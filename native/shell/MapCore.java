@@ -368,7 +368,7 @@ public final class MapCore {
     /** 칩: m:bus · m:subway · r:<지역> · f:<호선>. */
     public int cat(String v) {
         if (v == null) return R_NONE;
-        if (v.startsWith("m:")) { st.put(K_MODE, "subway".equals(v.substring(2)) ? "subway" : "bus"); busRes.clear(); return R_RENDER; }
+        if (v.startsWith("m:")) { st.put(K_MODE, "subway".equals(v.substring(2)) ? "subway" : "bus"); busRes.clear(); view = "bus".equals(mode()) ? "bus" : ""; return R_RENDER; }          // 새 화면이 올 때까지 노선도 뷰는 내려 둔다
         if (v.startsWith("r:")) { st.put(K_REG, v.substring(2)); st.put(K_FLT, "ALL"); return R_RENDER; }
         if (v.startsWith("f:")) { st.put(K_FLT, v.substring(2)); return R_RENDER; }
         return R_NONE;
