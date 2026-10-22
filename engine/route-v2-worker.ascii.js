@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s157";
+var ENGINE_VERSION = "route-v2-2026-10-23s159";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20034,7 +20034,7 @@ function mapBusArrView(s, res, key, info, si) {
   return mapBusRows(rows, info, si);
 }
 function mapBusTmap(pts, foc) {                                    // \uace0\uc815 \uc9c0\ub3c4: \ub04c\uae30\u00b7\ub450 \uc190\uac00\ub77d \ud655\ub300\u00b7\u00b1 \ub2e8\ucd94\u00b7\ud540 \ub204\ub984\uc740 \uc571, \ud540\u00b7\uc120\ud0dd\uc740 \uc5d4\uc9c4
-  return { t: 'tmap', h: 180, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '\uc22b\uc790\ub97c \ub204\ub974\uba74 \uc544\ub798 \uc815\ub958\uc7a5\uc73c\ub85c \uc774\ub3d9\ud574\uc694' };
+  return { t: 'tmap', h: 213, hv: 24, hmin: 137, hmax: 231, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '\uc22b\uc790\ub97c \ub204\ub974\uba74 \uc544\ub798 \uc815\ub958\uc7a5\uc73c\ub85c \uc774\ub3d9\ud574\uc694' };
 }
 function mapBusBody(f, info) {
   var b = f.bus, vw = (b && b.vw === 'fav') ? 'fav' : 'near', al = mapBusAliases(b), sel = (b && isFinite(Number(b.sel))) ? Math.floor(Number(b.sel)) : -1;
