@@ -115,6 +115,18 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   const r2 = screenCheck([E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { b: B(3), p: P(3) })]);
   ok(!r2.err && r2.out.every(l => l.startsWith('OK ')), '엔진이 거른 화면도 앱 검증기를 통과 ' + (r2.err || r2.out.join('|')));
 }
+// ── 단추 스피너: 도착지 미입력 흐림 ≠ 경로 찾는 중 ──
+{
+  const sb = (f) => { const s = E.homeScreen({ cap: 7 }, f, {}); return s.body[0].kids.filter(n => n.t === 'inbar'); };
+  let b = sb({ start: '', dest: '' });
+  ok(b[1].dim === true && b[1].spin === false && b[0].spin === false, '입력이 비면 경로 탐색 단추는 흐리지만 돌지 않는다');
+  b = sb({ start: '강남', dest: '잠실', startSet: true, destSet: true });
+  ok(!b[1].dim && !b[1].spin, '준비되면 흐리지 않고 돌지도 않는다');
+  b = sb({ start: '강남', dest: '잠실', startSet: true, destSet: true, rs: true });
+  ok(b[1].dim === true && b[1].spin === true, '경로를 찾는 동안만(rs) 돈다');
+  b = sb({ start: '', dest: '', gps: true });
+  ok(b[0].spin === true && b[0].dim === true && b[1].spin === false, '위치 감지 중에는 위치 단추만 돈다');
+}
 // ── ⑥ 워커 내장 ──
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
