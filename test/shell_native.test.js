@@ -95,6 +95,8 @@ function findAndroidJar() {
     assert.ok(/restoreState\(ck, json\)/.test(v) && /diskTtl\(key\)/.test(v), '캐시 화면은 눌림 상태까지 되살리고 모든 화면을 디스크에 둔다');
     assert.ok(/seedMapLoc\(\)/.test(v) && !/lastLocGet\(store\)/.test(v) && /liveLL\(\)/.test(v) && /locateQuiet\(/.test(v), '지도 · 맛집은 방금 받은 현재 위치(20~60초 안)로만 먼저 그리고(옛 위치는 쓰지 않는다) 조용히 새 위치를 받는다');
     const lf = fs.readFileSync(N('LocFused.java'), 'utf8');
+    assert.ok(/lastLocFresh\(store, 30L \* 60000L/.test(v) && /locf\.lastKnown\(5L \* 60000L/.test(v) && /void lastKnown\(final long maxAgeMs/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /getLastLocation\(\)/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /BUS_MOVE_DEG = 0\.0005/.test(v), 's148: 버스 첫 화면은 방금 안 위치(30분 안 저장값 · Fused 마지막 위치 5분 안)로 위치 대기 없이 그리고, 새 위치가 55m 넘게 다르면 바로잡는다');
+    assert.ok(/map\.svFail > 0 && round == 0 && map\.fillFromStash\(\) > 0/.test(v) && /spec\.isEmpty\(\) \|\| map\.svServer/.test(v) && /"bus"\.equals\(modeNow\) \? 12000 : 8000/.test(v), 's148: 서버가 한 번에 받아 주면 기기가 따로 받지 않고 · 못 받은 곳만 보던 값으로 채워 갱신이 막히지 않는다');
     assert.ok(/getCurrentLocation\(/.test(lf) && /PRIORITY_HIGH_ACCURACY/.test(lf) && /setMaxUpdateAgeMillis\(0L\)/.test(lf) && /setDurationMillis\(fastMs\)/.test(lf) && /NETWORK_PROVIDER/.test(lf) && !/getLastKnownLocation/.test(lf), '고정밀 현재 위치(캐시 0 · 제한 시간) + 네트워크 위치 동시 · 마지막 알려진 위치는 쓰지 않는다');
     assert.ok(/void untrack\(\)/.test(lf) && /removeLocationUpdates\(trackCb\)/.test(lf) && /trackStop\(\); if \(vec != null\) vec\.onPause\(\)/.test(v) && /trackStart\(\); refreshPower/.test(v), '화면이 켜진 동안만 연속 위치 · 벗어나면 즉시 해제');
   });
@@ -260,7 +262,7 @@ function findAndroidJar() {
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
     assert.ok(/if \(tdAct\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
-    assert.ok(/CAP = 22/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+    assert.ok(/CAP = 23/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
