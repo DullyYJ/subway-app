@@ -2278,20 +2278,70 @@ public class ShellActivity extends Activity {
     /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
     private android.view.View stnSheetBox(ScreenView sv, int[] pal) {
         FrameLayout box = new FrameLayout(this) {
-            // 웹 svgShowPopup: 팝업 어디서든 위로 끌면 시간표가 올라오고, 아래로 끌면 닫힌다(40dp · 세로가 가로의 1.2배 이상). 단추·알약 누르기는 그대로 — 끌기가 확정된 순간에만 가로채고, 한 번만 반응한다.
-            private float dx0, dy0; private boolean fired, top0;
+            // 웹 svgShowPopup · _nmDragDismiss: 팝업 어디서든 위로 끌면 시간표가 손가락을 따라 자라 오르고(놓으면 이어서 올라가거나 되돌아간다), 아래로 끌면 시트가 손가락을 따라 내려가다 놓으면 닫힌다(또는 제자리).
+            // 단추·알약 누르기는 그대로 — 세로로 10dp 이상 끌려(세로가 가로의 1.2배 이상) 끌기가 확정된 순간에만 가로채고, 그 전에는 건드리지 않는다. 손가락 따라가기는 창 높이(위로)와 창 이동(아래로)뿐이라 새 객체가 없다.
+            private float dx0, dy0, base; private boolean fired, top0, busy, up; private android.view.VelocityTracker vt;
+            private int curH;
             @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
                 int a = e.getActionMasked();
-                if (a == android.view.MotionEvent.ACTION_DOWN) { dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f; }
-                else if (a == android.view.MotionEvent.ACTION_MOVE && !fired) {
+                if (busy) return true;
+                if (a == android.view.MotionEvent.ACTION_DOWN) {
+                    dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f;
+                    if (vt == null) vt = android.view.VelocityTracker.obtain(); else vt.clear();
+                    vt.addMovement(e);
+                } else if (a == android.view.MotionEvent.ACTION_MOVE && !fired) {
+                    if (vt != null) vt.addMovement(e);
                     float dy = e.getRawY() - dy0, dx = e.getRawX() - dx0;
-                    boolean vert = Math.abs(dy) > Math.abs(dx) * 1.2f;
-                    if (ShellCore.S_MAPSTN.equals(sheetName) && vert && Math.abs(dy) > 28f * dpr) { fired = true; if (dy < 0f) openTimetable(); else closeSheet(); return true; }          // 한 번 쓸면: 위로 = 시간표, 아래로 = 닫기
-                    if (ShellCore.S_MAPTT.equals(sheetName) && top0 && vert && dy > 36f * dpr) { fired = true; closeSheet(); return true; }                                              // 시간표 맨 위에서 아래로 쓸면 닫힌다(스크롤 중이면 목록이 먼저)
+                    boolean vert = Math.abs(dy) > Math.abs(dx) * 1.2f && Math.abs(dy) > 10f * dpr;
+                    boolean stn = ShellCore.S_MAPSTN.equals(sheetName), tt = ShellCore.S_MAPTT.equals(sheetName);
+                    if (vert && (stn || (tt && top0 && dy > 0f))) {
+                        fired = true; up = dy < 0f; base = e.getRawY(); curH = Math.round(S_STN_H * dpr);
+                        return true;
+                    }
                 }
                 return false;
             }
-            @Override public boolean onTouchEvent(android.view.MotionEvent e) { return true; }
+            @Override public boolean onTouchEvent(android.view.MotionEvent e) {
+                if (!fired || busy) return true;
+                if (vt != null) vt.addMovement(e);
+                int a = e.getActionMasked();
+                final android.view.Window w = sheet == null ? null : sheet.getWindow();
+                if (w == null) return true;
+                final int from = Math.round(S_STN_H * dpr), to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
+                float d = e.getRawY() - base;
+                if (a == android.view.MotionEvent.ACTION_MOVE) {
+                    if (up && ShellCore.S_MAPSTN.equals(sheetName)) {
+                        int h = Math.max(from, Math.min(to, from + Math.round(-d)));
+                        if (Math.abs(h - curH) >= 2) { curH = h; try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, h); } catch (Throwable ignored) { } }
+                    } else if (!up) {
+                        w.getDecorView().setTranslationY(Math.max(0f, d));
+                    }
+                } else if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
+                    float vy = 0f;
+                    if (vt != null) { vt.computeCurrentVelocity(1000); vy = vt.getYVelocity(); }
+                    boolean cancel = a == android.view.MotionEvent.ACTION_CANCEL;
+                    if (up && ShellCore.S_MAPSTN.equals(sheetName)) {
+                        if (!cancel && (curH - from >= 28f * dpr || vy < -700f * dpr)) { busy = true; openTimetable(curH, new Runnable() { @Override public void run() { busy = false; } }); }
+                        else if (curH > from) { busy = true; animSheetH(curH, from, 180L, new Runnable() { @Override public void run() { busy = false; } }); }
+                    } else if (!up) {
+                        final android.view.View dv = w.getDecorView();
+                        float ty = dv.getTranslationY();
+                        boolean tt = ShellCore.S_MAPTT.equals(sheetName);
+                        if (!cancel && (ty >= (tt ? 56f : 40f) * dpr || vy > 600f * dpr)) {
+                            busy = true;
+                            final android.app.Dialog me = sheet;
+                            dv.animate().translationY(dv.getHeight() + 40f * dpr).setDuration(Math.round(160f + 80f * Math.max(0f, 1f - ty / Math.max(1f, dv.getHeight())))).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f))
+                                .withEndAction(new Runnable() { @Override public void run() { busy = false; if (sheet == me) closeSheet(); } }).start();       // 웹 _NM_SHEET_OUT(.24초 · 0.4,0,0.2,1)
+                        } else if (ty > 0f) {
+                            busy = true;
+                            dv.animate().translationY(0f).setDuration(180L).setInterpolator(new android.view.animation.PathInterpolator(0f, 0f, 0.58f, 1f))
+                                .withEndAction(new Runnable() { @Override public void run() { busy = false; } }).start();                     // 웹 _nmFullSnap(.18초 · 0,0,.58,1)
+                        }
+                    }
+                    fired = false;
+                }
+                return true;
+            }
         };
         box.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         playView = new PlayView(this, dpr);                                           // 역 이름 옆 빈 칸의 캐릭터 놀이터(웹 #nmPopPlay · #nmTtPlay) — 화면 글 위에 얹고, 만져지지 않는다
@@ -2338,19 +2388,30 @@ public class ShellActivity extends Activity {
             default: break;
         }
     }
-    private void openTimetable() {
-        if (sheet == null) return;
-        try {
-            final android.view.Window w = sheet.getWindow();
-            final int from = Math.round(S_STN_H * dpr), to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
-            final android.animation.ValueAnimator va = android.animation.ValueAnimator.ofInt(from, to);          // 시트가 한 번에 커지지 않고 위로 부드럽게 자란다
-            va.setDuration(300L); va.setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f));
-            va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(android.animation.ValueAnimator a) { try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (Integer) a.getAnimatedValue()); } catch (Throwable ignored) { va.cancel(); } } });
-            va.start();
-        } catch (Throwable ignored) { }
+    private void openTimetable() { openTimetable(Math.round(S_STN_H * dpr), null); }
+    /** 시간표로 커진다. fromPx = 지금 창 높이(손가락이 끌어 올린 만큼에서 이어서 올라간다), done = 끝난 뒤 할 일. */
+    private void openTimetable(int fromPx, final Runnable done) {
+        if (sheet == null) { if (done != null) done.run(); return; }
+        final int to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
+        int span = Math.max(1, to - Math.round(S_STN_H * dpr));
+        float rest = Math.max(0f, Math.min(1f, (to - fromPx) / (float) span));
+        animSheetH(fromPx, to, Math.round(120f + 180f * rest), done);                    // 남은 거리에 비례(전부 남았으면 .3초 — 웹 시트 올라오기)
         sheetName = ShellCore.S_MAPTT;
         ttRender();
         ttFetch();
+    }
+    /** 시트 창 높이를 부드럽게 바꾼다(웹 시트 곡선). 창이 바뀌었거나 닫혔으면 조용히 멈춘다. */
+    private void animSheetH(int a, int b, long ms, final Runnable done) {
+        final android.app.Dialog me = sheet;
+        if (me == null || a == b) { if (done != null) done.run(); return; }
+        try {
+            final android.view.Window w = me.getWindow();
+            final android.animation.ValueAnimator va = android.animation.ValueAnimator.ofInt(a, b);
+            va.setDuration(ms); va.setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f));
+            va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(android.animation.ValueAnimator x) { if (sheet != me) { va.cancel(); return; } try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (Integer) x.getAnimatedValue()); } catch (Throwable ignored) { va.cancel(); } } });
+            va.addListener(new android.animation.AnimatorListenerAdapter() { @Override public void onAnimationEnd(android.animation.Animator x) { if (done != null) done.run(); } });
+            va.start();
+        } catch (Throwable ignored) { if (done != null) done.run(); }
     }
     private void ttRender() {
         final String json = map.ttRequest(ShellCore.CAP, ShellCore.theme(store));
