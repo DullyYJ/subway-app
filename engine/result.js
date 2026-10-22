@@ -343,6 +343,7 @@ function resPart(cap, part, facts) {
 //   r.ride.row = 대기 모드 엔진(ride-standby)의 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. 칸 색은 웹 _ROW_COLORS 와 같다.
 //   an = 전환 연출(앱이 sq 가 방금일 때만 그린다): { k, ms, e[4], sq, bg(가리개 색), o:{ s, fill, tc } 바뀌기 전 칸 }
 var RES_ROW_CAP = 21;
+var RES_CONF_CAP = 22;                                                          // 안내 전 버튼 줄의 [경로 확정](웹 mainConfirmRouteBtn)을 그릴 수 있는 앱 수준
 var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
 var RES_ROW_LABELS = { board: '탑승', transfer: '환승', arrive: '도착' };
 function resSlotNode(row) {
@@ -402,7 +403,10 @@ function resultScreen(opt, r) {
       var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
       if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
       nodes.push(rowNode);
-    } else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
+    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // 웹 routeActRow(안내 전): [세부경로 보기][경로 확정(파랑)]
+      { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
+      { t: 'button', s: '경로 확정', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
+    else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
