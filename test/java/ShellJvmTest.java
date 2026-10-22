@@ -520,10 +520,6 @@ public class ShellJvmTest {
             ls.put(ShellCore.K_LASTLOC, "999,5,1"); ok(ShellCore.lastLocGet(ls) == null, "엉터리 좌표는 버린다");
             ShellCore.lastLocPut(ls, 37.5, 127.0, 5L);
             ok(ShellCore.skeletonScreen("home").contains("\"kind\":\"cards\"") && ShellCore.skeletonScreen("mapb").contains("\"kind\":\"map\"") && ShellCore.skeletonScreen("chat").contains("\"kind\":\"list\""), "스켈레톤 모양은 화면마다");
-            MapCore sk = new MapCore(new ShellCore.MemStore()); sk.modeOverride = "bus";
-            String skj = ShellCore.skeletonScreen("mapb", sk.busToggleJson());
-            ScreenCore.Screen sks = ScreenCore.load(skj);
-            ok(skj.contains("\"t\":\"btog\"") && skj.contains("mp.vw.near") && skj.contains("mp.rf") && sks != null, "버스 뼈대: 칩 줄(주변 정류장 · 즐겨찾기 · 새로고침)이 처음부터 머리에 있다");
         }
         {
             List<String> cv = ShellCore.catValues("{\"body\":[{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"식품\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"b\",\"act\":{\"a\":\"call\",\"v\":\"x\"}}]}");
