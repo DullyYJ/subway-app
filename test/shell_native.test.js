@@ -297,9 +297,9 @@ function findAndroidJar() {
   await t('역 시트·맛집·전환(s152): 시트는 내용이 찬 채 올라옴 · 위로 쓸면 시간표/아래로 쓸면 닫힘(시간표 맨 위 포함) · 맛집 원자료는 병렬·서버 먼저 · 전환 곡선', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/stnCache\.get\(json\)/.test(v) && /private void stnCachePut/.test(v) && /main\.postDelayed\(startSlide, 450L\)/.test(v), '역 시트: 본 역은 먼저 채우고, 처음 보는 역은 내용이 올 때까지 잠깐 기다렸다 올린다');
-    assert.ok(/ShellCore\.S_MAPTT\.equals\(sheetName\) && top0 && vert && dy > 36f \* dpr/.test(v) && /Math\.abs\(dy\) > 28f \* dpr/.test(v), '시간표 맨 위에서 아래로 쓸면 닫힘 · 한 번 쓸면 시간표');
+    assert.ok(/tt && top0 && dy > 0f/.test(v) && /curH - from >= 28f \* dpr/.test(v) && /ty >= \(tt \? 56f : 40f\) \* dpr/.test(v), '시간표 맨 위에서 아래로 끌면 닫힘 · 위로 끌면 시간표(손가락을 따라가다 놓으면 마무리)');
     assert.ok(/private void foodStage\(/.test(v) && /if \(food\.ctr != null && food\.needData\(\)\) fetchFoodData\(my, v\);/.test(v) && /FoodCore\.parseData\(res\[0\]\.body, new ArrayList<String>\(\)\)/.test(v), '맛집: 중심을 알면 엔진 왕복과 동시에 · 서버 가게 먼저 그린 뒤 공공데이터까지');
-    assert.ok(/PathInterpolator\(0\.32f, 0\.72f, 0f, 1f\)/.test(v) && /ValueAnimator\.ofInt\(from, to\)/.test(v), '아이폰 곡선 · 시간표 시트가 자란다');
+    assert.ok(/PathInterpolator\(0\.32f, 0\.72f, 0f, 1f\)/.test(v) && /ValueAnimator\.ofInt\(a, b\)/.test(v), '아이폰 곡선 · 시간표 시트가 자란다');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
@@ -323,7 +323,7 @@ function findAndroidJar() {
   });
   await t('역 팝업 위로 끌면 시간표 · 아래로 끌면 닫힘(s140): 박스가 끌기가 확정된 순간에만 가로채고 한 번만 반응한다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), d = a.slice(a.indexOf('private android.view.View stnSheetBox('), a.indexOf('private void mapSheetAct('));
-    assert.ok(/onInterceptTouchEvent/.test(d) && /40f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /dy < 0f\) openTimetable\(\); else closeSheet\(\)/.test(d), '위/아래 끌기 규칙(웹과 같은 40 · 1.2배)');
+    assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
     assert.ok(/ShellCore\.S_MAPSTN\.equals\(sheetName\)/.test(d) && /fired = true/.test(d) && /return false;/.test(d), '역 팝업일 때만 · 한 번만 · 평소엔 가로채지 않는다');
   });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
