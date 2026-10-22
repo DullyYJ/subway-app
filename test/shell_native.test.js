@@ -425,6 +425,7 @@ function findAndroidJar() {
     assert.ok(/KEEP_OLD_MS = 120000L/.test(mc) && /public static boolean hasArr/.test(mc), '받아 둔 도착정보는 2분까지 둔다');
     assert.ok(/MapCore\.hasArr\(map\.busRes\.get\(e\.getKey\(\)\)\)\) return;/.test(a), 'busMove: 같은 정류장인데 새 도착정보가 비면 바꿔 끼우지 않는다');
     assert.ok(/arrWave/.test(w) && /else failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
+    assert.ok(/busToggleJson\(\)/.test(a) && /skeletonScreen\(screen, hj\)/.test(a), '버스 뼈대에 칩 줄을 처음부터 깐다(탭을 누르는 즉시 틀이 다 보인다)');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
