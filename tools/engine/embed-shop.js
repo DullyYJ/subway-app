@@ -24,8 +24,8 @@ const SETS = [
   { name: 'DIALOG', src: 'engine/dialog.js', glue: 'engine/dlg-worker.js', path: '/screen/dlg', fn: 'handleScreenDlg', anchor: '  if (url.pathname === "/screen/talk") return handleScreenTalk(request);\n' },
   { name: 'PVLABEL', src: 'engine/pvlabel.js', glue: 'engine/pvl-worker.js', path: '/screen/pvl', fn: 'handleScreenPvl', anchor: '  if (url.pathname === "/screen/dlg") return handleScreenDlg(request);\n' },
   { name: 'POSFUSE', src: 'engine/posfusion.js', glue: 'engine/pf-worker.js', path: '/pos-fuse', fn: 'handlePosFuse', anchor: '  if (url.pathname === "/screen/pvl") return handleScreenPvl(request);\n' },
-  { name: 'MAP', src: 'engine/map.js', glue: 'engine/map-worker.js', path: '/screen/map', fn: 'handleScreenMap', anchor: '  if (url.pathname === "/pos-fuse") return handlePosFuse(request);\n' },
-  { name: 'FAV', src: 'engine/fav.js', glue: 'engine/fav-worker.js', path: '/screen/fav', fn: 'handleScreenFav', anchor: '  if (url.pathname === "/screen/map") return handleScreenMap(request);\n' },
+  { name: 'MAP', src: 'engine/map.js', glue: 'engine/map-worker.js', path: '/screen/map', fn: 'handleScreenMap', args: 'request, env', anchor: '  if (url.pathname === "/pos-fuse") return handlePosFuse(request);\n' },
+  { name: 'FAV', src: 'engine/fav.js', glue: 'engine/fav-worker.js', path: '/screen/fav', fn: 'handleScreenFav', anchor: '  if (url.pathname === "/screen/map") return handleScreenMap(request, env);\n' },
   { name: 'HCARDS', src: 'engine/hcards.js', glue: 'engine/hcards-worker.js', path: '/screen/hcards', fn: 'handleScreenHcards', anchor: '  if (url.pathname === "/screen/fav") return handleScreenFav(request);\n' },
   { name: 'RIDESTART', src: 'engine/ride-start.js', glue: 'engine/ride-start-worker.js', path: '/ride/start', fn: 'handleRideStart', anchor: '  if (url.pathname === "/screen/hcards") return handleScreenHcards(request);\n' },
   { name: 'RULES', src: 'engine/rules.js', glue: 'engine/rules-worker.js', path: '/rules', fn: 'handleRules', anchor: '  if (url.pathname === "/ride/start") return handleRideStart(request);\n' },
@@ -46,7 +46,9 @@ for (const S of SETS) {
   let i = w.indexOf(BEGIN), j = w.indexOf(END);
   if (i >= 0 && j > i) w = w.slice(0, i) + block + w.slice(j + END.length + 1);
   else { const k = w.indexOf('async function handleFetch(request, env, ctx) {'); if (k < 0) throw new Error('handleFetch 없음'); w = w.slice(0, k) + block + '\n' + w.slice(k); }
-  const route = '  if (url.pathname === "' + S.path + '") return ' + S.fn + '(request);\n';
+  const oldRoute = '  if (url.pathname === "' + S.path + '") return ' + S.fn + '(request);\n';
+  const route = '  if (url.pathname === "' + S.path + '") return ' + S.fn + '(' + (S.args || 'request') + ');\n';
+  if (S.args && w.indexOf(oldRoute) >= 0) w = w.replace(oldRoute, route);            // 이 연결부가 env 도 받게 바뀐 경우: 옛 연결 줄을 새 줄로
   if (w.indexOf(route) < 0) {
     if (w.indexOf(S.anchor) < 0) throw new Error(S.path + ' 앞 경로 없음');
     w = w.replace(S.anchor, S.anchor + route);
