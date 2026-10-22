@@ -147,6 +147,7 @@ public final class MapCore {
         for (int i = 0; i < keys.length; i++) { if (i > 0) o.append(','); o.append(ShellCore.q(keys[i])); }
         st.put(K_BUSORD, o.append(']').toString());
         permuteArr(busRes, perm); permuteArr(arrStash, perm);
+        arrKeyAt.clear();
         if (!lastArrNeed.isEmpty()) {
             String[] old = new String[perm.length];
             List<String[]> rest = new ArrayList<String[]>();
@@ -180,7 +181,25 @@ public final class MapCore {
         if (lastArrNeed.isEmpty() || !lastArrSig.equals(arrSig())) return new ArrayList<String[]>();
         return new ArrayList<String[]>(lastArrNeed);
     }
-    public void addBusRes(String k, String body) { if (k != null && k.matches("[af][0-9]{1,3}")) arrAt = System.currentTimeMillis(); if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
+    // 한 정류장 응답이 잠깐 비어 와도(공공 API 의 일시 빈 응답 · 연달아 부른 제한) 보던 줄이 "도착정보 없음"으로 사라지지 않게:
+    // 새 응답에 도착 값이 하나도 없고 45초 안에 받은 값이 있으면 보던 값을 그대로 둔다(그 시각도 새로 치지 않는다).
+    static final long KEEP_OLD_MS = 45000L;
+    private final java.util.HashMap<String, Long> arrKeyAt = new java.util.HashMap<String, Long>();
+    static boolean hasArr(String b) {
+        return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
+    }
+    public void addBusRes(String k, String body) {
+        boolean arr = k != null && k.matches("[af][0-9]{1,3}");
+        if (arr) {
+            long now = System.currentTimeMillis();
+            if (hasArr(body)) arrKeyAt.put(k, now);
+            else {
+                Long at = arrKeyAt.get(k); String old = arrStash.get(k);
+                if (old != null && at != null && now - at < KEEP_OLD_MS && hasArr(old)) { busRes.put(k, old); return; }
+            }
+            arrAt = now;
+        }
+        if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
     /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 subway-api(gentle-lab) 워커에 있다. 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {
         if (u == null) return "";
