@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 
@@ -39,6 +40,13 @@ public class RideService extends Service {
     static volatile int liveRev = 0;
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
+    static volatile OvCore.Ov liveOv;                        // 앱 탑승 시트(RsSheetView)가 그릴 엔진 값(overlay.rs 포함)
+    static volatile Runnable rsListener;                     // 값이 바뀔 때 메인 스레드에서 불린다(ShellActivity 가 화면에 있을 때만 건다)
+    private static volatile RideService inst;
+    private static final Handler mainH = new Handler(Looper.getMainLooper());
+    /** 앱 탑승 시트의 손짓(press · undo · open · close · pill)을 엔진의 다음 걸음에 알린다 — 오버레이 줄과 같은 길. */
+    static void rsAct(String a) { RideService s = inst; if (s != null) s.ovHost.act(a); }
+    static void rsNotify() { Runnable l = rsListener; if (l != null) mainH.post(l); }
     static volatile long recoStageAt = 0L;
 
     private HandlerThread ht;
@@ -73,7 +81,7 @@ public class RideService extends Service {
     }
     static void stop(Context c) {
         clearSaved(c);
-        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveRev++;
+        running = false; liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -89,6 +97,7 @@ public class RideService extends Service {
             stopSelf(); return START_NOT_STICKY;
         }
         if (core == null) core = restored;
+        inst = this;
         ensureChannels();
         startFg(ongoing());
         if (!running) {
@@ -108,6 +117,7 @@ public class RideService extends Service {
         try { if (fusedLoc != null) fusedLoc.stopRide(); } catch (Throwable ignored) { }
         try { if (lm != null && listening) lm.removeUpdates(ll); } catch (Throwable ignored) { }
         listening = false;
+        if (inst == this) inst = null;
         if (h != null) h.removeCallbacksAndMessages(null);
         if (ht != null) ht.quitSafely();
         super.onDestroy();
@@ -189,7 +199,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveRev++;
+        liveRide = core.rideJson(); liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -197,7 +207,7 @@ public class RideService extends Service {
         stopped = true; running = false;
         if (ov != null) ov.hide();
         clearSaved(this);
-        liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveRev++;
+        liveRide = ""; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();
