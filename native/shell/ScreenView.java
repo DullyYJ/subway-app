@@ -82,13 +82,14 @@ public class ScreenView extends View {
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
+    private float bandX; private boolean flingBand, inBand; private String bandSig = "";   // 본문 안 타임라인 줄(경로 결과 카드)의 가로 위치 · 그 줄을 놓고 미는 중 · 손가락이 그 줄 위에서 시작했다
     private String ctrDone = null;                      // 24시간 차트: 지금 시각 막대를 가운데로 맞춘 막대 내용 표시(내용이 바뀔 때만 다시 맞춘다)
     private final OverScroller flingY, flingX;
     private VelocityTracker vt;
     private final int slop, minFling, maxFling;
     private float downX, downY, lastX, lastY, downBodyY;
     private long downT;
-    private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 3 눌러보는 중 · 6 순서 바꾸기 줄 · 7 카드 끄는 중
+    private int mode = 0;                                  // 0 없음 · 1 본문 세로 · 2 머리 가로 · 8 본문 안 타임라인 가로 · 3 눌러보는 중 · 6 순서 바꾸기 줄 · 7 카드 끄는 중
     private boolean inHead, inChips, inFoot;
     private String openKey;                                // 펼친 게시글 id (null = 엔진이 준 표시를 따름 · "" = 모두 접음)
     private final Map<float[], android.graphics.Path> iconPaths = new HashMap<float[], android.graphics.Path>();
@@ -196,8 +197,8 @@ public class ScreenView extends View {
         hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
         cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
-        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; }
-        boolean touching = mode == 1 || mode == 2;
+        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; bandX = 0f; bandSig = ""; }
+        boolean touching = mode == 1 || mode == 2 || mode == 8;
         if (!touching) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }      // 손가락이 닿은 채 오는 8초 갱신이 스크롤을 끊지 않는다(노선 상세만; 그 밖은 예전과 같다)
         else if (before == null || !before.part) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }
         partialFrom = before != null && before.part ? before : null;
@@ -218,7 +219,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; bandX = 0f; bandSig = ""; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -265,6 +266,8 @@ public class ScreenView extends View {
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
+        if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
+        else if (!lay.bandSig.equals(bandSig)) { bandSig = lay.bandSig; bandX = lay.mkBody && lay.mk != null ? ScreenCore.clamp(lay.mk.x(lay.mk.r) - lay.bandL - lay.bandView / 2f, lay.bandMax()) : 0f; }      // 새 경로면 내 위치(없으면 처음)가 보이게
         if (lay.ctrSig.length() == 0) ctrDone = null;
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
@@ -329,6 +332,7 @@ public class ScreenView extends View {
         if (lay == null) return;
         scrollY = ScreenCore.clamp(scrollY, lay.bodyMaxScroll(bodyViewH()));
         scrollX = ScreenCore.clamp(scrollX, lay.headMaxScroll());
+        bandX = ScreenCore.clamp(bandX, lay.bandMax());
     }
 
     // ───────────── 손가락 ─────────────
@@ -351,6 +355,7 @@ public class ScreenView extends View {
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
+                { float byy = y / dpr - lay.headH + scrollY; inBand = !inHead && lay.bandTop >= 0f && lay.bandMax() > 0f && byy >= lay.bandTop - 4f && byy < lay.bandBot + 4f && y < footTop() * dpr; }       // 본문 안 타임라인 줄 위에서 시작했나
                 inFoot = lay.footH > 0f && !inHead && y >= footTop() * dpr;
                 mode = 3;
                 fabDown = fabAt(x, y);
@@ -379,11 +384,13 @@ public class ScreenView extends View {
                         pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
+                        if (mode == 1 && inBand && Math.abs(x - downX) > Math.abs(y - downY)) mode = 8;          // 타임라인 줄은 가로로 밀면 그 줄만 민다(세로로 쓸면 목록)
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
                     } else return true;
                 }
                 if (mode == 1) { scrollY = ScreenCore.clamp(scrollY - dy / dpr, lay.bodyMaxScroll(bodyViewH())); lastY = y; invalidate(); }
                 else if (mode == 2) { scrollX = ScreenCore.clamp(scrollX - dx / dpr, lay.headMaxScroll()); lastX = x; invalidate(); }
+                else if (mode == 8) { bandX = ScreenCore.clamp(bandX - dx / dpr, lay.bandMax()); lastX = x; invalidate(); }
                 return true;
             }
             case MotionEvent.ACTION_UP: {
@@ -406,13 +413,17 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); listener.onAction(a); }
                     }
-                } else if (mode == 1 || mode == 2) {
+                } else if (mode == 1 || mode == 2 || mode == 8) {
                     vt.computeCurrentVelocity(1000, maxFling);
                     if (mode == 1) {
                         float v = vt.getYVelocity();
                         if (Math.abs(v) > minFling) { flingY.fling(0, Math.round(scrollY * dpr), 0, Math.round(-v), 0, 0, 0, Math.round(lay.bodyMaxScroll(bodyViewH()) * dpr)); }
-                    } else {
+                    } else if (mode == 8) {
                         float v = vt.getXVelocity();
+                        flingBand = true;
+                        if (Math.abs(v) > minFling) { flingX.fling(Math.round(bandX * dpr), 0, Math.round(-v), 0, 0, Math.round(lay.bandMax() * dpr), 0, 0); }
+                    } else {
+                        float v = vt.getXVelocity(); flingBand = false;
                         if (Math.abs(v) > minFling) { flingX.fling(Math.round(scrollX * dpr), 0, Math.round(-v), 0, 0, Math.round(lay.headMaxScroll() * dpr), 0, 0); }
                     }
                 }
@@ -1599,7 +1610,7 @@ public class ScreenView extends View {
             scrollY = ScreenCore.clamp(ssFrom + (ssTo - ssFrom) * ease(f), lay.bodyMaxScroll(bodyViewH())); moving = true;
         }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
-        if (flingX.computeScrollOffset()) { scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
+        if (flingX.computeScrollOffset()) { if (flingBand) bandX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.bandMax()); else scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
         roStep(now);                                                                      // 카드를 끄는 중이면 가장자리 자동 스크롤 · 비키는 카드 이동
 
         cv.save();
@@ -1610,7 +1621,17 @@ public class ScreenView extends View {
         cv.clipRect(0f, lay.headH, w, h - lay.footH);
         cv.translate(0f, lay.headH - scrollY);
         int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
-        for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind != ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);
+        for (int i = r[0]; i < r[1]; i++) {
+            ScreenCore.Item bit = lay.body[i];
+            if (bit.kind == ScreenCore.K_SWAP) continue;
+            if (bit.band) { cv.save(); cv.clipRect(bit.cl, bit.y - 4f, bit.cr, bit.y + bit.h + 4f); cv.translate(-bandX, 0f); drawItem(cv, bit); cv.restore(); }      // 카드 안 타임라인: 틀 안에서 가로로 밀린다
+            else drawItem(cv, bit);
+        }
+        boolean pulsingB = false;
+        if (lay.mkBody && lay.bandTop >= 0f && lay.bandTop + 100f >= scrollY - 4f && lay.bandTop <= scrollY + (h - lay.headH - lay.footH) + 4f) {     // 그 줄 위의 내 위치 마커(칸과 같이 밀린다)
+            cv.save(); cv.clipRect(lay.bandL, lay.bandTop - 6f, lay.bandL + lay.bandView, lay.bandBot + 6f); cv.translate(-bandX, 0f);
+            pulsingB = drawMk(cv, now); cv.restore();
+        }
         for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind == ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);       // 두 줄 경계에 얹는 둥근 단추는 맨 위에(웹 z-index 20) — 그 밑의 구분선이 단추를 가로지르지 않게
         if (dragOn || settleOn) roDrawDragged(cv);                                        // 끌리는 카드는 맨 위에
         cv.restore();
@@ -1624,7 +1645,7 @@ public class ScreenView extends View {
         cv.translate(-scrollX, 0f);
         float x0 = scrollX - 4f, x1 = scrollX + w + 4f;
         for (int i = 0; i < lay.head.length; i++) { ScreenCore.Item it = lay.head[i]; if (!it.fixed && it.x + it.w >= x0 && it.x <= x1) drawItem(cv, it); }   // 칩 줄(가로로 밀림)
-        boolean pulsing = drawMk(cv, now);                                                      // 내 위치 마커(구간 타임라인 위)
+        boolean pulsing = lay.mkBody ? pulsingB : drawMk(cv, now);                                                      // 내 위치 마커(구간 타임라인 위)
         cv.restore();
         if (lay.footH > 0f) {                                                                    // 아래 고정 줄(채팅 입력줄): 배경 + 위 선 + 조각
             cv.save();
@@ -1659,7 +1680,7 @@ public class ScreenView extends View {
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
