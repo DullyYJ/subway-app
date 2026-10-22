@@ -369,12 +369,12 @@ public class ShellActivity extends Activity {
         if ("home".equals(tab)) main.post(new Runnable() { @Override public void run() { autoGps(); } });
     }
 
-    /** 탭을 옮길 때 새 화면이 아이폰처럼 살짝(8dp) 떠올라 자리잡는다(0.18초 · 투명도 0.7 → 1). 그리는 일만 한다 — 새 내용은 이미 올라가 있다(캐시 먼저). */
+    /** 탭을 옮길 때 새 화면이 아이폰처럼 살짝(10dp) 떠올라 자리잡는다(0.3초 · 투명도 0.55 → 1 · 아이폰 곡선). 그리는 일만 한다 — 새 내용은 이미 올라가 있다(캐시 먼저). */
     private void tabSettle() {
         try {
             body.animate().cancel();
-            body.setAlpha(0.7f); body.setTranslationY(8f * dpr);
-            body.animate().alpha(1f).translationY(0f).setDuration(180L).setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+            body.setAlpha(0.55f); body.setTranslationY(10f * dpr);
+            body.animate().alpha(1f).translationY(0f).setDuration(300L).setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f)).start();
         } catch (Throwable ignored) { body.setAlpha(1f); body.setTranslationY(0f); }
     }
     private ScreenView viewOfSlot(int i) { return slots.length > 1 && i == 0 ? head : body; }
@@ -1101,12 +1101,12 @@ public class ShellActivity extends Activity {
         if (v == null) return;
         try {
             v.setAlpha(0f); v.setTranslationY(56f * dpr);
-            v.animate().alpha(1f).translationY(0f).setDuration(220L).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+            v.animate().alpha(1f).translationY(0f).setDuration(340L).setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f)).start();        // 아이폰 시트와 같은 곡선(빠르게 시작해 부드럽게 멈춘다)
         } catch (Throwable ignored) { v.setAlpha(1f); v.setTranslationY(0f); }
     }
     /** 새 화면(탭 이동 등)이 올라올 때 살짝 떠오른다(웹 busCardIn 류, 140ms). 갱신(keep)에는 쓰지 않는다. */
     private void fadeIn(View v) {
-        try { v.setAlpha(0.35f); v.animate().alpha(1f).setDuration(140L).start(); } catch (Throwable ignored) { v.setAlpha(1f); }
+        try { v.setAlpha(0.35f); v.animate().alpha(1f).setDuration(240L).setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f)).start(); } catch (Throwable ignored) { v.setAlpha(1f); }
     }
 
     private void toast(String m) { try { Toast.makeText(this, m, Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) { } }
@@ -1440,7 +1440,9 @@ public class ShellActivity extends Activity {
             }
         }
         if (food.needGps() && !food.noperm && !food.locating) locateForFood();
+        final boolean wasLoaded = food.loaded;
         final String json = food.request(ShellCore.CAP, true);
+        if (food.ctr != null && food.needData()) fetchFoodData(my, v);          // 중심을 이미 알면(지난번 화면) 엔진 첫 왕복을 기다리지 않고 원자료를 곧장 받는다(두 통신이 동시에 간다)
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 12000);
@@ -1448,13 +1450,15 @@ public class ShellActivity extends Activity {
                 final FoodCore.Parsed fpar = txt.length() > 0 ? FoodCore.parseScreen(txt) : null;          // 큰 화면 읽기는 통신 스레드에서
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqFood || txt.length() == 0) { if (txt.length() == 0 && my == seqFood && !(keep && v.itemCount() > 0)) toast("맛집 화면을 받지 못했어요"); return; }
+                    if (!wasLoaded && food.loaded && foodFetching == my && foodSu.equals(food.ctr == null ? "" : food.serverUrl())) return;      // 원자료가 먼저 와서 완성 화면이 이미 올라갔다(이 답은 "받는 중" 화면이다) — 덮지 않는다
                     food.apply(fpar);
                     if (!(keep && food.needData())) foodPresent(v, txt, keep);          // 캐시 화면이 떠 있으면 "받는 중" 중간 화면으로 덮지 않는다(깜빡임)
-                    if (food.needData()) fetchFoodData(my, v);
+                    if (food.needData() && (foodFetching != my || !foodSu.equals(food.ctr == null ? "" : food.serverUrl()))) fetchFoodData(my, v);
                 } });
             }
         }, "shell-food").start();
     }
+    private int foodFetching = -1, foodStageSeq; private String foodSu = "";
     /** 서버 맛집 + 공공데이터(최대 3쪽)를 받아 FoodCore 에 넣고 엔진에 다시 묻는다. */
     /** (스레드 안) 맛집 원자료 — 서버 가게와 공공데이터 쪽을 받아 읽는다. */
     private FoodCore.Data foodDataNow(final String su, final String[] pu) {
@@ -1476,32 +1480,60 @@ public class ShellActivity extends Activity {
         }
         return FoodCore.parseData(res[0] != null && res[0].status == 200 ? res[0].body : "", pubs);
     }
+    /** 맛집 원자료: 서버 가게가 먼저 오면 그것으로 곧바로 한 번 그리고(대개 1초 안), 느린 공공데이터 쪽이 오면 그것까지 합쳐 다시 그린다 — 가장 느린 통신을 기다리지 않는다. */
     private void fetchFoodData(final int my, final ScreenView v) {
+        if (food.ctr == null) return;
+        foodFetching = my;
         final String su = food.serverUrl();
+        foodSu = su;
         final String[] pu = new String[FoodCore.PUB_PAGES];
         for (int i = 0; i < pu.length; i++) pu[i] = food.publicUrl(i + 1);
         new Thread(new Runnable() {
             @Override public void run() {
-                final FoodCore.Data data = foodDataNow(su, pu);
-                main.post(new Runnable() { @Override public void run() {
-                    if (my != seqFood) return;
-                    food.setData(data);
-                    final String json = food.request(ShellCore.CAP, true);
-                    new Thread(new Runnable() {
-                        @Override public void run() {
-                            NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", json, 20000);
-                            final String txt2 = r2.status == 200 ? r2.body : ""; warm(txt2);
-                            final FoodCore.Parsed fpar2 = txt2.length() > 0 ? FoodCore.parseScreen(txt2) : null;
-                            main.post(new Runnable() { @Override public void run() {
-                                if (my != seqFood) return;
-                                if (txt2.length() == 0) { toast("맛집 화면을 받지 못했어요"); return; }
-                                food.apply(fpar2); foodPresent(v, txt2, true);
-                            } });
-                        }
-                    }, "shell-food2").start();
-                } });
+                final NetPost.Res[] res = new NetPost.Res[1 + pu.length];
+                Thread[] th = new Thread[res.length];
+                for (int i = 0; i < res.length; i++) {
+                    final int ii = i;
+                    th[i] = new Thread(new Runnable() { @Override public void run() { res[ii] = ii == 0 ? NetPost.get(su, 8000) : NetPost.get(pu[ii - 1], 10000); } }, "shell-foodpart");
+                    th[i].start();
+                }
+                long t0 = System.currentTimeMillis();
+                try { th[0].join(9000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                boolean allDone = true;
+                for (int i = 1; i < th.length; i++) if (th[i].isAlive()) allDone = false;
+                if (!allDone && res[0] != null && res[0].status == 200 && res[0].body != null) foodStage(my, v, su, FoodCore.parseData(res[0].body, new ArrayList<String>()));      // 1단계: 서버 가게만으로 먼저
+                for (int i = 1; i < th.length; i++) { try { th[i].join(Math.max(1L, 13000L - (System.currentTimeMillis() - t0))); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; } }
+                List<String> pubs = new ArrayList<String>();
+                for (int i = 1; i < res.length; i++) {
+                    NetPost.Res pr = res[i];
+                    String t = pr != null && pr.status == 200 ? pr.body : "";
+                    pubs.add(t);
+                    if (FoodCore.pageCount(t) < FoodCore.PUB_PAGE_SIZE) break;
+                }
+                foodStage(my, v, su, FoodCore.parseData(res[0] != null && res[0].status == 200 && res[0].body != null ? res[0].body : "", pubs));      // 2단계: 공공데이터까지 합쳐
             }
         }, "shell-fooddata").start();
+    }
+    /** 받은 원자료를 상태기에 넣고 엔진에 다시 물어 화면을 올린다(통신 스레드에서 부른다). 더 새 요청이 시작됐거나 중심이 달라졌으면 버린다. */
+    private void foodStage(final int my, final ScreenView v, final String su, final FoodCore.Data data) {
+        main.post(new Runnable() { @Override public void run() {
+            if (my != seqFood || food.ctr == null || !su.equals(food.serverUrl())) return;
+            food.setData(data);
+            final int st = ++foodStageSeq;
+            final String json = food.request(ShellCore.CAP, true);
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", json, 20000);
+                    final String txt2 = r2.status == 200 ? r2.body : ""; warm(txt2);
+                    final FoodCore.Parsed fpar2 = txt2.length() > 0 ? FoodCore.parseScreen(txt2) : null;
+                    main.post(new Runnable() { @Override public void run() {
+                        if (my != seqFood || st != foodStageSeq) return;
+                        if (txt2.length() == 0) { toast("맛집 화면을 받지 못했어요"); return; }
+                        food.apply(fpar2); foodPresent(v, txt2, true);
+                    } });
+                }
+            }, "shell-food2").start();
+        } });
     }
     private void reloadFood() { if (ShellCore.S_FOOD.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadFood(body, true, false); }
 
@@ -2160,13 +2192,23 @@ public class ShellActivity extends Activity {
         closeSheet();
         sheetName = ShellCore.S_MAPSTN;
         sheetView = new ScreenView(this);
-        sheetView.setDpr(dpr);
+        final ScreenView sv = sheetView;
+        sv.setDpr(dpr);
         int[] pal = ShellCore.palette(ShellCore.theme(store));
-        sheetView.setPalette(pal);
-        sheetView.setListener(new SheetHost());
+        sv.setPalette(pal);
+        sv.setListener(new SheetHost());
+        final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
+        final String cached = stnCache.get(json);                         // 본 적 있는 역이면 시트가 올라오기 전에 내용을 먼저 채워 둔다(올라오면서 이미 채워져 있다)
+        boolean filled = false;
+        if (cached != null) {
+            try { map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false); filled = true; } catch (Throwable e) { filled = false; }
+        }
+        final boolean wasFilled = filled;
+        final boolean[] slid = new boolean[1];
+        final Runnable startSlide = new Runnable() { @Override public void run() { if (slid[0]) return; slid[0] = true; slideIn(sv); } };
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
-        if (hDp == S_STN_H) sheet.setContentView(stnSheetBox(sheetView, pal)); else sheet.setContentView(sheetView);
-        sheetView.setScrollHook(new Runnable() { @Override public void run() { playScroll(); } });     // 시간표 머리줄이 글과 함께 올라가면 놀이터(캐릭터)도 같이 올라간다
+        if (hDp == S_STN_H) sheet.setContentView(stnSheetBox(sv, pal)); else sheet.setContentView(sv);
+        sv.setScrollHook(new Runnable() { @Override public void run() { playScroll(); } });     // 시간표 머리줄이 글과 함께 올라가면 놀이터(캐릭터)도 같이 올라간다
         try {
             android.view.Window w = sheet.getWindow();
             int hpx = hDp > 0 ? Math.round(hDp * dpr) : Math.round(getResources().getDisplayMetrics().heightPixels * (-hDp) / 100f);
@@ -2176,23 +2218,32 @@ public class ShellActivity extends Activity {
             w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             w.setWindowAnimations(android.R.style.Animation_InputMethod);
             sheet.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() { @Override public void onDismiss(android.content.DialogInterface d) { map.ttSeq++; } });
-            sheet.show(); slideIn(sheetView);
+            if (!wasFilled) { sv.setAlpha(0f); sv.setTranslationY(56f * dpr); }              // 아직 빈 시트 — 내용이 오는 대로(최대 0.45초) 올린다. 빈 채로 올라오지 않게
+            sheet.show();
+            if (wasFilled) { startSlide.run(); sv.post(new Runnable() { @Override public void run() { if (sv == sheetView) playPlace(); } }); }
+            else main.postDelayed(startSlide, 450L);
         } catch (Throwable t) { toast("역 정보를 열지 못했어요"); return; }
-        final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
-                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPSTN.equals(sheetName)) return;
-                    if (txt.length() == 0) { closeSheet(); return; }          // 역이 아닌 글자 — 조용히 닫는다
-                    map.onStn(txt); map.setLinesFromStn(txt);
-                    present(sheetView, txt, false);
+                    if (sheet == null || sv != sheetView || !sheet.isShowing() || !ShellCore.S_MAPSTN.equals(sheetName)) return;
+                    if (txt.length() == 0) { if (!wasFilled) closeSheet(); return; }          // 역이 아닌 글자 — 조용히 닫는다(이미 보이는 내용이 있으면 그대로)
+                    stnCachePut(json, txt);
+                    if (!wasFilled || !txt.equals(cached)) { map.onStn(txt); map.setLinesFromStn(txt); present(sv, txt, false); }
+                    startSlide.run();
                     playPlace();
                     if (mapView != null) mapView.ensureVisible(map.stn);
                 } });
             }
         }, "shell-mapstn").start();
+    }
+    private final java.util.LinkedHashMap<String, String> stnCache = new java.util.LinkedHashMap<String, String>();
+    private void stnCachePut(String key, String txt) {
+        if (key == null || txt == null || txt.length() == 0 || txt.length() > 80000) return;
+        stnCache.remove(key); stnCache.put(key, txt);
+        while (stnCache.size() > 40) { java.util.Iterator<String> it = stnCache.keySet().iterator(); it.next(); it.remove(); }
     }
 
     // ── 캐릭터 놀이터(웹 _RC.playStart): 역 팝업 이름 오른쪽 · 시간표 제목 오른쪽 빈 칸. 팝업 → 시간표로 올라올 땐 같은 장면이 이어진다 ──
@@ -2228,13 +2279,15 @@ public class ShellActivity extends Activity {
     private android.view.View stnSheetBox(ScreenView sv, int[] pal) {
         FrameLayout box = new FrameLayout(this) {
             // 웹 svgShowPopup: 팝업 어디서든 위로 끌면 시간표가 올라오고, 아래로 끌면 닫힌다(40dp · 세로가 가로의 1.2배 이상). 단추·알약 누르기는 그대로 — 끌기가 확정된 순간에만 가로채고, 한 번만 반응한다.
-            private float dx0, dy0; private boolean fired;
+            private float dx0, dy0; private boolean fired, top0;
             @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
                 int a = e.getActionMasked();
-                if (a == android.view.MotionEvent.ACTION_DOWN) { dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; }
-                else if (a == android.view.MotionEvent.ACTION_MOVE && !fired && ShellCore.S_MAPSTN.equals(sheetName)) {
+                if (a == android.view.MotionEvent.ACTION_DOWN) { dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f; }
+                else if (a == android.view.MotionEvent.ACTION_MOVE && !fired) {
                     float dy = e.getRawY() - dy0, dx = e.getRawX() - dx0;
-                    if (Math.abs(dy) > 40f * dpr && Math.abs(dy) > Math.abs(dx) * 1.2f) { fired = true; if (dy < 0f) openTimetable(); else closeSheet(); return true; }
+                    boolean vert = Math.abs(dy) > Math.abs(dx) * 1.2f;
+                    if (ShellCore.S_MAPSTN.equals(sheetName) && vert && Math.abs(dy) > 28f * dpr) { fired = true; if (dy < 0f) openTimetable(); else closeSheet(); return true; }          // 한 번 쓸면: 위로 = 시간표, 아래로 = 닫기
+                    if (ShellCore.S_MAPTT.equals(sheetName) && top0 && vert && dy > 36f * dpr) { fired = true; closeSheet(); return true; }                                              // 시간표 맨 위에서 아래로 쓸면 닫힌다(스크롤 중이면 목록이 먼저)
                 }
                 return false;
             }
@@ -2287,7 +2340,14 @@ public class ShellActivity extends Activity {
     }
     private void openTimetable() {
         if (sheet == null) return;
-        try { android.view.Window w = sheet.getWindow(); w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f)); } catch (Throwable ignored) { }
+        try {
+            final android.view.Window w = sheet.getWindow();
+            final int from = Math.round(S_STN_H * dpr), to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
+            final android.animation.ValueAnimator va = android.animation.ValueAnimator.ofInt(from, to);          // 시트가 한 번에 커지지 않고 위로 부드럽게 자란다
+            va.setDuration(300L); va.setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f));
+            va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(android.animation.ValueAnimator a) { try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (Integer) a.getAnimatedValue()); } catch (Throwable ignored) { va.cancel(); } } });
+            va.start();
+        } catch (Throwable ignored) { }
         sheetName = ShellCore.S_MAPTT;
         ttRender();
         ttFetch();
