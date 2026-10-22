@@ -39,7 +39,7 @@ function findAndroidJar() {
   await t('안드로이드 계층(ScreenView·ScreenNativePlugin)을 진짜 android.jar 로 컴파일', async () => {
     const jar = findAndroidJar(); if (!jar) return 'skip';
     const j = path.join(out, 'j'); fs.mkdirSync(j);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('RunnerCore.java'), N('RunnerArt.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-Xlint:all', '-Xlint:-deprecation', '-cp', jar, '-d', j, N('ScreenCore.java'), N('NetPost.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneHaptics.java'), N('SceneCv.java'), N('SceneArt.java'), N('SceneActs.java'), N('SceneCore.java'), N('AndroidCv.java'), N('SceneDriver.java'), N('ScreenView.java'), N('ActRowCore.java'), N('RunnerCore.java'), N('RunnerArt.java'), N('TileMapCore.java'), N('TileLoader.java'), N('TileMapArt.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').split('\n').filter(l => !/^Picked up/.test(l)).join(' / ').slice(0, 1500));
     assert(fs.existsSync(path.join(j, 'com', 'dullyyj', 'subway', 'ScreenView.class')));
   });
