@@ -207,6 +207,11 @@ public final class RideCore {
                 Object al2 = om.get("alert"); ovAlert = al2 instanceof Number ? Math.max(0, Math.min(2, ((Number) al2).intValue())) : 0;
                 ovShare = ShareCore.fromMap(om.get("share")); ov = OvCore.fromMap(om);
             } else { ovActive = false; ovLine1 = ovLine2 = ovBanner = ""; ovAlert = 0; ovShare = null; ov = null; }
+            Object rw = m.get("row");
+            if (rw instanceof Map) {                                  // 경로 카드 버튼 줄 오른쪽 칸(탑승 → 환승 → 도착): 칸의 뜻·전환은 엔진이 정한다
+                Map<String, Object> rm = (Map<String, Object>) rw;
+                rowJson = HomeSearchCore.toJson(rm); rowSlot = BoardCore.s(rm.get("slot"), 12); rowCan = Boolean.TRUE.equals(rm.get("can"));
+            } else { rowJson = ""; rowSlot = ""; rowCan = false; }
             Object nm = m.get("nextMs");
             double nx = nm instanceof Number ? ((Number) nm).doubleValue() : STEP_DEFAULT_MS;
             nextMs = (long) Math.max(STEP_MIN_MS, Math.min(STEP_MAX_MS, nx));
@@ -296,7 +301,9 @@ public final class RideCore {
 
     // ═════════════ 앱 화면용 ═════════════
     /** 결과 카드의 탑승 상태 { on:1, text } (HomeCore → 엔진 r.ride). */
-    public String rideJson() { return "{\"on\":1,\"text\":" + ShellCore.q(text) + "}"; }
+    public String rideJson() { return "{\"on\":1,\"text\":" + ShellCore.q(text) + (rowJson.length() > 2 ? ",\"row\":" + rowJson : "") + "}"; }
+    /** 버튼 줄 오른쪽 칸: 지금 칸 이름("board"|"transfer"|"arrive"|"") · 지금 누르면 먹히나. */
+    public String rowJson = "", rowSlot = ""; public boolean rowCan;
     /**
      * 탑승 중 캐릭터 장면 재료 { here, boarded, key, nodes[{name,isOrigin,isSub,isBus,lineName}] } — 상태에서 이름·종류만 옮겨 담는다(어떤 장면을 보일지는 엔진 sceneDecide 가 정한다).
      * 상태가 없거나 이상하면 빈 글.
