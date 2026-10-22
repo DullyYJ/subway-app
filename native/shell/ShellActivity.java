@@ -1829,6 +1829,7 @@ public class ShellActivity extends Activity {
     /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
+        map.svb = busRefreshing ? 2500 : 700;                                                    // 처음 그리기는 서버가 도착정보를 오래 기다리지 않는다(정류장부터 먼저 · 도착정보는 이어서) · 조용한 갱신은 넉넉히
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
         final String modeNow = map.mode();
         final String wtxt = round == 0 && "bus".equals(modeNow) && json.equals(warmBusJson) && System.currentTimeMillis() - warmBusAt < 45000L ? warmBusTxt : "";          // 위치를 잡을 때 뒤에서 미리 받아 둔 정류장 화면이 있으면 기다리지 않고 바로
@@ -2028,7 +2029,7 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 String fin = ""; String sig = ""; final List<String[]> arrNeed = new ArrayList<String[]>(); final java.util.Map<String, String> res = new java.util.LinkedHashMap<String, String>();
                 try {
-                    MapCore w = new MapCore(store); w.modeOverride = "bus"; w.setBusLoc(la, lo);
+                    MapCore w = new MapCore(store); w.modeOverride = "bus"; w.svb = 2500; w.setBusLoc(la, lo);
                     for (int round = 0; round < 4 && fin.length() == 0; round++) {
                         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme), 12000);
                         if (r.status != 200 || r.body == null || r.body.length() == 0) break;
@@ -2049,8 +2050,9 @@ public class ShellActivity extends Activity {
                     busQuiet = false;
                     if (txt.length() == 0 || !busShowing() || !MapCore.VW_NEAR.equals(map.busView()) || busRefreshing) return;      // 못 받았거나 그 사이 화면이 바뀜 — 아무것도 건드리지 않는다(다음 위치 때 다시)
                     if (from != null && map.busLL != null && (map.busLL[0] != from[0] || map.busLL[1] != from[1])) return;       // 그 사이 다른 곳으로 이미 옮겨졌다
+                    if (nsig.equals(curSig)) for (java.util.Map.Entry<String, String> e : res.entrySet())            // 같은 정류장들인데 새로 받은 도착정보가 비었거나 에러 글이면(옛 값은 멀쩡) 바꿔 끼우지 않는다 — 있던 정보가 사라지지 않게
+                        if (e.getKey().matches("[af][0-9]{1,3}") && !MapCore.hasArr(e.getValue()) && MapCore.hasArr(map.busRes.get(e.getKey()))) return;
                     seqMapB++;                                                                  // 이 받기보다 먼저 시작한 화면 응답은 버린다
-                    boolean same = nsig.equals(curSig);
                     map.setBusLoc(la, lo);
                     for (java.util.Map.Entry<String, String> e : res.entrySet()) map.addBusRes(e.getKey(), e.getValue());
                     if (!arrNeed.isEmpty()) map.rememberNeed(arrNeed);
