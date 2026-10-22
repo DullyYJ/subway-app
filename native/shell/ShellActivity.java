@@ -152,6 +152,18 @@ public class ShellActivity extends Activity {
         tabs = new ScreenView(this);
         tabs.setDpr(dpr);
         tabs.setListener(new Host(2));
+        tabs.setOnTouchListener(new View.OnTouchListener() {         // 하단 탭 막대를 위로 쓸면 탑승 시트를 연다(웹 _rsInitSwipe) — 탭 누름은 그대로 두려고 이벤트를 먹지 않는다
+            private float tx, ty;
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == android.view.MotionEvent.ACTION_DOWN) { tx = e.getX() / dpr; ty = e.getY() / dpr; }
+                else if (a == android.view.MotionEvent.ACTION_UP && RideService.running) {
+                    String act = RsCore.tabSwipe(RideService.liveOv, e.getX() / dpr - tx, e.getY() / dpr - ty);
+                    if (act != null) RideService.rsAct(act);
+                }
+                return false;
+            }
+        });
         root.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(56f * dpr)));
         setContentView(root);
 
