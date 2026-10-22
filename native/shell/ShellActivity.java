@@ -2557,7 +2557,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    private void closeSheet() { brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+    private void closeSheet() { detLoading = null; brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
@@ -2574,7 +2574,10 @@ public class ShellActivity extends Activity {
             if (ln != null && "fm.ki".equals(a.v)) { openKakaoPlace(ln); return; }
             if (ln != null) openExternal(ln[0], ln[1]);
         }
-        @Override public void onSet(ScreenCore.Act a, boolean on) { if (ShellCore.S_SETPG.equals(sheetName)) setPageAct(a.a, a.v, a.key, on); }
+        @Override public void onSet(ScreenCore.Act a, boolean on) {
+            if (ShellCore.S_SETPG.equals(sheetName)) setPageAct(a.a, a.v, a.key, on);
+            else if (ShellCore.S_DETAIL.equals(sheetName) && a != null && "call".equals(a.a)) home.actDetail(a.v);          // 구간 펼침은 화면이 바로 했다 — 펼친 번호만 적어 둔다(다시 그리지 않는다)
+        }
         @Override public void onSearch(ScreenCore.Act a, String q) { if (ShellCore.S_SETPG.equals(sheetName) && "cm".equals(setPage) && "call".equals(a.a)) cmAct("call", a.v, null, false, q); }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
@@ -3267,8 +3270,13 @@ public class ShellActivity extends Activity {
                     home.rideRouteId = rid;
                     rideGraceUntil = System.currentTimeMillis() + 8000L;
                     home.setRide(ride.rideJson(), ride.lvJson());
-                    closeSheet();
-                    toast("탑승 안내를 시작했어요");
+                    final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
+                    toast(HomeCore.optName(home.resTab) + " 경로로 확정했어요");                    // 웹 confirmSelectedRoute 토스트
+                    ovlHintOnce();
+                    if (inDetail) {                                                              // 웹: 단추가 초록 '확정됨' 으로 바뀌고 0.6초 뒤 시트가 닫힌다
+                        loadDetail();
+                        main.postDelayed(new Runnable() { @Override public void run() { if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); } }, 600L);
+                    } else closeSheet();
                     reloadHome();
                     final List<String> secs = new ArrayList<String>(home.resSec);
                     new Thread(new Runnable() {
@@ -3280,6 +3288,15 @@ public class ShellActivity extends Activity {
                 } });
             }
         }, "shell-ride").start();
+    }
+    /** 웹 _pipArmNow: 오버레이 권한이 없으면 한 번만 알려 준다(다른 앱을 보면서도 내 위치를 보려면 필요). */
+    private void ovlHintOnce() {
+        try {
+            if (RideOverlay.supported() && !RideOverlay.allowed(this) && "1".equals(store.get(ShellCore.K_OVL, "0")) && !"1".equals(store.get(ShellCore.K_OVLHINT, "0"))) {
+                store.put(ShellCore.K_OVLHINT, "1");
+                main.postDelayed(new Runnable() { @Override public void run() { toast("다른 앱을 보면서도 내 위치를 보려면 설정 > '다른 앱 위에 표시'를 켜세요"); } }, 1800L);
+            }
+        } catch (Throwable ignored) { }
     }
     /** 앱이 죽었다(또는 화면만 다시 만들어졌다) 다시 열렸을 때, 탑승 안내가 아직 살아 있으면 그 경로의 결과 카드를 되살린다. */
     private void restoreRideCard() {
@@ -3393,16 +3410,90 @@ public class ShellActivity extends Activity {
     }
 
     // ───────────── 세부경로 시트 ─────────────
+    private android.widget.TextView detLoading;
+    private final java.util.LinkedHashMap<String, String> detCache = new java.util.LinkedHashMap<String, String>();
+    /** 웹 transitDetailModal 과 같은 틀: 화면 전체를 0.82 로 어둡게 · 시트는 아래 탭바 위에 떠서 위쪽 모서리 20 · 너비 520 까지 · 머리를 아래로 120dp 넘게 끌면 닫힌다(.25초). 안의 글·단추는 엔진이 정한다. */
     private void openDetailSheet() {
         closeSheet();
+        final String json = home.detailRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store));
+        if (json.length() == 0) return;
         sheetName = ShellCore.S_DETAIL;
-        sheetView = new ScreenView(this);
-        sheetView.setDpr(dpr);
-        sheetView.setPalette(ShellCore.palette(ShellCore.theme(store)));
-        sheetView.setListener(new SheetHost());
+        final int[] pal = ShellCore.palette(ShellCore.theme(store));
+        final ScreenView sv = new ScreenView(this);
+        sheetView = sv;
+        sv.setDpr(dpr);
+        sv.setPalette(pal);
+        sv.setListener(new SheetHost());
+        boolean filled = false;
+        final String cached = detCache.get(json);                                      // 본 적 있는 경로면 시트가 올라오기 전에 먼저 채워 둔다
+        if (cached != null) { try { home.onDetail(cached); sv.setScreen(parsedGet(cached), false); filled = true; } catch (Throwable e) { filled = false; } }
+        final FrameLayout root = new FrameLayout(this);
+        root.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closeSheet(); } });       // 웹: 어두운 바깥을 누르면 닫힌다
+        final FrameLayout box = new FrameLayout(this) {
+            private float rawY0; private boolean drag; private final int slop = android.view.ViewConfiguration.get(ShellActivity.this).getScaledTouchSlop();
+            @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
+                int a = e.getActionMasked();
+                if (a == android.view.MotionEvent.ACTION_DOWN) { rawY0 = e.getRawY(); drag = false; return false; }
+                if (a == android.view.MotionEvent.ACTION_MOVE && !drag && e.getY() - (e.getRawY() - rawY0) < 64f * dpr) {            // 머리(손잡이 · 제목) 에서 시작한 아래 끌기만
+                    float dy = e.getRawY() - rawY0;
+                    if (dy > slop) { drag = true; return true; }
+                }
+                return false;
+            }
+            @Override public boolean onTouchEvent(android.view.MotionEvent e) {
+                int a = e.getActionMasked();
+                if (!drag) return true;
+                if (a == android.view.MotionEvent.ACTION_MOVE) { setTranslationY(Math.max(0f, e.getRawY() - rawY0)); return true; }
+                if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
+                    drag = false;
+                    float dy = e.getRawY() - rawY0;
+                    android.view.animation.PathInterpolator ease = new android.view.animation.PathInterpolator(0.25f, 0.1f, 0.25f, 1f);       // CSS ease
+                    if (a == android.view.MotionEvent.ACTION_UP && dy > 120f * dpr) {
+                        animate().translationY(getHeight()).setDuration(250L).setInterpolator(ease).start();
+                        main.postDelayed(new Runnable() { @Override public void run() { if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); } }, 200L);
+                    } else animate().translationY(0f).setDuration(250L).setInterpolator(ease).start();
+                }
+                return true;
+            }
+        };
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(pal[ScreenView.R_CARD]); float rr = 20f * dpr; g.setCornerRadii(new float[] { rr, rr, rr, rr, 0f, 0f, 0f, 0f });
+        box.setBackground(g);
+        if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
+        box.addView(sv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (!filled) {                                                                  // 웹 '경로를 불러오는 중...'
+            android.widget.TextView tv = new android.widget.TextView(this);
+            tv.setText("경로를 불러오는 중..."); tv.setTextSize(13f); tv.setTextColor(pal[ScreenView.R_SUB]); tv.setGravity(android.view.Gravity.CENTER);
+            box.addView(tv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER));
+            detLoading = tv;
+        }
+        box.setClickable(true);
+        box.setAlpha(0f);
+        root.addView(box, new FrameLayout.LayoutParams(1, 1, android.view.Gravity.TOP | android.view.Gravity.CENTER_HORIZONTAL));
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
-        sheet.setContentView(sheetView);
-        try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("세부경로를 열지 못했어요"); return; }
+        sheet.setContentView(root);
+        try {
+            android.view.Window w = sheet.getWindow();
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.setDimAmount(0.82f);
+            w.setWindowAnimations(android.R.style.Animation_InputMethod);
+            sheet.show();
+        } catch (Throwable t) { toast("세부경로를 열지 못했어요"); sheet = null; sheetView = null; sheetName = ""; return; }
+        root.post(new Runnable() { @Override public void run() {                        // 웹: 높이 = 화면 - 탭바 56 - 위 안전영역 - 10 · 탭바 위에 떠 있다
+            if (sheet == null || sv != sheetView) return;
+            int[] ro = new int[2]; root.getLocationOnScreen(ro);
+            int rootH = root.getHeight(), rootW = root.getWidth();
+            int tabsTop = rootH - Math.round(56f * dpr);
+            if (tabs != null && tabs.getHeight() > 0) { int[] tl = new int[2]; tabs.getLocationOnScreen(tl); tabsTop = tl[1] - ro[1]; }
+            int sb = 0; int rid = getResources().getIdentifier("status_bar_height", "dimen", "android"); if (rid > 0) sb = getResources().getDimensionPixelSize(rid);
+            int top = Math.max(0, sb - ro[1]) + Math.round(10f * dpr);
+            FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) box.getLayoutParams();
+            lp.width = Math.min(rootW, Math.round(520f * dpr)); lp.height = Math.max(Math.round(200f * dpr), tabsTop - top); lp.topMargin = top;
+            box.setLayoutParams(lp);
+            slideIn(box);
+        } });
         loadDetail();
     }
     private void loadDetail() {
@@ -3415,8 +3506,10 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_DETAIL.equals(sheetName)) return;
                     if (txt.length() == 0) { toast("세부경로를 받지 못했어요"); return; }
+                    if (txt.length() < 80000) { detCache.remove(json); detCache.put(json, txt); while (detCache.size() > 12) { java.util.Iterator<String> it = detCache.keySet().iterator(); it.next(); it.remove(); } }
                     home.onDetail(txt);
                     present(sheetView, txt, true);
+                    if (detLoading != null) { detLoading.setVisibility(View.GONE); detLoading = null; }
                 } });
             }
         }, "shell-detail").start();
