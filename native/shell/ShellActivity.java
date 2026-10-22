@@ -2213,6 +2213,7 @@ public class ShellActivity extends Activity {
             android.view.Window w = sheet.getWindow();
             int hpx = hDp > 0 ? Math.round(hDp * dpr) : Math.round(getResources().getDisplayMetrics().heightPixels * (-hDp) / 100f);
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, hpx);
+            if (mapView != null) mapView.setCover(hpx);                                      // 시트가 덮은 만큼을 뺀 보이는 영역에 역이 오게
             w.setGravity(android.view.Gravity.BOTTOM);
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(pal[ScreenView.R_BG]));
             w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
@@ -2327,7 +2328,9 @@ public class ShellActivity extends Activity {
                         final android.view.View dv = w.getDecorView();
                         float ty = dv.getTranslationY();
                         boolean tt = ShellCore.S_MAPTT.equals(sheetName);
-                        if (!cancel && (ty >= (tt ? 56f : 40f) * dpr || vy > 600f * dpr)) {
+                        if (!cancel && tt && (ty >= 56f * dpr || vy > 600f * dpr)) {
+                            busy = true; backToStation(dv, new Runnable() { @Override public void run() { busy = false; } });          // 웹: 시간표를 내리면 역 팝업이 되돌아온다
+                        } else if (!cancel && (ty >= (tt ? 56f : 40f) * dpr || vy > 600f * dpr)) {
                             busy = true;
                             final android.app.Dialog me = sheet;
                             dv.animate().translationY(dv.getHeight() + 40f * dpr).setDuration(Math.round(160f + 80f * Math.max(0f, 1f - ty / Math.max(1f, dv.getHeight())))).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f))
@@ -2395,10 +2398,41 @@ public class ShellActivity extends Activity {
         final int to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
         int span = Math.max(1, to - Math.round(S_STN_H * dpr));
         float rest = Math.max(0f, Math.min(1f, (to - fromPx) / (float) span));
-        animSheetH(fromPx, to, Math.round(120f + 180f * rest), done);                    // 남은 거리에 비례(전부 남았으면 .3초 — 웹 시트 올라오기)
+        animSheetH(fromPx, to, Math.round(120f + 180f * rest), done);
+        if (mapView != null) { mapView.setCover(to); mapView.ensureVisible(map.stn); }          // 시간표가 더 높이 덮으니 역이 그 위 영역 안에 오게(웹은 지도 사각형을 시트 끝까지로 줄인다)                    // 남은 거리에 비례(전부 남았으면 .3초 — 웹 시트 올라오기)
         sheetName = ShellCore.S_MAPTT;
         ttRender();
         ttFetch();
+    }
+    /**
+     * 시간표를 아래로 내리면 역 팝업이 되돌아온다(웹 nmTtOpen 의 backOK). 시간표는 손가락이 놓인 자리에서 팝업 자리까지 내려가며 옅어지고(.2초),
+     * 그 자리에서 창을 팝업 높이로 줄여 본 역 화면(캐시)을 채운 뒤 또렷하게 나타난다. 캐시가 없으면 팝업을 새로 연다. done = 끝난 뒤 할 일.
+     */
+    private void backToStation(final android.view.View dv, final Runnable done) {
+        final android.app.Dialog me = sheet; final ScreenView sv = sheetView;
+        if (me == null || sv == null) { if (done != null) done.run(); return; }
+        final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
+        final String cached = stnCache.get(json);
+        if (cached == null) { if (done != null) done.run(); closeSheet(); openMapSheet(S_STN_H); return; }
+        map.ttSeq++;                                                                       // 늦게 오는 시간표 답이 이 화면을 덮지 않게
+        final int from = Math.round(S_STN_H * dpr), to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
+        final android.view.animation.PathInterpolator ez = new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f);
+        sv.animate().alpha(0f).setDuration(200L).setInterpolator(ez).start();
+        dv.animate().translationY(Math.max(0, to - from)).setDuration(200L).setInterpolator(ez).withEndAction(new Runnable() {
+            @Override public void run() {
+                try {
+                    if (sheet != me || sheetView != sv) return;
+                    map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false);
+                    sheetName = ShellCore.S_MAPSTN;
+                    me.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, from);
+                    dv.setTranslationY(0f);
+                    if (mapView != null) { mapView.setCover(from); mapView.ensureVisible(map.stn); }
+                    sv.animate().alpha(1f).setDuration(160L).setInterpolator(ez).start();
+                    sv.post(new Runnable() { @Override public void run() { if (sv == sheetView) playPlace(); } });
+                } catch (Throwable t) { if (sheet == me) closeSheet(); }
+                finally { if (done != null) done.run(); }
+            }
+        }).start();
     }
     /** 시트 창 높이를 부드럽게 바꾼다(웹 시트 곡선). 창이 바뀌었거나 닫혔으면 조용히 멈춘다. */
     private void animSheetH(int a, int b, long ms, final Runnable done) {
@@ -2618,7 +2652,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    private void closeSheet() { detLoading = null; brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+    private void closeSheet() { if (mapView != null) mapView.setCover(0f); detLoading = null; brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
