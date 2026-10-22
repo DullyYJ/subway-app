@@ -1095,6 +1095,7 @@ public final class ScreenCore {
         public String dk = "", time = "", gk = "";   // 타임라인 칸: 점 종류(e 끝점 · r 고리 · m 도보 가운데) · 시각 글 · 배지 종류(p 알약 · t 글)
         public Col lc, rc, dc, dc2, gc, nc, timec;   // 칸: 왼/오른 선 · 점 · 점 둘째 색 · 배지 · 이름 · 시각 글자 색
         public float tsz, gsz, gx, badgeTw, nameBot; // 칸: 시각 글 크기 · 배지 글 크기 · 알약 좌우 여백 · 배지 글 폭 · 이름 마지막 줄 아래쪽
+        public boolean band; public float cl, cr, cr2; public Mark bmk;   // 본문 안 타임라인 칸: 가로로 밀리는 줄인가 · 보이는 틀 왼쪽·오른쪽 · 내용 오른쪽 끝(여백 포함) · (첫 칸에만) 내 위치 마커
         public boolean tb;
         public boolean ps, hr;                       // 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
@@ -1147,6 +1148,11 @@ public final class ScreenCore {
         public float dlgR;                                                // 안내창 모서리(dp)
         public float fitW;                                                // 안내창(fit): 가장 긴 글 줄에 맞춘 카드 너비(dp; 0 이면 못 구함)
         public Mark mk;                                                   // 구간 타임라인의 내 위치 마커(없으면 null)
+        public boolean mkBody;                                            // 그 마커가 본문 안 타임라인(가로로 밀리는 줄)의 것이다
+        public float bandTop = -1f, bandBot = -1f, bandR;                 // 본문 안 타임라인 줄의 위·아래(본문 좌표) · 내용 오른쪽 끝
+        public float bandMax() { return bandR > 0f ? Math.max(0f, bandR - bandView) : 0f; }
+        public float bandView;                                            // 줄이 보이는 틀의 너비
+        public float bandL; public String bandSig = "";                      // 틀 왼쪽 · 줄 내용이 바뀌었는지 알아보는 표시(바뀔 때만 앱이 내 위치로 다시 맞춘다)
         public float initScrollX;                                         // 24시간 차트: 지금 시각 막대를 가운데로 맞추는 가로 위치
         public String ctrSig = "";                                        // 그 막대 내용이 바뀌면 이 값이 바뀐다 — 바뀔 때만 앱이 다시 가운데로 맞춘다
         float[] headMaxB = new float[0], bodyMaxB = new float[0];     // 앞에서부터 가장 아래쪽(이진 탐색용)
@@ -1376,6 +1382,13 @@ public final class ScreenCore {
         y = 0f;
         for (Node n : sc.body) y = stack(n, 0f, width, y, bi, m, openKey);
         L.body = bi.toArray(new Item[0]); L.bodyH = y;
+        for (Item q : L.body) {                                                                           // 본문 안 타임라인 줄(경로 결과 카드) — 위·아래·내용 끝·마커를 모은다
+            if (q.kind != K_TRK || !q.band) continue;
+            if (L.bandTop < 0f) { L.bandTop = q.y; L.bandView = q.cr - q.cl; L.bandL = q.cl; }
+            L.bandSig += (q.lines.length > 0 ? q.lines[0] : "") + ",";
+            L.bandBot = Math.max(L.bandBot, q.y + q.h); L.bandR = Math.max(L.bandR, q.cr2 - q.cl);
+            if (q.bmk != null && L.mk == null) { L.mk = q.bmk; L.mkBody = true; }
+        }
         for (Item q : L.body) if (q.kind == K_BRX) { L.part = true; break; }
         // 아래 고정 줄
         List<Item> fi = new ArrayList<Item>();
@@ -1613,6 +1626,35 @@ public final class ScreenCore {
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
+        if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다
+            float tx = ox, ty = y + n.padT;
+            int rowFrom = out.size();
+            for (Node c : n.items) {
+                Item it = new Item(); it.kind = K_TRK; it.x = tx; it.y = ty; it.w = c.max; it.h = TRK_H;
+                List<String> nl = wrap(c.name, Math.max(10f, c.max - 4f), c.size, c.bold, 2, m);
+                it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
+                it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;
+                it.gk = c.tag; it.gsz = c.ssize; it.gx = c.vp; it.gc = col(c.fill, null);
+                if (c.badge.length() > 0) {
+                    float avail = c.max - 2f - ("p".equals(c.tag) ? 2f * c.vp : 0f);
+                    it.label = ellipsize(c.badge, Math.max(10f, avail), c.ssize, true, m);
+                    it.badgeTw = m.width(it.label, c.ssize, true);
+                }
+                it.lc = col(c.line, null); it.rc = col(c.accent, null); it.dk = c.dot; it.dc = col(c.onc, null); it.dc2 = col(c.onl, null);
+                it.time = ellipsize(c.time, c.max - 2f, c.lh, c.big, m); it.timec = col(c.sc, new Col("sub", 0)); it.tsz = c.lh; it.tb = c.big; it.ti = c.cols; it.ps = c.ps; it.hr = c.hr;
+                it.band = true; it.cl = x0; it.cr = x0 + width;
+                out.add(it); tx += c.max;
+            }
+            for (int q = rowFrom; q < out.size(); q++) out.get(q).cr2 = tx + n.padR;
+            if (n.mk != null && rowFrom < out.size() && n.mk.f < out.size() - rowFrom && n.mk.t < out.size() - rowFrom) {
+                Mark k = n.mk; Item a = out.get(rowFrom + k.f), b = out.get(rowFrom + k.t);
+                k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null);
+                k.x0 = a.x + a.w / 2f; k.x1 = b.x + b.w / 2f; k.y = ty + TRK_NAME_H + TRK_BADGE_H + TRK_DOT_Y;
+                if (k.bt.length() > 0) { k.btw = m.width(k.bt, k.bz, true); k.bth = k.bz * 1.25f + 2f; k.bty = ty + TRK_NAME_H + (TRK_BADGE_H - k.bth) / 2f; }
+                out.get(rowFrom).bmk = k;
+            }
+            return ty + TRK_H + n.padB;
+        }
         if ("spacer".equals(n.t)) return y + n.h;
         if ("swap".equals(n.t)) {                                                    // 두 줄의 경계 한가운데에 얹히는 동그란 단추 — 높이를 차지하지 않는다
             float d = n.size;
