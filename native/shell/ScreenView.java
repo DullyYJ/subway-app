@@ -454,10 +454,27 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_BUTTON && it.y == pi.y && it.act != null && it.act.v != null && it.act.v.startsWith("rh.tab.")) row.add(it);
         for (ScreenCore.Item it : row) if (it != pi && it.fill != null && "gold".equals(it.fill.role)) on = it;
         if (on == null || on == pi) return;
+        rtFrom[0] = cc(pi.fill, pal[R_CARD]); rtFrom[1] = cc(pi.line, pal[R_BORDER]); rtFrom[2] = cc(pi.tc, pal[R_SUB]);          // 웹 #routeOptionTabs button{transition:all .15s} — 옛 색에서 새 색으로 0.15초 동안 섞는다
+        rtFrom[3] = cc(on.fill, pal[R_CARD]); rtFrom[4] = cc(on.line, pal[R_BORDER]); rtFrom[5] = cc(on.tc, pal[R_SUB]);
         ScreenCore.Col f = pi.fill, l = pi.line, t = pi.tc;
         pi.fill = on.fill; pi.line = on.line; pi.tc = on.tc;
         on.fill = f; on.line = l; on.tc = t;
+        rtA = pi; rtB = on; rtT0 = android.os.SystemClock.uptimeMillis();
         invalidate();
+    }
+    private ScreenCore.Item rtA, rtB; private long rtT0; private final int[] rtFrom = new int[6]; private boolean rtAnim;
+    private static int mix(int a, int b, float f) {
+        int ra = (a >>> 24) & 255, rb = (b >>> 24) & 255;
+        int A = Math.round(ra + (rb - ra) * f), R = Math.round(((a >> 16) & 255) + (((b >> 16) & 255) - ((a >> 16) & 255)) * f), G = Math.round(((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * f), B = Math.round((a & 255) + ((b & 255) - (a & 255)) * f);
+        return (A << 24) | (R << 16) | (G << 8) | B;
+    }
+    /** 경로 탭 단추의 지금 색(전환 중이면 섞은 색). k: 0 바탕 · 1 테두리 · 2 글. */
+    private int rtColor(ScreenCore.Item it, int k, int to) {
+        if (it != rtA && it != rtB) return to;
+        float f = (android.os.SystemClock.uptimeMillis() - rtT0) / 150f;
+        if (f >= 1f) { return to; }
+        rtAnim = true;
+        return mix(rtFrom[(it == rtA ? 0 : 3) + k], to, f * (2f - f));
     }
     /** 토글 줄 단추를 누르면 새 화면이 오기 전에 먼저 그 단추를 켜 보인다(새로고침 단추는 제외). */
     private void pickBtog(ScreenCore.Item pi) {
@@ -1624,7 +1641,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1701,7 +1718,7 @@ public class ScreenView extends View {
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -2180,17 +2197,18 @@ public class ScreenView extends View {
 
     private void drawButton(Canvas cv, ScreenCore.Item it) {
         rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
-        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, pal[R_CARD]));
+        p.setStyle(Paint.Style.FILL); p.setColor(rtColor(it, 0, cc(it.fill, pal[R_CARD])));
         cv.drawRoundRect(rf, it.radius, it.radius, p);
         if (it == pressed) { p.setColor(0x14808080); cv.drawRoundRect(rf, it.radius, it.radius, p); }
-        int lc = cc(it.line, pal[R_BORDER]);
+        int lc = rtColor(it, 1, cc(it.line, pal[R_BORDER]));
         if ((lc >>> 24) != 0) {
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(lc);
-            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
-            cv.drawRoundRect(rf2, it.radius - 0.5f, it.radius - 0.5f, p);
+            float bw = it.act != null && it.act.v != null && it.act.v.startsWith("rh.tab.") ? 1.5f : 1f, hb = bw / 2f;         // 웹 경로 탭 단추 테두리 1.5px
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(bw); p.setColor(lc);
+            rf2.set(it.x + hb, it.y + hb, it.x + it.w - hb, it.y + it.h - hb);
+            cv.drawRoundRect(rf2, it.radius - hb, it.radius - hb, p);
         }
         p.setStyle(Paint.Style.FILL);
-        setText(it.size, it.bold, cc(it.tc, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+        setText(it.size, it.bold, rtColor(it, 2, cc(it.tc, pal[R_SUB]))); tp.setTextAlign(Paint.Align.CENTER);
         cv.drawText(it.lines.length > 0 ? it.lines[0] : it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
     }
