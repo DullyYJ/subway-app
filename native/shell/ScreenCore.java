@@ -1052,7 +1052,7 @@ public final class ScreenCore {
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
-        public boolean bold, on;
+        public boolean bold, on, spin;               // spin: inbar 단추에 도는 점(Node.spin 에서)
         public String color = "text", bg = "", align = "left";
         public float alpha = 1f;
         public boolean fixed;                        // 머리에서 가로로 안 밀리는 조각(안내 상자·검색줄)
@@ -2164,7 +2164,7 @@ public final class ScreenCore {
             float btnW = n.bops.length > 0 ? btnH : m.width(n.label, bsz, true) + (n.bpx > 0f ? n.bpx : INBAR_BTN_PADX) * 2f;        // 아이콘 단추는 동그라미(가로=세로)
             Item it = new Item(); it.kind = K_INBAR; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
             it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.act = n.act; it.badge = n.label;
-            it.bold = n.bold; it.size2 = n.bsize > 0f ? n.bsize : 0f; it.watch = n.watch; it.on = n.on; it.act2 = n.bact;
+            it.bold = n.bold; it.size2 = n.bsize > 0f ? n.bsize : 0f; it.watch = n.watch; it.on = n.on; it.spin = n.spin; it.act2 = n.bact;
             float inH = n.inh > 0f ? Math.min(n.inh, n.h) : n.h;
             it.ix = ox; it.iy = y + (n.h - inH) / 2f; it.iw = Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = inH;
             it.btx = ox + innerW - btnW; it.bty = y + (n.h - btnH) / 2f; it.sw = btnW; it.sh = btnH; it.top = n.top; it.pathOps = n.bops;
