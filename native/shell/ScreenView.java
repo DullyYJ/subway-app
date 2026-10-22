@@ -394,6 +394,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_FIELD) beginEdit(pi);
                         else if (pi.kind == ScreenCore.K_INBAR) tapInbar(pi, x / dpr, pressInFoot);
                         else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
+                        else if (pi.kind == ScreenCore.K_TDROW && pi.key.length() > 0) toggleTd(pi);
                         else if ((pi.kind == ScreenCore.K_SUG || pi.kind == ScreenCore.K_TROW) && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
                         else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
@@ -1480,6 +1481,21 @@ public class ScreenView extends View {
     private float sceneY(float py, ScreenCore.Item it) { return py - (lay.headH - scrollY + it.y) * dpr; }
     private float lastCH = -1f;
     /** 게시글 머리를 눌렀다 — 앱이 바로 펼치고(한 번에 한 글) 눌린 머리가 화면에서 움직이지 않게 스크롤을 맞춘다. 알림은 on(펼침) 으로. */
+    /** 세부경로 구간 줄을 눌렀다 — 서버를 거치지 않고 앱이 바로 펼친다(웹 _toggleDetailSec: ▾ 가 0.2초 동안 돈다). 알림은 on(펼침) 으로. */
+    private void toggleTd(ScreenCore.Item pi) {
+        blurInput();
+        final boolean wasOn = pi.on; final ScreenCore.Act a = pi.act;
+        StringBuilder b = new StringBuilder(",");
+        for (ScreenCore.Item q : lay.body) { if (q.kind != ScreenCore.K_TDROW || q.key.length() == 0) continue; if (q.key.equals(pi.key) ? !wasOn : q.on) b.append(q.key).append(','); }
+        openKey = "td:" + b;
+        tdTog.put(pi.key, Long.valueOf(SystemClock.uptimeMillis()));
+        relayout();
+        if (lay != null) scrollY = ScreenCore.clamp(scrollY, lay.bodyMaxScroll(bodyViewH()));
+        invalidate();
+        if (listener != null) listener.onSet(a, !wasOn);
+    }
+    private final java.util.HashMap<String, Long> tdTog = new java.util.HashMap<String, Long>();       // 구간 번호 → 마지막으로 누른 때(▾ 돌리기)
+    private boolean tdAnim;
     private void toggleOpen(ScreenCore.Item hd) {
         blurInput();
         boolean wasOn = hd.on; String key = hd.key; ScreenCore.Act a = hd.act;
@@ -1573,7 +1589,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1613,8 +1629,7 @@ public class ScreenView extends View {
             cv.translate(0f, h - lay.footH);
             p.setStyle(Paint.Style.FILL); p.setColor(bgNow());
             cv.drawRect(0f, 0f, w, lay.footH, p);
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);
-            cv.drawLine(0f, 0.5f, w, 0.5f, p);
+            if (lay.fl) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(0f, 0.5f, w, 0.5f, p); }
             p.setStyle(Paint.Style.FILL);
             for (int i = 0; i < lay.foot.length; i++) drawItem(cv, lay.foot[i]);
             cv.restore();
@@ -1639,7 +1654,7 @@ public class ScreenView extends View {
             }
         }
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
-        if (tdAct) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
+        if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
@@ -1711,6 +1726,7 @@ public class ScreenView extends View {
             case ScreenCore.K_SELECT: drawSelect(cv, it); break;
             case ScreenCore.K_FIELD: drawField(cv, it); break;
             case ScreenCore.K_BAR: drawBar(cv, it); break;
+            case ScreenCore.K_SHD: drawShd(cv, it); break;
             case ScreenCore.K_SEC: drawSec(cv, it); break;
             case ScreenCore.K_BRX: drawBrx(cv, it); break;
             case ScreenCore.K_TROW: drawTrow(cv, it); break;
@@ -1847,6 +1863,18 @@ public class ScreenView extends View {
         if (it.go.length() > 0) { setText(it.size2, false, pal[R_SUB]); cv.drawText(it.go, it.btx, base(it.y, it.h, 0), tp); }
     }
 
+    /** 시트 머리(웹 transitDetailHandle): 손잡이 40x5 · 제목 15px 800 · 오른쪽 28 동그란 ×(rgba(120,120,128,.16)). */
+    private void drawShd(Canvas cv, ScreenCore.Item it) {
+        p.setStyle(Paint.Style.FILL); p.setColor(pal[R_BORDER2]);
+        rf.set(it.bx, it.by, it.bx + 40f, it.by + ScreenCore.SHD_HANDLE_H); cv.drawRoundRect(rf, 3f, 3f, p);
+        for (int i = 0; i < it.lines.length; i++) { setText(it.size, true, pal[R_TEXT]); cv.drawText(it.lines[i], it.textX, base(it.textY + i * it.lineH, it.lineH, 0), tp); }
+        final float cx = it.sx + it.sw / 2f, cy = it.sy + it.sh / 2f;
+        p.setColor(it == pressed ? 0x47787880 : 0x29787880); cv.drawCircle(cx, cy, it.sw / 2f, p);
+        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.7f); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(pal[R_TEXT]);
+        cv.drawLine(cx - 4.2f, cy - 4.2f, cx + 4.2f, cy + 4.2f, p); cv.drawLine(cx + 4.2f, cy - 4.2f, cx - 4.2f, cy + 4.2f, p);
+        p.setStyle(Paint.Style.FILL); p.setStrokeCap(Paint.Cap.BUTT); p.setStrokeWidth(1f);
+    }
+
     // ───────────── 세부경로 줄(웹 .tdsec-row): 진행 레일 · 현재위치 점 · 아이콘 · 뱃지 · 펼침 정거장 ─────────────
     /** 구간 아이콘(손으로 그린 선 모양: w 도보 · s 지하철 · b 버스). 새 객체 없이 중심 (cx,cy) 기준 16dp 안에 그린다. */
     private void tdIcon(Canvas cv, String k, float cx, float cy, int c) {
@@ -1878,7 +1906,7 @@ public class ScreenView extends View {
         tdDrawn = true; if (act) tdAct = true;
         p.setStyle(Paint.Style.FILL);
         if (act) { p.setColor(pal[R_CARD2]); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
-        else if (it == pressed && it.act != null) { p.setColor(0x0F808080); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
+        else if (it == pressed && it.act != null) { p.setColor(pal[R_CARD2]); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
         // 진행 레일: 바탕 선 + 지나온 만큼 색 채움(첫 줄은 가운데부터 · 마지막 줄은 가운데까지)
         final String pos = it.gk;
         final float t0 = ("f".equals(pos) || "o".equals(pos)) ? y + hh / 2f : y, t1 = ("l".equals(pos) || "o".equals(pos)) ? y + hh / 2f : y + hh;
@@ -1893,8 +1921,9 @@ public class ScreenView extends View {
         if (it.badgeW > 0f) {
             rf.set(it.bx, it.sy, it.bx + it.badgeW, it.sy + ScreenCore.TD_BADGE_H);
             p.setColor(cc(it.fill, pal[R_CARD2])); cv.drawRoundRect(rf, ScreenCore.TD_BADGE_H / 2f, ScreenCore.TD_BADGE_H / 2f, p);
+            final String bt = ellipsizeTd(it.badge, it.badgeW - ScreenCore.TD_BADGE_PX * 2f, ScreenCore.TD_BADGE_TXT, true);          // 줄이는 쪽이 Paint 색을 지우므로 먼저 구하고 색을 정한다
             setText(ScreenCore.TD_BADGE_TXT, true, cc(it.line, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
-            cv.drawText(ellipsizeTd(it.badge, it.badgeW - ScreenCore.TD_BADGE_PX * 2f, ScreenCore.TD_BADGE_TXT, true), it.bx + it.badgeW / 2f, base(it.sy, ScreenCore.TD_BADGE_H, 0), tp);
+            cv.drawText(bt, it.bx + it.badgeW / 2f, base(it.sy, ScreenCore.TD_BADGE_H, 0), tp);
             tp.setTextAlign(Paint.Align.LEFT);
         }
         if (it.pub) {
@@ -1902,9 +1931,16 @@ public class ScreenView extends View {
             p.setColor(pal[R_CARD2]); cv.drawCircle(it.ix, it.iy, cr, p);
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawCircle(it.ix, it.iy, cr - 0.5f, p);
             p.setStyle(Paint.Style.FILL); p.setColor(pal[R_SUB]);
-            final float d = it.on ? -1f : 1f;                                                        // 열리면 위로 뒤집힌다(웹 rotate 180°)
-            tdTri.rewind(); tdTri.moveTo(it.ix - 3.6f, it.iy - 1.6f * d); tdTri.lineTo(it.ix + 3.6f, it.iy - 1.6f * d); tdTri.lineTo(it.ix, it.iy + 2.2f * d); tdTri.close();
+            float ang = it.on ? 180f : 0f;                                                           // 열리면 위로 뒤집힌다(웹 rotate 180° · transition .2s)
+            Long tg = it.key.length() > 0 ? tdTog.get(it.key) : null;
+            if (tg != null) {
+                final float fr = (SystemClock.uptimeMillis() - tg.longValue()) / 200f;
+                if (fr < 1f) { final float e = 1f - (1f - fr) * (1f - fr); ang = (it.on ? e : 1f - e) * 180f; tdAnim = true; }
+            }
+            cv.save(); cv.rotate(ang, it.ix, it.iy);
+            tdTri.rewind(); tdTri.moveTo(it.ix - 3.6f, it.iy - 1.6f); tdTri.lineTo(it.ix + 3.6f, it.iy - 1.6f); tdTri.lineTo(it.ix, it.iy + 2.2f); tdTri.close();
             cv.drawPath(tdTri, p);
+            cv.restore();
         }
         for (int i = 0; i < it.lines.length; i++) { setText(ScreenCore.TD_PATH, false, pal[R_SUB]); cv.drawText(it.lines[i], it.bx, base(it.textY + i * ScreenCore.TD_PATH_LH, ScreenCore.TD_PATH_LH, 0), tp); }
         if (it.tag.length() > 0) { setText(ScreenCore.TD_CNT, false, pal[R_SUB]); cv.drawText(it.tag, it.bx, base(it.f3, ScreenCore.TD_CNT_LH, 0), tp); }
@@ -1914,7 +1950,7 @@ public class ScreenView extends View {
         if (it.value.length() > 0) { setText(ScreenCore.TD_RNG, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(it.value, it.btx, base(it.bty, ScreenCore.TD_RNG_LH, 0), tp); }
         tp.setTextAlign(Paint.Align.LEFT);
         // 줄 아래 가는 선(펼친 줄은 목록 끝에)
-        p.setColor(pal[R_BORDER]); rf.set(x, y + hh - 1f, x + it.w, y + hh); if (!it.on) cv.drawRect(rf, p);
+        p.setColor(pal[R_BORDER]); rf.set(x, y + hh - 1f, x + it.w, y + hh); cv.drawRect(rf, p);                // 웹: 줄 아래 선은 펼쳐도 그대로, 목록은 그 아래
         // 펼친 정거장 목록
         if (it.on) {
             final int ns = it.gb.length;
@@ -1931,7 +1967,6 @@ public class ScreenView extends View {
                 setText(11f, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.RIGHT);
                 cv.drawText(it.sa[k * 2 + 1], x + it.w - ScreenCore.TD_PADH, base(ry, ScreenCore.TD_STOP_ROW, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
             }
-            p.setColor(pal[R_BORDER]); p.setStyle(Paint.Style.FILL); rf.set(x, y + it.h - 1f, x + it.w, y + it.h); cv.drawRect(rf, p);
         }
         // 현재위치 점: 빨간 점 + 흰 테두리 + 옅은 고리 + 퍼지는 맥박(1.4초, ease-out)
         if (act) {
