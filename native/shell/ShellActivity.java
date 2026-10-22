@@ -1829,7 +1829,7 @@ public class ShellActivity extends Activity {
     /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
-        map.svb = busRefreshing ? 2500 : 700;                                                    // 처음 그리기는 서버가 도착정보를 오래 기다리지 않는다(정류장부터 먼저 · 도착정보는 이어서) · 조용한 갱신은 넉넉히
+        map.svb = busRefreshing ? 2500 : 300;                                                    // 처음 그리기는 서버가 도착정보를 오래 기다리지 않는다(정류장부터 먼저 · 도착정보는 이어서) · 조용한 갱신은 넉넉히
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
         final String modeNow = map.mode();
         final String wtxt = round == 0 && "bus".equals(modeNow) && json.equals(warmBusJson) && System.currentTimeMillis() - warmBusAt < 45000L ? warmBusTxt : "";          // 위치를 잡을 때 뒤에서 미리 받아 둔 정류장 화면이 있으면 기다리지 않고 바로
