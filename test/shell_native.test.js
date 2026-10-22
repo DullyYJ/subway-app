@@ -349,6 +349,15 @@ function findAndroidJar() {
     assert.ok(/private boolean stationNow\(float tr\)/.test(a) && /d >= to - from && stationNow\(d - \(to - from\)\)\) swapOff = to - from/.test(a) && /swapOff = 0f; top0/.test(a), '시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다');
     assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /a < 3 && u\.length\(\) > 0/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
   });
+  await t('실기기 3건(s158): 키보드는 화면을 누르지 않고 · 칩 전환은 캐시로 바로 · 버스 카드는 첫 정류장부터 스프링', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), h = fs.readFileSync(N('HomeCore.java'), 'utf8');
+    const man = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
+    assert.ok(/windowSoftInputMode="adjustPan"/.test(man) && /private void applyIme\(\)/.test(a) && /SOFT_INPUT_ADJUST_PAN/.test(a) && /onInputFocus\(boolean on\) \{ if \(on\) applyIme\(\); \}/.test(a), '키보드: 화면은 그대로(adjustPan), 채팅 입력줄만 줄인다');
+    assert.ok(/public void touch\(\) \{ resRev\+\+; dataRev\+\+; \}/.test(h) && /resultRequestTab\(/.test(h) && /case HomeCore\.R_RESULT: homeChip = true; reloadHome\(\)/.test(a), '칩: 경로 자료가 바뀔 때만 dataRev 가 오른다(칩만 바꿔도 캐시 열쇠는 그대로)');
+    assert.ok(/private String resGet\(String k\)/.test(a) && /home\.dataRev \+ ":" \+ home\.resTab/.test(a) && /"shell-home-res-pre"/.test(a) && /cachedHome = chip \? lruGet\(homeCache, json\)/.test(a) && /!home\.riding\(\)\) for \(String tb : HomeCore\.RTABS\)/.test(a), '칩: 다른 탭 결과를 뒤에서 미리 받아 두고 칩을 누르면 서버 없이 바로 그린다');
+    assert.ok(/CARD_STAGGER_MS \* Math\.min\(order, 8\)/.test(sv) && /dy = f <= 0f \? -18f : -18f \* \(1f - spring\(f\)\)/.test(sv) && /cardLn\.put\(it\.key, it\.ln\)/.test(sv), '버스: 정류장 카드가 첫 번째부터 차례로 위에서 스프링으로 내려앉는다(다시 그려도 멈추지 않는다)');
+    assert.ok(/private void warmBus\(final double la, final double lo\)/.test(a) && /json\.equals\(warmBusJson\)/.test(a) && /warmBus\(l\.getLatitude\(\), l\.getLongitude\(\)\)/.test(a), '버스: 위치를 잡는 순간 정류장 화면을 미리 받아 둔다(요청이 같을 때만 쓴다)');
+  });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/abiFilters 'arm64-v8a' \}/.test(g) && !/armeabi/.test(g), '지도 엔진 네이티브 라이브러리는 64비트만');
