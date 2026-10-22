@@ -1166,8 +1166,8 @@ public class ScreenView extends View {
                 float top = y + 1f + it.gf[i * 2], rh = it.gf[i * 2 + 1];
                 float ra = 1f, rdy = 0f;
                 if (it.rt[i] > 0L) {                                          // 노선 줄 등장: 위에서 10dp 내려오며 나타남 .3초(55ms씩 차례로)
-                    float f = (now - it.rt[i]) / 300f;
-                    if (f < 1f) { ra = f <= 0f ? 0f : ease(f); rdy = -10f * (1f - ra); bcAnim = true; }
+                    float f = (now - it.rt[i]) / ROW_SPRING_MS;                  // 새 버스 줄: 위에서 스프링처럼 내려와(살짝 지나쳤다 되돌아) 자리잡는다
+                    if (f < 1f) { ra = f <= 0f ? 0f : Math.min(1f, f * 3f); rdy = f <= 0f ? -16f : -16f * (1f - spring(f)); bcAnim = true; }
                 }
                 if (ra <= 0f) continue;
                 if (ra < 1f) cv.saveLayerAlpha(x, top - 12f, x + w, top + rh + 4f, Math.round(255f * ra));
@@ -1213,6 +1213,9 @@ public class ScreenView extends View {
         if (layer) cv.restore();
     }
     private final Path bcClip = new Path();
+    private static final float ROW_SPRING_MS = 520f;
+    /** 감쇠 스프링 0 → 1(중간에 약 15% 지나쳤다가 되돌아와 1 에 닿는다). f = 0..1 */
+    private static float spring(float f) { return 1f - (float) (Math.exp(-6.0 * f) * Math.cos(10.0 * f)); }
     /** 벨 아이콘(웹 .map-bus-bell: 22px, 보조색, 투명도 .55). 24x24 칸의 경로를 22px 로 줄여 그린다. */
     private void drawBell(Canvas cv, float x, float y) {
         if (bellPath == null) {
