@@ -938,6 +938,7 @@ public class ShellJvmTest {
                 float[] pw = RsCore.pill(360f, 50f);
                 ok("pill".equals(RsCore.tap(rw, pw[0] + 4f, pw[1] + 4f, 360f, 50f)) && RsCore.tap(rw, 10f, 10f, 360f, 50f) == null && Math.abs(pw[0] + pw[2] - 344f) < 0.01f, "대기 알약을 누르면 pill");
                 ok("close".equals(RsCore.swipe(rb, 5f, 60f)) && RsCore.swipe(rb, 5f, 20f) == null && RsCore.swipe(rb, 80f, 60f) == null && "open".equals(RsCore.swipe(rw, 3f, -40f)) && RsCore.swipe(rw, 3f, -10f) == null && RsCore.swipe(ru, 0f, 90f) == null, "올라온 시트는 아래로 쓸면 close · 알약은 위로 쓸면 open · 짧거나 비스듬하면 무반응");
+                ok("open".equals(RsCore.tabSwipe(rw, 3f, -40f)) && "open".equals(RsCore.tabSwipe(null, 0f, -50f)) && RsCore.tabSwipe(rb, 0f, -50f) == null && "close".equals(RsCore.tabSwipe(rb, 5f, 60f)) && RsCore.tabSwipe(rw, 5f, 60f) == null && RsCore.tabSwipe(null, 0f, 60f) == null && RsCore.tabSwipe(rw, 60f, -40f) == null && RsCore.tabSwipe(rw, 0f, -10f) == null, "하단 탭 막대: 위로 쓸면 open(시트가 올라와 있으면 무반응) · 올라온 시트는 아래로 쓸면 close · 짧거나 비스듬하면 무반응");
                 ok(RsCore.barFill(rb, 328f) == 164f && RsCore.barFill(rw, 328f) == 0f, "막대 채움 너비");
             }
             OvCore.Ov rr = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"ch\":\"dudung\",\"a\":\"맛있는집\",\"b\":\"점심 한 끼\",\"m\":\"120m\",\"go\":\"쿠팡 보기\",\"ok\":\"확인\",\"at\":77},\"getoff\":{\"on\":false}}"));
