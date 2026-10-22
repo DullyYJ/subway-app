@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s159";
+var ENGINE_VERSION = "route-v2-2026-10-23s160";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20346,24 +20346,35 @@ async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb3
   }
   return '';
 }
-async function mapSvResolve(env, cap, body, out) {          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
+var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
+async function mapSvResolve(env, cap, body, out) {
+  var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // \uae30\uae30\uac00 \uc815\ud55c \uae30\ub2e4\ub9bc(\ucc98\uc74c \uadf8\ub9ac\uae30\ub294 \uc9e7\uac8c \u2014 \uc815\ub958\uc7a5\ubd80\ud130 \uba3c\uc800 \ubcf4\uc774\uace0 \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\uc5b4\uc11c \ucc44\uc6b4\ub2e4)          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
   var f = body.f, b = f.bus, res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
   for (round = 0; round < 3; round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
-    var texts = await Promise.all(need.map(function (n) { return mapSvOne(env, String(n.k || ''), String(n.url || '')); }));
+    var arrWave = need.every(function (n) { return /^[af][0-9]{1,3}$/.test(String(n.k || '')); });
+    var slot = new Array(need.length);
+    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; return t; }); });
+    if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
+    else await Promise.all(ps);
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
-      var k = String(n.k || ''), t = texts[i] || '';
-      if (t) any = true; else if (/^[af][0-9]{1,3}$/.test(k)) failA++;
+      var k = String(n.k || ''), t = slot[i] || '';
+      if (arrWave) {                                          // \ub3c4\ucc29\uc815\ubcf4: \ubc1b\uc740 \uac83\ub9cc \ub123\uace0, \ubabb \ubc1b\uc558\uac70\ub098 \ub2a6\uc740 \uacf3\uc740 \uc544\uc608 \ub450\uc9c0 \uc54a\ub294\ub2e4 \u2192 \uc5d4\uc9c4\uc774 \ub2e4\uc2dc need \ub85c \uc54c\ub824 \uae30\uae30\uac00 \ubc1b\ub294\ub2e4('\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc73c\ub85c \uad73\uc9c0 \uc54a\ub294\ub2e4)
+        if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else failA++;
+        return;
+      }
+      if (t) any = true;
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;
-    if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac00\uac8c
+    if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
+    if (arrWave) break;                                     // \ub3c4\ucc29\uc815\ubcf4\ub294 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
   return out;
