@@ -626,10 +626,7 @@ public class ShellActivity extends Activity {
     // 스켈레톤: 캐시도 없고 아직 못 받은 칸에 먼저 보이는 뼈대
     private final java.util.HashSet<ScreenView> skelViews = new java.util.HashSet<ScreenView>();
     private void showSkeleton(ScreenView v, String screen) {
-        try {
-            final String hj = ShellCore.S_MAPB.equals(screen) && "bus".equals(map.mode()) ? map.busToggleJson() : "";          // 버스 화면은 칩 줄까지 처음부터 — 데이터만 나중에 채운다
-            v.setScreen(parsedGet(ShellCore.skeletonScreen(screen, hj)), false); shownJson.remove(v); skelViews.add(v);
-        }
+        try { v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v); }
         catch (Throwable e) { v.clearScreen(); shownJson.remove(v); }
     }
 
@@ -2053,8 +2050,6 @@ public class ShellActivity extends Activity {
                     busQuiet = false;
                     if (txt.length() == 0 || !busShowing() || !MapCore.VW_NEAR.equals(map.busView()) || busRefreshing) return;      // 못 받았거나 그 사이 화면이 바뀜 — 아무것도 건드리지 않는다(다음 위치 때 다시)
                     if (from != null && map.busLL != null && (map.busLL[0] != from[0] || map.busLL[1] != from[1])) return;       // 그 사이 다른 곳으로 이미 옮겨졌다
-                    if (nsig.equals(curSig)) for (java.util.Map.Entry<String, String> e : res.entrySet())            // 같은 정류장들인데 새로 받은 도착정보가 비었거나 에러 글이면(옛 값은 멀쩡) 바꿔 끼우지 않는다 — 있던 정보가 사라지지 않게
-                        if (e.getKey().matches("[af][0-9]{1,3}") && !MapCore.hasArr(e.getValue()) && MapCore.hasArr(map.busRes.get(e.getKey()))) return;
                     seqMapB++;                                                                  // 이 받기보다 먼저 시작한 화면 응답은 버린다
                     map.setBusLoc(la, lo);
                     for (java.util.Map.Entry<String, String> e : res.entrySet()) map.addBusRes(e.getKey(), e.getValue());
