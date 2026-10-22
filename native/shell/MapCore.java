@@ -31,6 +31,8 @@ public final class MapCore {
     public double[] busLL = null;
     final Map<String, String> busRes = new LinkedHashMap<String, String>();
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
+    /** 서버가 정류장·도착정보를 한 번에 받아 준 적이 있다(그러면 갱신도 서버에 한 번에 맡긴다) · 이번 응답에서 서버가 못 받은 도착정보 수. */
+    public boolean svServer; public int svFail;
     public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; loadStopsCache(); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
@@ -104,6 +106,8 @@ public final class MapCore {
         java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
         busNeed.clear();
     }
+    /** 새로 못 받은 도착정보(a · f)만 갱신 전에 보던 값으로 채운다 — 채운 개수. */
+    public int fillFromStash() { int c = 0; for (Map.Entry<String, String> e : arrStash.entrySet()) if (!busRes.containsKey(e.getKey())) { busRes.put(e.getKey(), e.getValue()); c++; } return c; }
     public void restoreArrivals() { if (!arrStash.isEmpty()) { busRes.putAll(arrStash); arrAt = arrStashAt; arrStash.clear(); } busNeed.clear(); }
     public void commitArrivals() { arrStash.clear(); }
     // ── 도착정보 미리 받기(투기적 선(先)받기): 엔진이 지난번에 "이 주소들을 받아 와라" 한 도착정보 주소(a0.. · f0..)를 기억해 두었다가, 같은 정류장 목록 · 같은 보기이면
@@ -207,7 +211,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"sv\":1,\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
@@ -285,9 +289,16 @@ public final class MapCore {
             findName = im.get("find") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("find")).get("name"), 40) : "";
             busNeed.clear();
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List)
-                for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 12) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
+                for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 64) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
+            svFail = 0;
+            if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List && !busNeed.isEmpty()) svServer = false;     // 서버가 못 받았다 — 기기가 받는 옛 길로
+            if (im.get("bres") instanceof Map) {                                                   // 서버가 정류장·도착정보를 한 번에 받아 줬다 — 받은 본문을 그대로 모아 둔다(다음 갱신·즐겨찾기에 쓴다)
+                svServer = true;
+                for (Map.Entry<String, Object> e : ((Map<String, Object>) im.get("bres")).entrySet()) if (e.getValue() instanceof String) addBusRes(e.getKey(), (String) e.getValue());
+                if (im.get("svf") instanceof Double) svFail = (int) ((Double) im.get("svf")).doubleValue();
+            }
             stopJson.clear();
-            if (im.get("stops") instanceof List) for (Object x : (List<Object>) im.get("stops")) if (x instanceof Map && stopJson.size() < 20) stopJson.add(HomeSearchCore.toJson(x));
+            if (im.get("stops") instanceof List) for (Object x : (List<Object>) im.get("stops")) if (x instanceof Map && stopJson.size() < 40) stopJson.add(HomeSearchCore.toJson(x));
             nearName = im.get("near") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("near")).get("name"), 40) : "";
             rts.clear();
             if (im.get("rts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) im.get("rts")).entrySet()) {
