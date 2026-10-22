@@ -4,7 +4,7 @@
 'use strict';
 const assert = require('assert');
 const path = require('path');
-const { rideStandby, rsAlerts, handleRideStandby } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const { rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
 
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
@@ -485,6 +485,77 @@ t('탑승 시트(첫 구간): 같은 값(kick · chip · 색 · 막대)도 채�
   assert.ok(rs.st === 'board' && rs.bt === '탑승' && rs.x === 0 && rs.mode === 'sub' && rs.chip === '인천1호선' && rs.cbg === '#336699' && /^2분 안에 도착/.test(rs.kick), JSON.stringify(rs));
   const lt = stepO(r.state, at(12, 53, 0), null, false).overlay.rs;
   assert.ok(lt.bar > 0.6 && lt.bar < 1 && /^곧 도착|^도착했어요/.test(lt.kick), JSON.stringify(lt));
+});
+
+// ── s144: 탑승 버튼 보정 — 방금 떠난 차 인정 · 어느 차를 탔나(시각표) · 승차역에서 먼 곳에서 누르면 거두기 ─────────────────
+const fakeNt = (dep) => ({ boardTable: (q) => ({ dk: '상', depMin: typeof dep === 'function' ? dep(q) : dep }) });
+const pressReq = (st, ms, extra) => Object.assign({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)), act: 'press' }, extra || {});
+t('탑승 버튼 보정: 시각표에 물을 것(rsPressQuery) — 누를 때 · 지하철 구간만, 방금/다음 차는 rsAttachPressTT 가 정한다', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0));
+  assert.strictEqual(rsPressQuery({ nowMs: at(12, 55, 20), state: x0.state }), null, '누르는 손짓이 아니면 묻지 않는다');
+  const q = rsPressQuery(pressReq(x0.state, at(12, 55, 20)));
+  assert.ok(q && q.i === 4 && q.line === '2호선' && q.from === 'T0' && q.to === 'T1' && q.atMin === 12 * 60 + 55, JSON.stringify(q));
+  const bus = JSON.parse(JSON.stringify(x0.state)); bus.eta.nodes[4].isSub = false; bus.eta.nodes[4].isBus = true;
+  assert.strictEqual(rsPressQuery(pressReq(bus, at(12, 55, 20))), null, '버스는 시각표가 없다');
+  const rq = pressReq(x0.state, at(12, 55, 20));
+  assert.ok(rsAttachPressTT(rq, fakeNt(12 * 60 + 55)) && rq.pressTT.late === 775 && rq.pressTT.depMin === 775 && rq.pressTT.i === 4, JSON.stringify(rq.pressTT));
+  const rq2 = pressReq(x0.state, at(12, 55, 20)); rsAttachPressTT(rq2, fakeNt(12 * 60 + 58));
+  assert.ok(rq2.pressTT.late === null && rq2.pressTT.depMin === 778, '다음 차: late 없음');
+  const rq3 = pressReq(x0.state, at(12, 55, 20)); rsAttachPressTT(rq3, fakeNt(12 * 60 + 40));
+  assert.strictEqual(rq3.pressTT.late, null, '1분보다 더 오래 전에 떠난 차는 인정하지 않는다');
+  assert.strictEqual(rsPickMs({ i: 4, nowM: 775, depMin: 790, late: null }, 4, at(12, 55, 20)), at(12, 55, 20), '다음 차가 12분보다 멀면 누른 시각');
+});
+t('탑승 버튼 보정(환승): 일찍 눌러도 방금 떠난 차가 있으면 예약 없이 그 차 출발(:30)로 바로 확정', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0));
+  const rq = pressReq(x0.state, at(12, 55, 40)); rsAttachPressTT(rq, fakeNt(12 * 60 + 55));
+  const r = rideStandby(rq);
+  assert.ok(!r.state.xPend && !r.state.xw && r.state.eta.passes.some(p => p.idx === 4 && p.ms === at(12, 55, 30) && p.src === 'gps'), JSON.stringify(r.state.eta.passes) + JSON.stringify(r.notes));
+  assert.strictEqual(r.overlay.rs.st, 'undo');
+  const u = rideStandby({ nowMs: at(12, 55, 45), fixes: [], state: r.state, act: 'undo' });
+  assert.ok(!u.state.eta.passes.some(p => p.idx === 4) && u.state.xw, '되돌리면 지워진다');
+  const rq2 = pressReq(x0.state, at(12, 55, 40)); rsAttachPressTT(rq2, fakeNt(12 * 60 + 58));
+  const r2 = rideStandby(rq2);
+  assert.ok(r2.state.xPend && !r2.state.eta.passes.some(p => p.idx === 4), '방금 떠난 차가 없으면 예약');
+  const rq3 = pressReq(x0.state, at(12, 55, 40)); rq3.pressTT = null;
+  assert.ok(rideStandby(rq3).state.xPend, '시각표를 못 읽어도 평소처럼 예약');
+});
+t('탑승 버튼 보정: 방금 떠난 차 인정은 승차역에서 600m 넘게 멀면 하지 않는다', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0));
+  const T = at(12, 55, 40), stop = x0.state.stops.filter(s => s.i === 4)[0];
+  const rq = pressReq(x0.state, T, { fixes: [[T - 3000, stop.lat + 0.0072, stop.lng, 10]] }); rsAttachPressTT(rq, fakeNt(12 * 60 + 55));
+  const r = rideStandby(rq);
+  assert.ok(r.state.xPend && !r.state.eta.passes.some(p => p.idx === 4), JSON.stringify(r.notes));
+});
+t('탑승 버튼 보정(첫 구간): 누른 시각이 아니라 방금 떠난 차 · 다음 차 시각을 승차 통과로 적는다', () => {
+  const w0 = waitState(); w0.eta.nodes = w0.eta.nodes.map(n => Object.assign({}, n, n.isOrigin ? {} : { isSub: true, isBus: false, lineName: '인천1호선' }));
+  const T = at(12, 50, 35);
+  let rq = { nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' };
+  rsAttachPressTT(rq, fakeNt(12 * 60 + 50));
+  let r = rideStandby(rq);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 50, 30)), '방금 떠난 12:50 차 → 12:50:30 ' + JSON.stringify(r.state.eta.passes));
+  rq = { nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' };
+  rsAttachPressTT(rq, fakeNt(12 * 60 + 53));
+  r = rideStandby(rq);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 53, 30)), '다음 차(3분 뒤) → 12:53:30');
+  const u = rideStandby({ nowMs: T + 5000, fixes: [], state: r.state, act: 'undo' });
+  assert.ok(u.state.wait && !u.state.eta.passes.some(p => p.idx === 1), '되돌리기 정상');
+});
+t('탑승 버튼 보정: 승차역에서 800m 넘게 먼 곳에서 누르면 버튼을 거두고 알린다 · 역 근처나 위치 없음은 그대로', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0));
+  const T = at(12, 56, 20), stop = x0.state.stops.filter(s => s.i === 4)[0], D = x0.state.etaMs[4];
+  const near = pressReq(x0.state, D - 50000, { fixes: [[D - 52000, stop.lat, stop.lng, 10]] });
+  assert.ok(rideStandby(near).state.eta.passes.some(p => p.idx === 4), '역에 있으면 확정');
+  const away = rideStandby(pressReq(x0.state, D - 50000, { fixes: [[D - 52000, stop.lat + 0.012, stop.lng, 10]] }));
+  assert.ok(!away.state.eta.passes.some(p => p.idx === 4) && away.state.xw && away.state.xw.i === 4, '멀면 확정이 취소된다 ' + JSON.stringify(away.notes));
+  assert.ok(away.overlay.rs.st === 'board' && /떨어져 있어요/.test(away.overlay.rs.kick), JSON.stringify(away.overlay.rs));
+  const later = rideStandby({ nowMs: D - 46000, fixes: [], state: away.state });
+  assert.ok(/떨어져 있어요/.test(later.overlay.rs.kick), '안내는 몇 초 붙어 있다');
+  const gone = rideStandby({ nowMs: D + 10000, fixes: [], state: later.state });
+  assert.ok(!/떨어져/.test(gone.overlay.rs.kick) && !gone.state.rsToast, '시간이 지나면 사라진다');
+  const none = rideStandby(pressReq(x0.state, D - 50000));
+  assert.ok(none.state.eta.passes.some(p => p.idx === 4), '위치가 없으면(지하) 시각표를 믿는다');
+  const wL = waitState(); const wr = rideStandby({ nowMs: at(12, 50, 35), fixes: [[at(12, 50, 33), LAT + 0.02, LNG0, 10]], state: JSON.parse(JSON.stringify(withOvl(wL))), act: 'press' });
+  assert.ok(wr.state.wait && wr.state.eta.boarded === false, '첫 구간도 멀면 거둔다 ' + JSON.stringify(wr.notes));
 });
 
 const httpTest = async () => {
