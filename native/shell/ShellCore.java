@@ -673,6 +673,8 @@ public final class ShellCore {
      */
     /** 버스 도착정보는 실시간이라 이보다 오래된 화면은 보여 주지 않는다(새로 받을 때까지 뼈대) — 이 안이면 받은 뒤 흐른 초만큼 줄어든 채로 바로 뜬다. */
     public static final long BUS_FRESH_MS = 8000L;
+    /** SWR: 8초가 지난 버스 화면도 이 안이면 먼저 보인다(받은 뒤 흐른 초만큼 줄인 채) — 뒤에서 새로 받아 바꾼다. 이보다 오래되면 뼈대. */
+    public static final long BUS_STALE_MS = 90000L;
     public static long diskTtl(String key) {
         if (key == null) return 0L;
         String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
