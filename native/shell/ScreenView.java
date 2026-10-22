@@ -332,6 +332,9 @@ public class ScreenView extends View {
     }
 
     // ───────────── 손가락 ─────────────
+    private boolean parentMayIntercept;
+    /** true 면 터치를 시작해도 부모의 가로채기를 막지 않는다(시트 박스가 위아래 끌기를 확정하면 가져간다). */
+    public void setParentIntercept(boolean on) { parentMayIntercept = on; }
     @Override public boolean onTouchEvent(MotionEvent e) {
         if (lay == null) return true;
         if (vt == null) vt = VelocityTracker.obtain();
@@ -341,7 +344,7 @@ public class ScreenView extends View {
         if ((mode == 6 || mode == 7) && e.getActionMasked() != MotionEvent.ACTION_DOWN) return roTouch(e);       // 주변 정류장 카드 끌어서 순서 바꾸기
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+                if (!parentMayIntercept && getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);          // 끌어 닫는 시트 안이면 부모가 위아래 끌기를 가로챌 수 있게 둔다
                 flingY.forceFinished(true); flingX.forceFinished(true); ssOn = false;
                 if (roMode && roDown(x, y)) { downX = lastX = x; downY = lastY = y; return true; }
                 if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); return true; }
