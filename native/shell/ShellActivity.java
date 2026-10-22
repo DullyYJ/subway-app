@@ -1647,22 +1647,29 @@ public class ShellActivity extends Activity {
     private LocFused locf;
     private Location liveLoc; private long liveAt;
     private static final long LIVE_FRESH_MS = 20000L;
-    private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
+    private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); hcFixFrom(l.getLatitude(), l.getLongitude()); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
     /** 방금(20초 안) 받은 현재 위치의 좌표(없으면 null) — 오래된 위치는 절대 돌려주지 않는다. */
     private double[] liveLL() { return liveLoc != null && System.currentTimeMillis() - liveAt < 60000L ? new double[] { liveLoc.getLatitude(), liveLoc.getLongitude() } : null; }
     /** 같은 때 들어온 위치 요청은 한 번의 요청을 같이 쓴다(켤 때 · 탭 · 위치감지가 겹쳐도 위성/네트워크 요청은 하나). */
     private static final class LocBatch { final java.util.ArrayList<LocCb> ws = new java.util.ArrayList<LocCb>(); long endAt; }
     private LocBatch locBatch;
-    private void locateFast(final long waitMs, final LocCb cb) { locateNow(waitMs, 2000L, LIVE_FRESH_MS, cb); }
+    private void locateFast(final long waitMs, final LocCb cb) { locateNow(waitMs, 1000L, LIVE_FRESH_MS, 30000L, cb); }
     /** 현재 위치: maxAge 안에 받은 연속 위치가 있으면 그것을 바로, 아니면 고정밀 현재 위치(fastMs)+네트워크 위치를 동시에 요청한다. */
-    private void locateNow(final long waitMs, final long fastMs, final long maxAge, final LocCb cb) {
+    private void locateNow(final long waitMs, final long fastMs, final long maxAge, final LocCb cb) { locateNow(waitMs, fastMs, maxAge, 0L, cb); }
+    /** lkMs > 0 이면 기기가 그 안(ms)에 알던 위치(Play 서비스 합친 값)를 0.1초 안에 먼저 알리고, 곧이어 새 위치(fastMs ≈ 1초)로 바로잡는다. */
+    private void locateNow(final long waitMs, final long fastMs, final long maxAge, final long lkMs, final LocCb cb) {
         if (liveLoc != null && System.currentTimeMillis() - liveAt < maxAge) { cb.fix(liveLoc); return; }
         if (locBatch != null && System.currentTimeMillis() < locBatch.endAt) { locBatch.ws.add(cb); return; }
         if (locf == null) locf = new LocFused(this);
         final LocBatch b = new LocBatch(); b.ws.add(cb); b.endAt = System.currentTimeMillis() + waitMs + 500L; locBatch = b;
+        final boolean[] got = { false };
         locf.current(fastMs, waitMs, new LocFused.Cb() {
-            @Override public void fix(Location l) { liveSet(l); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
-            @Override public void fail() { if (locBatch == b) locBatch = null; for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fail(false); }
+            @Override public void fix(Location l) { got[0] = true; liveSet(l); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
+            @Override public void fail() { if (locBatch == b) locBatch = null; if (got[0]) return; for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fail(false); }
+        });
+        if (lkMs > 0L) locf.lastKnown(lkMs, new LocFused.Cb() {              // 새 위치를 기다리는 동안 기기가 방금 알던 위치로 먼저 — 새 위치가 먼저 왔으면 버린다
+            @Override public void fix(Location l) { if (got[0]) return; got[0] = true; hcFixFrom(l.getLatitude(), l.getLongitude()); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
+            @Override public void fail() { }
         });
     }
     /** 방금(maxAge 안) 받은 현재 위치가 있으면 그것, 없으면 null — 오래된 위치는 돌려주지 않는다. */
@@ -1671,7 +1678,7 @@ public class ShellActivity extends Activity {
     private void launchLocate() {
         if (!hasLocPerm()) return;
         if (pfMap == null) pfMap = new MapCore(store);
-        locateNow(10000L, 1500L, 0L, new LocCb() {
+        locateNow(10000L, 1000L, 0L, 120000L, new LocCb() {
             private double[] last;
             @Override public void fix(Location l) {
                 if (last != null && Math.abs(last[0] - l.getLatitude()) < 0.0003 && Math.abs(last[1] - l.getLongitude()) < 0.0003) return;       // 같은 자리의 다듬기는 다시 받지 않는다
@@ -2138,6 +2145,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
         if (hDp == S_STN_H) sheet.setContentView(stnSheetBox(sheetView, pal)); else sheet.setContentView(sheetView);
+        sheetView.setScrollHook(new Runnable() { @Override public void run() { playScroll(); } });     // 시간표 머리줄이 글과 함께 올라가면 놀이터(캐릭터)도 같이 올라간다
         try {
             android.view.Window w = sheet.getWindow();
             int hpx = hDp > 0 ? Math.round(hDp * dpr) : Math.round(getResources().getDisplayMetrics().heightPixels * (-hDp) / 100f);
@@ -2184,6 +2192,15 @@ public class ShellActivity extends Activity {
         try { reduce = android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f; } catch (Throwable ignored) { }
         PlayCore.Snap snap = tt ? pv.snap() : null;                                  // 시간표로 올라오면 팝업에서 놀던 그대로
         pv.begin(wp, hp, ShellCore.theme(store).equals("dark"), reduce, snap);
+        playScrollY = a[7] > 0f ? 1f : 0f;
+        playScroll();
+    }
+    private float playScrollY;                                                       // 1 이면 놀이터 칸이 본문 안에 있어 스크롤을 따라 움직인다
+    /** 본문이 스크롤되면 놀이터 그림도 같은 만큼 옮긴다(위치만 바꾸는 가벼운 일 — 그림 박자는 그대로). */
+    private void playScroll() {
+        PlayView pv = playView; ScreenView sv = sheetView;
+        if (pv == null || sv == null) return;
+        pv.setTranslationY(playScrollY > 0f ? -sv.scrollPos() * dpr : 0f);
     }
 
     /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
@@ -2556,7 +2573,8 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
-                final String[] rsBox = { resKey.equals(resCacheKey) ? resCacheJson : "" }, cjBox = { hBody.length() == 0 ? hcJson : "" };
+                final boolean staleCards = hBody.length() > 0 && hcJson.length() > 0;                              // 지난 카드가 있으면 그것을 0초에 먼저 그리고, 새 카드는 뒤에서 받아 바뀐 것만 다시 그린다(SWR)
+                final String[] rsBox = { resKey.equals(resCacheKey) ? resCacheJson : "" }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
                 Thread tr = null, tc = null;
                 if (hasRes && rsBox[0].length() == 0) {
                     tr = new Thread(new Runnable() { @Override public void run() {
@@ -2569,14 +2587,19 @@ public class ShellActivity extends Activity {
                 if (hBody.length() > 0) {
                     tc = new Thread(new Runnable() { @Override public void run() {
                         NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
-                        cjBox[0] = cr.status == 200 && cr.body != null ? cr.body : "";
+                        String nj = cr.status == 200 && cr.body != null ? cr.body : "";
+                        if (staleCards) {
+                            if (nj.length() > 0) { boolean same = nj.equals(hcJson); hcKey = hKey; hcJson = nj; if (!same) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } }); }
+                            return;
+                        }
+                        cjBox[0] = nj;
                         if (cjBox[0].length() > 0) { hcKey = hKey; hcJson = cjBox[0]; }
                     } }, "shell-home-cards");
                     tc.start();
                 }
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
                 String txt = r.status == 200 ? r.body : "";
-                try { if (tr != null) tr.join(16000); if (tc != null) tc.join(16000); } catch (InterruptedException ignored) { }
+                try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
                 if (hasRes && txt.length() > 0) {
                     String rs = rsBox[0];
                     if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); } }); }
@@ -2701,17 +2724,26 @@ public class ShellActivity extends Activity {
             }
         }, 5000);
     }
-    /** 권한이 이미 있으면 물어보지 않고 마지막 위치를 한 번 읽어 둔다(혼잡도·브리핑의 '가까운 역'). */
+    /** 홈 카드(AI 승무원 브리핑)의 '내 위치': 0초에 저장된 위치로 먼저 채우고, 곧이어 Play 서비스가 아는 위치(0.1초) → 새 위치(약 1초)로 바로잡는다.
+     *  처음 채워질 때와 300m 넘게 움직였을 때만 홈을 다시 그린다. */
+    private void hcFixFrom(double la, double lo) {
+        long now = System.currentTimeMillis();
+        boolean first = hc.fix == null, far = !first && (Math.abs(hc.fix[0] - la) > 0.003 || Math.abs(hc.fix[1] - lo) > 0.003);
+        if (!first && !far) { hc.fixAt = now; return; }
+        hc.setFix(la, lo, now);
+        if (homeVisible()) reloadHome();
+    }
     private void quietFix() {
         long now = System.currentTimeMillis();
-        if (now - hc.fixAt < 10 * 60000L) return;
+        if (hc.fix != null && now - hc.fixAt < 10 * 60000L) return;
+        double[] seed = liveLL();
+        if (seed == null) seed = ShellCore.lastLocFresh(store, 6L * 3600000L, now);        // 몇 시간 안에 안 위치면 우선 그것으로 브리핑을 채운다(곧 새 위치로 바로잡힌다)
+        if (seed != null && hc.fix == null) { hc.setFix(seed[0], seed[1], now - 9 * 60000L); }            // 처음 그릴 때 이미 들어가 있게(다시 그리지 않는다) — 1분 뒤 새로 확인
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
-        try {
-            LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            Location best = null;
-            for (String p : lm.getProviders(true)) { Location l = lm.getLastKnownLocation(p); if (l != null && (best == null || l.getTime() > best.getTime())) best = l; }
-            if (best != null) { hc.setFix(best.getLatitude(), best.getLongitude(), now); reloadHome(); }
-        } catch (Throwable t) { /* 위치 없이 그린다 */ }
+        locateNow(8000L, 1000L, 60000L, 120000L, new LocCb() {
+            @Override public void fix(Location l) { hcFixFrom(l.getLatitude(), l.getLongitude()); }
+            @Override public void fail(boolean noperm) { }
+        });
     }
     private void reloadHome() { if (ShellCore.S_HOME.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadHome(body, true); }
 
@@ -2789,7 +2821,7 @@ public class ShellActivity extends Activity {
         home.gps = true; reloadHome();
         Location recent = liveRecent(30000L);
         if (recent != null) gotGps(recent);                                      // 방금 받은 현재 위치는 0초에 먼저 채우고
-        locateNow(12000L, 1000L, 2500L, new LocCb() {                             // 곧바로 새로 받은 현재 위치(약 1초)로 바로잡는다
+        locateNow(12000L, 1000L, 2500L, 60000L, new LocCb() {                     // 곧바로 새로 받은 현재 위치(약 1초)로 바로잡는다
             @Override public void fix(Location l) { gotGps(l); }
             @Override public void fail(boolean noperm) { if (!home.gps) return; home.gps = false; toast("현재 위치를 찾지 못했어요"); reloadHome(); }
         });
@@ -2957,7 +2989,7 @@ public class ShellActivity extends Activity {
         if (r.status == 200 && r.body != null && r.body.length() > 2) rloadJson = r.body;
         return true;
     }
-    private final Runnable rloadSafety = new Runnable() { @Override public void run() { rloadHide(); } };
+    private final Runnable rloadSafety = new Runnable() { @Override public void run() { rloadHide(); reloadHome(); } };
     private void rloadShow() {
         String js = rloadJson;
         if (js.length() == 0) { Thread t = new Thread(new Runnable() { @Override public void run() { rloadFetch(); } }, "shell-rload"); t.setDaemon(true); t.start(); return; }   // 이번엔 카드 없이 — 다음부터
@@ -3003,6 +3035,7 @@ public class ShellActivity extends Activity {
     private static final float RUN_CARD_H = 24f + ScreenCore.RUN_H + 22f;
     private void rloadHide() {
         main.removeCallbacks(rloadSafety);
+        home.routing = false;
         android.app.Dialog d = rloadDlg; rloadDlg = null; rloadView = null;
         if (d != null) { try { d.dismiss(); } catch (Throwable ignored) { } RunnerArt.release(); }
     }
@@ -3028,7 +3061,7 @@ public class ShellActivity extends Activity {
         if (shown && hit.state == Swr.FRESH) { home.lastQs = qs; return; }          // 방금 받은 결과 — 통신 없이 끝
         final int my = ++seqRoute;
         home.lastQs = qs;
-        if (!shown) { if (rloadJson.length() == 0) toast("경로를 찾는 중이에요"); rloadShow(); }
+        if (!shown) { if (rloadJson.length() == 0) toast("경로를 찾는 중이에요"); home.routing = true; reloadHome(); rloadShow(); }       // 찾는 동안만 단추가 돈다(엔진이 그린다)
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r1 = NetPost.get(RouteFetchCore.liveZero(url), 15000);
@@ -3583,7 +3616,7 @@ public class ShellActivity extends Activity {
     }
     /** quiet: 옛 결과가 이미 떠 있다 — 뒤에서 새로 받다 실패해도 알림 없이 옛 결과를 그대로 둔다. */
     private void postFail(final int my, final boolean quiet) {
-        main.post(new Runnable() { @Override public void run() { if (my != seqRoute) return; rloadHide(); if (!quiet) toast("경로를 받지 못했어요"); } });
+        main.post(new Runnable() { @Override public void run() { if (my != seqRoute) return; rloadHide(); reloadHome(); if (!quiet) toast("경로를 받지 못했어요"); } });
     }
 
     private void openLink(String url) {
