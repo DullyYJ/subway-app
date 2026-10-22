@@ -29,7 +29,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":21,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":22,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -319,11 +319,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=21") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=22") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":21,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":22,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -383,7 +383,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":21,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":22,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -414,7 +414,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":21,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":22,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -794,6 +794,7 @@ public class ShellJvmTest {
             ok(h2.actResult("rh.ld.g.1") == HomeCore.R_NONE && h2.actResult("rh.ld.m.9") == HomeCore.R_NONE, "엉뚱한 질의·번호는 버린다");
             ok(h2.actResult("rh.room.1") == HomeCore.R_ROOM && "2호선".equals(h2.roomLine) && h2.actResult("rh.room.5") == HomeCore.R_NONE, "노선 방 보기 번호 = info.sec 번호");
             ok(h2.actResult("rh.detail") == HomeCore.R_DETAIL && h2.detOpen.isEmpty(), "세부경로 보기 단추");
+            ok(h2.actResult("rh.confirm") == HomeCore.R_CONFIRM && new HomeCore().actResult("rh.confirm") == HomeCore.R_NONE, "경로 확정 단추(안내 전·경로가 있을 때만)");
             ok(h2.actDetail("rd.tg.1") == HomeCore.D_RENDER && h2.detOpen.contains(1) && h2.actDetail("rd.tg.1") == HomeCore.D_RENDER && h2.detOpen.isEmpty() && h2.actDetail("rd.tg.99") == HomeCore.D_NONE && h2.actDetail("rd.close") == HomeCore.D_CLOSE && h2.actDetail("rd.kakao") == HomeCore.D_NONE, "세부경로: 펼침 토글 · 닫기 · 주소가 없으면 길안내 무시");
             h2.onDetail("{\"info\":{\"nav\":{\"kakao\":[\"kakaomap://route?ep=1,2&by=PUBLICTRANSIT\",\"https://map.kakao.com/x\"],\"naver\":[\"evil://x\",\"https://map.naver.com/y\"]}}}");
             ok(h2.actDetail("rd.kakao") == HomeCore.D_KAKAO && h2.actDetail("rd.naver") == HomeCore.D_NAVER && HomeCore.navAppOk(h2.navKakao[0]) && !HomeCore.navAppOk(h2.navNaver[0]), "세부경로: 길안내 주소 읽기 · 허용된 앱 주소만");
