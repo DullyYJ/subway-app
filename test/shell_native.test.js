@@ -185,7 +185,7 @@ function findAndroidJar() {
   });
   await t('0초 체감: 켜자마자 현재 위치 · 위치감지 1초 · 누르는 즉시 스피너 · 무거운 준비물은 켠 직후 미리 · 맛집 큰 목록은 주 스레드에서 읽지 않음', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), vm = fs.readFileSync(N('VecMap.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8');
-    assert.ok(/launchLocate\(\);/.test(v.slice(v.indexOf('captureLastLoc();') - 900, v.indexOf('captureLastLoc();') + 20)) && /locateNow\(10000L, 1500L, 0L/.test(v), '켜는 순간 캐시 없이(maxAge 0) 현재 위치를 요청');
+    assert.ok(/launchLocate\(\);/.test(v.slice(v.indexOf('captureLastLoc();') - 900, v.indexOf('captureLastLoc();') + 20)) && /locateNow\(10000L, 1000L, 0L, 120000L/.test(v), '켜는 순간 캐시 없이(maxAge 0) 현재 위치를 요청');
     const ll = v.slice(v.indexOf('private void launchLocate()'), v.indexOf('private void launchLocate()') + 1400);
     assert.ok(/map\.setBusLoc/.test(ll) && /pfBusRun\(ll, theme\)/.test(ll), '위치가 오면 정류장 기준을 잡고 주변 버스를 뒤에서 미리 받는다');
     assert.ok(/brPrefetch\(pfMap\)/.test(v) && /private boolean pfBusRun\(double\[\] ll/.test(v), '가까운 정류장의 노선 목록까지 미리');
@@ -265,6 +265,15 @@ function findAndroidJar() {
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
     assert.ok(/if \(tdAct\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
     assert.ok(/CAP = 23/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+  });
+  await t('홈·시간표·버스 보정(s150): 단추 스피너는 spin 만 · 경로 찾는 동안만 · 시간표 머리 놀이터가 스크롤을 따라감 · 다음 열차 줄로 한 번 내려감 · 위치는 저장값→마지막 위치→새 위치', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
+    assert.ok(/boolean spinOn = \(it\.spin && it\.on\)/.test(sv) && /if \(spinOn && it\.sw/.test(sv) && !/if \(busy && it\.sw/.test(sv), '흐린 단추(dim)는 돌지 않고 spin 일 때만 돈다');
+    assert.ok(/n\.spin = optBool\(m, "spin"/.test(sc) && /public volatile boolean routing/.test(hm) && /\\"rs\\":/.test(hm), '엔진의 spin · 앱의 경로 찾는 중(rs) 사실');
+    assert.ok(/home\.routing = true;/.test(v) && /home\.routing = false;/.test(v), '경로를 찾는 동안만 켜지고 끝나면 꺼진다');
+    assert.ok(/setScrollHook\(new Runnable/.test(v) && /setTranslationY\(playScrollY > 0f \? -sv\.scrollPos\(\) \* dpr : 0f\)/.test(v) && /scrollHook != null && scrollY != hookY/.test(sv), '시간표 머리 놀이터가 스크롤과 함께 움직인다');
+    assert.ok(/private void applyFocus\(\)/.test(sv) && /fcDone/.test(sv) && /optStr\(m, "fc"/.test(sc), '엔진이 표시한 줄(fc)로 새 열쇠일 때 한 번 스크롤');
+    assert.ok(/private void hcFixFrom\(/.test(v) && /lastLocFresh\(store, 6L \* 3600000L/.test(v) && /locf\.lastKnown\(lkMs/.test(v) && /staleCards/.test(v), '위치 3단(저장값 → 기기가 아는 위치 → 새 위치) · 지난 홈 카드를 먼저 그림(SWR)');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
