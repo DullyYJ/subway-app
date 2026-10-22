@@ -1079,6 +1079,17 @@ public class ScreenJvmTest {
             ScreenCore.Item tb1 = ScreenCore.layout(ScreenCore.load(bj.replace("TITLE", "강남")), 360f, M).body[0];
             ScreenCore.Item tb2 = ScreenCore.layout(ScreenCore.load(bj.replace("TITLE", "아주아주아주 긴 역 이름 아주아주아주 긴 역 이름")), 360f, M).body[0];
             ok(!tb1.mq && tb2.mq && tb2.mqW > tb2.mqVis + 1f && tb2.mqVis >= 40f, "시간표 제목줄도 길 때만 흐른다");
+            String rj = "{\"t\":\"row\",\"pad\":[8,0,0,4],\"gap\":8,AN\"kids\":[{\"t\":\"button\",\"s\":\"세부경로 보기\",\"size\":13,\"h\":42,\"r\":12,\"act\":{\"a\":\"call\",\"v\":\"rh.detail\"}},{\"t\":\"button\",\"s\":\"안내 종료\",\"size\":13,\"h\":42,\"r\":12,\"act\":{\"a\":\"call\",\"v\":\"rh.stop\"}},{\"t\":\"button\",\"s\":\"환승\",\"size\":13,\"h\":42,\"r\":12,\"fill\":\"#bf5af2\",\"tc\":\"#ffffff\",\"act\":{\"a\":\"call\",\"v\":\"rh.slot\"}}]}";
+            String anJ = "\"an\":{\"k\":\"slide_down\",\"ms\":380,\"e\":[0.2,0,0,1],\"sq\":1791862800123,\"bg\":\"card\",\"o\":{\"s\":\"탑승\",\"fill\":\"#0a84ff\",\"tc\":\"#ffffff\"}},";
+            ScreenCore.Layout rl = ScreenCore.layout(ScreenCore.load(wrapBody(rj.replace("AN", anJ))), 360f, M), rl0 = ScreenCore.layout(ScreenCore.load(wrapBody(rj.replace("AN", ""))), 360f, M);
+            ScreenCore.Item ran = null; for (ScreenCore.Item q : rl.body) if (q.kind == ScreenCore.K_ROWANIM) ran = q;
+            ok(ran != null && ran.ak.equals("slide_down") && ran.ams == 380 && ran.sq == 1791862800123L && near(ran.aez[0], 0.2f) && ran.subs.length == 4 && ran.subs[3] != null && ran.subs[3].label.equals("탑승") && ran.subs[2].label.equals("환승") && ran.gap == 8f && near(ran.h, 42f) && ran.w > 300f, "버튼 줄 전환 연출: 칸이 셋이면 덮개 조각이 만들어진다(시각은 long 그대로 · 옛 칸 모양 포함)");
+            int nb = 0; for (ScreenCore.Item q : rl0.body) if (q.kind == ScreenCore.K_ROWANIM) nb++;
+            int nb1 = 0; for (ScreenCore.Item q : rl.body) if (q.kind == ScreenCore.K_BUTTON) nb1++;
+            ok(nb == 0 && nb1 == 3, "연출 값이 없으면 덮개 없음 · 단추는 그대로 세 개(눌림·행동은 단추가 받는다)");
+            ScreenCore.Layout rl2 = ScreenCore.layout(ScreenCore.load(wrapBody(rj.replace("AN", anJ.replace("slide_down", "bogus")))), 360f, M);
+            int nb2 = 0; for (ScreenCore.Item q : rl2.body) if (q.kind == ScreenCore.K_ROWANIM) nb2++;
+            ok(nb2 == 0, "모르는 전환 종류는 무시");
         }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
