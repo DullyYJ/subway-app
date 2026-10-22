@@ -153,7 +153,7 @@ function findAndroidJar() {
     // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
     assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
-    assert.ok(/BUS_FRESH_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '8초 지난 버스 캐시 화면은 보이지 않는다');
+    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = 90000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 90초까지는 먼저 보이고(SWR) 뒤에서 새로 받음 · 그보다 오래면 뼈대');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
     const svw = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -166,7 +166,7 @@ function findAndroidJar() {
     assert.ok(/BR_POLL_MS = 8000L/.test(br) && /BR_CACHE_MS = 7L \* 24L/.test(br) && /brc_/.test(br), '8초 · 정류장 7일 보관');
     assert.ok(/private boolean brShowing\(\) \{ return resumed && brAlive/.test(br) && /if \(!brShowing\(\)\) return;/.test(br), '앞에 있을 때만 돈다(없으면 다시 걸지 않는다)');
     assert.ok(/private void closeSheet\(\) \{ if \(mapView != null\) mapView\.setCover\(0f\); detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
-    assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{ if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
+    assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{\s*if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
     assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
     assert.ok(/a < \(pos \? 5 : 2\)/.test(br) && /Thread\.sleep\(pos \? 800 : 300\)/.test(br), '위치는 실패하면 0.8초 뒤 다시(최대 4번 더)');
@@ -333,6 +333,14 @@ function findAndroidJar() {
     assert.ok(/tt && \(ty >= 56f \* dpr[\s\S]*backToStation\(dv/.test(a), '시간표를 놓을 때 내려갔으면 역 팝업으로');
     assert.ok(/public void setCover\(float px\)/.test(m) && /cam\.viewH - cover - m/.test(m) && /\(cam\.viewH - cover\) \/ 2f/.test(m), '지도: 덮인 높이를 뺀 영역에 역을 맞춘다');
     assert.ok(/mapView\.setCover\(hpx\)/.test(a) && /mapView\.setCover\(to\)/.test(a) && /mapView\.setCover\(0f\)/.test(a), '열 때 · 시간표로 커질 때 · 닫을 때 덮개 높이');
+  });
+  await t('실기기 3건(s156): 시트는 아무 데나 잡고 끌어도 · 버스 탭 즉시 뼈대 + 90초 SWR · 노선 상세 · 도착정보 자동 재시도', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/!parentMayIntercept && getParent\(\) != null\) getParent\(\)\.requestDisallowInterceptTouchEvent\(true\)/.test(sv) && /public void setParentIntercept\(boolean on\)/.test(sv), '화면 뷰가 부모의 가로채기를 막지 않을 수 있다');
+    assert.ok((a.match(/sv\.setParentIntercept\(true\)/g) || []).length >= 2, '역 시트 · 세부경로 시트는 가로채기를 허용');
+    assert.ok(/atTop = e\.getY\(\) < 64f \* dpr \|\| sv\.scrollPos\(\) <= 0\.5f/.test(a), '세부경로: 목록이 맨 위면 어디를 잡아도 아래로 끌어 닫는다');
+    assert.ok(/if \(!shown\) showSkeleton\(body, ShellCore\.S_MAPB\);\s*\/\/[^\n]*\n\s*syncMapView\(\);/.test(a) && /view = "bus"\.equals\(mode\(\)\) \? "bus" : ""/.test(mc), '탭을 누르면 뼈대 · 노선도 뷰는 바로 내림');
+    assert.ok(/brRetryN < 3/.test(a) && /busRetryN < 3/.test(a) && /busBadFetch = badN/.test(a), '노선 상세 · 도착정보는 비면 세 번까지 조용히 다시');
   });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
