@@ -29,7 +29,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":22,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":23,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -319,11 +319,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=22") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=23") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":22,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":23,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -383,7 +383,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":22,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":23,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -414,7 +414,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":22,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":23,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -734,6 +734,26 @@ public class ShellJvmTest {
         String bq2 = mc.bodyRequest(18, "dark");
         ok(bq2.contains("\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && bq2.contains("\"fav\":[]") && bq2.contains("\"al\":{}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다(+ 즐겨찾기·별명 값)");
         mc.setBusLoc(37.4, 127.1); ok(!mc.bodyRequest(18, "dark").contains("\"tp\""), "위치를 다시 잡으면 이전 본문은 비운다");
+        // s148: 서버가 정류장·도착정보를 한 번에 받는다(sv) — 요청에 sv:1, 응답의 bres 는 그대로 모아 두고, 한도는 정류장 40 · 주소 64
+        {
+            ShellCore.MemStore sv = new ShellCore.MemStore(); MapCore sm = new MapCore(sv);
+            sm.setBusLoc(37.5, 127.0);
+            ok(sm.bodyRequest(23, "dark").contains("\"sel\":-1,\"sv\":1,\"fav\""), "버스 요청에 sv:1(서버가 받아 줄 수 있다)");
+            sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"tp\":\"<a/>\",\"a0\":\"AAA\",\"BAD KEY\":\"x\"},\"svf\":2}}");
+            ok(sm.svServer && sm.svFail == 2 && sm.bodyRequest(23, "dark").contains("\"a0\":\"AAA\"") && sm.bodyRequest(23, "dark").contains("\"tp\":\"<a/>\"") && !sm.bodyRequest(23, "dark").contains("BAD"), "info.bres 를 받은 본문으로 모은다 · 못 받은 수(svf)");
+            sm.dropArrivals(); sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"a1\":\"B\"},\"svf\":1}}");
+            ok(sm.fillFromStash() == 1 && sm.bodyRequest(23, "dark").contains("\"a0\":\"AAA\"") && sm.bodyRequest(23, "dark").contains("\"a1\":\"B\""), "새로 못 받은 도착정보만 보던 값으로 채운다");
+            sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"need\",\"need\":[{\"k\":\"a0\",\"url\":\"http://ws.bus.go.kr/x\"}]}}}");
+            ok(!sm.svServer && sm.svFail == 0 && sm.busNeed.size() == 1, "서버가 못 받았으면(need 가 남음) 기기가 받는 옛 길로");
+            StringBuilder big = new StringBuilder("{\"info\":{\"view\":\"bus\",\"stops\":["), nd = new StringBuilder();
+            for (int i = 0; i < 45; i++) { if (i > 0) { big.append(','); nd.append(','); } big.append("{\"nm\":\"s").append(i).append("\",\"id\":\"SEOUL:").append(i).append("\"}"); nd.append("{\"k\":\"a").append(i).append("\",\"url\":\"http://ws.bus.go.kr/").append(i).append("\"}"); }
+            sm.onScreen(big.append("],\"bus\":{\"st\":\"need\",\"need\":[").append(nd).append("]}}}").toString());
+            ok(sm.stopCount() == 40 && sm.busNeed.size() == 45, "반경 300m 정류장이 많아도 40곳까지 · 받을 주소 45개 모두");
+            ShellCore.MemStore ls = new ShellCore.MemStore();
+            ok(ShellCore.lastLocFresh(ls, 1800000L, 1000000L) == null, "저장된 위치 없음 = null");
+            ShellCore.lastLocPut(ls, 37.5, 127.0, 900000L);
+            ok(ShellCore.lastLocFresh(ls, 1800000L, 1000000L) != null && ShellCore.lastLocFresh(ls, 1800000L, 900000L + 1800001L) == null && ShellCore.lastLocFresh(ls, 1800000L, 800000L) == null, "마지막 위치는 30분 안일 때만 첫 화면에 쓴다(시계가 거꾸로 가도 안 쓴다)");
+        }
         // 버스: 주변/즐겨찾기 전환 · 선택 · 즐겨찾기(12곳) · 별명
         {
             ShellCore.MemStore bsv = new ShellCore.MemStore(); MapCore bm = new MapCore(bsv);
