@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s153";
+var ENGINE_VERSION = "route-v2-2026-10-22s157";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17761,6 +17761,20 @@ function rheadTrkPrep(inp) {
   };
   return { facts: facts, f: f };
 }
+// \uc2b9\ucc28 \uc804 '\ub0b4 \uc704\uce58' \uc810\uc774 \ub193\uc77c \uce78(\uc810 \ubc88\ud638). \ucd9c\ubc1c\uc774 '\ub0b4 \uc704\uce58'\uba74 \ucc98\uc74c \uce78. \uc544\ub2c8\uba74 \uae30\uae30 \uc704\uce58\uc5d0\uc11c 600m \uc548\uc758 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed\u00b7\uc815\ub958\uc7a5. \uc5c6\uc73c\uba74 -1.
+function rheadTrkMeCell(pts, me, ra) {
+  if (!pts || !pts.length) return -1;
+  var hasMe = Array.isArray(me) && me.length === 2 && isFinite(Number(me[0])) && isFinite(Number(me[1])) && Math.abs(Number(me[0])) <= 90 && Math.abs(Number(me[1])) <= 180;
+  if (!hasMe) return -1;
+  if (/\ub0b4\s*\uc704\uce58|\ud604\uc7ac\s*\uc704\uce58/.test(String(ra == null ? '' : ra))) return 0;
+  var la = Number(me[0]), lo = Number(me[1]), best = -1, bd = 600;
+  pts.forEach(function (pt, i) {
+    if (!pt || pt.type !== 'stn' || pt.la == null || pt.lo == null) return;
+    var d = rheadTrkHav(la, lo, pt.la, pt.lo);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
 function rheadTrackScreen(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
   var pp = rheadTrkPrep(inp);
@@ -17791,6 +17805,10 @@ function rheadTrackScreen(inp) {
   }
   var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
+  if (!(lv && lv.p)) {                                    // \ud0d1\uc2b9 \ucd94\uc801\uc774 \uc5c6\uc5b4\ub3c4 \uc6f9\ucc98\ub7fc '\ub0b4 \uc704\uce58' \uc810\uc744 \ubcf4\uc5ec \uc900\ub2e4(\ucd9c\ubc1c\uc774 \ub0b4 \uc704\uce58\uba74 \ucc98\uc74c \uce78, \uc544\ub2c8\uba74 \uac00\uae4c\uc6b4 \uc5ed\u00b7\uc815\ub958\uc7a5 \uce78)
+    var mi = rheadTrkMeCell(pts, f.me, f.ra);
+    if (mi >= 0 && cells[mi] && cells[mi].ti >= 0) lv = { p: { f: cells[mi].ti, t: cells[mi].ti, r: 0, sn: 1 }, w: null, ea: ea };
+  }
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
   var mk = rheadTrkMark(lv, cells);
   if (mk) {
@@ -19164,7 +19182,8 @@ function resTrkFacts(route, r, noGeo) {
       st: stops.slice(0, 150).map(function (q) { q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', resR5(q.lat != null ? q.lat : q.y), resR5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
   });
   return { lv: resLiveFacts(r), secs: secs, xf: Array.isArray(route.transfers) ? route.transfers.slice(0, 12).map(function (x) { return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
-    bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
+    bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark',
+    me: (Array.isArray(r.me) && r.me.length === 2) ? [resNum(r.me[0], null), resNum(r.me[1], null)] : null, ra: typeof r.a === 'string' ? r.a.slice(0, 40) : '' };
 }
 
 // \uc7a5\uac70\ub9ac \uace0\ub974\uae30 \ub20c\ub9bc \u2192 \ub2e4\uc2dc \ubb3c\uc744 \ub54c \ub367\ubd99\uc77c \uc9c8\uc758(\uc6f9 _ldReselect). m = \uc218\ub2e8/\uc2dc\uac01 \uce69, g = \ub4f1\uae09/\uc2dc\uac01 \uce69. \ubc88\ud638\ub294 \uc5d4\uc9c4\uc774 \uce69\uc744 \ub9cc\ub4e0 \uc21c\uc11c\uc640 \uac19\ub2e4.
