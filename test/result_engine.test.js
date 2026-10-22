@@ -134,6 +134,27 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const rs = screenCheck([o, o1]);
   ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(tdrow): ' + (rs.err || rs.out.join(' | ')));
 }
+// ⑤-a2 세부경로 시트 웹 모양(cap 24): 머리(shd) · 앱이 바로 펼치는 줄 · 확정/지도 단추 줄
+{
+  const c24 = (extra, cap) => E.resultScreen({ cap: cap || 24 }, Object.assign({ data: DATA, tab: 'less', a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1, view: 'detail', dl: { la: 36.5, lo: 127.1, n: '두정역' }, me: [37.49, 126.72] }, extra || {}));
+  const o = c24(), rows = flat(o.body).filter(n => n.t === 'tdrow');
+  ok(o.ok && o.head.length === 1 && o.head[0].t === 'shd' && o.head[0].act.v === 'rd.close' && /분 · 부평 → 두정$/.test(o.head[0].title) && !flat(o.body).some(n => n.t === 'bar'), 'shd: 시트 머리(제목 · 닫기)는 head 에, 본문에 옛 bar 는 없다');
+  ok(o.bg === 'card' && o.fl === false && o.info.opt === '최소환승', '시트 바탕은 카드색 · 아래 줄 맨 위 선 없음 · 옵션 이름은 엔진이 준다');
+  const ex = rows.filter(r => r.ex);
+  ok(ex.length >= 1 && ex.every(r => typeof r.i === 'number' && Array.isArray(r.stops) && r.stops.length >= 2 && !r.op), 'tdrow: 펼칠 줄은 번호(i)와 정거장을 처음부터 갖고, 접힌 채 온다(앱이 바로 펼친다)');
+  const o1 = c24({ open: [ex[0].i] }); ok(flat(o1.body).filter(n => n.t === 'tdrow' && n.op === true).length === 1, 'tdrow: 서버가 기억하던 펼침은 op 로 처음 상태만 알린다');
+  const ft = o.foot;
+  ok(ft.length === 3 && ft[0].t === 'button' && ft[0].s === '\u2705 이 경로로 확정하기' && ft[0].fill === '#2f7cf6' && ft[0].act.v === 'rd.confirm' && ft[0].pad.join() === '14,10,14,0', '확정 단추: 웹과 같은 파랑 · 글 · 안쪽 여백(좌 14 · 위 10 · 우 14)');
+  ok(ft[1].t === 'divider' && ft[2].t === 'row' && ft[2].pad.join() === '14,12,14,16' && ft[2].kids.length === 2 && /카카오맵 길안내$/.test(ft[2].kids[0].s) && /네이버지도$/.test(ft[2].kids[1].s), '지도 단추 줄: 위 선 · 12/14/16 여백 · 카카오 · 네이버');
+  const rd = c24({ ride: { on: true } });
+  ok(rd.foot[0].fill === '#30a14e' && /최소환승 경로로 확정됨$/.test(rd.foot[0].s) && rd.foot[0].act.v === 'rd.done', '확정되면 초록 \'○○ 경로로 확정됨\'(다시 눌러도 아무 일 없음)');
+  const lg = c24({}, 23);
+  ok(!lg.head.length && lg.body.some(n => n.t === 'bar') && !('foot' in lg), 'cap 23 이하 앱은 예전 모양 그대로(머리 bar · 본문 안 단추)');
+  const bt = lg.body.filter(n => n.t === 'button'), rw = lg.body.find(n => n.t === 'row');
+  ok(bt.every(b => b.pad.length === 4 && b.pad[0] === 14 && b.pad[2] === 14) && rw.pad[0] === 14 && rw.pad[2] === 14, '옛 앱 단추도 좌우 14 — 오른쪽으로 넘치지 않는다');
+  const rs = screenCheck([o, o1, rd]);
+  ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(세부경로 시트): ' + (rs.err || rs.out.join(' | ')));
+}
 // ⑤-b 세부경로 시트
 {
   const dl = { la: 36.5, lo: 127.1, n: '두정역' };
