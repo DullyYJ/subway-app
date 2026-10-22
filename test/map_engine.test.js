@@ -84,6 +84,8 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(k[3].items[0].label === '잠실 방면' && k[3].items[1].label === '하행' && k[3].items[0].on, '방향 칩');
   ok(k[4].s === '첫차 05:00 · 막차 00:10 · 다음 열차 08:00', '요약 ' + k[4].s);
   ok(k[5].s === '05시   00  10' && k[6].s === '08시   00  05' && k[6].hl && k[6].hl[0][0] === 7 && k[7].s === '24시 익일   10' || k[7].s.startsWith('00시'), '시(時)별 묶기·익일 표시·다음 열차 굵게 ' + k[5].s + ' | ' + k[6].s + ' | ' + (k[7] && k[7].s));
+  ok(k[6].fc && /^n/.test(k[6].fc) && !k[5].fc && !k[7].fc, '다음 열차가 든 줄에만 fc(스크롤 표시)가 붙는다: ' + k[6].fc);
+  ok(call({ part: 'tt', stn: '강남', tt: { st: 'ok', res } }).body[6].fc === k[6].fc, '같은 노선·요일·방향이면 fc 열쇠가 같다(다시 그려도 보던 자리를 지킨다)');
   t = call({ part: 'tt', stn: '강남', tt: { st: 'ok', res, sel: { line: lines[0], day: 'SAT', dk: '하' } } });
   ok(t.info.need && t.info.need.day === 'SAT', '요일 고르면 그 응답이 없을 때 앱이 받아야 할 것을 알려 준다');
   t = call({ part: 'tt', stn: '강남', tt: { st: 'loading', res: {} } });
@@ -208,6 +210,11 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
 // ⑥-b 버스 — 웹 mapBusPanel: 선택 · 즐겨찾기 · 별명 · 토글
 {
   const near = (extra, res) => call({ part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5, lng: 127.0, res: Object.assign({ tp: SEOUL_POS, gg: '', tn: '', a0: SEOUL_ARR, a1: '', a2: '', a3: '' }, res || {}) }, extra || {}) });
+  {   // 정류장마다 따로: 못 받은 정류장만 '불러오는 중' + 그 정류장만 다시 받으라고 한다(a0 만 받았을 때 나머지가 '도착정보 없음'으로 보이던 문제)
+    const p = near({}, { a1: undefined, a2: undefined, a3: undefined });
+    const pc = p.body.filter(n => n.t === 'bcard');
+    ok(pc[0].rows && !pc[0].ld && pc[1].ld && pc[1].em === undefined && p.info.bus.st === 'need' && p.info.bus.need.every(n => n.k !== 'a0') && p.info.bus.need.length === pc.length - 1, '받은 정류장은 그리고 못 받은 정류장만 불러오는 중 ' + JSON.stringify(p.info.bus.need && p.info.bus.need.map(n => n.k)));
+  }
   let b = near({ sel: 1 });
   const cs = b.body.filter(n => n.t === 'bcard');
   ok(cs[1].on === true && cs[0].on === false && b.head[1].foc === cs[1].pi, '고른 정류장(sel): 그 카드가 켜지고 지도도 그 핀을 고른다');
