@@ -373,8 +373,8 @@ public class ShellActivity extends Activity {
     private void tabSettle() {
         try {
             body.animate().cancel();
-            body.setAlpha(0.55f); body.setTranslationY(10f * dpr);
-            body.animate().alpha(1f).translationY(0f).setDuration(300L).setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f)).start();
+            body.setAlpha(0.85f); body.setTranslationY(4f * dpr);                      // 웹은 탭을 곧바로 바꾼다 — 그 느낌에 가깝게 아주 짧고 얕게(0.18초 · 4dp)
+            body.animate().alpha(1f).translationY(0f).setDuration(180L).setInterpolator(new android.view.animation.PathInterpolator(0.32f, 0.72f, 0f, 1f)).start();
         } catch (Throwable ignored) { body.setAlpha(1f); body.setTranslationY(0f); }
     }
     private ScreenView viewOfSlot(int i) { return slots.length > 1 && i == 0 ? head : body; }
@@ -1798,10 +1798,11 @@ public class ShellActivity extends Activity {
                     if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
                     if (txt.length() > 0) map.onScreen(txt);
                     if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
-                    if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
+                    final boolean shownNow = !(keep && txt.length() > 0 && !map.busNeed.isEmpty());
+                    if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
-                    if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
+                    if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
                     else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch();
                         if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
                             busRetryN++; final long wait = 1500L * busRetryN;
@@ -1852,7 +1853,25 @@ public class ShellActivity extends Activity {
             }
         }, "shell-brpf").start();
     }
-    private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my) {
+    private boolean busPaintFly, busPaintDirty;
+    /** 정류장마다 도착정보가 오는 대로 그 카드만 채운다(웹처럼 병렬로 받고 먼저 온 곳부터 보인다) — 아직 못 받은 카드는 엔진이 '불러오는 중'으로 그린다. 계산은 엔진, 앱은 그리기만. */
+    private void busPaint(final ScreenView v, final int my) {
+        if (busPaintFly) { busPaintDirty = true; return; }
+        busPaintFly = true;
+        final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 && r.body != null ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    busPaintFly = false;
+                    if (my == seqMapB && txt.length() > 0 && !busRefreshing && busShowing()) { v.setSourceAge(map.arrAge()); present(v, txt, true); }          // 그 사이 다음 통신·탭 이동이 있었으면 버린다(최종 그림이 곧 온다)
+                    if (busPaintDirty) { busPaintDirty = false; if (my == seqMapB) busPaint(v, my); }
+                } });
+            }
+        }, "shell-buspaint").start();
+    }
+    private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my, final boolean partial) {
         final List<String[]> need = new ArrayList<String[]>(map.busNeed);
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1863,13 +1882,19 @@ public class ShellActivity extends Activity {
                     ts[i] = new Thread(new Runnable() { @Override public void run() {
                         String u = MapCore.busFetchUrl(need.get(k)[1]);
                         String body = "";
-                        for (int a = 0; a < 2 && u.length() > 0 && body.length() == 0; a++) {          // 한 곳이 느려 전체가 9초 걸리지 않게: 5초 안에 못 받으면 한 번 더(빨리 실패했을 때만 — 느린 서버에 또 매달리지 않는다)
+                        for (int a = 0; a < 3 && u.length() > 0 && body.length() == 0; a++) {          // 한 곳이 느려 전체가 9초 걸리지 않게: 5초 안에 못 받으면 한 번 더(빨리 실패했을 때만 — 느린 서버에 또 매달리지 않는다). 공공 API 의 일시적 빈 응답은 0.3초 뒤 한 번 더
                             long t0 = System.currentTimeMillis();
                             NetPost.Res r = NetPost.get(u, a == 0 ? 5000 : 4000);
                             body = r.status == 200 && r.body != null ? r.body : "";
                             if (body.length() == 0 && System.currentTimeMillis() - t0 > 2500L) break;
+                            if (body.length() == 0 && a < 2) { try { Thread.sleep(300L); } catch (InterruptedException ie) { break; } }
                         }
                         got[k] = body;
+                        if (partial && body.length() > 0) main.post(new Runnable() { @Override public void run() {          // 먼저 온 정류장부터 바로 보인다
+                            if (my != seqMapB || busRefreshing) return;
+                            map.addBusRes(need.get(k)[0], got[k]);
+                            busPaint(v, my);
+                        } });
                     } });
                     ts[i].start();
                 }
@@ -2293,12 +2318,12 @@ public class ShellActivity extends Activity {
             // 웹 svgShowPopup · _nmDragDismiss: 팝업 어디서든 위로 끌면 시간표가 손가락을 따라 자라 오르고(놓으면 이어서 올라가거나 되돌아간다), 아래로 끌면 시트가 손가락을 따라 내려가다 놓으면 닫힌다(또는 제자리).
             // 단추·알약 누르기는 그대로 — 세로로 10dp 이상 끌려(세로가 가로의 1.2배 이상) 끌기가 확정된 순간에만 가로채고, 그 전에는 건드리지 않는다. 손가락 따라가기는 창 높이(위로)와 창 이동(아래로)뿐이라 새 객체가 없다.
             private float dx0, dy0, base; private boolean fired, top0, busy, up; private android.view.VelocityTracker vt;
-            private int curH;
+            private int curH; private float swapOff;                                      // swapOff = 끌다가 시간표가 역 팝업으로 바뀐 순간까지 내려온 거리(그 뒤로는 팝업이 손가락을 따라간다)
             @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
                 int a = e.getActionMasked();
                 if (busy) return true;
                 if (a == android.view.MotionEvent.ACTION_DOWN) {
-                    dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f;
+                    dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; swapOff = 0f; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f;
                     if (vt == null) vt = android.view.VelocityTracker.obtain(); else vt.clear();
                     vt.addMovement(e);
                 } else if (a == android.view.MotionEvent.ACTION_MOVE && !fired) {
@@ -2326,7 +2351,8 @@ public class ShellActivity extends Activity {
                         int h = Math.max(from, Math.min(to, from + Math.round(-d)));
                         if (Math.abs(h - curH) >= 2) { curH = h; try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, h); } catch (Throwable ignored) { } }
                     } else if (!up) {
-                        w.getDecorView().setTranslationY(Math.max(0f, d));
+                        if (swapOff == 0f && ShellCore.S_MAPTT.equals(sheetName) && d >= to - from && stationNow(d - (to - from))) swapOff = to - from;      // 시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다
+                        w.getDecorView().setTranslationY(Math.max(0f, d - swapOff));
                     }
                 } else if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
                     float vy = 0f;
@@ -2444,6 +2470,25 @@ public class ShellActivity extends Activity {
                 finally { if (done != null) done.run(); }
             }
         }).start();
+    }
+    /** 끄는 도중 시간표를 그 자리에서 역 팝업으로 바꾼다(손가락 밑 위쪽 가장자리는 그대로 — 창을 팝업 높이로 줄이고 그만큼 덜 내려 놓는다). 캐시가 없으면 false(놓을 때 새로 연다). */
+    private boolean stationNow(float tr) {
+        final android.app.Dialog me = sheet; final ScreenView sv = sheetView;
+        if (me == null || sv == null) return false;
+        final String cached = stnCache.get(map.stnRequest(ShellCore.CAP, ShellCore.theme(store)));
+        if (cached == null) return false;
+        try {
+            final int from = Math.round(S_STN_H * dpr);
+            map.ttSeq++;                                                                   // 늦게 오는 시간표 답이 이 화면을 덮지 않게
+            map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false);
+            sheetName = ShellCore.S_MAPSTN;
+            me.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, from);
+            me.getWindow().getDecorView().setTranslationY(Math.max(0f, tr));
+            if (mapView != null) { mapView.setCover(from); mapView.ensureVisible(map.stn); }
+            sv.setAlpha(0.35f); sv.animate().alpha(1f).setDuration(140L).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)).start();
+            sv.post(new Runnable() { @Override public void run() { if (sv == sheetView) playPlace(); } });
+            return true;
+        } catch (Throwable t) { return false; }
     }
     /** 시트 창 높이를 부드럽게 바꾼다(웹 시트 곡선). 창이 바뀌었거나 닫혔으면 조용히 멈춘다. */
     private void animSheetH(int a, int b, long ms, final Runnable done) {
