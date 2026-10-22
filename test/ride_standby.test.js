@@ -558,6 +558,27 @@ t('탑승 버튼 보정: 승차역에서 800m 넘게 먼 곳에서 누르면 버
   assert.ok(wr.state.wait && wr.state.eta.boarded === false, '첫 구간도 멀면 거둔다 ' + JSON.stringify(wr.notes));
 });
 
+// ── s146: 경로 카드 버튼 줄의 오른쪽 칸(탑승 → 환승 → 도착) — 칸의 뜻·전환은 엔진이 정한다 ─────────────────────────────
+t('버튼 줄 칸: 처음엔 탑승(밀고 들어옴) → 첫 구간 뒤 환승(위에서 내려옴) → 마지막 구간 뒤 도착(아래에서 올라옴), 누를 수 있는지(can)도 엔진이 말한다', () => {
+  let r = stepO(waitState(), at(12, 47, 0), null, false);
+  assert.ok(r.row && r.row.slot === 'board' && r.row.label === '탑승' && r.row.leg === 0 && r.row.can === true && r.row.anim.kind === 'push_in' && r.row.anim.sq === at(12, 47, 0) && r.row.anim.ms === 420 && r.row.anim.o === 'none', JSON.stringify(r.row));
+  r = stepO(r.state, at(12, 47, 5), null, false);
+  assert.ok(r.row.anim.kind === 'push_in' && r.row.anim.sq === at(12, 47, 0), '전환은 다음 전환까지 그대로 들고 있다(시각이 안 바뀐다)');
+  r = stepO(r.state, at(12, 50, 35), { act: 'press' }, false);
+  assert.ok(r.row.slot === 'arrive' && r.row.label === '도착' && r.row.leg === -1 && r.row.anim.kind === 'slide_up' && r.row.anim.o === 'board' && r.row.anim.sq === at(12, 50, 35), JSON.stringify(r.row));
+  const xs0 = xferState(); xs0.eta.passes = xs0.eta.passes.slice(0, 1);
+  let x = stepX(xs0, at(12, 51, 0));
+  assert.ok(x.row.slot === 'transfer' && x.row.label === '환승' && x.row.leg === 1 && x.row.can === false && x.row.anim.kind === 'push_in', '앞 구간을 내리기 전: 환승 칸은 있지만 아직 누를 수 없다 ' + JSON.stringify(x.row));
+  const x1 = stepX(xferState(), at(12, 55, 0));
+  assert.ok(x1.row.slot === 'transfer' && x1.row.can === true, '내린 뒤에는 누를 수 있다');
+  const D = x1.state.etaMs[4];
+  const x2 = stepX(x1.state, D - 50000, { act: 'press' });
+  assert.ok(x2.row.slot === 'arrive' && x2.row.anim.kind === 'slide_up' && x2.row.anim.o === 'transfer', JSON.stringify(x2.row));
+  const x3 = stepX(x2.state, D - 45000, { act: 'undo' });
+  assert.ok(x3.row.slot === 'transfer' && x3.row.anim.kind === 'slide_down' && x3.row.anim.o === 'arrive', '되돌리면 반대 방향 전환 ' + JSON.stringify(x3.row));
+  assert.strictEqual(stepO(withOvl(mkState()), at(12, 59, 0)).row.slot !== undefined, true);
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
