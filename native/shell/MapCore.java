@@ -33,6 +33,8 @@ public final class MapCore {
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
     /** 서버가 정류장·도착정보를 한 번에 받아 준 적이 있다(그러면 갱신도 서버에 한 번에 맡긴다) · 이번 응답에서 서버가 못 받은 도착정보 수. */
     public boolean svServer; public int svFail;
+    /** 서버가 도착정보를 기다리는 시간(ms): 처음 그릴 때는 짧게(정류장부터 먼저 보이고 도착정보는 이어서), 조용한 갱신은 넉넉히. */
+    public int svb = 700;
     public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; loadStopsCache(); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
@@ -189,10 +191,10 @@ public final class MapCore {
         return new ArrayList<String[]>(lastArrNeed);
     }
     // 한 정류장 응답이 잠깐 비어 와도(공공 API 의 일시 빈 응답 · 연달아 부른 제한) 보던 줄이 "도착정보 없음"으로 사라지지 않게:
-    // 새 응답에 도착 값이 하나도 없고 45초 안에 받은 값이 있으면 보던 값을 그대로 둔다(그 시각도 새로 치지 않는다).
-    static final long KEEP_OLD_MS = 45000L;
+    // 새 응답에 도착 값이 하나도 없고 2분 안에 받은 값이 있으면 보던 값을 그대로 둔다(그 시각도 새로 치지 않는다).
+    static final long KEEP_OLD_MS = 120000L;                    // 공공 API 가 비거나 에러 글을 줘도 2분까지는 받아 둔 값을 둔다(웹처럼 사라지지 않게)
     private final java.util.HashMap<String, Long> arrKeyAt = new java.util.HashMap<String, Long>();
-    static boolean hasArr(String b) {
+    public static boolean hasArr(String b) {
         return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
     }
     public void addBusRes(String k, String body) {
@@ -237,7 +239,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"sv\":1,\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"sv\":1,\"svb\":" + svb + ",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
