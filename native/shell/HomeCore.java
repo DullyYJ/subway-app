@@ -191,6 +191,15 @@ public final class HomeCore {
     public static boolean navAppOk(String u) {
         return u != null && u.length() < 1024 && u.indexOf(' ') < 0 && (u.startsWith("kakaomap://route?") || u.startsWith("nmap://route/public?") || u.startsWith("nmap://route/walk?"));
     }
+    /** 웹 confirmSelectedRoute 의 옵션 이름(확정 토스트에 쓴다). */
+    public static String optName(String tab) {
+        if ("fast".equals(tab)) return "최단시간";
+        if ("less".equals(tab)) return "최소환승";
+        if ("sub".equals(tab)) return "지하철";
+        if ("bus".equals(tab)) return "버스";
+        if ("longdist".equals(tab)) return "장거리";
+        return "선택한";
+    }
     /** 세부경로 시트의 눌림(rd.*). */
     public int actDetail(String v) {
         if (v == null || !v.startsWith("rd.")) return D_NONE;
