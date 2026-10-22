@@ -132,11 +132,55 @@ function rsAlightGps(st, tr, bi) {
   if (!o || q[0] - o[0] > 120000) return false;
   return rsHav(o[1], o[2], q[1], q[2]) / ((q[0] - o[0]) / 1000) <= 2.5;
 }
+// ── 탑승 버튼 보정(웹 _rsLateCheck · _rsPressTrain · _rsPressVerify 를 엔진으로) ─────────────────────────
+//   · 어느 차를 탔나: 누른 시각 기준 시각표상 '방금(1분 안에) 떠난 차'가 있으면 그 차, 없으면 다음 차(12분 안) — 출발 시각(:30)을 승차 통과 시각으로 적는다.
+//   · 일찍 눌러 예약이 될 것이라도 방금 떠난 차가 있으면 예약하지 않고 바로 확정한다(실시간 위치가 없는 노선에서 조금 늦게 누른 경우).
+//   · 승차역에서 분명히 먼 곳(800m 밖)에서 눌렀으면 버튼을 거두고 알린다(ride-track press).
+//   시각표는 비동기라 순수 함수에서 못 읽는다 → 워커 연결부(handleRideStandby)가 rsPressQuery 로 물을 것을 정해 시각표에서 읽어 req.pressTT 로 넣어 준다.
+var RS_NEAR_M = 600;          // 승차역에서 이보다 멀면 '방금 떠난 차' 인정을 하지 않는다
+var RS_LATE_BACK_MIN = 1;     // 방금 = 지금 분 · 한 분 전
+var RS_PICK_MAX_MIN = 12;     // 다음 차가 이보다 멀면 건드리지 않는다
+// 지금 누르면 대상이 되는 정류장 번호(첫 구간 대기 → st.wait, 아니면 환승 대기 → st.xw)
+function rsPressTarget(st) { if (!st) return -1; if (st.wait) return st.wait.i; if (st.xw && !st.xPend) return st.xw.i; return -1; }
+// 시각표에 물을 것: { i, line, from, to, atMin, baseMs } — 지하철 구간이 아니거나 누르는 손짓이 아니면 null
+function rsPressQuery(req) {
+  if (!req || req.act !== 'press' || !req.state || !req.state.eta || !isFinite(+req.nowMs)) return null;
+  var st = req.state, i = rsPressTarget(st), nodes = st.eta.nodes || [], n = nodes[i], nx = nodes[i + 1];
+  if (i < 0 || !n || !n.isSub || n.isBus || !n.lineName || !n.name) return null;
+  var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
+  var atMin = Math.floor((((+req.nowMs / 60000 + tz) % 1440) + 1440) % 1440);
+  return { i: i, line: n.lineName, from: n.name, to: (nx && nx.name) || '', atMin: atMin, baseMs: +req.nowMs };
+}
+// 시각표(nt.boardTable)에서 답을 읽어 req.pressTT = { i, nowM, depMin, late } 로 붙인다. late = 방금 떠난 차의 출발 분(없으면 null)
+function rsAttachPressTT(req, nt) {
+  try {
+    var q = rsPressQuery(req); if (!q || !nt || typeof nt.boardTable !== 'function') return false;
+    var bl = nt.boardTable({ line: q.line, from: q.from, to: q.to, atMin: q.atMin - RS_LATE_BACK_MIN, baseMs: q.baseMs });
+    var dep = bl && bl.depMin, ok = dep != null && isFinite(dep) && dep <= q.atMin && dep >= q.atMin - RS_LATE_BACK_MIN;
+    req.pressTT = { i: q.i, nowM: q.atMin, depMin: dep != null && isFinite(dep) ? dep : null, late: ok ? dep : null };
+    return true;
+  } catch (e) { return false; }
+}
+// 승차 통과 시각(ms): 방금 떠난 차(late) → 그 출발 시각 · 없으면 다음 차(depMin, 12분 안) → 그 시각 · 아니면 누른 시각
+function rsPickMs(tt, i, now) {
+  if (!tt || tt.i !== i) return now;
+  var m = tt.late != null && isFinite(tt.late) ? tt.late : (tt.depMin != null && isFinite(tt.depMin) ? tt.depMin : null);
+  if (m == null) return now;
+  var d = m - tt.nowM; if (d < -720) d += 1440; if (d > 720) d -= 1440;
+  if (d > RS_PICK_MAX_MIN) return now;
+  return now - (now % 60000) + d * 60000 + 30000;       // 시각표 06:17 → 06:17:30 출발(영점의 :30 규칙과 같다)
+}
+function rsStopOf(st, i) { var stops = st.stops || [], k; for (k = 0; k < stops.length; k++) if (stops[k].i === i) return stops[k]; return null; }
+// 승차역까지의 거리(m) — 위치나 좌표를 모르면 null
+function rsDistToStop(st, tr, i) {
+  var s = rsStopOf(st, i); if (!s || !tr.length || !isFinite(s.lat) || !isFinite(s.lng)) return null;
+  var q = tr[tr.length - 1]; return rsHav(q[1], q[2], s.lat, s.lng);
+}
 // 눌러서(또는 예약 시각이 되어) 그 구간 차량을 탔다고 기록한다. 되돌릴 때 쓸 이전 통과 기록을 돌려준다.
-function rsXCommit(st, i, now) {
+function rsXCommit(st, i, now, ms) {
   var eta = st.eta, passes = eta.passes = eta.passes || [], hit = -1, k;
   for (k = 0; k < passes.length; k++) if (passes[k].idx === i) { hit = k; break; }
-  var prev = hit >= 0 ? passes[hit] : null, np = { idx: i, ms: now, src: 'gps' };
+  var prev = hit >= 0 ? passes[hit] : null, np = { idx: i, ms: ms != null ? ms : now, src: 'gps' };
   if (hit >= 0) passes[hit] = np; else passes.push(np);
   (st.rsDone = st.rsDone || {})[i] = 1;
   delete st.xw; delete st.xPend; st.rsOpen = 0;
@@ -176,17 +220,36 @@ function rsActs(st, req, now, notes) {
   if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; }
   else if (a === 'close') { st.rsOpen = 0; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // 도착 2분 안에 닫은 차량은 대기 알약으로(다시 올리지 않음) · 2분보다 먼 때 닫은 것은 2분 안이 되면 자동으로 다시 올라온다
   else if (a === 'press' && !st.wait && st.xw && !st.xPend) {
-    var x = st.xw;
-    if (x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // 도착 1분 반보다 일찍 누른 것은 예약만(마커가 튀지 않게) — 그 시각이 되거나 탄 증거가 잡히면 확정
+    var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
+    var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // 방금 떠난 차가 있으면 예약하지 않고 바로 확정
+    if (!lateHit && x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // 도착 1분 반보다 일찍 누른 것은 예약만(마커가 튀지 않게) — 그 시각이 되거나 탄 증거가 잡히면 확정
       st.xPend = { i: x.i, at: now }; st.rsOpen = 0; x.seen = true;
       st.rsUndo = { w: { i: x.i }, x: true, pend: true, prev: null, until: now + 20000 };
       notes.push('환승 예약(' + x.i + '번 · 도착 ' + Math.round((x.arrMs - now) / 1000) + '초 전)');
     } else {
-      st.rsUndo = { w: { i: x.i }, x: true, prev: rsXCommit(st, x.i, now), until: now + 20000 };
-      notes.push('환승 수동 확정(' + x.i + '번)');
+      st.rsUndo = { w: { i: x.i }, x: true, prev: rsXCommit(st, x.i, now, rsPickMs(tt && (dN == null || dN <= RS_NEAR_M || tt.late == null) ? tt : null, x.i, now)), until: now + 20000 };
+      notes.push('환승 수동 확정(' + x.i + '번)' + (lateHit ? ' · 방금 떠난 차 인정' : ''));
+      rsPressVerify(st, x.i, now, notes);
     }
-  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && st.rsUndo.x) {
-    var ux = st.rsUndo, pxs = eta.passes || [], ki;
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && st.rsUndo.x) rsDoUndo(st, now, notes);
+  else if (a === 'press' && st.wait) {
+    w = st.wait; passes = eta.passes = eta.passes || [];
+    var tw = req.pressTT && req.pressTT.i === w.i ? req.pressTT : null, dW = rsDistToStop(st, st.trail || [], w.i);
+    var hit = -1;
+    for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
+    st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
+    var np = { idx: w.i, ms: rsPickMs(tw && !(dW != null && dW > RS_NEAR_M && tw.late != null) ? tw : null, w.i, now), src: 'gps' };
+    if (hit >= 0) passes[hit] = np; else passes.push(np);
+    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
+    notes.push('승차 수동 확정(오버레이 탑승 버튼)' + (np.ms !== now ? ' · 시각표 ' + Math.round((np.ms - now) / 1000) + '초' : ''));
+    rsPressVerify(st, w.i, now, notes);
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
+}
+// 되돌리기: 환승 확정(예약 포함) 또는 첫 구간 탑승 확정을 이전 기록으로 돌린다
+function rsDoUndo(st, now, notes) {
+  var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
+  if (!ux) return;
+  if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {
       for (ki = pxs.length - 1; ki >= 0; ki--) if (pxs[ki].idx === ux.w.i) { if (ux.prev) pxs[ki] = ux.prev; else pxs.splice(ki, 1); }
@@ -194,22 +257,27 @@ function rsActs(st, req, now, notes) {
     }
     delete st.rsUndo; st.rsOpen = now + 20000; rsXwait(st, st.trail || [], now, notes); if (st.xw) { st.xw.shr = false; st.xw.seen = true; }
     notes.push('환승 확정 되돌림');
-  }
-  else if (a === 'press' && st.wait) {
-    w = st.wait; passes = eta.passes = eta.passes || [];
-    var hit = -1;
-    for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
-    st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
-    var np = { idx: w.i, ms: now, src: 'gps' };
-    if (hit >= 0) passes[hit] = np; else passes.push(np);
-    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
-    notes.push('승차 수동 확정(오버레이 탑승 버튼)');
-  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) {
-    var u = st.rsUndo, ps = eta.passes || [];
-    for (k = ps.length - 1; k >= 0; k--) if (ps[k].idx === u.w.i) { if (u.prev) ps[k] = u.prev; else ps.splice(k, 1); }
-    eta.boarded = false; eta.notDeparted = true; st.wait = u.w; delete st.rsUndo; st.rsOpen = 0;
+  } else {
+    for (ki = pxs.length - 1; ki >= 0; ki--) if (pxs[ki].idx === ux.w.i) { if (ux.prev) pxs[ki] = ux.prev; else pxs.splice(ki, 1); }
+    eta.boarded = false; eta.notDeparted = true; st.wait = ux.w; delete st.rsUndo; st.rsOpen = 0;
     notes.push('승차 확정 되돌림(오버레이)');
   }
+}
+// 누른 순간 승차역에 있나(ride-track press): 800m 밖('away')이면 버튼을 거두고 알린다. 가깝거나 위치를 모르면(지하) 그대로 시각표를 따른다.
+function rsPressVerify(st, i, now, notes) {
+  try {
+    var s = rsStopOf(st, i), tr = st.trail || [];
+    if (!s || !isFinite(s.lat) || !isFinite(s.lng) || !tr.length || !st.rsUndo) return;
+    var res = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: [], pressPt: { lat: s.lat, lng: s.lng } }, want: { off: false, ridden: false, miss: false, bus: false, press: true } });
+    var pr = res && res.press;
+    if (!pr) return;
+    notes.push('승차역확인 ' + pr.state + (pr.distM != null ? ' ' + pr.distM + 'm' : '') + (pr.why ? ' (' + pr.why + ')' : ''));
+    if (pr.state === 'away') {
+      rsDoUndo(st, now, notes);
+      st.rsToast = { t: '승차역에서 ' + pr.distM + 'm 떨어져 있어요. 도착해서 다시 눌러 주세요', until: now + 8000 };
+      notes.push('승차역에서 멀어 버튼을 거둠');
+    }
+  } catch (e) { notes.push('승차역확인 실패: ' + (e && e.message)); }
 }
 // 탑승 줄(앱 탑승 시트 · 오버레이 공통): 대기 중이면 도착 2분 전부터(또는 손잡이·알약을 눌러 20초) 'board', 아니면 'wait'(알약). 탑승을 누른 직후 20초는 'undo'. 아니면 'hidden'.
 //   앱 시트가 그릴 값: kick(곧 도착 문구) · mode('sub'|'bus') · chip(노선 글) · cbg/cfg(노선 색) · bar(출발 뒤 줄어드는 막대 0~1, 없으면 -1) · x(환승 구간이면 1) · late(출발 3분 뒤)
@@ -222,6 +290,12 @@ function rsKick(dt, late, x) {
   return '도착했어요';
 }
 function rsRsState(st, r, now) {
+  var o = rsRsState0(st, r, now);
+  if (st.rsToast && now < st.rsToast.until && o && o.st && o.st !== 'hidden' && o.st !== 'undo') { o.kick = st.rsToast.t; o.late = false; }
+  else if (st.rsToast && now >= st.rsToast.until) delete st.rsToast;
+  return o;
+}
+function rsRsState0(st, r, now) {
   var base = { bar: -1, cbg: '', cfg: '#0a84ff', ch: '', um: '', kick: '', mode: '', chip: '', x: 0, late: false };
   var mk = function (stt, k, nm, bt) { var o = {}, q; for (q in base) o[q] = base[q]; o.st = stt; o.k = k; o.nm = nm; o.bt = bt; return o; };
   var nodes = (st.eta && st.eta.nodes) || [];
@@ -648,7 +722,7 @@ function rideStandby(req) {
   return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
-function handleRideStandby(request) {
+function handleRideStandby(request, env) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
   if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ error: 'POST only' }), { status: 405, headers: H }));
@@ -660,9 +734,16 @@ function handleRideStandby(request) {
   }).then(function (txt) {
     var body, out;
     try { body = JSON.parse(txt); } catch (e0) { return new Response(JSON.stringify({ error: 'JSON 아님' }), { status: 400, headers: H }); }
-    try { out = rideStandby(body); } catch (e) { return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H }); }
-    return new Response(JSON.stringify(out), { headers: H });
+    var run = function () {
+      try { out = rideStandby(body); } catch (e) { return new Response(JSON.stringify({ error: String(e && e.message || e) }), { status: 500, headers: H }); }
+      return new Response(JSON.stringify(out), { headers: H });
+    };
+    // 탑승 버튼을 눌렀고 지하철 구간이면 시각표(방금 떠난 차 · 다음 차)를 읽어 붙인다 — 시각표를 못 불러와도 그냥 누른 시각으로 확정한다
+    if (typeof ntEnsure === 'function' && rsPressQuery(body)) {
+      return Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); return run(); }, function () { return run(); });
+    }
+    return run();
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
