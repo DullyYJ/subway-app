@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 23;
+    public static final int CAP = 24;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
@@ -323,7 +323,7 @@ public final class ShellCore {
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_MAPBR = "mapbr", S_FAV = "fav", S_DETAIL = "detail", S_WALK = "walk", S_SETPG = "setpg", S_HDR = "hdr";
-    public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_GPSASK = "gps_asked", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
+    public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_GPSASK = "gps_asked", K_OVLHINT = "ovl_hint", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
     public static String[] slotsOf(Store st, String tab) {
