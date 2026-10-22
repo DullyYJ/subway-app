@@ -199,7 +199,7 @@ public final class ScreenCore {
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
         public float ipL = 12f, ipT = 8f, ipR = 12f, ipB = 8f, r = 10f, max = 340f, vp = 9f, ssize = 11f;
         public int maxlen = 60;
-        public boolean top, big;
+        public boolean top, big, spin;                     // spin: inbar 단추에 도는 점(감지 중 · 경로 찾는 중) — dim(흐림)과 따로
         public long ln, ln2;                               // tdrow: 구간 출발·도착 시각(기기 시계 ms)
         public String key = "", title = "", sub = "", value = "";
         public String fill = "", line = "", hint = "", accent = "#e63329", tc = "", sc = "", onc = "", onl = "", chk = "", ckf = "";
@@ -530,6 +530,7 @@ public final class ScreenCore {
             n.color = optStr(m, "color", "text", 12); if (!role(n.color)) throw new ParseError("color: 모르는 색 " + n.color);
             n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", ""); n.tc = roleOrCss(m, "tc", "");
             n.onc = roleOrCss(m, "hc", "");                                                                      // 굵은 구간(hl)의 색(없으면 글 색 그대로)
+            n.key = optStr(m, "fc", "", 40);                                                                     // fc = '여기로 스크롤해 보여 달라'는 표시(열쇠가 새로 나올 때 한 번) — 시간표의 다음 열차 줄
             n.r = optNum(m, "r", 10f, 0f, 40f);
         } else if ("search".equals(t)) {
             pad(m, n);
@@ -651,7 +652,8 @@ public final class ScreenCore {
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
             n.onc = roleOrCss(m, "onc", "gold"); if (n.onc.length() == 0) n.onc = "gold"; n.chk = roleOrCss(m, "ckf", "#121214"); if (n.chk.length() == 0) n.chk = "#121214";
             n.dot = roleOrCss(m, "dot", ""); n.bold = optBool(m, "bold", false); n.watch = optBool(m, "watch", false);
-            n.on = optBool(m, "dim", false); n.bact = act(m.get("eact"), false);              // dim = 단추를 흐리게(눌러도 아무 일 없음) · eact = 키보드의 확인 키 행동(없으면 단추 행동)
+            n.on = optBool(m, "dim", false); n.bact = act(m.get("eact"), false);
+            n.spin = optBool(m, "spin", n.on && n.act != null && "rt.gps".equals(n.act.v));      // 옛 엔진은 spin 을 안 준다 — 위치 감지 단추만 흐릴 때 돌던 옛 동작 그대로(경로 탐색 단추는 흐려도 안 돈다)              // dim = 단추를 흐리게(눌러도 아무 일 없음) · eact = 키보드의 확인 키 행동(없으면 단추 행동)
             n.bh = optNum(m, "bh", 0f, 0f, 60f); n.bsize = optNum(m, "bsize", 0f, 0f, 30f);
             n.bpx = optNum(m, "bpx", 0f, 0f, 40f); n.ifill = roleOrCss(m, "ifill", ""); n.ifh = optNum(m, "ifh", 0f, 0f, 60f); n.ifr = optNum(m, "ifr", 0f, 0f, 40f); n.inh = optNum(m, "inh", 0f, 0f, 80f);
             if (n.bh > 0f && n.bh < 20f) throw new ParseError("inbar: bh 는 0 또는 20 이상");
@@ -1815,7 +1817,7 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_BOX; it.x = ox; it.y = y; it.w = innerW;
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = false; it.color = n.color; it.lineH = n.size * n.lh;
             it.h = 2f + n.ipT + it.lineH * ls.size() + n.ipB;
-            it.textX = ox + 1f + n.ipL; it.textY = y + 1f + n.ipT; it.radius = n.r;
+            it.textX = ox + 1f + n.ipL; it.textY = y + 1f + n.ipT; it.radius = n.r; it.key = n.key;
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, null); it.ac2 = col(n.onc, null);
             if (rich) richSegs(it, n.s, n.hl, n.hlc);
             out.add(it);
