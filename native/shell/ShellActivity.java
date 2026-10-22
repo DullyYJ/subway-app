@@ -41,6 +41,8 @@ public class ShellActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private ShellCore.Store store;
     private LinearLayout root;
+    private RsSheetView rs;
+    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; boolean ovOn = false; try { ovOn = "1".equals(store.get(ShellCore.K_OVL, "0")) && RideOverlay.allowed(ShellActivity.this); } catch (Throwable ignored) { } rs.setOv(RideService.running && !ovOn ? RideService.liveOv : null); } };       // 떠 있는 안내(오버레이)가 켜져 있으면 같은 줄이 거기 있으니 앱 안에서는 겹쳐 그리지 않는다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -144,6 +146,9 @@ public class ShellActivity extends Activity {
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
         body.setVecHost(vec);
         root.addView(holder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        rs = new RsSheetView(this);                      // 탑승 시트: 하단 탭 바로 위(웹 rs-sheet — 도착 2분 전 [탑승]/[환승완료] · 되돌리기 · 대기 알약). 값은 서비스가 엔진에게서 받아 온다
+        rs.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
+        root.addView(rs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         tabs = new ScreenView(this);
         tabs.setDpr(dpr);
         tabs.setListener(new Host(2));
@@ -274,8 +279,8 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
-    @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; super.onPause(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; RideService.rsListener = rsApply; rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
         String t = ShellCore.currentTab(store);
@@ -292,6 +297,7 @@ public class ShellActivity extends Activity {
         head.setPalette(pal);
         body.setPalette(pal);
         tabs.setPalette(pal);
+        if (rs != null) rs.setPalette(pal);
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
     }
