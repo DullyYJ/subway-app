@@ -34,6 +34,17 @@ final class RecoNotify {
         return false;
     }
 
+    /** 탑승 전에 받아 둔 /reco-text 응답으로 알림을 띄운다 — 네트워크를 쓰지 않는다. 보낼 글이 없으면 false. */
+    static boolean sendCached(Context c, String resp, RideCore core) {
+        try {
+            String[] t = RideCore.recoText(resp);
+            if (t == null) return false;
+            if (core != null) core.setRecoAd(RideCore.recoAd(resp));
+            show(c, t[0], t[1]);
+            return true;
+        } catch (Throwable ignored) { return false; }
+    }
+
     private static void show(Context c, String title, String text) {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
