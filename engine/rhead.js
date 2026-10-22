@@ -549,6 +549,20 @@ function rheadTrkPrep(inp) {
   };
   return { facts: facts, f: f };
 }
+// 승차 전 '내 위치' 점이 놓일 칸(점 번호). 출발이 '내 위치'면 처음 칸. 아니면 기기 위치에서 600m 안의 가장 가까운 역·정류장. 없으면 -1.
+function rheadTrkMeCell(pts, me, ra) {
+  if (!pts || !pts.length) return -1;
+  var hasMe = Array.isArray(me) && me.length === 2 && isFinite(Number(me[0])) && isFinite(Number(me[1])) && Math.abs(Number(me[0])) <= 90 && Math.abs(Number(me[1])) <= 180;
+  if (!hasMe) return -1;
+  if (/내\s*위치|현재\s*위치/.test(String(ra == null ? '' : ra))) return 0;
+  var la = Number(me[0]), lo = Number(me[1]), best = -1, bd = 600;
+  pts.forEach(function (pt, i) {
+    if (!pt || pt.type !== 'stn' || pt.la == null || pt.lo == null) return;
+    var d = rheadTrkHav(la, lo, pt.la, pt.lo);
+    if (d < bd) { bd = d; best = i; }
+  });
+  return best;
+}
 function rheadTrackScreen(inp) {
   var f = (inp && typeof inp === 'object') ? inp : {};
   var pp = rheadTrkPrep(inp);
@@ -579,6 +593,10 @@ function rheadTrackScreen(inp) {
   }
   var cells = rheadTrkCells(pts, th, ea), w = 0;
   cells.forEach(function (c) { w += c.w; });
+  if (!(lv && lv.p)) {                                    // 탑승 추적이 없어도 웹처럼 '내 위치' 점을 보여 준다(출발이 내 위치면 처음 칸, 아니면 가까운 역·정류장 칸)
+    var mi = rheadTrkMeCell(pts, f.me, f.ra);
+    if (mi >= 0 && cells[mi] && cells[mi].ti >= 0) lv = { p: { f: cells[mi].ti, t: cells[mi].ti, r: 0, sn: 1 }, w: null, ea: ea };
+  }
   var node = { t: 'trk', pad: [14, 6, 14, 6], cells: cells };
   var mk = rheadTrkMark(lv, cells);
   if (mk) {
