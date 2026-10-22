@@ -339,6 +339,25 @@ function resPart(cap, part, facts) {
   return (o && o.ok) ? o : null;
 }
 
+// ── 경로 카드 버튼 줄 오른쪽 칸(웹 routeSlotBtn) ─────────────────────────────────────────────
+//   r.ride.row = 대기 모드 엔진(ride-standby)의 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. 칸 색은 웹 _ROW_COLORS 와 같다.
+//   an = 전환 연출(앱이 sq 가 방금일 때만 그린다): { k, ms, e[4], sq, bg(가리개 색), o:{ s, fill, tc } 바뀌기 전 칸 }
+var RES_ROW_CAP = 21;
+var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
+var RES_ROW_LABELS = { board: '탑승', transfer: '환승', arrive: '도착' };
+function resSlotNode(row) {
+  if (!row || typeof row !== 'object' || !RES_ROW_COLORS[row.slot]) return null;
+  var c = RES_ROW_COLORS[row.slot], btn = { t: 'button', s: String(row.label || RES_ROW_LABELS[row.slot]).slice(0, 6), size: 13, h: 42, r: 12, bold: true, fill: c.fill, line: 'none', tc: c.tc, act: { a: 'call', v: 'rh.slot' } };
+  var a = row.anim, an = null;
+  if (a && typeof a === 'object' && ['push_in', 'push_out', 'slide_down', 'slide_up'].indexOf(a.kind) >= 0 && resNum(a.ms, 0) > 0 && resNum(a.sq, 0) > 0) {
+    var ez = resArr(a.ease).map(function (x) { return resNum(x, 0); });
+    an = { k: a.kind, ms: Math.max(1, Math.min(1500, Math.round(resNum(a.ms, 0)))), e: ez.length === 4 ? ez : [0.2, 0, 0, 1], sq: Math.round(resNum(a.sq, 0)), bg: 'card' };
+    var oc = RES_ROW_COLORS[a.o];
+    if (oc) an.o = { s: RES_ROW_LABELS[a.o], fill: oc.fill, tc: oc.tc };
+  }
+  return { btn: btn, an: an };
+}
+
 function resultScreen(opt, r) {
   var cap = Math.floor(resNum(opt && opt.cap, 0));
   if (cap < 12) return { ok: false, error: 'cap' };
@@ -376,9 +395,13 @@ function resultScreen(opt, r) {
     if (r.ride && r.ride.on) {
       var rt = String(r.ride.text || '').slice(0, 120);
       nodes.push({ t: 'box', s: '탑승 안내 중' + (rt ? '\n' + rt : ''), hl: [[0, 6]], size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'gold', r: 10, ip: [12, 8, 12, 8], pad: [8, 0, 0, 4] });
-      nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [
+      var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // 웹 routeActRow: 오른쪽에 탑승 → 환승 → 도착 칸(칸의 뜻·전환은 대기 모드 엔진이 정한다)
+      var rowKids = [
         { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
-        { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }] });
+        { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
+      var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
+      if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
+      nodes.push(rowNode);
     } else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
