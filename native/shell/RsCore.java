@@ -39,6 +39,12 @@ public final class RsCore {
         if ("wait".equals(v.rsSt) && dy < -28f && -dy > Math.abs(dx) * 1.2f) return "open";
         return null;
     }
+    /** 하단 탭 막대를 쓸었을 때(웹 _rsInitSwipe): 위로 쓸면 도착이 멀어도 시트를 연다("open"), 올라온 시트는 아래로 쓸면 닫는다("close"). 세로가 충분하고 가로보다 클 때만. */
+    public static String tabSwipe(OvCore.Ov v, float dx, float dy) {
+        if (dy < -28f && -dy > Math.abs(dx) * 1.2f) return v != null && "board".equals(v.rsSt) ? null : "open";
+        if (dy > 36f && dy > Math.abs(dx) * 1.2f && v != null && "board".equals(v.rsSt)) return "close";
+        return null;
+    }
     /** 막대(출발 뒤 줄어드는 시간) 채움 너비(dp). 값이 없으면 0. */
     public static float barFill(OvCore.Ov v, float w) { return v.rsBar < 0f ? 0f : w * Math.max(0f, Math.min(1f, v.rsBar)); }
     private static boolean in(float[] r, float x, float y, float slop) { return x >= r[0] - slop && x <= r[0] + r[2] + slop && y >= r[1] - slop && y <= r[1] + r[3] + slop; }
