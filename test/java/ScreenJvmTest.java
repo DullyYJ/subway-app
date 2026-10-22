@@ -1026,6 +1026,24 @@ public class ScreenJvmTest {
             ok(tdb != null && tdb.on && tdb.gb.length == 3 && tdb.gb[0] && !tdb.gb[1] && tdb.gb[2] && "가".equals(tdb.sa[2]) && near(tdb.h - tdb.f1, ScreenCore.TD_STOP_PAD_T + 3 * ScreenCore.TD_STOP_ROW + ScreenCore.TD_STOP_PAD_B), "tdrow: 펼치면 정거장 줄(끝점 표시) 높이가 더해진다");
             ok(tda != null && "12분".equals(tda.label) && "12:03~12:15".equals(tda.value) && "3정거장 경유".equals(tda.tag) && tda.lines.length >= 1, "tdrow: 시간 · 시간대 · 경유 · 경로 글");
         } catch (Exception ex) { ok(false, "tdrow 읽기: " + ex); }
+        // ── 시트 머리(shd) · 앱이 바로 펼치는 줄(i + openKey "td:") · 아래 줄 선(fl) ──
+        try {
+            String shd = "{\"t\":\"shd\",\"title\":\"52분 · 부평 → 두정\",\"act\":{\"a\":\"call\",\"v\":\"rd.close\"}}";
+            String r2 = "{\"t\":\"tdrow\",\"i\":%I%,\"pos\":\"m\",\"ic\":\"s\",\"lab\":\"1호선\",\"time\":\"5분\",\"ex\":true,\"act\":{\"a\":\"call\",\"v\":\"rd.tg.%I%\"},\"stops\":[[\"a\",\"12:00\",1],[\"b\",\"12:02\",0],[\"c\",\"12:05\",1]]}";
+            String js = "{\"ok\":true,\"v\":1,\"screen\":\"rdetail\",\"fl\":false,\"bg\":\"card\",\"head\":[" + shd + "],\"body\":[" + r2.replace("%I%", "1") + "," + r2.replace("%I%", "3") + "],\"foot\":[{\"t\":\"button\",\"s\":\"x\",\"act\":{\"a\":\"call\",\"v\":\"rd.confirm\"}}]}";
+            ScreenCore.Screen scd = ScreenCore.load(js);
+            ScreenCore.Layout ld = ScreenCore.layout(scd, 360f, M);
+            ScreenCore.Item hd0 = ld.head.length > 0 ? ld.head[0] : null;
+            ok(hd0 != null && hd0.kind == ScreenCore.K_SHD && near(hd0.h, 8f + 5f + 8f + 28f + 8f) && near(hd0.sw, 28f) && near(hd0.sx, 360f - 18f - 28f), "shd: 높이 8+5+8+28+8 · × 동그라미는 오른쪽 18 안쪽");
+            ok(ld.fl == false && "card".equals(ld.bg), "화면 fl=false · bg=card");
+            ok(ScreenCore.Layout.hits(hd0, 360f - 18f - 14f, hd0.sy + 14f) && !ScreenCore.Layout.hits(hd0, 40f, hd0.sy + 14f), "shd: × 자리만 눌린다");
+            ScreenCore.Layout lc = ScreenCore.layout(scd, 360f, M, null);
+            ok(lc.body.length == 2 && !lc.body[0].on && !lc.body[1].on && "1".equals(lc.body[0].key) && "3".equals(lc.body[1].key), "tdrow: i 가 있으면 key 에 구간 번호 · 접힌 채 시작");
+            ScreenCore.Layout lo = ScreenCore.layout(scd, 360f, M, "td:,3,");
+            ok(!lo.body[0].on && lo.body[1].on && lo.body[1].h > lc.body[1].h && near(lo.bodyH - lc.bodyH, ScreenCore.TD_STOP_PAD_T + 3 * ScreenCore.TD_STOP_ROW + ScreenCore.TD_STOP_PAD_B), "tdrow: 앱이 3번을 펼치면 그 줄만 정거장 높이만큼 커진다(서버 왕복 없음)");
+            ScreenCore.Layout lz = ScreenCore.layout(scd, 360f, M, "td:,");
+            ok(!lz.body[0].on && !lz.body[1].on, "tdrow: 앱이 모두 접으면 모두 접힌다");
+        } catch (Exception ex) { ok(false, "shd/로컬 펼침: " + ex); }
         for (String bad : new String[] { "{\"t\":\"tdrow\",\"ic\":\"x\"}", "{\"t\":\"tdrow\",\"pos\":\"z\"}", "{\"t\":\"tdrow\",\"dep\":-5}", "{\"t\":\"tdrow\",\"stops\":[[\"a\"]]}", "{\"t\":\"tdrow\",\"col\":\"nope\"}" }) {
             try { ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"x\",\"head\":[],\"body\":[" + bad + "]}"); ok(false, "tdrow: 잘못된 값은 거절 " + bad); }
             catch (Exception ex) { ok(true, "tdrow: 잘못된 값은 거절 " + bad); }
