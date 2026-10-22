@@ -34,6 +34,11 @@ public final class OvCore {
         public int bg = 0xFF1C1C1E, fg = 0xFFF2F2F7, sub = 0xFF8E8E93;
         public String rsSt = "hidden", rsBt = "", rsK = "", rsNm = "";
         public boolean rsEnd;
+        // 앱 탑승 시트(RsSheetView)가 그릴 값 — 모두 엔진(/ride-standby overlay.rs)이 정한다
+        public String rsKick = "", rsMode = "", rsChip = "";
+        public int rsCbg = 0xFF0A84FF, rsCfg = 0xFFFFFFFF;
+        public float rsBar = -1f;
+        public boolean rsX, rsLate;
         public Row row = new Row();
     }
 
@@ -91,6 +96,10 @@ public final class OvCore {
             Map<String, Object> r = (Map<String, Object>) m.get("rs");
             v.rsSt = BoardCore.s(r.get("st"), 10); v.rsBt = BoardCore.s(r.get("bt"), 12); v.rsK = BoardCore.s(r.get("k"), 40); v.rsNm = BoardCore.s(r.get("nm"), 24); v.rsEnd = Boolean.TRUE.equals(r.get("end"));
             if (v.rsSt.length() == 0) v.rsSt = "hidden";
+            v.rsKick = BoardCore.s(r.get("kick"), 48); v.rsMode = BoardCore.s(r.get("mode"), 4); v.rsChip = BoardCore.s(r.get("chip"), 16);
+            v.rsCbg = color(r.get("cbg"), v.rsCbg); v.rsCfg = color(r.get("cfg"), v.rsCfg);
+            v.rsBar = r.get("bar") instanceof Number ? Math.max(-1f, Math.min(1f, ((Number) r.get("bar")).floatValue())) : -1f;
+            v.rsX = r.get("x") instanceof Number && ((Number) r.get("x")).intValue() == 1; v.rsLate = Boolean.TRUE.equals(r.get("late"));
         }
         Object go = m.get("getoff"), rc = m.get("reco");
         if (go instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) go).get("on")) && BoardCore.s(((Map<String, Object>) go).get("a"), 30).length() > 0) {
@@ -139,6 +148,8 @@ public final class OvCore {
     public static boolean hasStrip(Ov v) { return v.cells.length > 0; }
     /** 도착 줄([안내 종료] 버튼)이 보이는 상태인가. */
     public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsEnd && v.rsBt.length() > 0; }
+    /** 앱 탑승 시트가 보일 상태인가(올라온 시트 · 기록 직후 되돌리기 · 대기 알약). 도착 줄(안내 종료)은 앱에서는 따로 있으니 제외. */
+    public static boolean rsShown(Ov v) { return v != null && !v.rsEnd && ("board".equals(v.rsSt) || "wait".equals(v.rsSt) || "undo".equals(v.rsSt)); }
     /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 느리게, 1정거장 전 빠르게, 없으면 0. */
     public static long spinMs(int alert) { return alert == 1 ? 1400L : (alert == 2 ? 4200L : 0L); }
 }
