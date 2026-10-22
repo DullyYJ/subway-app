@@ -32,6 +32,7 @@ public final class HomeCore {
     public int active = -1, last = START;
     public long baseMs = -1;                         // -1 = 기준시각을 안 골랐다(지금)
     public boolean gps;
+    public volatile boolean routing;                 // 경로를 찾는 중(엔진이 단추 스피너를 정한다)
 
     /** 후보(눌려 있는 칸 하나에 대한 것). */
     static final class Cand {
@@ -242,7 +243,7 @@ public final class HomeCore {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{");
         b.append("\"start\":").append(ShellCore.q(text[START])).append(",\"dest\":").append(ShellCore.q(text[DEST]));
         b.append(",\"active\":").append(ShellCore.q(key));
-        b.append(",\"startSet\":").append(loc[START] != null).append(",\"destSet\":").append(loc[DEST] != null).append(",\"gps\":").append(gps);
+        b.append(",\"startSet\":").append(loc[START] != null).append(",\"destSet\":").append(loc[DEST] != null).append(",\"gps\":").append(gps).append(",\"rs\":").append(routing);
         b.append(",\"base\":{\"ms\":").append(baseMs >= 0 ? String.valueOf(baseMs) : "null");
         b.append(",\"tzo\":").append(env.tzoMin).append(",\"today\":[").append(env.y).append(',').append(env.m).append(',').append(env.d).append(']');
         b.append(",\"hol\":").append(env.hol).append("}}");
