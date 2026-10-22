@@ -420,8 +420,8 @@ function findAndroidJar() {
   await t('s160: 도착정보 못 받은 곳은 비워 기기가 직접 받는다 · 처음 그리기는 서버 대기 짧게', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
-    assert.ok(/public int svb = 700/.test(mc) && /\\"svb\\":" \+ svb/.test(mc), '요청에 svb(서버 대기 ms)');
-    assert.ok(/map\.svb = busRefreshing \? 2500 : 700/.test(a) && /w\.svb = 2500/.test(a), '처음 그리기 700ms · 조용한 갱신 2500ms');
+    assert.ok(/public int svb = 300/.test(mc) && /\\"svb\\":" \+ svb/.test(mc), '요청에 svb(서버 대기 ms)');
+    assert.ok(/map\.svb = busRefreshing \? 2500 : 300/.test(a) && /w\.svb = 2500/.test(a), '처음 그리기 300ms · 조용한 갱신 2500ms');
     assert.ok(/KEEP_OLD_MS = 45000L/.test(mc), '받아 둔 도착정보는 45초까지 둔다(앱은 판단하지 않는다 — 서버가 정한다)');
     assert.ok(/arrWave/.test(w) && /else failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
   });
