@@ -45,7 +45,7 @@ function homeFacts(f) {
   return {
     start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
     active: f.active === 'start' || f.active === 'dest' ? f.active : '',
-    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps,
+    startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps, rs: !!f.rs,
     base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
   };
 }
@@ -129,17 +129,17 @@ function homeScreen(inp, factsIn, dataIn) {
   var ready = (f.startSet && f.destSet) || (f.start.trim().length > 0 && f.dest.trim().length > 0);
   var act = function (v) { return { a: 'call', v: v }; };
   var kids = [];
-  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act) {
+  var inb = function (key, hint, val, dot, btn, onc, ckf, dim, act, spin) {
     return { t: 'inbar', key: key, hint: hint, value: val, maxlen: 60, h: HOME_ROW_H, size: 15, bold: true, r: 0, fill: '', line: '', dot: dot, pad: [0, 0, 14, 0],
-      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, act: act, eact: { a: 'call', v: 'rt.enter' } };
+      ifill: 'card2', ifh: 17, ifr: 11, btn: btn, bh: 33, bsize: 12, bpx: 16, onc: onc, ckf: ckf, watch: true, dim: dim, spin: !!spin, act: act, eact: { a: 'call', v: 'rt.enter' } };
   };
   var line = { t: 'divider', c: 'border2' };
-  kids.push(inb('start', '출발지 검색', f.start, '#0a84ff', f.gps ? '감지 중' : '위치 감지', '#0a84ff', '#ffffff', f.gps, act('rt.gps')));
+  kids.push(inb('start', '출발지 검색', f.start, '#0a84ff', f.gps ? '감지 중' : '위치 감지', '#0a84ff', '#ffffff', f.gps, act('rt.gps'), f.gps));
   kids.push({ t: 'swap', size: 34, fill: '#0a84ff', line: 'bg', tc: 'white', icon: HOME_SWAP_ICON, act: act('rt.swap') });
   var rowsS = f.active === 'start' ? sugs : [], rowsD = f.active === 'dest' ? sugs : [];
   kids.push(line);
   rowsS.forEach(function (r) { kids.push(r); });
-  kids.push(inb('dest', '도착지 검색', f.dest, '#ff3b30', '경로 탐색', 'gold', '#121214', !ready, act('rt.go')));
+  kids.push(inb('dest', '도착지 검색', f.dest, '#ff3b30', '경로 탐색', 'gold', '#121214', !ready || f.rs, act('rt.go'), f.rs));       // 도착지 미입력 흐림(돌지 않음) ≠ 경로 찾는 중(돌아간다 — f.rs)
   rowsD.forEach(function (r) { kids.push(r); });
   kids.push(line);
   var custom = f.base.ms != null;
