@@ -365,21 +365,33 @@ public class ShellActivity extends Activity {
         loadTabs(tab);
         if ("map".equals(tab)) seedMapLoc();
         for (int i = 0; i < slots.length; i++) loadSlot(i, false);
+        tabSettle();
         if ("home".equals(tab)) main.post(new Runnable() { @Override public void run() { autoGps(); } });
     }
 
+    /** 탭을 옮길 때 새 화면이 아이폰처럼 살짝(8dp) 떠올라 자리잡는다(0.18초 · 투명도 0.7 → 1). 그리는 일만 한다 — 새 내용은 이미 올라가 있다(캐시 먼저). */
+    private void tabSettle() {
+        try {
+            body.animate().cancel();
+            body.setAlpha(0.7f); body.setTranslationY(8f * dpr);
+            body.animate().alpha(1f).translationY(0f).setDuration(180L).setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+        } catch (Throwable ignored) { body.setAlpha(1f); body.setTranslationY(0f); }
+    }
     private ScreenView viewOfSlot(int i) { return slots.length > 1 && i == 0 ? head : body; }
 
+    private final java.util.HashMap<String, Long> tabsAt = new java.util.HashMap<String, Long>();
     private void loadTabs(final String tab) {
         final int my = ++seqTabs;
         final String url = ShellCore.tabsUrl(), json = ShellCore.tabsBody(tab), ck = "tabs|" + tab;
         viewKey.put(tabs, ck);
         String c = cacheGet(ck, true);
         final boolean shown = c != null && showCached(tabs, c);
+        Long at = tabsAt.get(ck);
+        if (shown && at != null && System.currentTimeMillis() - at < 600000L) return;            // 하단 탭 막대는 10분 안에 받은 화면이면 그대로(탭을 옮길 때마다 다시 받지 않는다)
         new Thread(new Runnable() {
             @Override public void run() {
                 final String txt = screenCall(ck, false, url, json, null, 8000); warm(txt);
-                main.post(new Runnable() { @Override public void run() { if (my == seqTabs) present(tabs, txt, shown); } });       // 캐시를 이미 보여 줬으면 같은 글은 다시 그리지 않고, 다르면 자리·깜빡임 없이 바꾼다
+                main.post(new Runnable() { @Override public void run() { if (my == seqTabs) { present(tabs, txt, shown); if (txt.length() > 0) tabsAt.put(ck, System.currentTimeMillis()); } } });       // 캐시를 이미 보여 줬으면 같은 글은 다시 그리지 않고, 다르면 자리·깜빡임 없이 바꾼다
             }
         }, "shell-tabs").start();
     }
@@ -626,7 +638,7 @@ public class ShellActivity extends Activity {
             if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
             if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
             if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
-            if (ShellCore.S_MAPB.equals(screen)) { loadMapBody(v, keep); return; }
+            if (ShellCore.S_MAPB.equals(screen)) { if (keep && !keep0 && busReturnQuiet()) return; loadMapBody(v, keep); return; }
             new Thread(new Runnable() {
                 @Override public void run() {
                     final String txt = fetchGeneric(screen); warm(txt);
@@ -1950,6 +1962,15 @@ public class ShellActivity extends Activity {
         startBusTick();
     }
     private boolean busTicking;
+    /** 다른 탭에 갔다 버스 탭으로 돌아왔다(위치가 그대로라 정류장 목록이 같다): 기억해 둔 화면을 지난 시간만큼 줄여 바로 보이고, 정류장 · 엔진 왕복 없이 도착정보만 뒤에서 새로 받아
+     *  숫자만 조용히 바꾼다(새 버스 줄만 스프링으로 내려온다). 기억해 둔 정류장이 없으면 false — 평소 길로 받는다. */
+    private boolean busReturnQuiet() {
+        if (!busShowing() || map.stopCount() == 0 || map.speculativeNeed().isEmpty()) return false;
+        if (System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();
+        startBusTick();
+        syncMapView();
+        return true;
+    }
     private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, BUS_POLL_MS); } }
     private void reloadMap(boolean headToo) {
         seedMapLoc();
