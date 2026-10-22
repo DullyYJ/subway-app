@@ -166,7 +166,8 @@ function resTrkFacts(route, r, noGeo) {
       st: stops.slice(0, 150).map(function (q) { q = q || {}; return noGeo ? [q.stationName || ''] : [q.stationName || '', resR5(q.lat != null ? q.lat : q.y), resR5(q.lon != null ? q.lon : (q.lng != null ? q.lng : q.x))]; }) };
   });
   return { lv: resLiveFacts(r), secs: secs, xf: Array.isArray(route.transfers) ? route.transfers.slice(0, 12).map(function (x) { return x ? { k: x.kind, xi: x.xferSecIdx, si: x.secIdx } : null; }).filter(Boolean) : null,
-    bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark' };
+    bt: r.bt == null ? null : r.bt, rb: r.rb == null ? null : r.rb, now: resNum(r.now, 0), sw: [], tz: resNum(r.tz, 540), th: r.th === 'pastel' ? 'pastel' : 'dark',
+    me: (Array.isArray(r.me) && r.me.length === 2) ? [resNum(r.me[0], null), resNum(r.me[1], null)] : null, ra: typeof r.a === 'string' ? r.a.slice(0, 40) : '' };
 }
 
 // 장거리 고르기 눌림 → 다시 물을 때 덧붙일 질의(웹 _ldReselect). m = 수단/시각 칩, g = 등급/시각 칩. 번호는 엔진이 칩을 만든 순서와 같다.
