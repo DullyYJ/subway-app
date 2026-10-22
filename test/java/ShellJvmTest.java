@@ -29,7 +29,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":20,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":21,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -319,11 +319,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=20") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=21") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":20,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":21,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -383,7 +383,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":20,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":21,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -414,7 +414,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":20,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":21,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -939,6 +939,20 @@ public class ShellJvmTest {
                 ok("pill".equals(RsCore.tap(rw, pw[0] + 4f, pw[1] + 4f, 360f, 50f)) && RsCore.tap(rw, 10f, 10f, 360f, 50f) == null && Math.abs(pw[0] + pw[2] - 344f) < 0.01f, "대기 알약을 누르면 pill");
                 ok("close".equals(RsCore.swipe(rb, 5f, 60f)) && RsCore.swipe(rb, 5f, 20f) == null && RsCore.swipe(rb, 80f, 60f) == null && "open".equals(RsCore.swipe(rw, 3f, -40f)) && RsCore.swipe(rw, 3f, -10f) == null && RsCore.swipe(ru, 0f, 90f) == null, "올라온 시트는 아래로 쓸면 close · 알약은 위로 쓸면 open · 짧거나 비스듬하면 무반응");
                 ok("open".equals(RsCore.tabSwipe(rw, 3f, -40f)) && "open".equals(RsCore.tabSwipe(null, 0f, -50f)) && RsCore.tabSwipe(rb, 0f, -50f) == null && "close".equals(RsCore.tabSwipe(rb, 5f, 60f)) && RsCore.tabSwipe(rw, 5f, 60f) == null && RsCore.tabSwipe(null, 0f, 60f) == null && RsCore.tabSwipe(rw, 60f, -40f) == null && RsCore.tabSwipe(rw, 0f, -10f) == null, "하단 탭 막대: 위로 쓸면 open(시트가 올라와 있으면 무반응) · 올라온 시트는 아래로 쓸면 close · 짧거나 비스듬하면 무반응");
+
+                float[] af = new float[20];
+                ActRowCore.frame("push_in", 0f, 344f, 42f, 8f, af);
+                ok(af[0] == 1f && Math.abs(af[3] - 168f) < 0.01f && af[10] == 1f && Math.abs(af[13] - (344f - 16f) / 3f) < 0.01f && af[15] == 0f, "버튼 줄: 밀고 들어옴 시작 = 두 칸 폭(반씩) · 새 칸은 오른쪽 끝");
+                ActRowCore.frame("push_in", 1f, 344f, 42f, 8f, af);
+                float w3 = (344f - 16f) / 3f;
+                ok(Math.abs(af[3] - w3) < 0.01f && Math.abs(af[6] - (w3 + 8f)) < 0.01f && Math.abs(af[11] - 2f * (w3 + 8f)) < 0.01f && Math.abs(af[13] - w3) < 0.01f, "버튼 줄: 밀고 들어옴 끝 = 세 칸 같은 폭");
+                ActRowCore.frame("slide_down", 0.5f, 344f, 42f, 8f, af);
+                ok(af[10] == 1f && Math.abs(af[12] - (-21f)) < 0.01f && af[15] == 1f && Math.abs(af[17] - 21f) < 0.01f && af[5] == 1f, "버튼 줄: 위에서 내려오며 옛 칸을 아래로 민다");
+                ActRowCore.frame("slide_up", 0.5f, 344f, 42f, 8f, af);
+                ok(Math.abs(af[12] - 21f) < 0.01f && Math.abs(af[17] - (-21f)) < 0.01f, "버튼 줄: 아래에서 올라오며 옛 칸을 위로 민다");
+                float[] ez = { 0.2f, 0f, 0f, 1f };
+                ok(ActRowCore.ease(0f, ez) == 0f && ActRowCore.ease(1f, ez) == 1f && ActRowCore.ease(0.5f, ez) > 0.5f && ActRowCore.ease(0.25f, ez) < ActRowCore.ease(0.5f, ez), "버튼 줄: 곡선은 0→1, 앞에서 빠르게(CSS cubic-bezier 와 같은 식)");
+                ok(ActRowCore.fresh(1000L, 1500L) && ActRowCore.fresh(1000L, 3000L) && !ActRowCore.fresh(1000L, 5000L) && !ActRowCore.fresh(0L, 100L) && ActRowCore.fresh(1000L, 0L) && !ActRowCore.fresh(10000L, 0L), "버튼 줄: 방금 일어난 전환만 그린다");
                 ok(RsCore.barFill(rb, 328f) == 164f && RsCore.barFill(rw, 328f) == 0f, "막대 채움 너비");
             }
             OvCore.Ov rr = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"ch\":\"dudung\",\"a\":\"맛있는집\",\"b\":\"점심 한 끼\",\"m\":\"120m\",\"go\":\"쿠팡 보기\",\"ok\":\"확인\",\"at\":77},\"getoff\":{\"on\":false}}"));
