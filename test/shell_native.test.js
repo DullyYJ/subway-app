@@ -414,7 +414,17 @@ function findAndroidJar() {
     assert.ok(/hv = optNum\(m, "hv"/.test(sc) && /winH \* n\.hv \/ 100f/.test(sc) && /public static volatile float winH/.test(sc), '지도 높이는 창 높이 vh');
     assert.ok(/ScreenCore\.winH = /.test(sv), 'ScreenView 가 창 높이를 알려 준다');
     assert.ok(/pickRtab\(/.test(sv), '경로 방식 칩은 누르는 즉시 강조');
+    assert.ok(/rtColor\(it, 0,/.test(sv) && /f \* \(2f - f\)/.test(sv) && /150f/.test(sv) && /rtAnim = false/.test(sv) && /rh\.tab\."\) \? 1\.5f/.test(sv), '칩 색은 0.15초 동안 섞인다(웹 transition .15s) · 테두리 1.5');
     assert.ok(/nameBot = TRK_NAME_H - c\.ipB/.test(sc) && /ellipsize\(c\.name\.replace/.test(sc), '타임라인 이름은 한 줄');
+  });
+  await t('s160: 도착정보 못 받은 곳은 비워 기기가 직접 받는다 · 처음 그리기는 서버 대기 짧게 · 있던 도착정보는 빈 값으로 안 덮는다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
+    assert.ok(/public int svb = 700/.test(mc) && /\\"svb\\":" \+ svb/.test(mc), '요청에 svb(서버 대기 ms)');
+    assert.ok(/map\.svb = busRefreshing \? 2500 : 700/.test(a) && /w\.svb = 2500/.test(a), '처음 그리기 700ms · 조용한 갱신 2500ms');
+    assert.ok(/KEEP_OLD_MS = 120000L/.test(mc) && /public static boolean hasArr/.test(mc), '받아 둔 도착정보는 2분까지 둔다');
+    assert.ok(/MapCore\.hasArr\(map\.busRes\.get\(e\.getKey\(\)\)\)\) return;/.test(a), 'busMove: 같은 정류장인데 새 도착정보가 비면 바꿔 끼우지 않는다');
+    assert.ok(/arrWave/.test(w) && /else failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
