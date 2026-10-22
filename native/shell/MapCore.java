@@ -34,7 +34,7 @@ public final class MapCore {
     /** 서버가 정류장·도착정보를 한 번에 받아 준 적이 있다(그러면 갱신도 서버에 한 번에 맡긴다) · 이번 응답에서 서버가 못 받은 도착정보 수. */
     public boolean svServer; public int svFail;
     /** 서버가 도착정보를 기다리는 시간(ms): 처음 그릴 때는 짧게(정류장부터 먼저 보이고 도착정보는 이어서), 조용한 갱신은 넉넉히. */
-    public int svb = 700;
+    public int svb = 300;
     public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; loadStopsCache(); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
