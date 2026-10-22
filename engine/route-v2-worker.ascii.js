@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s146";
+var ENGINE_VERSION = "route-v2-2026-10-22s147";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19341,6 +19341,7 @@ function resPart(cap, part, facts) {
 //   r.ride.row = \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4(ride-standby)\uc758 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. \uce78 \uc0c9\uc740 \uc6f9 _ROW_COLORS \uc640 \uac19\ub2e4.
 //   an = \uc804\ud658 \uc5f0\ucd9c(\uc571\uc774 sq \uac00 \ubc29\uae08\uc77c \ub54c\ub9cc \uadf8\ub9b0\ub2e4): { k, ms, e[4], sq, bg(\uac00\ub9ac\uac1c \uc0c9), o:{ s, fill, tc } \ubc14\ub00c\uae30 \uc804 \uce78 }
 var RES_ROW_CAP = 21;
+var RES_CONF_CAP = 22;                                                          // \uc548\ub0b4 \uc804 \ubc84\ud2bc \uc904\uc758 [\uacbd\ub85c \ud655\uc815](\uc6f9 mainConfirmRouteBtn)\uc744 \uadf8\ub9b4 \uc218 \uc788\ub294 \uc571 \uc218\uc900
 var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
 var RES_ROW_LABELS = { board: '\ud0d1\uc2b9', transfer: '\ud658\uc2b9', arrive: '\ub3c4\ucc29' };
 function resSlotNode(row) {
@@ -19400,7 +19401,10 @@ function resultScreen(opt, r) {
       var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
       if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
       nodes.push(rowNode);
-    } else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
+    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // \uc6f9 routeActRow(\uc548\ub0b4 \uc804): [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30][\uacbd\ub85c \ud655\uc815(\ud30c\ub791)]
+      { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
+      { t: 'button', s: '\uacbd\ub85c \ud655\uc815', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
+    else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
