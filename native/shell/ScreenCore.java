@@ -178,7 +178,7 @@ public final class ScreenCore {
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public String ak = "", aoS = "", aoF = "", aoT = "", abg = "card"; public int ams; public float[] aez; public long asq;   // row: 버튼 줄 전환 연출(엔진이 정한 종류·시간·곡선·시각, 옛 칸 모양, 가리개 색)
-        public String path = ""; public float fpad = 0f, fzmax = 0f;   // tmap: 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
+        public String path = ""; public float fpad = 0f, fzmax = 0f, hv = 0f, hmin = 0f, hmax = 0f;   // tmap: 높이 = 창 높이의 hv% 를 hmin~hmax 로(웹 height:24vh;min 137;max 231) · 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
         public Act bact;                                   // sug: 오른쪽 작은 단추의 행동
@@ -777,6 +777,7 @@ public final class ScreenCore {
             n.on = optNum(m, "live", 0f, 0f, 1f) > 0f;                                                          // 끌기 · 두 손가락 확대 · ± 단추 · 핀 누르기를 받는 고정 지도
             n.ci = Math.round(optNum(m, "foc", -1f, -1f, 39f)); n.top = optNum(m, "bl", 0f, 0f, 1f) > 0f;       // 고른 핀 번호 · 아래 구분선
             n.hint = optStr(m, "hint", "", 60);
+            n.hv = optNum(m, "hv", 0f, 0f, 60f); n.hmin = optNum(m, "hmin", 0f, 0f, 420f); n.hmax = optNum(m, "hmax", 0f, 0f, 600f);
             n.fpad = optNum(m, "fp", 0f, 0f, 120f); n.fzmax = optNum(m, "fz", 0f, 0f, 19f);                    // 맞춤: 여백(dp) · 최대 배율(0 이면 기본)
             if (m.get("line") != null) {                                                                        // 걷는 길(엔진이 정한 점들): [[위도,경도],…] 최대 400개
                 StringBuilder lb = new StringBuilder(); int lc = 0;
@@ -1264,6 +1265,8 @@ public final class ScreenCore {
         return stripEnd(s.substring(0, lo)) + e;
     }
 
+    /** 창(화면 전체) 높이 dp — 웹 vh 로 높이를 정하는 노드(tmap hv)가 쓴다. 그리기 전에 ScreenView 가 알려 준다(0 이면 모름). */
+    public static volatile float winH = 0f;
     public static Layout layout(Screen sc, float width, Measurer m) { return layout(sc, width, m, null); }
 
     /** openKey: 펼쳐 둘 post 의 id. null 이면 엔진이 준 open 표시를 따르고, 빈 글자면 모두 접는다. */
@@ -1323,9 +1326,9 @@ public final class ScreenCore {
                 int rowFrom = hi.size(); float rowY = y;
                 for (Node c : n.items) {
                     Item it = new Item(); it.kind = K_TRK; it.x = x; it.y = y; it.w = c.max; it.h = TRK_H;
-                    List<String> nl = wrap(c.name, Math.max(10f, c.max - 4f), c.size, c.bold, 2, m);
+                    List<String> nl = new ArrayList<String>(); if (c.name != null && c.name.length() > 0) nl.add(ellipsize(c.name.replace('\n', ' '), Math.max(10f, c.max - 4f), c.size, c.bold, m));          // 웹 #transitHtlTrack .htl-name: 한 줄(nowrap) · 넘치면 …
                     it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
-                    it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;
+                    it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;          // 웹 row1: 30px 칸 아래 정렬(align-items:flex-end) · 한 줄
                     it.gk = c.tag; it.gsz = c.ssize; it.gx = c.vp; it.gc = col(c.fill, null);
                     if (c.badge.length() > 0) {
                         float avail = c.max - 2f - ("p".equals(c.tag) ? 2f * c.vp : 0f);
@@ -1631,9 +1634,9 @@ public final class ScreenCore {
             int rowFrom = out.size();
             for (Node c : n.items) {
                 Item it = new Item(); it.kind = K_TRK; it.x = tx; it.y = ty; it.w = c.max; it.h = TRK_H;
-                List<String> nl = wrap(c.name, Math.max(10f, c.max - 4f), c.size, c.bold, 2, m);
+                List<String> nl = new ArrayList<String>(); if (c.name != null && c.name.length() > 0) nl.add(ellipsize(c.name.replace('\n', ' '), Math.max(10f, c.max - 4f), c.size, c.bold, m));          // 웹 #transitHtlTrack .htl-name: 한 줄(nowrap) · 넘치면 …
                 it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
-                it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;
+                it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;          // 웹 row1: 30px 칸 아래 정렬(align-items:flex-end) · 한 줄
                 it.gk = c.tag; it.gsz = c.ssize; it.gx = c.vp; it.gc = col(c.fill, null);
                 if (c.badge.length() > 0) {
                     float avail = c.max - 2f - ("p".equals(c.tag) ? 2f * c.vp : 0f);
@@ -1806,9 +1809,11 @@ public final class ScreenCore {
         if ("bcard".equals(n.t)) return bcardLayout(n, ox, innerW, y, out, m);
         if (n.t.startsWith("br") && ("brh".equals(n.t) || "brt".equals(n.t) || "brsec".equals(n.t) || "brturn".equals(n.t) || "brs".equals(n.t))) return brxLayout(n, ox, innerW, y, out, m);
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
-            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.fpad = n.fpad; it.fzmax = n.fzmax;
+            float th = n.h;
+            if (n.hv > 0f && winH > 0f) { th = winH * n.hv / 100f; if (n.hmin > 0f) th = Math.max(th, n.hmin); if (n.hmax > 0f) th = Math.min(th, n.hmax); }          // 웹 vh 높이: 창 높이에 맞춰 늘고 준다
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = th; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.fpad = n.fpad; it.fzmax = n.fzmax;
             out.add(it);
-            return y + n.h + n.padB;
+            return y + th + n.padB;
         }
         if ("cars".equals(n.t)) {                                                    // 칸별 혼잡: 제목 + 칸 가로줄(칸마다 테두리 색 · 글 세 줄) / 칸이 없으면 안내 글
             Item it = new Item(); it.kind = K_CARS; it.x = ox; it.y = y; it.w = innerW;
