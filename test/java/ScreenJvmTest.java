@@ -629,6 +629,15 @@ public class ScreenJvmTest {
         ok(near(MKL.mk.y, 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H + ScreenCore.TRK_DOT_Y) && MKL.mk.btw == 0f && MKL.mk.ccol != null && MKL.mk.hcol != null && MKL.mk.rcol != null, "마커: 점 높이는 칸의 점 자리 · 배지 없음 · 색을 읽는다");
         ok(near(MKL.mk.ms, 3000f) && near(MKL.mk.pms, 1300f) && "b".equals(MKL.mk.pu), "마커: 이동 시간·맥박 주기·종류는 엔진 값 그대로");
         ok(ScreenCore.layout(ScreenCore.load(trkJson), 200f, M).mk == null, "마커: 없으면 없음");
+        // 본문(패널 안) 타임라인: 칸 줄이 틀 안에서 가로로 밀리고, 마커·밀림 범위는 배치가 알려 준다(경로 결과 카드 — 예전엔 본문에서 칸이 통째로 사라졌다)
+        String bandJson = "{\"ok\":true,\"v\":1,\"screen\":\"r\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"panel\",\"pad\":[0,4,0,8],\"ip\":[12,12,12,8],\"kids\":[{\"t\":\"text\",\"s\":\"가\",\"size\":13},{\"t\":\"trk\",\"pad\":[14,6,14,6],\"cells\":" + trkCells + "," + mkBase + "}]}]}";
+        ScreenCore.Layout BDL = ScreenCore.layout(ScreenCore.load(bandJson), 200f, M);
+        int bdN = 0; ScreenCore.Item bd0 = null;
+        for (ScreenCore.Item q : BDL.body) if (q.kind == ScreenCore.K_TRK) { bdN++; if (bd0 == null) bd0 = q; }
+        ok(bdN == 3 && bd0.band && bd0.cl > 0f && bd0.cr > bd0.cl && BDL.bandTop >= 0f && BDL.bandBot - BDL.bandTop >= ScreenCore.TRK_H - 0.1f, "본문 타임라인: 칸 셋이 본문에 놓이고 가로 틀·세로 범위가 잡힌다");
+        ok(BDL.bandMax() > 0f && near(BDL.bandMax(), 14f + 64f + 64f + 108f + 14f - BDL.bandView), "본문 타임라인: 틀보다 넘친 폭만큼 가로로 밀린다");
+        ok(BDL.mk != null && BDL.mkBody && near(BDL.mk.x0, bd0.x + 32f) && near(BDL.mk.x(0.5f), bd0.x + 64f), "본문 타임라인: 내 위치 마커가 칸 가운데 사이에 놓인다");
+        ok(BDL.bandSig.length() > 0 && ScreenCore.layout(ScreenCore.load(bandJson), 200f, M).bandSig.equals(BDL.bandSig), "본문 타임라인: 같은 내용이면 같은 표시(바뀔 때만 앱이 마커로 다시 맞춘다)");
         String mkWait = mkJson.replace("\"pu\":\"b\"", "\"pu\":\"w\",\"bt\":\"대기 중 · 350m\",\"bg\":\"#ff9f0a\",\"btc\":\"#ffffff\",\"bz\":9");
         ScreenCore.Layout MWL = ScreenCore.layout(ScreenCore.load(mkWait), 200f, M);
         ok(MWL.mk.btw > 0f && near(MWL.mk.bth, 9f * 1.25f + 2f) && MWL.mk.bty >= 6f + ScreenCore.TRK_NAME_H && MWL.mk.bty + MWL.mk.bth <= 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H && "w".equals(MWL.mk.pu) && MWL.mk.gcol != null, "마커: 대기 배지는 노선 줄 안에 가운데 놓인다");
