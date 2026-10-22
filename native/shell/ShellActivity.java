@@ -1625,7 +1625,10 @@ public class ShellActivity extends Activity {
     }
     /** 권한이 이미 있을 때만 위치를 조용히 새로 받는다(없으면 아무것도 안 한다 — 권한 안내는 사용자가 위치 단추를 눌렀을 때만). */
     private void locateQuiet(LocCb cb) { if (hasLocPerm()) locateOnce(REQ_MAP_LOC, cb); }
-    private static boolean farFrom(double[] a, Location l) { return a == null || Math.abs(a[0] - l.getLatitude()) > 0.003 || Math.abs(a[1] - l.getLongitude()) > 0.003; }
+    private static boolean farFrom(double[] a, Location l) { return farFrom(a, l, 0.003); }
+    private static boolean farFrom(double[] a, Location l, double deg) { return a == null || Math.abs(a[0] - l.getLatitude()) > deg || Math.abs(a[1] - l.getLongitude()) > deg; }
+    /** 버스 정류장 탐색의 위치 차이 기준 — 약 55m(반경 300m 안의 정류장 집합이 달라질 만큼). 거리는 언제나 진짜 좌표로 다시 잰다. */
+    private static final double BUS_MOVE_DEG = 0.0005;
     private LocCb pendingLoc;
     private void locateOnce(final int reqCode, final LocCb cb0) {
         final LocCb cb = new LocCb() {
@@ -1676,7 +1679,7 @@ public class ShellActivity extends Activity {
                 final double[] ll = last;
                 final String theme = ShellCore.theme(store);
                 final boolean onBusNow = "map".equals(ShellCore.currentTab(store)) && "bus".equals(map.mode());
-                if (farFrom(map.busLL, l)) { map.setBusLoc(ll[0], ll[1]); if (onBusNow && resumed) loadMapBody(body, true); }
+                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) { map.setBusLoc(ll[0], ll[1]); if (onBusNow && resumed) loadMapBody(body, true); }
                 if (!onBusNow) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfBusRun(ll, theme); } });
             }
             @Override public void fail(boolean noperm) { }
@@ -1690,8 +1693,8 @@ public class ShellActivity extends Activity {
             @Override public void fix(Location l) {
                 liveSet(l);
                 if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
-                if (Math.abs(map.busLL[0] - l.getLatitude()) > 0.0015 || Math.abs(map.busLL[1] - l.getLongitude()) > 0.0015) {
-                    final double la = l.getLatitude(), lo = l.getLongitude();          // 170m 넘게 움직였다 — 위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장을 받는다(디바운스)
+                if (Math.abs(map.busLL[0] - l.getLatitude()) > 0.0008 || Math.abs(map.busLL[1] - l.getLongitude()) > 0.0008) {
+                    final double la = l.getLatitude(), lo = l.getLongitude();          // 90m 넘게 움직였다 — 위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장을 받는다(디바운스)
                     deb.trailing("busloc", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
                         if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
                         map.setBusLoc(la, lo); loadMapBody(body, true);
@@ -1734,19 +1737,22 @@ public class ShellActivity extends Activity {
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
+        final String modeNow = map.mode();
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, "bus".equals(modeNow) ? 12000 : 8000);          // 버스는 서버가 정류장·도착정보를 한 번에 받아 오므로 조금 더 기다린다
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
                     if (txt.length() > 0) map.onScreen(txt);
+                    if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
                     if (!(keep && txt.length() > 0 && !map.busNeed.isEmpty())) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
-                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch(); }
+                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch();
+                        if (map.svFail > 0 && !busRefreshing) main.postDelayed(new Runnable() { @Override public void run() { if (busShowing()) busRefresh(); } }, 1500L); }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
                 } });
             }
         }, "shell-mapb").start();
@@ -1831,12 +1837,23 @@ public class ShellActivity extends Activity {
     /** 버스 방식 노선도: 위치를 기다리지 않고 마지막 위치로 먼저 그리고, 권한이 있으면 새 위치를 조용히 받아 바뀌었을 때만 다시 그린다. */
     private void seedMapLoc() {
         if (!"bus".equals(map.mode()) || map.busLL != null) return;
-        final double[] seed = liveLL();
+        double[] seed = liveLL();
+        if (seed == null) seed = ShellCore.lastLocFresh(store, 30L * 60000L, System.currentTimeMillis());       // 기다리지 않고 바로 그린다(30분 안에 안 위치) — 새 위치가 오면 바로잡는다
         if (seed != null) map.setBusLoc(seed[0], seed[1]);
+        else if (hasLocPerm()) {                                                                             // 기기가 방금 알던 위치(Play 서비스가 합친 값)를 비동기로 즉시 — 새 위치보다 먼저 오면 그것으로 먼저 그린다
+            if (locf == null) locf = new LocFused(this);
+            locf.lastKnown(5L * 60000L, new LocFused.Cb() {
+                @Override public void fix(Location l) {
+                    if (map.busLL != null || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store))) return;
+                    map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true);
+                }
+                @Override public void fail() { }
+            });
+        }
         locateQuiet(new LocCb() {
             @Override public void fix(Location l) {
                 if (!"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store))) return;
-                if (farFrom(map.busLL, l)) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
             }
             @Override public void fail(boolean noperm) { }
         });
@@ -1872,7 +1889,7 @@ public class ShellActivity extends Activity {
         busRefreshing = true; busRefAt = System.currentTimeMillis(); busAt = busRefAt;
         map.dropArrivals();
         final List<String[]> spec = map.speculativeNeed();
-        if (spec.isEmpty()) { loadMapBodyRound(body, true, 0); return; }
+        if (spec.isEmpty() || map.svServer) { loadMapBodyRound(body, true, 0); return; }                       // 서버가 한 번에 받아 주는 중이면 기기가 따로 받지 않는다
         busSpeculate(spec);
     }
     /** 엔진 왕복 하나를 건너뛴다: 지난번 도착정보 주소들을 곧장 받고(병렬) 한 번에 그린다. 하나라도 비면 평소 길(엔진에게 묻기)로 돌아간다. */
