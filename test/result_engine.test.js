@@ -175,6 +175,14 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const rs = screenCheck([d3, c3, lvs]);
   ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(탑승 중): ' + (rs.err || rs.out.join(' | ')));
   ok(call('fast').body.some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail') || flat(call('fast').body).some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail'), '결과 카드: 세부경로 보기 단추');
+  {   // s147: 안내 전 버튼 줄 = [세부경로 보기][경로 확정](웹 routeActRow) — cap 22 부터
+    const idle = (cap) => E.resultScreen({ cap }, { data: DATA, tab: 'fast', a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1 });
+    const rw = (s) => flat(s.body).find(n => n.t === 'row' && n.kids.some(q => q.act && q.act.v === 'rh.detail'));
+    const i22 = rw(idle(22)), i21 = rw(idle(21));
+    ok(i22 && i22.kids.length === 2 && i22.kids[1].act.v === 'rh.confirm' && i22.kids[1].s === '경로 확정' && i22.kids[1].fill === '#2f7cf6' && i22.kids[1].tc === '#ffffff' && !i21, '안내 전 버튼 줄: cap 22 에는 [세부경로 보기][경로 확정], 옛 앱에는 세부경로 단추 하나');
+    const rs3 = screenCheck([idle(22)]);
+    ok(!rs3.err && rs3.out.every(l => /^OK/.test(l)), '앱 검증기 통과(안내 전 버튼 줄): ' + (rs3.err || rs3.out.join(' | ')));
+  }
   const r = screenCheck([d0, d1, d2, call('fast')]);
   ok(!r.err && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과(세부경로): ' + (r.err || r.out.join(' | ')));
   ok(call('longdist', { view: 'detail' }).ok === false || true, '없는 탭이어도 죽지 않는다');
