@@ -235,7 +235,7 @@ function mapTimetableSheet(f) {
         txt += mm + (i < r.m.length - 1 ? '  ' : '');
       });
       var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
-      if (hl.length) n.hl = hl;
+      if (hl.length) { n.hl = hl; n.fc = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : '')); }      // 지금 시각 다음 열차가 든 줄 — 앱이 시간표를 열 때 그 줄로 내려 보인다
       kids.push(n);
     });
   }
@@ -609,12 +609,14 @@ function mapBusBody(f, info) {
   info.stops = stops.map(mapStopKeep);
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
   head.push(mapBusTmap(pts, foc));
-  var pending = res.a0 === undefined;
-  if (pending) info.bus = { st: 'need', vw: 'near', need: stops.map(function (s, i) { return { k: 'a' + i, url: mapBusArrUrl(s) }; }) };
+  // 정류장마다 따로 본다: 아직 못 받은 정류장은 '도착정보 없음'이 아니라 '불러오는 중'으로 두고, 못 받은 것만 다시 받으라고 한다(받은 것까지 다시 받지 않는다)
+  var miss = [];
+  stops.forEach(function (s, i) { if (res['a' + i] === undefined) miss.push({ k: 'a' + i, url: mapBusArrUrl(s) }); });
+  if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: pending ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: res['a' + i] === undefined ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
   });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
