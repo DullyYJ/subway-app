@@ -177,6 +177,7 @@ public final class ScreenCore {
         public float rw = 0f; public boolean mq;           // text/bar: 오른쪽에 남겨 둘 칸(놀이터) · 넘치면 그 칸만큼 줄여 좌우로 흐르게
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
+        public String ak = "", aoS = "", aoF = "", aoT = "", abg = "card"; public int ams; public float[] aez; public long asq;   // row: 버튼 줄 전환 연출(엔진이 정한 종류·시간·곡선·시각, 옛 칸 모양, 가리개 색)
         public String path = ""; public float fpad = 0f, fzmax = 0f;   // tmap: 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
@@ -475,6 +476,20 @@ public final class ScreenCore {
                 if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt) && !"panel".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
                 Node kn = node(ko, sc);
                 if (kn != null) n.kids.add(kn);
+            }
+            Object ano = m.get("an");
+            if (ano instanceof Map) {                                                                       // 버튼 줄 전환 연출: 칸이 셋일 때만(탑승·환승·도착 칸)
+                Map<String, Object> am = asObj(ano, "row.an");
+                String ak = optStr(am, "k", "", 12);
+                if (("push_in".equals(ak) || "push_out".equals(ak) || "slide_down".equals(ak) || "slide_up".equals(ak)) && n.kids.size() == 3) {
+                    n.ak = ak; n.ams = (int) optNum(am, "ms", 0f, 0f, 1500f); n.asq = am.get("sq") instanceof Number ? ((Number) am.get("sq")).longValue() : 0L; n.abg = optStr(am, "bg", "card", 16);
+                    n.aez = new float[] { 0.2f, 0f, 0f, 1f };
+                    Object eo = am.get("e");
+                    if (eo instanceof List && ((List<Object>) eo).size() == 4) for (int ei = 0; ei < 4; ei++) { Object ev = ((List<Object>) eo).get(ei); if (ev instanceof Number) n.aez[ei] = Math.max(-1f, Math.min(2f, ((Number) ev).floatValue())); }
+                    Object oo = am.get("o");
+                    if (oo instanceof Map) { Map<String, Object> om = asObj(oo, "row.an.o"); n.aoS = optStr(om, "s", "", 8); n.aoF = optStr(om, "fill", "", 16); n.aoT = optStr(om, "tc", "", 16); }
+                    if (n.ams <= 0 || n.asq <= 0L) n.ak = "";
+                }
             }
         } else if ("toggle".equals(t)) {
             pad(m, n);
@@ -984,7 +999,7 @@ public final class ScreenCore {
     public static final int SCENE_MAX = 6000;
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47;
     /** 노선 알약(웹 _linePillHtml): 글자 13 · 좌우 14(숫자 동그라미가 있으면 왼쪽 6) · 동그라미 22 · 동그라미와 글 사이 6 · 높이 27/34. */
     public static final float LP_FS = 13f, LP_NUM_FS = 12f, LP_PADL = 14f, LP_PADR = 14f, LP_PADL_N = 6f, LP_NUM = 22f, LP_NUM_GAP = 6f, LP_H = 27f, LP_H_NUM = 34f;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
@@ -1053,6 +1068,7 @@ public final class ScreenCore {
         public float bx, by, btx, bty;               // 검색줄: 배지 · 단추 왼쪽위 (영역 좌표)
         public int maxlen = 60;
         public String label = "", badge = "", tag = "", img = "", fb = "";
+        public ScreenCore.Item[] subs; public String ak = ""; public int ams; public float[] aez; public long sq; public float gap;   // K_ROWANIM: 조각 네 개(A·B·C·O)와 전환 연출 값
         public boolean mq; public float mqW, mqVis;  // 흐르는 글(넘칠 때만 mq): 글 전체 폭 · 보이는 폭
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
@@ -1577,6 +1593,12 @@ public final class ScreenCore {
     }
 
     /** 노드 하나를 y 에서부터 쌓고 다음 y 를 돌려준다. x0 = 이 노드를 담는 칸의 왼쪽(패널 안이면 패널 안쪽), width = 그 칸의 폭. */
+    /** 전환 연출용 단추 조각: 단추 한 개의 겉모양(색·글자)만 복사한다. */
+    private static Item btnCopy(Item b) {
+        Item c = new Item(); c.kind = K_BUTTON; c.x = b.x; c.y = b.y; c.w = b.w; c.h = b.h; c.label = b.label; c.size = b.size; c.bold = b.bold; c.radius = b.radius;
+        c.lines = b.lines; c.fill = b.fill; c.line = b.line; c.tc = b.tc;
+        return c;
+    }
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
@@ -1822,7 +1844,20 @@ public final class ScreenCore {
         if ("row".equals(n.t)) {                                                     // 같은 폭 칸으로 나란히: 칸마다 stack 으로 쌓고 가장 아래까지가 이 줄의 높이
             int c = Math.max(1, n.kids.size());
             float colW = Math.max(1f, (innerW - n.gap * (c - 1)) / c), maxY = y;
+            int s0 = out.size();
             for (int i = 0; i < n.kids.size(); i++) maxY = Math.max(maxY, stack(n.kids.get(i), ox + i * (colW + n.gap), colW, y, out, m, ok));
+            if (n.ak.length() > 0 && out.size() - s0 == 3 && out.get(s0).kind == K_BUTTON && out.get(s0 + 1).kind == K_BUTTON && out.get(s0 + 2).kind == K_BUTTON) {   // 전환 연출 덮개: 세 단추 위에 얹혀 그려진다(눌림은 아래 단추가 받는다)
+                Item an = new Item(); an.kind = K_ROWANIM; an.x = ox; an.y = y; an.w = innerW; an.h = maxY - y;
+                an.ak = n.ak; an.ams = n.ams; an.aez = n.aez; an.sq = n.asq; an.gap = n.gap; an.ac = col(n.abg, new Col("card", 0));
+                Item[] sub = new Item[4];
+                for (int i = 0; i < 3; i++) sub[i] = btnCopy(out.get(s0 + i));
+                if (n.aoS.length() > 0) {
+                    Item o = btnCopy(out.get(s0 + 2)); o.label = n.aoS; o.lines = new String[] { n.aoS };
+                    o.fill = col(n.aoF, o.fill); o.tc = col(n.aoT, o.tc); sub[3] = o;
+                }
+                an.subs = sub;
+                out.add(an);
+            }
             return maxY + n.padB;
         }
         if ("panel".equals(n.t)) {
