@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s150";
+var ENGINE_VERSION = "route-v2-2026-10-22s153";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19211,13 +19211,16 @@ function resRgba(hex, a) {                                       // '#rrggbb' + 
   return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
 }
 var RES_TD_CAP = 20;                                             // tdrow(\uc138\ubd80\uacbd\ub85c \uc904) \ub178\ub4dc\ub97c \uc544\ub294 \uc571
+var RES_SHD_CAP = 24;                                            // shd(\uc6f9 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8 \uba38\ub9ac: \uc190\uc7a1\uc774 \u00b7 \uc81c\ubaa9 \u00b7 \ub3d9\uadf8\ub780 \u00d7) + \uc571 \uc548\uc5d0\uc11c \ubc14\ub85c \ud3bc\uce58\ub294 \uad6c\uac04 + \uc6f9 \uac19\uc740 \uc544\ub798 \ub2e8\ucd94 \uc904\uc744 \uc544\ub294 \uc571
+var RES_OPT_NAMES = { fast: '\ucd5c\ub2e8\uc2dc\uac04', less: '\ucd5c\uc18c\ud658\uc2b9', sub: '\uc9c0\ud558\ucca0', bus: '\ubc84\uc2a4', longdist: '\uc7a5\uac70\ub9ac' };   // \uc6f9 confirmSelectedRoute optName
 var RES_BUS_LEG_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];   // \uc6f9 _BUS_LEG_COLS
 function resDetailScreen(route, r, tab, cap) {
   if (cap < RES_TD_CAP) return resDetailLegacy(route, r, tab);
   var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
   var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
   resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
-  var kids = [{ t: 'bar', pad: [16, 0, 0, 8], title: total + '\ubd84 \u00b7 ' + String(r.a || '') + ' \u2192 ' + String(r.b || ''), btn: '\ub2eb\uae30', act: { a: 'call', v: 'rd.close' } }];
+  var web = cap >= RES_SHD_CAP, ttl = total + '\ubd84 \u00b7 ' + String(r.a || '') + ' \u2192 ' + String(r.b || ''), optName = RES_OPT_NAMES[tab] || '\uc120\ud0dd\ud55c';
+  var kids = web ? [] : [{ t: 'bar', pad: [16, 0, 0, 8], title: ttl, btn: '\ub2eb\uae30', act: { a: 'call', v: 'rd.close' } }];
   var cum = base, busN = 0, busIdx = {}, exp = [], rows = [];
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // \uc6f9 \uc138\ubd80\uacbd\ub85c \uc904(.tdsec-row)\uacfc \uac19\uc740 \uac12: \uc0c9 \u00b7 \uc544\uc774\ucf58 \u00b7 \ubc43\uc9c0 \u00b7 \uacbd\uc720 \u00b7 \uc2dc\uac04\ub300
@@ -19245,8 +19248,9 @@ function resDetailScreen(route, r, tab, cap) {
         exp.push(si);
         row.act = { a: 'call', v: 'rd.tg.' + si };
         row.ex = true;
-        if (open[si]) {
-          row.op = true;
+        if (web) row.i = si;                                       // \uc571\uc774 \uc11c\ubc84\ub97c \uac70\uce58\uc9c0 \uc54a\uace0 \ubc14\ub85c \ud3bc\uce58\ub294 \uad6c\uac04 \ubc88\ud638
+        if (open[si]) row.op = true;
+        if (web || open[si]) {
           var ss = (ty === 1 && Array.isArray(sec.stopSec) && sec.stopSec.length === stops.length) ? sec.stopSec : null, even = secSec * 1000 / (stops.length - 1), cm = 0;
           row.stops = stops.slice(0, 60).map(function (st, k) {
             var off;
@@ -19261,13 +19265,24 @@ function resDetailScreen(route, r, tab, cap) {
     rows.push(row);
   });
   rows.forEach(function (row, i) { row.pos = rows.length === 1 ? 'o' : i === 0 ? 'f' : i === rows.length - 1 ? 'l' : 'm'; kids.push(row); });
-  var nav = resNavUrls(r);
-  if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
+  var nav = resNavUrls(r), onRide = !!(r.ride && r.ride.on);
+  if (web) {                                                     // \uc6f9 transitDetailModal: \ud655\uc815 \ub2e8\ucd94(\ud30c\ub791 \u2192 \ud655\uc815\ub418\uba74 \ucd08\ub85d) \u00b7 \uc704 \uc120 \u00b7 \uce74\uce74\uc624\ub9f5/\ub124\uc774\ubc84\uc9c0\ub3c4
+    var foot = [onRide ? { t: 'button', s: '\u2705 ' + optName + ' \uacbd\ub85c\ub85c \ud655\uc815\ub428', size: 15, h: 48, r: 12, bold: true, fill: '#30a14e', line: 'none', tc: '#ffffff', pad: [14, 10, 14, 0], act: { a: 'call', v: 'rd.done' } }
+      : { t: 'button', s: '\u2705 \uc774 \uacbd\ub85c\ub85c \ud655\uc815\ud558\uae30', size: 15, h: 48, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', pad: [14, 10, 14, 0], act: { a: 'call', v: 'rd.confirm' } }];
+    if (nav) foot.push({ t: 'divider', pad: [0, 0, 0, 0] });
+    else foot[0].pad = [14, 10, 14, 16];
+    if (nav) foot.push({ t: 'row', pad: [14, 12, 14, 16], gap: 8, kids: [
+      { t: 'button', s: '\ud83d\uddfa\ufe0f \uce74\uce74\uc624\ub9f5 \uae38\uc548\ub0b4', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
+      { t: 'button', s: '\ud83d\uddfa\ufe0f \ub124\uc774\ubc84\uc9c0\ub3c4', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+    var outW = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', bg: 'card', fl: false, head: [{ t: 'shd', title: ttl, act: { a: 'call', v: 'rd.close' } }], body: kids, foot: foot, info: { exp: exp, nav: nav, m: total, tab: tab, opt: optName } };
+    outW.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify([outW.head, kids, foot]));
+    return outW;
+  }
+  if (nav) kids.push({ t: 'row', pad: [14, 10, 14, 14], gap: 8, kids: [
     { t: 'button', s: '\uce74\uce74\uc624\ub9f5 \uae38\uc548\ub0b4', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
     { t: 'button', s: '\ub124\uc774\ubc84\uc9c0\ub3c4', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
-  var onRide = !!(r.ride && r.ride.on);
-  kids.push(onRide ? { t: 'button', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc885\ub8cc', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.stop' } }
-    : { t: 'button', s: '\uc774 \uacbd\ub85c\ub85c \ud0d1\uc2b9 \uc2dc\uc791', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.confirm' } });
+  kids.push(onRide ? { t: 'button', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc885\ub8cc', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [14, 10, 14, 14], act: { a: 'call', v: 'rd.stop' } }
+    : { t: 'button', s: '\uc774 \uacbd\ub85c\ub85c \ud0d1\uc2b9 \uc2dc\uc791', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [14, 10, 14, 14], act: { a: 'call', v: 'rd.confirm' } });
   var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
   out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
   return out;
