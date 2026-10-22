@@ -213,6 +213,7 @@ public final class HomeCore {
         if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
         if ("rh.fav".equals(v)) return R_FAV;
         if ("rh.stop".equals(v)) return riding() ? R_STOP : R_NONE;
+        if ("rh.slot".equals(v)) return riding() ? R_SLOT : R_NONE;
         if ("rh.detail".equals(v)) { if (!hasRoute()) return R_NONE; detOpen.clear(); return R_DETAIL; }
         if (v.startsWith("rh.ld.")) {                                          // rh.ld.m.<번호> · rh.ld.g.<번호> — 엔진이 만든 질의를 그대로 쓴다
             try {
@@ -320,7 +321,7 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12, R_SLOT = 13;
     public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4, D_CONFIRM = 5, D_STOP = 6;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
