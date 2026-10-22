@@ -155,12 +155,26 @@ public class ScreenView extends View {
                 if (it.kind != kind || it.lines.length == 0) continue;
                 setText(it.size, it.bold, 0);
                 float right = kind == ScreenCore.K_BAR && it.sw > 0f ? it.sx - 8f : it.x + it.w;
-                return new float[] { it.textX, oy + it.textY, it.mqVis > 0f ? Math.min(it.mqVis, it.mqW) : tp.measureText(it.lines[0]), it.lineH, oy + it.y, it.h, right };
+                return new float[] { it.textX, oy + it.textY, it.mqVis > 0f ? Math.min(it.mqVis, it.mqW) : tp.measureText(it.lines[0]), it.lineH, oy + it.y, it.h, right, pass == 0 ? 0f : 1f };      // [7] = 1 이면 본문 안의 칸 — 스크롤을 따라 움직인다
             }
         }
         return null;
     }
     public float scrollPos() { return scrollY; }
+    /** 스크롤 위치가 바뀐 그림 박자마다 부른다(시간표 머리의 캐릭터 놀이터가 글과 함께 올라가게). 그리는 일만 하는 가벼운 것이어야 한다. */
+    private Runnable scrollHook; private float hookY = Float.NaN;
+    public void setScrollHook(Runnable r) { scrollHook = r; hookY = Float.NaN; }
+    private String fcDone = "";
+    /** 엔진이 '여기로 내려 보여 달라'고 표시한 칸(box 의 fc 열쇠 — 시간표에서 지금 시각 다음 열차 줄)이 새로 나타났으면 한 번 그 줄로 스크롤한다. 같은 열쇠는 다시 안 끌어서 보던 자리를 지킨다. */
+    private void applyFocus() {
+        if (lay == null || getHeight() <= 0) return;
+        for (ScreenCore.Item q : lay.body) {
+            if (q.kind != ScreenCore.K_BOX || q.key.length() == 0) continue;
+            if (!q.key.equals(fcDone)) { fcDone = q.key; scrollY = ScreenCore.clamp(q.y - 56f, lay.bodyMaxScroll(bodyViewH())); invalidate(); }
+            return;
+        }
+        fcDone = "";
+    }
     public void setDpr(float d) { if (d > 0f && d != dpr) { dpr = d; relayout(); } }
     public void setPalette(int[] c) { for (int i = 0; i < pal.length && i < c.length; i++) pal[i] = c[i]; styleInput(); invalidate(); }
 
@@ -204,7 +218,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -254,6 +268,7 @@ public class ScreenView extends View {
         if (lay.ctrSig.length() == 0) ctrDone = null;
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
+        applyFocus();
         markBcards();
         roSync();                                                                         // 주변 정류장 카드 목록을 다시 모은다(새 배치 = 끌던 상태는 끝)
         buildFab();
@@ -485,7 +500,9 @@ public class ScreenView extends View {
             setText(10.5f, true, pal[R_WHITE]);
             float tw = tp.measureText(tg) + 18f;
             rf.set(it.x + 8f, it.y + 7f, it.x + 8f + tw, it.y + 27f);
-            p.setStyle(Paint.Style.FILL); p.setColor(0x8C0C1222); cv.drawRoundRect(rf, 10f, 10f, p);
+            p.setStyle(Paint.Style.FILL); p.setColor(0xF20C1222); cv.drawRoundRect(rf, 10f, 10f, p);                    // 구름 위에서도 구름과 섞이지 않게 거의 불투명하게 + 밝은 테두리로 떼어 놓는다
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(0x66FFFFFF); rf2.set(rf.left + 0.5f, rf.top + 0.5f, rf.right - 0.5f, rf.bottom - 0.5f); cv.drawRoundRect(rf2, 9.5f, 9.5f, p);
+            p.setStyle(Paint.Style.FILL);
             cv.drawText(tg, it.x + 17f, base(it.y + 7f, 20f, 0), tp);
         }
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]);       // 웹 .cong-scene 의 1px 테두리
@@ -1546,6 +1563,7 @@ public class ScreenView extends View {
         if (vecHost != null && !vecPlaced) vecHost.place(0, 0, 0, 0);                  // 벡터 지도가 놓일 자리가 이번 그림에 없다 — 숨긴다
     }
     private void drawAll(Canvas cv) {
+        if (scrollHook != null && scrollY != hookY) { hookY = scrollY; scrollHook.run(); }
         long now = SystemClock.uptimeMillis();
         lastDraw = now;
         p.setStyle(Paint.Style.FILL); p.setColor(lay == null ? pal[R_BG] : bgNow());      // 바탕: 화면이 정한 색 역할(카드 안 화면은 card · 안내창은 엔진이 준 색)
@@ -2403,7 +2421,8 @@ public class ScreenView extends View {
         if (down) { p.setColor(0x33000000); cv.drawRoundRect(rf, br, br, p); }
         setText(it.size2 > 0f ? it.size2 : it.size, true, busy ? alpha(cc(it.ac2, 0xFF121214), 0.6f) : cc(it.ac2, 0xFF121214)); tp.setTextAlign(Paint.Align.CENTER);
         float tw = tp.measureText(it.badge), spR = 5f, gap = 6f;
-        if (busy && it.sw >= tw + 2f * (spR + gap) + 6f) {                                                                    // 글자 왼쪽에서 도는 작은 스피너
+        boolean spinOn = (it.spin && it.on) || (it.act != null && it.act.v != null && it.act.v.equals(hintAct) && nowI < hintUntil);
+        if (spinOn && it.sw >= tw + 2f * (spR + gap) + 6f) {                                                                    // 글자 왼쪽에서 도는 작은 스피너
             float sx = bcx - (tw + gap + 2f * spR) / 2f + spR;
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setStrokeCap(Paint.Cap.ROUND); p.setColor(alpha(cc(it.ac2, 0xFF121214), 0.75f));
             rf2.set(sx - spR, bcy - spR, sx + spR, bcy + spR);
@@ -2411,7 +2430,7 @@ public class ScreenView extends View {
             p.setStrokeCap(Paint.Cap.BUTT); p.setStyle(Paint.Style.FILL);
             cv.drawText(it.badge, bcx + (gap + 2f * spR) / 2f, base(it.bty, it.sh, 0), tp);
         } else cv.drawText(it.badge, bcx, base(it.bty, it.sh, 0), tp);
-        if (busy) inbarBusy = true;
+        if (spinOn) inbarBusy = true;
         cv.restore();
         tp.setTextAlign(Paint.Align.LEFT);
     }
