@@ -625,12 +625,10 @@ public final class ShellCore {
     }
 
     /** 화면을 기다리는 동안 보이는 스켈레톤(뼈대) — 앱이 스스로 그리는 자리표시(내용 없음). 화면마다 모양만 다르다. */
-    public static String skeletonScreen(String screen) { return skeletonScreen(screen, ""); }
-    /** headJson: 머리에 미리 깔아 둘 고정 줄(JSON 배열 안의 노드들, 쉼표로 이은 글) — 엔진 화면이 오기 전에도 칩 줄이 처음부터 보이게(웹처럼 탭을 누르는 즉시 틀이 다 있다). */
-    public static String skeletonScreen(String screen, String headJson) {
+    public static String skeletonScreen(String screen) {
         String kind = S_HOME.equals(screen) || S_SHOP.equals(screen) ? "cards" : S_MAPB.equals(screen) ? "map" : "list";
         int rows = "cards".equals(kind) ? 4 : "map".equals(kind) ? 4 : 8;
-        return "{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[" + (headJson == null ? "" : headJson) + "],\"body\":[{\"t\":\"skel\",\"kind\":\"" + kind + "\",\"rows\":" + rows + ",\"pad\":[12,12,12,0]}]}";
+        return "{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"skel\",\"kind\":\"" + kind + "\",\"rows\":" + rows + ",\"pad\":[12,12,12,0]}]}";
     }
     /**
      * 엔진이 "서버가 늦다"며 준 안내 화면(top-level delayed:true · retry:[초…])의 재시도 간격(초). 아니면 null.
