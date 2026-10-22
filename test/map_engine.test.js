@@ -108,7 +108,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
 }
 
 // ⑥ 버스 — 근처 정류장 · 도착정보
-const SEOUL_POS = '<ServiceResult><msgBody>' + [['11111', '아라역5번출구', 127.0, 37.5, 60], ['11112', '아라역5번출구', 127.00001, 37.50001, 70], ['22222', '길건너', 127.001, 37.501, 200], ['33333', '큰길', 127.002, 37.502, 400], ['0', '퇴계로2가교차로(미정차)', 127.0, 37.5, 10], ['44444', '아라역1번출구', 127.003, 37.503, 330]]
+const SEOUL_POS = '<ServiceResult><msgBody>' + [['11111', '아라역5번출구', 127.0, 37.50054, 60], ['11112', '아라역5번출구', 127.0, 37.500541, 70], ['22222', '길건너', 127.0, 37.5018, 200], ['33333', '큰길', 127.0, 37.50252, 400], ['0', '퇴계로2가교차로(미정차)', 127.0, 37.5, 10], ['44444', '아라역1번출구', 127.0, 37.50297, 330]]
   .map(r => `<itemList><arsId>${r[0]}</arsId><stationNm>${r[1]}</stationNm><gpsX>${r[2]}</gpsX><gpsY>${r[3]}</gpsY><dist>${r[4]}</dist></itemList>`).join('') + '</msgBody></ServiceResult>';
 const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3분30초후[2번째 전]</arrmsg1><traTime1>210</traTime1><arrmsg2>10분후[5번째 전]</arrmsg2><traTime2></traTime2><congestion1>2</congestion1><busType1>1</busType1><adirection>강남역</adirection></itemList><itemList><rtNm>N13</rtNm><arrmsg1>곧 도착</arrmsg1><traTime1>0</traTime1><arrmsg2>운행종료</arrmsg2></itemList></msgBody></ServiceResult>';
 {
@@ -138,7 +138,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: TA } });
   ok(b.info.bus.st === 'ok' && /"no":"8"/.test(JSON.stringify(b.body)) && /4분 00초/.test(JSON.stringify(b.body)) && /11분 40초/.test(JSON.stringify(b.body)) && /3번째전/.test(JSON.stringify(b.body)), 'TAGO 도착 두 대');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '' } });
-  ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=800$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
+  ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=450$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '', d1: '{"stops":[]}' } });
   ok(b.info.bus.st === 'empty', '정류장 없음')
   ok(b.head[1].t === 'tmap' && b.head[1].pts.length === 1, '정류장이 없어도 내 위치 지도는 보인다');
@@ -151,7 +151,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     { routeName: '99', routeTypeCd: 30, predictTimeSec1: 100, flag: 'STOP' },
     { routeName: '88', routeTypeCd: 30, predictTimeSec1: 7209, predictTimeSec2: 0, flag: 'PASS' }] } } });
   b = mk({ lat: 37.2661, lng: 127.0011, res: {} });
-  ok(b.info.bus.need.map(n => n.k).join() === 'gg,tn' && /^https:\/\/apis\.data\.go\.kr\/6410000\/busstationservice\/v2\/getBusStationAroundListv2\?x=127\.0011&y=37\.2661&format=json$/.test(b.info.bus.need[0].url), '경기 좌표(서울 밖): GBIS 정류장 + TAGO 를 요청');
+  ok(b.info.bus.need.map(n => n.k).join() === 'gg,tn' && /^https:\/\/apis\.data\.go\.kr\/6410000\/busstationservice\/v2\/getBusStationAroundListv2\?x=127\.001&y=37\.266&format=json$/.test(b.info.bus.need[0].url), '경기 좌표(서울 밖): GBIS 정류장 + TAGO 를 요청');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO } });
   const n3 = b.info.bus.need;
   ok(b.info.bus.st === 'need' && n3.length === 2 && /busarrivalservice\/v2\/getBusArrivalListv2\?stationId=203000123&format=json$/.test(n3[0].url), '경기 좌표는 GBIS 정류장이 TAGO 보다 먼저: 도착 주소는 stationId 로 ' + JSON.stringify(n3.map(x => x.url.slice(-40))));
@@ -159,7 +159,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const gt = JSON.stringify(b.body);
   ok(b.info.bus.st === 'ok' && /"no":"13-4"/.test(gt) && /4분 00초/.test(gt) && /3번째전/.test(gt) && /→ 영통방향/.test(gt) && /11분 40초/.test(gt) && /8번째전/.test(gt), 'GBIS 도착: 노선 · 분 · 번째전 · 방면 · 둘째 차');
   ok(/"no":"7000"/.test(gt) && /5분 00초/.test(gt) && /→ 서울역방향/.test(gt) && !/"no":"99"/.test(gt) && !/"no":"88"/.test(gt), 'GBIS: 분 단위 값은 초로 · 운행종료(STOP)와 1시간 넘는 예측은 뺀다');
-  ok(/"nm":"수원역"/.test(gt) && /"dist":"120m"/.test(gt), 'GBIS 정류장: 이름 · 거리');
+  ok(/"nm":"수원역"/.test(gt) && /"dist":"0m"/.test(gt), 'GBIS 정류장: 이름 · 거리(내 좌표로 다시 잰다)');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: JSON.stringify({ response: { msgHeader: { resultCode: 4 } } }), tn: TAGO } });
   ok(b.info.bus.need[0].url.indexOf('ArvlInfoInqireService') > 0, 'GBIS 가 결과 없음(4)이면 TAGO 로');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: '<html>인증 실패</html>', tn: TAGO } });
@@ -169,7 +169,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   b = mk({ lat: 37.489, lng: 126.724, res: { gg: GGS, tn: '' } });
   ok(/busarrivalservice/.test(b.info.bus.need[0].url), '인천 상자 안이라도 TAGO 가 비면 GBIS');
   // D1 보조
-  const D1 = JSON.stringify({ ok: true, stops: [{ node_id: 'DJB1', node_nm: '대전역', city_code: '25', lat: 36.332, lng: 127.434 }, { node_id: 'XX9', node_nm: '시청', city_code: '0', lat: 36.35, lng: 127.385 }] });
+  const D1 = JSON.stringify({ ok: true, stops: [{ node_id: 'DJB1', node_nm: '대전역', city_code: '25', lat: 36.332, lng: 127.434 }, { node_id: 'XX9', node_nm: '시청', city_code: '0', lat: 36.3345, lng: 127.434 }] });
   b = mk({ lat: 36.333, lng: 127.434, res: { tn: '', d1: D1 } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
   ok(E.mapCityOf(35.1, 129.0) === '21' && E.mapCityOf(10, 10) === '' && E.mapGGPreferred(37.2661, 127.0011) === true && E.mapGGPreferred(37.489, 126.724) === false && E.mapGGPreferred(35.1, 129.0) === false, '시 코드 상자 · 경기 우선 판정');
@@ -184,11 +184,24 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const cards = mm.body.filter(n => n.t === 'bcard'), r0 = cards[0].rows.find(r => r.act);
     ok(r0 && /^br\.0\.\d+$/.test(r0.act.v) && cards[0].rows.every(r => !r.act || mm.info.rts[0][Number(r.act.v.split('.')[2])][0].length > 0) && mm.info.rts[0].length === cards[0].rows.length, '도착정보 줄을 누르면 노선 상세(br.<정류장>.<줄>) · 노선 id 는 info.rts');
   }
-  // 웹과 같은 규칙: 같은 이름 25m 안은 한 곳으로, 출구가 많으면 목록이 늘어난다
+  // s148: 반경 300m 안은 전부(최대 40곳) · 하나도 없으면 가까운 순 3곳 · 같은 열쇠/같은 이름 3m 안만 한 곳
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
   for (let i = 0; i < 6; i++) many.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' });
   const ord = E.mapStopOrder(many);
-  ok(ord.length === 12 && ord.slice(0, 9).every(x => /출구/.test(x.nm)) && ord[9].nm === '일반0', '출구 9곳이면 12곳까지, 출구가 먼저');
+  ok(ord.length === 15 && ord.slice(0, 9).every(x => /출구/.test(x.nm)) && ord[9].nm === '일반0', '300m 안(출구는 350m 안)은 전부, 출구가 먼저');
+  {
+    const mkS = (n, d, nm) => ({ nm: nm || ('정류장' + n), id: 'T' + n, la: 37.5 + n * 1e-5, lo: 127, dist: d, src: 'tago' });
+    const big = []; for (let i = 0; i < 55; i++) big.push(mkS(i, 10 + i * 5));                               // 10m … 280m — 55곳 모두 300m 안
+    ok(E.mapStopOrder(big).length === 40, '300m 안이 아무리 많아도 40곳까지');
+    const mix = [mkS(1, 250), mkS(2, 299), mkS(3, 301), mkS(4, 900)];
+    ok(E.mapStopOrder(mix).map(s => s.id).join() === 'T1,T2', '300m 밖은 안에 있는 것이 있으면 뺀다(299m 는 포함 · 301m 는 제외)');
+    const none = [mkS(1, 420), mkS(2, 380), mkS(3, 700), mkS(4, 520), mkS(5, 900)];
+    ok(E.mapStopOrder(none).map(s => s.id).join() === 'T2,T1,T4', '300m 안에 하나도 없으면 가까운 순 3곳');
+    ok(E.mapDedupStops([{ nm: '가', id: 'A', la: 37.5, lo: 127, dist: 5 }, { nm: '가', id: 'B', la: 37.5, lo: 127.00033, dist: 9 }, { nm: '가', id: 'A', la: 37.5, lo: 127, dist: 5 }, { nm: '나', id: 'C', la: 37.5, lo: 127, dist: 5 }]).length === 3, '길 건너(30m)의 같은 이름 정류장은 따로 · 같은 열쇠는 하나');
+    ok(E.mapQ(37.26666) === 37.267 && E.mapQ(126.7244) === 126.724, '조회 좌표는 0.001° 칸으로');
+    const bq = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5042, lng: 127.0049, res: {} } });
+    ok(/tmX=127&tmY=37\.504&radius=450/.test(bq.info.bus.need[0].url) || /tmX=127\.005&tmY=37\.504&radius=450/.test(bq.info.bus.need[0].url), '정류장 조회 주소는 칸 가운데 좌표 + 반경 450m: ' + bq.info.bus.need[0].url);
+  }
 }
 
 
@@ -310,7 +323,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   let src = fs.readFileSync(R('engine/map.js'), 'utf8'); src = src.slice(0, src.indexOf('if (typeof module')).trimEnd();
   const body = w.slice(i + ms.length, j);
   ok(body.indexOf(esc(src)) >= 0 && body.indexOf(esc(fs.readFileSync(R('engine/map-worker.js'), 'utf8').trimEnd())) >= 0, '워커 내장 사본이 같다');
-  ok(w.indexOf('if (url.pathname === "/screen/map") return handleScreenMap(request);') > 0 && !/[^\x00-\x7f]/.test(body), '경로 등록 · ASCII');
+  ok(w.indexOf('if (url.pathname === "/screen/map") return handleScreenMap(request, env);') > 0 && !/[^\x00-\x7f]/.test(body), '경로 등록 · ASCII');
   const tmp = path.join(os.tmpdir(), 'rv2_map_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
   try {
