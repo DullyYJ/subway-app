@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-22s144";
+var ENGINE_VERSION = "route-v2-2026-10-22s146";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9665,6 +9665,7 @@ var RIDE_STANDBY_DEFAULTS = {
 };
 
 function rsTrackFn() { return (typeof rideTrack === 'function') ? rideTrack : require('./ride-track').rideTrack; }
+function rsRowFn() { return (typeof rideRow === 'function') ? rideRow : require('./ride-eta').rideRow; }
 function rsEtaFn() { return (typeof rideEta === 'function') ? rideEta : require('./ride-eta').rideEta; }
 function rsClone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -9874,6 +9875,18 @@ function rsDoUndo(st, now, notes) {
     eta.boarded = false; eta.notDeparted = true; st.wait = ux.w; delete st.rsUndo; st.rsOpen = 0;
     notes.push('\uc2b9\ucc28 \ud655\uc815 \ub418\ub3cc\ub9bc(\uc624\ubc84\ub808\uc774)');
   }
+}
+// \u2500\u2500 \uacbd\ub85c \uce74\ub4dc \ubc84\ud2bc \uc904\uc758 \uc624\ub978\ucabd \uce78(\uc6f9 routeSlotBtn): \ud0d1\uc2b9 \u2192 \ud658\uc2b9 \u2192 \ub3c4\ucc29. \uce78\uc758 \ub73b\u00b7\uc804\ud658 \uc5f0\ucd9c\uc740 ride-eta \uc758 rideRow \uac00 \uc815\ud558\uace0, \uc5ec\uae30\uc11c\ub294 \ud0d1\uc2b9 \ud655\uc815 \uc99d\uac70(\uad6c\uac04\ubcc4 done)\ub9cc \ubaa8\uc544 \ub118\uae34\ub2e4.
+//   \ucd9c\ub825 row = { slot, label, leg, can(\uc9c0\uae08 \ub204\ub974\uba74 \uba39\ud788\ub098), anim:{kind,ms,ease,sq(\uc804\ud658\uc774 \uc77c\uc5b4\ub09c \uc2dc\uac01 ms),o(\ubc14\ub00c\uae30 \uc804 \uce78)} } \u2014 \uc804\ud658\uc740 \ud55c \ubc88 \uc815\ud574\uc9c0\uba74 \ub2e4\uc74c \uc804\ud658\uae4c\uc9c0 \uadf8\ub300\ub85c \ub4e4\uace0 \uc788\uace0, \uc571\uc740 sq \uac00 \ubc29\uae08(2\ucd08 \uc548)\uc77c \ub54c\ub9cc \uc5f0\ucd9c\ud55c\ub2e4.
+function rsRowOut(st, now) {
+  try {
+    var legs = rsLegsOf(st.eta), pm = rsMaxPass(st.eta), done = st.rsDone || {}, ev = [], k;
+    for (k = 0; k < legs.length; k++) ev.push({ done: (k === 0 ? !st.wait : false) || pm >= legs[k].bi || !!done[legs[k].bi], mode: legs[k].mode });
+    var prev = st.rowSlot || 'none', r = rsRowFn()({ op: 'row', locked: true, legs: ev, prev: prev });
+    if (r.slot !== prev) { st.rowAnim = { kind: r.anim.kind, ms: r.anim.ms, ease: r.anim.ease, sq: now, o: prev }; st.rowSlot = r.slot; }
+    var an = st.rowAnim || { kind: 'none', ms: 0, ease: r.anim.ease, sq: 0, o: 'none' };
+    return { slot: r.slot, label: r.label, leg: r.leg, can: r.slot === 'arrive' || !!(st.wait || (st.xw && !st.xPend)), anim: an };
+  } catch (e) { return null; }
 }
 // \ub204\ub978 \uc21c\uac04 \uc2b9\ucc28\uc5ed\uc5d0 \uc788\ub098(ride-track press): 800m \ubc16('away')\uc774\uba74 \ubc84\ud2bc\uc744 \uac70\ub450\uace0 \uc54c\ub9b0\ub2e4. \uac00\uae5d\uac70\ub098 \uc704\uce58\ub97c \ubaa8\ub974\uba74(\uc9c0\ud558) \uadf8\ub300\ub85c \uc2dc\uac01\ud45c\ub97c \ub530\ub978\ub2e4.
 function rsPressVerify(st, i, now, notes) {
@@ -10331,7 +10344,8 @@ function rideStandby(req) {
   var reco = { fire: false };
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('\ucd94\ucc9c \ud310\ub2e8 \uc2e4\ud328: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  var row = done ? null : rsRowOut(st, now);
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
 }
 
 function handleRideStandby(request, env) {
@@ -19323,6 +19337,25 @@ function resPart(cap, part, facts) {
   return (o && o.ok) ? o : null;
 }
 
+// \u2500\u2500 \uacbd\ub85c \uce74\ub4dc \ubc84\ud2bc \uc904 \uc624\ub978\ucabd \uce78(\uc6f9 routeSlotBtn) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   r.ride.row = \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4(ride-standby)\uc758 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. \uce78 \uc0c9\uc740 \uc6f9 _ROW_COLORS \uc640 \uac19\ub2e4.
+//   an = \uc804\ud658 \uc5f0\ucd9c(\uc571\uc774 sq \uac00 \ubc29\uae08\uc77c \ub54c\ub9cc \uadf8\ub9b0\ub2e4): { k, ms, e[4], sq, bg(\uac00\ub9ac\uac1c \uc0c9), o:{ s, fill, tc } \ubc14\ub00c\uae30 \uc804 \uce78 }
+var RES_ROW_CAP = 21;
+var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
+var RES_ROW_LABELS = { board: '\ud0d1\uc2b9', transfer: '\ud658\uc2b9', arrive: '\ub3c4\ucc29' };
+function resSlotNode(row) {
+  if (!row || typeof row !== 'object' || !RES_ROW_COLORS[row.slot]) return null;
+  var c = RES_ROW_COLORS[row.slot], btn = { t: 'button', s: String(row.label || RES_ROW_LABELS[row.slot]).slice(0, 6), size: 13, h: 42, r: 12, bold: true, fill: c.fill, line: 'none', tc: c.tc, act: { a: 'call', v: 'rh.slot' } };
+  var a = row.anim, an = null;
+  if (a && typeof a === 'object' && ['push_in', 'push_out', 'slide_down', 'slide_up'].indexOf(a.kind) >= 0 && resNum(a.ms, 0) > 0 && resNum(a.sq, 0) > 0) {
+    var ez = resArr(a.ease).map(function (x) { return resNum(x, 0); });
+    an = { k: a.kind, ms: Math.max(1, Math.min(1500, Math.round(resNum(a.ms, 0)))), e: ez.length === 4 ? ez : [0.2, 0, 0, 1], sq: Math.round(resNum(a.sq, 0)), bg: 'card' };
+    var oc = RES_ROW_COLORS[a.o];
+    if (oc) an.o = { s: RES_ROW_LABELS[a.o], fill: oc.fill, tc: oc.tc };
+  }
+  return { btn: btn, an: an };
+}
+
 function resultScreen(opt, r) {
   var cap = Math.floor(resNum(opt && opt.cap, 0));
   if (cap < 12) return { ok: false, error: 'cap' };
@@ -19360,9 +19393,13 @@ function resultScreen(opt, r) {
     if (r.ride && r.ride.on) {
       var rt = String(r.ride.text || '').slice(0, 120);
       nodes.push({ t: 'box', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc911' + (rt ? '\n' + rt : ''), hl: [[0, 6]], size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'gold', r: 10, ip: [12, 8, 12, 8], pad: [8, 0, 0, 4] });
-      nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [
+      var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // \uc6f9 routeActRow: \uc624\ub978\ucabd\uc5d0 \ud0d1\uc2b9 \u2192 \ud658\uc2b9 \u2192 \ub3c4\ucc29 \uce78(\uce78\uc758 \ub73b\u00b7\uc804\ud658\uc740 \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
+      var rowKids = [
         { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
-        { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }] });
+        { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
+      var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
+      if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
+      nodes.push(rowNode);
     } else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
