@@ -165,7 +165,7 @@ function findAndroidJar() {
     const br = v.slice(v.indexOf('private static final long BR_POLL_MS'), v.indexOf('private void closeSheet()'));
     assert.ok(/BR_POLL_MS = 8000L/.test(br) && /BR_CACHE_MS = 7L \* 24L/.test(br) && /brc_/.test(br), '8초 · 정류장 7일 보관');
     assert.ok(/private boolean brShowing\(\) \{ return resumed && brAlive/.test(br) && /if \(!brShowing\(\)\) return;/.test(br), '앞에 있을 때만 돈다(없으면 다시 걸지 않는다)');
-    assert.ok(/private void closeSheet\(\) \{ brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
+    assert.ok(/private void closeSheet\(\) \{ detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
     assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{ if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
     assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
@@ -263,8 +263,20 @@ function findAndroidJar() {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
-    assert.ok(/if \(tdAct\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
-    assert.ok(/CAP = 23/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+    assert.ok(/if \(tdAct \|\| tdAnim\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
+    assert.ok(/CAP = 24/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+  });
+  await t('세부경로 시트 웹 맞춤(s153): 머리(shd)·손잡이·× · 구간은 서버 없이 바로 펼침(▾ 0.2초) · 배경 0.82·탭바 위·끌어 닫기 120dp/.25초 · 확정 토스트·0.6초 뒤 닫힘·오버레이 안내 한 번', () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
+    assert.ok(/K_SHD = 48/.test(sc) && /"shd"\.equals\(t\)/.test(sc) && /case ScreenCore\.K_SHD: drawShd/.test(sv) && /m\.kind == K_SHD\) return m\.sw > 0f/.test(sc), 'shd 노드: 파싱 · 배치 · 그리기 · × 자리만 눌림');
+    assert.ok(/sc\.fl = /.test(sc) && /if \(lay\.fl\)/.test(sv), '아래 고정 줄 맨 위 선은 엔진이 끌 수 있다(fl)');
+    const td = sv.slice(sv.indexOf('private void toggleTd('), sv.indexOf('private void toggleOpen('));
+    assert.ok(/openKey = "td:" \+ b/.test(td) && /relayout\(\)/.test(td) && /listener\.onSet\(a, !wasOn\)/.test(td) && !/listener\.onAction/.test(td) && /K_TDROW && pi\.key\.length\(\) > 0\) toggleTd\(pi\)/.test(sv), '구간 펼침: 서버 왕복 없이 바로 다시 배치 · 알림은 onSet');
+    const dt = sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('));
+    assert.ok(/cv\.rotate\(ang, it\.ix, it\.iy\)/.test(dt) && /\/ 200f/.test(dt) && /final String bt = ellipsizeTd/.test(dt) && dt.indexOf('final String bt = ellipsizeTd') < dt.indexOf('setText(ScreenCore.TD_BADGE_TXT'), '▾ 는 0.2초 돌고 · 뱃지 글은 색을 정하기 전에 줄여서 보인다');
+    const op = v.slice(v.indexOf('private void openDetailSheet()'), v.indexOf('private void loadDetail()'));
+    assert.ok(/setDimAmount\(0\.82f\)/.test(op) && /520f \* dpr/.test(op) && /20f \* dpr/.test(op) && /tabs\.getLocationOnScreen/.test(op) && /120f \* dpr/.test(op) && /PathInterpolator\(0\.25f, 0\.1f, 0\.25f, 1f\)/.test(op) && /setDuration\(250L\)/.test(op) && /root\.setOnClickListener/.test(op) && /경로를 불러오는 중/.test(op), '웹 틀: 어둡기 .82 · 너비 520 · 위 모서리 20 · 탭바 위 · 끌어 닫기 120dp .25초 ease · 바깥 누르면 닫힘 · 불러오는 중 글');
+    assert.ok(/HomeCore\.optName\(home\.resTab\) \+ " 경로로 확정했어요"/.test(v) && /postDelayed\([\s\S]{0,160}closeSheet\(\)[\s\S]{0,40}600L/.test(v) && /ovlHintOnce\(\)/.test(v) && /K_OVLHINT/.test(v) && /RideOverlay\.supported\(\) && !RideOverlay\.allowed\(this\)/.test(v) && /optName\(String tab\)/.test(hm), '확정: 토스트(옵션 이름) · 초록 단추 다시 받기 · 0.6초 뒤 닫힘 · 오버레이 권한 안내는 한 번만');
   });
   await t('홈·시간표·버스 보정(s150): 단추 스피너는 spin 만 · 경로 찾는 동안만 · 시간표 머리 놀이터가 스크롤을 따라감 · 다음 열차 줄로 한 번 내려감 · 위치는 저장값→마지막 위치→새 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
