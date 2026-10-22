@@ -423,6 +423,70 @@ t('도착 3분 뒤 done 과 함께 quit:true(앱도 끝낸다), 경로 이탈 �
   assert.ok(r2.done === true && r2.quit === false, '오래 갱신 안 된 상태는 quit 아님');
 });
 
+// ── s143: 탑승 시트 — 환승 구간 승차('환승완료') · 시트가 그릴 풍부한 값 ─────────────────────────────────
+// 노드 1~3 = 1호선(S0..S2), 노드 4~6 = 2호선(T0..T2). 노드 3 에서 내려 노드 4 에서 갈아탄다. 계획: 노드 n 은 12:50 + 2(n-1)분.
+function xferState() {
+  const nd = [{ name: '출발', isOrigin: true }], PL = [null], cells = [], map = [], stops = [], seq = [];
+  for (let i = 1; i <= 6; i++) {
+    const a = i <= 3; PL[i] = 12 * 60 + 50 + 2 * (i - 1) + (a ? 0 : 3);          // 환승 걷기 3분
+    nd.push({ name: (a ? 'S' : 'T') + (a ? i - 1 : i - 4), isSub: true, lineName: a ? '1호선' : '2호선', planMin: PL[i] });
+    cells.push({ n: nd[i].name, t: '--:--', dc: a ? '#336699' : '#00a84d', dk: 1, m: nd[i].name + '(이동중)' }); map.push(i);
+    stops.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + PL[i] * 60000, pass: true, fin: i === 6 }); seq.push(i);
+  }
+  return { v: 1, tripSig: 'X1', eta: { nodes: nd, passes: [{ idx: 1, ms: at(12, 50, 0), src: 'gps' }, { idx: 2, ms: at(12, 52, 0), src: 'gps' }, { idx: 3, ms: at(12, 54, 0), src: 'gps' }], boarded: true, notDeparted: false, timetableFirst: true, tzOffsetMin: 540 },
+    stops: stops, trail: [], cfg: { targets: [{ seqPos: 5, nodeIdx: 6, name: 'T2', kind: 'dest' }], seq: seq, allowed: {}, destName: 'T2' }, fired: {},
+    ovl: { cells: cells, map: map, base: 0, theme: { bg: '#fff', fg: '#111', sub: '#888' } } };
+}
+const stepX = (st, ms, extra) => rideStandby(Object.assign({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
+t('탑승 시트(환승): 앞 구간을 내린 뒤 출발 2분 전에 올라와 [환승완료] → [되돌리기], 노선 글·색·문구도 엔진이 정한다', () => {
+  let r = stepX(xferState(), at(12, 55, 0));
+  assert.ok(r.state.xw && r.state.xw.i === 4 && r.state.xw.k === 1, '환승 대기 ' + JSON.stringify(r.state.xw));
+  assert.strictEqual(r.overlay.rs.st, 'hidden', '도착이 2분보다 멀면 안 올린다');
+  const D = r.state.etaMs[4];                                   // 환승 열차 출발(도착) 시각 — 엔진이 정한 값
+  r = stepX(r.state, D - 100000);
+  let rs = r.overlay.rs;
+  assert.ok(rs.st === 'board' && rs.bt === '환승완료' && rs.x === 1 && rs.mode === 'sub' && rs.chip === '2호선' && rs.cbg === '#00a84d' && /^#/.test(rs.cfg) && rs.nm === 'T0역' && /^2분 안에 도착/.test(rs.kick) && rs.bar === -1, JSON.stringify(rs));
+  r = stepX(r.state, D - 60000);
+  assert.ok(/^1분 안에 도착/.test(r.overlay.rs.kick), r.overlay.rs.kick);
+  r = stepX(r.state, D - 50000, { act: 'press' });
+  assert.ok(r.overlay.rs.st === 'undo' && r.overlay.rs.bt === '되돌리기' && /환승 완료/.test(r.overlay.rs.k) && !r.state.xw, JSON.stringify(r.overlay.rs));
+  assert.ok(r.state.eta.passes.some(p => p.idx === 4 && p.ms === D - 50000 && p.src === 'gps'), '승차 통과가 기록된다');
+  const u = stepX(r.state, D - 45000, { act: 'undo' });
+  assert.ok(!u.state.eta.passes.some(p => p.idx === 4) && u.state.xw && u.state.xw.i === 4 && u.overlay.rs.st === 'board', '되돌리면 통과 기록이 지워지고 시트가 다시 열린다');
+  const g = stepX(r.state, D - 20000);
+  assert.ok(g.overlay.rs.st === 'hidden' && !g.state.xw, '눌러 확정하면 이 구간은 더 안 나온다');
+});
+t('탑승 시트(환승): 일찍 누르면 예약(알약) → 도착 1분 반 전에 확정, 앞 구간 하차 전엔 안 나오고, 3분 넘게 안 누르면 알약·"환승하셨다면"', () => {
+  const st0 = xferState(); st0.eta.passes = st0.eta.passes.slice(0, 2);
+  let r = stepX(st0, at(12, 52, 30));
+  assert.ok(!r.state.xw && r.overlay.rs.st === 'hidden', '앞 구간(노드 3)을 내리기 전에는 환승 대기가 없다');
+  const x0 = stepX(xferState(), at(12, 55, 0)), D = x0.state.etaMs[4];
+  r = stepX(x0.state, at(12, 55, 5), { act: 'open' });
+  assert.strictEqual(r.overlay.rs.st, 'board', '쓸어 올리면 도착이 멀어도 연다');
+  r = stepX(r.state, at(12, 55, 10), { act: 'press' });
+  assert.ok(r.overlay.rs.st === 'undo' && /예정/.test(r.overlay.rs.k) && r.state.xPend && !r.state.eta.passes.some(p => p.idx === 4), JSON.stringify(r.overlay.rs));
+  r = stepX(r.state, D - 80000);
+  assert.ok(!r.state.xPend && r.state.eta.passes.some(p => p.idx === 4) && r.overlay.rs.st === 'hidden', '예약은 도착 1분 반 전에 확정된다');
+  const x2 = stepX(x0.state, D - 60000); const l = stepX(x2.state, D + 190000);
+  assert.ok(l.overlay.rs.st === 'wait' && /^환승하셨다면 눌러 주세요/.test(l.overlay.rs.kick) && l.overlay.rs.late === true, JSON.stringify(l.overlay.rs));
+  const c = stepX(x2.state, D - 50000, { act: 'close' });
+  assert.strictEqual(c.overlay.rs.st, 'wait', '도착 2분 안에 닫으면 알약으로');
+  assert.strictEqual(stepX(c.state, D - 30000).overlay.rs.st, 'wait', '다시 올리지 않는다');
+  assert.strictEqual(stepX(c.state, D - 20000, { act: 'pill' }).overlay.rs.st, 'board', '알약을 누르면 다시 연다');
+  const e = stepX(x0.state, D - 150000);
+  assert.strictEqual(e.overlay.rs.st, 'hidden', '처음 올리기 전에는 숨김');
+  const far = stepX(stepX(x0.state, D - 140000, { act: 'open' }).state, D - 130000, { act: 'close' });
+  assert.strictEqual(far.overlay.rs.st, 'wait', '2분보다 먼 때 닫은 것은 알약');
+  assert.strictEqual(stepX(far.state, D - 100000).overlay.rs.st, 'board', '2분 안이 되면 자동으로 다시 올라온다');
+});
+t('탑승 시트(첫 구간): 같은 값(kick · chip · 색 · 막대)도 채운다', () => {
+  const w0 = waitState(); w0.eta.nodes = w0.eta.nodes.map(n => Object.assign({}, n, n.isOrigin ? {} : { isSub: true, isBus: false, lineName: '인천1호선' }));
+  const r = stepO(w0, at(12, 50, 20), null, false), rs = r.overlay.rs;
+  assert.ok(rs.st === 'board' && rs.bt === '탑승' && rs.x === 0 && rs.mode === 'sub' && rs.chip === '인천1호선' && rs.cbg === '#336699' && /^2분 안에 도착/.test(rs.kick), JSON.stringify(rs));
+  const lt = stepO(r.state, at(12, 53, 0), null, false).overlay.rs;
+  assert.ok(lt.bar > 0.6 && lt.bar < 1 && /^곧 도착|^도착했어요/.test(lt.kick), JSON.stringify(lt));
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
