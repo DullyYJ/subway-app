@@ -56,6 +56,13 @@ public final class MapCore {
     }
     /** 정류장 목록을 다 받았다 — 이 자리 칸에 보관한다(처음 한 번). 호출하는 쪽이 정류장이 있는 화면일 때만 부른다. */
     public int stopCount() { return stopJson.size(); }
+    /** 지금 목록의 정류장 열쇠(id) 묶음 — 위치가 바뀌어도 같은 정류장들이면 같다(거리는 넣지 않는다). */
+    public String stopSig() {
+        StringBuilder b = new StringBuilder();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"id\"\\s*:\\s*\"([^\"]*)\"");
+        for (String sj : stopJson) { java.util.regex.Matcher m = p.matcher(sj); b.append(m.find() ? m.group(1) : sj.hashCode()).append('|'); }
+        return b.toString();
+    }
     public boolean saveStopsCache() {
         if (!VW_NEAR.equals(busView()) || stopJson.isEmpty()) return false;
         String k = stopsKey();
