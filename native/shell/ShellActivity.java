@@ -483,7 +483,7 @@ public class ShellActivity extends Activity {
         }
         if (c != null && ShellCore.S_MAPB.equals(key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key) && key.contains("|bus|")) {      // 버스 도착정보는 실시간 — 8초가 지난 것은 보여 주지 않고 새로 받을 때까지 뼈대
             long m = diskMtime(key);
-            if (m <= 0L || System.currentTimeMillis() - m > ShellCore.BUS_FRESH_MS) return null;
+            if (m <= 0L || System.currentTimeMillis() - m > ShellCore.BUS_STALE_MS) return null;          // 오래돼도 90초 안이면 먼저 보이고(SWR) 뒤에서 새로 받는다
         }
         return c;
     }
@@ -1803,7 +1803,11 @@ public class ShellActivity extends Activity {
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my);
                     else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch();
-                        if (map.svFail > 0 && !busRefreshing) main.postDelayed(new Runnable() { @Override public void run() { if (busShowing()) busRefresh(); } }, 1500L); }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
+                        if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
+                            busRetryN++; final long wait = 1500L * busRetryN;
+                            main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);
+                        } else if (map.svFail == 0 && busBadFetch == 0) busRetryN = 0;
+                        busBadFetch = 0; }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
                 } });
             }
         }, "shell-mapb").start();
@@ -1877,6 +1881,9 @@ public class ShellActivity extends Activity {
                         for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) bad = true;
                         if (bad) { busFail(); return; }
                     }
+                    int badN = 0;
+                    for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) badN++;
+                    busBadFetch = badN;
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     map.rememberNeed(need);                                                       // 다음 갱신은 이 주소들을 엔진에게 묻지 않고 곧장 받는다
                     map.busNeed.clear();
@@ -2008,6 +2015,9 @@ public class ShellActivity extends Activity {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
         boolean shown = keyedShow(body, ShellCore.S_MAPB);
+        if (!shown) showSkeleton(body, ShellCore.S_MAPB);                                   // 새 화면이 올 때까지 옛 모드의 화면(노선도 · 다른 정류장)을 두지 않는다 — 눌렀는데 아무 일도 없는 것처럼 보이지 않게
+        syncMapView();
+        busRetryN = 0;
         if (shown && busShowing() && System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();        // 버스 탭에 들어오면 캐시 화면을 먼저 보이고, 도착정보는 곧장(엔진 왕복 없이) 새로 받는다
         else loadMapBody(body, shown);
         if (shown) syncMapView();
@@ -2197,6 +2207,7 @@ public class ShellActivity extends Activity {
         int[] pal = ShellCore.palette(ShellCore.theme(store));
         sv.setPalette(pal);
         sv.setListener(new SheetHost());
+        sv.setParentIntercept(true);                                                // 팝업 어디를 잡아도 위아래로 끌면 박스가 가져간다(시간표 · 닫기)
         final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
         final String cached = stnCache.get(json);                         // 본 적 있는 역이면 시트가 올라오기 전에 내용을 먼저 채워 둔다(올라오면서 이미 채워져 있다)
         boolean filled = false;
@@ -2549,7 +2560,7 @@ public class ShellActivity extends Activity {
         if (seed != null) map.setRouteMe(seed[0], seed[1]);
         String[] c = brCacheGet(map.brRid);
         if (c != null) map.useCachedStations(c[0], c[1], c[2]);                          // 정류장은 기기에 둔 것으로 바로 — 위치는 아래에서 새로 받는다
-        brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.clear(); brCached = "";
+        brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.clear(); brCached = ""; brRetryN = 0;
         brRound(gen, false);
         brArm();
     }
@@ -2559,6 +2570,9 @@ public class ShellActivity extends Activity {
         boolean keep = brKeep; brKeep = false;
         if (map.pkName.length() > 0) { if (!keep) home.pickRestore(map.pkName); map.brPickClear(); }
     }
+    private int brRetryN;                                                           // 노선 상세를 처음 못 받았을 때 자동으로 다시 해 본 횟수
+    private int busRetryN;                                                          // 정류장 도착정보가 비었을 때 자동으로 다시 해 본 횟수(사람이 탭 · 보기를 바꾸면 처음부터)
+    private volatile int busBadFetch;                                               // 이번에 받은 도착정보 주소 중 응답이 빈 곳 수
     private volatile int brReq;                                                     // 가장 최근 엔진 요청 번호(늦게 온 옛 답이 새 답을 덮지 않게)
     private final java.util.HashSet<String> brFlight = new java.util.HashSet<String>();     // 지금 받는 중인 주소 열쇠(같은 것을 두 번 받지 않는다)
     private String brCached = "";
@@ -2572,7 +2586,15 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (!brAlive(gen)) return;
-                    if (txt.length() == 0) { if (my == brReq && brFlight.isEmpty()) brBusy = false; if (!brShown && sheetView != null) toast("노선 정보를 받지 못했어요"); return; }      // 갱신이 실패하면 보던 화면을 그대로 둔다
+                    if (txt.length() == 0) {
+                        if (my == brReq && brFlight.isEmpty()) brBusy = false;
+                        if (!brShown && sheetView != null) {                                  // 처음 한 번 못 받았다고 빈 시트로 두지 않는다 — 0.4 · 1.2 · 2.5초 뒤 조용히 다시(세 번까지), 그래도 안 되면 알린다
+                            if (brRetryN < 3) { final long wait = brRetryN == 0 ? 400L : brRetryN == 1 ? 1200L : 2500L; brRetryN++; main.postDelayed(new Runnable() { @Override public void run() { if (brAlive(gen) && !brShown) { brBusy = true; brRound(gen, false); } } }, wait); }
+                            else toast("노선 정보를 받지 못했어요");
+                        }
+                        return;
+                    }
+                    brRetryN = 0;      // 갱신이 실패하면 보던 화면을 그대로 둔다
                     if (my != brReq) return;                                                // 더 새 요청이 이미 나갔다 — 그 답이 이 내용까지 담는다
                     map.onBr(txt);
                     final List<String[]> need = new ArrayList<String[]>(map.brNeed);
@@ -3519,19 +3541,20 @@ public class ShellActivity extends Activity {
         sv.setDpr(dpr);
         sv.setPalette(pal);
         sv.setListener(new SheetHost());
+        sv.setParentIntercept(true);
         boolean filled = false;
         final String cached = detCache.get(json);                                      // 본 적 있는 경로면 시트가 올라오기 전에 먼저 채워 둔다
         if (cached != null) { try { home.onDetail(cached); sv.setScreen(parsedGet(cached), false); filled = true; } catch (Throwable e) { filled = false; } }
         final FrameLayout root = new FrameLayout(this);
         root.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { closeSheet(); } });       // 웹: 어두운 바깥을 누르면 닫힌다
         final FrameLayout box = new FrameLayout(this) {
-            private float rawY0; private boolean drag; private final int slop = android.view.ViewConfiguration.get(ShellActivity.this).getScaledTouchSlop();
+            private float rawY0, rawX0; private boolean drag, atTop; private final int slop = android.view.ViewConfiguration.get(ShellActivity.this).getScaledTouchSlop();
             @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
                 int a = e.getActionMasked();
-                if (a == android.view.MotionEvent.ACTION_DOWN) { rawY0 = e.getRawY(); drag = false; return false; }
-                if (a == android.view.MotionEvent.ACTION_MOVE && !drag && e.getY() - (e.getRawY() - rawY0) < 64f * dpr) {            // 머리(손잡이 · 제목) 에서 시작한 아래 끌기만
-                    float dy = e.getRawY() - rawY0;
-                    if (dy > slop) { drag = true; return true; }
+                if (a == android.view.MotionEvent.ACTION_DOWN) { rawY0 = e.getRawY(); rawX0 = e.getRawX(); drag = false; atTop = e.getY() < 64f * dpr || sv.scrollPos() <= 0.5f; return false; }
+                if (a == android.view.MotionEvent.ACTION_MOVE && !drag && atTop) {                                                 // 머리 어디서든 · 목록이 맨 위면 어디를 잡아도 아래로 끌면 시트가 따라 내려간다
+                    float dy = e.getRawY() - rawY0, dx = e.getRawX() - rawX0;
+                    if (dy > slop && dy > Math.abs(dx) * 1.2f) { drag = true; return true; }
                 }
                 return false;
             }
