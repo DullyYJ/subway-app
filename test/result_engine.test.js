@@ -214,6 +214,18 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const e1 = E.resultScreen({ cap: 18 }, null), e2 = E.resultScreen({ cap: 18 }, { data: { result: { path: 'x' } } }), e3 = E.resultScreen({ cap: 18 }, { data: { result: { path: [{ info: null, subPath: [null, 3, {}] }] } }, tab: 'fast' });
   ok(e1.ok && e2.ok && e3.ok && flat(e1.body).some(n => n.t === 'text' && n.s === '경로 정보가 없어요'), '경로가 없거나 깨져도 죽지 않고 안내를 낸다');
 }
+// ⑤-b 승차 전 '내 위치' 점(웹 htl-gps-marker-dot): 탑승 추적(lv)이 없어도 출발이 내 위치면 처음 칸, 아니면 600m 안 가까운 역·정류장 칸
+{
+  const trk = o => flat(o.head.concat(o.body)).find(n => n.t === 'trk');
+  const t0 = trk(call('fast', { a: '내 위치', me: [37.5, 126.8] }));
+  ok(t0 && t0.mk && t0.mk.f === 0 && t0.mk.t === 0 && t0.mk.ms === 0 && t0.mk.pu === 'b', '출발이 내 위치면 점이 처음 칸에 놓인다(승차 대기 아님 · 곧바로)');
+  ok(!trk(call('fast', { a: '부평', me: [10, 10] })).mk, '출발이 내 위치가 아니고 역에서 멀면 점 없음');
+  ok(!trk(call('fast', { a: '내 위치' })).mk && !trk(call('fast', { a: '내 위치', me: [999, 5] })).mk, '위치를 모르거나 이상하면 점 없음');
+  const near = trk(call('fast', { a: '부평', me: [37.49, 126.72] }));
+  ok(near && near.mk && near.mk.f >= 0, '가까운 역이 있으면 그 칸에 점');
+  const lv = trk(call('fast', { a: '내 위치', me: [37.5, 126.8], lv: { cur: 1, arr: [] } }));
+  ok(lv && lv.mk && lv.mk.f === 1, '탑승 추적이 있으면 추적 위치가 우선');
+}
 // ⑥ 워커 내장
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
