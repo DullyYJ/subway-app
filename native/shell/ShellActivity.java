@@ -2741,6 +2741,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_ROOM: goRoom(); break;
             case HomeCore.R_DETAIL: openDetailSheet(); break;
             case HomeCore.R_STOP: stopRide(); break;
+            case HomeCore.R_SLOT: rideSlot(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
@@ -3159,6 +3160,14 @@ public class ShellActivity extends Activity {
             home.setRide(RideService.running ? RideService.liveRide : live.rideJson(), RideService.running ? RideService.liveLv : live.lvJson());
             rideGraceUntil = System.currentTimeMillis() + 8000L;
         } catch (Throwable ignored) { }
+    }
+    /** 경로 카드 버튼 줄 오른쪽 칸(탑승 · 환승 · 도착): 칸의 뜻은 엔진이 정했다. 탑승·환승 = 탑승 시트의 [탑승]과 같은 확정, 도착 = 안내 종료. */
+    private void rideSlot() {
+        String sl = RideService.liveRowSlot;
+        if ("arrive".equals(sl)) { stopRide(); return; }
+        if (!RideService.running || !("board".equals(sl) || "transfer".equals(sl))) return;
+        if (RideService.liveRowCan) { RideService.rsAct("press"); if (tabs != null) tabs.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); }
+        else toast("앞 구간을 내린 뒤에 눌러 주세요");
     }
     private void stopRide() {
         store.put(ShellCore.K_RIDESNAP, "");
