@@ -923,6 +923,23 @@ public class ShellJvmTest {
             ok(OvCore.centerPos(10, 0, 30) == 8f && OvCore.centerPos(0, 0, 30) == 0f && OvCore.centerPos(29, 0, 30) == 25f && OvCore.centerPos(1, 0, 3) == 0f && OvCore.centerPos(3, 100, 20) == 101f && OvCore.clampPos(-4f, 0, 30) == 0f, "다섯 칸 창: 현위치가 가운데 · 가장자리에서 멈춘다");
             ok("경인교대 (이동중)".equals(OvCore.pillText(ovv)) && OvCore.spinMs(1) < OvCore.spinMs(2) && OvCore.spinMs(0) == 0L && !OvCore.fromMap(null).active && !OvCore.fromMap(ScreenCore.parse("{\"active\":true}")).active, "알약 글 · 경고 테두리 속도 · 빈 값");
             ok(!OvCore.arrived(OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"board\",\"bt\":\"탑승\",\"k\":\"S0 12:52 출발\",\"nm\":\"S0\"}}"))) && OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"undo\",\"bt\":\"되돌리기\"}}")).rsSt.equals("undo"), "탑승 줄은 도착 줄이 아니다(탑승 단추 ≠ 안내 종료)");
+            {   // s143: 앱 탑승 시트 — 엔진 값 읽기 · 칸 · 눌림 · 쓸기
+                OvCore.Ov rb = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"board\",\"bt\":\"환승완료\",\"k\":\"T0 12:59 출발\",\"nm\":\"T0역\",\"kick\":\"2분 안에 도착 · 12:59\",\"mode\":\"sub\",\"chip\":\"2호선\",\"cbg\":\"#00a84d\",\"cfg\":\"#ffffff\",\"bar\":0.5,\"x\":1,\"late\":false}}"));
+                ok(rb.rsKick.startsWith("2분") && rb.rsMode.equals("sub") && rb.rsChip.equals("2호선") && rb.rsCbg == 0xFF00A84D && rb.rsCfg == 0xFFFFFFFF && Math.abs(rb.rsBar - 0.5f) < 1e-6f && rb.rsX && !rb.rsLate, "탑승 시트 값(kick · 노선 글 · 색 · 막대 · 환승 구간)을 엔진 JSON 에서 읽는다");
+                OvCore.Ov rw = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"wait\",\"bt\":\"탑승\",\"chip\":\"150번\",\"mode\":\"bus\"}}"));
+                OvCore.Ov ru = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"undo\",\"bt\":\"되돌리기\",\"k\":\"탑승으로 기록했어요\"}}"));
+                OvCore.Ov rh = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"hidden\"}}"));
+                OvCore.Ov re = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"board\",\"end\":true,\"bt\":\"안내 종료\"}}"));
+                ok(RsCore.heightDp(rb) == RsCore.H_BOARD && RsCore.heightDp(ru) == RsCore.H_UNDO && RsCore.heightDp(rw) == RsCore.H_PILL && RsCore.heightDp(rh) == 0 && RsCore.heightDp(re) == 0 && RsCore.heightDp(null) == 0, "시트 높이: 올라온 92 · 되돌리기 54 · 알약 44 · 숨김/도착 줄은 0(도착은 앱에 따로 있다)");
+                float[] bb = RsCore.btn(rb, 360f);
+                ok(Math.abs(bb[0] + bb[2] - 344f) < 0.01f && bb[2] == RsCore.btnW("환승완료") && RsCore.btnW("탑승") == 72f && "press".equals(RsCore.tap(rb, bb[0] + 5f, bb[1] + 5f, 360f, 0f)) && RsCore.tap(rb, 20f, 50f, 360f, 0f) == null, "[환승완료] 단추는 오른쪽 여백 16 · 누르면 press · 다른 곳은 무반응");
+                float[] ub = RsCore.btn(ru, 360f);
+                ok("undo".equals(RsCore.tap(ru, ub[0] + 3f, ub[1] + 3f, 360f, 0f)) && ub[3] == 34f, "기록 직후엔 [되돌리기] 가 undo");
+                float[] pw = RsCore.pill(360f, 50f);
+                ok("pill".equals(RsCore.tap(rw, pw[0] + 4f, pw[1] + 4f, 360f, 50f)) && RsCore.tap(rw, 10f, 10f, 360f, 50f) == null && Math.abs(pw[0] + pw[2] - 344f) < 0.01f, "대기 알약을 누르면 pill");
+                ok("close".equals(RsCore.swipe(rb, 5f, 60f)) && RsCore.swipe(rb, 5f, 20f) == null && RsCore.swipe(rb, 80f, 60f) == null && "open".equals(RsCore.swipe(rw, 3f, -40f)) && RsCore.swipe(rw, 3f, -10f) == null && RsCore.swipe(ru, 0f, 90f) == null, "올라온 시트는 아래로 쓸면 close · 알약은 위로 쓸면 open · 짧거나 비스듬하면 무반응");
+                ok(RsCore.barFill(rb, 328f) == 164f && RsCore.barFill(rw, 328f) == 0f, "막대 채움 너비");
+            }
             OvCore.Ov rr = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"ch\":\"dudung\",\"a\":\"맛있는집\",\"b\":\"점심 한 끼\",\"m\":\"120m\",\"go\":\"쿠팡 보기\",\"ok\":\"확인\",\"at\":77},\"getoff\":{\"on\":false}}"));
             ok(rr.row.kind == 1 && rr.row.ch.equals("dudung") && rr.row.a.equals("맛있는집") && rr.row.go.equals("쿠팡 보기") && rr.row.ok.equals("확인") && rr.row.at == 77L && rr.row.m.equals("120m"), "추천 줄을 읽는다");
             OvCore.Ov gg = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":true,\"a\":\"x\"},\"getoff\":{\"on\":true,\"ch\":\"hack/../x\",\"a\":\"내릴 준비를 해주세요\",\"b\":\"수고했어요\",\"end\":\"앱 종료\",\"at\":9}}"));
