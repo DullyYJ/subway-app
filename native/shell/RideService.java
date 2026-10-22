@@ -24,7 +24,7 @@ import android.os.Vibrator;
 /**
  * 탑승 추적 포그라운드 서비스 (2026-10-20 s94) — 앱 화면이 가려지거나 닫혀도 안내가 이어진다.
  *
- * ★ 원칙(YJ): "모든 계산은 엔진이 한다. 앱은 그림만 그린다." 이 서비스는 위치를 모아 5초마다 엔진(/ride-standby)에 보내고,
+ * ★ 원칙(YJ): "모든 계산은 엔진이 한다. 앱은 그림만 그린다." 이 서비스는 위치를 모아 5초마다 폰 안의 엔진(RideLocal — 서버 엔진의 자바 포팅, 서버 요청 0)에 넣고,
  *   돌려받은 상주 알림 글 · 울릴 알림 · 끝내기를 그리기만 한다. state 는 해석하지 않는다(RideCore 가 그대로 들고 있는다).
  * 시작은 ShellActivity 가 RideCore 를 만들어 SharedPreferences 에 저장한 뒤 start() 로 부른다. START_STICKY 로 되살아나면 저장본(30분 안)으로 이어간다.
  * foregroundServiceType=location (Android 14). 위치 권한은 앱이 화면에 있을 때 이미 받아 둔다.
@@ -153,10 +153,16 @@ public class RideService extends Service {
             stepping = true;
             long delay = RideCore.STEP_DEFAULT_MS;
             try {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride-standby", core.stepBody(System.currentTimeMillis()), 8000);
-                if (r.status == 200) {
-                    RideCore.Step s = core.onStep(r.body);
+                // ★ 탑승이 확정된 뒤에는 외부 서버 요청 0 — 5초 걸음은 폰 안의 엔진(RideLocal)이 계산한다. 서버는 [탑승]을 눌러 열차를 가릴 때 시각표 한 번뿐.
+                String body = core.stepBody(System.currentTimeMillis()), resp = null;
+                if (RideLocal.needsTable(body)) {
+                    try { NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride-standby", body, 5000); if (r.status == 200) resp = r.body; } catch (Throwable ignored) { }
+                }
+                if (resp == null) resp = RideLocal.step(body);
+                if (resp != null) {
+                    RideCore.Step s = core.onStep(resp);
                     if (s.ok) {
+                        prefetchReco(body, resp);
                         save(RideService.this, core);
                         if (s.alert) fireAlert(s);
                         if (s.recoBody.length() > 0) fireReco(s.recoBody);
@@ -254,15 +260,30 @@ public class RideService extends Service {
     private void updateOngoing() {
         try { ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTI_ID, ongoing()); } catch (Throwable ignored) { }
     }
-    /** 하차 7분 전 추천: 글(맛집·커피·쇼핑 문구)은 엔진 /reco-text 가 만든다(RecoNotify). 받는 동안 5초 걸음을 막지 않게 따로 돈다. */
-    private void fireReco(final String body) {
-        final Context app = getApplicationContext();
+    // ── 하차 추천 문구: 탑승 전에 한 번 받아 두고, 탑승 뒤에는 받아 둔 글만 쓴다(서버 요청 0) ──
+    private volatile String recoCacheBody = "", recoCacheResp = "";
+    private volatile int recoTries = 0;
+    private volatile boolean recoFetching = false;
+    private void prefetchReco(String reqBody, String resp) {
+        if (recoCacheResp.length() > 0 || recoFetching || recoTries >= 2) return;
+        final String pb = RideLocal.prefetchBody(reqBody, resp);
+        if (pb.length() == 0) return;
+        recoFetching = true; recoTries++;
         new Thread(new Runnable() {
             @Override public void run() {
-                boolean ok = RecoNotify.send(app, body, core);
-                recoStage = ok ? "문구 받아 알림 보냄" : "문구 못 받음/시간대 아님"; recoStageAt = System.currentTimeMillis();
+                try {
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/reco-text", pb, 9000);
+                    if (r.status == 200) { recoCacheBody = pb; recoCacheResp = r.body; }
+                } catch (Throwable ignored) { }
+                recoFetching = false;
             }
-        }, "ride-reco").start();
+        }, "ride-reco-pre").start();
+    }
+    /** 하차 7분 전 추천: 탑승 전에 받아 둔 글(맛집·커피·쇼핑 문구)을 띄운다(RecoNotify.sendCached) — 네트워크를 쓰지 않는다. */
+    private void fireReco(final String body) {
+        final Context app = getApplicationContext();
+        boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core);
+        recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름"; recoStageAt = System.currentTimeMillis();
     }
     private void fireAlert(RideCore.Step s) {
         try {
