@@ -213,13 +213,16 @@ function resRgba(hex, a) {                                       // '#rrggbb' + 
   return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
 }
 var RES_TD_CAP = 20;                                             // tdrow(세부경로 줄) 노드를 아는 앱
+var RES_SHD_CAP = 24;                                            // shd(웹 세부경로 시트 머리: 손잡이 · 제목 · 동그란 ×) + 앱 안에서 바로 펼치는 구간 + 웹 같은 아래 단추 줄을 아는 앱
+var RES_OPT_NAMES = { fast: '최단시간', less: '최소환승', sub: '지하철', bus: '버스', longdist: '장거리' };   // 웹 confirmSelectedRoute optName
 var RES_BUS_LEG_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];   // 웹 _BUS_LEG_COLS
 function resDetailScreen(route, r, tab, cap) {
   if (cap < RES_TD_CAP) return resDetailLegacy(route, r, tab);
   var tz = resNum(r.tz, 540), now = resNum(r.now, 0), base = r.bt != null ? resNum(r.bt, now) : (resNum(r.rb, 0) || now), th = r.th === 'pastel' ? 'pastel' : 'dark';
   var total = Math.round(resNum(route.summary.duration, 0) / 60), open = {};
   resArr(r.open).forEach(function (i) { i = Math.floor(Number(i)); if (i >= 0 && i < 40) open[i] = 1; });
-  var kids = [{ t: 'bar', pad: [16, 0, 0, 8], title: total + '분 · ' + String(r.a || '') + ' → ' + String(r.b || ''), btn: '닫기', act: { a: 'call', v: 'rd.close' } }];
+  var web = cap >= RES_SHD_CAP, ttl = total + '분 · ' + String(r.a || '') + ' → ' + String(r.b || ''), optName = RES_OPT_NAMES[tab] || '선택한';
+  var kids = web ? [] : [{ t: 'bar', pad: [16, 0, 0, 8], title: ttl, btn: '닫기', act: { a: 'call', v: 'rd.close' } }];
   var cum = base, busN = 0, busIdx = {}, exp = [], rows = [];
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // 웹 세부경로 줄(.tdsec-row)과 같은 값: 색 · 아이콘 · 뱃지 · 경유 · 시간대
@@ -247,8 +250,9 @@ function resDetailScreen(route, r, tab, cap) {
         exp.push(si);
         row.act = { a: 'call', v: 'rd.tg.' + si };
         row.ex = true;
-        if (open[si]) {
-          row.op = true;
+        if (web) row.i = si;                                       // 앱이 서버를 거치지 않고 바로 펼치는 구간 번호
+        if (open[si]) row.op = true;
+        if (web || open[si]) {
           var ss = (ty === 1 && Array.isArray(sec.stopSec) && sec.stopSec.length === stops.length) ? sec.stopSec : null, even = secSec * 1000 / (stops.length - 1), cm = 0;
           row.stops = stops.slice(0, 60).map(function (st, k) {
             var off;
@@ -263,13 +267,24 @@ function resDetailScreen(route, r, tab, cap) {
     rows.push(row);
   });
   rows.forEach(function (row, i) { row.pos = rows.length === 1 ? 'o' : i === 0 ? 'f' : i === rows.length - 1 ? 'l' : 'm'; kids.push(row); });
-  var nav = resNavUrls(r);
-  if (nav) kids.push({ t: 'row', pad: [10, 0, 0, 14], gap: 8, kids: [
+  var nav = resNavUrls(r), onRide = !!(r.ride && r.ride.on);
+  if (web) {                                                     // 웹 transitDetailModal: 확정 단추(파랑 → 확정되면 초록) · 위 선 · 카카오맵/네이버지도
+    var foot = [onRide ? { t: 'button', s: '\u2705 ' + optName + ' 경로로 확정됨', size: 15, h: 48, r: 12, bold: true, fill: '#30a14e', line: 'none', tc: '#ffffff', pad: [14, 10, 14, 0], act: { a: 'call', v: 'rd.done' } }
+      : { t: 'button', s: '\u2705 이 경로로 확정하기', size: 15, h: 48, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', pad: [14, 10, 14, 0], act: { a: 'call', v: 'rd.confirm' } }];
+    if (nav) foot.push({ t: 'divider', pad: [0, 0, 0, 0] });
+    else foot[0].pad = [14, 10, 14, 16];
+    if (nav) foot.push({ t: 'row', pad: [14, 12, 14, 16], gap: 8, kids: [
+      { t: 'button', s: '\ud83d\uddfa\ufe0f 카카오맵 길안내', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
+      { t: 'button', s: '\ud83d\uddfa\ufe0f 네이버지도', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
+    var outW = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', bg: 'card', fl: false, head: [{ t: 'shd', title: ttl, act: { a: 'call', v: 'rd.close' } }], body: kids, foot: foot, info: { exp: exp, nav: nav, m: total, tab: tab, opt: optName } };
+    outW.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify([outW.head, kids, foot]));
+    return outW;
+  }
+  if (nav) kids.push({ t: 'row', pad: [14, 10, 14, 14], gap: 8, kids: [
     { t: 'button', s: '카카오맵 길안내', size: 13, h: 46, r: 12, bold: true, fill: '#fee500', line: 'none', tc: '#3a1d1d', act: { a: 'call', v: 'rd.kakao' } },
     { t: 'button', s: '네이버지도', size: 13, h: 46, r: 12, bold: true, fill: '#03c75a', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rd.naver' } }] });
-  var onRide = !!(r.ride && r.ride.on);
-  kids.push(onRide ? { t: 'button', s: '탑승 안내 종료', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.stop' } }
-    : { t: 'button', s: '이 경로로 탑승 시작', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [10, 0, 0, 14], act: { a: 'call', v: 'rd.confirm' } });
+  kids.push(onRide ? { t: 'button', s: '탑승 안내 종료', size: 14, h: 48, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', pad: [14, 10, 14, 14], act: { a: 'call', v: 'rd.stop' } }
+    : { t: 'button', s: '이 경로로 탑승 시작', size: 14, h: 48, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [14, 10, 14, 14], act: { a: 'call', v: 'rd.confirm' } });
   var out = { ok: true, v: RESULT_V, screen: 'rdetail', cover: 'tab', head: [], body: kids, info: { exp: exp, nav: nav, m: total, tab: tab } };
   out.rev = 'd' + RESULT_V + ':' + resHash(JSON.stringify(kids));
   return out;
