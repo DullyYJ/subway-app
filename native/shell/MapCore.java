@@ -92,12 +92,6 @@ public final class MapCore {
         return true;
     }
     /** 주변 정류장 / 즐겨찾기 (웹 _busViewMode). 저장소에 두어 캐시 열쇠가 알아본다. */
-    /** 버스 화면의 칩 줄(주변 정류장 · 즐겨찾기 · 새로고침) — 엔진 mapBusToggle 과 같은 모양. 엔진 화면이 오기 전 뼈대 머리에 미리 깐다(눌러도 같은 행동). */
-    public String busToggleJson() {
-        boolean near = VW_NEAR.equals(busView());
-        return "{\"t\":\"btog\",\"v\":\"p\",\"pad\":[10,12,10,12],\"h\":38,\"items\":[{\"label\":\"\uD83D\uDCCD \uC8FC\uBCC0 \uC815\uB958\uC7A5\",\"on\":" + near + ",\"act\":{\"a\":\"call\",\"v\":\"mp.vw.near\"}},"
-            + "{\"label\":\"\u2B50 \uC990\uACA8\uCC3E\uAE30\",\"on\":" + !near + ",\"act\":{\"a\":\"call\",\"v\":\"mp.vw.fav\"}}],\"rf\":{\"label\":\"\uD83D\uDD04\",\"act\":{\"a\":\"call\",\"v\":\"mp.rf\"}}}";
-    }
     public String busView() { return VW_FAV.equals(st.get(K_BUSVW, VW_NEAR)) ? VW_FAV : VW_NEAR; }
     public int busSel = -1;                                      // 지도·카드에서 고른 정류장 번호(엔진이 핀·카드 강조를 정한다)
     final java.util.Map<Integer, List<String[]>> rts = new java.util.HashMap<Integer, List<String[]>>();       // 정류장 번호 → 줄마다 [노선 id, 번호, 종류] (엔진이 알려 준다)
@@ -197,8 +191,8 @@ public final class MapCore {
         return new ArrayList<String[]>(lastArrNeed);
     }
     // 한 정류장 응답이 잠깐 비어 와도(공공 API 의 일시 빈 응답 · 연달아 부른 제한) 보던 줄이 "도착정보 없음"으로 사라지지 않게:
-    // 새 응답에 도착 값이 하나도 없고 2분 안에 받은 값이 있으면 보던 값을 그대로 둔다(그 시각도 새로 치지 않는다).
-    static final long KEEP_OLD_MS = 120000L;                    // 공공 API 가 비거나 에러 글을 줘도 2분까지는 받아 둔 값을 둔다(웹처럼 사라지지 않게)
+    // 새 응답에 도착 값이 하나도 없고 45초 안에 받은 값이 있으면 보던 값을 그대로 둔다(그 시각도 새로 치지 않는다).
+    static final long KEEP_OLD_MS = 45000L;
     private final java.util.HashMap<String, Long> arrKeyAt = new java.util.HashMap<String, Long>();
     public static boolean hasArr(String b) {
         return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
