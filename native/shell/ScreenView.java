@@ -265,6 +265,7 @@ public class ScreenView extends View {
     }
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
+        try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
         if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
         else if (!lay.bandSig.equals(bandSig)) { bandSig = lay.bandSig; bandX = lay.mkBody && lay.mk != null ? ScreenCore.clamp(lay.mk.x(lay.mk.r) - lay.bandL - lay.bandView / 2f, lay.bandMax()) : 0f; }      // 새 경로면 내 위치(없으면 처음)가 보이게
@@ -411,7 +412,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_BRX && "h".equals(pi.dk)) tapBrh(pi, x / dpr);
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
-                        else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); listener.onAction(a); }
+                        else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); else if (pi.kind == ScreenCore.K_BUTTON && a != null && a.v != null && a.v.startsWith("rh.tab.")) pickRtab(pi); listener.onAction(a); }
                     }
                 } else if (mode == 1 || mode == 2 || mode == 8) {
                     vt.computeCurrentVelocity(1000, maxFling);
@@ -444,6 +445,20 @@ public class ScreenView extends View {
         invalidate();
     }
 
+    /** 경로 방식 탭(최단시간 · 최소환승 · 지하철 · 버스)을 누르면 새 화면이 오기 전에 그 자리에서 먼저 켜 보인다 — 켜진 단추의 모양(색)을 눌린 단추와 맞바꾼다. 서버를 기다리지 않아 웹처럼 즉시 바뀐다. */
+    private void pickRtab(ScreenCore.Item pi) {
+        if (lay == null) return;
+        ScreenCore.Item on = null;
+        java.util.ArrayList<ScreenCore.Item> row = new java.util.ArrayList<ScreenCore.Item>();
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_BUTTON && it.y == pi.y && it.act != null && it.act.v != null && it.act.v.startsWith("rh.tab.")) row.add(it);
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_BUTTON && it.y == pi.y && it.act != null && it.act.v != null && it.act.v.startsWith("rh.tab.")) row.add(it);
+        for (ScreenCore.Item it : row) if (it != pi && it.fill != null && "gold".equals(it.fill.role)) on = it;
+        if (on == null || on == pi) return;
+        ScreenCore.Col f = pi.fill, l = pi.line, t = pi.tc;
+        pi.fill = on.fill; pi.line = on.line; pi.tc = on.tc;
+        on.fill = f; on.line = l; on.tc = t;
+        invalidate();
+    }
     /** 토글 줄 단추를 누르면 새 화면이 오기 전에 먼저 그 단추를 켜 보인다(새로고침 단추는 제외). */
     private void pickBtog(ScreenCore.Item pi) {
         if (lay == null || "r".equals(pi.value)) return;
