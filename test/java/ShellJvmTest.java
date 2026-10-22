@@ -750,7 +750,7 @@ public class ShellJvmTest {
         {
             ShellCore.MemStore sv = new ShellCore.MemStore(); MapCore sm = new MapCore(sv);
             sm.setBusLoc(37.5, 127.0);
-            ok(sm.bodyRequest(23, "dark").contains("\"sel\":-1,\"sv\":1,\"fav\""), "버스 요청에 sv:1(서버가 받아 줄 수 있다)");
+            ok(sm.bodyRequest(23, "dark").contains("\"sel\":-1,\"sv\":1,\"svb\":700,\"fav\""), "버스 요청에 sv:1(서버가 받아 줄 수 있다)");
             sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"tp\":\"<a/>\",\"a0\":\"AAA\",\"BAD KEY\":\"x\"},\"svf\":2}}");
             ok(sm.svServer && sm.svFail == 2 && sm.bodyRequest(23, "dark").contains("\"a0\":\"AAA\"") && sm.bodyRequest(23, "dark").contains("\"tp\":\"<a/>\"") && !sm.bodyRequest(23, "dark").contains("BAD"), "info.bres 를 받은 본문으로 모은다 · 못 받은 수(svf)");
             sm.dropArrivals(); sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"a1\":\"B\"},\"svf\":1}}");
