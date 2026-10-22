@@ -626,7 +626,10 @@ public class ShellActivity extends Activity {
     // 스켈레톤: 캐시도 없고 아직 못 받은 칸에 먼저 보이는 뼈대
     private final java.util.HashSet<ScreenView> skelViews = new java.util.HashSet<ScreenView>();
     private void showSkeleton(ScreenView v, String screen) {
-        try { v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v); }
+        try {
+            final String hj = ShellCore.S_MAPB.equals(screen) && "bus".equals(map.mode()) ? map.busToggleJson() : "";          // 버스 화면은 칩 줄까지 처음부터 — 데이터만 나중에 채운다
+            v.setScreen(parsedGet(ShellCore.skeletonScreen(screen, hj)), false); shownJson.remove(v); skelViews.add(v);
+        }
         catch (Throwable e) { v.clearScreen(); shownJson.remove(v); }
     }
 
