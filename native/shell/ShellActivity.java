@@ -2742,6 +2742,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_DETAIL: openDetailSheet(); break;
             case HomeCore.R_STOP: stopRide(); break;
             case HomeCore.R_SLOT: rideSlot(); break;
+            case HomeCore.R_CONFIRM: startRide(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
                 reloadHome(); break;
