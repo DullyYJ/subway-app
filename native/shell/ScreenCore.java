@@ -230,6 +230,7 @@ public final class ScreenCore {
         public Dlg dlg;                                    // 안내창이면 값이 있다
         public String id = "", rev = "", cover = "chips";
         public List<Node> head = new ArrayList<Node>(), body = new ArrayList<Node>(), foot = new ArrayList<Node>();
+        public boolean fl = true;                          // 아래 고정 줄 맨 위에 가는 선을 그리나(웹 세부경로 시트는 선이 단추 아래에 따로 있다)
         public String anchor = "", bg = "bg";                  // bg: 화면 바탕 색 역할(기본 bg = 페이지 바탕 · card = 카드 안에 놓이는 화면)
         public int skipped = 0, nodes = 0;
         public Node fab;                                   // 화면 아래 가운데에 떠 있는 둥근 단추(웹 .fab '제보 글쓰기')
@@ -546,6 +547,10 @@ public final class ScreenCore {
             n.sub = optStr(m, "sub", "", 80); n.label = optStr(m, "btn", "", 16);
             n.rw = optNum(m, "rw", 0f, 0f, 300f); n.mq = optBool(m, "mq", false);
             if (n.label.length() > 0) n.act = act(m.get("act"), true); else n.act = act(m.get("act"), false);
+        } else if ("shd".equals(t)) {                                                                       // 시트 머리(웹 transitDetailHandle): 손잡이 · 제목 · 동그란 ×
+            pad(m, n);
+            n.title = optStr(m, "title", "", 80); if (n.title.length() == 0) throw new ParseError("shd: title 없음");
+            n.act = act(m.get("act"), true);
         } else if ("sec".equals(t)) {                                                                       // 카드 위 제목줄(웹 .sec): 제목 · (알약) · (가운데 작은 글) · (오른쪽 테두리 단추)
             pad(m, n);
             n.s = optStr(m, "s", "", 30); if (n.s.length() == 0) throw new ParseError("sec: s 없음");
@@ -568,6 +573,7 @@ public final class ScreenCore {
             n.badge = optStr(m, "lab", "", 24); n.name = optStr(m, "path", "", 60); n.tag = optStr(m, "cnt", "", 20); n.title = optStr(m, "time", "", 12); n.sub = optStr(m, "rng", "", 14);
             n.ln = optLong(m, "dep"); n.ln2 = optLong(m, "arr");
             n.big = optBool(m, "ex", false); n.on = optBool(m, "op", false);
+            n.maxlen = (int) optNum(m, "i", -1f, -1f, 60f);                                                  // 앱이 바로 펼치는 구간 번호(없으면 -1: 엔진이 준 펼침 표시를 따른다)
             n.act = n.big ? act(m.get("act"), true) : null;
             if (m.get("stops") != null) {
                 List<Object> sl = asArr(m.get("stops"), "tdrow.stops");
@@ -965,6 +971,7 @@ public final class ScreenCore {
             d.fill = roleOrCss(dm, "fill", ""); d.line = roleOrCss(dm, "line", ""); d.tap = act(dm.get("tap"), false);
             sc.dlg = d;
         }
+        if (m.get("fl") instanceof Boolean) sc.fl = ((Boolean) m.get("fl")).booleanValue();
         sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
@@ -1001,7 +1008,7 @@ public final class ScreenCore {
     public static final int SCENE_MAX = 6000;
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47, K_SHD = 48;
     /** 노선 알약(웹 _linePillHtml): 글자 13 · 좌우 14(숫자 동그라미가 있으면 왼쪽 6) · 동그라미 22 · 동그라미와 글 사이 6 · 높이 27/34. */
     public static final float LP_FS = 13f, LP_NUM_FS = 12f, LP_PADL = 14f, LP_PADR = 14f, LP_PADL_N = 6f, LP_NUM = 22f, LP_NUM_GAP = 6f, LP_H = 27f, LP_H_NUM = 34f;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
@@ -1041,6 +1048,7 @@ public final class ScreenCore {
     // 세부경로 줄(웹 .tdsec-row): 안쪽 여백 13/16 · 레일 34 · 틈 12 · 뱃지 · 경유 글 · 오른쪽 시간
     public static final float TD_PADV = 13f, TD_PADH = 16f, TD_RAIL = 34f, TD_GAP = 12f, TD_BADGE_H = 24f, TD_BADGE_PX = 11f, TD_BADGE_TXT = 13f, TD_CHEV = 19f, TD_CHEV_GAP = 8f,
         TD_PATH = 12f, TD_PATH_LH = 16f, TD_CNT = 11f, TD_CNT_LH = 15f, TD_TIME = 14f, TD_TIME_LH = 18f, TD_RNG = 10f, TD_RNG_LH = 13f, TD_STOP_ROW = 27f, TD_STOP_PAD_L = 60f, TD_STOP_PAD_T = 4f, TD_STOP_PAD_B = 8f, TD_MAXSTOPS = 60;
+    public static final float SHD_TOP = 8f, SHD_HANDLE_H = 5f, SHD_PX = 18f, SHD_X = 28f, SHD_TITLE = 15f;
     public static final float TROW_PX = 14f, TROW_TXT = 12f, TROW_SMALL = 10f, TROW_PILL_PX = 7f, TROW_PILL_H = 18f;
     public static final float SEARCH_H = 44f, SEARCH_BADGE = 20f, SEARCH_BTN = 30f, SEARCH_PADL = 14f, SEARCH_PADR = 8f, SEARCH_GAP = 8f;
     public static final float CARD_PAD = 8f, CARD_IMG_H = 78f, CARD_IMG_GAP = 5f, CARD_NAME_SIZE = 11f, CARD_LH = 1.35f, CARD_TAG_GAP = 6f, CHIP_PADX = 12f;
@@ -1134,6 +1142,7 @@ public final class ScreenCore {
         public float fabW; public String fabLabel = ""; public float[] fabIcon = new float[0]; public Act fabAct;      // 떠 있는 단추(없으면 fabW 0)
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
         public String bg = "bg";                                          // 화면 바탕 색 역할
+        public boolean fl = true;                                         // 아래 고정 줄 맨 위 선
         public Col bgCol, lineCol;                                        // 안내창: 카드 바탕·테두리 색(없으면 null = bg 역할 · 테두리 없음)
         public float dlgR;                                                // 안내창 모서리(dp)
         public float fitW;                                                // 안내창(fit): 가장 긴 글 줄에 맞춘 카드 너비(dp; 0 이면 못 구함)
@@ -1182,7 +1191,7 @@ public final class ScreenCore {
             if (m.kind == K_TOGGLE) return x >= m.sx - 8f && x < m.sx + m.sw + 8f && y >= m.sy - 8f && y < m.sy + m.sh + 8f;
             if (m.kind == K_RHD) return (m.sw > 0f && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f) || (m.on && x >= m.btx - 6f && x < m.btx + RHD_X + 6f && y >= m.bty - 6f && y < m.bty + RHD_X + 6f);      // 머리줄은 두 단추 자리만
             if (m.kind == K_AIH) return m.act != null && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 새로고침 단추만
-            if (m.kind == K_BAR || m.kind == K_SEC) return m.sw > 0f && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
+            if (m.kind == K_BAR || m.kind == K_SEC || m.kind == K_SHD) return m.sw > 0f && x >= m.sx - 6f && x < m.sx + m.sw + 6f && y >= m.sy - 6f && y < m.sy + m.sh + 6f;      // 머리줄은 오른쪽 단추만
             if (m.kind == K_MSG) return m.act != null && x >= m.zoneX - 6f && x < m.zoneX + m.zoneW + 6f && y >= m.zoneY - 6f && y < m.zoneY + m.zoneH + 6f;      // 말풍선은 '신고' 글자 자리만
             return x >= m.x && x < m.x + m.w && y >= m.y && y < m.y + m.h;
         }
@@ -1276,7 +1285,7 @@ public final class ScreenCore {
     private static Layout layout0(Screen sc, float width, Measurer m, String openKey) {
         Layout L = new Layout();
         L.width = width;
-        L.bg = sc.bg;
+        L.bg = sc.bg; L.fl = sc.fl;
         if (sc.dlg != null) { L.dlgR = sc.dlg.r; L.bgCol = sc.dlg.fill.length() > 0 ? col(sc.dlg.fill, null) : null; L.lineCol = sc.dlg.line.length() > 0 ? col(sc.dlg.line, null) : null; }
         // 머리: 칩 줄은 한 줄이라 가로로 놓는다. 머리 노드는 위에서 아래로 쌓는다.
         List<Item> hi = new ArrayList<Item>();
@@ -1945,6 +1954,18 @@ public final class ScreenCore {
             out.add(it);
             return y + 1f + n.padB;
         }
+        if ("shd".equals(n.t)) {                                                     // 웹: padding 8 18 0 · 손잡이 40x5 (아래 8) · 제목 줄(15px 800 · ×28 동그라미) 아래 8
+            float cw = Math.max(60f, innerW - SHD_PX * 2f), tw = Math.max(40f, cw - SHD_X - 8f), lh = SHD_TITLE * 1.3f;
+            List<String> tl = wrap(n.title, tw, SHD_TITLE, true, 2, m);
+            float rowH = Math.max(SHD_X, tl.size() * lh), top = SHD_TOP + SHD_HANDLE_H + 8f;
+            Item it = new Item(); it.kind = K_SHD; it.x = ox; it.y = y; it.w = innerW; it.h = top + rowH + 8f; it.act = n.act;
+            it.lines = tl.toArray(new String[0]); it.size = SHD_TITLE; it.bold = true; it.lineH = lh;
+            it.textX = ox + SHD_PX; it.textY = y + top + (rowH - tl.size() * lh) / 2f;
+            it.sw = SHD_X; it.sh = SHD_X; it.sx = ox + innerW - SHD_PX - SHD_X; it.sy = y + top + (rowH - SHD_X) / 2f;
+            it.bx = ox + (innerW - 40f) / 2f; it.by = y + SHD_TOP;
+            out.add(it);
+            return y + it.h + n.padB;
+        }
         if ("bar".equals(n.t)) {
             float btnW = 0f, btnH = 0f;
             if (n.label.length() > 0) { btnW = m.width(n.label, BAR_BTN, false) + 28f + 2f; btnH = BAR_BTN * BAR_LH + 12f + 2f; }
@@ -2000,9 +2021,11 @@ public final class ScreenCore {
             float timeH = (n.title.length() > 0 ? TD_TIME_LH : 0f) + (n.sub.length() > 0 ? 2f + TD_RNG_LH : 0f);
             float ch = Math.max(TD_RAIL, Math.max(bodyH, timeH));
             float hh = TD_PADV * 2f + ch + 1f;
-            int ns = n.on ? n.items.size() : 0;
+            boolean opn = n.on;
+            if (n.maxlen >= 0 && ok != null && ok.startsWith("td:")) opn = ok.indexOf("," + n.maxlen + ",") >= 0;       // 앱이 바로 펼친 구간(서버를 거치지 않는다)
+            int ns = opn ? n.items.size() : 0;
             float eh = ns > 0 ? TD_STOP_PAD_T + ns * TD_STOP_ROW + TD_STOP_PAD_B : 0f;
-            Item it = new Item(); it.kind = K_TDROW; it.x = ox; it.y = y; it.w = innerW; it.h = hh + eh; it.f1 = hh; it.act = n.act; it.on = n.on; it.pub = n.big;
+            Item it = new Item(); it.kind = K_TDROW; it.x = ox; it.y = y; it.w = innerW; it.h = hh + eh; it.f1 = hh; it.act = n.act; it.on = opn; it.pub = n.big; it.key = n.maxlen >= 0 ? String.valueOf(n.maxlen) : "";
             it.dk = n.key; it.gk = n.value; it.ln = n.ln; it.ln2 = n.ln2;
             it.ac = col(n.accent, new Col("sub", 0)); it.lc = col(n.bg, new Col("border", 0)); it.dc = col(n.ob, new Col("card2", 0)); it.fill = col(n.fill, new Col("card2", 0)); it.line = col(n.line, new Col("sub", 0)); it.tc = col(n.tc, new Col("sub", 0));
             it.sx = ox + TD_PADH + TD_RAIL / 2f;                                     // 레일 가운데 x
