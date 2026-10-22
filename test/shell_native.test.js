@@ -140,7 +140,7 @@ function findAndroidJar() {
     assert.ok(/setSourceAge\(am > 0L/.test(v) && /diskIdx\.put\(diskName\(key\), System\.currentTimeMillis\(\)\)/.test(v), '캐시 화면은 받은 뒤 흐른 만큼 줄어 있다');
     assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); brResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /> BUS_POLL_MS/.test(v), '앞으로 돌아오면 8초 넘었을 때 바로 다시 받는다');
     assert.ok(/if \(b == null\) store\.put\(ShellCore\.K_TAB, ShellCore\.DEFAULT_TAB\)/.test(v), '새로 켜면 홈부터');
-    assert.ok(/kind != ScreenCore\.K_SWAP\) drawItem/.test(sv) && /kind == ScreenCore\.K_SWAP\) drawItem/.test(sv), '교환 단추는 구분선 위에 그린다');
+    assert.ok(/kind == ScreenCore\.K_SWAP\) continue;/.test(sv) && /kind == ScreenCore\.K_SWAP\) drawItem/.test(sv), '교환 단추는 구분선 위에 그린다');
     const hi = sv.slice(sv.indexOf('private void hideInput()'), sv.indexOf('private void syncInput()'));
     assert.ok(!/endEdit\(\)|blurInput\(\)/.test(hi), '검색칸 숨기기가 글자 입력칸 편집을 끝내지 않는다');
   });
@@ -323,7 +323,7 @@ function findAndroidJar() {
   });
   await t('역 팝업 위로 끌면 시간표 · 아래로 끌면 닫힘(s140): 박스가 끌기가 확정된 순간에만 가로채고 한 번만 반응한다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), d = a.slice(a.indexOf('private android.view.View stnSheetBox('), a.indexOf('private void mapSheetAct('));
-    assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
+    assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d - swapOff\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
     assert.ok(/ShellCore\.S_MAPSTN\.equals\(sheetName\)/.test(d) && /fired = true/.test(d) && /return false;/.test(d), '역 팝업일 때만 · 한 번만 · 평소엔 가로채지 않는다');
   });
   await t('시간표를 내리면 역 팝업이 되돌아옴 · 지도는 시트가 덮은 만큼을 빼고 역을 맞춤(s155)', () => {
@@ -341,6 +341,13 @@ function findAndroidJar() {
     assert.ok(/atTop = e\.getY\(\) < 64f \* dpr \|\| sv\.scrollPos\(\) <= 0\.5f/.test(a), '세부경로: 목록이 맨 위면 어디를 잡아도 아래로 끌어 닫는다');
     assert.ok(/if \(!shown\) showSkeleton\(body, ShellCore\.S_MAPB\);\s*\/\/[^\n]*\n\s*syncMapView\(\);/.test(a) && /view = "bus"\.equals\(mode\(\)\) \? "bus" : ""/.test(mc), '탭을 누르면 뼈대 · 노선도 뷰는 바로 내림');
     assert.ok(/brRetryN < 3/.test(a) && /busRetryN < 3/.test(a) && /busBadFetch = badN/.test(a), '노선 상세 · 도착정보는 비면 세 번까지 조용히 다시');
+  });
+  await t('실기기 4건(s157): 경로 카드 안 타임라인(가로 밀림 · 내 위치 점) · 시간표를 내리면 그 높이에서 역 팝업 재생성 · 정류장 도착정보 병렬 · 먼저 온 곳부터', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n\s*float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
+    assert.ok(/mode = 8/.test(sv) && /bandX = ScreenCore\.clamp\(bandX - dx \/ dpr, lay\.bandMax\(\)\)/.test(sv) && /cv\.clipRect\(bit\.cl, bit\.y - 4f, bit\.cr/.test(sv) && /pulsing = lay\.mkBody \? pulsingB : drawMk/.test(sv), '그 줄만 가로로 밀고(세로로 쓸면 목록) 틀 안에 자르고 마커도 같이 민다');
+    assert.ok(/private boolean stationNow\(float tr\)/.test(a) && /d >= to - from && stationNow\(d - \(to - from\)\)\) swapOff = to - from/.test(a) && /swapOff = 0f; top0/.test(a), '시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다');
+    assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /a < 3 && u\.length\(\) > 0/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
   });
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
