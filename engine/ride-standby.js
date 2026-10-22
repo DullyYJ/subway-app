@@ -103,6 +103,66 @@ var RS_CHARS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
 function rsChar(at) { return RS_CHARS[Math.abs(Math.floor((+at || 0) / 1000)) % RS_CHARS.length]; }
 function rsClampTxt(s, n) { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
+// ── 탑승 시트(앱 화면 · 오버레이 공통): 환승 구간 승차 ───────────────────────────────────────────
+// 웹 _rsLegs · _rsNotDeparted · _rsAlightGps · _rsPress 의 계산을 엔진으로 옮긴 것. 첫 구간은 위(rsWait)가 맡고, 둘째 구간부터는 여기서 '환승 대기'(st.xw)를 만든다.
+var RS_LEAD_MS = 120000;     // 도착 2분 전부터 시트를 올린다
+var RS_EARLY_MS = 90000;     // 도착 1분 반보다 일찍 누른 것은 '예약'
+var RS_SHRINK_MS = 180000;   // 출발 3분이 지나도 안 눌렀으면 알약으로 줄인다
+var RS_ALIGHT_M = 150;       // 앞 구간 하차를 못 잡았어도 위치가 다음 승차 지점 150m 안에서 멈춰 있으면 내린 것으로 본다
+// 노선(모드·노선명)이 바뀔 때마다 한 구간: [{k, bi(승차 노드), ai(하차 노드), mode, line, name}]
+function rsLegsOf(eta) {
+  var nodes = (eta && eta.nodes) || [], out = [], cur = null, i, n, mode, ln;
+  for (i = 1; i < nodes.length; i++) {
+    n = nodes[i];
+    if (!n || n.isWalk || !(n.isSub || n.isBus)) { cur = null; continue; }
+    mode = n.isSub ? 'sub' : 'bus'; ln = n.lineName || '';
+    if (cur && cur.mode === mode && cur.line === ln) cur.ai = i;
+    else { cur = { k: out.length, bi: i, ai: i, mode: mode, line: ln, name: n.name || '' }; out.push(cur); }
+  }
+  return out;
+}
+function rsMaxPass(eta) { var ps = (eta && eta.passes) || [], m = -1, i; for (i = 0; i < ps.length; i++) if (ps[i] && ps[i].idx > m) m = ps[i].idx; return m; }
+function rsAlightGps(st, tr, bi) {
+  var stops = st.stops || [], s = null, i;
+  for (i = 0; i < stops.length; i++) if (stops[i].i === bi) { s = stops[i]; break; }
+  if (!s || !tr.length || !isFinite(s.lat) || !isFinite(s.lng)) return false;
+  var q = tr[tr.length - 1], o = null;
+  if (rsHav(q[1], q[2], s.lat, s.lng) > RS_ALIGHT_M) return false;
+  for (i = tr.length - 2; i >= 0; i--) if (q[0] - tr[i][0] >= 20000) { o = tr[i]; break; }
+  if (!o || q[0] - o[0] > 120000) return false;
+  return rsHav(o[1], o[2], q[1], q[2]) / ((q[0] - o[0]) / 1000) <= 2.5;
+}
+// 눌러서(또는 예약 시각이 되어) 그 구간 차량을 탔다고 기록한다. 되돌릴 때 쓸 이전 통과 기록을 돌려준다.
+function rsXCommit(st, i, now) {
+  var eta = st.eta, passes = eta.passes = eta.passes || [], hit = -1, k;
+  for (k = 0; k < passes.length; k++) if (passes[k].idx === i) { hit = k; break; }
+  var prev = hit >= 0 ? passes[hit] : null, np = { idx: i, ms: now, src: 'gps' };
+  if (hit >= 0) passes[hit] = np; else passes.push(np);
+  (st.rsDone = st.rsDone || {})[i] = 1;
+  delete st.xw; delete st.xPend; st.rsOpen = 0;
+  return prev;
+}
+// 환승 대기: 아직 안 탄 첫 환승 구간이 있고 앞 구간을 내렸으면 st.xw = {i,k,mode,line,name,arrMs,seen,shr}. 예약(xPend)은 그 시각이 되면 확정한다.
+function rsXwait(st, tr, now, notes) {
+  var eta = st.eta;
+  if (st.wait || !eta) { delete st.xw; delete st.xPend; return; }
+  var legs = rsLegsOf(eta), pm = rsMaxPass(eta), L = null, i, done = st.rsDone || {};
+  for (i = 1; i < legs.length; i++) { if (pm >= legs[i].bi || done[legs[i].bi]) continue; L = legs[i]; break; }
+  if (!L) { delete st.xw; delete st.xPend; return; }
+  var dep = (st.etaMs && st.etaMs[L.bi] != null && isFinite(st.etaMs[L.bi])) ? st.etaMs[L.bi] : null;
+  if (dep == null) { var sp = (st.stops || []).filter(function (q) { return q.i === L.bi; })[0]; dep = sp && isFinite(sp.arrMs) ? sp.arrMs : null; }
+  var prevAt = st.etaMs && st.etaMs[L.bi - 1] != null && isFinite(st.etaMs[L.bi - 1]) ? st.etaMs[L.bi - 1] : null;      // 웹 _timeMaxIdx: 시각표상 앞 구간 하차 시각이 지났으면 내린 것으로 본다
+  if (dep == null || !(pm >= L.bi - 1 || (prevAt != null && prevAt <= now) || rsAlightGps(st, tr, L.bi))) { delete st.xw; if (st.xPend && st.xPend.i !== L.bi) delete st.xPend; return; }
+  var keep = st.xw && st.xw.i === L.bi ? st.xw : null;
+  st.xw = { i: L.bi, k: L.k, mode: L.mode, line: L.line, name: L.name, arrMs: dep, seen: keep ? !!keep.seen : false, shr: keep ? !!keep.shr : false };
+  if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now); notes.push('환승 예약 확정(' + L.bi + '번)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
+}
+function rsContrast(hex) {
+  var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return '#ffffff';
+  var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 170 ? '#121214' : '#ffffff';
+}
+
 // 앱이 알려 준 추천 줄 · 닫기 · 탑승 줄 손짓을 상태에 반영한다(승차 대기 판정 직후).
 function rsActs(st, req, now, notes) {
   var rc = req.rc, eta = st.eta, k, w, passes;
@@ -113,8 +173,28 @@ function rsActs(st, req, now, notes) {
   }
   if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
   var a = req.act;
-  if (a === 'open' || a === 'pill') st.rsOpen = now + 20000;
-  else if (a === 'close') st.rsOpen = 0;
+  if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; }
+  else if (a === 'close') { st.rsOpen = 0; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // 도착 2분 안에 닫은 차량은 대기 알약으로(다시 올리지 않음) · 2분보다 먼 때 닫은 것은 2분 안이 되면 자동으로 다시 올라온다
+  else if (a === 'press' && !st.wait && st.xw && !st.xPend) {
+    var x = st.xw;
+    if (x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // 도착 1분 반보다 일찍 누른 것은 예약만(마커가 튀지 않게) — 그 시각이 되거나 탄 증거가 잡히면 확정
+      st.xPend = { i: x.i, at: now }; st.rsOpen = 0; x.seen = true;
+      st.rsUndo = { w: { i: x.i }, x: true, pend: true, prev: null, until: now + 20000 };
+      notes.push('환승 예약(' + x.i + '번 · 도착 ' + Math.round((x.arrMs - now) / 1000) + '초 전)');
+    } else {
+      st.rsUndo = { w: { i: x.i }, x: true, prev: rsXCommit(st, x.i, now), until: now + 20000 };
+      notes.push('환승 수동 확정(' + x.i + '번)');
+    }
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && st.rsUndo.x) {
+    var ux = st.rsUndo, pxs = eta.passes || [], ki;
+    if (ux.pend) delete st.xPend;
+    else {
+      for (ki = pxs.length - 1; ki >= 0; ki--) if (pxs[ki].idx === ux.w.i) { if (ux.prev) pxs[ki] = ux.prev; else pxs.splice(ki, 1); }
+      if (st.rsDone) delete st.rsDone[ux.w.i];
+    }
+    delete st.rsUndo; st.rsOpen = now + 20000; rsXwait(st, st.trail || [], now, notes); if (st.xw) { st.xw.shr = false; st.xw.seen = true; }
+    notes.push('환승 확정 되돌림');
+  }
   else if (a === 'press' && st.wait) {
     w = st.wait; passes = eta.passes = eta.passes || [];
     var hit = -1;
@@ -124,26 +204,64 @@ function rsActs(st, req, now, notes) {
     if (hit >= 0) passes[hit] = np; else passes.push(np);
     eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
     notes.push('승차 수동 확정(오버레이 탑승 버튼)');
-  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until) {
+  } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) {
     var u = st.rsUndo, ps = eta.passes || [];
     for (k = ps.length - 1; k >= 0; k--) if (ps[k].idx === u.w.i) { if (u.prev) ps[k] = u.prev; else ps.splice(k, 1); }
     eta.boarded = false; eta.notDeparted = true; st.wait = u.w; delete st.rsUndo; st.rsOpen = 0;
     notes.push('승차 확정 되돌림(오버레이)');
   }
 }
-// 오버레이 탑승 줄: 대기 중이면 출발 2분 전부터(또는 손잡이·알약을 눌러 20초) 'board', 아니면 'wait'(알약). 탑승을 누른 직후 20초는 'undo'. 아니면 'hidden'.
+// 탑승 줄(앱 탑승 시트 · 오버레이 공통): 대기 중이면 도착 2분 전부터(또는 손잡이·알약을 눌러 20초) 'board', 아니면 'wait'(알약). 탑승을 누른 직후 20초는 'undo'. 아니면 'hidden'.
+//   앱 시트가 그릴 값: kick(곧 도착 문구) · mode('sub'|'bus') · chip(노선 글) · cbg/cfg(노선 색) · bar(출발 뒤 줄어드는 막대 0~1, 없으면 -1) · x(환승 구간이면 1) · late(출발 3분 뒤)
+function rsKick(dt, late, x) {
+  if (late) return x ? '환승하셨다면 눌러 주세요' : '타셨다면 눌러 주세요';
+  if (dt > 150000) return x ? '환승 예정' : '탑승 예정';
+  if (dt > 90000) return '2분 안에 도착';
+  if (dt > 45000) return '1분 안에 도착';
+  if (dt > -30000) return '곧 도착해요';
+  return '도착했어요';
+}
 function rsRsState(st, r, now) {
-  var base = { bar: -1, cbg: '', cfg: '#0a84ff', ch: '', um: '' };
+  var base = { bar: -1, cbg: '', cfg: '#0a84ff', ch: '', um: '', kick: '', mode: '', chip: '', x: 0, late: false };
   var mk = function (stt, k, nm, bt) { var o = {}, q; for (q in base) o[q] = base[q]; o.st = stt; o.k = k; o.nm = nm; o.bt = bt; return o; };
   var nodes = (st.eta && st.eta.nodes) || [];
+  var rich = function (o, i, dep, x, late) {
+    var n = nodes[i] || {}, line = n.lineName || '', dt = dep - now, cells = (st.ovl && st.ovl.cells) || [], map = (st.ovl && st.ovl.map) || [], j, col = '';
+    for (j = 0; j < map.length; j++) if (map[j] === i) { col = (cells[j] && cells[j].dc) || ''; break; }
+    o.mode = n.isBus ? 'bus' : 'sub'; o.x = x ? 1 : 0; o.late = !!late;
+    o.chip = n.isBus ? (line + (/번$/.test(line) ? '' : '번')) : line;
+    if (col) { o.cbg = col; o.cfg = rsContrast(col); }
+    var hm = r.arr && r.arr[i] ? r.arr[i] : '';
+    o.kick = rsKick(dt, late, x) + (hm ? ' · ' + hm : '');
+    if (dt <= 0 && !late) o.bar = Math.max(0, Math.min(1, 1 - (-dt) / RS_SHRINK_MS));
+    o.nm = (n.name || '') + (!n.isBus && n.name && !/역$/.test(n.name) ? '역' : '');
+    return o;
+  };
   if (st.rsUndo && now < st.rsUndo.until) {
-    var uw = st.rsUndo.w, un = (nodes[uw.i] && nodes[uw.i].name) || '';
-    return mk('undo', '탑승으로 기록했어요', un, '되돌리기');
+    var u0 = st.rsUndo, uw = u0.w, un = (nodes[uw.i] && nodes[uw.i].name) || '';
+    var uo = mk('undo', u0.x ? (u0.pend ? '환승 예정으로 기록했어요' : '환승 완료로 기록했어요') : '탑승으로 기록했어요', un, '되돌리기');
+    if (nodes[uw.i]) { rich(uo, uw.i, now, !!u0.x, false); uo.k = u0.x ? (u0.pend ? '환승 예정으로 기록했어요' : '환승 완료로 기록했어요') : '탑승으로 기록했어요'; uo.bar = -1; }
+    return uo;
   }
   if (st.wait) {
     var w = st.wait, nm = (nodes[w.i] && nodes[w.i].name) || '', hm = r.arr && r.arr[w.i] ? r.arr[w.i] : '';
-    var open = now >= w.arrMs - 120000 || (st.rsOpen || 0) > now;
-    return mk(open ? 'board' : 'wait', nm + (hm ? ' ' + hm : '') + ' 출발', nm, '탑승');
+    var open = now >= w.arrMs - RS_LEAD_MS || (st.rsOpen || 0) > now;
+    var wo = mk(open ? 'board' : 'wait', nm + (hm ? ' ' + hm : '') + ' 출발', nm, '탑승');
+    if (nodes[w.i]) rich(wo, w.i, w.arrMs, false, now - w.arrMs >= RS_SHRINK_MS);
+    return wo;
+  }
+  if (st.xw) {
+    var x = st.xw, dt = x.arrMs - now, late = -dt >= RS_SHRINK_MS, forced = (st.rsOpen || 0) > now, stt;
+    if (st.xPend) stt = 'wait';
+    else if (forced) { stt = 'board'; x.seen = true; }
+    else if (dt > RS_LEAD_MS || late) stt = x.seen ? 'wait' : 'hidden';
+    else if (x.shr) stt = 'wait';
+    else { stt = 'board'; x.seen = true; }
+    if (stt === 'hidden') return { st: 'hidden' };
+    var xn = (nodes[x.i] && nodes[x.i].name) || '', xh = r.arr && r.arr[x.i] ? r.arr[x.i] : '';
+    var xo = mk(stt, xn + (xh ? ' ' + xh : '') + ' 출발', xn, '환승완료');
+    rich(xo, x.i, x.arrMs, true, late);
+    return xo;
   }
   return { st: 'hidden' };
 }
@@ -412,6 +530,7 @@ function rideStandby(req) {
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
   rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
+  rsXwait(st, tr, now, notes);                    // 1.55) 환승 구간 승차 대기
   rsActs(st, req, now, notes);                    // 1.6) 앱이 알려 준 추천 줄 · 닫기 · 오버레이 탑승 손짓
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
@@ -546,4 +665,4 @@ function handleRideStandby(request) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
