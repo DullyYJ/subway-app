@@ -881,7 +881,9 @@ public class ScreenView extends View {
 
     // ───────────── 버스: 토글 줄 · 정류장 카드(내용·모양·색은 엔진, 앱은 그리기) ─────────────
     private static final int C_BLUE = 0xFF0066FF, C_SOON = 0xFFE74C3C, C_NOARR = 0xFFA0A0A5;
-    private boolean bcAnim;
+    private boolean bcAnim, arAnim;
+    private long arSq, arT0;                                   // 버튼 줄 전환 연출: 마지막으로 본 전환 시각 · 시작한 시계
+    private final float[] arF = new float[20];
     // ── 새 말풍선 등장 애니메이션(웹 .chat-bubble.anim-l/anim-r: 0.34초 · 타인은 왼쪽에서, 내 글은 오른쪽에서 24px 미끄러지며 나타남). 처음 그린 화면·다른 화면으로 바뀐 뒤 처음에는 쓰지 않는다(기존 글은 다시 움직이지 않음).
     private final java.util.HashSet<String> msgSeen = new java.util.HashSet<String>();
     private final java.util.HashMap<String, Long> msgBorn = new java.util.HashMap<String, Long>();
@@ -1550,7 +1552,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1618,7 +1620,7 @@ public class ScreenView extends View {
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -1679,6 +1681,7 @@ public class ScreenView extends View {
             case ScreenCore.K_CARD: drawCard(cv, it); break;
             case ScreenCore.K_TEXT: drawTextBlock(cv, it); break;
             case ScreenCore.K_BUTTON: drawButton(cv, it); break;
+            case ScreenCore.K_ROWANIM: drawRowAnim(cv, it); break;
             case ScreenCore.K_BOX: drawBox(cv, it); break;
             case ScreenCore.K_SEARCH: drawSearch(cv, it); break;
             case ScreenCore.K_PANEL: drawPanel(cv, it); if (it.pub) drawGlow(cv, it); break;
@@ -2049,6 +2052,29 @@ public class ScreenView extends View {
             cv.drawText(it.lines[k], x, base(it.y + k * it.lineH, it.lineH, k), tp);
         }
         tp.setTextAlign(Paint.Align.LEFT);
+    }
+
+    /** 경로 카드 버튼 줄의 전환 연출(웹 RowNative): 최종 모양 위에 카드색 덮개를 얹고 네 조각을 엔진이 정한 종류·시간·곡선대로 움직인다. 방금 일어난 전환만 그리고, 아니면 아무것도 안 그린다. */
+    private void drawRowAnim(Canvas cv, ScreenCore.Item it) {
+        if (it.subs == null) return;
+        long wall = System.currentTimeMillis();
+        if (it.sq != arSq) { arSq = it.sq; arT0 = ActRowCore.fresh(it.sq, wall) ? SystemClock.uptimeMillis() - Math.max(0L, wall - it.sq) : 0L; }
+        if (arT0 == 0L) return;
+        long el = SystemClock.uptimeMillis() - arT0;
+        if (el >= it.ams) return;
+        ActRowCore.frame(it.ak, ActRowCore.ease(Math.max(0f, el) / (float) it.ams, it.aez), it.w, it.h, it.gap, arF);
+        arAnim = true;
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        cv.save(); cv.clipRect(rf);
+        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac, pal[R_CARD])); cv.drawRect(rf, p);
+        for (int k = 3; k >= 0; k--) {                                    // 옛 칸 → 새 칸 → 가운데 → 왼쪽 순(웹과 같다)
+            int sl = k == 3 ? 3 : (k == 2 ? 2 : (k == 1 ? 1 : 0)), b = sl * 5;
+            ScreenCore.Item sub = it.subs[sl];
+            if (sub == null || arF[b] == 0f) continue;
+            sub.x = it.x + arF[b + 1]; sub.y = it.y + arF[b + 2]; sub.w = arF[b + 3]; sub.h = arF[b + 4];
+            drawButton(cv, sub);
+        }
+        cv.restore();
     }
 
     private void drawButton(Canvas cv, ScreenCore.Item it) {
