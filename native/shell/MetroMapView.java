@@ -179,16 +179,20 @@ public class MetroMapView extends View {
     public boolean ensureVisible(String name) {
         int op = data.findLabel(name);
         if (op < 0) return false;
-        if (cam.isVisible(data.labelCx(op), data.labelCy(op), 28f * density)) return true;
+        float m = 28f * density, sx = cam.screenX(data.labelCx(op)), sy = cam.screenY(data.labelCy(op));
+        if (sx >= m && sx <= cam.viewW - m && sy >= m && sy <= cam.viewH - cover - m) return true;        // 아래를 시트가 덮은 만큼은 안 보이는 자리로 친다
         animateTo(op, cam.scale, false, false);
         return true;
     }
+    /** 아래에서 올라온 시트가 덮은 높이(px). 웹은 지도 사각형을 시트 위쪽 끝까지로 줄여 역이 그 안에 오게 한다 — 앱은 지도를 크게 둔 채 같은 보이는 영역으로 가운데를 맞춘다. 0 이면 덮개 없음. */
+    public void setCover(float px) { cover = Math.max(0f, px); }
+    private float cover;
 
     private void animateTo(final int op, final float targetScale, final boolean notify, final boolean flash) {
         stopMotion();
         final float x = data.labelCx(op), y = data.labelCy(op);
         final float s0 = cam.scale, sx0 = cam.screenX(x), sy0 = cam.screenY(y);
-        final float s1 = targetScale, sx1 = cam.viewW / 2f, sy1 = cam.viewH / 2f;
+        final float s1 = targetScale, sx1 = cam.viewW / 2f, sy1 = (cam.viewH - cover) / 2f;
         anim = ValueAnimator.ofFloat(0f, 1f);
         anim.setDuration(380L);
         anim.setInterpolator(new DecelerateInterpolator(1.6f));
