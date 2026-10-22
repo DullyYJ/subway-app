@@ -49,6 +49,10 @@ public final class HomeCore {
     public String routeRaw = "", resTab = "fast", resA = "", resB = "";
     public long resRb = 0, resBt = -1;
     public int resRev = 0;                                       // 결과가 바뀔 때마다 오른다(화면 캐시 열쇠)
+    public int dataRev = 0;                                      // 경로 자료(받은 경로 · 공지 · 탑승 추적)가 바뀔 때만 오른다 — 칩(최단시간 · 최소환승 · 지하철 · 버스)만 바꿀 때는 그대로(탭별 결과를 미리 받아 두는 열쇠)
+    public void touch() { resRev++; dataRev++; }
+    /** 탭만 바꿔 본 결과 요청(미리 받기용). 상태는 건드리지 않는다. */
+    public String resultRequestTab(Env env, int cap, String theme, String tab) { String keep = resTab; resTab = tab; try { return resultRequest(env, cap, theme, 0); } finally { resTab = keep; } }
     public boolean hasRoute() { return routeRaw.length() > 2; }
     // 결과 카드의 보조 사실: 지난 탐색 질의(장거리 다시 고르기에 쓴다) · 다시 받은 장거리 응답 · 공지/제보 원자료(서버가 준 글 그대로)
     public String lastQs = "", ld2Raw = "", offRaw = "", alRaw = "", noteKey = "";
@@ -82,19 +86,19 @@ public final class HomeCore {
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {
         String t = raw == null ? "" : raw.trim();
         if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
-        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; resRev++; ld2Raw = ""; detOpen.clear(); routeId++;
+        routeRaw = t; resA = a == null ? "" : a; resB = b == null ? "" : b; resBt = bt; resRb = rb; resTab = "fast"; touch(); ld2Raw = ""; detOpen.clear(); routeId++;
         return true;
     }
-    public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; resRev++; }
+    public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; touch(); }
     /** 같은 경로를 다시 받은 응답으로 바꾼다(보던 탭은 그대로). */
     public boolean replaceRoute(String raw) {
         String t = raw == null ? "" : raw.trim();
         if (t.length() < 2 || t.charAt(0) != '{' || t.charAt(t.length() - 1) != '}') return false;
-        routeRaw = t; ld2Raw = ""; resRev++;
+        routeRaw = t; ld2Raw = ""; touch();
         return true;
     }
     /** 공지·제보 원자료를 넣는다(60초 안에 같은 노선이면 다시 받지 않는다). */
-    public void setNotes(String key, String off, String al, long now) { noteKey = key; offRaw = off == null ? "" : off; alRaw = al == null ? "" : al; noteAt = now; resRev++; }
+    public void setNotes(String key, String off, String al, long now) { noteKey = key; offRaw = off == null ? "" : off; alRaw = al == null ? "" : al; noteAt = now; touch(); }
     public String secKey() { StringBuilder b = new StringBuilder(); for (String x : resSec) b.append(x).append(','); return b.toString(); }
     public boolean needNotes(long now) { return hasRoute() && !resSec.isEmpty() && (!secKey().equals(noteKey) || now - noteAt > 60000); }
     /** 결과 화면 사실 { data, tab, a, b, bt, rb, now, tz, th, fav, … } (경로가 없으면 null 글). 결과 화면과 홈 카드 묶음이 같은 것을 쓴다. */
@@ -158,7 +162,7 @@ public final class HomeCore {
     public boolean setRide(String ride, String lv) {
         String r = ride == null ? "" : ride, l = lv == null ? "" : lv;
         if (r.equals(rideJson) && l.equals(lvJson)) return false;
-        rideJson = r; lvJson = l; resRev++;
+        rideJson = r; lvJson = l; touch();
         return true;
     }
     /** 지금 보는 경로로 탑승 안내 중인가. */
