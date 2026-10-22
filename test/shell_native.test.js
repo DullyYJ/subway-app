@@ -275,6 +275,13 @@ function findAndroidJar() {
     assert.ok(/private void applyFocus\(\)/.test(sv) && /fcDone/.test(sv) && /optStr\(m, "fc"/.test(sc), '엔진이 표시한 줄(fc)로 새 열쇠일 때 한 번 스크롤');
     assert.ok(/private void hcFixFrom\(/.test(v) && /lastLocFresh\(store, 6L \* 3600000L/.test(v) && /locf\.lastKnown\(lkMs/.test(v) && /staleCards/.test(v), '위치 3단(저장값 → 기기가 아는 위치 → 새 위치) · 지난 홈 카드를 먼저 그림(SWR)');
   });
+  await t('탭 이동·버스 복귀(s151): 탭 막대는 10분 안이면 다시 안 받음 · 새 화면이 살짝 떠올라 자리잡음 · 버스 탭 복귀는 도착정보만 조용히 · 새 버스 줄은 스프링', async () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/tabsAt\.get\(ck\)/.test(v) && /< 600000L\) return;/.test(v), '하단 탭 막대 재요청 생략');
+    assert.ok(/private void tabSettle\(\)/.test(v) && /loadSlot\(i, false\);\s*tabSettle\(\);/.test(v), '탭 전환 정착 연출');
+    assert.ok(/private boolean busReturnQuiet\(\)/.test(v) && /keep && !keep0 && busReturnQuiet\(\)/.test(v) && /map\.speculativeNeed\(\)\.isEmpty\(\)/.test(v), '버스 탭 복귀: 정류장 · 엔진 왕복 없이 도착정보만');
+    assert.ok(/private static float spring\(float f\)/.test(sv) && /ROW_SPRING_MS/.test(sv) && /spring\(f\)/.test(sv), '새 버스 줄 스프링');
+  });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/srcDirs = \['\.\.\/\.\.\/native\/shell'\]/.test(g), '소스 경로');
