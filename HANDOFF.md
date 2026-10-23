@@ -2308,3 +2308,8 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - `locKick()`: 버스 본문을 처음 그릴 때(`loadMapBodyFast`) · `busLocCheck` 에서 위치를 한 번 더 확인(lastKnown 0.1초 → 새 위치 1초). `seedMapLoc` 은 이미 위치가 있어도 방금 받은 더 새 위치가 165m 넘게 다르면 그쪽으로.
 - **캐시 열쇠에 위치 칸**: `ShellCore.mapKey(screen, mode, st, cell)` — 버스 '주변'만 `|near|bsc_<위도*1000>_<경도*1000>`(즐겨찾기는 그대로). `MapCore.primary`(실제 화면 상태기만) 가 `setBusLoc` 때 `bus_cell` 저장 → `cacheKey` 가 따라간다. 미리 받기(`pfBusRun` · `warmLocTabs` · `prefetchTabs`)는 그 위치 칸 열쇠로 넣고 확인한다(`MapCore.cellOf`). 응답이 오는 사이 칸이 바뀌어도 그 동네 화면으로 저장되게 `rekeyMapBody()`. 칸별 캐시는 최근 6곳만(`trimBusKeys`).
 - 시험: `shell_native` 45(s179 정적 + ShellJvmTest 열쇠) — 기기에서는 못 돌려 봤다. 새 APK 필요.
+
+## s180 (정류장 번호 서버↔API 전국 대조)
+- 전국 32곳(D1 /bus-stops vs TAGO 좌표 정류장)을 돌려 비교: 부산·대구·광주·대전·울산·수원·성남·용인·전주·청주·제주·포항·천안·김해 번호 100% 일치. 인천(city 23)만 다름: D1 `ICB1…`·`GGB1…` ↔ TAGO `ICB3…`(도착정보 조회 실증: 원래 번호 0건, ICB3 변환 시 부평 10건 등).
+- `mapD1Stops`: city_code 23 이면 `^(ICB|GGB)1` → `ICB3`(s178 은 ICB1 만). 경기 GGB2… 는 그대로. 서울(GGB1·cc11)은 TOPIS 가 우선이라 영향 없음.
+- ENGINE_VERSION route-v2-2026-10-23s180 · 테스트 1건 추가. 엔진 변경 → route-v2 에 붙여넣기 필요.
