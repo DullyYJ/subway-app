@@ -799,6 +799,16 @@ public class ShellJvmTest {
             for (int i = 0; i < 12; i++) { bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"s" + i + "\",\"id\":\"SEOUL:" + (10 + i) + "\",\"src\":\"topis\"}"); bm.act("mp.fv.0", null); }
             bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"x\",\"id\":\"SEOUL:99\",\"src\":\"topis\"}");
             ok(bm.act("mp.fv.0", null) == MapCore.R_NONE && "즐겨찾기는 최대 12개".equals(bm.toast) && !bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:99"), "즐겨찾기는 12곳까지");
+            {   // s179: 버스 '주변' 화면 캐시는 위치 칸마다 따로 — 다른 동네의 정류장이 먼저 뜨지 않는다
+                ShellCore.MemStore kcs = new ShellCore.MemStore();
+                MapCore kcm = new MapCore(kcs); kcm.primary = true; kcm.setBusLoc(37.5827, 126.7078);
+                MapCore ghost = new MapCore(kcs); ghost.setBusLoc(35.1796, 129.0756);
+                String k1 = ShellCore.mapKey("mapb", "bus", kcs);
+                kcm.setBusLoc(35.1796, 129.0756);
+                String k2 = ShellCore.mapKey("mapb", "bus", kcs);
+                ok(k1.equals("mapb|bus|seoul|ALL|near|bsc_37583_126708") && k2.equals("mapb|bus|seoul|ALL|near|bsc_35180_129076") && !k1.equals(k2) && MapCore.cellOf(35.1796, 129.0756).equals("bsc_35180_129076")
+                    && ShellCore.mapKey("mapb", "bus", kcs, "bsc_1_2").endsWith("|near|bsc_1_2") && ShellCore.diskTtl(k1) == ShellCore.BUS_FRESH_MS && "map".equals(ShellCore.expectId(k1)), "버스 화면 열쇠에 위치 칸(주 상태기만 적는다 · 유령 상태기는 저장소를 건드리지 않는다)");
+            }
             ok(bm.act("mp.vw.fav", null) == MapCore.R_BUS_VIEW && bm.busView().equals("fav") && ShellCore.mapKey("mapb", "bus", bsv).endsWith("|fav") && ShellCore.mapKey("maph", "bus", bsv).endsWith("|ALL") && bm.act("mp.vw.fav", null) == MapCore.R_NONE, "즐겨찾기로 전환(캐시 열쇠도 따로 · 머리는 그대로)");
             ok(bm.act("mp.rf", null) == MapCore.R_BUS_REF && bm.bodyRequest(18, "dark").contains("\"vw\":\"fav\"") && bm.act("mp.vw.near", null) == MapCore.R_BUS_VIEW && bm.act("mp.rf", null) == MapCore.R_BUS_LOC, "새로고침: 즐겨찾기는 도착정보만 · 주변은 위치부터");
             bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"한진\",\"id\":\"SEOUL:5\",\"src\":\"topis\"}");
