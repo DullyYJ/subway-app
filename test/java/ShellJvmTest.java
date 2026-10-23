@@ -758,6 +758,14 @@ public class ShellJvmTest {
             ok(sm.fillFromStash() == 1 && sm.bodyRequest(23, "dark").contains("\"a0\":\"AAA\"") && sm.bodyRequest(23, "dark").contains("\"a1\":\"B\""), "새로 못 받은 도착정보만 보던 값으로 채운다");
             sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"need\",\"need\":[{\"k\":\"a0\",\"url\":\"http://ws.bus.go.kr/x\"}]}}}");
             ok(!sm.svServer && sm.svFail == 0 && sm.busNeed.size() == 1, "서버가 못 받았으면(need 가 남음) 기기가 받는 옛 길로");
+            // s168: 정류장 뼈대 요청(도착정보 없이 · sv 끔) · 옛 도착정보 비우기 · 뼈대 열쇠
+            sm.addBusRes("tn", "{\"response\":1}"); sm.addBusRes("a0", "OLD0"); sm.addBusRes("f1", "OLD1");
+            String sk = sm.bodyRequest(23, "dark", true);
+            ok(sk.contains("\"tn\"") && !sk.contains("\"a0\"") && !sk.contains("\"f1\"") && !sk.contains("\"sv\":1") && sk.contains("\"fav\":[]") && sm.bodyRequest(23, "dark").contains("\"a0\":\"OLD0\""), "뼈대 요청: 정류장 본문만 · 도착정보(a·f) 없음 · sv 끔(일반 요청은 그대로)");
+            sm.clearArrivals();
+            ok(!sm.bodyRequest(23, "dark").contains("\"a0\"") && !sm.bodyRequest(23, "dark").contains("\"f1\"") && sm.bodyRequest(23, "dark").contains("\"tn\"") && sm.busNeed.isEmpty(), "처음 그리기: 옛 도착정보는 비우고 정류장 목록은 둔다");
+            ok(sm.stopsCell().equals("bsc_37500_127000") && ShellCore.busSkelKey(sv).equals("mapb|busskel|seoul|ALL") && ShellCore.diskTtl(ShellCore.busSkelKey(sv)) >= 3600000L && ShellCore.BUS_STALE_MS == ShellCore.BUS_FRESH_MS && ShellCore.diskTtl("mapb|bus|seoul|ALL") == ShellCore.BUS_FRESH_MS, "뼈대는 24시간 · 도착정보 화면은 8초(옛 숫자를 남기지 않는다)");
+            ok(ShellCore.warmKeys(sv, "home").contains(ShellCore.busSkelKey(sv)), "뼈대도 켤 때 미리 읽는다");
             StringBuilder big = new StringBuilder("{\"info\":{\"view\":\"bus\",\"stops\":["), nd = new StringBuilder();
             for (int i = 0; i < 45; i++) { if (i > 0) { big.append(','); nd.append(','); } big.append("{\"nm\":\"s").append(i).append("\",\"id\":\"SEOUL:").append(i).append("\"}"); nd.append("{\"k\":\"a").append(i).append("\",\"url\":\"http://ws.bus.go.kr/").append(i).append("\"}"); }
             sm.onScreen(big.append("],\"bus\":{\"st\":\"need\",\"need\":[").append(nd).append("]}}}").toString());
