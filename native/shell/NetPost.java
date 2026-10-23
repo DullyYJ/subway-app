@@ -50,7 +50,7 @@ public final class NetPost {
         for (String m : BUS_ERR) if (b.indexOf(m) >= 0) return true;
         return false;
     }
-    /** 버스 서버에서 GET: 오류 봉투 · 빈 본문이면 0.3 · 0.6초 뒤 다시(최대 3번). 네트워크가 느리게 실패하면(2.5초 넘게) 또 매달리지 않는다. 못 받으면 status -3 · 빈 본문. */
+    /** 버스 서버에서 GET: 오류 봉투 · 빈 본문이면 0.2 · 0.4초 뒤 다시(최대 3번 — 1초 안쪽). 네트워크가 느리게 실패하면(2.5초 넘게) 또 매달리지 않는다. 못 받으면 status -3 · 빈 본문. */
     public static Res getBus(String url, double firstMs, double retryMs) {
         Res last = new Res(-1, "", "none");
         for (int a = 0; a < 3; a++) {
@@ -60,7 +60,7 @@ public final class NetPost {
             if (last.status == 200 && !busBodyBad(last.body)) return last;
             if ("blocked".equals(last.err)) return last;
             if (last.status < 0 && System.currentTimeMillis() - t0 > 2500L) break;
-            if (a < 2) { try { Thread.sleep(300L * (a + 1) + (long) (Math.random() * 120)); } catch (InterruptedException ie) { break; } }
+            if (a < 2) { try { Thread.sleep(200L * (a + 1) + (long) (Math.random() * 100)); } catch (InterruptedException ie) { break; } }
         }
         return new Res(last.status == 200 ? -3 : last.status, "", last.err.length() > 0 ? last.err : "bus-bad");
     }
