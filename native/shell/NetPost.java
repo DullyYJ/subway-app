@@ -65,6 +65,60 @@ public final class NetPost {
         return new Res(last.status == 200 ? -3 : last.status, "", last.err.length() > 0 ? last.err : "bus-bad");
     }
 
+    // ── 공공데이터 키 2개 나눠 쓰기 ──
+    // 버스 서버(gildongmu-bus)는 키 1개, route-v2 의 /bus-tago 는 키 2개를 번갈아 쓴다. 정류장을 번호 짝·홀로 나눠 서로 다른 길로 먼저 보내면(반반) 같은 키에 몰리지 않아 오류가 줄고 빠르다.
+    // 정류장 목록처럼 하나뿐인 요청은 두 길에 동시에 보내(hedge) 먼저 온 정상 본문을 쓴다. route-v2 쪽이 아직 없거나(404) 막혀 있으면 이번 실행 동안 그 길을 끄고 예전처럼 버스 서버만 쓴다.
+    private static volatile boolean altOff = false;
+    public static boolean altEnabled() { return !altOff; }
+    public static void altReset() { altOff = false; }
+    private static Res once(String url, double ms, boolean isAlt) {
+        try { BUS_GATE.acquire(); } catch (InterruptedException ie) { return new Res(-1, "", "interrupted"); }
+        Res r;
+        try { r = get(url, ms); } finally { BUS_GATE.release(); }
+        if (isAlt && (r.status == 404 || r.status == 403 || r.status == 405)) altOff = true;
+        return r;
+    }
+    private static Res race(final String a, final String b, final double ms) {
+        final Res[] out = new Res[2]; final Object lock = new Object();
+        for (int i = 0; i < 2; i++) {
+            final int k = i;
+            Thread t = new Thread(new Runnable() { @Override public void run() {
+                Res r = once(k == 0 ? a : b, ms, k == 1);
+                synchronized (lock) { out[k] = r; lock.notifyAll(); }
+            } }, "bus-race"); t.setDaemon(true); t.start();
+        }
+        long end = System.currentTimeMillis() + (long) ms + 1500L;
+        synchronized (lock) {
+            while (true) {
+                Res bestBad = null; int n = 0;
+                for (int k = 0; k < 2; k++) {
+                    Res r = out[k]; if (r == null) continue; n++;
+                    if (r.status == 200 && !busBodyBad(r.body)) return r;
+                    bestBad = r;
+                }
+                long left = end - System.currentTimeMillis();
+                if (n == 2 || left <= 0) return bestBad != null ? bestBad : new Res(-1, "", "timeout");
+                try { lock.wait(left); } catch (InterruptedException ie) { return new Res(-1, "", "interrupted"); }
+            }
+        }
+    }
+    /** 두 길(url=버스 서버 · alt=route-v2 키 2개)로 받는다. pref 0 이면 url 먼저 · 1 이면 alt 먼저(정류장 번호 짝·홀), 시도마다 길을 바꾼다. hedge 면 첫 시도를 두 길에 동시에. alt 가 비었거나 꺼져 있으면 예전과 같다. */
+    public static Res getBus2(String url, String alt, int pref, boolean hedge, double firstMs, double retryMs) {
+        if (alt == null || alt.length() == 0 || altOff) return getBus(url, firstMs, retryMs);
+        Res last = new Res(-1, "", "none");
+        for (int a = 0; a < 3; a++) {
+            long t0 = System.currentTimeMillis();
+            if (altOff) { Res r = getBus(url, a == 0 ? firstMs : retryMs, retryMs); return r; }
+            if (a == 0 && hedge) last = race(url, alt, firstMs);
+            else { boolean useAlt = ((a + pref) & 1) == 1; last = once(useAlt ? alt : url, a == 0 ? firstMs : retryMs, useAlt); }
+            if (last.status == 200 && !busBodyBad(last.body)) return last;
+            if ("blocked".equals(last.err)) return last;
+            if (last.status < 0 && System.currentTimeMillis() - t0 > 2500L) break;
+            if (a < 2) { try { Thread.sleep(150L * (a + 1) + (long) (Math.random() * 100)); } catch (InterruptedException ie) { break; } }
+        }
+        return new Res(last.status == 200 ? -3 : last.status, "", last.err.length() > 0 ? last.err : "bus-bad");
+    }
+
     private static Res send(String method, String url, String body, double timeoutMs) { return send(method, url, body, timeoutMs, ""); }
     private static Res send(String method, String url, String body, double timeoutMs, String etag) {
         if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
