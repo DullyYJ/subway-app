@@ -1959,6 +1959,7 @@ public class ShellActivity extends Activity {
         if (now - preConnAt < 20000L) return;
         preConnAt = now;
         new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BUS_BASE + "/health", 4000); } catch (Throwable ignored) { } } }, "shell-preconn").start();
+        new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BASE + "/health", 4000); } catch (Throwable ignored) { } } }, "shell-preconn2").start();          // 엔진(route-v2) · 두 번째 길(/bus-tago)도 같은 곳 — 연결을 미리 맺어 둔다
     }
     // ── 정류장 뼈대 저장: 정류장을 다 받은 뒤, 같은 정류장 목록을 도착정보 없이 엔진에 한 번 더 그리게 해(백그라운드) 저장한다 — 다음에 켜자마자 정류장 카드가 바로 뜬다 ──
     private String skelSig = "";
@@ -1984,6 +1985,12 @@ public class ShellActivity extends Activity {
         final String modeNow = map.mode();
         final String wtxt = round == 0 && "bus".equals(modeNow) && json.equals(warmBusJson) && System.currentTimeMillis() - warmBusAt < 45000L ? warmBusTxt : "";          // 위치를 잡을 때 뒤에서 미리 받아 둔 정류장 화면이 있으면 기다리지 않고 바로
         if (wtxt.length() > 0) warmBusJson = "";
+        // s174: 처음 그릴 때는 '정류장만 먼저(0.3초)' 요청과 '서버가 도착정보까지 한 번에(최대 3.5초 · 보통 1초)' 요청을 동시에 보낸다 — 정류장은 바로 뜨고, 도착정보는 기기가 정류장마다 따로 받는 것보다 훨씬 빨리 온 완성 화면으로 바뀐다. 전체 요청이 실패하면 예전처럼 기기가 이어 받는다.
+        final boolean dual = round == 0 && wtxt.length() == 0 && "bus".equals(modeNow) && !busRefreshing;
+        String jf = "";
+        if (dual) { map.svb = 3500; jf = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store)); map.svb = 300; }
+        final String jsonFull = jf;
+        final boolean[] st = new boolean[3];                                                      // 0: 정류장만 화면을 그렸다 · 1: 전체 요청이 끝났다 · 2: 전체 요청이 성공했다
         new Thread(new Runnable() {
             @Override public void run() {
                 String got0;
@@ -1992,23 +1999,45 @@ public class ShellActivity extends Activity {
                 final String txt = got0; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
-                    if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
-                    if (txt.length() > 0) map.onScreen(txt);
-                    if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
-                    final boolean shownNow = !(keep && txt.length() > 0 && !map.busNeed.isEmpty());
-                    if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
-                    syncMapView();
-                    if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
-                    if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
-                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { brPrefetch(); saveBusSkeleton(); }
-                        if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
-                            busRetryN++; final long wait = 1500L * busRetryN;
-                            main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);
-                        } else if (map.svFail == 0 && busBadFetch == 0) busRetryN = 0;
-                        busBadFetch = 0; }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
+                    if (dual && st[2]) return;                                                       // 전체 화면이 이미 왔다 — 늦게 온 정류장만 화면은 버린다
+                    final boolean wait = dual && !st[1];
+                    mapBodyApply(v, keep, round, my, txt, wait);
+                    if (wait && txt.length() > 0) st[0] = true;
                 } });
             }
         }, "shell-mapb").start();
+        if (dual) new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", jsonFull, 12000);
+                final String txt = r.status == 200 && r.body != null ? r.body : ""; warm(txt);
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqMapB) return;
+                    st[1] = true;
+                    if (txt.length() > 0) { st[2] = true; mapBodyApply(v, keep || st[0], round, my, txt, false); return; }
+                    if (st[0] && !map.busNeed.isEmpty()) fetchBusNeed(v, keep, round, my, true);       // 전체 요청이 실패 — 먼저 그린 정류장 화면에서 예전처럼 기기가 도착정보를 받는다(정류장만 화면이 아직 안 왔으면 그쪽이 이어 간다)
+                } });
+            }
+        }, "shell-mapfull").start();
+    }
+    /** 버스 화면 응답 하나를 반영한다. deferNeed 면 그리기만 하고 도착정보 받기·마무리는 하지 않는다(동시에 보낸 전체 요청이 이어 간다). */
+    private void mapBodyApply(final ScreenView v, final boolean keep, final int round, final int my, final String txt, final boolean deferNeed) {
+        if (my != seqMapB) return;
+        if (deferNeed && txt.length() == 0) return;
+        if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
+        if (txt.length() > 0) map.onScreen(txt);
+        if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
+        final boolean shownNow = !(keep && txt.length() > 0 && !map.busNeed.isEmpty());
+        if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
+        syncMapView();
+        if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
+        if (deferNeed) return;
+        if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
+        else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { brPrefetch(); saveBusSkeleton(); }
+            if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
+                busRetryN++; final long wait = 1500L * busRetryN;
+                main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);
+            } else if (map.svFail == 0 && busBadFetch == 0) busRetryN = 0;
+            busBadFetch = 0; }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
     }
     // ── 노선 정류장 목록 미리 받기: 도착정보가 뜬 가장 가까운 정류장의 앞 몇 개 노선은 목록을 기기에 7일 두어, 누르면 바로 그린다(정류장 목록은 거의 안 바뀐다) ──
     private long brPfAt; private String brPfSig = "";
