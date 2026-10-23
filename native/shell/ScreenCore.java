@@ -1113,6 +1113,7 @@ public final class ScreenCore {
         public float[] gf = new float[0];            // bcard: 줄마다 [위쪽 y(카드 안), 높이]
         public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
         public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
+        public float yo; public long yt;             // bcard: 자리가 바뀔 때 옛 자리에서 스프링으로 옮겨 오는 거리(dp, 시작 때)와 시작 시각 — 위 카드가 커지면 아래 카드가 미끄러져 내려간다
         public float[] bs = new float[0];            // bcard: 줄마다 도착 둘의 남은 초(엔진이 준 값; 0 이면 카운트다운 없음) — 앱은 1초마다 줄여 그린다(웹 _busFmtCd)
         public String[] ck = new String[0];          // bcard: 줄마다 도착 둘의 카운트다운 열쇠(카드 열쇠|노선|방면|칸) — 새로 그려도 흐르던 값을 이어 가려고
         public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
