@@ -49,20 +49,34 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
   }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // 공공데이터 키가 둘이면 정류장을 반반씩(짝수 번째는 키1 먼저 · 홀수 번째는 키2 먼저) 나눠 묻고, 한쪽이 오류면 바로 다른 쪽 · 마지막은 BUSAPI 바인딩
   if (!atts.length) return '';
-  if (atts.length === 1) atts.push(atts[0]);                                                  // 길이 하나뿐이면 빨리 실패했을 때 한 번 더
-  for (var a = 0; a < atts.length && a < 3; a++) {
-    var t0 = Date.now(), body = '';
-    try {
-      var p = atts[a]();
-      if (!p) continue;
-      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3000 : 2000); })]);
-      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // 공공 API 오류 봉투(200)는 받지 못한 것 — 다른 키로 다시 받고, 끝내 못 받으면 비워 둔다
-    } catch (e1) { body = ''; }
-    if (body) {
-      if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
-      return body;
+  if (atts.length === 1) atts.push(atts[0]);                                                  // 길이 하나뿐이면 한 번 더
+  // s174: 헤지 — 첫 시도가 0.7초 안에 안 오면 기다리지 않고 다음 길(다른 키)을 동시에 띄워 먼저 온 정상 본문을 쓴다. 빨리 실패(오류 봉투)하면 즉시 다음 길. 최대 3번.
+  var max = Math.min(atts.length, 3), launched = 0, inflight = [];
+  function start() {
+    var o = {};
+    o.p = (async function () {
+      try {
+        var p = atts[launched - 1]();
+        if (!p) return '';
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3000); })]);
+        if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // 공공 API 오류 봉투(200)는 받지 못한 것
+      } catch (e1) { /* 실패 */ }
+      return '';
+    })().then(function (b) { o.b = b; return o; });
+    inflight.push(o);
+  }
+  launched++; start();
+  while (inflight.length) {
+    var waiters = inflight.map(function (o) { return o.p; });
+    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, 700); }));
+    var w = await Promise.race(waiters);
+    if (w === null) { launched++; start(); continue; }                                         // 느리다 — 다른 길을 동시에
+    inflight.splice(inflight.indexOf(w), 1);
+    if (w.b) {
+      if (cache && ck && mapSvOkBody(k, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
+      return w.b;
     }
-    if (Date.now() - t0 > 2500) break;                      // 느린 서버에 또 매달리지 않는다(빨리 실패했을 때만 다음 시도)
+    if (!inflight.length && launched < max) { launched++; start(); }                           // 빨리 실패했다 — 곧바로 다음 길
   }
   return '';
 }
