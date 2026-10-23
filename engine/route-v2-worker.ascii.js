@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s182";
+var ENGINE_VERSION = "route-v2-2026-10-23s186";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19458,8 +19458,6 @@ function resultScreen(opt, r) {
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
     if (r.ride && r.ride.on) {
-      var rt = String(r.ride.text || '').slice(0, 120);
-      nodes.push({ t: 'box', s: '\ud0d1\uc2b9 \uc548\ub0b4 \uc911' + (rt ? '\n' + rt : ''), hl: [[0, 6]], size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'gold', r: 10, ip: [12, 8, 12, 8], pad: [8, 0, 0, 4] });
       var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // \uc6f9 routeActRow: \uc624\ub978\ucabd\uc5d0 \ud0d1\uc2b9 \u2192 \ud658\uc2b9 \u2192 \ub3c4\ucc29 \uce78(\uce78\uc758 \ub73b\u00b7\uc804\ud658\uc740 \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
       var rowKids = [
         { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
