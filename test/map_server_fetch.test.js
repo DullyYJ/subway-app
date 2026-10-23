@@ -6,7 +6,7 @@ const R = p => path.join(__dirname, '..', p);
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
-const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap;';
+const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago;';
 function load(extra) {
   const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
   vm.runInNewContext(code, ctx);
@@ -110,6 +110,36 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
   {
     const c = load();
     ok(c.mapSvViaBinding({ BUSAPI: binding([]) }, 'https://evil.example/x') === null && c.mapSvViaBinding({ BUSAPI: binding([]) }, 'http://ws.bus.go.kr/api/x?y=1') !== null && c.mapSvViaBinding({ BUSAPI: binding([]) }, 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/bus-stops?lat=37.5&lng=127&radius=450') !== null, '허용 호스트(공공 API · D1 정류장 표)만');
+  }
+  // ⑧ s172: /bus-tago 중계 — 키 2개 번갈아 · 오류 봉투면 다른 키 · 허용 호스트만 · 키는 응답에 없다
+  {
+    const ERRENV = '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR"}}}', GOOD = '<response><body><items><item><arrtime>120</arrtime></item></items></body></response>';
+    const seen = [];
+    const fx = (badKey) => async (u) => { seen.push(u); const m = /serviceKey=([^&]+)/.exec(u); const k = m ? decodeURIComponent(m[1]) : ''; return new Response(k === badKey ? ERRENV : GOOD, { status: 200 }); };
+    const call = (c, url, env) => c.T(new Request('https://x/bus-tago?url=' + encodeURIComponent(url)), env);
+    const env = { TAGO_KEY: 'KEYONE', TAGO_KEY2: 'KEYTWO' };
+    const U = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?cityCode=23&nodeId=ICB1&_type=json';
+    let c = load({ fetch: fx('') });
+    const r1 = await call(c, U, env), r2 = await call(c, U, env);
+    const k1 = /serviceKey=([^&]+)/.exec(seen[0])[1], k2 = /serviceKey=([^&]+)/.exec(seen[1])[1];
+    ok(r1.status === 200 && r2.status === 200 && k1 !== k2, '두 키를 번갈아 쓴다 ' + k1 + '/' + k2);
+    ok(!(await r1.clone().text()).includes('KEYONE') && r1.headers.get('Access-Control-Allow-Origin') === '*', '응답에 키가 없고 CORS 가 열려 있다');
+    seen.length = 0; c = load({ fetch: fx('KEYONE') });
+    let ra = await call(c, U, env), rb = await call(c, U, env);
+    ok(ra.status === 200 && rb.status === 200 && (await ra.text()) === GOOD && (await rb.text()) === GOOD, '한 키가 오류 봉투(200)여도 다른 키로 받는다');
+    seen.length = 0; c = load({ fetch: fx('KEYONE') });
+    const rc = await call(c, U, { TAGO_KEY: 'KEYONE' });
+    ok(rc.status === 502, '키가 하나뿐이고 오류면 502(기기가 다른 길로)');
+    c = load({ fetch: async () => { throw new Error('x'); } });
+    ok((await call(c, U, env)).status === 502, '네트워크 오류면 502');
+    c = load({ fetch: fx('') }); seen.length = 0;
+    const bad = await call(c, 'https://evil.example/x?serviceKey=zzz', env), big = await call(c, 'https://apis.data.go.kr/' + 'a'.repeat(1600), env);
+    ok(bad.status === 400 && big.status === 400 && seen.length === 0, '허용 호스트가 아니거나 너무 긴 주소는 거절(나가지 않는다)');
+    const U2 = 'https://apis.data.go.kr/x?serviceKey=OLD&cityCode=1';
+    await call(c, U2, env);
+    ok(seen.length === 1 && !/OLD/.test(seen[0]) && /serviceKey=KEY/.test(seen[0]), '들어온 주소의 serviceKey 는 지우고 서버 키를 쓴다');
+    const op = await c.T(new Request('https://x/bus-tago', { method: 'OPTIONS' }), env);
+    ok(op.status === 204, 'OPTIONS 204');
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
