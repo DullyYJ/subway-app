@@ -176,7 +176,7 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const d3 = call('fast', { view: 'detail', ride: { on: 1, text: '다음 부평' } });
   ok(flat(d3.body).some(n => n.t === 'button' && n.act.v === 'rd.stop') && !flat(d3.body).some(n => n.act && n.act.v === 'rd.confirm'), '세부경로: 탑승 중에는 [탑승 안내 종료]');
   const c3 = call('fast', { ride: { on: 1, text: '다음 부평 12:03 \u00b7 두정까지 2정거장' } });
-  ok(flat(c3.body).some(n => n.t === 'box' && /탑승 안내 중\n다음 부평/.test(n.s)) && flat(c3.body).some(n => n.t === 'button' && n.act.v === 'rh.stop') && flat(c3.body).some(n => n.t === 'button' && n.act.v === 'rh.detail'), '결과 카드: 탑승 중에는 상태 글 · [안내 종료]');
+  ok(!flat(c3.body).some(n => n.t === 'box' && /탑승 안내 중/.test(n.s)) && flat(c3.body).some(n => n.t === 'button' && n.act.v === 'rh.stop') && flat(c3.body).some(n => n.t === 'button' && n.act.v === 'rh.detail'), '결과 카드: 탑승 중에는 [안내 종료] ("탑승 안내 중" 상태 박스는 없다 — 탑승 시트가 같은 줄을 보여 준다)');
   const rowA = { slot: 'transfer', label: '환승', leg: 1, can: true, anim: { kind: 'slide_down', ms: 380, ease: [0.2, 0, 0, 1], sq: 1791862800123, o: 'board' } };
   const call21 = (row) => E.resultScreen({ cap: 21 }, { data: DATA, tab: 'fast', a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1, ride: { on: 1, text: '다음 부평', row } });
   const s1 = call21(rowA), srow = flat(s1.body).find(n => n.t === 'row' && n.kids.some(q => q.act && q.act.v === 'rh.stop'));
