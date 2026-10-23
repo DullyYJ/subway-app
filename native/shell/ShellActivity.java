@@ -509,7 +509,7 @@ public class ShellActivity extends Activity {
         }
         if (c != null && ShellCore.S_MAPB.equals(key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key) && key.contains("|bus|")) {      // 버스 도착정보는 실시간 — 8초가 지난 것은 보여 주지 않고 새로 받을 때까지 뼈대
             long m = diskMtime(key);
-            if (m <= 0L || System.currentTimeMillis() - m > ShellCore.BUS_STALE_MS) return null;          // 오래돼도 90초 안이면 먼저 보이고(SWR) 뒤에서 새로 받는다
+            if (m <= 0L || System.currentTimeMillis() - m > ShellCore.BUS_STALE_MS) return null;          // 오래돼도 5분 안이면(앱을 껐다 켠 직후 포함) 먼저 보이고(SWR) 뒤에서 새로 받아 바꾼다
         }
         return c;
     }
