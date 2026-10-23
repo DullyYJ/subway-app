@@ -454,6 +454,19 @@ function findAndroidJar() {
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
+  await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    const f = a.slice(a.indexOf('private void setupNext()'), a.indexOf('private void askDone('));
+    const iN = f.indexOf('POST_NOTIFICATIONS'), iL = f.indexOf('locGate('), iB = f.indexOf('openSetPage("askbat")'), iS = f.indexOf('openSetPage("asksam")'), iO = f.indexOf('openSetPage("askovl")');
+    assert.ok(iN > 0 && iN < iL && iL < iB && iB < iS && iS < iO, '차례: 알림 → 위치 → 배터리 → 갤럭시 절전 → 오버레이');
+    assert.ok(/K_LOCDISC, \"0\"\)\)\) return;/.test(f.replace(/\\"/g, '"')) || /K_LOCDISC, "0"\)\)\) return;/.test(f), '위치 안내에 동의한 뒤에만 이어서');
+    assert.ok(/K_BATASK[\s\S]{0,160}K_SAMASK/.test(f) && /K_OVLASK/.test(f) && /K_NOTIFASK/.test(f), '각 안내는 평생 한 번(저장소 열쇠)');
+    assert.ok(/setupDeclined = true/.test(a) && /setupDeclined \|\| setupPhase != 0/.test(f), '위치 안내를 거부하면 이번엔 더 묻지 않는다');
+    assert.ok(/code == REQ_SETUP_NOTIF\) \{ setupSoon\(\)/.test(a) && /setupSoon\(\);\s*\/\/ 위치 창이 닫혔다/.test(a) && /setupResume\(\); \}/.test(a), '기기 창이 닫히면(권한 결과 · 설정에서 돌아옴) 다음 승인으로');
+    assert.ok(/setupPhase = 1; PowerInfo\.openSamsung/.test(a) && /PowerInfo\.requestIgnore\(ShellActivity\.this\)/.test(a) && /ACTION_MANAGE_OVERLAY_PERMISSION/.test(a.slice(a.indexOf('private void askDone('))), '갤럭시: 절전 목록 → 돌아오면 기기 허용 창 · 오버레이는 설정 화면');
+    assert.ok(/if \(!perm\) return;/.test(a.slice(a.indexOf('private void autoGps()'), a.indexOf('private void autoGps()') + 700)), '첫 위치 권한은 승인 순서가 맡는다(두 곳에서 동시에 묻지 않음)');
+    assert.ok(/PG_ASKOK = 16, PG_ASKNO = 17/.test(sc) && /isAskPage\(page\)/.test(sc) && /ShellCore\.isAskPage\(setPage\)\s*\? ShellCore\.pageUrlAsk/.test(a) && /isAskPage\(page\)\) sheet\.setCancelable\(false\)/.test(a.replace('"locd".equals(page) || ShellCore.', 'ShellCore.').replace(/"locd"\.equals\(page\) \|\| /, '')) || /setCancelable\(false\)/.test(a), '안내 화면: 바깥을 눌러도 닫히지 않는다 · 서버 엔진이 모르면 건너뛴다');
+  });
   await t('s181: 버스 다시 묻기 — 캐시된 오류 봉투를 피해 일회용 글자(_r)를 붙인다', () => {
     const np = fs.readFileSync(N('NetPost.java'), 'utf8');
     assert.ok(/public static String busBust\(String url, int attempt\)/.test(np) && /get\(busBust\(url, a\), a == 0 \? firstMs : retryMs\)/.test(np) && /once\(busBust\(useAlt \? alt : url, a\)/.test(np), 'getBus · getBus2 의 다시 묻기에 일회용 글자');
