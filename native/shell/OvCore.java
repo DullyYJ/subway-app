@@ -150,6 +150,6 @@ public final class OvCore {
     public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsEnd && v.rsBt.length() > 0; }
     /** 앱 탑승 시트가 보일 상태인가(올라온 시트 · 기록 직후 되돌리기 · 대기 알약). 도착 줄(안내 종료)은 앱에서는 따로 있으니 제외. */
     public static boolean rsShown(Ov v) { return v != null && !v.rsEnd && ("board".equals(v.rsSt) || "wait".equals(v.rsSt) || "undo".equals(v.rsSt)); }
-    /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 느리게, 1정거장 전 빠르게, 없으면 0. */
-    public static long spinMs(int alert) { return alert == 1 ? 1400L : (alert == 2 ? 4200L : 0L); }
+    /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 6초(웹), 1정거장 전 빠르게, 없으면 0. */
+    public static long spinMs(int alert) { return alert == 1 ? 1400L : (alert == 2 ? 6000L : 0L); }
 }
