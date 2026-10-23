@@ -473,6 +473,13 @@ function findAndroidJar() {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8');
     assert.ok(/Border\(Context c\) \{ super\(c\);[^\n]*setVisibility\(View\.GONE\)/.test(o) && /MeasureSpec\.getMode\(ws\) == MeasureSpec\.EXACTLY \? MeasureSpec\.getSize\(ws\) : 0/.test(o), '테두리 뷰: 처음 숨김 + 재는 동안 0');
   });
+  await t('s185: 탑승 시트 웹 숫자 맞춤 — 시트(탭 아래·탭이 같이 올라감) / 떠 있는 알약·되돌리기(탭 위) 두 뷰 · 0.46초 곡선 · 줄어들며 사라짐 · 끌어내리기', () => {
+    const v = fs.readFileSync(N('RsSheetView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), c = fs.readFileSync(N('RsCore.java'), 'utf8');
+    assert.ok(/H_BOARD = 83, H_UNDO = 53, H_PILL = 52/.test(c) && /BTN_H = 46f/.test(c) && /PILL_R = 14f/.test(c) && /Math\.max\(92f/.test(c), '웹 CSS 숫자(시트 83 · 단추 46 · 알약 38/14 · 단추 최소 92)');
+    assert.ok(/new RsSheetView\(this, true\)/.test(a) && /new RsSheetView\(this, false\)/.test(a) && /rs\.setSibling\(tabs\)/.test(a) && /rsF\.setOv\(o\)/.test(a) && a.indexOf('root.addView(rsF') < a.indexOf('root.addView(tabs') && a.indexOf('root.addView(tabs') < a.indexOf('root.addView(rs,'), '두 뷰: 알약은 탭 위 · 시트는 탭 아래 · 시트가 탭을 올린다');
+    assert.ok(/PathInterpolator\(0\.22f, 1f, 0\.36f, 1f\)/.test(v) && /RISE_MS = 460L, FADE_MS = 300L/.test(v) && /translationX\(w \* 0\.34f\)\.translationY\(hh \* 0\.64f\)\.scaleX\(0\.2f\)/.test(v) && /hh \* 1\.12f/.test(v) && /setStartDelay\(120L\)\.setDuration\(400L\)/.test(v) && /sibling\.animate\(\)\.translationY/.test(v), '올라옴 0.46초 · 닫힘은 오른쪽 아래로 0.2배 · 알약 0.12초 뒤 0.4초 · 탭 동행');
+    assert.ok(/setTranslationY\(dy \* dpr\)/.test(v) && /ScreenView\.R_GOLD2/.test(v) && /new LinearGradient/.test(v) && /1400L/.test(v), '아래로 끌면 따라 내려옴 · 금색 그라데이션 단추 · 맥동 링 · 점 1.4초');
+  });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     const f = a.slice(a.indexOf('private void setupNext()'), a.indexOf('private void askDone('));
