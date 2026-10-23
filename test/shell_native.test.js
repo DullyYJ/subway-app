@@ -432,7 +432,7 @@ function findAndroidJar() {
     assert.ok(/private void showSkeleton[\s\S]{0,700}busSkelKey\(store\)/.test(a) && /bsk_cell/.test(a) && /stopsCell\(\)/.test(a), '버스 뼈대: 같은 동네(110m 칸)의 엔진이 그린 정류장 뼈대를 먼저 그린다');
     assert.ok(/saveBusSkeleton\(\)/.test(a) && /bodyRequest\(ShellCore\.CAP, ShellCore\.theme\(store\), true\)/.test(a), '정류장을 받은 뒤 도착정보 없는 화면을 엔진에게 받아 저장(백그라운드)');
     const f = a.slice(a.indexOf('private void loadMapBodyFast'), a.indexOf('private long preConnAt'));
-    assert.ok(/if \(!keep\) map\.clearArrivals\(\)/.test(f) && /speculativeNeed\(\)/.test(f) && /fetchBusNeed\(v, keep, 0, \+\+seqMapB, false\)/.test(f) && /preconnectBus\(\)/.test(f), '콜드 스타트/탭 진입: 옛 도착정보 비우고 · 엔진 왕복 없이 도착정보만 곧장 받는다');
+    assert.ok(/if \(!keep\) map\.clearArrivals\(\)/.test(f) && /speculativeNeed\(\)/.test(f) && /fetchBusNeed\(v, keep, 0, \+\+seqMapB, true\)/.test(f) && /preconnectBus\(\)/.test(f), '콜드 스타트/탭 진입: 옛 도착정보 비우고 · 엔진 왕복 없이 도착정보만 곧장 받는다');
     assert.ok(/loadMapBodyFast\(body, shown\)/.test(a) && /loadMapBodyFast\(v, keep\); return; \}/.test(a), '탭 진입 두 길이 빠른 길을 쓴다');
     assert.ok(/NetPost\.get\(ShellCore\.BUS_BASE \+ "\/health"/.test(a) && /boolean reuse = false/.test(np) && /if \(c != null && !reuse\) c\.disconnect\(\)/.test(np), '사전 연결 + 연결 재사용(응답을 다 읽으면 끊지 않는다)');
     const bp = a.slice(a.indexOf('private void busPaint'), a.indexOf('private void fetchBusNeed'));
@@ -484,6 +484,12 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('RsSheetView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), e = fs.readFileSync(path.join(__dirname, '..', 'engine', 'result.js'), 'utf8');
     assert.ok(/holder\.addView\(rsF,/.test(a) && !/root\.addView\(rsF/.test(a) && /rsF\.bringToFront\(\)/.test(a) && /!sheetMode\) \{[^}]*return false;/.test(v.replace(/\n/g, ' ')), '알약 뷰는 본문 칸 위(투명) · 알약 밖 터치는 통과');
     assert.ok(!/'탑승 안내 중'/.test(e), '결과 카드에 "탑승 안내 중" 박스가 없다');
+  });
+  await t('s187: 버스 탭 — 먼저 온 정류장부터 바로 그린다 · 비어 있음은 한 번만 더 · 카드가 커져 아래 카드 자리가 바뀌면 스프링으로 미끄러진다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/fetchBusNeed\(v, keep, 0, \+\+seqMapB, true\)/.test(a) && !/fetchBusNeed\(v, keep, 0, \+\+seqMapB, false\)/.test(a), '처음 들어올 때도 정류장마다 오는 대로 그린다');
+    assert.ok(/k >= 1 \|\| !busEmpty\(r\.body\)/.test(np), '비어 있음은 한 번만 더');
+    assert.ok(/public float yo; public long yt;/.test(sc) && /cardY\.get\(it\.key\)/.test(sv) && /it\.yo \* \(1f - spring\(fy/.test(sv), '카드 자리가 바뀌면 옛 자리에서 스프링으로');
   });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
