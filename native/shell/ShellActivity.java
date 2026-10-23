@@ -1980,7 +1980,7 @@ public class ShellActivity extends Activity {
             if (!sp.isEmpty()) {
                 map.busNeed.clear(); map.busNeed.addAll(sp);
                 busAt = System.currentTimeMillis();
-                fetchBusNeed(v, keep, 0, ++seqMapB, false);
+                fetchBusNeed(v, keep, 0, ++seqMapB, true);                                    // 먼저 온 정류장부터 바로 그린다(한 곳이 느리다고 전부 "불러오는 중"에 묶이지 않게)
                 return;
             }
         }
