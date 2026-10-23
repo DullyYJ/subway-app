@@ -43,6 +43,11 @@ public final class NetPost {
     // 본문이 맞는지(도착 정보가 있는지 · 없는지)는 엔진이 판단한다 — 여기서는 "서버가 준 오류 봉투인가"만 본다(웹 _safeParseResponse 의 오류 글자와 같다).
     private static final java.util.concurrent.Semaphore BUS_GATE = new java.util.concurrent.Semaphore(4);
     private static final String[] BUS_ERR = { "OpenAPI_ServiceResponse", "cmmMsgHeader", "SERVICE_KEY_IS_NOT_REGISTERED_ERROR", "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR" };
+    /** 다시 물을 때 주소 뒤에 일회용 글자(_r)를 붙인다 — 버스 서버가 공공 API 오류 봉투(HTTP_ERROR)를 같은 주소로 한동안 그대로 되돌려주는(캐시) 정류장이 있다(실측: 인천 검단대성베르힐 — 같은 주소는 계속 오류, _r 만 달리하면 바로 5건). 첫 시도는 그대로(캐시 이득 유지). */
+    public static String busBust(String url, int attempt) {
+        if (attempt <= 0 || url == null || url.length() == 0 || url.indexOf("/tago?") < 0 && url.indexOf("/bus-tago?") < 0) return url;
+        return url + (url.indexOf('?') >= 0 ? "&" : "?") + "_r=" + Long.toString((long) (Math.random() * 1e9), 36);
+    }
     /** 받지 못한 본문인가: 비었거나 공공 API 의 오류 봉투. */
     public static boolean busBodyBad(String b) {
         if (b == null || b.length() == 0) return true;
@@ -56,7 +61,7 @@ public final class NetPost {
         for (int a = 0; a < 3; a++) {
             long t0 = System.currentTimeMillis();
             try { BUS_GATE.acquire(); } catch (InterruptedException ie) { return last; }
-            try { last = get(url, a == 0 ? firstMs : retryMs); } finally { BUS_GATE.release(); }
+            try { last = get(busBust(url, a), a == 0 ? firstMs : retryMs); } finally { BUS_GATE.release(); }
             if (last.status == 200 && !busBodyBad(last.body)) return last;
             if ("blocked".equals(last.err)) return last;
             if (last.status < 0 && System.currentTimeMillis() - t0 > 2500L) break;
@@ -112,7 +117,7 @@ public final class NetPost {
             long t0 = System.currentTimeMillis();
             if (altOff) { Res r = getBus(url, a == 0 ? firstMs : retryMs, retryMs); return r; }
             if (a == 0 && hedge) last = race(url, alt, firstMs);
-            else { boolean useAlt = ((a + pref) & 1) == 1; last = once(useAlt ? alt : url, a == 0 ? firstMs : retryMs, useAlt); }
+            else { boolean useAlt = ((a + pref) & 1) == 1; last = once(busBust(useAlt ? alt : url, a), a == 0 ? firstMs : retryMs, useAlt); }
             if (last.status == 200 && !busBodyBad(last.body)) return last;
             if ("blocked".equals(last.err)) return last;
             if (last.status < 0 && System.currentTimeMillis() - t0 > 2500L) break;
