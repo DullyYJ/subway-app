@@ -701,6 +701,12 @@ public class ShellJvmTest {
             MapCore bo = new MapCore(new ShellCore.MemStore());
             bo.addBusRes("a0", ""); bo.addBusRes("a1", good);
             ok(!bo.busRes.containsKey("a0") && good.equals(bo.busRes.get("a1")), "통신에 실패한 정류장은 '없음'으로 굳히지 않고 비워 둔다(엔진이 불러오는 중으로 그린다)");
+            {   // s181: 같은 주소의 오류 봉투가 캐시돼 돌아오는 정류장 — 다시 물을 때는 일회용 글자를 붙여 새로 받는다
+                String bu = "https://gildongmu-bus.phg0643.workers.dev/tago?url=abc", bd = "https://gentle-lab.workers.dev/bus-stops?lat=1";
+                String br1 = NetPost.busBust(bu, 1), br2 = NetPost.busBust(bu, 2);
+                ok(NetPost.busBust(bu, 0).equals(bu) && br1.startsWith(bu + "&_r=") && br2.startsWith(bu + "&_r=") && !br1.equals(br2) && NetPost.busBust(bd, 1).equals(bd)
+                    && NetPost.busBust("https://route-v2.phg0643.workers.dev/bus-tago?url=z", 1).contains("&_r="), "다시 물을 때만 일회용 글자(_r) — 첫 시도 · 버스 프록시가 아닌 주소는 그대로");
+            }
             ok(NetPost.getBus("https://example.com/x", 1000, 1000).status == -1 && "blocked".equals(NetPost.getBus("https://example.com/x", 1000, 1000).err), "허용 안 된 주소는 다시 묻지 않고 막는다");
         }
         mc.cat("r:seoul"); ok(mc.cat("f:2호선") == MapCore.R_RENDER && "2호선".equals(mc.flt()) && mc.cat("zz") == MapCore.R_NONE, "호선 필터");
