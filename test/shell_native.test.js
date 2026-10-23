@@ -476,9 +476,14 @@ function findAndroidJar() {
   await t('s185: 탑승 시트 웹 숫자 맞춤 — 시트(탭 아래·탭이 같이 올라감) / 떠 있는 알약·되돌리기(탭 위) 두 뷰 · 0.46초 곡선 · 줄어들며 사라짐 · 끌어내리기', () => {
     const v = fs.readFileSync(N('RsSheetView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), c = fs.readFileSync(N('RsCore.java'), 'utf8');
     assert.ok(/H_BOARD = 83, H_UNDO = 53, H_PILL = 52/.test(c) && /BTN_H = 46f/.test(c) && /PILL_R = 14f/.test(c) && /Math\.max\(92f/.test(c), '웹 CSS 숫자(시트 83 · 단추 46 · 알약 38/14 · 단추 최소 92)');
-    assert.ok(/new RsSheetView\(this, true\)/.test(a) && /new RsSheetView\(this, false\)/.test(a) && /rs\.setSibling\(tabs\)/.test(a) && /rsF\.setOv\(o\)/.test(a) && a.indexOf('root.addView(rsF') < a.indexOf('root.addView(tabs') && a.indexOf('root.addView(tabs') < a.indexOf('root.addView(rs,'), '두 뷰: 알약은 탭 위 · 시트는 탭 아래 · 시트가 탭을 올린다');
+    assert.ok(/new RsSheetView\(this, true\)/.test(a) && /new RsSheetView\(this, false\)/.test(a) && /rs\.setSibling\(tabs\)/.test(a) && /rsF\.setOv\(o\)/.test(a) && /holder\.addView\(rsF, new FrameLayout\.LayoutParams\([^)]*Gravity\.BOTTOM\)/.test(a) && a.indexOf('root.addView(tabs') < a.indexOf('root.addView(rs,'), '두 뷰: 알약은 본문 위에 떠서(자리 안 차지 · 뒤가 비침) · 시트는 탭 아래 · 시트가 탭을 올린다');
     assert.ok(/PathInterpolator\(0\.22f, 1f, 0\.36f, 1f\)/.test(v) && /RISE_MS = 460L, FADE_MS = 300L/.test(v) && /translationX\(w \* 0\.34f\)\.translationY\(hh \* 0\.64f\)\.scaleX\(0\.2f\)/.test(v) && /hh \* 1\.12f/.test(v) && /setStartDelay\(120L\)\.setDuration\(400L\)/.test(v) && /sibling\.animate\(\)\.translationY/.test(v), '올라옴 0.46초 · 닫힘은 오른쪽 아래로 0.2배 · 알약 0.12초 뒤 0.4초 · 탭 동행');
     assert.ok(/setTranslationY\(dy \* dpr\)/.test(v) && /ScreenView\.R_GOLD2/.test(v) && /new LinearGradient/.test(v) && /1400L/.test(v), '아래로 끌면 따라 내려옴 · 금색 그라데이션 단추 · 맥동 링 · 점 1.4초');
+  });
+  await t('s186: 대기 알약은 본문 위에 투명하게 뜨고(알약 자리 밖 터치는 뒤 화면으로) · "탑승 안내 중" 박스는 엔진에서 뺀다', () => {
+    const v = fs.readFileSync(N('RsSheetView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), e = fs.readFileSync(path.join(__dirname, '..', 'engine', 'result.js'), 'utf8');
+    assert.ok(/holder\.addView\(rsF,/.test(a) && !/root\.addView\(rsF/.test(a) && /rsF\.bringToFront\(\)/.test(a) && /!sheetMode\) \{[^}]*return false;/.test(v.replace(/\n/g, ' ')), '알약 뷰는 본문 칸 위(투명) · 알약 밖 터치는 통과');
+    assert.ok(!/'탑승 안내 중'/.test(e), '결과 카드에 "탑승 안내 중" 박스가 없다');
   });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
