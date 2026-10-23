@@ -212,6 +212,7 @@ public final class MapCore {
             else {
                 Long at = arrKeyAt.get(k); String old = arrStash.get(k);
                 if (old != null && at != null && now - at < KEEP_OLD_MS && hasArr(old)) { busRes.put(k, old); return; }
+                if (body == null || body.length() == 0) { busRes.remove(k); return; }      // 못 받은 정류장(빈 본문 = 통신 실패)은 '없음'이 아니라 아직 못 받은 것으로 둔다 — 엔진이 '불러오는 중'으로 그리고 곧 다시 받는다(받았는데 버스가 없으면 본문은 비어 있지 않다)
             }
             arrAt = now;
         }
