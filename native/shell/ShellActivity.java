@@ -226,10 +226,7 @@ public class ShellActivity extends Activity {
     private void autoGps() {
         if (home.hasRoute() || home.loc[HomeCore.START] != null || home.gps || home.text[HomeCore.START].length() > 0) return;
         boolean perm = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        if (!perm) {
-            if ("1".equals(store.get(ShellCore.K_GPSASK, "0"))) return;          // 한 번 물었다 — 다시 조르지 않는다(위치 감지 단추로 직접)
-            store.put(ShellCore.K_GPSASK, "1");
-        }
+        if (!perm) return;                                                         // 처음 권한 묻기는 '처음 설치 승인 순서'(setupNext)가 알림 다음 차례로 한다 — 두 곳에서 동시에 묻지 않는다
         startGps();
     }
 
@@ -309,7 +306,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; RideService.rsListener = rsApply; rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; RideService.rsListener = rsApply; rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -3435,6 +3432,7 @@ public class ShellActivity extends Activity {
         setHomeFields(); reloadHome();
     }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        if (code == REQ_SETUP_NOTIF) { setupSoon(); return; }                    // 알림 창이 닫혔다(허용이든 거부든) — 다음 승인으로
         if (code == REQ_FOOD_LOC || code == REQ_MAP_LOC) {
             boolean g = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
             LocCb cb = pendingLoc; pendingLoc = null;
@@ -3451,6 +3449,7 @@ public class ShellActivity extends Activity {
         if (code != REQ_LOC) return;
         boolean ok = res.length > 0 && res[0] == PackageManager.PERMISSION_GRANTED;
         if (ok) { startGps(); launchLocate(); } else toast("위치 권한이 필요해요");
+        setupSoon();                                                                 // 위치 창이 닫혔다 — 다음 승인(배터리 안내)으로
     }
 
     // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자)
@@ -4066,7 +4065,7 @@ public class ShellActivity extends Activity {
         sheetView.setListener(new SheetHost());
         sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_NoActionBar);
         sheet.setContentView(sheetView);
-        if ("locd".equals(page)) sheet.setCancelable(false);                 // 바깥을 눌러도 닫히지 않는다 — 직접 [동의] 또는 [거부]
+        if ("locd".equals(page) || ShellCore.isAskPage(page)) sheet.setCancelable(false);                 // 바깥을 눌러도 닫히지 않는다 — 직접 [동의] 또는 [거부]
         try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
         loadSetPage();
     }
@@ -4075,6 +4074,7 @@ public class ShellActivity extends Activity {
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
             : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
             : "locd".equals(setPage) ? ShellCore.pageUrlPlain("locd", null)
+            : ShellCore.isAskPage(setPage) ? ShellCore.pageUrlAsk(setPage, PowerInfo.isSamsung())
             : "erl".equals(setPage) ? ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(store))
             : ShellCore.isPolPage(setPage) ? ShellCore.pageUrlPlain(setPage, null)
             : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.pageFacts(devPh, devLeft(), devStopped))
@@ -4086,6 +4086,7 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
+                    if (ShellCore.isAskPage(setPage) && txt.indexOf("\"body\"") < 0) { closeSheet(); setupSoon(); return; }          // 서버 엔진이 아직 이 안내를 모르면(붙여넣기 전) 건너뛰고 다음 승인으로
                     if (txt.length() == 0) { toast("설정을 받지 못했어요"); return; }
                     if ("cm".equals(setPage)) cm.setStations(cmStations(txt));
                     present(sheetView, txt, true);
@@ -4156,6 +4157,7 @@ public class ShellActivity extends Activity {
         }
         if (r == ShellCore.PG_LOCOK) { closeSheet(); Runnable ok = locOk; locOk = null; locNo = null; if (ok != null) ok.run(); return; }
         if (r == ShellCore.PG_LOCNO) { closeSheet(); Runnable no = locNo; locOk = null; locNo = null; if (no != null) no.run(); return; }
+        if (r == ShellCore.PG_ASKOK || r == ShellCore.PG_ASKNO) { String pg = setPage; closeSheet(); askDone(pg, r == ShellCore.PG_ASKOK); return; }
         if (r == ShellCore.PG_POLOPEN) { openSetPage("polp"); return; }
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
         if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
@@ -4229,6 +4231,72 @@ public class ShellActivity extends Activity {
         if ("1".equals(store.get(ShellCore.K_LOCDISC, "0"))) { ok.run(); return; }
         locOk = ok; locNo = no;
         openSetPage("locd");
+    }
+
+
+    // ───────────── 처음 설치 승인을 한 가지씩 차례로(웹과 같은 순서 · 하나가 끝나야 다음이 나온다) ─────────────
+    // ① 알림 권한(기기 창) → ② 위치 정보 이용 안내(동의) → 위치 권한(기기 창) → ③ 배터리 최적화 안내(갤럭시는 자동 절전 제외까지 한 창) → ④ 다른 앱 위에 표시 안내.
+    // 안내 글은 엔진(askbat · asksam · askovl), 여기는 차례와 기기 창 열기만 한다. 각 안내는 평생 한 번(저장소 열쇠) · 위치 안내를 거부하면 이번 실행엔 더 묻지 않는다.
+    private static final int REQ_SETUP_NOTIF = 76;
+    private int setupPhase;                                          // 0 없음 · 1 삼성 절전 목록에서 돌아오길 기다림(→ 기기 허용 창) · 2 기기 창/설정 화면에서 돌아오길 기다림
+    private boolean setupDeclined;
+    private final Runnable setupRun = new Runnable() { @Override public void run() { setupNext(); } };
+    private void setupSoon() { main.removeCallbacks(setupRun); main.postDelayed(setupRun, 600L); }
+    private void setupResume() {
+        if (setupPhase == 1) {
+            setupPhase = 2;
+            main.postDelayed(new Runnable() { @Override public void run() { PowerInfo.requestIgnore(ShellActivity.this); } }, 350L);   // 삼성 목록에서 돌아오면 기기 허용 창
+        } else if (setupPhase == 2) { setupPhase = 0; setupSoon(); }
+        else setupSoon();
+    }
+    private void setupNext() {
+        if (!resumed || setupDeclined || setupPhase != 0 || (sheet != null && sheet.isShowing())) return;
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !"1".equals(store.get(ShellCore.K_NOTIFASK, "0"))) {
+            store.put(ShellCore.K_NOTIFASK, "1");
+            requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_SETUP_NOTIF);
+            return;
+        }
+        if (!hasLocPerm() && !"1".equals(store.get(ShellCore.K_GPSASK, "0"))) {
+            store.put(ShellCore.K_GPSASK, "1");
+            locGate(new Runnable() { @Override public void run() { requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION }, REQ_LOC); } },
+                new Runnable() { @Override public void run() { setupDeclined = true; toast("위치 정보 이용에 동의하지 않아 내 위치를 쓸 수 없어요"); } });
+            return;
+        }
+        if (!"1".equals(store.get(ShellCore.K_LOCDISC, "0"))) return;                // 위치 안내에 동의한 뒤에만 이어서 묻는다
+        PowerInfo pi = PowerInfo.read(this);
+        boolean sam = PowerInfo.isSamsung();
+        if (Build.VERSION.SDK_INT >= 23 && !"1".equals(store.get(ShellCore.K_BATASK, "0")) && !pi.ig) {
+            store.put(ShellCore.K_BATASK, "1");
+            if (sam) store.put(ShellCore.K_SAMASK, "1");                              // 갤럭시는 배터리 안내와 절전 제외 안내를 한 창이 맡는다
+            openSetPage("askbat");
+            return;
+        }
+        if (sam && !"1".equals(store.get(ShellCore.K_SAMASK, "0")) && !pi.ig) {      // 배터리 안내를 예전에 봤고 절전 안내만 아직인 갤럭시
+            store.put(ShellCore.K_SAMASK, "1");
+            openSetPage("asksam");
+            return;
+        }
+        boolean batSettled = Build.VERSION.SDK_INT < 23 || "1".equals(store.get(ShellCore.K_BATASK, "0")) || pi.ig;
+        if (batSettled && RideOverlay.supported() && !RideOverlay.allowed(this) && !"1".equals(store.get(ShellCore.K_OVLASK, "0"))) {
+            store.put(ShellCore.K_OVLASK, "1");
+            openSetPage("askovl");
+        }
+    }
+    /** 안내 창의 [나중에] · [설정하기]: 나중에 = 바로 다음 승인으로, 설정하기 = 기기 창을 열고 돌아오면 다음 승인으로. */
+    private void askDone(String page, boolean go) {
+        if (!go) { setupSoon(); return; }
+        if ("askbat".equals(page)) {
+            if (PowerInfo.isSamsung()) { setupPhase = 1; PowerInfo.openSamsung(this); }       // 갤럭시: 먼저 절전 목록(이때는 아직 '최적화'라 길동무가 보인다) → 돌아오면 기기 허용 창
+            else { setupPhase = 2; PowerInfo.requestIgnore(this); }
+            return;
+        }
+        if ("asksam".equals(page)) { setupPhase = 2; PowerInfo.openSamsung(this); return; }
+        if ("askovl".equals(page)) {
+            store.put(ShellCore.K_OVL, "1");                                              // 켜기로 고른 것 — 허용하고 돌아오면 바로 뜬다
+            setupPhase = 2;
+            try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()))); }
+            catch (Throwable t) { setupPhase = 0; toast("설정에서 '다른 앱 위에 표시'를 허용해 주세요"); }
+        }
     }
 
     private boolean notifOk() {
