@@ -347,7 +347,7 @@ function findAndroidJar() {
     assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n\s*float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
     assert.ok(/mode = 8/.test(sv) && /bandX = ScreenCore\.clamp\(bandX - dx \/ dpr, lay\.bandMax\(\)\)/.test(sv) && /cv\.clipRect\(bit\.cl, bit\.y - 4f, bit\.cr/.test(sv) && /pulsing = lay\.mkBody \? pulsingB : drawMk/.test(sv), '그 줄만 가로로 밀고(세로로 쓸면 목록) 틀 안에 자르고 마커도 같이 민다');
     assert.ok(/private boolean stationNow\(float tr\)/.test(a) && /d >= to - from && stationNow\(d - \(to - from\)\)\) swapOff = to - from/.test(a) && /swapOff = 0f; top0/.test(a), '시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다');
-    assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /a < 3 && u\.length\(\) > 0/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
+    assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /NetPost\.getBus\(u, 5000, 4000\)/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
   });
   await t('실기기 3건(s158): 키보드는 화면을 누르지 않고 · 칩 전환은 캐시로 바로 · 버스 카드는 첫 정류장부터 스프링', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), h = fs.readFileSync(N('HomeCore.java'), 'utf8');
@@ -447,6 +447,12 @@ function findAndroidJar() {
     assert.ok(/"map"\.equals\(ShellCore\.currentTab\(store\)\)\) return/.test(w) && /600000L/.test(w) && /speculativeNeed\(\)\.isEmpty\(\)/.test(w), '버스 탭에선 하지 않고 · 10분에 한 번 · 이미 준비된 동네는 건너뜀');
     assert.ok(/main\.post\(new Runnable\(\) \{ @Override public void run\(\) \{ w\.saveStopsCache/.test(w) && /main\.post\(new Runnable\(\) \{ @Override public void run\(\) \{ store\.put\("bsk_cell"/.test(w), '저장소 쓰기는 주 스레드로');
     assert.ok(/^\s*preconnectBus\(\);\s+\/\/ 버스 서버 연결을 켜자마자/m.test(a), '켜자마자(홈에서도) 연결을 미리 맺는다');
+  });
+  await t('s170: 버스 공공 API 오류 봉투는 다시 묻고 · 동시 4곳 · 못 받으면 없음으로 굳히지 않는다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/Semaphore\(4\)/.test(np) && /OpenAPI_ServiceResponse/.test(np) && /public static Res getBus\(/.test(np) && /status == 200 \? -3/.test(np), '동시 4곳 · 오류 봉투 감지 · 못 받으면 -3');
+    assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/NetPost\.getBus\(/g) || []).length >= 5, '버스 받기는 모두 getBus 로');
+    assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
