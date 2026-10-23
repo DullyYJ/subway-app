@@ -141,6 +141,7 @@ public class ShellActivity extends Activity {
         dpr = getResources().getDisplayMetrics().density;
         if (b == null) store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);            // 껐다 켜면 늘 홈부터(웹과 같다) — 화면 회전 같은 다시 만들기(b != null)는 보던 탭 그대로
         preloadDisk();                                                               // 모든 탭의 마지막 화면을 IO 스레드가 읽고 해석해 둔다(주 스레드는 파일을 열지 않는다)
+        if ("map".equals(ShellCore.currentTab(store))) preconnectBus();             // 버스 서버 연결을 미리 맺어 둔다(도착정보 요청의 DNS · TLS 시간을 없앤다)
         ErrLog.install(this);
         ScreenView.preloadFaces(this);
 
@@ -626,7 +627,13 @@ public class ShellActivity extends Activity {
     // 스켈레톤: 캐시도 없고 아직 못 받은 칸에 먼저 보이는 뼈대
     private final java.util.HashSet<ScreenView> skelViews = new java.util.HashSet<ScreenView>();
     private void showSkeleton(ScreenView v, String screen) {
-        try { v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v); }
+        try {
+            if (v == body && ShellCore.S_MAPB.equals(screen) && "bus".equals(map.mode()) && MapCore.VW_NEAR.equals(map.busView())) {        // 버스: 엔진이 그려 둔 정류장 뼈대(도착정보 자리는 '불러오는 중')를 먼저 — 같은 동네(약 110m 칸)일 때만, 숫자는 없다
+                String cell = map.stopsCell(), sk = cell.length() > 0 && cell.equals(store.get("bsk_cell", "")) ? cacheGet(ShellCore.busSkelKey(store), true) : null;
+                if (sk != null) { v.setSourceAge(0L); v.setScreen(parsedGet(sk), false); shownJson.remove(v); skelViews.add(v); return; }
+            }
+            v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v);
+        }
         catch (Throwable e) { v.clearScreen(); shownJson.remove(v); }
     }
 
@@ -664,7 +671,7 @@ public class ShellActivity extends Activity {
             if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
             if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
             if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
-            if (ShellCore.S_MAPB.equals(screen)) { if (keep && !keep0 && busReturnQuiet()) return; loadMapBody(v, keep); return; }
+            if (ShellCore.S_MAPB.equals(screen)) { if (keep && !keep0 && busReturnQuiet()) return; loadMapBodyFast(v, keep); return; }
             new Thread(new Runnable() {
                 @Override public void run() {
                     final String txt = fetchGeneric(screen); warm(txt);
@@ -1826,6 +1833,49 @@ public class ShellActivity extends Activity {
         }, "shell-maph").start();
     }
     private void loadMapBody(final ScreenView v, final boolean keep) { if (busRefreshing) map.restoreArrivals(); busRefreshing = false; loadMapBodyRound(v, keep, 0); }
+    /**
+     * 탭에 들어올 때 · 앱을 켤 때(콜드 스타트)의 버스 본문: 정류장 뼈대는 이미 그려졌다(캐시) — 도착정보(실시간 분·초)만 곧장 gildongmu-bus 로 받는다(엔진 왕복 없이).
+     * 옛 도착 숫자는 엔진에 넣지 않는다(보여 줄 옛 화면이 없으면 비운다). 지난번 도착정보 주소를 모르면 평소 길(엔진에게 묻기).
+     */
+    private void loadMapBodyFast(final ScreenView v, final boolean keep) {
+        if (busRefreshing) map.restoreArrivals(); busRefreshing = false;
+        if (v == body && "bus".equals(map.mode())) {
+            preconnectBus();
+            if (!keep) map.clearArrivals();
+            List<String[]> sp = map.speculativeNeed();
+            if (!sp.isEmpty()) {
+                map.busNeed.clear(); map.busNeed.addAll(sp);
+                busAt = System.currentTimeMillis();
+                fetchBusNeed(v, keep, 0, ++seqMapB, false);
+                return;
+            }
+        }
+        loadMapBodyRound(v, keep, 0);
+    }
+    // ── 네트워크 사전 연결: 버스 서버로 연결(DNS · TLS · HTTP/2)을 미리 맺어 둔다 — 실제 도착정보 요청이 그 연결을 이어 쓴다(NetPost 는 연결을 끊지 않는다) ──
+    private long preConnAt;
+    private void preconnectBus() {
+        long now = System.currentTimeMillis();
+        if (now - preConnAt < 20000L) return;
+        preConnAt = now;
+        new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BUS_BASE + "/health", 4000); } catch (Throwable ignored) { } } }, "shell-preconn").start();
+    }
+    // ── 정류장 뼈대 저장: 정류장을 다 받은 뒤, 같은 정류장 목록을 도착정보 없이 엔진에 한 번 더 그리게 해(백그라운드) 저장한다 — 다음에 켜자마자 정류장 카드가 바로 뜬다 ──
+    private String skelSig = "";
+    private void saveBusSkeleton() {
+        if (!"bus".equals(map.mode()) || !MapCore.VW_NEAR.equals(map.busView()) || map.stopCount() == 0) return;
+        final String cell = map.stopsCell(), sig = cell + "|" + map.stopSig();
+        if (cell.length() == 0 || sig.equals(skelSig)) return;
+        skelSig = sig;
+        final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store), true), key = ShellCore.busSkelKey(store);
+        ioExec.execute(new Runnable() { @Override public void run() {
+            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+            final String txt = r.status == 200 && r.body != null ? r.body : "";
+            if (txt.length() == 0) { skelSig = ""; return; }
+            warm(txt);
+            main.post(new Runnable() { @Override public void run() { store.put("bsk_cell", cell); cachePut(key, txt); } });
+        } });
+    }
     /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
@@ -1850,7 +1900,7 @@ public class ShellActivity extends Activity {
                     syncMapView();
                     if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
                     if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
-                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) brPrefetch();
+                    else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { brPrefetch(); saveBusSkeleton(); }
                         if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
                             busRetryN++; final long wait = 1500L * busRetryN;
                             main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);
@@ -1909,7 +1959,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
-                final String txt = r.status == 200 && r.body != null ? r.body : "";
+                final String txt = r.status == 200 && r.body != null ? r.body : ""; warm(txt);          // 해석은 IO 스레드에서 — 주 스레드는 그리기만
                 main.post(new Runnable() { @Override public void run() {
                     busPaintFly = false;
                     if (my == seqMapB && txt.length() > 0 && !busRefreshing && busShowing()) { v.setSourceAge(map.arrAge()); present(v, txt, true); }          // 그 사이 다음 통신·탭 이동이 있었으면 버린다(최종 그림이 곧 온다)
@@ -2069,7 +2119,7 @@ public class ShellActivity extends Activity {
         busRefreshing = true; busRefAt = System.currentTimeMillis(); busAt = busRefAt;
         map.dropArrivals();
         final List<String[]> spec = map.speculativeNeed();
-        if (spec.isEmpty() || map.svServer) { loadMapBodyRound(body, true, 0); return; }                       // 서버가 한 번에 받아 주는 중이면 기기가 따로 받지 않는다
+        if (spec.isEmpty()) { loadMapBodyRound(body, true, 0); return; }                                       // 지난번 도착정보 주소를 모르면 엔진에게 묻는다(주소를 아는 한 기기가 gildongmu-bus 로 곧장 받는다 — 서버 경유보다 빠르다)
         busSpeculate(spec);
     }
     /** 엔진 왕복 하나를 건너뛴다: 지난번 도착정보 주소들을 곧장 받고(병렬) 한 번에 그린다. 하나라도 비면 평소 길(엔진에게 묻기)로 돌아간다. */
@@ -2141,7 +2191,7 @@ public class ShellActivity extends Activity {
         syncMapView();
         busRetryN = 0;
         if (shown && busShowing() && System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();        // 버스 탭에 들어오면 캐시 화면을 먼저 보이고, 도착정보는 곧장(엔진 왕복 없이) 새로 받는다
-        else loadMapBody(body, shown);
+        else loadMapBodyFast(body, shown);
         if (shown) syncMapView();
     }
 
