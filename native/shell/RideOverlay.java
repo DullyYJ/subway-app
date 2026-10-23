@@ -50,7 +50,9 @@ final class RideOverlay {
     private Border border;
     private GradientDrawable bg;
     private WindowManager.LayoutParams lp;
-    private boolean shown, userPill, blinkOn = true, blinking, userScrolling;
+    private boolean shown, userPill, blinkOn = true, blinking, userScrolling, forcedOpen;
+    private int savedY = -1;
+    private long dismissedRecoAt = -1L;
     private OvCore.Ov cur = new OvCore.Ov();
     private float scrollPos;
     private ValueAnimator pulseAnim, pillAnim;
@@ -91,14 +93,22 @@ final class RideOverlay {
     }
     void hide() { ui.post(new Runnable() { @Override public void run() { removeNow(); } }); }
 
-    private boolean pillMode() { return userPill && cur.alert == 0; }
+    /** 접힌 알약으로 보일지. 접어 둬도 1정거장 전(alert 1)이거나 새 추천(row)이 오면 저절로 펼친다 — 2정거장 전(alert 2)은 펼치지 않고 알약 둘레 무지개만 돈다(웹 OverlayPlugin). 접은 그 추천으로는 다시 펼치지 않는다. */
+    private boolean pillMode() { return userPill && !wantOpen(); }
+    private boolean wantOpen() { return cur.alert == 1 || (cur.row.kind > 0 && cur.row.at != dismissedRecoAt); }
 
     private void apply() {
         OvCore.Ov v = cur;
         boolean pill = pillMode(), hasStrip = OvCore.hasStrip(v);
         int bgc = v.hasTheme ? v.bg : 0xF01C1C1E, fg = v.hasTheme ? v.fg : 0xFFFFFFFF, sub = v.hasTheme ? v.sub : 0xFFD1D1D6;
         bg.setColor(bgc);
+        bg.setCornerRadius(dp(pill ? 15 : 14));
+        border.pill = pill;
         bg.setStroke(Math.max(1, dp(1)), 0x33808080);
+        boolean forced = userPill && !pill;                                   // 접어 둔 알약이 경고 · 추천 때문에 저절로 펼쳐졌다: 맨 위로 옮기고, 끝나면 원래 자리의 알약으로
+        if (forced && !forcedOpen) { savedY = lp.y; lp.y = Math.min(lp.y, dp(36)); }
+        else if (!forced && forcedOpen && savedY >= 0) { lp.y = savedY; savedY = -1; }
+        forcedOpen = forced;
         lp.width = pill ? WindowManager.LayoutParams.WRAP_CONTENT : WindowManager.LayoutParams.MATCH_PARENT;
         pillT.setVisibility(pill ? View.VISIBLE : View.GONE);
         pillT.setText("●  " + OvCore.pillText(v)); pillT.setTextColor(fg);
@@ -123,7 +133,7 @@ final class RideOverlay {
         if (showRow) rowView.set(v.row, fg, sub);
         if (!userScrolling) scrollPos = OvCore.centerPos(v.cur, v.base, v.cells.length);
         strip.invalidate();
-        border.setMode(pill ? 0 : v.alert);
+        border.setMode(pill ? (v.alert == 2 ? 2 : 0) : v.alert);          // 접힌 알약도 2정거장 전엔 둘레 무지개(6초에 한 바퀴)
         startAnims();
         try { wm.updateViewLayout(box, lp); } catch (Throwable ignored) { }
     }
@@ -258,7 +268,8 @@ final class RideOverlay {
                                 else if (!"board".equals(cur.rsSt) && !"undo".equals(cur.rsSt)) dAct("open");            // 아래로 쓸면 탑승 줄이 열린다
                             } else if (up && my < -dp(22)) {
                                 if ("board".equals(cur.rsSt) && !OvCore.arrived(cur)) dAct("close");                  // 위로 쓸면 열린 탑승 줄부터 닫고
-                                else if (!userPill && cur.alert == 0) { userPill = true; apply(); }                    // 그다음엔 알약으로 접는다
+                                else if (!userPill && cur.alert != 1) { userPill = true; if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; apply(); }      // 그다음엔 알약으로 접는다(1정거장 전엔 못 접는다 · 접은 추천은 다시 안 펼친다)
+                                else if (userPill && forcedOpen && cur.alert != 1) { if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; apply(); }
                             }
                         } else if (!dragged && !armed && up) {
                             if (pillMode()) { userPill = false; apply(); }
@@ -350,8 +361,13 @@ final class RideOverlay {
         private final RectF rf = new RectF();
         private ValueAnimator anim;
         private int mode;
+        boolean pill;
         private float angle;
-        Border(Context c) { super(c); p.setStyle(Paint.Style.STROKE); setClickable(false); }
+        Border(Context c) { super(c); p.setStyle(Paint.Style.STROKE); setClickable(false); setVisibility(View.GONE); }       // 처음엔 숨김 — 보이는 채로 카드(WRAP_CONTENT)에 MATCH_PARENT 로 들어가면 화면 높이만큼 카드가 늘어난다
+        /** 카드 크기에 영향을 주지 않는다: 카드가 정해진 뒤(EXACTLY)에만 그 크기를 따르고, 재는 동안엔 0. */
+        @Override protected void onMeasure(int ws, int hs) {
+            setMeasuredDimension(MeasureSpec.getMode(ws) == MeasureSpec.EXACTLY ? MeasureSpec.getSize(ws) : 0, MeasureSpec.getMode(hs) == MeasureSpec.EXACTLY ? MeasureSpec.getSize(hs) : 0);
+        }
         void setMode(int m) {
             if (m == mode) return;
             mode = m;
@@ -370,7 +386,7 @@ final class RideOverlay {
             p.setShader(new SweepGradient(getWidth() / 2f, getHeight() / 2f, new int[] { 0xFFFF453A, 0xFFFF9F0A, 0xFFFFD60A, 0xFF30D158, 0xFF64D2FF, 0xFF0A84FF, 0xFFBF5AF2, 0xFFFF453A }, null));
             rf.set(w / 2f, w / 2f, getWidth() - w / 2f, getHeight() - w / 2f);
             cv.save(); cv.rotate(angle, getWidth() / 2f, getHeight() / 2f);
-            cv.drawRoundRect(rf, dp(14), dp(14), p);
+            cv.drawRoundRect(rf, dp(pill ? 15 : 14), dp(pill ? 15 : 14), p);
             cv.restore();
         }
     }
@@ -403,8 +419,17 @@ final class RideOverlay {
         private final RectF b1 = new RectF(), b2 = new RectF(), cr = new RectF();
         private OvCore.Row row = new OvCore.Row();
         private int fg = 0xFFFFFFFF, sub = 0xFF8E8E93;
+        private final android.graphics.Rect src = new android.graphics.Rect();
+        private long inAt = 0L, seenAt = -1L;                              // 입장 시작 시각 · 마지막으로 본 추천(row.at)
+        private static final long IN_MS = 1150L, TURN_MS = 300L;            // 오른쪽에서 줄을 끌고 들어오는 시간(웹 RecoView) · 다 들어온 뒤 돌아서기까지
+        private final Runnable tick = new Runnable() { @Override public void run() { invalidate(); if (isShown() && row.kind > 0) postDelayed(this, 55L); } };
         RowView(Context c) { super(c); setVisibility(View.GONE); }
-        void set(OvCore.Row r, int fgc, int subc) { row = r; fg = fgc; sub = subc; invalidate(); }
+        void set(OvCore.Row r, int fgc, int subc) {
+            if (r.kind > 0 && (r.at != seenAt || row.kind == 0)) { seenAt = r.at; inAt = System.currentTimeMillis(); }          // 새 추천/내릴 준비: 입장 연출을 다시
+            row = r; fg = fgc; sub = subc;
+            removeCallbacks(tick); if (r.kind > 0) post(tick);
+            invalidate();
+        }
         @Override protected void onMeasure(int w, int h) { setMeasuredDimension(MeasureSpec.getSize(w), dp(64)); }
         private void layoutBtns() {
             float w = getWidth(), top = dp(17), bot = dp(47);
@@ -438,14 +463,23 @@ final class RideOverlay {
         @Override protected void onDraw(Canvas cv) {
             if (row.kind == 0) return;
             layoutBtns();
+            long now = System.currentTimeMillis(), el = now - inAt;
+            float u = Math.min(1f, el / (float) IN_MS), slide = 1f - (1f - u) * (1f - u) * (1f - u);        // 처음엔 빠르게 걷다가 끝에서 서서히 멈춘다(감속)
+            boolean walking = u < 1f, facingRow = el >= IN_MS + TURN_MS;                                     // 들어오는 동안 · 다 들어오고 0.3초 뒤엔 줄 쪽(오른쪽)으로 돌아선다
+            cv.save();
+            cv.translate((1f - slide) * getWidth(), 0f);                                                      // 캐릭터 + 줄 묶음이 오른쪽 화면 밖에서 왼쪽으로
             float x0 = dp(8);
             android.graphics.Bitmap sh = row.ch.length() > 0 ? sheet(row.ch) : null;
             if (sh != null) {
-                int f = (int) ((System.currentTimeMillis() / 110L) % 16L), cell = sh.getWidth() / 4;
-                android.graphics.Rect src = new android.graphics.Rect((f % 4) * cell, (f / 4) * cell, (f % 4) * cell + cell, (f / 4) * cell + cell);
+                long per = facingRow ? 183L : 110L;                                                            // 돌아선 뒤엔 동작을 0.6배 속도로 늦춘다
+                int f = (int) ((now / per) % 16L), cell = sh.getWidth() / 4;
+                src.set((f % 4) * cell, (f / 4) * cell, (f % 4) * cell + cell, (f / 4) * cell + cell);
                 cr.set(x0, dp(6), x0 + dp(52), dp(58));
                 p.setFilterBitmap(true); p.setAlpha(255); p.setStyle(Paint.Style.FILL);
+                cv.save();
+                if (walking) { cv.rotate(-5f * (1f - u * 0.4f), cr.centerX(), cr.bottom); cv.scale(-1f, 1f, cr.centerX(), cr.centerY()); }     // 앞(왼쪽)으로 5° 숙이고 왼쪽으로 가니 좌우 반전(시트는 오른쪽을 본다)
                 cv.drawBitmap(sh, src, cr, p);
+                cv.restore();
                 x0 += dp(58);
             }
             float right = b1.left - dp(6), w = Math.max(dp(40), right - x0);
@@ -454,6 +488,8 @@ final class RideOverlay {
             if (row.kind == 1 && row.m.length() > 0) draw(cv, row.m, x0, dp(56), 10f, false, sub, w);
             if (row.kind == 1) { btn(cv, b1, row.go, true); btn(cv, b2, row.ok, false); }
             else btn(cv, b1, row.end, true);
+            cv.restore();
         }
+        @Override protected void onDetachedFromWindow() { removeCallbacks(tick); super.onDetachedFromWindow(); }
     }
 }
