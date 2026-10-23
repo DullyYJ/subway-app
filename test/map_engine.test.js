@@ -118,10 +118,10 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   let b = mk(null);
   ok(b.info.view === 'bus' && b.info.bus.st === 'noloc' && JSON.stringify(b.body).includes('mp.loc') && b.head[0].t === 'btog' && b.head[0].v === 'p', '버스: 위치 없으면 안내 + 내 위치 단추(토글 줄은 머리에 고정)');
   b = mk({ lat: 37.5, lng: 127.0, res: {} });
-  ok(b.info.bus.st === 'need' && b.info.bus.need.map(n => n.k).join() === 'tp,gg,tn' && /getStationByPos\?tmX=127&tmY=37\.5/.test(b.info.bus.need[0].url) && /busstationservice\/v2\/getBusStationAroundListv2\?x=127&y=37\.5&format=json/.test(b.info.bus.need[1].url) && /gpsLati=37\.5&gpsLong=127/.test(b.info.bus.need[2].url), '버스 1단계: 서울 좌표면 TOPIS + 경기 GBIS + TAGO 주소를 요청');
+  ok(b.info.bus.st === 'need' && b.info.bus.need.map(n => n.k).join() === 'tp,gg,tn,d1' && /getStationByPos\?tmX=127&tmY=37\.5/.test(b.info.bus.need[0].url) && /busstationservice\/v2\/getBusStationAroundListv2\?x=127&y=37\.5&format=json/.test(b.info.bus.need[1].url) && /gpsLati=37\.5&gpsLong=127/.test(b.info.bus.need[2].url), '버스 1단계: 서울 좌표면 TOPIS + 경기 GBIS + TAGO 주소를 요청');
   ok(b.head[0].items.map(i => i.label).join() === '📍 주변 정류장,⭐ 즐겨찾기' && b.head[0].items[0].on && b.head[0].rf.act.v === 'mp.rf' && b.head[1].t === 'tmap' && b.head[1].live === 1 && b.head[1].pts.length === 1 && b.head[1].pts[0].k === 'm' && b.head[1].pts[0].la === 37.5, '정류장을 찾는 중에도 토글 줄 + 내 위치 지도가 머리에 먼저 뜬다');
   b = mk({ lat: 35.1, lng: 129.0, res: {} });
-  ok(b.info.bus.need.map(n => n.k).join() === 'tn', '서울 밖이면 TAGO 만');
+  ok(b.info.bus.need.map(n => n.k).join() === 'tn,d1' && /\/bus-stops\?lat=35\.1&lng=129&radius=450$/.test(b.info.bus.need[1].url), '서울 밖이면 TAGO + 서버 정류장 표(D1)');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
   const n2 = b.info.bus.need;
   ok(b.info.bus.st === 'need' && n2.length === 4 && n2[0].k === 'a0' && /getStationByUid\?arsId=11111/.test(n2[0].url), '버스 2단계: 중복·미정차 제거, 출구 우선, 도착 주소 요청 ' + n2.length);
@@ -164,7 +164,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     { routeName: '99', routeTypeCd: 30, predictTimeSec1: 100, flag: 'STOP' },
     { routeName: '88', routeTypeCd: 30, predictTimeSec1: 7209, predictTimeSec2: 0, flag: 'PASS' }] } } });
   b = mk({ lat: 37.2661, lng: 127.0011, res: {} });
-  ok(b.info.bus.need.map(n => n.k).join() === 'gg,tn' && /^https:\/\/apis\.data\.go\.kr\/6410000\/busstationservice\/v2\/getBusStationAroundListv2\?x=127\.001&y=37\.266&format=json$/.test(b.info.bus.need[0].url), '경기 좌표(서울 밖): GBIS 정류장 + TAGO 를 요청');
+  ok(b.info.bus.need.map(n => n.k).join() === 'gg,tn,d1' && /^https:\/\/apis\.data\.go\.kr\/6410000\/busstationservice\/v2\/getBusStationAroundListv2\?x=127\.001&y=37\.266&format=json$/.test(b.info.bus.need[0].url), '경기 좌표(서울 밖): GBIS 정류장 + TAGO 를 요청');
   b = mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO } });
   const n3 = b.info.bus.need;
   ok(b.info.bus.st === 'need' && n3.length === 2 && /busarrivalservice\/v2\/getBusArrivalListv2\?stationId=203000123&format=json$/.test(n3[0].url), '경기 좌표는 GBIS 정류장이 TAGO 보다 먼저: 도착 주소는 stationId 로 ' + JSON.stringify(n3.map(x => x.url.slice(-40))));
@@ -185,6 +185,16 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const D1 = JSON.stringify({ ok: true, stops: [{ node_id: 'DJB1', node_nm: '대전역', city_code: '25', lat: 36.332, lng: 127.434 }, { node_id: 'XX9', node_nm: '시청', city_code: '0', lat: 36.3345, lng: 127.434 }] });
   b = mk({ lat: 36.333, lng: 127.434, res: { tn: '', d1: D1 } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
+  // s177: 정류장 목록 준비 판정(서버가 '충분하면 느린 출처는 안 기다린다')
+  {
+    const rd = (la, lo, res) => E.mapBusReady({ bus: { lat: la, lng: lo, res } });
+    ok(rd(35.1796, 129.0756, {}) === false && rd(35.1796, 129.0756, { d1: '' }) === false && rd(35.1796, 129.0756, { tn: '' }) === true, 'TAGO 칸: 아무것도 안 왔으면 기다린다 · D1 이 비고 TAGO 가 아직이면 기다린다 · TAGO 가 비면(D1 은 덤) 끝');
+    const D1B = JSON.stringify({ ok: true, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }] });
+    ok(rd(35.1796, 129.0756, { d1: D1B }) === true, 'TAGO 칸: D1 이 정류장을 주면 TAGO 를 기다리지 않는다');
+    ok(rd(37.5, 127.0, { d1: D1B, gg: '', tn: '' }) === false && rd(37.5, 127.0, { tp: SEOUL_POS }) === true, '서울: D1 이 먼저 와도 TOPIS(tp)를 기다린다 · tp 가 정류장을 주면 나머지를 기다리지 않는다');
+    ok(rd(37.5, 127.0, { tp: '', gg: '', tn: '' }) === true && rd(37.2661, 127.0011, { gg: GGS }) === true && rd(37.2661, 127.0011, {}) === false, '서울 TOPIS 가 비고 나머지도 비면 끝 · 경기: GBIS 가 정류장을 주면 TAGO 를 기다리지 않는다');
+    ok(rd(37.489, 126.724, { gg: GGS_IC }) === false && rd(37.489, 126.724, { tn: TAGO }) === true, '인천 상자 안: TAGO 가 먼저 — GBIS 만 와서는 TAGO 를 기다린다');
+  }
   ok(E.mapCityOf(35.1, 129.0) === '21' && E.mapCityOf(10, 10) === '' && E.mapGGPreferred(37.2661, 127.0011) === true && E.mapGGPreferred(37.489, 126.724) === false && E.mapGGPreferred(35.1, 129.0) === false, '시 코드 상자 · 경기 우선 판정');
   ok(mk({ lat: 37.2661, lng: 127.0011, res: { gg: GGS, tn: TAGO, a0: GGA, a1: '' } }).info.stops[0].sid === '203000123', '즐겨찾기용 정류장 값(info.stops)에 도착정보를 다시 물을 열쇠가 들어 있다');
   {
