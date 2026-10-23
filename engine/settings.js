@@ -162,10 +162,11 @@ function settingsScreen(inp, factsIn) {
 // ★ 하위 화면(cap 8) — 예전에 '웹 카드 시트'로 열던 6개: 갤럭시 절전 · 다른 앱 위에 표시 · 개발자 도구 · 하차 추천 시험 · 캐릭터 시계 위젯 · 출퇴근 브리핑.
 //   앱은 pf(기기 사실)만 보낸다 — 켜짐·값·고른 칸·읽은 숫자. 글(상태 문구·시각 글·요일 안내·퇴근 힌트·시간대 이름)과 어떤 칸을 어떻게 보일지는 여기서 정한다.
 //   행동(act call v): pg.back(설정으로) · sam.open · bat.req · ovl.diag · pf.live · pf.rec · dev.start.<모드> · dev.stop · arr.t.<종류> · arr.demo · arr.stat ·
-//   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · erl.copy · erl.clear · locd.ok · locd.no · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
+//   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · erl.copy · erl.clear · locd.ok · locd.no · ask.ok · ask.no · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
 //   tp.ap.<am|pm> · tp.h.<1-12> · tp.m.<0-55> · tp.ok · tp.cancel · pk.save · pk.clear · pk.u.<번호> · pk.b.<번호> · pk.cancel.   스위치(toggle) 키: cm · ovl.
 // ══════════════════════════════════════════════════════════════════════════
-var SETTINGS_PAGES = { sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내' };
+var SETTINGS_PAGES = { sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내', askbat: '화면을 꺼도 끊기지 않게', asksam: '갤럭시 절전 제외', askovl: '다른 앱 위에 표시' };
+var SETTINGS_ASK = { askbat: 1, asksam: 1, askovl: 1 };      // 처음 설치 때 이어서 묻는 기기 설정 안내 — 뒤로 가기 없이 [나중에]/[설정하기] 만
 var SETTINGS_DAY_NM = ['일', '월', '화', '수', '목', '금', '토'];
 var SETTINGS_BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
 var SETTINGS_PICK = { from: ['출근 출발지 (집 근처)', '지하철·버스 (예: 아라)', '현재 위치 기준'], to: ['출근 도착지 (회사 근처)', '지하철·버스 (예: 강남)', '현재 위치 기준'],
@@ -187,7 +188,7 @@ function settingsPageFacts(pf) {
   var tp = (pf.tp && typeof pf.tp === 'object') ? pf.tp : null, pk = (pf.pick && typeof pf.pick === 'object') ? pf.pick : null, st = (pf.st && typeof pf.st === 'object') ? pf.st : null;
   var dg = (st && st.dg && typeof st.dg === 'object') ? st.dg : {};
   return {
-    w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
+    sm: settingsFlag(pf.sm, false), w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
     errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
@@ -505,6 +506,37 @@ function settingsPageLocd() {
     settingsRowN([settingsBtnN('거부', 'locd.no', { h: 46 }), settingsBtnN('동의', 'locd.ok', { gold: true, h: 46 })], 10),
     settingsNavN('개인정보처리방침 보기', '', { a: 'call', v: 'pol.privacy' }, true)], 24)];
 }
+// ── 처음 설치 때 기기 설정 안내(웹 _batAsk · _samAsk · _ovlAsk 의 글 그대로) ── 앱이 위치 안내 다음부터 한 가지씩 차례로 띄운다. 눌림은 ask.no(나중에) · ask.ok(설정하기) 둘뿐.
+function settingsAskPanelN(title, bodyParts, boxParts, subParts) {
+  var a = settingsBoldN(bodyParts), k = [settingsTitleN(title, 14)];
+  var ta = { t: 'text', s: a.s, size: 14, color: 'text', lh: 1.75, pad: [0, 0, 0, 14] }; if (a.hl.length) ta.hl = a.hl; k.push(ta);
+  if (boxParts) { var x = settingsBoldN(boxParts); k.push({ t: 'box', s: x.s, hl: x.hl, size: 12.5, lh: 1.75, color: 'text', fill: 'bg', line: 'border', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 12] }); }
+  var b = settingsBoldN(subParts), tb = { t: 'text', s: b.s, size: 12.5, color: 'sub', lh: 1.7, pad: [0, 0, 0, 18] }; if (b.hl.length) tb.hl = b.hl; k.push(tb);
+  k.push(settingsRowN([settingsBtnN('나중에', 'ask.no', { h: 46 }), settingsBtnN('설정하기', 'ask.ok', { gold: true, h: 46 })], 0));
+  return [settingsPanelN(k, 24)];
+}
+function settingsPageAskBat(f) {
+  if (f.sm) return settingsAskPanelN('갤럭시에서 화면을 꺼도 끊기지 않게',
+    [['지하철·버스를 타는 동안 화면이 꺼져 있어도 ', 0], ['내릴 정거장 알림', 1], ['과 ', 0], ['오버레이', 1], ['가 계속 움직이려면, ', 0], ['길동무를 배터리 최적화와 자동 절전에서 제외', 1], ['해 주셔야 해요. 갤럭시는 며칠 안 쓴 앱을 자동으로 절전시켜 이동 중에 멈출 수 있어요.', 0]],
+    [['[설정하기] 한 번이면 이어서 안내해요\n① 열리는 목록에서 오른쪽 위 ', 0], ['+', 1], [' → ', 0], ['길동무', 1], [' 체크(안 보이면 아래 검색) → ', 0], ['추가', 1], ['\n② 돌아오면 나오는 기기 창에서 ', 0], ['허용', 1]],
+    [['· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.\n· 이동 중에 최근 앱 화면에서 ', 0], ['모두 닫기', 1], ['를 누르면 안내가 멈춰요.', 0]]);
+  return settingsAskPanelN('화면을 꺼도 끊기지 않게',
+    [['지하철·버스를 타는 동안 화면이 꺼져 있어도 ', 0], ['내릴 정거장 알림', 1], ['과 ', 0], ['오버레이', 1], ['가 계속 움직이려면, 기기의 ', 0], ['배터리 최적화에서 길동무를 제외', 1], ['해 주셔야 해요. 제외하지 않으면 일부 기기(삼성·샤오미 등)가 이동 중에 앱을 멈출 수 있어요.', 0]],
+    null,
+    [['· [설정하기]를 누르면 기기의 안내 창이 열려요. 거기서 ', 0], ['허용', 1], ['을 눌러 주세요.\n· 경로 안내 중에만 위치를 쓰고, 설정은 기기 설정에서 언제든 되돌릴 수 있어요.', 0]]);
+}
+function settingsPageAskSam() {
+  return settingsAskPanelN('갤럭시 절전에서 제외해 주세요',
+    [['갤럭시는 며칠 안 쓴 앱을 자동으로 ', 0], ['절전 상태', 1], ['로 만들어, 화면이 꺼진 동안의 ', 0], ['하차 알림', 1], ['이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 주세요.', 0]],
+    [['① [설정하기]를 누르면 목록 화면이 열려요\n② 오른쪽 위 ', 0], ['+', 1], ['(추가)를 누르고\n③ ', 0], ['길동무', 1], ['를 체크(안 보이면 아래 ', 0], ['검색', 1], ['에 입력)한 뒤 ', 0], ['추가', 1], ['를 눌러 주세요', 0]],
+    [['· 화면 모양은 기기·One UI 버전에 따라 조금 달라요.\n· 이동 중에 최근 앱 화면에서 ', 0], ['모두 닫기', 1], ['를 누르면 안내가 멈춰요.', 0]]);
+}
+function settingsPageAskOvl() {
+  return settingsAskPanelN('다른 앱을 보면서도 내 위치 확인',
+    [['지하철·버스에서 다른 앱을 쓰는 동안에도 ', 0], ['현재 역과 남은 시간', 1], ['을 화면 위쪽에 작은 막대로 띄워 드려요. 막대를 누르면 길동무로 돌아와요.', 0]],
+    [['[설정하기]를 누르면 기기 설정 화면이 열려요\n① ', 0], ['길동무', 1], ['를 찾아 눌러서\n② ', 0], ['다른 앱 위에 표시', 1], ['를 ', 0], ['켬', 1], ['으로 바꾸고 돌아오세요', 0]],
+    [['· 안내 정보만 보여주고 광고는 넣지 않아요.\n· 나중에 설정 탭의 \'다른 앱 위에 표시\'에서도 켜고 끌 수 있어요.', 0]]);
+}
 function settingsPageScreen(inp, factsIn) {
   var p = String(inp.p || '');
   if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
@@ -515,8 +547,8 @@ function settingsPageScreen(inp, factsIn) {
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
   else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd })[p](pf);
-  var body = (p === 'locd' ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
+  var body = (p === 'locd' || SETTINGS_ASK[p] ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;
