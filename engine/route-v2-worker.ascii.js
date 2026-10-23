@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s174";
+var ENGINE_VERSION = "route-v2-2026-10-23s175";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19442,7 +19442,7 @@ function resultScreen(opt, r) {
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
-  var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
+  var body = nodes.length ? [{ t: 'panel', pad: [14, 4, 14, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];             // \uc88c\uc6b0 14 \u2014 \uc6f9 \ud648\uc740 \uc785\ub825 \uce74\ub4dc \u00b7 \uacb0\uacfc \uce74\ub4dc\uac00 \uac19\uc740 \ubc14\uae65 \uc5ec\ubc31(14)\uc744 \uc4f4\ub2e4(\uc608\uc804\uc5d4 0 \uc774\ub77c \uacb0\uacfc \uce74\ub4dc\ub9cc \ud654\uba74 \ub05d\uae4c\uc9c0 \ub2ff\uc558\ub2e4)
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
