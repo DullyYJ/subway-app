@@ -1008,13 +1008,15 @@ public class ShellJvmTest {
                 OvCore.Ov ru = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"undo\",\"bt\":\"되돌리기\",\"k\":\"탑승으로 기록했어요\"}}"));
                 OvCore.Ov rh = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"hidden\"}}"));
                 OvCore.Ov re = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"rs\":{\"st\":\"board\",\"end\":true,\"bt\":\"안내 종료\"}}"));
-                ok(RsCore.heightDp(rb) == RsCore.H_BOARD && RsCore.heightDp(ru) == RsCore.H_UNDO && RsCore.heightDp(rw) == RsCore.H_PILL && RsCore.heightDp(rh) == 0 && RsCore.heightDp(re) == 0 && RsCore.heightDp(null) == 0, "시트 높이: 올라온 92 · 되돌리기 54 · 알약 44 · 숨김/도착 줄은 0(도착은 앱에 따로 있다)");
+                ok(RsCore.heightDp(rb) == RsCore.H_BOARD && RsCore.heightDp(ru) == RsCore.H_UNDO && RsCore.heightDp(rw) == RsCore.H_PILL && RsCore.heightDp(rh) == 0 && RsCore.heightDp(re) == 0 && RsCore.heightDp(null) == 0, "시트 높이: 올라온 83 · 되돌리기 53 · 알약 52 · 숨김/도착 줄은 0(도착은 앱에 따로 있다)");
                 float[] bb = RsCore.btn(rb, 360f);
-                ok(Math.abs(bb[0] + bb[2] - 344f) < 0.01f && bb[2] == RsCore.btnW("환승완료") && RsCore.btnW("탑승") == 72f && "press".equals(RsCore.tap(rb, bb[0] + 5f, bb[1] + 5f, 360f, 0f)) && RsCore.tap(rb, 20f, 50f, 360f, 0f) == null, "[환승완료] 단추는 오른쪽 여백 16 · 누르면 press · 다른 곳은 무반응");
-                float[] ub = RsCore.btn(ru, 360f);
-                ok("undo".equals(RsCore.tap(ru, ub[0] + 3f, ub[1] + 3f, 360f, 0f)) && ub[3] == 34f, "기록 직후엔 [되돌리기] 가 undo");
+                ok(Math.abs(bb[0] + bb[2] - 344f) < 0.01f && bb[2] == RsCore.btnW("환승완료") && RsCore.btnW("탑승") == 92f && "press".equals(RsCore.tap(rb, bb[0] + 5f, bb[1] + 5f, 360f, 0f)) && RsCore.tap(rb, 20f, 50f, 360f, 0f) == null, "[환승완료] 단추는 오른쪽 여백 16 · 누르면 press · 다른 곳은 무반응");
+                float[] ub = RsCore.undoBtn(360f, 120f);
+                float[] uc = RsCore.undoCap(360f, 120f);
+                ok("undo".equals(RsCore.tap(ru, ub[0] + 3f, ub[1] + 3f, 360f, 120f)) && ub[3] == 39f && Math.abs(uc[0] * 2f + uc[2] - 360f) < 0.01f && RsCore.tap(ru, uc[0] + 4f, 20f, 360f, 120f) == null && RsCore.btnW("환승완료") == 98f, "기록 직후엔 [되돌리기] 가 undo · 캡슐은 가운데 정렬 · 안내 글 쪽은 무반응");
+                ok(RsCore.heightDp(rb, true) == 83 && RsCore.heightDp(rb, false) == 0 && RsCore.heightDp(rw, true) == 0 && RsCore.heightDp(rw, false) == 52 && RsCore.heightDp(ru, false) == 53 && RsCore.heightDp(ru, true) == 0, "시트 뷰는 올라온 시트만 · 떠 있는 뷰는 알약 · 되돌리기만 맡는다");
                 float[] pw = RsCore.pill(360f, 50f);
-                ok("pill".equals(RsCore.tap(rw, pw[0] + 4f, pw[1] + 4f, 360f, 50f)) && RsCore.tap(rw, 10f, 10f, 360f, 50f) == null && Math.abs(pw[0] + pw[2] - 344f) < 0.01f, "대기 알약을 누르면 pill");
+                ok("pill".equals(RsCore.tap(rw, pw[0] + 4f, pw[1] + 4f, 360f, 50f)) && RsCore.tap(rw, 10f, 10f, 360f, 50f) == null && Math.abs(pw[0] + pw[2] - 346f) < 0.01f && pw[2] == 94f && pw[3] == 38f, "대기 알약을 누르면 pill (오른쪽 14 · 높이 38)");
                 ok("close".equals(RsCore.swipe(rb, 5f, 60f)) && RsCore.swipe(rb, 5f, 20f) == null && RsCore.swipe(rb, 80f, 60f) == null && "open".equals(RsCore.swipe(rw, 3f, -40f)) && RsCore.swipe(rw, 3f, -10f) == null && RsCore.swipe(ru, 0f, 90f) == null, "올라온 시트는 아래로 쓸면 close · 알약은 위로 쓸면 open · 짧거나 비스듬하면 무반응");
                 ok("open".equals(RsCore.tabSwipe(rw, 3f, -40f)) && "open".equals(RsCore.tabSwipe(null, 0f, -50f)) && RsCore.tabSwipe(rb, 0f, -50f) == null && "close".equals(RsCore.tabSwipe(rb, 5f, 60f)) && RsCore.tabSwipe(rw, 5f, 60f) == null && RsCore.tabSwipe(null, 0f, 60f) == null && RsCore.tabSwipe(rw, 60f, -40f) == null && RsCore.tabSwipe(rw, 0f, -10f) == null, "하단 탭 막대: 위로 쓸면 open(시트가 올라와 있으면 무반응) · 올라온 시트는 아래로 쓸면 close · 짧거나 비스듬하면 무반응");
 
