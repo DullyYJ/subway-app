@@ -138,7 +138,7 @@ function findAndroidJar() {
     assert.ok(/public static String cdFmt\(/.test(sc) && /it\.bs\[i \* 2 \+ a\] = ar\.val/.test(sc), '남은 초를 항목에 싣는다');
     assert.ok(!/flowed/.test(sv) && /cdState\.put\(it\.ck\[k\], new double\[\] \{ sec, now - age \}\)/.test(sv) && /cdDrawn\) postInvalidateDelayed\(1000L/.test(sv) && /rem <= 60\.0/.test(sv), '새 실시간 값이 오면 옛 카운트다운을 버리고 덮어쓴다 · 초마다 다시 그리고 · 60초 이하는 임박색');
     assert.ok(/setSourceAge\(am > 0L/.test(v) && /diskIdx\.put\(diskName\(key\), System\.currentTimeMillis\(\)\)/.test(v), '캐시 화면은 받은 뒤 흐른 만큼 줄어 있다');
-    assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); brResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /> BUS_POLL_MS/.test(v), '앞으로 돌아오면 8초 넘었을 때 바로 다시 받는다');
+    assert.ok(/private void busResume\(\)/.test(v) && /busResume\(\); brResume\(\); if \(ShellCore\.S_SETPG/.test(v) && /busLocCheck\(\);\s+\/\/ 위치가 그대로면 아무것도 받지 않는다/.test(v), '앞으로 돌아오면 위치만 확인한다(그대로면 받지 않는다 · 시간만 줄어든다)');
     assert.ok(/if \(b == null\) store\.put\(ShellCore\.K_TAB, ShellCore\.DEFAULT_TAB\)/.test(v), '새로 켜면 홈부터');
     assert.ok(/kind == ScreenCore\.K_SWAP\) continue;/.test(sv) && /kind == ScreenCore\.K_SWAP\) drawItem/.test(sv), '교환 단추는 구분선 위에 그린다');
     const hi = sv.slice(sv.indexOf('private void hideInput()'), sv.indexOf('private void syncInput()'));
@@ -148,12 +148,12 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     const bt = v.slice(v.indexOf('private boolean busShowing'), v.indexOf('private void startBusTick'));
-    assert.ok(/BUS_POLL_MS = 60000L/.test(v) && /postDelayed\(busTick, BUS_POLL_MS\)/.test(v), '1분 간격(그 사이 초는 기기에서 줄어든다)');
+    assert.ok(/BUS_POLL_MS = 30000L/.test(v) && /postDelayed\(busTick, BUS_POLL_MS\)/.test(v), '위치 재확인 30초 간격(그 사이 초는 기기에서 줄어든다)');
     assert.ok(/resumed/.test(bt) && /currentTab\(store\)/.test(bt) && /S_MAPB/.test(bt) && /dropArrivals\(\)/.test(bt) && /loadMapBodyRound\(/.test(bt), '보일 때만 · 도착정보만 비우고 다시 묻는다');
     // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
     assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
-    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = BUS_FRESH_MS/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 그보다 오래면 옛 숫자 없이 정류장 뼈대(s168)');
+    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 600000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = BUS_FRESH_MS/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 10분 안이면 흐른 초만큼 줄여 바로 · 그보다 오래면 옛 숫자 없이 정류장 뼈대(s176)');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
     const svw = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -409,7 +409,7 @@ function findAndroidJar() {
     const bm = a.slice(a.indexOf('private void busMove('), a.indexOf('private void busMove(') + 6000);
     assert.ok(/busShowing\(\)/.test(bm) && /stopCount\(\) > 0/.test(bm) && /new Thread\(/.test(bm) && /map\.addBusRes\(/.test(bm) && /present\(body, txt, true\)/.test(bm), '비우지 않고 뒤 스레드에서 받아 한 번에 바꿔 끼운다');
     assert.ok(/busMove\(ll\[0\], ll\[1\]\)/.test(a) && /busMove\(la, lo\);/.test(a), '위치가 바뀌면 busMove');
-    assert.ok(/BUS_POLL_MS = 60000L/.test(a), '1분에 한 번');
+    assert.ok(/BUS_POLL_MS = 30000L/.test(a), '위치 재확인 30초에 한 번');
     assert.ok(/public String stopSig\(\)/.test(mc), '정류장 구성 서명');
     assert.ok(/hv = optNum\(m, "hv"/.test(sc) && /winH \* n\.hv \/ 100f/.test(sc) && /public static volatile float winH/.test(sc), '지도 높이는 창 높이 vh');
     assert.ok(/ScreenCore\.winH = /.test(sv), 'ScreenView 가 창 높이를 알려 준다');
@@ -437,7 +437,7 @@ function findAndroidJar() {
     assert.ok(/NetPost\.get\(ShellCore\.BUS_BASE \+ "\/health"/.test(a) && /boolean reuse = false/.test(np) && /if \(c != null && !reuse\) c\.disconnect\(\)/.test(np), '사전 연결 + 연결 재사용(응답을 다 읽으면 끊지 않는다)');
     const bp = a.slice(a.indexOf('private void busPaint'), a.indexOf('private void fetchBusNeed'));
     assert.ok(/warm\(txt\)/.test(bp), '응답 해석은 IO 스레드(주 스레드는 그리기만)');
-    assert.ok(/BUS_STALE_MS = BUS_FRESH_MS/.test(sc) && /busSkelKey\(Store st\)/.test(sc), '도착정보 화면 8초 · 뼈대 24시간');
+    assert.ok(/BUS_STALE_MS = BUS_FRESH_MS/.test(sc) && /busSkelKey\(Store st\)/.test(sc), '도착정보 화면 10분 · 뼈대 24시간');
   });
   await t('s169: 홈에서 시작해도 버스 탭을 미리 준비(연결 · 정류장 · 도착정보 주소 · 뼈대)', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
@@ -453,6 +453,16 @@ function findAndroidJar() {
     assert.ok(/Semaphore\(4\)/.test(np) && /OpenAPI_ServiceResponse/.test(np) && /public static Res getBus\(/.test(np) && /status == 200 \? -3/.test(np), '동시 4곳 · 오류 봉투 감지 · 못 받으면 -3');
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
+  });
+  await t('s176: 버스 재조회는 위치가 바뀔 때만 · 탭을 다녀와도 시간만 줄어든다 · 위치 재확인은 탑승 중이 아니면 30초마다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    const lc = a.slice(a.indexOf('private void busLocCheck()'), a.indexOf('/** 앞으로 돌아왔을 때'));
+    assert.ok(/if \(!busShowing\(\) \|\| home\.riding\(\)\) return;/.test(lc) && /BUS_FRESH_MS\) \{ busRefresh\(\); return; \}/.test(lc) && /farFrom\(map\.busLL, l, BUS_MOVE_DEG\)\) busMove\(/.test(lc) && !/busRefresh\(\);[^}]*busMove/.test(lc.replace(/BUS_FRESH_MS\) \{ busRefresh\(\); return; \}/, '')), '탑승 중엔 안 함 · 위치가 55m 넘게 바뀌면 busMove · 같으면 아무것도 받지 않는다(10분 넘은 숫자만 예외)');
+    const bt = a.slice(a.indexOf('private final Runnable busTick'), a.indexOf('private void busLocCheck()'));
+    assert.ok(/busLocCheck\(\); startBusTick\(\);/.test(bt) && !/busRefresh\(\)/.test(bt), '30초 박자는 위치만 본다(도착정보를 곧바로 받지 않는다)');
+    const rq = a.slice(a.indexOf('private boolean busReturnQuiet()'), a.indexOf('private void startBusTick()'));
+    assert.ok(/busLocCheck\(\);/.test(rq) && !/busRefresh\(\)/.test(rq), '탭을 다녀오면 위치만 확인한다');
+    assert.ok(/BUS_FRESH_MS = 600000L/.test(sc), '버스 캐시 화면 10분');
   });
   await t('s174: 처음 그릴 때 정류장만(0.3초)·전체(서버가 도착정보까지) 두 요청을 동시에 · 늦은 정류장만 화면은 버린다 · 전체가 실패하면 예전처럼', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
