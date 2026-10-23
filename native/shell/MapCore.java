@@ -226,6 +226,22 @@ public final class MapCore {
         try { return ShellCore.BUS_BASE + "/tago?url=" + java.net.URLEncoder.encode(u, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; }
     }
 
+    /** 같은 주소를 route-v2 의 /bus-tago(공공데이터 키 2개)로 보내는 주소 — 공공 API 주소가 아니면 빈 문자열(그땐 두 길로 나누지 않는다). */
+    public static String busAltUrl(String u) {
+        if (u == null || !u.matches("^https?://(apis\\.data\\.go\\.kr|ws\\.bus\\.go\\.kr)/.*")) return "";
+        try { return ShellCore.BASE + "/bus-tago?url=" + java.net.URLEncoder.encode(u, "UTF-8"); } catch (java.io.UnsupportedEncodingException e) { return ""; }
+    }
+    /** 엔진이 준 주소 하나를 받는다: 도착정보(a·f 번호)는 번호 짝·홀로 두 길에 반반, 그 밖(정류장 목록 등)은 두 길에 동시에. */
+    public static NetPost.Res busGet(String key, String raw, double firstMs, double retryMs) {
+        String u = busFetchUrl(raw);
+        if (u.length() == 0) return null;
+        String alt = busAltUrl(raw);
+        boolean arr = key != null && key.matches("[af][0-9]{1,3}");
+        int pref = 0;
+        if (arr) { try { pref = Integer.parseInt(key.substring(1)) & 1; } catch (NumberFormatException e) { pref = 0; } }
+        return NetPost.getBus2(u, alt, pref, !arr && alt.length() > 0 && !(key != null && key.endsWith("p")), firstMs, retryMs);
+    }
+
     // ── 화면에서 읽은 것 ──
     public String view = "";                                   // 'metro' | 'list' | 'bus'
     final List<String[]> regionStns = new ArrayList<String[]>();   // 지방 노선 목록의 눌림 번호 → [역, 노선]
