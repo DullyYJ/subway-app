@@ -42,7 +42,7 @@ public class ShellActivity extends Activity {
     private ShellCore.Store store;
     private LinearLayout root;
     private RsSheetView rs;
-    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; boolean ovOn = false; try { ovOn = ShellCore.ovlOn(store.get(ShellCore.K_OVL, "")) && RideOverlay.allowed(ShellActivity.this); } catch (Throwable ignored) { } rs.setOv(RideService.running && !ovOn ? RideService.liveOv : null); } };       // 떠 있는 안내(오버레이)가 켜져 있으면 같은 줄이 거기 있으니 앱 안에서는 겹쳐 그리지 않는다
+    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; rs.setOv(RideService.running ? RideService.liveOv : null); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -238,7 +238,7 @@ public class ShellActivity extends Activity {
         widgetLaunch();
     }
     @Override protected void onStart() { super.onStart(); if (vec != null) vec.onStart(); }
-    @Override protected void onStop() { if (vec != null) vec.onStop(); super.onStop(); WidgetCore.onAppLeft(this); }
+    @Override protected void onStop() { RideService.setAppFront(false); if (vec != null) vec.onStop(); super.onStop(); WidgetCore.onAppLeft(this); }
     @Override public void onLowMemory() { super.onLowMemory(); if (vec != null) vec.onLowMemory(); }
 
     private boolean resumed;
@@ -306,7 +306,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; RideService.rsListener = rsApply; rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; RideService.setAppFront(true); RideService.rsListener = rsApply; rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -3808,7 +3808,7 @@ public class ShellActivity extends Activity {
     /** 웹 _pipArmNow: 경로를 확정했는데 '다른 앱 위에 표시' 허용이 없으면 안내 창을 이번 실행에 한 번 띄운다(다른 앱을 보면서도 내 위치·탑승 줄을 보려면 필요). 끈 적이 있으면 묻지 않는다. */
     private void ovlHintOnce() {
         try {
-            if (ovlAskedRun || !RideOverlay.supported() || RideOverlay.allowed(this) || !ShellCore.ovlOn(store.get(ShellCore.K_OVL, ""))) return;
+            if (ovlAskedRun || !RideOverlay.supported() || RideOverlay.allowed(this) || "0".equals(store.get(ShellCore.K_OVL, ""))) return;       // 일부러 끈("0") 사람에게는 묻지 않는다
             ovlAskedRun = true;
             store.put(ShellCore.K_OVLASK, "1");
             main.postDelayed(new Runnable() { @Override public void run() { if (resumed && (sheet == null || !sheet.isShowing())) openSetPage("askovl"); } }, 1800L);
