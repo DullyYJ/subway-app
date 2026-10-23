@@ -41,7 +41,7 @@ public class ShellJvmTest {
         {
             ShellCore.MemStore ps = new ShellCore.MemStore();
             ok(ShellCore.routeSettings(ps, "call", "pg.ovl", null, false, null).kind == ShellCore.E_PAGE && "ovl".equals(ShellCore.routeSettings(ps, "call", "pg.ovl", null, false, null).arg), "설정: 하위 화면 누름 → E_PAGE(ovl)");
-            ok(ShellCore.settingsFacts(ps).contains("\"ovl\":0"), "설정 사실: 오버레이 꺼짐");
+            ok(ShellCore.settingsFacts(ps).contains("\"ovl\":1"), "설정 사실: 오버레이 기본 켜짐(끈 적 없음)");
             ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", true, false) == ShellCore.PG_NEEDPERM && "1".equals(ps.get(ShellCore.K_OVL, "0")) && ShellCore.settingsFacts(ps).contains("\"ovl\":1"), "오버레이 스위치 켬 + 권한 없음 → 권한 화면을 열어야 한다(저장은 켬)");
             ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", true, true) == ShellCore.PG_RENDER, "권한이 있으면 그냥 다시 그린다");
             ok(ShellCore.routePage(ps, "ovl", "set", null, "ovl", false, true) == ShellCore.PG_RENDER && "0".equals(ps.get(ShellCore.K_OVL, "1")), "끄면 저장 꺼짐");
@@ -260,7 +260,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":1,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
@@ -379,7 +379,7 @@ public class ShellJvmTest {
             ok(ShellCore.retryHint("{\"ok\":true,\"delayed\":true}").length == ShellCore.DEFAULT_RETRY.length && ShellCore.retryHint("{\"ok\":true,\"v\":1,\"screen\":\"shop\"}") == null && ShellCore.retryHint("{\"delayed\":false}") == null && ShellCore.retryHint("") == null && ShellCore.retryHint(null) == null && ShellCore.retryHint("{\"delayed\":tru") == null, "간격이 없으면 기본값 · 안내가 아니면 null · 깨진 글도 안전");
             ShellCore.MemStore ss = new ShellCore.MemStore();
             String k1 = ShellCore.cacheKey("settings", ss);
-            ss.put("ovl_on", "1");
+            ss.put("ovl_on", "0");
             String k2 = ShellCore.cacheKey("settings", ss);
             ShellCore.MemStore ss2 = new ShellCore.MemStore();
             ok(k1.startsWith("settings|") && !k1.equals(k2) && k1.equals(ShellCore.cacheKey("settings", ss2)) && "settings".equals(ShellCore.expectId(k2)) && ShellCore.diskTtl(k2) > 0L, "설정 화면 캐시 열쇠는 기기 저장값의 지문 — 값이 바뀌면 옛 화면이 나오지 않는다");
@@ -709,6 +709,11 @@ public class ShellJvmTest {
                 String br1 = NetPost.busBust(bu, 1), br2 = NetPost.busBust(bu, 2);
                 ok(NetPost.busBust(bu, 0).equals(bu) && br1.startsWith(bu + "&_r=") && br2.startsWith(bu + "&_r=") && !br1.equals(br2) && NetPost.busBust(bd, 1).equals(bd)
                     && NetPost.busBust("https://route-v2.phg0643.workers.dev/bus-tago?url=z", 1).contains("&_r="), "다시 물을 때만 일회용 글자(_r) — 첫 시도 · 버스 프록시가 아닌 주소는 그대로");
+            }
+            {   // s183: 받았지만 비어 있는 도착정보(totalCount 0)도 다시 묻는다 · 오버레이는 끈 적이 없으면 켜짐
+                String em = "{\"response\":{\"header\":{\"resultCode\":\"00\"},\"body\":{\"items\":\"\",\"numOfRows\":10,\"pageNo\":1,\"totalCount\":0}}}";
+                ok(NetPost.busEmpty(em) && !NetPost.busEmpty("") && !NetPost.busEmpty(null) && !NetPost.busEmpty("{\"response\":{\"body\":{\"items\":{\"item\":[{\"routeno\":\"1\"}]},\"totalCount\":1}}}") && !NetPost.busBodyBad(em), "빈 도착정보는 정상 본문이지만 '비어 있음'으로 알아본다");
+                ok(ShellCore.ovlOn("") && ShellCore.ovlOn("1") && !ShellCore.ovlOn("0") && ShellCore.settingsFacts(new ShellCore.MemStore()).contains("\"ovl\":1"), "오버레이: 끈 적 없으면 켜짐 · 0 이면 꺼짐");
             }
             ok(NetPost.getBus("https://example.com/x", 1000, 1000).status == -1 && "blocked".equals(NetPost.getBus("https://example.com/x", 1000, 1000).err), "허용 안 된 주소는 다시 묻지 않고 막는다");
         }
