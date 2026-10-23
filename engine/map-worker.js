@@ -25,6 +25,17 @@ function mapSvViaBinding(env, url) {                       // → Promise<Respon
   if ((m = MAPSV_D1.exec(u))) return env.BUSAPI.fetch(new Request('https://busapi.internal' + m[1]));
   return null;
 }
+function mapSvAttempts(env, url, seq) {                    // → [() => Promise<Response>|null] 시도 순서
+  var out = [];
+  if (typeof tagoAttempts === 'function' && env && /^https?:\/\/apis\.data\.go\.kr\//.test(url)) {
+    var inner = url.replace(/([?&])serviceKey=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    var ks = tagoAttempts(env).filter(function (x) { return x.via === 'env-key' || x.via === 'env-key2' || x.via === 'default-key'; });
+    if (ks.length > 1 && seq % 2 === 1) ks = ks.slice(1).concat(ks.slice(0, 1));
+    ks.slice(0, 2).forEach(function (x) { out.push(function () { return x.run(inner); }); });
+  }
+  if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
+  return out;
+}
 async function mapSvOne(env, k, url) {                     // → 본문 글(실패는 '')
   var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
   if (cacheable) {
@@ -36,19 +47,22 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
       }
     } catch (e0) { cache = null; }
   }
-  for (var a = 0; a < 2; a++) {
+  var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // 공공데이터 키가 둘이면 정류장을 반반씩(짝수 번째는 키1 먼저 · 홀수 번째는 키2 먼저) 나눠 묻고, 한쪽이 오류면 바로 다른 쪽 · 마지막은 BUSAPI 바인딩
+  if (!atts.length) return '';
+  if (atts.length === 1) atts.push(atts[0]);                                                  // 길이 하나뿐이면 빨리 실패했을 때 한 번 더
+  for (var a = 0; a < atts.length && a < 3; a++) {
     var t0 = Date.now(), body = '';
     try {
-      var p = mapSvViaBinding(env, url);
-      if (!p) return '';
-      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3500 : 2500); })]);
-      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // 공공 API 오류 봉투(200)는 받지 못한 것 — 다시 받고, 끝내 못 받으면 비워 둔다
+      var p = atts[a]();
+      if (!p) continue;
+      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3000 : 2000); })]);
+      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // 공공 API 오류 봉투(200)는 받지 못한 것 — 다른 키로 다시 받고, 끝내 못 받으면 비워 둔다
     } catch (e1) { body = ''; }
     if (body) {
       if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
       return body;
     }
-    if (Date.now() - t0 > 1500) break;                      // 느린 서버에 또 매달리지 않는다(빨리 실패했을 때만 한 번 더)
+    if (Date.now() - t0 > 2500) break;                      // 느린 서버에 또 매달리지 않는다(빨리 실패했을 때만 다음 시도)
   }
   return '';
 }
@@ -106,4 +120,23 @@ async function handleScreenMap(request, env) {
   } catch (e3) { /* 서버가 못 받으면 need 가 남은 첫 화면 그대로 — 기기가 이어 간다 */ }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
+}
+// 도착정보 분산 호출 실측(GET /bus-split-test?n=8&mode=single|split): 같은 정류장들을 동시에 n번 불러 키 하나로만 vs 키 둘로 반반 나눴을 때 오류(HTTP_ERROR)·시간을 비교한다. 키 값은 나오지 않는다.
+async function handleBusSplitTest(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  var u = new URL(request.url), n = Math.max(1, Math.min(12, parseInt(u.searchParams.get('n') || '8', 10) || 8)), mode = u.searchParams.get('mode') === 'split' ? 'split' : 'single';
+  var ids = String(u.searchParams.get('nodes') || 'ICB368000436,ICB368000437,ICB368000438,ICB368000439,ICB368000440,ICB368000441,ICB368000442,ICB368000443').split(',').filter(function (x) { return /^[A-Za-z0-9]{6,20}$/.test(x); }).slice(0, 12);
+  var city = /^[0-9]{1,3}$/.test(u.searchParams.get('city') || '') ? u.searchParams.get('city') : '23';
+  var ks = typeof tagoAttempts === 'function' ? tagoAttempts(env).filter(function (x) { return x.via === 'env-key' || x.via === 'env-key2'; }) : [];
+  if (!ks.length || !ids.length) return new Response(JSON.stringify({ ok: false, error: 'no-key' }), { status: 200, headers: H });
+  var t00 = Date.now();
+  var rows = await Promise.all(Array.from({ length: n }, function (_, i) {
+    var a = mode === 'split' && ks.length > 1 ? ks[i % 2] : ks[0], t0 = Date.now();
+    var inner = MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?cityCode=' + city + '&nodeId=' + ids[i % ids.length] + '&_type=json';
+    return Promise.race([a.run(inner).then(function (r) { return r.text(); }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 8000); })])
+      .then(function (t) { return { via: a.via, ok: !mapArrErr(t) && t.length > 40, ms: Date.now() - t0 }; }, function () { return { via: a.via, ok: false, ms: Date.now() - t0 }; });
+  }));
+  var by = {}; rows.forEach(function (r) { var b = by[r.via] || (by[r.via] = { n: 0, ok: 0, ms: 0 }); b.n++; if (r.ok) b.ok++; b.ms += r.ms; });
+  Object.keys(by).forEach(function (v) { by[v].avgMs = Math.round(by[v].ms / by[v].n); delete by[v].ms; });
+  return new Response(JSON.stringify({ ok: true, mode: mode, n: n, keys: ks.length, okN: rows.filter(function (r) { return r.ok; }).length, totalMs: Date.now() - t00, by: by }), { headers: H });
 }
