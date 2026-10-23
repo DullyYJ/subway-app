@@ -242,6 +242,7 @@ public final class MapCore {
         boolean arr = key != null && key.matches("[af][0-9]{1,3}");
         int pref = 0;
         if (arr) { try { pref = Integer.parseInt(key.substring(1)) & 1; } catch (NumberFormatException e) { pref = 0; } }
+        if (arr) return NetPost.getBusArr(u, alt, pref, firstMs, retryMs);
         return NetPost.getBus2(u, alt, pref, !arr && alt.length() > 0 && !(key != null && key.endsWith("p")), firstMs, retryMs);
     }
 
