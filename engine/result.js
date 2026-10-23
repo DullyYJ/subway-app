@@ -426,7 +426,7 @@ function resultScreen(opt, r) {
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
-  var body = nodes.length ? [{ t: 'panel', pad: [0, 4, 0, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];
+  var body = nodes.length ? [{ t: 'panel', pad: [14, 4, 14, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];             // 좌우 14 — 웹 홈은 입력 카드 · 결과 카드가 같은 바깥 여백(14)을 쓴다(예전엔 0 이라 결과 카드만 화면 끝까지 닿았다)
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
