@@ -2259,3 +2259,10 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - 아직 미리 받지 않는 것: 지하철 역 팝업 · 시간표(역마다 · 노선마다 달라 양이 많다 — 처음 눌렀을 때 받고 7일 두는 기존 방식).
 - 시험: `map_server_fetch` 17(두 키 반반 · 오류 시 다른 키) · `shell_native` 41. 기기 실측은 못 했다.
 
+
+## s172 — 공공데이터 키 2개 반반 · 가까운 지하철역 미리받기
+
+- **엔진(route-v2 `route-v2-2026-10-23s172`) — 사용자가 `engine/route-v2-worker.ascii.js` 를 Cloudflare route-v2 에 다시 붙여 넣어야 적용된다.** 새 `GET /bus-tago?url=<인코딩된 공공 API 주소>`(`handleBusTago`, engine/map-worker.js): `TAGO_KEY`(또는 `DATA_GO_KR_KEY`)·`TAGO_KEY2` 를 번갈아 쓰고, 한쪽이 오류 봉투(200)·키 오류면 바로 다른 키로. 둘 다 안 되면 502. apis.data.go.kr · ws.bus.go.kr 만 허용(그 밖 400), 들어온 serviceKey 는 지우고 서버 키를 붙인다, 응답에 키 없음, CORS 열림.
+- **기기**: `MapCore.busAltUrl(raw)`(= BASE+"/bus-tago?url=…") · `MapCore.busGet(key, raw, firstMs, retryMs)` → `NetPost.getBus2(url, alt, pref, hedge, …)`. 도착정보 키(`a<i>`/`f<i>`)는 번호 짝·홀로 길을 나눠 먼저 보내고(반반), 시도마다 길을 바꾼다. 정류장 목록 등 하나뿐인 요청은 두 길에 동시에(race) 보내 먼저 온 정상 본문을 쓴다(위치 `…p` 는 제외). route-v2 가 404/403/405 를 주면(엔진 미배포) 이번 실행 동안 그 길을 끄고 예전처럼 gildongmu-bus 만 쓴다(`NetPost.altOff`). 모든 버스 받기 호출부(fetchBusNeed · fetchAll · pfBusRun · brPrefetch · brFetchOne)가 `MapCore.busGet` 을 쓴다.
+- **미리받기**: `pfNearStnRun(ll, theme)` — 고스트 MapCore(gps) 로 머리 요청 → 서버가 고른 `nearName` → `tapStation` → 역 팝업 요청을 보내 `stnCachePut`(역을 누르면 바로 뜸). prefetchTabs 와 warmLocTabs 에서 prio 2. 모든 역의 팝업 · 시간표는 받지 않는다(너무 무거움). 노선도 지하철(서울 · 부산 · 대구 · 광주 · 대전) · 맛집 · 쇼핑은 s171 에서 이미 미리 받는다.
+- **검증 안 된 것**: 기기에서 돌려 보지 않았다. 속도 이득은 엔진 붙여 넣은 뒤 `/bus-split-test?mode=single|split` 와 실제 앱으로 확인해야 한다(공공 API 오류는 키와 무관하게 무작위라 2배가 되리라는 보장은 없음).
