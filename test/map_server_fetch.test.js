@@ -101,6 +101,31 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     const c = load(), t0 = Date.now(), r = await post(c.H, { BUSAPI: slow }, base(true));
     ok(Date.now() - t0 < 2900 && r.j.info.bus.st === 'need' && r.j.info.bus.need.length === 1 && r.j.info.bres.a0, '느린 한 곳 때문에 전체가 기다리지 않는다(2.2초 안에 온 것만) ' + (Date.now() - t0) + 'ms');
   }
+  // ⑥-b s177: 정류장 목록 — TAGO 가 느려도(수 초) 서버 정류장 표(D1)가 먼저 정류장을 주면 기다리지 않고 도착정보로 넘어간다 · 서울은 D1 이 먼저 와도 TOPIS 를 기다린다
+  {
+    const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const log = [], bnd = { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+      if (/getCrdntPrxmtSttnList/.test(inner)) { await new Promise(r => setTimeout(r, 4500)); return new Response('', { status: 200 }); }
+      if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+      if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) return new Response(AR, { status: 200 });
+      return new Response('', { status: 200 }); } };
+    const c = load(), t0 = Date.now(), r = await post(c.H, { BUSAPI: bnd }, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 35.1796, lng: 129.0756, res: {}, sv: 1, svb: 2000 } } });
+    const cards = r.j.body.filter(n => n.t === 'bcard'), dt = Date.now() - t0;
+    ok(r.status === 200 && dt < 2500 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1) && r.j.info.bus.st === 'ok', 'TAGO 가 4.5초 걸려도 D1 로 정류장 2곳 + 도착정보를 바로 ' + dt + 'ms');
+    ok(r.j.info.bres && r.j.info.bres.d1 && r.j.info.bres.tn === '', '기다리지 않은 출처는 빈 값으로 돌려준다(기기가 보관)');
+  }
+  {
+    const POS = SEOUL_POS, D1 = JSON.stringify({ ok: true, count: 1, stops: [{ node_id: 'X1', node_nm: '엉뚱', city_code: '11', lat: 37.5, lng: 127.0 }] });
+    const log = [], bnd = { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+      if (/getStationByPos/.test(inner)) { await new Promise(r => setTimeout(r, 400)); return new Response(POS, { status: 200 }); }
+      if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+      if (/getStationByUid\?arsId=(\d+)/.test(inner)) return new Response(ARR('N' + inner.match(/arsId=(\d+)/)[1].slice(0, 2)), { status: 200 });
+      return new Response('', { status: 200 }); } };
+    const c = load(), r = await post(c.H, { BUSAPI: bnd }, base(true));
+    const cards = r.j.body.filter(n => n.t === 'bcard');
+    ok(cards.length === 3 && r.j.info.stops.every(x => x.src === 'topis'), '서울은 D1 이 먼저 와도 TOPIS 정류장을 쓴다(출처 우선순위)');
+  }
   // ⑥ 정류장도 못 받으면(전부 실패) need 그대로
   {
     const c = load(), r = await post(c.H, { BUSAPI: binding([], () => true) }, base(true));
