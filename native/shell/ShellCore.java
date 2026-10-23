@@ -671,16 +671,18 @@ public final class ShellCore {
     }
     /**
      * 이 화면 글(열쇠)을 디스크에 얼마나 오래 둘지(ms, 0 이면 두지 않는다). 앱을 다시 켜면 마지막 화면이 바로 뜨고, 새 글은 뒤에서 받아 바꾼다.
-     * 버스 도착정보는 오래되면 틀린 정보라 짧게(BUS_STALE_MS — 5분) 둔다: 앱을 다시 켜도 그 안이면 마지막 화면이 바로 뜨고(SWR) 새 글이 뒤에서 바꾼다.
+     * 버스 도착정보 화면은 실시간이라 BUS_FRESH_MS(8초)만 둔다 — 옛 숫자는 절대 남기지 않는다. 대신 정류장 뼈대(busSkelKey, 숫자 없음)는 24시간 둔다.
      */
-    /** 버스 도착정보는 실시간이라 이보다 오래된 화면은 보여 주지 않는다(새로 받을 때까지 뼈대) — 이 안이면 받은 뒤 흐른 초만큼 줄어든 채로 바로 뜬다. */
+    /** 버스 도착정보는 실시간이라 이보다 오래된 화면(옛 숫자)은 보여 주지 않는다(YJ) — 이 안이면 받은 뒤 흐른 초만큼 줄어든 채 바로 뜬다. 그보다 오래면 정류장 뼈대(도착정보 자리는 '불러오는 중')만 바로 그린다. */
     public static final long BUS_FRESH_MS = 8000L;
-    /** SWR(콜드 스타트 포함 — 디스크 보관도 같은 시간): 8초가 지난 버스 화면도 5분 안이면 먼저 보인다(받은 뒤 흐른 초만큼 줄인 채) — 뒤에서 새로 받아 바꾼다. 이보다 오래되면 뼈대. */
-    public static final long BUS_STALE_MS = 300000L;
+    /** 같은 뜻의 두 번째 이름(예전 SWR 창) — 이제 신선 시간과 같다: 옛 도착 숫자를 화면에 남기지 않는다. */
+    public static final long BUS_STALE_MS = BUS_FRESH_MS;
+    /** 버스 '정류장 뼈대' 화면 열쇠: 엔진이 정류장은 그리고 도착정보는 아직 없이(불러오는 중) 그린 화면. 앱을 껐다 켜도(콜드 스타트) 바로 그린다 — 숫자가 없어 오래 둬도 틀리지 않는다. */
+    public static String busSkelKey(Store st) { return mapKey(S_MAPB, "busskel", st); }
     public static long diskTtl(String key) {
         if (key == null) return 0L;
         String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
-        if (S_MAPB.equals(s)) return key.contains("|bus|") ? BUS_STALE_MS : 24L * 3600000L;
+        if (S_MAPB.equals(s)) return key.contains("|bus|") ? BUS_FRESH_MS : 24L * 3600000L;
         if (S_SHOP.equals(s) || S_CCHIPS.equals(s) || S_HDR.equals(s) || "tabs".equals(s) || S_NEWS.equals(s) || S_CHAT.equals(s) || S_BOARD.equals(s)
             || S_FOOD.equals(s) || S_MAPH.equals(s) || S_SETTINGS.equals(s)) return 24L * 3600000L;
         if (S_HOME.equals(s)) return 6L * 3600000L;
@@ -699,6 +701,7 @@ public final class ShellCore {
             out.add("tabs|" + t);
             for (String sl : slotsOf(st, t)) out.add(cacheKey(sl, st));
         }
+        out.add(busSkelKey(st));                                       // 버스 정류장 뼈대(숫자 없음) — 버스 탭을 누르면 바로 그린다
         java.util.List<String> r = new java.util.ArrayList<String>();
         for (String k : out) if (diskTtl(k) > 0L) r.add(k);
         return r;
