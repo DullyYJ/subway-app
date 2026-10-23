@@ -454,6 +454,20 @@ function findAndroidJar() {
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
+  await t('s179: 위치 허브 — 어디서 위치를 받든 홈 카드 · 버스 탭에 즉시 · 버스 화면 캐시는 위치 칸마다 · 미리받기도 그 칸 열쇠', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/private void locHub\(Location l\)[\s\S]{0,260}hcFixFrom\(la, lo\);\s*busLocFollow\(la, lo\);/.test(a), '허브: 홈 카드 위치와 버스 탭을 한 곳에서');
+    assert.ok(/saveLoc\(l\); locHub\(l\);/.test(a) && /got\[0\] = true; locHub\(l\);/.test(a), '현재 위치(1초) · 기기가 알던 위치(0.1초) 둘 다 허브로');
+    const f = a.slice(a.indexOf('private void busLocFollow'), a.indexOf('private static final double BUS_FAR_DEG'));
+    assert.ok(/home\.riding\(\)\) return;/.test(f) && /BUS_MOVE_DEG\)\) return;/.test(f) && /farLL\(map\.busLL, la, lo, BUS_FAR_DEG\)\) \{ map\.setBusLoc\(la, lo\); reloadMap\(false\); return; \}/.test(f) && /busMove\(la, lo\);/.test(f), '탑승 중 제외 · 55m 안이면 그대로 · 165m 넘게는 곧바로 그 동네 화면 · 그 안쪽은 조용히 바꿔 끼움');
+    assert.ok(/preconnectBus\(\); locKick\(\);/.test(a) && /private void locKick\(\)[\s\S]{0,200}locateNow\(8000L, 1000L, 60000L, 120000L/.test(a), '버스 탭에 들어올 때 위치를 한 번 더 확인(0.1초 → 1초)');
+    assert.ok(/K_BUSCELL = \"bus_cell\"/.test(sc.replace(/\\"/g, '"')) || /K_BUSCELL = "bus_cell"/.test(sc), '위치 칸 저장 열쇠');
+    assert.ok(/busViewSuffix\(String screen, String mode, Store st, String cell\)/.test(sc) && /\"\|\" \+ MapCore\.VW_NEAR \+ \"\|\" \+ \(cell == null/.test(sc.replace(/\\"/g, '"')) || /"\|" \+ MapCore\.VW_NEAR \+ "\|" \+ \(cell == null/.test(sc), '버스 주변 화면 열쇠에 위치 칸');
+    assert.ok(/public boolean primary;/.test(mc) && /if \(primary\) st\.put\(ShellCore\.K_BUSCELL, stopsKey\(\)\)/.test(mc) && /map = new MapCore\(store\); map\.primary = true;/.test(a), '실제 화면 상태기만 위치 칸을 적는다');
+    assert.ok(/mapKey\(ShellCore\.S_MAPB, "bus", store, MapCore\.cellOf\(ll\[0\], ll\[1\]\)\)/.test(a) && (a.match(/MapCore\.cellOf\(ll\[0\], ll\[1\]\)/g) || []).length >= 3, '미리 받기는 그 위치 칸의 열쇠로');
+    assert.ok(/private void rekeyMapBody\(\)/.test(a) && /rekeyMapBody\(\);\s*present\(body, txt, true\)/.test(a), '응답이 오는 사이 칸이 바뀌어도 그 동네 화면으로 저장');
+    assert.ok(/private void trimBusKeys\(String key\)[\s\S]{0,160}busKeys\.size\(\) > 6/.test(a), '위치 칸 캐시는 최근 6곳만');
+  });
   await t('s176: 버스 재조회는 위치가 바뀔 때만 · 탭을 다녀와도 시간만 줄어든다 · 위치 재확인은 탑승 중이 아니면 30초마다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     const lc = a.slice(a.indexOf('private void busLocCheck()'), a.indexOf('/** 앞으로 돌아왔을 때'));
