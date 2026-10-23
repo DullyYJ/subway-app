@@ -439,6 +439,15 @@ function findAndroidJar() {
     assert.ok(/warm\(txt\)/.test(bp), '응답 해석은 IO 스레드(주 스레드는 그리기만)');
     assert.ok(/BUS_STALE_MS = BUS_FRESH_MS/.test(sc) && /busSkelKey\(Store st\)/.test(sc), '도착정보 화면 8초 · 뼈대 24시간');
   });
+  await t('s169: 홈에서 시작해도 버스 탭을 미리 준비(연결 · 정류장 · 도착정보 주소 · 뼈대)', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const w = a.slice(a.indexOf('private void warmBusStructure'), a.indexOf('/** 켤 때: 권한이 이미 있으면'));
+    assert.ok(/saveLoc\(Location l\)[^\n]*warmBusStructure\(/.test(a), '위치를 잡으면 버스 준비를 시작');
+    assert.ok(/preconnectBus\(\)/.test(w) && /saveStopsCache\(\)/.test(w) && /rememberNeed\(arrNeed\)/.test(w) && /bodyRequest\(ShellCore\.CAP, theme, true\)/.test(w) && /store\.put\("bsk_cell", cell\)/.test(w), '연결 · 정류장 보관 · 도착정보 주소 기억 · 엔진이 그린 뼈대 저장');
+    assert.ok(/"map"\.equals\(ShellCore\.currentTab\(store\)\)\) return/.test(w) && /600000L/.test(w) && /speculativeNeed\(\)\.isEmpty\(\)/.test(w), '버스 탭에선 하지 않고 · 10분에 한 번 · 이미 준비된 동네는 건너뜀');
+    assert.ok(/main\.post\(new Runnable\(\) \{ @Override public void run\(\) \{ w\.saveStopsCache/.test(w) && /main\.post\(new Runnable\(\) \{ @Override public void run\(\) \{ store\.put\("bsk_cell"/.test(w), '저장소 쓰기는 주 스레드로');
+    assert.ok(/^\s*preconnectBus\(\);\s+\/\/ 버스 서버 연결을 켜자마자/m.test(a), '켜자마자(홈에서도) 연결을 미리 맺는다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
