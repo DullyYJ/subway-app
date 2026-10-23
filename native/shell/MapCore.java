@@ -39,6 +39,8 @@ public final class MapCore {
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
     private boolean stopsSaved;
+    /** 지금 위치가 속한 정류장 칸(약 110m) 이름 — 정류장 뼈대를 그 칸 것만 쓰게 하는 열쇠(위치를 모르면 빈 글). */
+    public String stopsCell() { return stopsKey(); }
     private String stopsKey() { return busLL == null ? "" : "bsc_" + Math.round(busLL[0] * 1000.0) + "_" + Math.round(busLL[1] * 1000.0); }
     @SuppressWarnings("unchecked")
     private void loadStopsCache() {
@@ -114,6 +116,11 @@ public final class MapCore {
         arrAt = 0L;
         java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
         busNeed.clear();
+    }
+    /** 보여 줄 옛 화면이 없는 처음 그리기(콜드 스타트 · 뼈대에서 시작): 옛 도착정보는 엔진에 넣지 않는다 — 옛 숫자가 화면에 올라오지 않게(정류장 목록 tp·gg·tn·d1 은 그대로). */
+    public void clearArrivals() {
+        arrAt = 0L; arrStash.clear(); busNeed.clear();
+        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
     }
     /** 새로 못 받은 도착정보(a · f)만 갱신 전에 보던 값으로 채운다 — 채운 개수. */
     public int fillFromStash() { int c = 0; for (Map.Entry<String, String> e : arrStash.entrySet()) if (!busRes.containsKey(e.getKey())) { busRes.put(e.getKey(), e.getValue()); c++; } return c; }
@@ -236,14 +243,16 @@ public final class MapCore {
     public String headRequest(int cap, String theme, String q) {
         return "{\"cap\":" + cap + ",\"f\":" + facts("h", theme, q) + "}";
     }
-    public String bodyRequest(int cap, String theme) {
+    public String bodyRequest(int cap, String theme) { return bodyRequest(cap, theme, false); }
+    /** skel: 정류장 뼈대 요청 — 도착정보(a · f)는 넣지 않고 서버 대신 받기(sv)도 끈다. 엔진이 정류장 카드를 '불러오는 중' 줄로 그려 준다(앱은 그 화면을 그대로 저장해 두었다 그린다). */
+    public String bodyRequest(int cap, String theme, boolean skel) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(",\"sv\":1,\"svb\":" + svb + ",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
-            for (Map.Entry<String, String> e : busRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+            for (Map.Entry<String, String> e : busRes.entrySet()) { if (skel && e.getKey().matches("[af][0-9]{1,3}")) continue; if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
             f = b.append("}}}").toString();
         }
         return "{\"cap\":" + cap + ",\"f\":" + f + "}";
