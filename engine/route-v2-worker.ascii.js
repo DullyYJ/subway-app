@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s173";
+var ENGINE_VERSION = "route-v2-2026-10-23s174";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20345,20 +20345,34 @@ async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb3
   }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // \uacf5\uacf5\ub370\uc774\ud130 \ud0a4\uac00 \ub458\uc774\uba74 \uc815\ub958\uc7a5\uc744 \ubc18\ubc18\uc529(\uc9dd\uc218 \ubc88\uc9f8\ub294 \ud0a41 \uba3c\uc800 \u00b7 \ud640\uc218 \ubc88\uc9f8\ub294 \ud0a42 \uba3c\uc800) \ub098\ub220 \ubb3b\uace0, \ud55c\ucabd\uc774 \uc624\ub958\uba74 \ubc14\ub85c \ub2e4\ub978 \ucabd \u00b7 \ub9c8\uc9c0\ub9c9\uc740 BUSAPI \ubc14\uc778\ub529
   if (!atts.length) return '';
-  if (atts.length === 1) atts.push(atts[0]);                                                  // \uae38\uc774 \ud558\ub098\ubfd0\uc774\uba74 \ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c \ud55c \ubc88 \ub354
-  for (var a = 0; a < atts.length && a < 3; a++) {
-    var t0 = Date.now(), body = '';
-    try {
-      var p = atts[a]();
-      if (!p) continue;
-      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3000 : 2000); })]);
-      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83 \u2014 \ub2e4\ub978 \ud0a4\ub85c \ub2e4\uc2dc \ubc1b\uace0, \ub05d\ub0b4 \ubabb \ubc1b\uc73c\uba74 \ube44\uc6cc \ub454\ub2e4
-    } catch (e1) { body = ''; }
-    if (body) {
-      if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
-      return body;
+  if (atts.length === 1) atts.push(atts[0]);                                                  // \uae38\uc774 \ud558\ub098\ubfd0\uc774\uba74 \ud55c \ubc88 \ub354
+  // s174: \ud5e4\uc9c0 \u2014 \uccab \uc2dc\ub3c4\uac00 0.7\ucd08 \uc548\uc5d0 \uc548 \uc624\uba74 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub2e4\uc74c \uae38(\ub2e4\ub978 \ud0a4)\uc744 \ub3d9\uc2dc\uc5d0 \ub744\uc6cc \uba3c\uc800 \uc628 \uc815\uc0c1 \ubcf8\ubb38\uc744 \uc4f4\ub2e4. \ube68\ub9ac \uc2e4\ud328(\uc624\ub958 \ubd09\ud22c)\ud558\uba74 \uc989\uc2dc \ub2e4\uc74c \uae38. \ucd5c\ub300 3\ubc88.
+  var max = Math.min(atts.length, 3), launched = 0, inflight = [];
+  function start() {
+    var o = {};
+    o.p = (async function () {
+      try {
+        var p = atts[launched - 1]();
+        if (!p) return '';
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3000); })]);
+        if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83
+      } catch (e1) { /* \uc2e4\ud328 */ }
+      return '';
+    })().then(function (b) { o.b = b; return o; });
+    inflight.push(o);
+  }
+  launched++; start();
+  while (inflight.length) {
+    var waiters = inflight.map(function (o) { return o.p; });
+    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, 700); }));
+    var w = await Promise.race(waiters);
+    if (w === null) { launched++; start(); continue; }                                         // \ub290\ub9ac\ub2e4 \u2014 \ub2e4\ub978 \uae38\uc744 \ub3d9\uc2dc\uc5d0
+    inflight.splice(inflight.indexOf(w), 1);
+    if (w.b) {
+      if (cache && ck && mapSvOkBody(k, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+      return w.b;
     }
-    if (Date.now() - t0 > 2500) break;                      // \ub290\ub9b0 \uc11c\ubc84\uc5d0 \ub610 \ub9e4\ub2ec\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c\ub9cc \ub2e4\uc74c \uc2dc\ub3c4)
+    if (!inflight.length && launched < max) { launched++; start(); }                           // \ube68\ub9ac \uc2e4\ud328\ud588\ub2e4 \u2014 \uace7\ubc14\ub85c \ub2e4\uc74c \uae38
   }
   return '';
 }
