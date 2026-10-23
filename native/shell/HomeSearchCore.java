@@ -24,6 +24,7 @@ public final class HomeSearchCore {
     public static final long PLACE_TTL_MS = 90L * 24 * 3600 * 1000, BUS_TTL_MS = 10L * 60 * 1000;
     public static final int PLACE_MAX = 300, BUS_MAX = 60;
     public static final String TAGO_URL = "https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList";
+    public static final String BUS_BASE = "https://gildongmu-bus.phg0643.workers.dev";            // 버스 공공 API 프록시(웹과 같음)
     public static final String DEFAULT_BASE = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
 
     // ═════════════ ① 검색어·주소 ═════════════
