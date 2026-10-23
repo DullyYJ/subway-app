@@ -92,6 +92,9 @@ public class ShellJvmTest {
                 ok(!"1".equals(es.get(ShellCore.K_LOCDISC, "0")) && ShellCore.routePage(es, "locd", "call", "locd.no", null, false, true) == ShellCore.PG_LOCNO && !"1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 거부는 동의로 기록하지 않는다");
                 ok(ShellCore.routePage(es, "locd", "call", "pol.privacy", null, false, true) == ShellCore.PG_POLOPEN && !"1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 방침 보기");
                 ok(ShellCore.routePage(es, "locd", "call", "locd.ok", null, false, true) == ShellCore.PG_LOCOK && "1".equals(es.get(ShellCore.K_LOCDISC, "0")), "위치 안내: 동의하면 기록");
+                ok(ShellCore.routePage(es, "askbat", "call", "ask.ok", null, false, true) == ShellCore.PG_ASKOK && ShellCore.routePage(es, "asksam", "call", "ask.no", null, false, true) == ShellCore.PG_ASKNO
+                    && ShellCore.routePage(es, "askovl", "call", "ask.ok", null, false, true) == ShellCore.PG_ASKOK && ShellCore.routePage(es, "askbat", "call", "pg.back", null, false, true) == ShellCore.PG_NONE && ShellCore.routePage(es, "askbat", "set", "ask.ok", null, true, true) == ShellCore.PG_NONE
+                    && ShellCore.isAskPage("askbat") && !ShellCore.isAskPage("locd") && ShellCore.pageUrlAsk("askbat", true).contains("p=askbat") && ShellCore.pageUrlAsk("askbat", true).contains("sm"), "s182 처음 설치 안내: 나중에 · 설정하기 둘뿐");
                 ok(ShellCore.pageUrlPlain("polp", null).endsWith("p=polp") && ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(es)).contains("p=erl&f="), "약관/오류 로그 주소");
             }
             {
