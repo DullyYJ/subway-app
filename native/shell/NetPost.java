@@ -131,13 +131,13 @@ public final class NetPost {
         if (b == null || b.length() == 0 || b.length() > 4000) return false;
         return b.indexOf("\"totalCount\":0") >= 0 || b.indexOf("\"totalCount\": 0") >= 0 || b.indexOf("\"items\":\"\"") >= 0;
     }
-    /** 도착정보 받기 — 무조건 받는다: 오류 · 못 받음 · '비어 있음'이면 다른 길 + 일회용 글자로 최대 두 번 더 묻는다. 끝내 비어 있으면 그 빈 본문을 그대로 건넨다(엔진이 '도착정보 없음'). */
+    /** 도착정보 받기 — 무조건 받는다: 오류 · 못 받음 · '비어 있음'이면 다른 길 + 일회용 글자로 오류는 최대 두 번 · 비어 있음은 한 번 더 묻는다. 끝내 비어 있으면 그 빈 본문을 그대로 건넨다(엔진이 '도착정보 없음'). */
     public static Res getBusArr(String url, String alt, int pref, double firstMs, double retryMs) {
         Res r = getBus2(url, alt, pref, false, firstMs, retryMs);
         for (int k = 0; k < 2; k++) {
             if ("blocked".equals(r.err)) return r;
             boolean bad = r.status != 200 || busBodyBad(r.body);
-            if (!bad && !busEmpty(r.body)) return r;
+            if (!bad && (k >= 1 || !busEmpty(r.body))) return r;                     // 오류는 두 번까지, '비어 있음'은 한 번만 더(느린 한 곳이 화면 전체를 붙잡지 않게)
             try { Thread.sleep(200L + (long) (Math.random() * 100)); } catch (InterruptedException ie) { return r; }
             boolean useAlt = alt != null && alt.length() > 0 && !altOff && (((k + 1 + pref) & 1) == 1);
             Res r2 = once(busBust(useAlt ? alt : url, 1), retryMs, useAlt);
