@@ -268,7 +268,14 @@ public final class RsSheetView extends View {
         OvCore.Ov v = ov;
         if (v == null || exiting || !OvCore.rsShown(v)) return false;
         switch (e.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN: dx0 = e.getRawX() / dpr; dy0 = e.getRawY() / dpr; down = true; dragging = false; return true;
+            case MotionEvent.ACTION_DOWN:
+                if (!sheetMode) {                                                   // 떠 있는 뷰는 알약 · 캡슐 자리만 받고 나머지 터치는 뒤 화면으로 보낸다
+                    float w0 = getWidth() / dpr, x0 = e.getX() / dpr, y0 = e.getY() / dpr;
+                    float tw0 = "wait".equals(v.rsSt) ? pillTextW(v) : undoTextW(v);
+                    float[] r0 = "wait".equals(v.rsSt) ? RsCore.pill(w0, tw0) : RsCore.undoCap(w0, tw0);
+                    if (x0 < r0[0] - 8f || x0 > r0[0] + r0[2] + 8f || y0 < r0[1] - 8f || y0 > r0[1] + r0[3] + 8f) return false;
+                }
+                dx0 = e.getRawX() / dpr; dy0 = e.getRawY() / dpr; down = true; dragging = false; return true;
             case MotionEvent.ACTION_MOVE: {
                 if (!down || !sheetMode || !"board".equals(v.rsSt)) return true;
                 float dx = e.getRawX() / dpr - dx0, dy = e.getRawY() / dpr - dy0;
