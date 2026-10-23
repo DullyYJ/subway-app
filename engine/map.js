@@ -422,6 +422,11 @@ function mapBusNeedStops(la, lo) {
   need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + ql + '&gpsLong=' + qo + '&numOfRows=50&pageNo=1&_type=json' });
   return need;
 }
+function mapArrErr(t) {                                    // 공공 API 가 HTTP 200 으로 건넨 오류 봉투({"OpenAPI_ServiceResponse":…"HTTP_ERROR"})인가 — 도착정보가 아니다(웹 _safeParseResponse 와 같은 글자). 받지 못한 것으로 친다
+  var x = typeof t === 'string' ? t : '';
+  return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
+}
+function mapArrMissing(res, k) { return res[k] === undefined || mapArrErr(res[k]); }     // 아직 못 받았거나 오류 봉투만 받았다 → '도착정보 없음'이 아니라 '불러오는 중'으로 그리고 다시 받는다
 function mapBusArrUrl(s) {
   if (s.src === 'topis') return 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + encodeURIComponent(s.ars);
   if (s.src === 'gbis') return MAP_GBIS_BASE + 'busarrivalservice/v2/getBusArrivalListv2?stationId=' + encodeURIComponent(s.sid) + '&format=json';
@@ -574,7 +579,7 @@ function mapBusBody(f, info) {
       { t: 'text', s: '즐겨찾기한 정류장이 없습니다', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
       { t: 'text', s: '주변 정류장에서 별(☆)을 눌러\n원하는 정류장을 추가하세요', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [0, 20, 14, 20] },
       { t: 'button', s: '주변 정류장 보기', size: 13, h: 42, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 80, 8, 80], act: { a: 'call', v: 'mp.vw.near' } }] };
-    var pend = favs.some(function (s, i) { return fres['f' + i] === undefined; });
+    var pend = favs.some(function (s, i) { return mapArrMissing(fres, 'f' + i); });
     if (pend) info.bus = { st: 'need', vw: 'fav', need: favs.map(function (s, i) { return { k: 'f' + i, url: mapBusArrUrl(s) }; }) };
     var fb = [{ t: 'text', s: '⭐ 즐겨찾기 ' + favs.length + '개 · 30초마다 자동 갱신', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
     favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusArrView(s, fres, 'f' + i, info, i) })); });
@@ -611,12 +616,12 @@ function mapBusBody(f, info) {
   head.push(mapBusTmap(pts, foc));
   // 정류장마다 따로 본다: 아직 못 받은 정류장은 '도착정보 없음'이 아니라 '불러오는 중'으로 두고, 못 받은 것만 다시 받으라고 한다(받은 것까지 다시 받지 않는다)
   var miss = [];
-  stops.forEach(function (s, i) { if (res['a' + i] === undefined) miss.push({ k: 'a' + i, url: mapBusArrUrl(s) }); });
+  stops.forEach(function (s, i) { if (mapArrMissing(res, 'a' + i)) miss.push({ k: 'a' + i, url: mapBusArrUrl(s) }); });
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: res['a' + i] === undefined ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: mapArrMissing(res, 'a' + i) ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
   });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
