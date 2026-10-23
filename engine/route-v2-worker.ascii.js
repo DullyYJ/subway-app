@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s171";
+var ENGINE_VERSION = "route-v2-2026-10-23s172";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20439,6 +20439,48 @@ async function handleBusSplitTest(request, env) {
   Object.keys(by).forEach(function (v) { by[v].avgMs = Math.round(by[v].ms / by[v].n); delete by[v].ms; });
   return new Response(JSON.stringify({ ok: true, mode: mode, n: n, keys: ks.length, okN: rows.filter(function (r) { return r.ok; }).length, totalMs: Date.now() - t00, by: by }), { headers: H });
 }
+// \u2550\u2550\u2550 \uae30\uae30 \uc9c1\uc811 \ubc1b\uae30\uc6a9 \uacf5\uacf5 API \uc911\uacc4(GET /bus-tago?url=<\uc778\ucf54\ub529\ub41c \uc6d0\ubcf8 \uc8fc\uc18c>) \u2014 \uacf5\uacf5\ub370\uc774\ud130 \ud0a4 2\uac1c\ub97c \ubc88\uac08\uc544 \uc4f4\ub2e4 \u2550\u2550\u2550
+//   \uae30\uae30\ub294 \ubc84\uc2a4 \uc11c\ubc84(gildongmu-bus \u00b7 \ud0a4 1\uac1c)\uc640 \uc774 \uc8fc\uc18c(\ud0a4 1\u00b72)\ub97c \ubc18\ubc18 \ub098\ub220 \ub3d9\uc2dc\uc5d0 \ubd80\ub978\ub2e4 \u2192 \uac19\uc740 \ud0a4\uc5d0 \ubab0\ub9ac\uc9c0 \uc54a\uc544 \uc624\ub958(HTTP_ERROR)\uac00 \uc904\uace0 \ube68\ub77c\uc9c4\ub2e4.
+//   \ud0a4\uac00 \ud558\ub098\ubfd0\uc774\uac70\ub098 \ud55c\ucabd\uc774 \uc624\ub958 \ubd09\ud22c(200)\u00b7\ud0a4 \uc624\ub958\uba74 \ubc14\ub85c \ub2e4\ub978 \ud0a4\ub85c. \ub458 \ub2e4 \ubabb \ubc1b\uc73c\uba74 502(\uae30\uae30\uac00 \ub2e4\ub978 \uae38\ub85c \ub2e4\uc2dc \ubc1b\ub294\ub2e4). \ud5c8\uc6a9: apis.data.go.kr \u00b7 ws.bus.go.kr \ub9cc. \ud0a4 \uac12\uc740 \ub0b4\ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4.
+var MAPBT_RR = 0;
+function mapKeyList(env) {
+  var out = [], c = [env && (env.TAGO_KEY || env.DATA_GO_KR_KEY), env && env.TAGO_KEY2];
+  c.forEach(function (k) {
+    k = String(k || '');
+    if (/%[0-9A-Fa-f]{2}/.test(k)) { try { k = decodeURIComponent(k); } catch (e) { /* \uc6d0\ubcf8 \uc0ac\uc6a9 */ } }
+    if (k && out.indexOf(k) < 0) out.push(k);
+  });
+  return out;
+}
+function mapKeyUrl(url, key) {
+  var base = String(url).replace(/([?&])(serviceKey|ServiceKey)=[^&]*&?/g, '$1').replace(/[?&]$/, '');
+  var sep = base.indexOf('?') >= 0 ? '&' : '?', k = encodeURIComponent(key);
+  if (/^https?:\/\/ws\.bus\.go\.kr\//.test(base)) return base + sep + 'serviceKey=' + k + '&ServiceKey=' + k;
+  return base + sep + 'serviceKey=' + k;
+}
+function mapBtBad(t) { return !t || mapArrErr(t) || /Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED|<headerCd>\s*[1-9]/i.test(t.slice(0, 4000)); }
+async function handleBusTago(request, env) {
+  var H = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  var raw = new URL(request.url).searchParams.get('url') || '';
+  if (raw.length === 0 || raw.length > 1500 || !/^https?:\/\/(apis\.data\.go\.kr|ws\.bus\.go\.kr)\//.test(raw)) return new Response('bad-url', { status: 400, headers: H });
+  var keys = mapKeyList(env);
+  if (!keys.length) return new Response('no-key', { status: 500, headers: H });
+  var first = (MAPBT_RR++) % keys.length;
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[(first + i) % keys.length], tgt = mapKeyUrl(raw, key);
+    for (var pr = 0; pr < 2; pr++) {                                                           // ws.bus.go.kr \ub294 http \ub9cc \ubc1b\ub294 \ub54c\uac00 \uc788\uc5b4 \ud504\ub85c\ud1a0\ucf5c\uc744 \ubc14\uafd4 \ud55c \ubc88 \ub354
+      try {
+        var u2 = pr === 0 ? tgt : tgt.replace(/^https?:/, /^https:/.test(tgt) ? 'http:' : 'https:');
+        var res = await Promise.race([fetch(u2, { headers: { 'Accept': '*/*', 'User-Agent': 'gildongmu/1.0' } }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3500); })]);
+        var txt = await res.text();
+        if (res.status === 200 && !mapBtBad(txt)) return new Response(txt, { status: 200, headers: Object.assign({ "Content-Type": res.headers.get('Content-Type') || 'text/plain; charset=utf-8' }, H) });
+        if (res.status === 200 || pr === 1) break;
+      } catch (e) { /* \ub2e4\uc74c \uc2dc\ub3c4 */ }
+    }
+  }
+  return new Response('bus-bad', { status: 502, headers: H });
+}
 // ===== MAP ENGINE END =====
 
 // ===== FAV ENGINE BEGIN =====
@@ -21712,6 +21754,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
   if (url.pathname === "/screen/map") return handleScreenMap(request, env);
   if (url.pathname === "/bus-split-test") return handleBusSplitTest(request, env);
+  if (url.pathname === "/bus-tago") return handleBusTago(request, env);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request);
