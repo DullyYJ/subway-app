@@ -276,7 +276,7 @@ function findAndroidJar() {
     assert.ok(/cv\.rotate\(ang, it\.ix, it\.iy\)/.test(dt) && /\/ 200f/.test(dt) && /final String bt = ellipsizeTd/.test(dt) && dt.indexOf('final String bt = ellipsizeTd') < dt.indexOf('setText(ScreenCore.TD_BADGE_TXT'), '▾ 는 0.2초 돌고 · 뱃지 글은 색을 정하기 전에 줄여서 보인다');
     const op = v.slice(v.indexOf('private void openDetailSheet()'), v.indexOf('private void loadDetail()'));
     assert.ok(/setDimAmount\(0\.82f\)/.test(op) && /520f \* dpr/.test(op) && /20f \* dpr/.test(op) && /tabs\.getLocationOnScreen/.test(op) && /120f \* dpr/.test(op) && /PathInterpolator\(0\.25f, 0\.1f, 0\.25f, 1f\)/.test(op) && /setDuration\(250L\)/.test(op) && /root\.setOnClickListener/.test(op) && /경로를 불러오는 중/.test(op), '웹 틀: 어둡기 .82 · 너비 520 · 위 모서리 20 · 탭바 위 · 끌어 닫기 120dp .25초 ease · 바깥 누르면 닫힘 · 불러오는 중 글');
-    assert.ok(/HomeCore\.optName\(home\.resTab\) \+ " 경로로 확정했어요"/.test(v) && /postDelayed\([\s\S]{0,160}closeSheet\(\)[\s\S]{0,40}600L/.test(v) && /ovlHintOnce\(\)/.test(v) && /K_OVLHINT/.test(v) && /RideOverlay\.supported\(\) && !RideOverlay\.allowed\(this\)/.test(v) && /optName\(String tab\)/.test(hm), '확정: 토스트(옵션 이름) · 초록 단추 다시 받기 · 0.6초 뒤 닫힘 · 오버레이 권한 안내는 한 번만');
+    assert.ok(/HomeCore\.optName\(home\.resTab\) \+ " 경로로 확정했어요"/.test(v) && /postDelayed\([\s\S]{0,160}closeSheet\(\)[\s\S]{0,40}600L/.test(v) && /ovlHintOnce\(\)/.test(v) && /RideOverlay\.supported\(\) && !RideOverlay\.allowed\(this\)/.test(v) && /optName\(String tab\)/.test(hm), '확정: 토스트(옵션 이름) · 초록 단추 다시 받기 · 0.6초 뒤 닫힘 · 오버레이 권한 안내는 한 번만');
   });
   await t('홈·시간표·버스 보정(s150): 단추 스피너는 spin 만 · 경로 찾는 동안만 · 시간표 머리 놀이터가 스크롤을 따라감 · 다음 열차 줄로 한 번 내려감 · 위치는 저장값→마지막 위치→새 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
@@ -453,6 +453,13 @@ function findAndroidJar() {
     assert.ok(/Semaphore\(4\)/.test(np) && /OpenAPI_ServiceResponse/.test(np) && /public static Res getBus\(/.test(np) && /status == 200 \? -3/.test(np), '동시 4곳 · 오류 봉투 감지 · 못 받으면 -3');
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
+  });
+  await t('s183: 도착정보가 비어 오면 다른 길로 다시 · 오버레이 기본 켜짐 + 경로 확정 때 허용 안내 · 확정 직후 탑승 시트 열기', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
+    assert.ok(/public static boolean busEmpty\(/.test(np) && /public static Res getBusArr\(/.test(np) && /if \(arr\) return NetPost\.getBusArr\(/.test(mc) && /busBust\(useAlt \? alt : url, 1\)/.test(np), '도착정보: 비어 오면 다른 길 + 일회용 글자로 두 번 더');
+    assert.ok(!/K_OVL, "0"\)\)/.test(a) && /ShellCore\.ovlOn\(/.test(rs) && /ShellCore\.ovlOn\(store\.get\(ShellCore\.K_OVL, ""\)\)/.test(a), '오버레이 읽는 곳 모두 ovlOn');
+    const f = a.slice(a.indexOf('private void ovlHintOnce()'), a.indexOf('private void restoreRideCard()'));
+    assert.ok(/openSetPage\("askovl"\)/.test(f) && /ovlAskedRun/.test(f) && /RideService\.rsAct\("open"\)/.test(f) && /rsOpenSoon\(\);/.test(a), '확정하면 허용 안내(이번 실행 한 번) · 탑승 시트 열기');
   });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
