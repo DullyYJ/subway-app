@@ -42,7 +42,7 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
       var p = mapSvViaBinding(env, url);
       if (!p) return '';
       var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3500 : 2500); })]);
-      if (res && res.status === 200) body = await res.text();
+      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // 공공 API 오류 봉투(200)는 받지 못한 것 — 다시 받고, 끝내 못 받으면 비워 둔다
     } catch (e1) { body = ''; }
     if (body) {
       if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
