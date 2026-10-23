@@ -695,6 +695,13 @@ public class ShellJvmTest {
             MapCore bn = new MapCore(new ShellCore.MemStore());
             bn.addBusRes("a0", empty); bn.dropArrivals(); bn.addBusRes("a0", empty);
             ok(empty.equals(bn.busRes.get("a0")), "처음부터 비어 있던 정류장은 그대로 비어 있다");
+            // s170: 공공 API 오류 봉투(HTTP 200 으로 옴)는 받지 못한 것 — 'OpenAPI_ServiceResponse'. 통신 실패(빈 본문)도 '도착정보 없음'이 아니라 아직 못 받은 것으로 둔다
+            String envl = "{\n  \"OpenAPI_ServiceResponse\": {\n    \"cmmMsgHeader\": {\n      \"errMsg\": \"HTTP_ERROR\",\n      \"returnReasonCode\": \"04\"\n    }\n  }\n}\n";
+            ok(NetPost.busBodyBad(envl) && NetPost.busBodyBad("") && NetPost.busBodyBad(null) && !NetPost.busBodyBad(good) && !NetPost.busBodyBad(empty) && !NetPost.busBodyBad("<itemList><rtNm>1</rtNm></itemList>"), "버스 본문: 오류 봉투 · 빈 본문만 받지 못한 것");
+            MapCore bo = new MapCore(new ShellCore.MemStore());
+            bo.addBusRes("a0", ""); bo.addBusRes("a1", good);
+            ok(!bo.busRes.containsKey("a0") && good.equals(bo.busRes.get("a1")), "통신에 실패한 정류장은 '없음'으로 굳히지 않고 비워 둔다(엔진이 불러오는 중으로 그린다)");
+            ok(NetPost.getBus("https://example.com/x", 1000, 1000).status == -1 && "blocked".equals(NetPost.getBus("https://example.com/x", 1000, 1000).err), "허용 안 된 주소는 다시 묻지 않고 막는다");
         }
         mc.cat("r:seoul"); ok(mc.cat("f:2호선") == MapCore.R_RENDER && "2호선".equals(mc.flt()) && mc.cat("zz") == MapCore.R_NONE, "호선 필터");
         String mh = mc.headRequest(18, "dark", "부평");
