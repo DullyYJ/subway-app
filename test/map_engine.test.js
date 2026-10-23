@@ -139,6 +139,15 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const TA = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }, { routeno: '8', arrtime: 700, arrprevstationcnt: 9 }] } } } });
   b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: TA } });
   ok(b.info.bus.st === 'ok' && /"no":"8"/.test(JSON.stringify(b.body)) && /4분 00초/.test(JSON.stringify(b.body)) && /11분 40초/.test(JSON.stringify(b.body)) && /3번째전/.test(JSON.stringify(b.body)), 'TAGO 도착 두 대');
+  // s170: 공공 API 오류 봉투(HTTP 200)는 도착정보가 아니다 — '도착정보 없음'으로 굳히지 않고 '불러오는 중' + 다시 받기
+  { const ENV = '{\n  "OpenAPI_ServiceResponse": {\n    "cmmMsgHeader": {\n      "errMsg": "HTTP_ERROR",\n      "returnReasonCode": "04"\n    }\n  }\n}\n';
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: ENV } });
+    const c0 = b.body.filter(n => n.t === 'bcard')[0];
+    ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'a0' && c0.ld === '도착 정보 불러오는 중...' && !c0.em, '오류 봉투는 받지 못한 것: 불러오는 중 + 다시 받기(need)');
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}' } });
+    ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', '정상 응답인데 버스가 없으면 그대로 "도착정보 없음"');
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '' } });
+    ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', "빈 본문('')은 예전처럼 없음(기기는 못 받으면 아예 보내지 않는다)"); }
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '' } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=450$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '', d1: '{"stops":[]}' } });
