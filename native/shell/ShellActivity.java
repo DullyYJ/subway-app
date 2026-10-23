@@ -776,7 +776,7 @@ public class ShellActivity extends Activity {
     private void pfKick() {
         while (true) {
             int w = pfWorkers.get();
-            if (w >= 2 || pfQueue.isEmpty()) return;
+            if (w >= 3 || pfQueue.isEmpty()) return;
             if (!pfWorkers.compareAndSet(w, w + 1)) continue;
             new Thread(new Runnable() { @Override public void run() {
                 try {
@@ -840,6 +840,50 @@ public class ShellActivity extends Activity {
         }
         return true;
     }
+    /** 위치: 지금 연속 위치가 있으면 그것, 없으면 마지막으로 안 위치(6시간 안). 없으면 null. */
+    private double[] pfLL() {
+        double[] l = liveLL();
+        return l != null ? l : ShellCore.lastLocFresh(store, 6L * 3600000L, System.currentTimeMillis());
+    }
+    /** (뒤 스레드) 맛집 미리 받기: 도착지가 있으면 도착지로, 없으면(도착지 설정 전) 현위치로. 위치가 아직 없으면 건너뛴다(위치가 잡히면 warmLocTabs 가 다시 한다). */
+    private boolean pfFoodRun(double[] ll, String dName, double dLa, double dLo) throws Exception {
+        if (!pfNeeds(ShellCore.S_FOOD)) return false;
+        synchronized (pfFood) {
+            pfFood.setDest(dName, dLa, dLo);
+            if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
+            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
+            if (r.status != 200 || r.body == null) return true;
+            pfFood.onScreen(r.body);
+            if (pfFood.needData()) {
+                String su = pfFood.serverUrl();
+                String[] pu = new String[FoodCore.PUB_PAGES];
+                for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
+                pfFood.setData(foodDataNow(su, pu));
+                NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
+                if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(ShellCore.S_FOOD, r2.body, false); }
+            } else prefetchPut(ShellCore.S_FOOD, r.body, false);
+        }
+        return true;
+    }
+    /** 위치가 새로 잡혔다: 켤 때 위치가 없어 건너뛴 위치 기반 화면(맛집 · 버스 노선도)을 지금 위치로 뒤에서 받아 둔다. 같은 곳에서는 3분에 한 번만. */
+    private double[] warmLocLL; private long warmLocAt;
+    private void warmLocTabs(final double la, final double lo) {
+        try {
+            long now = System.currentTimeMillis();
+            if (prefetchAt == 0L) return;                                                                    // 켤 때 미리 받기가 아직 시작 전 — 그쪽이 마지막 위치로 이미 한다
+            if (warmLocLL != null && now - warmLocAt < 180000L && Math.abs(warmLocLL[0] - la) < BUS_MOVE_DEG && Math.abs(warmLocLL[1] - lo) < BUS_MOVE_DEG) return;
+            warmLocLL = new double[] { la, lo }; warmLocAt = now;
+            final HomeCore.Loc d = home.loc[HomeCore.DEST];
+            final String dName = d != null && d.ok() ? d.name : ""; final double dLa = d != null && d.ok() ? d.lat : 0, dLo = d != null && d.ok() ? d.lng : 0;
+            final double[] ll = new double[] { la, lo };
+            final String theme = ShellCore.theme(store), cur = ShellCore.currentTab(store), mapMode = map.mode();
+            if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });
+            if (!("map".equals(cur) && "bus".equals(mapMode))) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {
+                if (!pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
+                return pfBusRun(ll, theme);
+            } });
+        } catch (Throwable ignored) { }
+    }
     private void prefetchTabs() {
         if (pfPending.get() > 0) return;                                  // 아직 도는 중
         prefetchAt = System.currentTimeMillis();
@@ -851,7 +895,7 @@ public class ShellActivity extends Activity {
         final java.util.HashSet<String> live = new java.util.HashSet<String>();
         for (String sc : slots) live.add(sc);
         final String liveMode = ShellCore.mode(store), liveSel = chat.sel(), mapMode = map.mode(), theme = ShellCore.theme(store);
-        final double[] ll = liveLL();
+        final double[] ll = pfLL();                                       // 켤 때 위치가 아직 안 잡혔어도 마지막으로 안 위치(6시간 안)로 미리 받는다 — 새 위치가 잡히면 아래 warmLocTabs 가 다시 맞춘다
         final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
         final HomeCore.Loc d = home.loc[HomeCore.DEST];
         final String dName = d != null && d.ok() ? d.name : ""; final double dLa = d != null && d.ok() ? d.lat : 0, dLo = d != null && d.ok() ? d.lng : 0;
@@ -874,6 +918,12 @@ public class ShellActivity extends Activity {
             }
             if (!("map".equals(cur) && "bus".equals(mapMode))) { pfMapB.modeOverride = "bus"; ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPH, "bus", store), "/screen/map", "POST", pfMapB.headRequest(ShellCore.CAP, theme, "") }); }
             pfMapB.modeOverride = null;
+            for (String rg : new String[] { "busan", "daegu", "gwangju", "daejeon" }) {                 // 지하철 노선도의 다른 지방 노선(부산 · 대구 · 광주 · 대전)도 미리 — 눌렀을 때 바로 뜬다(서버가 정적으로 그리는 가벼운 화면)
+                ShellCore.MemStore gs = new ShellCore.MemStore(); gs.put(MapCore.K_REG, rg);
+                MapCore gm = new MapCore(gs); gm.modeOverride = "subway";
+                ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPH, "subway", gs), "/screen/map", "POST", gm.headRequest(ShellCore.CAP, theme, "") });
+                ents.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPB, "subway", gs), "/screen/map", "POST", gm.bodyRequest(ShellCore.CAP, theme) });
+            }
             return pfBatch(ents);
         } });
         if (!"home".equals(cur) && !hasRoute) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {                 // 홈
@@ -929,24 +979,8 @@ public class ShellActivity extends Activity {
             }
             return net;
         } });
-        if (!"food".equals(cur)) pfAdd(3, new PfJob() { @Override public boolean run() throws Exception {                // 맛집: 도착지 또는 마지막 위치(고스트 상태기)
-            if (!pfNeeds(ShellCore.S_FOOD)) return false;
-            pfFood.setDest(dName, dLa, dLo);
-            if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
-            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
-            if (r.status != 200 || r.body == null) return true;
-            pfFood.onScreen(r.body);
-            if (pfFood.needData()) {
-                String su = pfFood.serverUrl();
-                String[] pu = new String[FoodCore.PUB_PAGES];
-                for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
-                pfFood.setData(foodDataNow(su, pu));
-                NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
-                if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(ShellCore.S_FOOD, r2.body, false); }
-            } else prefetchPut(ShellCore.S_FOOD, r.body, false);
-            return true;
-        } });
-        pfAdd(3, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
+        if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집: 도착지 또는 현위치(고스트 상태기)
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
             String base = pfNeeds(key) ? shopCall(key, store.get(ShellCore.K_SHOP_CAT, "")) : "";
@@ -1687,7 +1721,7 @@ public class ShellActivity extends Activity {
     /** 위치 한 번 받기(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). 결과는 cb 로. */
     private interface LocCb { void fix(Location l); void fail(boolean noperm); }
     private boolean hasLocPerm() { return checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED; }
-    private void saveLoc(Location l) { if (l != null) { ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); warmBus(l.getLatitude(), l.getLongitude()); warmBusStructure(l.getLatitude(), l.getLongitude()); } }
+    private void saveLoc(Location l) { if (l != null) { ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); warmBus(l.getLatitude(), l.getLongitude()); warmBusStructure(l.getLatitude(), l.getLongitude()); warmLocTabs(l.getLatitude(), l.getLongitude()); } }
     /**
      * 홈 등 버스 탭이 아닌 곳에서 시작해도 버스 탭을 미리 준비한다(Warm-up): 위치를 잡으면 뒤에서 ① 서버 연결(DNS·TLS)을 맺고 ② 그 동네(약 110m 칸)의 정류장 목록을 기기에 보관하고
      * ③ 도착정보 주소를 기억하고 ④ 엔진이 그린 정류장 뼈대를 저장한다 — 버스 탭을 누르면 뼈대가 바로 그려지고 도착정보만 곧장 받는다. 이미 준비된 동네는 건너뛴다(10분에 한 번).
