@@ -40,6 +40,24 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     const cards = r.j.body.filter(n => n.t === 'bcard');
     ok(r.status === 200 && cards.length === 3 && cards.every(x => x.ld && !x.em) && r.j.info.bus.st === 'need' && !(r.j.info.bres && r.j.info.bres.a0), '오류 봉투만 받았다: "도착정보 없음"이 아니라 불러오는 중 + 다시 받기(need)');
   }
+  // ⓪-2 s170: 공공데이터 키가 둘이면 정류장을 반반씩(짝수 번째 키1 먼저 · 홀수 번째 키2 먼저) 나눠 묻고, 한쪽이 오류 봉투면 바로 다른 키로
+  {
+    const ENV = '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR","returnReasonCode":"04"}}}';
+    const TN = JSON.stringify({ response: { body: { items: { item: [0, 1, 2, 3].map(i => ({ nodeid: 'ICB36800043' + i, nodenm: '정류장' + i, gpslati: 37.489 + i * 0.0003, gpslong: 126.724, citycode: '23', nodeno: '1' + i })) } } } });
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }] } } } });
+    const calls = [];
+    const tagoAttempts = (env) => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner) => { calls.push([n, inner]); const bad = n === 'k2' && /ICB368000431/.test(inner); return Promise.resolve(new Response(/getCrdntPrxmtSttnList/.test(inner) ? TN : bad ? ENV : AR, { status: 200 })); } }));
+    const c = load({ tagoAttempts }), env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+    const r = await post(c.H, env, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.489, lng: 126.724, res: {}, sv: 1, svb: 3000 } } });
+    const arr = calls.filter(x => /getSttnAcctoArvlPrearngeInfoList/.test(x[1]));
+    const first = id => (arr.find(x => x[1].indexOf(id) >= 0) || [])[0];
+    const cards = r.j.body.filter(n => n.t === 'bcard');
+    ok(r.status === 200 && cards.length === 4 && cards.every(x => x.rows && x.rows.length === 1) && r.j.info.bus.st === 'ok', '두 키: 모든 정류장 도착정보를 한 번에 채운다(' + cards.length + '곳)');
+    ok(arr.every(x => !/serviceKey=&|serviceKey=$/.test(x[1])) && arr.length >= 5, '빈 serviceKey 는 빼고 키는 실행 쪽이 붙인다 · 오류 난 곳은 다른 키로 다시 ' + arr.length);
+    const ord = [...new Set(arr.map(x => x[1].match(/nodeId=(\w+)/)[1]))].map(id => id + ':' + first(id));
+    ok(ord.length === 4 && ord.filter(x => x.endsWith('k1')).length === 2 && ord.filter(x => x.endsWith('k2')).length === 2, '정류장을 두 키로 반반 ' + ord.join());
+    ok(arr.filter(x => /ICB368000431/.test(x[1])).map(x => x[0]).join() === 'k2,k1', '먼저 물은 키가 오류 봉투면 같은 정류장을 다른 키로 바로 다시');
+  }
   // ① 서버가 정류장 → 도착정보를 한 번에 받는다
   {
     const log = [], c = load(), r = await post(c.H, { BUSAPI: binding(log) }, base(true));
