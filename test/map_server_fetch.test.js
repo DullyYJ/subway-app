@@ -29,6 +29,17 @@ const post = (H, env, body) => H(new Request('https://x/screen/map', { method: '
 const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5, lng: 127.0, res: {} }, sv ? { sv: 1 } : {}) } });
 
 (async () => {
+  // ⓪ s170: 공공 API 오류 봉투(200)는 받은 것이 아니다 — 서버가 res 에 넣지 않고 info.bres 에도 싣지 않는다(기기가 다시 받는다)
+  {
+    const ENV = '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR","returnReasonCode":"04"}}}';
+    const b2 = (log) => ({ fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || ''; log.push(inner);
+      if (/getStationByPos/.test(inner)) return new Response(SEOUL_POS, { status: 200 });
+      if (/getStationByUid\?arsId=(\d+)/.test(inner)) return new Response(ENV, { status: 200 });
+      return new Response('', { status: 200 }); } });
+    const log = [], c = load(), r = await post(c.H, { BUSAPI: b2(log) }, base(true));
+    const cards = r.j.body.filter(n => n.t === 'bcard');
+    ok(r.status === 200 && cards.length === 3 && cards.every(x => x.ld && !x.em) && r.j.info.bus.st === 'need' && !(r.j.info.bres && r.j.info.bres.a0), '오류 봉투만 받았다: "도착정보 없음"이 아니라 불러오는 중 + 다시 받기(need)');
+  }
   // ① 서버가 정류장 → 도착정보를 한 번에 받는다
   {
     const log = [], c = load(), r = await post(c.H, { BUSAPI: binding(log) }, base(true));
