@@ -62,6 +62,7 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const o = call('fast');
   const ns = flat(o.body);
   ok(o.ok && o.screen === 'result' && o.body.length === 1 && o.body[0].t === 'panel' && /^e1:/.test(o.rev), '화면 모양(panel 하나)');
+  ok(o.body[0].pad[0] === 14 && o.body[0].pad[2] === 14, 's175: 경로 카드 좌우 바깥 여백 14 — 입력 카드와 같다(웹 홈과 같은 너비 · 0 이면 화면 끝까지 닿는다)');
   ok(ns.some(n => n.t === 'rhd' && n.num === '24' && n.s === '부평 → 두정'), '머리줄: 24분 부평 → 두정');
   ok(ns.some(n => n.t === 'text' && /^전체 24분/.test(n.s)) && ns.some(n => n.t === 'text' && n.s === '가장 빨라요'), '요약 줄·이유');
   ok(ns.some(n => n.t === 'trk') && ns.some(n => n.s === '최단시간') && o.info.has.sub && o.info.has.bus && !o.info.has.longdist, '타임라인 · 탭 줄 · 있는 탭');
