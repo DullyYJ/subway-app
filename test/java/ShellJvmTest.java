@@ -749,6 +749,11 @@ public class ShellJvmTest {
         ok(MapCore.busFetchUrl("https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json").startsWith(ShellCore.BUS_BASE + "/tago?url=https%3A%2F%2Fapis.data.go.kr%2F6410000%2F")
             && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800").equals(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800")
             && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=1&x=<script>").isEmpty() && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/other?x=1").isEmpty() && MapCore.busFetchUrl("https://evil.example/bus-stops?lat=1").isEmpty(), "경기 GBIS 주소는 프록시로, 서버 정류장 표(D1)는 직접, 그 밖은 막는다");
+        String rawU = "https://apis.data.go.kr/1613000/ArvlInfoInqireService/getX?cityCode=23&nodeId=ICB1";
+        ok(MapCore.busAltUrl(rawU).startsWith(ShellCore.BASE + "/bus-tago?url=https%3A%2F%2Fapis.data.go.kr%2F") && ScreenCore.netAllowed(MapCore.busAltUrl(rawU)), "s172: 키 2개 중계 주소(/bus-tago)는 허용 목록 안");
+        ok(MapCore.busAltUrl("https://evil.example/x").length() == 0 && MapCore.busAltUrl(null).length() == 0 && MapCore.busAltUrl(ShellCore.NEWS_BASE + "/bus-stops?a=1").length() == 0, "s172: 공공 API 가 아닌 주소는 두 길로 나누지 않는다");
+        ok(MapCore.busGet("a1", "https://evil.example/x", 1000, 1000) == null, "s172: 허용 안 된 주소는 받지 않는다(null)");
+        ok(NetPost.getBus2("https://example.com/x", "https://example.com/y", 1, true, 1000, 1000).status == -1, "s172: 두 길 다 막히면 못 받음");
         ok(ScreenCore.netAllowed(MapCore.busFetchUrl("https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json")) && ScreenCore.netAllowed(ShellCore.BUS_BASE + "/health") && ScreenCore.netAllowed(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, "x")), "버스 프록시(gildongmu-bus)는 앱 통신 허용 목록에 있다(없으면 기기 버스 받기가 전부 blocked)");
         mc.addBusRes("tp", "<a/>"); mc.addBusRes("BAD KEY", "x");
         String bq2 = mc.bodyRequest(18, "dark");
