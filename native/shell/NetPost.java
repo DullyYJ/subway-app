@@ -42,6 +42,7 @@ public final class NetPost {
         if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
         int to = ScreenCore.netTimeout(timeoutMs);
         java.net.HttpURLConnection c = null;
+        boolean reuse = false;                                  // 응답을 끝까지 읽었으면 연결을 끊지 않는다 — 다음 요청이 같은 연결(HTTP/2 · TLS 이미 끝남)을 이어 쓴다(커넥션 풀)
         try {
             c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
             c.setConnectTimeout(Math.min(to, 6000)); c.setReadTimeout(to);
@@ -55,7 +56,7 @@ public final class NetPost {
             }
             int code = c.getResponseCode();
             String tag = c.getHeaderField("ETag"); int ma = parseMaxAge(c.getHeaderField("Cache-Control"));
-            if (code == 304) return new Res(304, "", "", tag, ma);
+            if (code == 304) { reuse = true; return new Res(304, "", "", tag, ma); }
             java.io.InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
             java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
             if (is != null) {
@@ -63,9 +64,10 @@ public final class NetPost {
                 while ((n = is.read(buf)) > 0) { total += n; if (total > ScreenCore.NET_MAX_RES) return new Res(-1, "", "too-big"); bo.write(buf, 0, n); }
                 is.close();
             }
+            reuse = true;
             return new Res(code, bo.toString("UTF-8"), "", tag, ma);
         } catch (Throwable t) {
             return new Res(-1, "", "net: " + String.valueOf(t.getMessage()));
-        } finally { if (c != null) c.disconnect(); }
+        } finally { if (c != null && !reuse) c.disconnect(); }
 }
 }
