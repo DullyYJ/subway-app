@@ -35,13 +35,16 @@ public final class MapCore {
     public boolean svServer; public int svFail;
     /** 서버가 도착정보를 기다리는 시간(ms): 처음 그릴 때는 짧게(정류장부터 먼저 보이고 도착정보는 이어서), 조용한 갱신은 넉넉히. */
     public int svb = 300;
-    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; loadStopsCache(); }
+    /** true 면 이 상태기가 실제 화면의 것이다(미리 받기용 유령 상태기는 false) — 위치 칸을 기기 저장소(ShellCore.K_BUSCELL)에 적어 화면 캐시 열쇠가 따라가게 한다. */
+    public boolean primary;
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; if (primary) st.put(ShellCore.K_BUSCELL, stopsKey()); loadStopsCache(); }
+    public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
     private boolean stopsSaved;
     /** 지금 위치가 속한 정류장 칸(약 110m) 이름 — 정류장 뼈대를 그 칸 것만 쓰게 하는 열쇠(위치를 모르면 빈 글). */
     public String stopsCell() { return stopsKey(); }
-    private String stopsKey() { return busLL == null ? "" : "bsc_" + Math.round(busLL[0] * 1000.0) + "_" + Math.round(busLL[1] * 1000.0); }
+    private String stopsKey() { return busLL == null ? "" : cellOf(busLL[0], busLL[1]); }
     @SuppressWarnings("unchecked")
     private void loadStopsCache() {
         String k = stopsKey();
