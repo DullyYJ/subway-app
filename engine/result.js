@@ -410,8 +410,6 @@ function resultScreen(opt, r) {
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
     if (r.ride && r.ride.on) {
-      var rt = String(r.ride.text || '').slice(0, 120);
-      nodes.push({ t: 'box', s: '탑승 안내 중' + (rt ? '\n' + rt : ''), hl: [[0, 6]], size: 12, lh: 1.5, color: 'text', fill: 'card2', line: 'gold', r: 10, ip: [12, 8, 12, 8], pad: [8, 0, 0, 4] });
       var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // 웹 routeActRow: 오른쪽에 탑승 → 환승 → 도착 칸(칸의 뜻·전환은 대기 모드 엔진이 정한다)
       var rowKids = [
         { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
