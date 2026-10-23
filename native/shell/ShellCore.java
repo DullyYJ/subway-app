@@ -54,6 +54,8 @@ public final class ShellCore {
 
     // ═════════════ 설정 화면 ═════════════
     public static final String K_LOCDISC = "loc_disc";   // 위치 정보 이용 안내에 동의했는가(1)
+    /** 처음 설치 때 이어서 묻는 기기 설정 안내를 이미 보여 줬는가(평생 한 번 — 웹 gdm_bat_asked_at · gdm_sam_asked_at · gdm_ovl_asked_at). 알림 권한은 한 번만 묻는다. */
+    public static final String K_BATASK = "bat_ask", K_SAMASK = "sam_ask", K_OVLASK = "ovl_ask", K_NOTIFASK = "notif_ask";
     public static final String K_ID = "comm_id", K_THEME = "theme", K_RIDELOG_OFF = "ride_log_off";
     public static final String[] NOTIF = { "arrive", "transfer", "arrive_reco" };
     public static final String THEME_DEFAULT = "pastel";
@@ -86,7 +88,7 @@ public final class ShellCore {
     }
 
     // ═════════════ 설정 하위 화면: 다른 앱 위에 표시(ovl) ═════════════
-    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6, PG_GWADD = 7, PG_GWCFG = 8, PG_DEVSTART = 9, PG_DEVSTOP = 10, PG_ERLCOPY = 11, PG_ERLCLEAR = 12, PG_LOCOK = 13, PG_LOCNO = 14, PG_POLOPEN = 15;
+    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6, PG_GWADD = 7, PG_GWCFG = 8, PG_DEVSTART = 9, PG_DEVSTOP = 10, PG_ERLCOPY = 11, PG_ERLCLEAR = 12, PG_LOCOK = 13, PG_LOCNO = 14, PG_POLOPEN = 15, PG_ASKOK = 16, PG_ASKNO = 17;
     /** 하위 화면 주소. 지원 여부·허용 여부는 기기 사실이라 껍데기가 알려 준다(글은 엔진이 만든다). */
     /** 출퇴근 브리핑 화면(cm · 시각 고르기 · 장소 고르기) 주소 — pfJson 은 CmCore.pageFacts(). */
     public static String pageUrlCm(String pfJson) {
@@ -105,6 +107,11 @@ public final class ShellCore {
         if ("pol.opensource".equals(v)) return "polo";
         if ("errlog".equals(v)) return "erl";
         return null;
+    }
+    public static boolean isAskPage(String p) { return "askbat".equals(p) || "asksam".equals(p) || "askovl".equals(p); }
+    /** 처음 설치 때 기기 설정 안내(askbat · asksam · askovl) 주소 — 갤럭시(삼성)인지는 기기 사실이라 껍데기가 알려 주고 글은 엔진이 만든다. */
+    public static String pageUrlAsk(String page, boolean samsung) {
+        return pageUrlPlain(page, "{\"pf\":{\"sm\":" + samsung + "}}");
     }
     public static boolean isPolPage(String p) { return "polp".equals(p) || "poll".equals(p) || "polo".equals(p) || "erl".equals(p); }
     /** 사실이 필요 없는 하위 화면(약관) 주소, 오류 로그는 pfJson 에 기록을 싣는다. */
@@ -164,6 +171,12 @@ public final class ShellCore {
             if ("locd.ok".equals(v)) { st.put(K_LOCDISC, "1"); return PG_LOCOK; }
             if ("locd.no".equals(v)) return PG_LOCNO;
             if ("pol.privacy".equals(v)) return PG_POLOPEN;
+            return PG_NONE;
+        }
+        if (isAskPage(page)) {                                          // 처음 설치 때 이어서 묻는 기기 설정 안내: 단추는 [나중에] · [설정하기] 둘뿐
+            if (!"call".equals(a)) return PG_NONE;
+            if ("ask.ok".equals(v)) return PG_ASKOK;
+            if ("ask.no".equals(v)) return PG_ASKNO;
             return PG_NONE;
         }
         if (isPolPage(page)) {
