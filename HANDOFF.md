@@ -2300,3 +2300,11 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - 증상(사용자 화면): 검단 정류장 카드가 전부 '도착정보 없음'. 원인은 s177: D1 정류장 표를 TAGO 와 경쟁시켰더니 D1 이 먼저 와서 쓰였는데, **인천 D1 번호는 ICB1…, TAGO 도착정보는 ICB3…**(웹 `_tagoAltNodeIds` 가 같은 이유로 ICB1↔ICB3 변환). ICB1 로 물으면 빈 응답(134자) → '없음'. 실측: ICB168001466 → 도착 0건 · ICB368001466 → 7건.
 - 고침(map.js `mapD1Stops`): `ICB1` 접두를 `ICB3` 로 바꿔 쓴다(정류장 id 도 ICB3 — TAGO 정류장 목록과 같은 번호). 시험 `map_engine` 140(인천 D1 시험 추가).
 - 엔진 `route-v2-2026-10-23s178`. 앱 변경 없음.
+
+## s179 — 홈 위치와 버스 탭 위치 즉시 연동(위치 허브) · 버스 화면 캐시를 위치 칸마다
+- 사용자 보고(스크린샷): 홈은 '이태원' 기준인데 버스 탭엔 '검단' 정류장 — 연동이 즉시 안 된다. 연동 1초 이내 · 정류장과 버스도 바로.
+- 원인 ① 버스 본문 화면 캐시 열쇠(`mapb|bus|지역|필터|near`)에 **위치가 없어서** 다른 동네의 정류장 화면이 캐시(s176 에서 10분으로 늘림)에서 먼저 떴다. ② 홈 카드 위치(`hcFixFrom`)는 기기가 알던 위치(0.1초)를 받아도 버스 탭은 그 위치를 못 받고 30분 안 저장 위치/옛 `map.busLL` 을 썼다(위치를 받는 길이 여러 갈래).
+- **위치 허브**(`ShellActivity.locHub`): 현재 위치(1초, `liveSet`) · 기기가 알던 위치(0.1초, `locateNow` lastKnown) 둘 다 한 곳에서 홈 카드(`hcFixFrom`)와 버스 탭(`busLocFollow`)에 곧바로 반영. `busLocFollow`: 탑승 중이면 안 함 · 55m 안이면 그대로 · 버스 탭이 아니면 조용히 위치만 바꿔 둔다(다음에 열면 그 동네 화면이 바로) · 보는 중이면 165m(`BUS_FAR_DEG`) 넘게는 곧바로 `setBusLoc` + `reloadMap(false)`(그 동네 캐시 → 뼈대 → 새로 받기), 55~165m 는 예전처럼 조용히 바꿔 끼움(`busMove`). 즐겨찾기 화면은 건드리지 않는다.
+- `locKick()`: 버스 본문을 처음 그릴 때(`loadMapBodyFast`) · `busLocCheck` 에서 위치를 한 번 더 확인(lastKnown 0.1초 → 새 위치 1초). `seedMapLoc` 은 이미 위치가 있어도 방금 받은 더 새 위치가 165m 넘게 다르면 그쪽으로.
+- **캐시 열쇠에 위치 칸**: `ShellCore.mapKey(screen, mode, st, cell)` — 버스 '주변'만 `|near|bsc_<위도*1000>_<경도*1000>`(즐겨찾기는 그대로). `MapCore.primary`(실제 화면 상태기만) 가 `setBusLoc` 때 `bus_cell` 저장 → `cacheKey` 가 따라간다. 미리 받기(`pfBusRun` · `warmLocTabs` · `prefetchTabs`)는 그 위치 칸 열쇠로 넣고 확인한다(`MapCore.cellOf`). 응답이 오는 사이 칸이 바뀌어도 그 동네 화면으로 저장되게 `rekeyMapBody()`. 칸별 캐시는 최근 6곳만(`trimBusKeys`).
+- 시험: `shell_native` 45(s179 정적 + ShellJvmTest 열쇠) — 기기에서는 못 돌려 봤다. 새 APK 필요.
