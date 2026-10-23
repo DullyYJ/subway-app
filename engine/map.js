@@ -269,8 +269,8 @@ function mapScreen(inp, factsIn, dataIn) {
 var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
 var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
 var MAP_EXIT_RE = /역\s*\d*\s*번?\s*출구|역\s*출구/;
-var MAP_STOP_DUP_M = 3, MAP_EXIT_NEAR_M = 350;
-var MAP_NEAR_R = 300, MAP_NEAR_CAP = 40, MAP_NEAR_MIN = 3;       // 내 주변 정류장: 반경 300m 안은 전부(최대 40곳) — 하나도 없으면 가까운 순 3곳
+var MAP_STOP_DUP_M = 3;
+var MAP_NEAR_R = 300, MAP_NEAR_CAP = 40;                          // 내 주변 정류장: 지금 위치에서 300m 이내만(최대 40곳) — 300m 밖은 하나도 넣지 않는다(없으면 '찾지 못했어요')
 var MAP_Q = 1000, MAP_QR = 450;                                    // 조회 좌표는 0.001°(약 100m) 칸의 가운데로 맞춘다(서버·기기 캐시가 같은 칸에서 맞는다) — 그만큼 반경을 300 → 450m 로 넉넉히 받고, 거리는 늘 내 진짜 좌표로 다시 잰다
 function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
@@ -393,17 +393,14 @@ function mapDedupStops(stops) {
   });
   return out;
 }
-function mapStopOrder(stops) {                       // 반경 300m 안은 전부(역 출구는 350m 안까지, 먼저) · 가까운 순 · 최대 40곳. 안에 하나도 없으면 가까운 순 3곳
-  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [], far = [];
+function mapStopOrder(stops) {                       // 지금 위치에서 반경 300m 이내만(역 출구도 300m — 예외 없음 · 300m 밖은 하나도 넣지 않는다) · 역 출구 먼저 · 가까운 순 · 최대 40곳
+  var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
   stops.forEach(function (s) {
-    if (mapStopExit(s) && s.dist <= MAP_EXIT_NEAR_M) ex.push(s);
-    else if (s.dist <= MAP_NEAR_R) rest.push(s);
-    else far.push(s);
+    if (!isFinite(s.dist) || s.dist > MAP_NEAR_R) return;
+    if (mapStopExit(s)) ex.push(s); else rest.push(s);
   });
-  ex.sort(byD); rest.sort(byD); far.sort(byD);
-  var out = ex.concat(rest);
-  if (!out.length) out = far.slice(0, MAP_NEAR_MIN);
-  return out.slice(0, MAP_NEAR_CAP);
+  ex.sort(byD); rest.sort(byD);
+  return ex.concat(rest).slice(0, MAP_NEAR_CAP);
 }
 function mapBusStops(f) {
   var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
