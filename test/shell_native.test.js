@@ -454,6 +454,15 @@ function findAndroidJar() {
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
+  await t('s174: 처음 그릴 때 정류장만(0.3초)·전체(서버가 도착정보까지) 두 요청을 동시에 · 늦은 정류장만 화면은 버린다 · 전체가 실패하면 예전처럼', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
+    assert.ok(/final boolean dual = round == 0 && wtxt\.length\(\) == 0 && "bus"\.equals\(modeNow\) && !busRefreshing/.test(a) && /map\.svb = 3500; jf = map\.bodyRequest/.test(a) && /"shell-mapfull"/.test(a), '동시에 두 요청(전체는 svb 3500)');
+    assert.ok(/if \(dual && st\[2\]\) return;/.test(a) && /mapBodyApply\(v, keep \|\| st\[0\], round, my, txt, false\)/.test(a) && /if \(st\[0\] && !map\.busNeed\.isEmpty\(\)\) fetchBusNeed/.test(a), '늦은 정류장만 화면 버림 · 전체 성공이면 그 화면 · 실패면 기기가 이어 받는다');
+    assert.ok(/private void mapBodyApply\(/.test(a) && /if \(deferNeed\) return;/.test(a) && /NetPost\.get\(ShellCore\.BASE \+ "\/health"/.test(a), '응답 반영 분리 · 엔진 연결도 미리');
+    assert.ok(/ALT_GATE = new java\.util\.concurrent\.Semaphore\(4\)/.test(np) && /isAlt \? ALT_GATE : BUS_GATE/.test(np), '두 번째 길은 줄을 따로(8곳 동시)');
+    const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
+    assert.ok(/헤지/.test(w) && /setTimeout\(function \(\) \{ r\(null\); \}, 700\)/.test(w), '서버 헤지(0.7초)');
+  });
   await t('s172: 공공데이터 키 두 개를 두 길(버스 서버 · route-v2 /bus-tago)로 반반 · 정류장 목록은 동시에 · 가까운 역 팝업 미리', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/public static Res getBus2\(/.test(np) && /private static Res race\(/.test(np) && /altOff = true/.test(np) && /r\.status == 404/.test(np), 'getBus2: 두 길 · 동시(race) · 404면 그 길을 끈다');
