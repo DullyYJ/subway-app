@@ -402,9 +402,16 @@ public final class ShellCore {
     }
     public static String shopUrl(String cat) { return BASE + "/screen/shop?cap=" + CAP + (cat != null && cat.length() > 0 ? "&cat=" + enc(cat) : ""); }
     /** 노선도 화면 열쇠(방식 · 지역 · 필터를 직접 줘서 — 지금 고른 방식이 아닌 쪽도 미리 받아 두려고). */
-    public static String mapKey(String screen, String mode, Store st) { return screen + "|" + mode + "|" + st.get(MapCore.K_REG, "seoul") + "|" + st.get(MapCore.K_FLT, "ALL") + busViewSuffix(screen, mode, st); }
+    public static String mapKey(String screen, String mode, Store st) { return mapKey(screen, mode, st, st.get(K_BUSCELL, "")); }
+    /** 버스 '주변' 화면은 위치 칸(약 110m)마다 따로 둔다 — 다른 동네의 정류장이 캐시에서 먼저 뜨지 않게(s179). cell 을 직접 줘서 지금 위치가 아닌 칸의 것도 미리 받아 둘 수 있다. */
+    public static String mapKey(String screen, String mode, Store st, String cell) { return screen + "|" + mode + "|" + st.get(MapCore.K_REG, "seoul") + "|" + st.get(MapCore.K_FLT, "ALL") + busViewSuffix(screen, mode, st, cell); }
+    /** 지금 버스 탭의 위치 칸(MapCore 가 위치를 바꿀 때마다 적는다). */
+    public static final String K_BUSCELL = "bus_cell";
     /** 버스 본문은 주변/즐겨찾기가 다른 화면이라 캐시도 따로(머리와 지하철은 해당 없음). */
-    private static String busViewSuffix(String screen, String mode, Store st) { return S_MAPB.equals(screen) && "bus".equals(mode) ? "|" + (MapCore.VW_FAV.equals(st.get(MapCore.K_BUSVW, MapCore.VW_NEAR)) ? MapCore.VW_FAV : MapCore.VW_NEAR) : ""; }
+    private static String busViewSuffix(String screen, String mode, Store st, String cell) {
+        if (!S_MAPB.equals(screen) || !"bus".equals(mode)) return "";
+        return MapCore.VW_FAV.equals(st.get(MapCore.K_BUSVW, MapCore.VW_NEAR)) ? "|" + MapCore.VW_FAV : "|" + MapCore.VW_NEAR + "|" + (cell == null ? "" : cell);
+    }
 
     /** 요청 하나(GET 이면 body 가 null). */
     public static final class Req {
