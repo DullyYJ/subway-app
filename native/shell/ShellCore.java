@@ -55,7 +55,7 @@ public final class ShellCore {
     // ═════════════ 설정 화면 ═════════════
     public static final String K_LOCDISC = "loc_disc";   // 위치 정보 이용 안내에 동의했는가(1)
     /** 처음 설치 때 이어서 묻는 기기 설정 안내를 이미 보여 줬는가(평생 한 번 — 웹 gdm_bat_asked_at · gdm_sam_asked_at · gdm_ovl_asked_at). 알림 권한은 한 번만 묻는다. */
-    public static final String K_BATASK = "bat_ask", K_SAMASK = "sam_ask", K_OVLASK = "ovl_ask", K_NOTIFASK = "notif_ask";
+    public static final String K_SETUPV = "setup_v", K_BATASK = "bat_ask", K_SAMASK = "sam_ask", K_OVLASK = "ovl_ask", K_NOTIFASK = "notif_ask";
     public static final String K_ID = "comm_id", K_THEME = "theme", K_RIDELOG_OFF = "ride_log_off";
     public static final String[] NOTIF = { "arrive", "transfer", "arrive_reco" };
     public static final String THEME_DEFAULT = "pastel";
