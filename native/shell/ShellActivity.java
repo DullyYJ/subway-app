@@ -41,8 +41,8 @@ public class ShellActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private ShellCore.Store store;
     private LinearLayout root;
-    private RsSheetView rs;
-    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; rs.setOv(RideService.running ? RideService.liveOv : null); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
+    private RsSheetView rs, rsF;                      // rs = 하단 탭 아래에 올라오는 탑승 시트, rsF = 탭 위에 뜨는 대기 알약 · 되돌리기 캡슐
+    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -164,9 +164,9 @@ public class ShellActivity extends Activity {
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
         body.setVecHost(vec);
         root.addView(holder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        rs = new RsSheetView(this);                      // 탑승 시트: 하단 탭 바로 위(웹 rs-sheet — 도착 2분 전 [탑승]/[환승완료] · 되돌리기 · 대기 알약). 값은 서비스가 엔진에게서 받아 온다
-        rs.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
-        root.addView(rs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rsF = new RsSheetView(this, false);              // 떠 있는 대기 알약 · 되돌리기 캡슐: 하단 탭 바로 위(웹 .rs-pill · .rs-undo)
+        rsF.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
+        root.addView(rsF, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         tabs = new ScreenView(this);
         tabs.setDpr(dpr);
         tabs.setListener(new Host(2));
@@ -183,6 +183,10 @@ public class ShellActivity extends Activity {
             }
         });
         root.addView(tabs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(56f * dpr)));
+        rs = new RsSheetView(this, true);                // 탑승 시트(웹 .rs-sheet): 도착 2분 전 [탑승]/[환승완료]. 하단 탭 아래에서 올라오며 탭이 같이 올라간다. 값은 서비스가 엔진에게서 받아 온다
+        rs.setSibling(tabs);
+        rs.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
+        root.addView(rs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
 
         // 설정 값이 필요한 준비는 칸을 만든 뒤에(그때쯤 설정 파일 읽기가 끝나 있어 기다림이 없다)
@@ -324,7 +328,7 @@ public class ShellActivity extends Activity {
         head.setPalette(pal);
         body.setPalette(pal);
         tabs.setPalette(pal);
-        if (rs != null) rs.setPalette(pal);
+        if (rs != null) { rs.setPalette(pal); rsF.setPalette(pal); }
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
     }
