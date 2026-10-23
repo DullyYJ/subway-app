@@ -125,14 +125,14 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   names.forEach(p => {
     const sc = PG(p, {});
     ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s2p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
-    if (p === 'locd') ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), 'locd: 동의 안내는 뒤로 가기 단추가 없다(동의/거부만)');
+    if (p === 'locd' || /^ask/.test(p)) ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), p + ': 안내 화면은 뒤로 가기 단추가 없다(단추 둘만)');
     else ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
     ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');
     ok(JSON.stringify(PG(p, {})) === JSON.stringify(sc) && PG(p, { x: 1 }).rev === sc.rev, p + ': 같은 입력 → 같은 출력, 모르는 사실은 무시');
   });
   ok(PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 7, m: 30 } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' && PG('cm', { sub: 'pick', pick: { k: 'to', q: '' } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', '시각/장소 고르기의 뒤로 단추는 출퇴근 브리핑 알림으로 돌아간다');
   // 행동 이름은 허용 목록 모양만
-  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
+  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|ask\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
   names.concat(['tp', 'pick']).forEach(p => {
     const sc = p === 'tp' ? PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } }) : p === 'pick' ? PG('cm', { sub: 'pick', pick: { k: 'to', q: '강' }, bus: ['강남역', '강남역', '강동'] }) : PG(p, {});
     const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
@@ -183,6 +183,12 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   { const t = texts(PG('locd', {})).join('\n'), a = acts(PG('locd', {})).map(x => x.v).join();
     ok(/백그라운드 위치 데이터를 수집/.test(t) && /하차역·환승역 도착 알림/.test(t) && /저장하지 않습니다/.test(t), '위치 안내: 고지 글');
     ok(a === 'locd.no,locd.ok,pol.privacy', '위치 안내: 거부 · 동의 · 방침 보기'); }
+  { const tb = texts(PG('askbat', {})).join('\n'), ts = texts(PG('askbat', { sm: 1 })).join('\n'), tm = texts(PG('asksam', {})).join('\n'), to = texts(PG('askovl', {})).join('\n');
+    ok(/배터리 최적화에서 길동무를 제외/.test(tb) && !/자동 절전/.test(tb) && /삼성·샤오미/.test(tb), 's180 배터리 안내: 일반 기기 글');
+    ok(/자동 절전에서 제외/.test(ts) && /\[설정하기\] 한 번이면 이어서 안내해요/.test(ts) && /One UI/.test(ts), 's180 배터리 안내: 갤럭시는 절전 제외까지 한 창');
+    ok(/자동으로 절전하지 않는 앱/.test(tm) && /③ 길동무를 체크/.test(tm), 's180 갤럭시 절전 안내');
+    ok(/현재 역과 남은 시간/.test(to) && /다른 앱 위에 표시를 켬으로/.test(to) && /광고는 넣지 않아요/.test(to), 's180 다른 앱 위에 표시 안내');
+    ['askbat', 'asksam', 'askovl'].forEach(n => ok(acts(PG(n, {})).map(x => x.v).join() === 'ask.no,ask.ok', n + ': 나중에 · 설정하기 둘뿐')); }
   // 하차 5분 전 추천 시험
   ok(texts(PG('arr', {})).includes("'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다."), '추천 시험: 처음 안내');
   const ST = { timer: 1, route: 1, dest: '강남', rem: 725, pre: 10, slot: 'night', dinner: 0, alertAt: Date.UTC(2026, 9, 19, 6, 7, 12), tickAt: Date.UTC(2026, 9, 19, 6, 8, 0), tzo: -540, policy: 1, dg: { stage: '문구 생성', at: Date.UTC(2026, 9, 19, 6, 7, 11), err: '' } };
