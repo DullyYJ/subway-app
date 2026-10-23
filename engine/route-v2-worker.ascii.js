@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s180";
+var ENGINE_VERSION = "route-v2-2026-10-23s182";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12355,10 +12355,11 @@ function settingsScreen(inp, factsIn) {
 // \u2605 \ud558\uc704 \ud654\uba74(cap 8) \u2014 \uc608\uc804\uc5d0 '\uc6f9 \uce74\ub4dc \uc2dc\ud2b8'\ub85c \uc5f4\ub358 6\uac1c: \uac24\ub7ed\uc2dc \uc808\uc804 \u00b7 \ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \u00b7 \uac1c\ubc1c\uc790 \ub3c4\uad6c \u00b7 \ud558\ucc28 \ucd94\ucc9c \uc2dc\ud5d8 \u00b7 \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f \u00b7 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551.
 //   \uc571\uc740 pf(\uae30\uae30 \uc0ac\uc2e4)\ub9cc \ubcf4\ub0b8\ub2e4 \u2014 \ucf1c\uc9d0\u00b7\uac12\u00b7\uace0\ub978 \uce78\u00b7\uc77d\uc740 \uc22b\uc790. \uae00(\uc0c1\ud0dc \ubb38\uad6c\u00b7\uc2dc\uac01 \uae00\u00b7\uc694\uc77c \uc548\ub0b4\u00b7\ud1f4\uadfc \ud78c\ud2b8\u00b7\uc2dc\uac04\ub300 \uc774\ub984)\uacfc \uc5b4\ub5a4 \uce78\uc744 \uc5b4\ub5bb\uac8c \ubcf4\uc77c\uc9c0\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4.
 //   \ud589\ub3d9(act call v): pg.back(\uc124\uc815\uc73c\ub85c) \u00b7 sam.open \u00b7 bat.req \u00b7 ovl.diag \u00b7 pf.live \u00b7 pf.rec \u00b7 dev.start.<\ubaa8\ub4dc> \u00b7 dev.stop \u00b7 arr.t.<\uc885\ub958> \u00b7 arr.demo \u00b7 arr.stat \u00b7
-//   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 erl.copy \u00b7 erl.clear \u00b7 locd.ok \u00b7 locd.no \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
+//   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 erl.copy \u00b7 erl.clear \u00b7 locd.ok \u00b7 locd.no \u00b7 ask.ok \u00b7 ask.no \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
 //   tp.ap.<am|pm> \u00b7 tp.h.<1-12> \u00b7 tp.m.<0-55> \u00b7 tp.ok \u00b7 tp.cancel \u00b7 pk.save \u00b7 pk.clear \u00b7 pk.u.<\ubc88\ud638> \u00b7 pk.b.<\ubc88\ud638> \u00b7 pk.cancel.   \uc2a4\uc704\uce58(toggle) \ud0a4: cm \u00b7 ovl.
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', polp: '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', poll: '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', polo: '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', erl: '\uc624\ub958 \ub85c\uadf8', locd: '\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4' };
+var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', polp: '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', poll: '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', polo: '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', erl: '\uc624\ub958 \ub85c\uadf8', locd: '\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4', askbat: '\ud654\uba74\uc744 \uaebc\ub3c4 \ub04a\uae30\uc9c0 \uc54a\uac8c', asksam: '\uac24\ub7ed\uc2dc \uc808\uc804 \uc81c\uc678', askovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc' };
+var SETTINGS_ASK = { askbat: 1, asksam: 1, askovl: 1 };      // \ucc98\uc74c \uc124\uce58 \ub54c \uc774\uc5b4\uc11c \ubb3b\ub294 \uae30\uae30 \uc124\uc815 \uc548\ub0b4 \u2014 \ub4a4\ub85c \uac00\uae30 \uc5c6\uc774 [\ub098\uc911\uc5d0]/[\uc124\uc815\ud558\uae30] \ub9cc
 var SETTINGS_DAY_NM = ['\uc77c', '\uc6d4', '\ud654', '\uc218', '\ubaa9', '\uae08', '\ud1a0'];
 var SETTINGS_BK = ['\uc54c \uc218 \uc5c6\uc74c', '\ud65c\uc131', '\uc791\uc5c5 \uc9d1\ud569', '\uc790\uc8fc \uc0ac\uc6a9', '\ub4dc\ubb3c\uac8c \uc0ac\uc6a9', '\uc81c\ud55c'];
 var SETTINGS_PICK = { from: ['\ucd9c\uadfc \ucd9c\ubc1c\uc9c0 (\uc9d1 \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uc544\ub77c)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'], to: ['\ucd9c\uadfc \ub3c4\ucc29\uc9c0 (\ud68c\uc0ac \uadfc\ucc98)', '\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4 (\uc608: \uac15\ub0a8)', '\ud604\uc7ac \uc704\uce58 \uae30\uc900'],
@@ -12380,7 +12381,7 @@ function settingsPageFacts(pf) {
   var tp = (pf.tp && typeof pf.tp === 'object') ? pf.tp : null, pk = (pf.pick && typeof pf.pick === 'object') ? pf.pick : null, st = (pf.st && typeof pf.st === 'object') ? pf.st : null;
   var dg = (st && st.dg && typeof st.dg === 'object') ? st.dg : {};
   return {
-    w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
+    sm: settingsFlag(pf.sm, false), w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
     errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
@@ -12698,6 +12699,37 @@ function settingsPageLocd() {
     settingsRowN([settingsBtnN('\uac70\ubd80', 'locd.no', { h: 46 }), settingsBtnN('\ub3d9\uc758', 'locd.ok', { gold: true, h: 46 })], 10),
     settingsNavN('\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68 \ubcf4\uae30', '', { a: 'call', v: 'pol.privacy' }, true)], 24)];
 }
+// \u2500\u2500 \ucc98\uc74c \uc124\uce58 \ub54c \uae30\uae30 \uc124\uc815 \uc548\ub0b4(\uc6f9 _batAsk \u00b7 _samAsk \u00b7 _ovlAsk \uc758 \uae00 \uadf8\ub300\ub85c) \u2500\u2500 \uc571\uc774 \uc704\uce58 \uc548\ub0b4 \ub2e4\uc74c\ubd80\ud130 \ud55c \uac00\uc9c0\uc529 \ucc28\ub840\ub85c \ub744\uc6b4\ub2e4. \ub20c\ub9bc\uc740 ask.no(\ub098\uc911\uc5d0) \u00b7 ask.ok(\uc124\uc815\ud558\uae30) \ub458\ubfd0.
+function settingsAskPanelN(title, bodyParts, boxParts, subParts) {
+  var a = settingsBoldN(bodyParts), k = [settingsTitleN(title, 14)];
+  var ta = { t: 'text', s: a.s, size: 14, color: 'text', lh: 1.75, pad: [0, 0, 0, 14] }; if (a.hl.length) ta.hl = a.hl; k.push(ta);
+  if (boxParts) { var x = settingsBoldN(boxParts); k.push({ t: 'box', s: x.s, hl: x.hl, size: 12.5, lh: 1.75, color: 'text', fill: 'bg', line: 'border', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 12] }); }
+  var b = settingsBoldN(subParts), tb = { t: 'text', s: b.s, size: 12.5, color: 'sub', lh: 1.7, pad: [0, 0, 0, 18] }; if (b.hl.length) tb.hl = b.hl; k.push(tb);
+  k.push(settingsRowN([settingsBtnN('\ub098\uc911\uc5d0', 'ask.no', { h: 46 }), settingsBtnN('\uc124\uc815\ud558\uae30', 'ask.ok', { gold: true, h: 46 })], 0));
+  return [settingsPanelN(k, 24)];
+}
+function settingsPageAskBat(f) {
+  if (f.sm) return settingsAskPanelN('\uac24\ub7ed\uc2dc\uc5d0\uc11c \ud654\uba74\uc744 \uaebc\ub3c4 \ub04a\uae30\uc9c0 \uc54a\uac8c',
+    [['\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4\ub97c \ud0c0\ub294 \ub3d9\uc548 \ud654\uba74\uc774 \uaebc\uc838 \uc788\uc5b4\ub3c4 ', 0], ['\ub0b4\ub9b4 \uc815\uac70\uc7a5 \uc54c\ub9bc', 1], ['\uacfc ', 0], ['\uc624\ubc84\ub808\uc774', 1], ['\uac00 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub824\uba74, ', 0], ['\uae38\ub3d9\ubb34\ub97c \ubc30\ud130\ub9ac \ucd5c\uc801\ud654\uc640 \uc790\ub3d9 \uc808\uc804\uc5d0\uc11c \uc81c\uc678', 1], ['\ud574 \uc8fc\uc154\uc57c \ud574\uc694. \uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9\uc73c\ub85c \uc808\uc804\uc2dc\ucf1c \uc774\ub3d9 \uc911\uc5d0 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694.', 0]],
+    [['[\uc124\uc815\ud558\uae30] \ud55c \ubc88\uc774\uba74 \uc774\uc5b4\uc11c \uc548\ub0b4\ud574\uc694\n\u2460 \uc5f4\ub9ac\ub294 \ubaa9\ub85d\uc5d0\uc11c \uc624\ub978\ucabd \uc704 ', 0], ['+', 1], [' \u2192 ', 0], ['\uae38\ub3d9\ubb34', 1], [' \uccb4\ud06c(\uc548 \ubcf4\uc774\uba74 \uc544\ub798 \uac80\uc0c9) \u2192 ', 0], ['\ucd94\uac00', 1], ['\n\u2461 \ub3cc\uc544\uc624\uba74 \ub098\uc624\ub294 \uae30\uae30 \ucc3d\uc5d0\uc11c ', 0], ['\ud5c8\uc6a9', 1]],
+    [['\u00b7 \ud654\uba74 \ubaa8\uc591\uc740 \uae30\uae30\u00b7One UI \ubc84\uc804\uc5d0 \ub530\ub77c \uc870\uae08 \ub2ec\ub77c\uc694.\n\u00b7 \uc774\ub3d9 \uc911\uc5d0 \ucd5c\uadfc \uc571 \ud654\uba74\uc5d0\uc11c ', 0], ['\ubaa8\ub450 \ub2eb\uae30', 1], ['\ub97c \ub204\ub974\uba74 \uc548\ub0b4\uac00 \uba48\ucdb0\uc694.', 0]]);
+  return settingsAskPanelN('\ud654\uba74\uc744 \uaebc\ub3c4 \ub04a\uae30\uc9c0 \uc54a\uac8c',
+    [['\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4\ub97c \ud0c0\ub294 \ub3d9\uc548 \ud654\uba74\uc774 \uaebc\uc838 \uc788\uc5b4\ub3c4 ', 0], ['\ub0b4\ub9b4 \uc815\uac70\uc7a5 \uc54c\ub9bc', 1], ['\uacfc ', 0], ['\uc624\ubc84\ub808\uc774', 1], ['\uac00 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub824\uba74, \uae30\uae30\uc758 ', 0], ['\ubc30\ud130\ub9ac \ucd5c\uc801\ud654\uc5d0\uc11c \uae38\ub3d9\ubb34\ub97c \uc81c\uc678', 1], ['\ud574 \uc8fc\uc154\uc57c \ud574\uc694. \uc81c\uc678\ud558\uc9c0 \uc54a\uc73c\uba74 \uc77c\ubd80 \uae30\uae30(\uc0bc\uc131\u00b7\uc0e4\uc624\ubbf8 \ub4f1)\uac00 \uc774\ub3d9 \uc911\uc5d0 \uc571\uc744 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694.', 0]],
+    null,
+    [['\u00b7 [\uc124\uc815\ud558\uae30]\ub97c \ub204\ub974\uba74 \uae30\uae30\uc758 \uc548\ub0b4 \ucc3d\uc774 \uc5f4\ub824\uc694. \uac70\uae30\uc11c ', 0], ['\ud5c8\uc6a9', 1], ['\uc744 \ub20c\ub7ec \uc8fc\uc138\uc694.\n\u00b7 \uacbd\ub85c \uc548\ub0b4 \uc911\uc5d0\ub9cc \uc704\uce58\ub97c \uc4f0\uace0, \uc124\uc815\uc740 \uae30\uae30 \uc124\uc815\uc5d0\uc11c \uc5b8\uc81c\ub4e0 \ub418\ub3cc\ub9b4 \uc218 \uc788\uc5b4\uc694.', 0]]);
+}
+function settingsPageAskSam() {
+  return settingsAskPanelN('\uac24\ub7ed\uc2dc \uc808\uc804\uc5d0\uc11c \uc81c\uc678\ud574 \uc8fc\uc138\uc694',
+    [['\uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9\uc73c\ub85c ', 0], ['\uc808\uc804 \uc0c1\ud0dc', 1], ['\ub85c \ub9cc\ub4e4\uc5b4, \ud654\uba74\uc774 \uaebc\uc9c4 \ub3d9\uc548\uc758 ', 0], ['\ud558\ucc28 \uc54c\ub9bc', 1], ['\uc774 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694. \uae38\ub3d9\ubb34\ub97c ', 0], ['\uc790\ub3d9\uc73c\ub85c \uc808\uc804\ud558\uc9c0 \uc54a\ub294 \uc571', 1], ['\uc5d0 \ub123\uc5b4 \uc8fc\uc138\uc694.', 0]],
+    [['\u2460 [\uc124\uc815\ud558\uae30]\ub97c \ub204\ub974\uba74 \ubaa9\ub85d \ud654\uba74\uc774 \uc5f4\ub824\uc694\n\u2461 \uc624\ub978\ucabd \uc704 ', 0], ['+', 1], ['(\ucd94\uac00)\ub97c \ub204\ub974\uace0\n\u2462 ', 0], ['\uae38\ub3d9\ubb34', 1], ['\ub97c \uccb4\ud06c(\uc548 \ubcf4\uc774\uba74 \uc544\ub798 ', 0], ['\uac80\uc0c9', 1], ['\uc5d0 \uc785\ub825)\ud55c \ub4a4 ', 0], ['\ucd94\uac00', 1], ['\ub97c \ub20c\ub7ec \uc8fc\uc138\uc694', 0]],
+    [['\u00b7 \ud654\uba74 \ubaa8\uc591\uc740 \uae30\uae30\u00b7One UI \ubc84\uc804\uc5d0 \ub530\ub77c \uc870\uae08 \ub2ec\ub77c\uc694.\n\u00b7 \uc774\ub3d9 \uc911\uc5d0 \ucd5c\uadfc \uc571 \ud654\uba74\uc5d0\uc11c ', 0], ['\ubaa8\ub450 \ub2eb\uae30', 1], ['\ub97c \ub204\ub974\uba74 \uc548\ub0b4\uac00 \uba48\ucdb0\uc694.', 0]]);
+}
+function settingsPageAskOvl() {
+  return settingsAskPanelN('\ub2e4\ub978 \uc571\uc744 \ubcf4\uba74\uc11c\ub3c4 \ub0b4 \uc704\uce58 \ud655\uc778',
+    [['\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4\uc5d0\uc11c \ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548\uc5d0\ub3c4 ', 0], ['\ud604\uc7ac \uc5ed\uacfc \ub0a8\uc740 \uc2dc\uac04', 1], ['\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc \ub4dc\ub824\uc694. \ub9c9\ub300\ub97c \ub204\ub974\uba74 \uae38\ub3d9\ubb34\ub85c \ub3cc\uc544\uc640\uc694.', 0]],
+    [['[\uc124\uc815\ud558\uae30]\ub97c \ub204\ub974\uba74 \uae30\uae30 \uc124\uc815 \ud654\uba74\uc774 \uc5f4\ub824\uc694\n\u2460 ', 0], ['\uae38\ub3d9\ubb34', 1], ['\ub97c \ucc3e\uc544 \ub20c\ub7ec\uc11c\n\u2461 ', 0], ['\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', 1], ['\ub97c ', 0], ['\ucf2c', 1], ['\uc73c\ub85c \ubc14\uafb8\uace0 \ub3cc\uc544\uc624\uc138\uc694', 0]],
+    [['\u00b7 \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694.\n\u00b7 \ub098\uc911\uc5d0 \uc124\uc815 \ud0ed\uc758 \'\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc\'\uc5d0\uc11c\ub3c4 \ucf1c\uace0 \ub04c \uc218 \uc788\uc5b4\uc694.', 0]]);
+}
 function settingsPageScreen(inp, factsIn) {
   var p = String(inp.p || '');
   if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
@@ -12708,8 +12740,8 @@ function settingsPageScreen(inp, factsIn) {
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
   else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd })[p](pf);
-  var body = (p === 'locd' ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
+  var body = (p === 'locd' || SETTINGS_ASK[p] ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;
