@@ -414,6 +414,8 @@ public final class ShellCore {
 
     public static final String BOARD_BASE = "https://board-writer.phg0643.workers.dev";
     public static final String NEWS_BASE = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+    /** 버스 공공 API 프록시(웹 _BUS_PROXY_DEFAULT 와 같은 서버) — 도착정보 · 정류장 · 노선은 여기로 받는다. gentle-lab /tago 는 도착정보가 522 · HTTP_ERROR 로 막혀 쓰지 않는다. */
+    public static final String BUS_BASE = "https://gildongmu-bus.phg0643.workers.dev";
     public static final String SHOP_BASE = "https://gildongmu-shop.phg0643.workers.dev";
 
     /** 이 화면을 계산하려면 먼저 받아야 하는 원자료 주소들(없으면 바로 엔진에 요청). */
