@@ -2205,3 +2205,8 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **앱 고침**: `ShellCore.BUS_BASE`(= gildongmu-bus). `MapCore.busFetchUrl` 이 TAGO · ws.bus.go.kr 주소를 `BUS_BASE/tago` 로 받는다(서버 정류장 표 D1 `bus-stops` 만 gentle-lab 직접). 정류장 이름 검색(`HomeSearchCore.busUrl` 호출 2곳)도 `BUS_BASE`. 식당·상가(`FoodCore`)는 웹도 `_SERVER_URL` 이라 그대로.
 - **서버(route-v2)**: 코드 변경 없음. 도착정보를 gentle-lab 으로 받다 실패하면 비워 두고(s160) 기기가 위 서버로 직접 받는다. **원하면** route-v2 의 `BUSAPI` 서비스 바인딩을 gentle-lab → `gildongmu-bus` 워커로 바꾸면 서버 쪽 도착정보도 같은 길로 빨라진다(대시보드 설정 — YJ 가 할 일. 바꾸면 `/bus-stops`(D1) 는 gildongmu-bus 에 없으므로 정류장 표 `d1` 는 앱이 직접 받는 길만 남는다는 점 유의).
 - 시험: `shell_native` 37 · `screen_native` 12 · `map_server_fetch` 12 · JVM(`busFetchUrl` 기대값을 `BUS_BASE` 로). 기기 실측은 못 했다.
+
+## s165 (2026-10-23) — 버스 탭 SWR: 앱을 다시 켜도 90초 안이면 마지막 화면이 바로
+- **확정(YJ)**: 네이버클라우드는 지하철 중계용으로 두고 버스는 s164 의 `gildongmu-bus`(웹과 같은 Cloudflare 워커)를 쓴다.
+- **고침**: 버스 화면 디스크 보관 시간(`ShellCore.diskTtl` 의 `|bus|`)이 8초(`BUS_FRESH_MS`)라 앱을 껐다 켜면 마지막 버스 화면이 파일에서도 버려졌다 → `BUS_STALE_MS`(90초)로. 메모리 캐시는 원래 90초(SWR)였다. 이제 90초 안이면 켜자마자 마지막 정류장·도착정보가 (받은 뒤 흐른 초만큼 줄인 채) 바로 뜨고, 뒤에서 `gildongmu-bus` 로 새로 받아(약 1초) 바꾼다. 90초를 넘으면 예전처럼 뼈대(틀린 도착정보를 보이지 않는다).
+- 시험: `shell_native` 37 · JVM(`diskTtl` 기대값 `BUS_STALE_MS`). 기기 실측은 못 했다.
