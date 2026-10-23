@@ -742,6 +742,7 @@ public class ShellJvmTest {
         ok(MapCore.busFetchUrl("https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json").startsWith(ShellCore.BUS_BASE + "/tago?url=https%3A%2F%2Fapis.data.go.kr%2F6410000%2F")
             && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800").equals(ShellCore.NEWS_BASE + "/bus-stops?lat=37.5&lng=127&radius=800")
             && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/bus-stops?lat=1&x=<script>").isEmpty() && MapCore.busFetchUrl(ShellCore.NEWS_BASE + "/other?x=1").isEmpty() && MapCore.busFetchUrl("https://evil.example/bus-stops?lat=1").isEmpty(), "경기 GBIS 주소는 프록시로, 서버 정류장 표(D1)는 직접, 그 밖은 막는다");
+        ok(ScreenCore.netAllowed(MapCore.busFetchUrl("https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json")) && ScreenCore.netAllowed(ShellCore.BUS_BASE + "/health") && ScreenCore.netAllowed(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, "x")), "버스 프록시(gildongmu-bus)는 앱 통신 허용 목록에 있다(없으면 기기 버스 받기가 전부 blocked)");
         mc.addBusRes("tp", "<a/>"); mc.addBusRes("BAD KEY", "x");
         String bq2 = mc.bodyRequest(18, "dark");
         ok(bq2.contains("\"lat\":37.5,\"lng\":127.0,\"res\":{\"tp\":\"<a/>\"}}") && bq2.contains("\"fav\":[]") && bq2.contains("\"al\":{}") && !bq2.contains("BAD"), "받은 본문을 res 로 다시 보낸다(+ 즐겨찾기·별명 값)");
