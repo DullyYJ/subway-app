@@ -825,7 +825,7 @@ public class ShellActivity extends Activity {
                         final int k = i;
                         ts[i] = new Thread(new Runnable() { @Override public void run() {
                             String u = MapCore.busFetchUrl(need.get(k)[1]);
-                            NetPost.Res r = u.length() == 0 ? null : NetPost.get(u, 9000);
+                            NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, 9000, 4000);
                             got[k] = r != null && r.status == 200 ? r.body : "";
                         } });
                         ts[i].start();
@@ -1982,7 +1982,7 @@ public class ShellActivity extends Activity {
                             for (String[] nd : new ArrayList<String[]>(m.brNeed)) {
                                 if (!nd[0].endsWith("s")) continue;                                   // 목록만(위치는 열 때 새로 받는다)
                                 String u = MapCore.busFetchUrl(nd[1]);
-                                NetPost.Res g = u.length() == 0 ? null : NetPost.get(u, 9000);
+                                NetPost.Res g = u.length() == 0 ? null : NetPost.getBus(u, 9000, 4000);
                                 m.addBrRes(nd[0], g != null && g.status == 200 && g.body != null ? g.body : ""); any = true;
                             }
                             if (!any) break;
@@ -2021,14 +2021,8 @@ public class ShellActivity extends Activity {
                     final int k = i;
                     ts[i] = new Thread(new Runnable() { @Override public void run() {
                         String u = MapCore.busFetchUrl(need.get(k)[1]);
-                        String body = "";
-                        for (int a = 0; a < 3 && u.length() > 0 && body.length() == 0; a++) {          // 한 곳이 느려 전체가 9초 걸리지 않게: 5초 안에 못 받으면 한 번 더(빨리 실패했을 때만 — 느린 서버에 또 매달리지 않는다). 공공 API 의 일시적 빈 응답은 0.3초 뒤 한 번 더
-                            long t0 = System.currentTimeMillis();
-                            NetPost.Res r = NetPost.get(u, a == 0 ? 5000 : 4000);
-                            body = r.status == 200 && r.body != null ? r.body : "";
-                            if (body.length() == 0 && System.currentTimeMillis() - t0 > 2500L) break;
-                            if (body.length() == 0 && a < 2) { try { Thread.sleep(300L); } catch (InterruptedException ie) { break; } }
-                        }
+                        NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, 5000, 4000);          // 동시 4곳 · 공공 API 오류 봉투는 다시 묻는다(끝내 못 받으면 빈 본문 — 아래에서 '없음'으로 굳히지 않는다)
+                        String body = r != null && r.status == 200 && r.body != null ? r.body : "";
                         got[k] = body;
                         if (partial && body.length() > 0) main.post(new Runnable() { @Override public void run() {          // 먼저 온 정류장부터 바로 보인다
                             if (my != seqMapB || busRefreshing) return;
@@ -2189,13 +2183,9 @@ public class ShellActivity extends Activity {
         for (int i = 0; i < need.size(); i++) {
             final int k = i;
             ts[i] = new Thread(new Runnable() { @Override public void run() {
-                String u = MapCore.busFetchUrl(need.get(k)[1]), b = "";
-                for (int a = 0; a < 2 && u.length() > 0 && b.length() == 0; a++) {
-                    long t0 = System.currentTimeMillis();
-                    NetPost.Res r = NetPost.get(u, a == 0 ? firstMs : retryMs);
-                    b = r.status == 200 && r.body != null ? r.body : "";
-                    if (b.length() == 0 && System.currentTimeMillis() - t0 > 2500L) break;
-                }
+                String u = MapCore.busFetchUrl(need.get(k)[1]);
+                NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, firstMs, retryMs);
+                String b = r != null && r.status == 200 && r.body != null ? r.body : "";
                 got[k] = b;
             } });
             ts[i].start();
@@ -2853,7 +2843,7 @@ public class ShellActivity extends Activity {
                     if (a > 0) { try { Thread.sleep(pos ? 800 : 300); } catch (InterruptedException e) { break; } }
                     if (gen != brGen) return;                                                  // 화면을 벗어났다 — 더 받지 않는다
                     long t0 = System.currentTimeMillis();
-                    NetPost.Res r = NetPost.get(u, pos ? 6000 : 9000);
+                    NetPost.Res r = NetPost.getBus(u, pos ? 6000 : 9000, 4000);
                     body = r.status == 200 && r.body != null ? r.body : "";
                     if (body.length() == 0 && !pos && System.currentTimeMillis() - t0 > 3000L) break;      // 느리게 실패했으면 또 기다리지 않는다
                 }
