@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s170";
+var ENGINE_VERSION = "route-v2-2026-10-23s171";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20324,6 +20324,17 @@ function mapSvViaBinding(env, url) {                       // \u2192 Promise<Res
   if ((m = MAPSV_D1.exec(u))) return env.BUSAPI.fetch(new Request('https://busapi.internal' + m[1]));
   return null;
 }
+function mapSvAttempts(env, url, seq) {                    // \u2192 [() => Promise<Response>|null] \uc2dc\ub3c4 \uc21c\uc11c
+  var out = [];
+  if (typeof tagoAttempts === 'function' && env && /^https?:\/\/apis\.data\.go\.kr\//.test(url)) {
+    var inner = url.replace(/([?&])serviceKey=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    var ks = tagoAttempts(env).filter(function (x) { return x.via === 'env-key' || x.via === 'env-key2' || x.via === 'default-key'; });
+    if (ks.length > 1 && seq % 2 === 1) ks = ks.slice(1).concat(ks.slice(0, 1));
+    ks.slice(0, 2).forEach(function (x) { out.push(function () { return x.run(inner); }); });
+  }
+  if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
+  return out;
+}
 async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 '')
   var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
   if (cacheable) {
@@ -20335,19 +20346,22 @@ async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb3
       }
     } catch (e0) { cache = null; }
   }
-  for (var a = 0; a < 2; a++) {
+  var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // \uacf5\uacf5\ub370\uc774\ud130 \ud0a4\uac00 \ub458\uc774\uba74 \uc815\ub958\uc7a5\uc744 \ubc18\ubc18\uc529(\uc9dd\uc218 \ubc88\uc9f8\ub294 \ud0a41 \uba3c\uc800 \u00b7 \ud640\uc218 \ubc88\uc9f8\ub294 \ud0a42 \uba3c\uc800) \ub098\ub220 \ubb3b\uace0, \ud55c\ucabd\uc774 \uc624\ub958\uba74 \ubc14\ub85c \ub2e4\ub978 \ucabd \u00b7 \ub9c8\uc9c0\ub9c9\uc740 BUSAPI \ubc14\uc778\ub529
+  if (!atts.length) return '';
+  if (atts.length === 1) atts.push(atts[0]);                                                  // \uae38\uc774 \ud558\ub098\ubfd0\uc774\uba74 \ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c \ud55c \ubc88 \ub354
+  for (var a = 0; a < atts.length && a < 3; a++) {
     var t0 = Date.now(), body = '';
     try {
-      var p = mapSvViaBinding(env, url);
-      if (!p) return '';
-      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3500 : 2500); })]);
-      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83 \u2014 \ub2e4\uc2dc \ubc1b\uace0, \ub05d\ub0b4 \ubabb \ubc1b\uc73c\uba74 \ube44\uc6cc \ub454\ub2e4
+      var p = atts[a]();
+      if (!p) continue;
+      var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, a === 0 ? 3000 : 2000); })]);
+      if (res && res.status === 200) { body = await res.text(); if (mapArrErr(body)) body = ''; }                    // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83 \u2014 \ub2e4\ub978 \ud0a4\ub85c \ub2e4\uc2dc \ubc1b\uace0, \ub05d\ub0b4 \ubabb \ubc1b\uc73c\uba74 \ube44\uc6cc \ub454\ub2e4
     } catch (e1) { body = ''; }
     if (body) {
       if (cache && ck && mapSvOkBody(k, body)) { try { await cache.put(ck, new Response(body, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
       return body;
     }
-    if (Date.now() - t0 > 1500) break;                      // \ub290\ub9b0 \uc11c\ubc84\uc5d0 \ub610 \ub9e4\ub2ec\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c\ub9cc \ud55c \ubc88 \ub354)
+    if (Date.now() - t0 > 2500) break;                      // \ub290\ub9b0 \uc11c\ubc84\uc5d0 \ub610 \ub9e4\ub2ec\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\ube68\ub9ac \uc2e4\ud328\ud588\uc744 \ub54c\ub9cc \ub2e4\uc74c \uc2dc\ub3c4)
   }
   return '';
 }
@@ -20405,6 +20419,25 @@ async function handleScreenMap(request, env) {
   } catch (e3) { /* \uc11c\ubc84\uac00 \ubabb \ubc1b\uc73c\uba74 need \uac00 \ub0a8\uc740 \uccab \ud654\uba74 \uadf8\ub300\ub85c \u2014 \uae30\uae30\uac00 \uc774\uc5b4 \uac04\ub2e4 */ }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
+}
+// \ub3c4\ucc29\uc815\ubcf4 \ubd84\uc0b0 \ud638\ucd9c \uc2e4\uce21(GET /bus-split-test?n=8&mode=single|split): \uac19\uc740 \uc815\ub958\uc7a5\ub4e4\uc744 \ub3d9\uc2dc\uc5d0 n\ubc88 \ubd88\ub7ec \ud0a4 \ud558\ub098\ub85c\ub9cc vs \ud0a4 \ub458\ub85c \ubc18\ubc18 \ub098\ub234\uc744 \ub54c \uc624\ub958(HTTP_ERROR)\u00b7\uc2dc\uac04\uc744 \ube44\uad50\ud55c\ub2e4. \ud0a4 \uac12\uc740 \ub098\uc624\uc9c0 \uc54a\ub294\ub2e4.
+async function handleBusSplitTest(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  var u = new URL(request.url), n = Math.max(1, Math.min(12, parseInt(u.searchParams.get('n') || '8', 10) || 8)), mode = u.searchParams.get('mode') === 'split' ? 'split' : 'single';
+  var ids = String(u.searchParams.get('nodes') || 'ICB368000436,ICB368000437,ICB368000438,ICB368000439,ICB368000440,ICB368000441,ICB368000442,ICB368000443').split(',').filter(function (x) { return /^[A-Za-z0-9]{6,20}$/.test(x); }).slice(0, 12);
+  var city = /^[0-9]{1,3}$/.test(u.searchParams.get('city') || '') ? u.searchParams.get('city') : '23';
+  var ks = typeof tagoAttempts === 'function' ? tagoAttempts(env).filter(function (x) { return x.via === 'env-key' || x.via === 'env-key2'; }) : [];
+  if (!ks.length || !ids.length) return new Response(JSON.stringify({ ok: false, error: 'no-key' }), { status: 200, headers: H });
+  var t00 = Date.now();
+  var rows = await Promise.all(Array.from({ length: n }, function (_, i) {
+    var a = mode === 'split' && ks.length > 1 ? ks[i % 2] : ks[0], t0 = Date.now();
+    var inner = MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?cityCode=' + city + '&nodeId=' + ids[i % ids.length] + '&_type=json';
+    return Promise.race([a.run(inner).then(function (r) { return r.text(); }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 8000); })])
+      .then(function (t) { return { via: a.via, ok: !mapArrErr(t) && t.length > 40, ms: Date.now() - t0 }; }, function () { return { via: a.via, ok: false, ms: Date.now() - t0 }; });
+  }));
+  var by = {}; rows.forEach(function (r) { var b = by[r.via] || (by[r.via] = { n: 0, ok: 0, ms: 0 }); b.n++; if (r.ok) b.ok++; b.ms += r.ms; });
+  Object.keys(by).forEach(function (v) { by[v].avgMs = Math.round(by[v].ms / by[v].n); delete by[v].ms; });
+  return new Response(JSON.stringify({ ok: true, mode: mode, n: n, keys: ks.length, okN: rows.filter(function (r) { return r.ok; }).length, totalMs: Date.now() - t00, by: by }), { headers: H });
 }
 // ===== MAP ENGINE END =====
 
@@ -21678,6 +21711,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/pvl") return handleScreenPvl(request);
   if (url.pathname === "/pos-fuse") return handlePosFuse(request);
   if (url.pathname === "/screen/map") return handleScreenMap(request, env);
+  if (url.pathname === "/bus-split-test") return handleBusSplitTest(request, env);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request);
