@@ -354,7 +354,7 @@ function mapD1Stops(text, la, lo) {                               // 서버 정�
     var a = Number(s.lat), b = Number(s.lng);
     if (!s.node_id || !isFinite(a) || !isFinite(b)) return;
     var cc = (s.city_code && String(s.city_code) !== '0') ? String(s.city_code) : '';
-    var nid = String(s.node_id).replace(/^ICB1/, 'ICB3');                          // 인천: 우리 표(D1)는 ICB1…, TAGO 도착정보는 ICB3… 를 쓴다(웹 _tagoAltNodeIds · 같은 정류장) — 그대로 쓰면 도착정보가 전부 '없음'
+    var nid = String(s.node_id); if (cc === '23') nid = nid.replace(/^(ICB|GGB)1/, 'ICB3');                          // 인천(city 23): 우리 표(D1)는 ICB1…·GGB1…, TAGO 도착정보는 ICB3… 를 쓴다(웹 _tagoAltNodeIds · 같은 정류장) — 그대로 쓰면 도착정보가 전부 '없음'
     stops.push({ nm: String(s.node_nm || ''), id: nid, no: '', city: cc || mapCityOf(a, b), la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'd1' });
   });
   stops.sort(function (x, y) { return x.dist - y.dist; });
