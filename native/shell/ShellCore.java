@@ -72,7 +72,7 @@ public final class ShellCore {
             b.append(q(NOTIF[i])).append(':').append("0".equals(st.get("np_" + NOTIF[i], "1")) ? 0 : 1);
         }
         b.append('}');
-        b.append(",\"ovl\":").append("1".equals(st.get(K_OVL, "0")) ? 1 : 0);
+        b.append(",\"ovl\":").append(ovlOn(st.get(K_OVL, "")) ? 1 : 0);
         b.append(",\"sam\":").append("1".equals(st.get(K_SAM, "0")) ? 1 : 0).append(",\"samw\":").append("1".equals(st.get(K_SAMW, "0")) ? 1 : 0);
         b.append(",\"cm\":").append(CmCore.on(st) ? 1 : 0);
         b.append(",\"errn\":").append(ErrCore.count(st));
@@ -160,7 +160,7 @@ public final class ShellCore {
             + ",\"loc\":{\"lat\":37.4979,\"lng\":127.0276},\"foodPref\":\"server\",\"aiCopy\":1,\"pickShop\":1}";
     }
     public static String pageUrl(Store st, String page, boolean supported, boolean granted) {
-        String pf = "{\"pf\":{\"nat\":true,\"nv\":true,\"sup\":" + supported + ",\"gr\":" + granted + ",\"on\":" + "1".equals(st.get(K_OVL, "0")) + ",\"pfl\":" + "1".equals(st.get(K_PFL, "0")) + "}}";
+        String pf = "{\"pf\":{\"nat\":true,\"nv\":true,\"sup\":" + supported + ",\"gr\":" + granted + ",\"on\":" + ovlOn(st.get(K_OVL, "")) + ",\"pfl\":" + "1".equals(st.get(K_PFL, "0")) + "}}";
         try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=" + URLEncoder.encode(page, "UTF-8") + "&f=" + URLEncoder.encode(pf, "UTF-8"); }
         catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&p=" + page; }
     }
@@ -336,6 +336,8 @@ public final class ShellCore {
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_MAPBR = "mapbr", S_FAV = "fav", S_DETAIL = "detail", S_WALK = "walk", S_SETPG = "setpg", S_HDR = "hdr";
+    /** 다른 앱 위 안내: 사용자가 끈 적이 없으면(저장값 없음) 켜진 것으로 본다 — 실제로 뜨려면 '다른 앱 위에 표시' 허용이 있어야 한다. 끈 값은 "0". */
+    public static boolean ovlOn(String v) { return !"0".equals(v); }
     public static final String K_OVL = "ovl_on", K_RIDESNAP = "ride_snap", K_GPSASK = "gps_asked", K_OVLHINT = "ovl_hint", K_PFL = "pf_live", K_SAM = "dev_sam", K_SAMW = "dev_samw";
 
     /** 탭이 보여 줄 화면 칸들(위에서 아래로). 첫 칸이 머리(높이는 그린 내용만큼), 마지막 칸이 본문(남은 높이). 한 칸이면 본문만. */
