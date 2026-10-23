@@ -190,7 +190,7 @@ public class ShellActivity extends Activity {
         board = new BoardCore(store);
         chat = new ChatCore(store);
         fav = new FavCore(store);
-        map = new MapCore(store);
+        map = new MapCore(store); map.primary = true;                          // 실제 화면의 버스 상태기 — 위치 칸을 저장소에 적어 화면 캐시 열쇠가 따라가게 한다(s179)
         store.put(MapCore.K_BUSVW, MapCore.VW_NEAR);                          // 웹은 앱을 켤 때마다 '주변 정류장'부터
         importLegacy();
 
@@ -565,7 +565,19 @@ public class ShellActivity extends Activity {
         scrCache.put(key, json); scrKeys.add(key);
         if (ShellCore.diskTtl(key) > 0L) diskIdx.put(diskName(key), System.currentTimeMillis());          // 받은 시각(캐시 나이 · 파일 목록)을 바로 맞춘다
         if (key.startsWith(ShellCore.S_SETTINGS + "|")) dropOldSettings(key);
+        else if (key.startsWith(ShellCore.S_MAPB + "|bus|") && key.contains("|near|")) trimBusKeys(key);
         if (ShellCore.diskTtl(key) > 0L && !(ShellCore.S_HOME.equals(key) && home.hasRoute())) diskPut(key, json);        // 경로를 보는 중의 홈은 디스크에 두지 않는다(다시 켜면 그 경로 상태가 없다)
+    }
+    /** 버스 '주변' 화면은 위치 칸마다 열쇠가 달라진다 — 가장 최근 6곳만 두고 오래된 곳의 글 · 파일은 치운다(쌓이지 않게). */
+    private final java.util.ArrayList<String> busKeys = new java.util.ArrayList<String>();
+    private void trimBusKeys(String key) {
+        busKeys.remove(key); busKeys.add(key);
+        while (busKeys.size() > 6) {
+            String old = busKeys.remove(0);
+            scrCache.remove(old); scrKeys.remove(old);
+            final File f = diskFile(old); diskIdx.remove(diskName(old));
+            ioExec.execute(new Runnable() { @Override public void run() { try { f.delete(); } catch (Throwable ignored) { } } });
+        }
     }
     /** 설정 화면은 기기 값마다 열쇠가 달라지므로 지난 값의 글 · 파일 · 메모는 치운다(쌓이지 않게). */
     private String lastSetKey = "";
@@ -832,8 +844,8 @@ public class ShellActivity extends Activity {
         synchronized (pfBusLock) {
             pfMap.modeOverride = "bus";
             try {
-                String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store);
-                if (ll != null) pfMap.setBusLoc(ll[0], ll[1]);
+                String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store, MapCore.cellOf(ll[0], ll[1]));          // 그 위치 칸의 화면 열쇠로 둔다(지금 보는 칸이 아니어도)
+                pfMap.setBusLoc(ll[0], ll[1]);
                 for (int round = 0; round < 4; round++) {
                     NetPost.Res br = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.bodyRequest(ShellCore.CAP, theme), 8000);
                     if (br.status != 200 || br.body == null) break;
@@ -900,7 +912,7 @@ public class ShellActivity extends Activity {
             final String theme = ShellCore.theme(store), cur = ShellCore.currentTab(store), mapMode = map.mode();
             if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });
             if (!("map".equals(cur) && "bus".equals(mapMode))) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {
-                if (!pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
+                if (!pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store, MapCore.cellOf(ll[0], ll[1])))) return false;
                 return pfBusRun(ll, theme);
             } });
             pfAdd(2, new PfJob() { @Override public boolean run() throws Exception { return pfNearStnRun(ll, theme); } });
@@ -970,7 +982,7 @@ public class ShellActivity extends Activity {
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return rloadFetch(); } });                                    // 경로 탐색 로딩 카드(글 · 모양은 엔진 — 한 번 받아 두면 앱을 끌 때까지 쓴다)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { boolean n = dlgFetch("exit"); n |= dlgFetch("report"); n |= dlgFetch("perm"); return n; } });      // 종료 · 신고 · 권한 안내 카드(글 · 단추 · 모양은 엔진)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
-            if (("map".equals(cur) && "bus".equals(mapMode)) || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
+            if (("map".equals(cur) && "bus".equals(mapMode)) || ll == null || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store, MapCore.cellOf(ll[0], ll[1])))) return false;
             return pfBusRun(ll, theme);
         } });
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {                // 대화방 전부(고스트 상태기) — 엔진이 칩으로 준 순서대로
@@ -1840,7 +1852,28 @@ public class ShellActivity extends Activity {
     private LocFused locf;
     private Location liveLoc; private long liveAt;
     private static final long LIVE_FRESH_MS = 20000L;
-    private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); hcFixFrom(l.getLatitude(), l.getLongitude()); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
+    // ── 위치 허브(s179): 위치를 어디서 받든(기기가 아는 위치 0.1초 · 현재 위치 1초 · 이어 받기) 한 곳에서 곧바로 홈 카드 · 버스 탭에 반영한다. 홈과 버스 탭이 서로 다른 위치를 보지 않는다. ──
+    private double[] hubLL; private long hubAt;
+    private static boolean farLL(double[] a, double la, double lo, double deg) { return a == null || Math.abs(a[0] - la) > deg || Math.abs(a[1] - lo) > deg; }
+    private void locHub(Location l) {
+        if (l == null) return;
+        final double la = l.getLatitude(), lo = l.getLongitude();
+        hubLL = new double[] { la, lo }; hubAt = System.currentTimeMillis();
+        hcFixFrom(la, lo);
+        busLocFollow(la, lo);
+    }
+    /** 버스 탭이 새 위치를 따라간다: 55m 안이면 그대로 · 버스 탭이 아니면 조용히 위치만 바꿔(다음에 열면 그 동네 화면이 바로) · 보는 중이면 165m 넘게는 곧바로 그 동네 화면(캐시 → 뼈대 → 새로 받기), 그 안쪽은 보던 화면을 두고 뒤에서 바꿔 끼운다. 탑승 중엔 하지 않는다. */
+    private void busLocFollow(double la, double lo) {
+        if (!"bus".equals(map.mode()) || home.riding()) return;
+        if (!farLL(map.busLL, la, lo, BUS_MOVE_DEG)) return;
+        boolean onBus = resumed && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
+        if (!onBus) { if (MapCore.VW_NEAR.equals(map.busView()) || map.busLL == null) map.setBusLoc(la, lo); return; }
+        if (!MapCore.VW_NEAR.equals(map.busView()) && map.busLL != null) return;                    // 즐겨찾기 화면은 위치와 상관없다
+        if (map.busLL == null || map.stopCount() == 0 || farLL(map.busLL, la, lo, BUS_FAR_DEG)) { map.setBusLoc(la, lo); reloadMap(false); return; }
+        busMove(la, lo);
+    }
+    private static final double BUS_FAR_DEG = 0.0015;                         // 약 165m — 이만큼 옮겼으면 보던 정류장은 이제 상관없다(바로 새 동네 화면)
+    private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); locHub(l); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
     /** 방금(20초 안) 받은 현재 위치의 좌표(없으면 null) — 오래된 위치는 절대 돌려주지 않는다. */
     private double[] liveLL() { return liveLoc != null && System.currentTimeMillis() - liveAt < 60000L ? new double[] { liveLoc.getLatitude(), liveLoc.getLongitude() } : null; }
     /** 같은 때 들어온 위치 요청은 한 번의 요청을 같이 쓴다(켤 때 · 탭 · 위치감지가 겹쳐도 위성/네트워크 요청은 하나). */
@@ -1861,7 +1894,7 @@ public class ShellActivity extends Activity {
             @Override public void fail() { if (locBatch == b) locBatch = null; if (got[0]) return; for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fail(false); }
         });
         if (lkMs > 0L) locf.lastKnown(lkMs, new LocFused.Cb() {              // 새 위치를 기다리는 동안 기기가 방금 알던 위치로 먼저 — 새 위치가 먼저 왔으면 버린다
-            @Override public void fix(Location l) { if (got[0]) return; got[0] = true; hcFixFrom(l.getLatitude(), l.getLongitude()); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
+            @Override public void fix(Location l) { if (got[0]) return; got[0] = true; locHub(l); for (LocCb c : new java.util.ArrayList<LocCb>(b.ws)) c.fix(l); }
             @Override public void fail() { }
         });
     }
@@ -1896,7 +1929,7 @@ public class ShellActivity extends Activity {
                 if (Math.abs(map.busLL[0] - l.getLatitude()) > 0.0008 || Math.abs(map.busLL[1] - l.getLongitude()) > 0.0008) {
                     final double la = l.getLatitude(), lo = l.getLongitude();          // 90m 넘게 움직였다 — 위치가 연달아 와도 멈춘 뒤 한 번만 새 자리의 정류장을 받는다(디바운스)
                     deb.trailing("busloc", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
-                        if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null) return;
+                        if (!resumed || !"bus".equals(map.mode()) || !"map".equals(ShellCore.currentTab(store)) || map.busLL == null || !farLL(map.busLL, la, lo, BUS_MOVE_DEG)) return;          // 허브가 이미 따라갔으면 다시 하지 않는다
                         busMove(la, lo);
                     } });
                 }
@@ -1940,7 +1973,7 @@ public class ShellActivity extends Activity {
     private void loadMapBodyFast(final ScreenView v, final boolean keep) {
         if (busRefreshing) map.restoreArrivals(); busRefreshing = false;
         if (v == body && "bus".equals(map.mode())) {
-            preconnectBus();
+            preconnectBus(); locKick();                                                     // 위치를 한 번 더 확인한다(홈과 같은 위치 — 달라졌으면 허브가 바로 그 동네로 옮긴다)
             if (!keep) map.clearArrivals();
             List<String[]> sp = map.speculativeNeed();
             if (!sp.isEmpty()) {
@@ -2020,8 +2053,11 @@ public class ShellActivity extends Activity {
         }, "shell-mapfull").start();
     }
     /** 버스 화면 응답 하나를 반영한다. deferNeed 면 그리기만 하고 도착정보 받기·마무리는 하지 않는다(동시에 보낸 전체 요청이 이어 간다). */
+    /** 버스 본문 캐시 열쇠를 지금 위치 칸으로 맞춘다(응답이 오는 사이 위치 칸이 바뀌어도 그 동네 화면으로 저장되게). */
+    private void rekeyMapBody() { if (slots.length > 1 && ShellCore.S_MAPB.equals(slots[1])) viewKey.put(body, ShellCore.cacheKey(ShellCore.S_MAPB, store)); }
     private void mapBodyApply(final ScreenView v, final boolean keep, final int round, final int my, final String txt, final boolean deferNeed) {
         if (my != seqMapB) return;
+        rekeyMapBody();
         if (deferNeed && txt.length() == 0) return;
         if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
         if (txt.length() > 0) map.onScreen(txt);
@@ -2136,8 +2172,19 @@ public class ShellActivity extends Activity {
         }, "shell-mapbus").start();
     }
     /** 버스 방식 노선도: 위치를 기다리지 않고 마지막 위치로 먼저 그리고, 권한이 있으면 새 위치를 조용히 받아 바뀌었을 때만 다시 그린다. */
+    /** 위치 허브 깨우기: 기기가 알던 위치(0.1초) → 현재 위치(1초) 순으로 받는다 — 결과는 허브(liveSet · lastKnown)가 홈 카드 · 버스 탭에 반영한다. */
+    private void locKick() {
+        if (!hasLocPerm()) return;
+        locateNow(8000L, 1000L, 60000L, 120000L, new LocCb() { @Override public void fix(Location l) { } @Override public void fail(boolean noperm) { } });
+    }
     private void seedMapLoc() {
-        if (!"bus".equals(map.mode()) || map.busLL != null) return;
+        if (!"bus".equals(map.mode())) return;
+        if (map.busLL != null) {                                                                              // 이미 위치가 있어도 방금 받은 더 새 위치(허브)가 165m 넘게 다르면 그쪽으로(옛 동네 정류장이 먼저 뜨지 않게)
+            double[] fr = liveLL();
+            if (fr == null && hubLL != null && System.currentTimeMillis() - hubAt < 120000L) fr = hubLL;
+            if (fr != null && MapCore.VW_NEAR.equals(map.busView()) && farLL(map.busLL, fr[0], fr[1], BUS_FAR_DEG)) map.setBusLoc(fr[0], fr[1]);
+            return;
+        }
         double[] seed = liveLL();
         if (seed == null) seed = ShellCore.lastLocFresh(store, 30L * 60000L, System.currentTimeMillis());       // 기다리지 않고 바로 그린다(30분 안에 안 위치) — 새 위치가 오면 바로잡는다
         if (seed != null) map.setBusLoc(seed[0], seed[1]);
@@ -2227,6 +2274,7 @@ public class ShellActivity extends Activity {
                     if (!arrNeed.isEmpty()) map.rememberNeed(arrNeed);
                     map.onScreen(txt);
                     body.setSourceAge(map.arrAge());
+                    rekeyMapBody();
                     present(body, txt, true);                                                   // 같은 정류장이면 값만 바뀌고, 다른 정류장이면 새 정류장이 차례로 내려앉는다
                     busAt = System.currentTimeMillis();
                     syncMapView();
@@ -2288,7 +2336,7 @@ public class ShellActivity extends Activity {
         if (!busShowing() || home.riding()) return;
         if (System.currentTimeMillis() - busAt > ShellCore.BUS_FRESH_MS) { busRefresh(); return; }
         if (!hasLocPerm()) return;
-        locateNow(8000L, 1000L, 0L, new LocCb() {
+        locateNow(8000L, 1000L, 0L, 120000L, new LocCb() {                    // 기기가 방금 알던 위치(0.1초)로 먼저 따라가고 곧 새 위치(1초)로 바로잡는다
             @Override public void fix(Location l) {
                 if (!busShowing() || home.riding()) return;
                 if (farFrom(map.busLL, l, BUS_MOVE_DEG)) busMove(l.getLatitude(), l.getLongitude());
