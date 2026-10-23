@@ -153,7 +153,7 @@ function findAndroidJar() {
     // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
     assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
-    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = 90000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 90초까지는 먼저 보이고(SWR) 뒤에서 새로 받음 · 그보다 오래면 뼈대');
+    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = 300000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 90초까지는 먼저 보이고(SWR) 뒤에서 새로 받음 · 그보다 오래면 뼈대');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
     const svw = fs.readFileSync(N('ScreenView.java'), 'utf8');
