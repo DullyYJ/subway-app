@@ -491,6 +491,18 @@ function findAndroidJar() {
     assert.ok(/k >= 1 \|\| !busEmpty\(r\.body\)/.test(np), '비어 있음은 한 번만 더');
     assert.ok(/public float yo; public long yt;/.test(sc) && /cardY\.get\(it\.key\)/.test(sv) && /it\.yo \* \(1f - spring\(fy/.test(sv), '카드 자리가 바뀌면 옛 자리에서 스프링으로');
   });
+  await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    assert.ok(/private boolean reviveRide\(\)/.test(a) && /RideService\.running\) && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)|!RideService\.running && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)/.test(a) && /reviveRide\(\);\s*rsApply\.run\(\)/.test(a), '앞으로 돌아오면 저장된 탑승 안내를 되살린다');
+    const o = a.slice(a.indexOf('private void openSetPage('), a.indexOf('private void loadSetPage()'));
+    assert.ok(/pop = "locd"\.equals\(page\) \|\| ShellCore\.isAskPage\(page\)/.test(o) && /Theme_Material_Light_Dialog_NoActionBar/.test(o) && /setDimAmount\(0\.68f\)/.test(o) && /Gravity\.CENTER/.test(o) && /setCancelable\(false\)/.test(o), '위치 · 설치 안내는 가운데 어두운 팝업(웹 .68)');
+    assert.ok(/popResize\(dp\)/.test(a) && /private void popResize\(float dp\)/.test(a), '팝업 높이는 화면이 정한 글 높이에 맞춘다');
+    assert.ok(/askUnburn\(setPage\); setupNoEngine = true;/.test(a) && /setupNoEngine \|\| setupPhase != 0/.test(a) && /K_SETUPV, ""\)\)\) \{ store\.put\(ShellCore\.K_SETUPV, "2"\)/.test(a) && /K_SETUPV = "setup_v"/.test(sc), '엔진이 모르는 안내는 건너뛰되 표시는 지우고 · 한 번 되돌린다');
+    assert.ok(/RideService\.running && RideService\.liveRide\.length\(\) < 3\) return;/.test(a), '서비스가 돌지만 첫 값이 아직이면 확정을 지우지 않는다');
+    assert.ok(/my == rideSeq && home\.riding\(\)\) return;/.test(a) && /rideSeq = seqRoute;/.test(a), '확정한 찾기의 뒤늦은 결과(근사 → 전체)가 확정을 풀지 않는다');
+    assert.ok(/private void ovlAuto\(\)/.test(a) && /RideOverlay\.allowed\(this\) && store\.get\(ShellCore\.K_OVL, ""\)\.length\(\) == 0\) store\.put\(ShellCore\.K_OVL, "1"\)/.test(a) && /ovlAuto\(\); if \(home\.riding\(\)/.test(a), '허용만 해 둔 기기는 오버레이를 켠 것으로');
+    assert.ok(/private void prefetchIfCold\(\)/.test(a) && /prefetchIfCold\(\); \} \}, 1500L\)/.test(a), '캐시에 없는 탭이 있으면 미리 받기를 다시');
+  });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     const f = a.slice(a.indexOf('private void setupNext()'), a.indexOf('private void askDone('));
@@ -498,7 +510,7 @@ function findAndroidJar() {
     assert.ok(iN > 0 && iN < iL && iL < iB && iB < iS && iS < iO, '차례: 알림 → 위치 → 배터리 → 갤럭시 절전 → 오버레이');
     assert.ok(/K_LOCDISC, \"0\"\)\)\) return;/.test(f.replace(/\\"/g, '"')) || /K_LOCDISC, "0"\)\)\) return;/.test(f), '위치 안내에 동의한 뒤에만 이어서');
     assert.ok(/K_BATASK[\s\S]{0,160}K_SAMASK/.test(f) && /K_OVLASK/.test(f) && /K_NOTIFASK/.test(f), '각 안내는 평생 한 번(저장소 열쇠)');
-    assert.ok(/setupDeclined = true/.test(a) && /setupDeclined \|\| setupPhase != 0/.test(f), '위치 안내를 거부하면 이번엔 더 묻지 않는다');
+    assert.ok(/setupDeclined = true/.test(a) && /setupDeclined \|\| setupNoEngine \|\| setupPhase != 0/.test(f), '위치 안내를 거부하면 이번엔 더 묻지 않는다');
     assert.ok(/code == REQ_SETUP_NOTIF\) \{ setupSoon\(\)/.test(a) && /setupSoon\(\);\s*\/\/ 위치 창이 닫혔다/.test(a) && /setupResume\(\); \}/.test(a), '기기 창이 닫히면(권한 결과 · 설정에서 돌아옴) 다음 승인으로');
     assert.ok(/setupPhase = 1; PowerInfo\.openSamsung/.test(a) && /PowerInfo\.requestIgnore\(ShellActivity\.this\)/.test(a) && /ACTION_MANAGE_OVERLAY_PERMISSION/.test(a.slice(a.indexOf('private void askDone('))), '갤럭시: 절전 목록 → 돌아오면 기기 허용 창 · 오버레이는 설정 화면');
     assert.ok(/if \(!perm\) return;/.test(a.slice(a.indexOf('private void autoGps()'), a.indexOf('private void autoGps()') + 700)), '첫 위치 권한은 승인 순서가 맡는다(두 곳에서 동시에 묻지 않음)');
