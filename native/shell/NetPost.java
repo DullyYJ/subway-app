@@ -126,6 +126,27 @@ public final class NetPost {
         return new Res(last.status == 200 ? -3 : last.status, "", last.err.length() > 0 ? last.err : "bus-bad");
     }
 
+    /** 받았지만 비어 있는 도착정보인가(공공 API 가 '버스 없음'을 주는 모양 — {"items":"","totalCount":0}). 진짜 없는 경우도 있지만 공공 API 가 일시적으로 비워 주는 경우가 잦다(실측: 인천 검단 2번 정류장). */
+    public static boolean busEmpty(String b) {
+        if (b == null || b.length() == 0 || b.length() > 4000) return false;
+        return b.indexOf("\"totalCount\":0") >= 0 || b.indexOf("\"totalCount\": 0") >= 0 || b.indexOf("\"items\":\"\"") >= 0;
+    }
+    /** 도착정보 받기 — 무조건 받는다: 오류 · 못 받음 · '비어 있음'이면 다른 길 + 일회용 글자로 최대 두 번 더 묻는다. 끝내 비어 있으면 그 빈 본문을 그대로 건넨다(엔진이 '도착정보 없음'). */
+    public static Res getBusArr(String url, String alt, int pref, double firstMs, double retryMs) {
+        Res r = getBus2(url, alt, pref, false, firstMs, retryMs);
+        for (int k = 0; k < 2; k++) {
+            if ("blocked".equals(r.err)) return r;
+            boolean bad = r.status != 200 || busBodyBad(r.body);
+            if (!bad && !busEmpty(r.body)) return r;
+            try { Thread.sleep(200L + (long) (Math.random() * 100)); } catch (InterruptedException ie) { return r; }
+            boolean useAlt = alt != null && alt.length() > 0 && !altOff && (((k + 1 + pref) & 1) == 1);
+            Res r2 = once(busBust(useAlt ? alt : url, 1), retryMs, useAlt);
+            if (r2.status == 200 && !busBodyBad(r2.body)) { if (!busEmpty(r2.body)) return r2; r = r2; }
+            else if (bad) r = r2.status == 200 ? new Res(-3, "", "bus-bad") : r2;
+        }
+        return r;
+    }
+
     private static Res send(String method, String url, String body, double timeoutMs) { return send(method, url, body, timeoutMs, ""); }
     private static Res send(String method, String url, String body, double timeoutMs, String etag) {
         if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
