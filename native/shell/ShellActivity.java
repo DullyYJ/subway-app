@@ -141,7 +141,7 @@ public class ShellActivity extends Activity {
         dpr = getResources().getDisplayMetrics().density;
         if (b == null) store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);            // 껐다 켜면 늘 홈부터(웹과 같다) — 화면 회전 같은 다시 만들기(b != null)는 보던 탭 그대로
         preloadDisk();                                                               // 모든 탭의 마지막 화면을 IO 스레드가 읽고 해석해 둔다(주 스레드는 파일을 열지 않는다)
-        if ("map".equals(ShellCore.currentTab(store))) preconnectBus();             // 버스 서버 연결을 미리 맺어 둔다(도착정보 요청의 DNS · TLS 시간을 없앤다)
+        preconnectBus();                                                             // 버스 서버 연결을 켜자마자(홈에서도) 미리 맺어 둔다 — 버스 탭을 누를 때 DNS · TLS 시간이 없다
         ErrLog.install(this);
         ScreenView.preloadFaces(this);
 
@@ -1687,7 +1687,50 @@ public class ShellActivity extends Activity {
     /** 위치 한 번 받기(홈의 위치 감지와 따로 — 홈 입력칸은 건드리지 않는다). 결과는 cb 로. */
     private interface LocCb { void fix(Location l); void fail(boolean noperm); }
     private boolean hasLocPerm() { return checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED; }
-    private void saveLoc(Location l) { if (l != null) { ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); warmBus(l.getLatitude(), l.getLongitude()); } }
+    private void saveLoc(Location l) { if (l != null) { ShellCore.lastLocPut(store, l.getLatitude(), l.getLongitude(), System.currentTimeMillis()); warmBus(l.getLatitude(), l.getLongitude()); warmBusStructure(l.getLatitude(), l.getLongitude()); } }
+    /**
+     * 홈 등 버스 탭이 아닌 곳에서 시작해도 버스 탭을 미리 준비한다(Warm-up): 위치를 잡으면 뒤에서 ① 서버 연결(DNS·TLS)을 맺고 ② 그 동네(약 110m 칸)의 정류장 목록을 기기에 보관하고
+     * ③ 도착정보 주소를 기억하고 ④ 엔진이 그린 정류장 뼈대를 저장한다 — 버스 탭을 누르면 뼈대가 바로 그려지고 도착정보만 곧장 받는다. 이미 준비된 동네는 건너뛴다(10분에 한 번).
+     * 앱은 엔진이 준 화면 · 주소를 저장할 뿐이다(만들거나 판단하지 않는다). 쓰기는 주 스레드로 넘긴다.
+     */
+    private String warmStructCell = ""; private long warmStructAt;
+    private void warmBusStructure(final double la, final double lo) {
+        try {
+            if (!"bus".equals(map.mode()) || !MapCore.VW_NEAR.equals(map.busView()) || "map".equals(ShellCore.currentTab(store))) return;
+            preconnectBus();
+            final MapCore w = new MapCore(store); w.modeOverride = "bus"; w.setBusLoc(la, lo);
+            final String cell = w.stopsCell();
+            long now = System.currentTimeMillis();
+            if (cell.length() == 0 || (cell.equals(warmStructCell) && now - warmStructAt < 600000L)) return;
+            warmStructCell = cell; warmStructAt = now;
+            if (cell.equals(store.get("bsk_cell", "")) && !w.speculativeNeed().isEmpty()) return;                // 이 동네는 이미 준비돼 있다(뼈대 · 정류장 · 도착정보 주소)
+            final String theme = ShellCore.theme(store), skKey = ShellCore.busSkelKey(store);
+            new Thread(new Runnable() { @Override public void run() {
+                final List<String[]> arrNeed = new ArrayList<String[]>(); boolean bad = false;
+                try {
+                    for (int round = 0; round < 4; round++) {
+                        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme), 12000);
+                        if (r.status != 200 || r.body == null || r.body.length() == 0) { bad = true; break; }
+                        w.onScreen(r.body);
+                        if (w.busNeed.isEmpty()) break;
+                        List<String[]> need = new ArrayList<String[]>(w.busNeed);
+                        String[] got = fetchAll(need, 5000, 4000);
+                        for (int i = 0; i < need.size(); i++) { if (got[i] == null || got[i].length() == 0) bad = true; else { w.addBusRes(need.get(i)[0], got[i]); arrNeed.add(need.get(i)); } }
+                        w.busNeed.clear();
+                        if (bad) break;
+                    }
+                    if (w.stopCount() == 0) { warmStructAt = 0L; return; }                                          // 정류장을 못 받았다 — 다음 위치 때 다시
+                    final boolean okAll = !bad;
+                    main.post(new Runnable() { @Override public void run() { w.saveStopsCache(); if (okAll && !arrNeed.isEmpty()) w.rememberNeed(arrNeed); } });
+                    NetPost.Res sr = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme, true), 8000);
+                    final String txt = sr.status == 200 && sr.body != null ? sr.body : "";
+                    if (txt.length() == 0) return;
+                    warm(txt);
+                    main.post(new Runnable() { @Override public void run() { store.put("bsk_cell", cell); cachePut(skKey, txt); } });
+                } catch (Throwable ignored) { warmStructAt = 0L; }
+            } }, "shell-busstruct").start();
+        } catch (Throwable ignored) { }
+    }
     /** 위치를 잡는 순간 뒤에서 '주변 정류장' 화면을 미리 받아 둔다 — 버스 탭에 들어가면 뼈대만 오래 보이지 않고 곧바로 정류장이 내려앉는다(요청이 같을 때만 쓴다). */
     private volatile String warmBusJson = "", warmBusTxt = ""; private volatile long warmBusAt; private double[] warmBusLL;
     private void warmBus(final double la, final double lo) {
