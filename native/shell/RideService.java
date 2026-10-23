@@ -199,7 +199,7 @@ public class RideService extends Service {
     private void updateOverlay() {
         try {
             if (ov == null) { ov = new RideOverlay(this); ov.setHost(ovHost); }
-            boolean on = "1".equals(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, "0"));
+            boolean on = ShellCore.ovlOn(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, ""));
             if (core.ov != null && core.ov.cells.length > 0) ov.show(on && core.ovActive, core.ov);
             else ov.update(on && core.ovActive, core.ovLine1, core.ovLine2, core.ovBanner, core.ovAlert);
         } catch (Throwable ignored) { }
