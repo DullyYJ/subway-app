@@ -454,6 +454,10 @@ function findAndroidJar() {
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
+  await t('s181: 버스 다시 묻기 — 캐시된 오류 봉투를 피해 일회용 글자(_r)를 붙인다', () => {
+    const np = fs.readFileSync(N('NetPost.java'), 'utf8');
+    assert.ok(/public static String busBust\(String url, int attempt\)/.test(np) && /get\(busBust\(url, a\), a == 0 \? firstMs : retryMs\)/.test(np) && /once\(busBust\(useAlt \? alt : url, a\)/.test(np), 'getBus · getBus2 의 다시 묻기에 일회용 글자');
+  });
   await t('s179: 위치 허브 — 어디서 위치를 받든 홈 카드 · 버스 탭에 즉시 · 버스 화면 캐시는 위치 칸마다 · 미리받기도 그 칸 열쇠', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/private void locHub\(Location l\)[\s\S]{0,260}hcFixFrom\(la, lo\);\s*busLocFollow\(la, lo\);/.test(a), '허브: 홈 카드 위치와 버스 탭을 한 곳에서');
