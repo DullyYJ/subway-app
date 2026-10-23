@@ -6,7 +6,7 @@ const R = p => path.join(__dirname, '..', p);
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
-const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago;';
+const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.mapSvOne = mapSvOne;';
 function load(extra) {
   const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
   vm.runInNewContext(code, ctx);
@@ -110,6 +110,22 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
   {
     const c = load();
     ok(c.mapSvViaBinding({ BUSAPI: binding([]) }, 'https://evil.example/x') === null && c.mapSvViaBinding({ BUSAPI: binding([]) }, 'http://ws.bus.go.kr/api/x?y=1') !== null && c.mapSvViaBinding({ BUSAPI: binding([]) }, 'https://gentle-lab-7e47subway-api.phg0643.workers.dev/bus-stops?lat=37.5&lng=127&radius=450') !== null, '허용 호스트(공공 API · D1 정류장 표)만');
+  }
+  // ⑨ s174: 헤지 — 첫 길이 느리면(0.7초) 다른 키를 동시에 띄워 먼저 온 정상 본문을 쓴다
+  {
+    const GOODT = '<response><body><items><item><arrtime>120</arrtime></item></items></body></response>';
+    const mkc = (first, second) => load({ tagoAttempts: () => [{ via: 'env-key', run: first }, { via: 'env-key2', run: second }] });
+    const U = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?cityCode=23&nodeId=ICB1&_type=json';
+    let c = mkc(() => new Promise(r => setTimeout(() => r(new Response(GOODT, { status: 200 })), 2000)), () => Promise.resolve(new Response(GOODT, { status: 200 })));
+    let t0 = Date.now(), body = await c.mapSvOne({}, 'a0', U);
+    ok(body === GOODT && Date.now() - t0 < 1300, '첫 길이 느려도 0.7초 뒤 다른 키가 먼저 온다 ' + (Date.now() - t0) + 'ms');
+    c = mkc(() => Promise.resolve(new Response('{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR"}}}', { status: 200 })), () => Promise.resolve(new Response(GOODT, { status: 200 })));
+    t0 = Date.now(); body = await c.mapSvOne({}, 'a0', U);
+    ok(body === GOODT && Date.now() - t0 < 300, '오류 봉투는 기다리지 않고 곧바로 다음 키 ' + (Date.now() - t0) + 'ms');
+    c = mkc(() => Promise.resolve(new Response('{"OpenAPI_ServiceResponse":1}', { status: 200 })), () => Promise.reject(new Error('x')));
+    ok((await c.mapSvOne({}, 'a0', U)) === '', '모두 실패하면 빈 본문(없음으로 굳히지 않는다)');
+    c = mkc(() => Promise.resolve(new Response(GOODT, { status: 200 })), () => { throw new Error('호출되면 안 된다'); });
+    ok((await c.mapSvOne({}, 'a0', U)) === GOODT, '첫 길이 바로 오면 다른 길은 쓰지 않는다');
   }
   // ⑧ s172: /bus-tago 중계 — 키 2개 번갈아 · 오류 봉투면 다른 키 · 허용 호스트만 · 키는 응답에 없다
   {
