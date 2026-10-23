@@ -2173,7 +2173,7 @@ public class ShellActivity extends Activity {
         return resumed && "bus".equals(map.view) && "bus".equals(map.mode()) && map.busLL != null && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
     }
     private long busAt = 0L;
-    private static final long BUS_POLL_MS = 60000L;                     // 실시간 도착정보 갱신 박자(1분에 한 번 — 그 사이 초는 기기에서 줄어든다, 화면은 깜박이지 않는다)
+    private static final long BUS_POLL_MS = 30000L;                     // 위치 재확인 박자(탑승 중이 아니면 30초에 한 번) — 그 사이 초는 기기에서 줄어든다. 도착정보는 위치가 바뀔 때만 새로 받는다(YJ)
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
     private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
@@ -2280,12 +2280,26 @@ public class ShellActivity extends Activity {
         busTicking = false;
         if (!busShowing()) { if (busRefreshing) map.restoreArrivals(); busRefreshing = false; return; }
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) { startBusTick(); return; }
-        busRefresh(); startBusTick();
+        busLocCheck(); startBusTick();
     } };
+    /** 위치 재확인(탑승 중이 아니면 30초마다): 위치가 그대로면 아무것도 받지 않는다(숫자는 기기에서 줄어들기만 한다). 55m 넘게 바뀌었으면 새 자리의 정류장 · 도착정보를 조용히 받아 바꿔 끼운다.
+     *  받은 지 10분이 넘은 도착정보만은 위치가 같아도 새로 받는다(그 이상은 쓸 수 없는 숫자). */
+    private void busLocCheck() {
+        if (!busShowing() || home.riding()) return;
+        if (System.currentTimeMillis() - busAt > ShellCore.BUS_FRESH_MS) { busRefresh(); return; }
+        if (!hasLocPerm()) return;
+        locateNow(8000L, 1000L, 0L, new LocCb() {
+            @Override public void fix(Location l) {
+                if (!busShowing() || home.riding()) return;
+                if (farFrom(map.busLL, l, BUS_MOVE_DEG)) busMove(l.getLatitude(), l.getLongitude());
+            }
+            @Override public void fail(boolean noperm) { }
+        });
+    }
     /** 앞으로 돌아왔을 때: 마지막으로 받은 지 8초가 넘었으면 바로 다시 받는다(박자를 기다리지 않는다). */
     private void busResume() {
         if (!busShowing()) return;
-        if (System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();
+        busLocCheck();                                                                    // 위치가 그대로면 아무것도 받지 않는다(시간만 줄어든다)
         startBusTick();
     }
     private boolean busTicking;
@@ -2293,7 +2307,7 @@ public class ShellActivity extends Activity {
      *  숫자만 조용히 바꾼다(새 버스 줄만 스프링으로 내려온다). 기억해 둔 정류장이 없으면 false — 평소 길로 받는다. */
     private boolean busReturnQuiet() {
         if (!busShowing() || map.stopCount() == 0 || map.speculativeNeed().isEmpty()) return false;
-        if (System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();
+        busLocCheck();                                                                    // 위치가 바뀌었을 때만 새로 받는다 — 그대로면 보던 화면에서 시간만 줄어든다
         startBusTick();
         syncMapView();
         return true;
@@ -2306,7 +2320,7 @@ public class ShellActivity extends Activity {
         if (!shown) showSkeleton(body, ShellCore.S_MAPB);                                   // 새 화면이 올 때까지 옛 모드의 화면(노선도 · 다른 정류장)을 두지 않는다 — 눌렀는데 아무 일도 없는 것처럼 보이지 않게
         syncMapView();
         busRetryN = 0;
-        if (shown && busShowing() && System.currentTimeMillis() - busAt > BUS_POLL_MS) busRefresh();        // 버스 탭에 들어오면 캐시 화면을 먼저 보이고, 도착정보는 곧장(엔진 왕복 없이) 새로 받는다
+        if (shown && busShowing() && System.currentTimeMillis() - busAt > ShellCore.BUS_FRESH_MS) busRefresh();        // 캐시 화면을 먼저 보이고, 받은 지 10분이 넘었을 때만 도착정보를 새로 받는다(그 안에서는 시간만 줄어든다)
         else loadMapBodyFast(body, shown);
         if (shown) syncMapView();
     }
