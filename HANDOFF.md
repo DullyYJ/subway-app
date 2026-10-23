@@ -2198,3 +2198,10 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **앱**: 요청에 `svb` — 처음 그리기 300ms(서버 최소 대기 — 정류장·칩·지도가 바로 그려지고 도착정보는 이어 채운다) · 조용한 갱신/`busMove` 2500ms. (YJ 원칙: 앱은 그림만 · 계산·판단은 서버 — 앱에 도착정보 유효성 판단을 더 넣지 않는다. 기존 `KEEP_OLD_MS` 45초는 그대로.)
 - 테스트: `map_server_fetch`(⑤ 일부 실패 → need · ⑤-b 느린 한 곳), `shell_native` s160. **워커 재붙여넣기 필요**. 기기 실측은 못 했다.
 - **s161 되돌림**: 버스 뼈대 머리에 앱이 칩 줄 JSON 을 직접 만들어 까는 것(`busToggleJson`)과 `busMove` 의 도착정보 유효성 판단을 뺐다 — 앱이 UI 정의·판단을 하면 엔진과 어긋난다(YJ). 뼈대 칩 줄이 필요하면 **엔진이 준 머리를 캐시해 재사용**하는 방식으로(앱은 그리기만).
+
+## s164 (2026-10-23) — 버스 도착정보가 계속 "없음" — 진짜 원인: 앱이 쓰던 서버가 막혀 있었다 (YJ 스크린샷 · PC 크롬으로 직접 확인)
+- **확인(PC 크롬, 같은 요청을 두 서버에 보냄)**: 검단 정류장 5곳 → 정류장 목록은 둘 다 200(약 1.8~2.1초). 도착정보는 **웹이 쓰는 `gildongmu-bus.phg0643.workers.dev/tago` 가 200 · 약 1초(첫 정류장 `arrtime`·`arrprevstationcnt` 정상)**, **앱이 쓰던 `gentle-lab…/tago` 는 한 곳 `HTTP_ERROR`(코드 04), 두 곳 `522`(약 39초)**. 서버 쪽 도착정보도 같은 gentle-lab(BUSAPI 바인딩)을 지나므로 서버·기기 모두 "없음"이 됐다.
+- **웹이 쓰는 서버**: `_BUS_PROXY_DEFAULT = https://gildongmu-bus.phg0643.workers.dev`(웹 `_busProxyBase()`). 네이버클라우드(NCP) 서버는 서울 지하철 중계(`seoul-relay`)용이고, 버스는 NCP 를 쓰지 않는다(3-1번 YJ 결정 — Cloudflare만). 웹에 `busProxyUrl` 를 따로 저장해 둔 경우만 달라진다.
+- **앱 고침**: `ShellCore.BUS_BASE`(= gildongmu-bus). `MapCore.busFetchUrl` 이 TAGO · ws.bus.go.kr 주소를 `BUS_BASE/tago` 로 받는다(서버 정류장 표 D1 `bus-stops` 만 gentle-lab 직접). 정류장 이름 검색(`HomeSearchCore.busUrl` 호출 2곳)도 `BUS_BASE`. 식당·상가(`FoodCore`)는 웹도 `_SERVER_URL` 이라 그대로.
+- **서버(route-v2)**: 코드 변경 없음. 도착정보를 gentle-lab 으로 받다 실패하면 비워 두고(s160) 기기가 위 서버로 직접 받는다. **원하면** route-v2 의 `BUSAPI` 서비스 바인딩을 gentle-lab → `gildongmu-bus` 워커로 바꾸면 서버 쪽 도착정보도 같은 길로 빨라진다(대시보드 설정 — YJ 가 할 일. 바꾸면 `/bus-stops`(D1) 는 gildongmu-bus 에 없으므로 정류장 표 `d1` 는 앱이 직접 받는 길만 남는다는 점 유의).
+- 시험: `shell_native` 37 · `screen_native` 12 · `map_server_fetch` 12 · JVM(`busFetchUrl` 기대값을 `BUS_BASE` 로). 기기 실측은 못 했다.
