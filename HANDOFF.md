@@ -2266,3 +2266,8 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **기기**: `MapCore.busAltUrl(raw)`(= BASE+"/bus-tago?url=…") · `MapCore.busGet(key, raw, firstMs, retryMs)` → `NetPost.getBus2(url, alt, pref, hedge, …)`. 도착정보 키(`a<i>`/`f<i>`)는 번호 짝·홀로 길을 나눠 먼저 보내고(반반), 시도마다 길을 바꾼다. 정류장 목록 등 하나뿐인 요청은 두 길에 동시에(race) 보내 먼저 온 정상 본문을 쓴다(위치 `…p` 는 제외). route-v2 가 404/403/405 를 주면(엔진 미배포) 이번 실행 동안 그 길을 끄고 예전처럼 gildongmu-bus 만 쓴다(`NetPost.altOff`). 모든 버스 받기 호출부(fetchBusNeed · fetchAll · pfBusRun · brPrefetch · brFetchOne)가 `MapCore.busGet` 을 쓴다.
 - **미리받기**: `pfNearStnRun(ll, theme)` — 고스트 MapCore(gps) 로 머리 요청 → 서버가 고른 `nearName` → `tapStation` → 역 팝업 요청을 보내 `stnCachePut`(역을 누르면 바로 뜸). prefetchTabs 와 warmLocTabs 에서 prio 2. 모든 역의 팝업 · 시간표는 받지 않는다(너무 무거움). 노선도 지하철(서울 · 부산 · 대구 · 광주 · 대전) · 맛집 · 쇼핑은 s171 에서 이미 미리 받는다.
 - **검증 안 된 것**: 기기에서 돌려 보지 않았다. 속도 이득은 엔진 붙여 넣은 뒤 `/bus-split-test?mode=single|split` 와 실제 앱으로 확인해야 한다(공공 API 오류는 키와 무관하게 무작위라 2배가 되리라는 보장은 없음).
+
+## s173 — 주변 정류장 300m 엄격 적용
+- 사용자 요청: 주변 정류장이 너무 많이 나온다 → 현재 위치 기준 최대 300m. 엔진(`engine/map.js` `mapStopOrder`)만 바뀜(앱은 그대로 그린다): 지금 위치에서 300m 이내만(최대 40곳, 역 출구 먼저 · 가까운 순). 예전의 **역 출구 350m 예외**와 **300m 안이 없으면 가까운 순 3곳** 폴백을 없앴다 — 300m 밖은 절대 넣지 않는다(하나도 없으면 "주변에 정류장을 찾지 못했어요").
+- **사용자가 `engine/route-v2-worker.ascii.js`(`route-v2-2026-10-23s173`)를 Cloudflare route-v2 에 붙여 넣어야 적용된다.** 앱 쪽 캐시는 다음 갱신 때 새 화면으로 바뀐다(SWR).
+- 시험: `map_engine` 134(300m 엄격 · 출구 예외 없음 · 정확히 300m 포함 시험 추가, GBIS/TAGO 시험의 좌표를 실제 위치 근처로 고침). 기기 확인은 못 했다.
