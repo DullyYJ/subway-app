@@ -140,3 +140,45 @@ async function handleBusSplitTest(request, env) {
   Object.keys(by).forEach(function (v) { by[v].avgMs = Math.round(by[v].ms / by[v].n); delete by[v].ms; });
   return new Response(JSON.stringify({ ok: true, mode: mode, n: n, keys: ks.length, okN: rows.filter(function (r) { return r.ok; }).length, totalMs: Date.now() - t00, by: by }), { headers: H });
 }
+// ═══ 기기 직접 받기용 공공 API 중계(GET /bus-tago?url=<인코딩된 원본 주소>) — 공공데이터 키 2개를 번갈아 쓴다 ═══
+//   기기는 버스 서버(gildongmu-bus · 키 1개)와 이 주소(키 1·2)를 반반 나눠 동시에 부른다 → 같은 키에 몰리지 않아 오류(HTTP_ERROR)가 줄고 빨라진다.
+//   키가 하나뿐이거나 한쪽이 오류 봉투(200)·키 오류면 바로 다른 키로. 둘 다 못 받으면 502(기기가 다른 길로 다시 받는다). 허용: apis.data.go.kr · ws.bus.go.kr 만. 키 값은 내보내지 않는다.
+var MAPBT_RR = 0;
+function mapKeyList(env) {
+  var out = [], c = [env && (env.TAGO_KEY || env.DATA_GO_KR_KEY), env && env.TAGO_KEY2];
+  c.forEach(function (k) {
+    k = String(k || '');
+    if (/%[0-9A-Fa-f]{2}/.test(k)) { try { k = decodeURIComponent(k); } catch (e) { /* 원본 사용 */ } }
+    if (k && out.indexOf(k) < 0) out.push(k);
+  });
+  return out;
+}
+function mapKeyUrl(url, key) {
+  var base = String(url).replace(/([?&])(serviceKey|ServiceKey)=[^&]*&?/g, '$1').replace(/[?&]$/, '');
+  var sep = base.indexOf('?') >= 0 ? '&' : '?', k = encodeURIComponent(key);
+  if (/^https?:\/\/ws\.bus\.go\.kr\//.test(base)) return base + sep + 'serviceKey=' + k + '&ServiceKey=' + k;
+  return base + sep + 'serviceKey=' + k;
+}
+function mapBtBad(t) { return !t || mapArrErr(t) || /Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED|<headerCd>\s*[1-9]/i.test(t.slice(0, 4000)); }
+async function handleBusTago(request, env) {
+  var H = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  var raw = new URL(request.url).searchParams.get('url') || '';
+  if (raw.length === 0 || raw.length > 1500 || !/^https?:\/\/(apis\.data\.go\.kr|ws\.bus\.go\.kr)\//.test(raw)) return new Response('bad-url', { status: 400, headers: H });
+  var keys = mapKeyList(env);
+  if (!keys.length) return new Response('no-key', { status: 500, headers: H });
+  var first = (MAPBT_RR++) % keys.length;
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[(first + i) % keys.length], tgt = mapKeyUrl(raw, key);
+    for (var pr = 0; pr < 2; pr++) {                                                           // ws.bus.go.kr 는 http 만 받는 때가 있어 프로토콜을 바꿔 한 번 더
+      try {
+        var u2 = pr === 0 ? tgt : tgt.replace(/^https?:/, /^https:/.test(tgt) ? 'http:' : 'https:');
+        var res = await Promise.race([fetch(u2, { headers: { 'Accept': '*/*', 'User-Agent': 'gildongmu/1.0' } }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3500); })]);
+        var txt = await res.text();
+        if (res.status === 200 && !mapBtBad(txt)) return new Response(txt, { status: 200, headers: Object.assign({ "Content-Type": res.headers.get('Content-Type') || 'text/plain; charset=utf-8' }, H) });
+        if (res.status === 200 || pr === 1) break;
+      } catch (e) { /* 다음 시도 */ }
+    }
+  }
+  return new Response('bus-bad', { status: 502, headers: H });
+}
