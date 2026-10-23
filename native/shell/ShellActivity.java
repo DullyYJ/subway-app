@@ -42,7 +42,7 @@ public class ShellActivity extends Activity {
     private ShellCore.Store store;
     private LinearLayout root;
     private RsSheetView rs;
-    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; boolean ovOn = false; try { ovOn = "1".equals(store.get(ShellCore.K_OVL, "0")) && RideOverlay.allowed(ShellActivity.this); } catch (Throwable ignored) { } rs.setOv(RideService.running && !ovOn ? RideService.liveOv : null); } };       // 떠 있는 안내(오버레이)가 켜져 있으면 같은 줄이 거기 있으니 앱 안에서는 겹쳐 그리지 않는다
+    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; boolean ovOn = false; try { ovOn = ShellCore.ovlOn(store.get(ShellCore.K_OVL, "")) && RideOverlay.allowed(ShellActivity.this); } catch (Throwable ignored) { } rs.setOv(RideService.running && !ovOn ? RideService.liveOv : null); } };       // 떠 있는 안내(오버레이)가 켜져 있으면 같은 줄이 거기 있으니 앱 안에서는 겹쳐 그리지 않는다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -3787,6 +3787,7 @@ public class ShellActivity extends Activity {
                     final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
                     toast(HomeCore.optName(home.resTab) + " 경로로 확정했어요");                    // 웹 confirmSelectedRoute 토스트
                     ovlHintOnce();
+                    rsOpenSoon();
                     if (inDetail) {                                                              // 웹: 단추가 초록 '확정됨' 으로 바뀌고 0.6초 뒤 시트가 닫힌다
                         loadDetail();
                         main.postDelayed(new Runnable() { @Override public void run() { if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); } }, 600L);
@@ -3803,14 +3804,19 @@ public class ShellActivity extends Activity {
             }
         }, "shell-ride").start();
     }
-    /** 웹 _pipArmNow: 오버레이 권한이 없으면 한 번만 알려 준다(다른 앱을 보면서도 내 위치를 보려면 필요). */
+    private boolean ovlAskedRun;
+    /** 웹 _pipArmNow: 경로를 확정했는데 '다른 앱 위에 표시' 허용이 없으면 안내 창을 이번 실행에 한 번 띄운다(다른 앱을 보면서도 내 위치·탑승 줄을 보려면 필요). 끈 적이 있으면 묻지 않는다. */
     private void ovlHintOnce() {
         try {
-            if (RideOverlay.supported() && !RideOverlay.allowed(this) && "1".equals(store.get(ShellCore.K_OVL, "0")) && !"1".equals(store.get(ShellCore.K_OVLHINT, "0"))) {
-                store.put(ShellCore.K_OVLHINT, "1");
-                main.postDelayed(new Runnable() { @Override public void run() { toast("다른 앱을 보면서도 내 위치를 보려면 설정 > '다른 앱 위에 표시'를 켜세요"); } }, 1800L);
-            }
+            if (ovlAskedRun || !RideOverlay.supported() || RideOverlay.allowed(this) || !ShellCore.ovlOn(store.get(ShellCore.K_OVL, ""))) return;
+            ovlAskedRun = true;
+            store.put(ShellCore.K_OVLASK, "1");
+            main.postDelayed(new Runnable() { @Override public void run() { if (resumed && (sheet == null || !sheet.isShowing())) openSetPage("askovl"); } }, 1800L);
         } catch (Throwable ignored) { }
+    }
+    /** 경로를 확정하면 하단 탭의 탑승 시트를 바로 한 번 연다(웹은 도착 2분 전에 올라오지만, 확정 직후에도 쓸어 올리지 않고 볼 수 있게). 열고 닫기는 엔진이 정한다. */
+    private void rsOpenSoon() {
+        main.postDelayed(new Runnable() { @Override public void run() { if (RideService.running) RideService.rsAct("open"); } }, 2600L);
     }
     /** 앱이 죽었다(또는 화면만 다시 만들어졌다) 다시 열렸을 때, 탑승 안내가 아직 살아 있으면 그 경로의 결과 카드를 되살린다. */
     private void restoreRideCard() {
