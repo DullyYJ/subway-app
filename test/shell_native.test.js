@@ -98,7 +98,7 @@ function findAndroidJar() {
     assert.ok(/seedMapLoc\(\)/.test(v) && !/lastLocGet\(store\)/.test(v) && /liveLL\(\)/.test(v) && /locateQuiet\(/.test(v), '지도 · 맛집은 방금 받은 현재 위치(20~60초 안)로만 먼저 그리고(옛 위치는 쓰지 않는다) 조용히 새 위치를 받는다');
     const lf = fs.readFileSync(N('LocFused.java'), 'utf8');
     assert.ok(/lastLocFresh\(store, 30L \* 60000L/.test(v) && /locf\.lastKnown\(5L \* 60000L/.test(v) && /void lastKnown\(final long maxAgeMs/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /getLastLocation\(\)/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /BUS_MOVE_DEG = 0\.0005/.test(v), 's148: 버스 첫 화면은 방금 안 위치(30분 안 저장값 · Fused 마지막 위치 5분 안)로 위치 대기 없이 그리고, 새 위치가 55m 넘게 다르면 바로잡는다');
-    assert.ok(/map\.svFail > 0 && round == 0 && map\.fillFromStash\(\) > 0/.test(v) && /spec\.isEmpty\(\) \|\| map\.svServer/.test(v) && /"bus"\.equals\(modeNow\) \? 12000 : 8000/.test(v), 's148: 서버가 한 번에 받아 주면 기기가 따로 받지 않고 · 못 받은 곳만 보던 값으로 채워 갱신이 막히지 않는다');
+    assert.ok(/map\.svFail > 0 && round == 0 && map\.fillFromStash\(\) > 0/.test(v) && /spec\.isEmpty\(\)\) \{ loadMapBodyRound\(body, true, 0\)/.test(v) && /"bus"\.equals\(modeNow\) \? 12000 : 8000/.test(v), 's148: 서버가 한 번에 받아 주면 기기가 따로 받지 않고· 못 받은 곳만 보던 값으로 채워 갱신이 막히지 않는다');
     assert.ok(/getCurrentLocation\(/.test(lf) && /PRIORITY_HIGH_ACCURACY/.test(lf) && /setMaxUpdateAgeMillis\(0L\)/.test(lf) && /setDurationMillis\(fastMs\)/.test(lf) && /NETWORK_PROVIDER/.test(lf) && !/getLastKnownLocation/.test(lf), '고정밀 현재 위치(캐시 0 · 제한 시간) + 네트워크 위치 동시 · 마지막 알려진 위치는 쓰지 않는다');
     assert.ok(/void untrack\(\)/.test(lf) && /removeLocationUpdates\(trackCb\)/.test(lf) && /trackStop\(\); if \(vec != null\) vec\.onPause\(\)/.test(v) && /trackStart\(\); refreshPower/.test(v), '화면이 켜진 동안만 연속 위치 · 벗어나면 즉시 해제');
   });
@@ -153,7 +153,7 @@ function findAndroidJar() {
     // 끊겨도 화면을 멈추거나 에러를 띄우지 않는다: 실패한 갱신은 버리고(옛 값을 섞지 않음) 카운트다운이 이어진다 · 느린 통신이 다음 박자에 끊기지 않는다
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
     assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
-    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = 300000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 90초까지는 먼저 보이고(SWR) 뒤에서 새로 받음 · 그보다 오래면 뼈대');
+    assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 8000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = BUS_FRESH_MS/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 8초 신선 · 그보다 오래면 옛 숫자 없이 정류장 뼈대(s168)');
     assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
     const svw = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -426,6 +426,18 @@ function findAndroidJar() {
     assert.ok(/HomeSearchCore\.busUrl\(HomeSearchCore\.BUS_BASE,/.test(a), 's164: 정류장 검색도 버스 프록시');
     assert.ok(/KEEP_OLD_MS = 45000L/.test(mc), '받아 둔 도착정보는 45초까지 둔다(앱은 판단하지 않는다 — 서버가 정한다)');
     assert.ok(/arrWave/.test(w) && /else failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
+  });
+  await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    assert.ok(/private void showSkeleton[\s\S]{0,700}busSkelKey\(store\)/.test(a) && /bsk_cell/.test(a) && /stopsCell\(\)/.test(a), '버스 뼈대: 같은 동네(110m 칸)의 엔진이 그린 정류장 뼈대를 먼저 그린다');
+    assert.ok(/saveBusSkeleton\(\)/.test(a) && /bodyRequest\(ShellCore\.CAP, ShellCore\.theme\(store\), true\)/.test(a), '정류장을 받은 뒤 도착정보 없는 화면을 엔진에게 받아 저장(백그라운드)');
+    const f = a.slice(a.indexOf('private void loadMapBodyFast'), a.indexOf('private long preConnAt'));
+    assert.ok(/if \(!keep\) map\.clearArrivals\(\)/.test(f) && /speculativeNeed\(\)/.test(f) && /fetchBusNeed\(v, keep, 0, \+\+seqMapB, false\)/.test(f) && /preconnectBus\(\)/.test(f), '콜드 스타트/탭 진입: 옛 도착정보 비우고 · 엔진 왕복 없이 도착정보만 곧장 받는다');
+    assert.ok(/loadMapBodyFast\(body, shown\)/.test(a) && /loadMapBodyFast\(v, keep\); return; \}/.test(a), '탭 진입 두 길이 빠른 길을 쓴다');
+    assert.ok(/NetPost\.get\(ShellCore\.BUS_BASE \+ "\/health"/.test(a) && /boolean reuse = false/.test(np) && /if \(c != null && !reuse\) c\.disconnect\(\)/.test(np), '사전 연결 + 연결 재사용(응답을 다 읽으면 끊지 않는다)');
+    const bp = a.slice(a.indexOf('private void busPaint'), a.indexOf('private void fetchBusNeed'));
+    assert.ok(/warm\(txt\)/.test(bp), '응답 해석은 IO 스레드(주 스레드는 그리기만)');
+    assert.ok(/BUS_STALE_MS = BUS_FRESH_MS/.test(sc) && /busSkelKey\(Store st\)/.test(sc), '도착정보 화면 8초 · 뼈대 24시간');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
