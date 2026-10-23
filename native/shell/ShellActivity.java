@@ -3139,7 +3139,7 @@ public class ShellActivity extends Activity {
         if (q.length() == 0) return;
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.DEFAULT_BASE, q), 6000);
+                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q), 6000);
                 final List<Map<String, Object>> bus = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
                 NetPost.Res rp = NetPost.get(HomeSearchCore.placeUrl(HomeSearchCore.DEFAULT_BASE, q), 6000);
                 final List<Map<String, Object>> pl = rp.status == 200 ? HomeSearchCore.parsePlaces(rp.body) : new java.util.ArrayList<Map<String, Object>>();
@@ -3896,7 +3896,7 @@ public class ShellActivity extends Activity {
         final int my = ++cmBusSeq;
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.DEFAULT_BASE, q.trim()), 6000);
+                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q.trim()), 6000);
                 final List<Map<String, Object>> raw = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
                 main.post(new Runnable() { @Override public void run() {
                     if (my != cmBusSeq || !"cm".equals(setPage) || !cm.picking() || sheet == null || !sheet.isShowing()) return;
