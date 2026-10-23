@@ -454,12 +454,24 @@ function findAndroidJar() {
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
   });
-  await t('s183: 도착정보가 비어 오면 다른 길로 다시 · 오버레이 기본 켜짐 + 경로 확정 때 허용 안내 · 확정 직후 탑승 시트 열기', () => {
+  await t('s183: 도착정보가 비어 오면 다른 길로 다시 · 오버레이는 앱을 내렸을 때만(기본 꺼짐) + 경로 확정 때 허용 안내 · 확정 직후 탑승 시트 열기', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
     assert.ok(/public static boolean busEmpty\(/.test(np) && /public static Res getBusArr\(/.test(np) && /if \(arr\) return NetPost\.getBusArr\(/.test(mc) && /busBust\(useAlt \? alt : url, 1\)/.test(np), '도착정보: 비어 오면 다른 길 + 일회용 글자로 두 번 더');
-    assert.ok(!/K_OVL, "0"\)\)/.test(a) && /ShellCore\.ovlOn\(/.test(rs) && /ShellCore\.ovlOn\(store\.get\(ShellCore\.K_OVL, ""\)\)/.test(a), '오버레이 읽는 곳 모두 ovlOn');
+    assert.ok(!/K_OVL, "0"\)\)/.test(a) && /ShellCore\.ovlOn\(/.test(rs), '오버레이 읽는 곳 모두 ovlOn');
     const f = a.slice(a.indexOf('private void ovlHintOnce()'), a.indexOf('private void restoreRideCard()'));
+    assert.ok(/appFront/.test(rs) && /on = on && !appFront;/.test(rs) && /RideService\.setAppFront\(true\)/.test(a) && /RideService\.setAppFront\(false\)/.test(a), '오버레이 창은 앱이 화면에 있는 동안 숨긴다');
     assert.ok(/openSetPage\("askovl"\)/.test(f) && /ovlAskedRun/.test(f) && /RideService\.rsAct\("open"\)/.test(f) && /rsOpenSoon\(\);/.test(a), '확정하면 허용 안내(이번 실행 한 번) · 탑승 시트 열기');
+  });
+  await t('s184: 오버레이 웹 규칙 — 접힌 알약은 1정거장 전·새 추천에만 펼침(맨 위로 갔다 원위치) · 2정거장 전 알약 무지개 6초 · 추천 줄 오른쪽에서 1.15초 입장', () => {
+    const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), oc = fs.readFileSync(N('OvCore.java'), 'utf8');
+    assert.ok(/userPill && !wantOpen\(\)/.test(o) && /cur\.alert == 1 \|\| \(cur\.row\.kind > 0 && cur\.row\.at != dismissedRecoAt\)/.test(o) && /dismissedRecoAt = cur\.row\.at/.test(o), '펼침 규칙(1정거장 전 · 새 추천, 접은 추천은 다시 안 펼침)');
+    assert.ok(/savedY = lp\.y; lp\.y = Math\.min\(lp\.y, dp\(36\)\)/.test(o) && /lp\.y = savedY/.test(o), '펼쳐지면 맨 위로, 끝나면 원래 자리');
+    assert.ok(/border\.setMode\(pill \? \(v\.alert == 2 \? 2 : 0\) : v\.alert\)/.test(o) && /alert == 2 \? 6000L/.test(oc) && /dp\(pill \? 15 : 14\)/.test(o), '알약 둘레 무지개 6초 · 반지름 15');
+    assert.ok(/IN_MS = 1150L, TURN_MS = 300L/.test(o) && /cv\.translate\(\(1f - slide\) \* getWidth\(\), 0f\)/.test(o) && /cv\.scale\(-1f, 1f/.test(o) && /\? 183L : 110L/.test(o), '추천 줄 입장: 오른쪽에서 1.15초 감속 · 좌우 반전 · 5° · 0.3초 뒤 돌아섬 · 0.6배속');
+  });
+  await t('s184: 오버레이 카드가 화면 높이만큼 늘어나던 문제 — 테두리 뷰는 처음엔 숨기고 재는 동안 크기를 갖지 않는다', () => {
+    const o = fs.readFileSync(N('RideOverlay.java'), 'utf8');
+    assert.ok(/Border\(Context c\) \{ super\(c\);[^\n]*setVisibility\(View\.GONE\)/.test(o) && /MeasureSpec\.getMode\(ws\) == MeasureSpec\.EXACTLY \? MeasureSpec\.getSize\(ws\) : 0/.test(o), '테두리 뷰: 처음 숨김 + 재는 동안 0');
   });
   await t('s182: 처음 설치 승인을 한 가지씩 차례로 — 알림 → 위치 안내/권한 → 배터리(갤럭시는 절전까지) → 다른 앱 위에 표시', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
