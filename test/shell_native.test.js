@@ -86,7 +86,7 @@ function findAndroidJar() {
   });
   await t('모든 탭 미리 받기(0초 병렬 · 예외 탭 없음): 지금 칸의 요청 번호를 올리지 않고 캐시에만 넣는다 · 스켈레톤 · 마지막 위치', async () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
-    const m = v.slice(v.indexOf('private void prefetchTabs()'), v.indexOf('private void cachePutAsync('));
+    const m = v.slice(v.indexOf('private double[] pfLL()'), v.indexOf('private void cachePutAsync('));
     assert.ok(m.length > 2000, 'prefetchTabs 있음');
     for (const f of ['/screen/home', '/screen/cchips', '/screen/chat', '/screen/board', '/screen/map', '/screen/food', 'prefetchNews', 'shopCall(', 'S_SETTINGS', 'catValues', 'modeOverride']) assert.ok(m.includes(f), f + ' 미리 받기');
     assert.ok(!/\+\+seq/.test(m) && !/present\(/.test(m), '진행 중인 칸을 건드리지 않는다');
@@ -453,6 +453,16 @@ function findAndroidJar() {
     assert.ok(/Semaphore\(4\)/.test(np) && /OpenAPI_ServiceResponse/.test(np) && /public static Res getBus\(/.test(np) && /status == 200 \? -3/.test(np), '동시 4곳 · 오류 봉투 감지 · 못 받으면 -3');
     assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/NetPost\.getBus\(/g) || []).length >= 5, '버스 받기는 모두 getBus 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
+  });
+  await t('s171: 맛집 · 쇼핑 · 지방 노선도까지 켜자마자 미리 · 위치가 늦게 잡혀도 다시 맞춘다 · 서버 두 키 반반', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/private double\[\] pfLL\(\)/.test(a) && /lastLocFresh\(store, 6L \* 3600000L/.test(a) && /final double\[\] ll = pfLL\(\);/.test(a), '켤 때 위치가 아직 없으면 마지막으로 안 위치(6시간 안)로 미리 받는다');
+    assert.ok(/pfAdd\(1, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return pfFoodRun\(ll, dName, dLa, dLo\); \} \}\)/.test(a) && /pfAdd\(1, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 쇼핑/.test(a) && /w >= 3 \|\| pfQueue\.isEmpty\(\)/.test(a), '맛집 · 쇼핑은 대화방보다 앞순서 · 일꾼 3');
+    assert.ok(/private boolean pfFoodRun\(/.test(a) && /needGps\(\)\) \{ if \(ll != null\) pfFood\.setGps/.test(a) && /synchronized \(pfFood\)/.test(a), '맛집: 도착지 전에는 현위치');
+    assert.ok(/saveLoc\(Location l\)[^\n]*warmLocTabs\(/.test(a) && /private void warmLocTabs\(/.test(a) && /180000L/.test(a), '위치가 잡히면 맛집 · 버스 노선도를 다시 맞춘다(3분에 한 번)');
+    assert.ok(/"busan", "daegu", "gwangju", "daejeon"/.test(a) && /gm\.bodyRequest\(ShellCore\.CAP, theme\)/.test(a), '지방 노선도(부산 · 대구 · 광주 · 대전)도 미리');
+    const mw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
+    assert.ok(/function mapSvAttempts\(/.test(mw) && /ks\.slice\(1\)\.concat\(ks\.slice\(0, 1\)\)/.test(mw) && /handleBusSplitTest/.test(mw), '서버: 두 키 반반 · 실측 주소');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
