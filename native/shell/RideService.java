@@ -42,6 +42,9 @@ public class RideService extends Service {
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
     static volatile OvCore.Ov liveOv;                        // 앱 탑승 시트(RsSheetView)가 그릴 엔진 값(overlay.rs 포함)
+    /** 앱 화면이 보이는 동안(ShellActivity onResume~onStop)은 오버레이 창을 숨긴다 — 오버레이는 앱을 내렸을 때만 뜬다(웹 OverlayPlugin 과 같다). 앱 안에서는 탑승 시트·경로 카드가 같은 줄을 그린다. */
+    static volatile boolean appFront = false;
+    static void setAppFront(boolean f) { appFront = f; final RideService s = inst; if (s != null) mainH.post(new Runnable() { @Override public void run() { s.updateOverlay(); } }); }
     static volatile Runnable rsListener;                     // 값이 바뀔 때 메인 스레드에서 불린다(ShellActivity 가 화면에 있을 때만 건다)
     private static volatile RideService inst;
     private static final Handler mainH = new Handler(Looper.getMainLooper());
@@ -200,6 +203,7 @@ public class RideService extends Service {
         try {
             if (ov == null) { ov = new RideOverlay(this); ov.setHost(ovHost); }
             boolean on = ShellCore.ovlOn(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, ""));
+            on = on && !appFront;
             if (core.ov != null && core.ov.cells.length > 0) ov.show(on && core.ovActive, core.ov);
             else ov.update(on && core.ovActive, core.ovLine1, core.ovLine2, core.ovBanner, core.ovAlert);
         } catch (Throwable ignored) { }
