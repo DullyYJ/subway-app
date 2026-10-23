@@ -189,6 +189,9 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const D1IC = JSON.stringify({ ok: true, stops: [{ node_id: 'ICB168001466', node_nm: '검단모아미래도엘리트', city_code: '23', lat: 37.582808, lng: 126.707849 }, { node_id: 'ICB368001467', node_nm: '검단대성베르힐', city_code: '23', lat: 37.582405, lng: 126.708497 }] });
     const q = mk({ lat: 37.5826, lng: 126.7078, res: { tn: '', d1: D1IC } });
     ok(q.info.bus.need.length === 2 && /cityCode=23&nodeId=ICB368001466/.test(q.info.bus.need[0].url) && /nodeId=ICB368001467/.test(q.info.bus.need[1].url) && q.info.stops[0].id === 'ICB368001466', 's178: 인천 D1 정류장 번호 ICB1… 는 TAGO 도착정보가 쓰는 ICB3… 로 바꿔 받는다(안 그러면 도착정보 전부 없음)');
+    const D1GG = JSON.stringify({ ok: true, stops: [{ node_id: 'GGB166000209', node_nm: '부평역', city_code: '23', lat: 37.489, lng: 126.724 }, { node_id: 'GGB218000940', node_nm: '고양', city_code: '31100', lat: 37.489, lng: 126.7245 }] });
+    const q2 = mk({ lat: 37.489, lng: 126.724, res: { tn: '', d1: D1GG } });
+    ok(q2.info.bus.need.length === 2 && /cityCode=23&nodeId=ICB366000209/.test(q2.info.bus.need[0].url) && /nodeId=GGB218000940/.test(q2.info.bus.need[1].url), 's180: 인천 GGB1… 도 ICB3… 로, 경기 GGB2… 는 그대로')
   }
   // s177: 정류장 목록 준비 판정(서버가 '충분하면 느린 출처는 안 기다린다')
   {
