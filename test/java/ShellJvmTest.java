@@ -509,7 +509,7 @@ public class ShellJvmTest {
             && ShellCore.cchipsBody("board").contains("\"mode\":\"board\"") && ShellCore.cchipsBody("zzz").contains("\"mode\":\"" + ShellCore.MODE_DEFAULT + "\"")
             && "cchips".equals(ShellCore.expectId(ShellCore.cchipsKey("set"))), "칩 줄 미리 받기: 방식마다 본문과 열쇠");
         ok(ShellCore.diskCacheable("shop") && ShellCore.diskCacheable("cchips") && ShellCore.diskCacheable("home") && ShellCore.diskCacheable("news") && ShellCore.diskCacheable("chat") && ShellCore.diskCacheable("food")
-            && !ShellCore.diskCacheable("write") && !ShellCore.diskCacheable("error") && ShellCore.diskTtl("mapb|bus|seoul|ALL") == 8000L && ShellCore.diskTtl("mapb|subway|seoul|ALL") > 3600000L
+            && !ShellCore.diskCacheable("write") && !ShellCore.diskCacheable("error") && ShellCore.diskTtl("mapb|bus|seoul|ALL") == ShellCore.BUS_STALE_MS && ShellCore.diskTtl("mapb|subway|seoul|ALL") > 3600000L
             && ShellCore.diskTtl("tabs|home") > 0L && ShellCore.diskTtl("news|전체") > 0L && ShellCore.diskTtl(null) == 0L, "모든 화면을 디스크에 둔다(버스 도착정보만 8초 — 실시간이라 옛 것은 쓰레기)");
         {
             ShellCore.MemStore ls = new ShellCore.MemStore();
