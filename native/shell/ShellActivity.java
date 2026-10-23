@@ -804,6 +804,28 @@ public class ShellActivity extends Activity {
 
     private final Object pfBusLock = new Object();
     /** (뒤 스레드) 버스 탭 미리 받기: 위치 → 정류장 → 도착정보 왕복을 돌려 화면을 캐시에 두고, 가까운 정류장의 앞 노선 목록도 이어서 받아 둔다. 위치가 있어야 한다. */
+    /** 가까운 지하철역 팝업(도착 · 노선)을 미리 받아 둔다: 위치로 가장 가까운 역을 서버에게 묻고(nearName), 그 역의 팝업 요청을 보내 역 시트 캐시에 넣는다 — 역을 누르면 바로 뜬다. 고르는 건 서버, 앱은 받아 둘 뿐. */
+    private long nearStnAt; private String nearStnKey = "";
+    private boolean pfNearStnRun(double[] ll, String theme) throws Exception {
+        if (ll == null) return false;
+        String sig = ((long) (ll[0] * 500)) + "," + ((long) (ll[1] * 500)) + "," + theme;
+        long now = System.currentTimeMillis();
+        if (sig.equals(nearStnKey) && now - nearStnAt < PF_SKIP_MS) return false;
+        nearStnKey = sig; nearStnAt = now;
+        MapCore g = new MapCore(new ShellCore.MemStore());
+        g.modeOverride = "subway"; g.gps = new double[] { ll[0], ll[1] };
+        NetPost.Res hr = NetPost.post(ShellCore.BASE + "/screen/map", g.headRequest(ShellCore.CAP, theme, ""), 8000);
+        if (hr.status != 200 || hr.body == null) return false;
+        g.onScreen(hr.body);
+        if (g.nearName == null || g.nearName.length() == 0) return false;
+        g.tapStation(g.nearName);
+        final String json = g.stnRequest(ShellCore.CAP, theme);
+        NetPost.Res sr = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+        if (sr.status != 200 || sr.body == null || sr.body.length() == 0) return false;
+        final String txt = sr.body;
+        main.post(new Runnable() { @Override public void run() { stnCachePut(json, txt); } });
+        return true;
+    }
     private boolean pfBusRun(double[] ll, String theme) throws Exception {
         if (ll == null) return false;                                               // 위치 없이 받은 '위치 없음' 화면을 캐시에 넣지 않는다
         boolean done = false;
@@ -824,8 +846,7 @@ public class ShellActivity extends Activity {
                     for (int i = 0; i < need.size(); i++) {
                         final int k = i;
                         ts[i] = new Thread(new Runnable() { @Override public void run() {
-                            String u = MapCore.busFetchUrl(need.get(k)[1]);
-                            NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, 9000, 4000);
+                            NetPost.Res r = MapCore.busGet(need.get(k)[0], need.get(k)[1], 9000, 4000);
                             got[k] = r != null && r.status == 200 ? r.body : "";
                         } });
                         ts[i].start();
@@ -882,6 +903,7 @@ public class ShellActivity extends Activity {
                 if (!pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store))) return false;
                 return pfBusRun(ll, theme);
             } });
+            pfAdd(2, new PfJob() { @Override public boolean run() throws Exception { return pfNearStnRun(ll, theme); } });
         } catch (Throwable ignored) { }
     }
     private void prefetchTabs() {
@@ -979,7 +1001,8 @@ public class ShellActivity extends Activity {
             }
             return net;
         } });
-        if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집: 도착지 또는 현위치(고스트 상태기)
+        if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집
+        pfAdd(2, new PfJob() { @Override public boolean run() throws Exception { return pfNearStnRun(ll, theme); } });                                // 가까운 지하철역 팝업(위치 → 서버가 고른 가까운 역 → 팝업): 도착지 또는 현위치(고스트 상태기)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
@@ -2015,8 +2038,7 @@ public class ShellActivity extends Activity {
                             boolean any = false;
                             for (String[] nd : new ArrayList<String[]>(m.brNeed)) {
                                 if (!nd[0].endsWith("s")) continue;                                   // 목록만(위치는 열 때 새로 받는다)
-                                String u = MapCore.busFetchUrl(nd[1]);
-                                NetPost.Res g = u.length() == 0 ? null : NetPost.getBus(u, 9000, 4000);
+                                NetPost.Res g = MapCore.busGet(nd[0], nd[1], 9000, 4000);
                                 m.addBrRes(nd[0], g != null && g.status == 200 && g.body != null ? g.body : ""); any = true;
                             }
                             if (!any) break;
@@ -2054,8 +2076,7 @@ public class ShellActivity extends Activity {
                 for (int i = 0; i < need.size(); i++) {
                     final int k = i;
                     ts[i] = new Thread(new Runnable() { @Override public void run() {
-                        String u = MapCore.busFetchUrl(need.get(k)[1]);
-                        NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, 5000, 4000);          // 동시 4곳 · 공공 API 오류 봉투는 다시 묻는다(끝내 못 받으면 빈 본문 — 아래에서 '없음'으로 굳히지 않는다)
+                        NetPost.Res r = MapCore.busGet(need.get(k)[0], need.get(k)[1], 5000, 4000);          // 동시 4곳 · 공공 API 오류 봉투는 다시 묻는다(끝내 못 받으면 빈 본문 — 아래에서 '없음'으로 굳히지 않는다)
                         String body = r != null && r.status == 200 && r.body != null ? r.body : "";
                         got[k] = body;
                         if (partial && body.length() > 0) main.post(new Runnable() { @Override public void run() {          // 먼저 온 정류장부터 바로 보인다
@@ -2217,8 +2238,7 @@ public class ShellActivity extends Activity {
         for (int i = 0; i < need.size(); i++) {
             final int k = i;
             ts[i] = new Thread(new Runnable() { @Override public void run() {
-                String u = MapCore.busFetchUrl(need.get(k)[1]);
-                NetPost.Res r = u.length() == 0 ? null : NetPost.getBus(u, firstMs, retryMs);
+                NetPost.Res r = MapCore.busGet(need.get(k)[0], need.get(k)[1], firstMs, retryMs);
                 String b = r != null && r.status == 200 && r.body != null ? r.body : "";
                 got[k] = b;
             } });
@@ -2877,7 +2897,7 @@ public class ShellActivity extends Activity {
                     if (a > 0) { try { Thread.sleep(pos ? 800 : 300); } catch (InterruptedException e) { break; } }
                     if (gen != brGen) return;                                                  // 화면을 벗어났다 — 더 받지 않는다
                     long t0 = System.currentTimeMillis();
-                    NetPost.Res r = NetPost.getBus(u, pos ? 6000 : 9000, 4000);
+                    NetPost.Res r = MapCore.busGet(k, url, pos ? 6000 : 9000, 4000);
                     body = r.status == 200 && r.body != null ? r.body : "";
                     if (body.length() == 0 && !pos && System.currentTimeMillis() - t0 > 3000L) break;      // 느리게 실패했으면 또 기다리지 않는다
                 }
