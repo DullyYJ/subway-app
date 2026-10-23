@@ -166,7 +166,7 @@ public class ShellActivity extends Activity {
         root.addView(holder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         rsF = new RsSheetView(this, false);              // 떠 있는 대기 알약 · 되돌리기 캡슐: 하단 탭 바로 위(웹 .rs-pill · .rs-undo)
         rsF.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
-        root.addView(rsF, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        holder.addView(rsF, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM));      // 알약 · 캡슐은 본문 위에 떠서(자리를 차지하지 않음) 뒤 화면이 비친다
         tabs = new ScreenView(this);
         tabs.setDpr(dpr);
         tabs.setListener(new Host(2));
@@ -2537,6 +2537,7 @@ public class ShellActivity extends Activity {
                         @Override public void onCentered(int op) { map.tapStation(mapData.labelName(op)); openMapSheet(S_STN_H); }
                     });
                     holder.addView(mapView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    if (rsF != null) rsF.bringToFront();
                     mapView.setFilter(map.flt());
                     syncMapView();
                 } });
