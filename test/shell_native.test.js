@@ -347,7 +347,7 @@ function findAndroidJar() {
     assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n\s*float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
     assert.ok(/mode = 8/.test(sv) && /bandX = ScreenCore\.clamp\(bandX - dx \/ dpr, lay\.bandMax\(\)\)/.test(sv) && /cv\.clipRect\(bit\.cl, bit\.y - 4f, bit\.cr/.test(sv) && /pulsing = lay\.mkBody \? pulsingB : drawMk/.test(sv), '그 줄만 가로로 밀고(세로로 쓸면 목록) 틀 안에 자르고 마커도 같이 민다');
     assert.ok(/private boolean stationNow\(float tr\)/.test(a) && /d >= to - from && stationNow\(d - \(to - from\)\)\) swapOff = to - from/.test(a) && /swapOff = 0f; top0/.test(a), '시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다');
-    assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /NetPost\.getBus\(u, 5000, 4000\)/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
+    assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /MapCore\.busGet\(need\.get\(k\)\[0\], need\.get\(k\)\[1\], 5000, 4000\)/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
   });
   await t('실기기 3건(s158): 키보드는 화면을 누르지 않고 · 칩 전환은 캐시로 바로 · 버스 카드는 첫 정류장부터 스프링', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), h = fs.readFileSync(N('HomeCore.java'), 'utf8');
@@ -451,8 +451,14 @@ function findAndroidJar() {
   await t('s170: 버스 공공 API 오류 봉투는 다시 묻고 · 동시 4곳 · 못 받으면 없음으로 굳히지 않는다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/Semaphore\(4\)/.test(np) && /OpenAPI_ServiceResponse/.test(np) && /public static Res getBus\(/.test(np) && /status == 200 \? -3/.test(np), '동시 4곳 · 오류 봉투 감지 · 못 받으면 -3');
-    assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/NetPost\.getBus\(/g) || []).length >= 5, '버스 받기는 모두 getBus 로');
+    assert.ok(!/NetPost\.get\(u, a == 0 \? 5000/.test(a) && (a.match(/MapCore\.busGet\(/g) || []).length >= 5 && !/NetPost\.getBus\(/.test(a), '버스 받기는 모두 busGet(→getBus2→getBus) 로');
     assert.ok(/busRes\.remove\(k\); return;/.test(mc), '빈 본문은 없음으로 굳히지 않는다');
+  });
+  await t('s172: 공공데이터 키 두 개를 두 길(버스 서버 · route-v2 /bus-tago)로 반반 · 정류장 목록은 동시에 · 가까운 역 팝업 미리', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/public static Res getBus2\(/.test(np) && /private static Res race\(/.test(np) && /altOff = true/.test(np) && /r\.status == 404/.test(np), 'getBus2: 두 길 · 동시(race) · 404면 그 길을 끈다');
+    assert.ok(/public static String busAltUrl\(/.test(mc) && /\/bus-tago\?url=/.test(mc) && /public static NetPost\.Res busGet\(/.test(mc) && /& 1/.test(mc) && /\[af\]\[0-9\]\{1,3\}/.test(mc), 'MapCore.busGet: 도착정보는 번호 짝·홀로 반반 · 나머지는 동시');
+    assert.ok(/private boolean pfNearStnRun\(/.test(a) && /g\.gps = new double\[\]/.test(a) && /g\.tapStation\(g\.nearName\)/.test(a) && /stnCachePut\(json, txt\)/.test(a) && (a.match(/pfNearStnRun\(ll, theme\)/g) || []).length >= 2, '가까운 역 팝업 미리받기: 켤 때 · 위치가 잡힐 때');
   });
   await t('s171: 맛집 · 쇼핑 · 지방 노선도까지 켜자마자 미리 · 위치가 늦게 잡혀도 다시 맞춘다 · 서버 두 키 반반', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
