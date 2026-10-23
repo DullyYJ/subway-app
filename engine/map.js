@@ -417,7 +417,36 @@ function mapBusNeedStops(la, lo) {
   if (mapInSeoul(la, lo)) need.push({ k: 'tp', url: 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByPos?tmX=' + qo + '&tmY=' + ql + '&radius=' + MAP_QR });
   if (mapInGG(la, lo)) need.push({ k: 'gg', url: MAP_GBIS_BASE + 'busstationservice/v2/getBusStationAroundListv2?x=' + qo + '&y=' + ql + '&format=json' });
   need.push({ k: 'tn', url: MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + ql + '&gpsLong=' + qo + '&numOfRows=50&pageNo=1&_type=json' });
+  need.push({ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + ql + '&lng=' + qo + '&radius=' + MAP_QR });          // s177: 서버 정류장 표(D1)도 동시에 — TAGO 와 같은 정류장을 0.3초에 준다(TAGO 는 느릴 때 5~10초)
   return need;
+}
+function mapStopsOf(k, text, la, lo) {                          // 한 출처 본문 → 300m 안 정류장 수
+  if (!text) return 0;
+  var s = k === 'tp' ? mapSeoulStops(text, la, lo) : k === 'gg' ? mapGbisStops(text, la, lo) : k === 'tn' ? mapTagoStops(text, la, lo) : k === 'd1' ? mapD1Stops(text, la, lo) : [];
+  return mapStopOrder(mapDedupStops(s)).length;
+}
+/**
+ * s177: 정류장 목록을 그리기에 충분히 받았나 — 출처를 우선순위 순서로 보아, 앞 출처가 정류장을 줬으면 뒤 출처를 기다리지 않는다.
+ * 우선순위: 서울 TOPIS(tp) → 경기 GBIS(gg, 인천 상자 안은 TAGO 먼저) → TAGO 칸(tn 또는 D1 — 같은 정류장이라 먼저 온 쪽). 아직 안 온 출처(undefined)가 앞에 있으면 기다린다.
+ * 서버가 이 함수로 '충분하면 나머지는 기다리지 않고' 도착정보 단계로 넘어간다(느린 TAGO 한 곳 때문에 5~10초 기다리지 않게). 모두 비면 true(빈 화면).
+ */
+function mapBusReady(f) {
+  var b = f && f.bus, res = (b && b.res && typeof b.res === 'object') ? b.res : {}, la = Number(b && b.lat), lo = Number(b && b.lng);
+  if (!isFinite(la) || !isFinite(lo)) return true;
+  var steps = [], tago = ['tn', 'd1'];
+  if (mapInSeoul(la, lo)) steps.push(['tp']);
+  if (mapInGG(la, lo)) { if (mapGGPreferred(la, lo)) { steps.push(['gg']); steps.push(tago); } else { steps.push(tago); steps.push(['gg']); } }
+  else steps.push(tago);
+  for (var i = 0; i < steps.length; i++) {
+    var unfinished = false;
+    for (var j = 0; j < steps[i].length; j++) {
+      var k = steps[i][j], v = res[k];
+      if (v === undefined) { if (k !== 'd1') unfinished = true; continue; }                       // D1 은 덤(없어도 기다리지 않는다) — 기다리는 것은 tn
+      if (mapStopsOf(k, v, la, lo) > 0) return true;
+    }
+    if (unfinished) return false;
+  }
+  return true;
 }
 function mapArrErr(t) {                                    // 공공 API 가 HTTP 200 으로 건넨 오류 봉투({"OpenAPI_ServiceResponse":…"HTTP_ERROR"})인가 — 도착정보가 아니다(웹 _safeParseResponse 와 같은 글자). 받지 못한 것으로 친다
   var x = typeof t === 'string' ? t : '';
@@ -593,7 +622,10 @@ function mapBusBody(f, info) {
   var need0 = mapBusNeedStops(la, lo);
   var mine = { la: la, lo: lo, k: 'm', n: '', l: '내 위치' };
   var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1)]), body: [note(txt)] }; };
-  if (need0.some(function (n) { return res[n.k] === undefined; })) { info.bus = { st: 'need', vw: 'near', need: need0 }; return wait('주변 정류장 찾는 중...'); }
+  if (!mapBusReady(f)) {                                                                // 출처 우선순위에서 앞 출처가 아직 안 왔다 — 아직 못 받은 주소만 받는다(받은 것은 다시 받지 않는다)
+    var miss0 = need0.filter(function (n) { return res[n.k] === undefined; });
+    if (miss0.length) { info.bus = { st: 'need', vw: 'near', need: miss0 }; return wait('주변 정류장 찾는 중...'); }
+  }
   var stops = mapApplyNearOrder(mapBusStops(f), mapBusOrd(b));                          // 사용자가 끌어서 정한 순서(b.ord) 먼저 · 새 정류장은 뒤에 거리순
   if (!stops.length && res.d1 === undefined) {                                           // 공공 API 가 모두 비었으면 서버 정류장 표(D1)로
     info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + mapQ(la) + '&lng=' + mapQ(lo) + '&radius=' + MAP_QR }] };
@@ -821,4 +853,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, mapBusReady: mapBusReady, MAP_FILTERS: MAP_FILTERS };
