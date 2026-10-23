@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s177";
+var ENGINE_VERSION = "route-v2-2026-10-23s178";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19827,7 +19827,8 @@ function mapD1Stops(text, la, lo) {                               // \uc11c\ubc8
     var a = Number(s.lat), b = Number(s.lng);
     if (!s.node_id || !isFinite(a) || !isFinite(b)) return;
     var cc = (s.city_code && String(s.city_code) !== '0') ? String(s.city_code) : '';
-    stops.push({ nm: String(s.node_nm || ''), id: String(s.node_id), no: '', city: cc || mapCityOf(a, b), la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'd1' });
+    var nid = String(s.node_id).replace(/^ICB1/, 'ICB3');                          // \uc778\ucc9c: \uc6b0\ub9ac \ud45c(D1)\ub294 ICB1\u2026, TAGO \ub3c4\ucc29\uc815\ubcf4\ub294 ICB3\u2026 \ub97c \uc4f4\ub2e4(\uc6f9 _tagoAltNodeIds \u00b7 \uac19\uc740 \uc815\ub958\uc7a5) \u2014 \uadf8\ub300\ub85c \uc4f0\uba74 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc804\ubd80 '\uc5c6\uc74c'
+    stops.push({ nm: String(s.node_nm || ''), id: nid, no: '', city: cc || mapCityOf(a, b), la: a, lo: b, dist: mapHav(la, lo, a, b), src: 'd1' });
   });
   stops.sort(function (x, y) { return x.dist - y.dist; });
   return stops;
