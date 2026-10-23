@@ -90,8 +90,21 @@ async function mapSvResolve(env, cap, body, out) {
     var need = ib.need.slice(0, 60);
     var arrWave = need.every(function (n) { return /^[af][0-9]{1,3}$/.test(String(n.k || '')); });
     var slot = new Array(need.length);
-    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; return t; }); });
+    var done = new Array(need.length);
+    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
+    var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && isFinite(Number(b.lat)) && isFinite(Number(b.lng)) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
     if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
+    else if (stopWave) {                                    // s177: 정류장 목록 — 우선순위 앞 출처가 정류장을 주면 나머지(느린 TAGO)는 기다리지 않고 도착정보로 넘어간다. 못 기다린 출처는 빈 값으로 둔다.
+      for (;;) {
+        var tmp = {}, pend = [];
+        Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
+        need.forEach(function (n, i) { if (done[i]) tmp[String(n.k)] = slot[i] || ''; else pend.push(ps[i]); });
+        var rdy = false;
+        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, res: tmp } }); } catch (eR) { rdy = false; }
+        if (rdy || !pend.length) break;
+        await Promise.race(pend);
+      }
+    }
     else await Promise.all(ps);
     var any = false;
     failA = 0;
