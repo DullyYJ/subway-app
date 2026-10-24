@@ -101,14 +101,14 @@ jobs:
           node test/next_train_attach.ui.test.js
           node test/next_train_parity.ui.test.js
           node test/ride_eta.test.js
-      - name: main 에 커밋
+      - name: 기본 브랜치(native-shell)에 커밋
         if: env.CHANGED == 'yes' && inputs.dry != true
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git add engine/next-train-tt.js
           git diff --cached --quiet || git commit -m "data: 지하철 시각표 분기 자동 갱신" -m "$(cat $OUT/report.md)"
-          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
+          for i in 1 2 3; do git pull -q --rebase origin native-shell && git push -q origin HEAD:native-shell && break || sleep 5; done
       - name: Cloudflare KV 에 올리기
         if: env.CHANGED == 'yes' && inputs.dry != true
         env:

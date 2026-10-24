@@ -81,14 +81,14 @@ jobs:
             (async()=>{let j=await q('CREATE TABLE IF NOT EXISTS holidays_live (k TEXT PRIMARY KEY, v TEXT NOT NULL, ts INTEGER)');if(!j.success)throw new Error(JSON.stringify(j.errors));
               j=await q(\"INSERT OR REPLACE INTO holidays_live (k,v,ts) VALUES ('nt:holidays:v1', ?1, ?2)\",[v,Date.now()]);if(!j.success)throw new Error(JSON.stringify(j.errors));console.log('D1 사본 완료',v.length,'bytes');})().catch(e=>{console.error('::warning::D1 사본 실패',String(e.message).slice(0,200));});
           "
-      - name: main 에 커밋(내장본 갱신)
+      - name: 기본 브랜치(native-shell)에 커밋(내장본 갱신)
         if: env.CHANGED == 'yes' && inputs.dry != true
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
           git add tools/holidays/holidays.json engine/holidays-data.js www/index.html
           git diff --cached --quiet || git commit -m "data: 공휴일 자동 갱신" -m "$(cat $OUT/report.md)"
-          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
+          for i in 1 2 3; do git pull -q --rebase origin native-shell && git push -q origin HEAD:native-shell && break || sleep 5; done
       - name: 검증 실패·불일치는 이슈로 알림(중복 방지)
         if: inputs.dry != true
         env:

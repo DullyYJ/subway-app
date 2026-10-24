@@ -46,7 +46,7 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add tools/collect-tt/drift-baseline.json
           git diff --cached --quiet || git commit -m "data: 시각표 감시 기준선 갱신"
-          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break || sleep 5; done
+          for i in 1 2 3; do git pull -q --rebase origin native-shell && git push -q origin HEAD:native-shell && break || sleep 5; done
       - name: 달라짐이 있으면 이슈로 알림(중복 방지)
         env:
           GH_TOKEN: ${{ github.token }}
