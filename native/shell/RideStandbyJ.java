@@ -787,7 +787,10 @@ final class RideStandbyJ {
         try {
             List<Object> ptsO = new ArrayList<Object>();
             if (stSt != null) for (Object q : stSt) if (truthy(q) && fin(g(q, "lat")) && fin(g(q, "lng"))) ptsO.add(obj("lat", g(q, "lat"), "lng", g(q, "lng")));
-            if (!tr.isEmpty() && ptsO.size() >= 2 && !truthy(st.get("arrivedAt"))) {
+            // ★ 2026-10-25 (YJ: 경로확정이 계속 풀려): 아직 안 탄 대기 중(wait · boarded:false · notDeparted)에는 이탈을 보지 않는다 — 역으로 걸어가는 동안 '이탈'로 읽혀 15분 뒤 안내가 끝나 확정이 풀렸다(엔진 ride-standby.js 와 같은 규칙).
+            boolean preBoard = st.get("wait") != null || Boolean.FALSE.equals(eta.get("boarded")) || Boolean.TRUE.equals(eta.get("notDeparted"));
+            if (preBoard) { st.put("offOn", 0.0); st.put("offAlertAt", 0.0); }
+            if (!preBoard && !tr.isEmpty() && ptsO.size() >= 2 && !truthy(st.get("arrivedAt"))) {
                 boolean tfO = Boolean.TRUE.equals(eta.get("timetableFirst"));
                 Map<String, Object> ot = RideTrackJ.rideTrack(obj("nowMs", now, "trail", tr, "plan", obj("pts", ptsO, "progIsSub", tfO, "subConfirmed", tfO, "boarded", Boolean.TRUE, "notDeparted", Boolean.FALSE, "suppress", new ArrayList<Object>()),
                     "want", obj("off", Boolean.TRUE, "ridden", Boolean.FALSE, "miss", Boolean.FALSE, "bus", Boolean.FALSE, "board", Boolean.FALSE)));
