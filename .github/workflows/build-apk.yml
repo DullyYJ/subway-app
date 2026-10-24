@@ -92,6 +92,7 @@ jobs:
           - arrival_end.ui.test.js
           - loc_disclosure.ui.test.js
           - journey_e2e.ui.test.js
+          - lock_keep.ui.test.js
           - latent_refs.ui.test.js
           - next_train_app.ui.test.js
           - next_train_attach.ui.test.js
