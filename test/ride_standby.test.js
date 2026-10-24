@@ -394,6 +394,20 @@ function waitState() {
   const st = mkState(); st.wait = { i: 1, lat: LAT, lng: LNG0, arrMs: at(12, 52, 0), since: at(12, 40, 0), seen: false, nearTs: 0 }; st.waitChk = 1;
   st.eta.boarded = false; st.eta.notDeparted = true; st.eta.passes = []; return withOvl(st);
 }
+t('탑승 전 대기: 역으로 걸어가느라 경로선에서 멀리 있어도 이탈 알림·안내 종료가 없다(확정이 풀리지 않는다)', () => {
+  // 출발 시각 12:52 인데 사용자는 경로선에서 북쪽 3km 쯤에서 30분 동안 걷고 있다 = 아직 역에 못 간 상태
+  let st = waitState(), offN = 0, doneAt = null, texts = [];
+  for (let ms = at(12, 20, 0); ms <= at(12, 50, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT + 3000 / 111320, LNG0 + (ms - at(12, 20, 0)) / 1000 * 1.6e-5, 15]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;   // 걸어서(초속 1.4m) 움직인다
+    if (r.alert && r.alert.type === 'offroute') offN++;
+    texts.push(r.ongoing.text);
+    if (r.done) { doneAt = ms; break; }
+  }
+  assert.strictEqual(offN, 0, '대기 중 이탈 알림');
+  assert.strictEqual(doneAt, null, '대기 중 15분 뒤 안내 종료');
+  assert.ok(!texts.some(x => /경로를 벗어났어요/.test(x)), '대기 중 상주 알림이 이탈 문구');
+  assert.ok(!st.offOn, '대기 중엔 이탈 시각을 적지 않는다');
+});
 t('오버레이 탑승 줄: 대기 알약 → (알약 누름 · 출발 2분 전) 탑승 줄 → [탑승] → [되돌리기]', () => {
   let r = stepO(waitState(), at(12, 47, 0), null, false);
   assert.strictEqual(r.overlay.rs.st, 'wait');
