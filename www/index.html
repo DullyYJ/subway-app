@@ -8873,10 +8873,31 @@ window.closeTransitDetail     = closeTransitDetail;
 // ★ 2026-10-09: 엔진이 경로를 못 주면(서버 오류·네트워크·경로 없음) 앱이 대신 계산하지 않고,
 //   화면에 이유와 [다시 시도] 를 보여준다. (토스트는 앱 전체에서 꺼져 있어 예전엔 아무 안내도 안 보였다.
 //   앱 자체 BFS 는 시간표·실시간 없이 고정 구간시간으로 '그럴듯한' 경로를 만들어 정확하지 않아 폴백으로 쓰지 않는다.)
+// 확정한 여정을 다시 찾다가 실패하면 원래 경로·확정·작은 화면 여정을 되돌린다(2026-10-25). 되돌렸으면 true.
+function _rrRestore(why){
+  try{
+    var s = window._rrSnap; if(!s) return false;
+    window._rrSnap = null;
+    if((window._routeResultReady || 0) >= (window._routeReqToken || 0)) return false;   // 그 사이 새 결과가 이미 그려졌다
+    _allRouteResults = s.results; window._routeBaseMs = s.baseMs; window._transitResultData = s.tr;
+    window._lastHtlNodes = s.nodes; window._lastHtlSections = s.secs; window._pendingRouteType = s.pend;
+    window._routeLocked = true; window._lockedRouteType = s.type; window._relockAfterReroute = null;
+    if(s.trip) window._pipTrip = s.trip;
+    var e = document.getElementById('transitResultErr'); if(e){ e.style.display = 'none'; delete e.dataset.fail; }
+    var card = document.getElementById('transitResultCard'); if(card) card.style.display = 'flex';
+    try{ _doSelectRouteOption(s.type); }catch(eS){}
+    try{ if(typeof _pipArmNow === 'function') _pipArmNow(); }catch(eP){}
+    try{ if(typeof _ovlDiag === 'function') _ovlDiag('재탐색', '실패 — 확정한 경로를 그대로 유지: ' + String(why || '').slice(0, 40)); }catch(eD){}
+    try{ if(typeof toast === 'function') toast('경로를 다시 찾지 못해 기존 경로를 유지해요'); }catch(eT){}
+    return true;
+  }catch(e){ return false; }
+}
+window._rrRestore = _rrRestore;
 function _routeFailShow(msg){
   try{
     var ld = document.getElementById('transitLoading'); if(ld) ld.style.display = 'none';
     if(window._loadingGuard){ clearTimeout(window._loadingGuard); window._loadingGuard = null; }
+    if(window._rrSnap && _rrRestore(msg)) return;
     var box = document.getElementById('transitResultBox'); if(box) box.style.display = 'block';
     var card = document.getElementById('transitResultCard'); if(card) card.style.display = 'none';
     var e = document.getElementById('transitResultErr'); if(!e) return;
@@ -8931,6 +8952,18 @@ function _hideRouteLoading(){
   }catch(e){}
 }
 window._hideRouteLoading = _hideRouteLoading;
+  // ★ 2026-10-25 (YJ: "경로확정이 계속 풀려 · 오버레이도 안돼"): 확정한 여정을 앱이 스스로 다시 찾는 중(이탈·시각 어긋남·놓침 재동기화 —
+  //   _relockAfterReroute)에 응답이 실패하면(터널·통신 끊김·엔진 오류) 예전엔 확정과 작은 화면 여정이 그대로 풀려 오버레이·알림이 꺼졌다.
+  //   → 재탐색 동안에도 확정·여정은 풀지 않고, 실패하면 이 보관본으로 원래 경로·확정을 되돌린다(_rrRestore). 사용자가 직접 새로 찾으면(플래그 없음) 예전처럼 푼다.
+  try{
+    if(window._relockAfterReroute){
+      if(!window._rrSnap && window._routeLocked === true && _allRouteResults){
+        window._rrSnap = { type: window._lockedRouteType || window._relockAfterReroute, results: _allRouteResults, baseMs: window._routeBaseMs,
+          tr: window._transitResultData, nodes: window._lastHtlNodes, secs: window._lastHtlSections, pend: window._pendingRouteType,
+          trip: window._pipTrip, relock: window._relockAfterReroute, at: Date.now() };
+      }
+    } else { window._rrSnap = null; }
+  }catch(eRr){ window._rrSnap = null; }
   _allRouteResults = null;
   // ★ 2026-09-04: 새 탐색이면 시간축도 새로 잡는다(요청이 나갈 때 찍는다).
   window._routeBaseMs = null;
@@ -8938,8 +8971,10 @@ window._hideRouteLoading = _hideRouteLoading;
   window._lastHtlNodes = null;
   window._lastHtlSections = null;
   window._pendingRouteType = null;
-  window._routeLocked = false;
-  window._lockedRouteType = null;
+  if(!window._rrSnap){       // 보호 중인 재탐색은 확정을 풀지 않는다
+    window._routeLocked = false;
+    window._lockedRouteType = null;
+  }
   window._lastCongNodeIdx = -1;
   try{
     if(typeof _htlWaitStop === 'function') _htlWaitStop('새 경로 탐색');
@@ -8966,7 +9001,7 @@ window._hideRouteLoading = _hideRouteLoading;
     window._gpsConfirmIdx = -1;   // 순수 GPS로만 확인된 위치
     window._timeMaxIdx    = -1;   // 시각표 추정으로 올라간 위치
     window._htlBoarded    = false;
-    window._pipTrip       = null; // 작은 요약 화면의 여정도 함께 정리
+    if(!window._rrSnap) window._pipTrip = null; // 작은 요약 화면의 여정도 함께 정리(보호 중인 재탐색은 유지)
   }catch(e){}
 
   // ★ 2026-09-03: 이전 경로 카드를 즉시 치운다.
@@ -9490,7 +9525,7 @@ window._hideRouteLoading = _hideRouteLoading;
 
       // ★ 미탑승 재동기화: 확정 경로였다면 같은 유형으로 다시 확정 (시각표만 다음 차편)
       if(window._relockAfterReroute){
-        var _rlType = window._relockAfterReroute; window._relockAfterReroute = null;
+        var _rlType = window._relockAfterReroute; window._relockAfterReroute = null; window._rrSnap = null;
         window._routeLocked = true;
         window._lockedRouteType = _rlType;
         _doSelectRouteOption(_rlType);
@@ -38110,7 +38145,7 @@ function _resetRouteInputs(){
     window._alarmStartAtStop = false;
     window._routeLocked = false;
     window._lockedRouteType = null;
-    window._relockAfterReroute = null;
+    window._relockAfterReroute = null; window._rrSnap = null;
     window._favSearchStart = null;
     _allRouteResults = null;
     // 노선도 하이라이트·다음열차 폴링 정리
