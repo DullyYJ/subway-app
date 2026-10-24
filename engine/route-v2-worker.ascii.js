@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-23s186";
+var ENGINE_VERSION = "route-v2-2026-10-25s189";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10296,7 +10296,12 @@ function rideStandby(req) {
   var offRes = null, offActive = false;
   try {
     var ptsO = (st.stops || []).filter(function (q) { return q && isFinite(q.lat) && isFinite(q.lng); }).map(function (q) { return { lat: q.lat, lng: q.lng }; });
-    if (tr.length && ptsO.length >= 2 && !(st.arrivedAt)) {
+    // \u2605 2026-10-25 (YJ: \uacbd\ub85c\ud655\uc815\uc774 \uacc4\uc18d \ud480\ub824): \uc544\uc9c1 \uc548 \ud0c4 \ub300\uae30 \uc911(st.wait \u00b7 eta.boarded:false \u00b7 notDeparted)\uc5d0\ub294 \uc774\ud0c8\uc744 \ubcf4\uc9c0 \uc54a\ub294\ub2e4.
+    //   \uc5ed\uc73c\ub85c \uac78\uc5b4\uac00\ub294 \uc0ac\ub78c\uc740 \uacbd\ub85c\uc120(\ucc28\ub7c9\uc774 \ub2ec\ub9ac\ub294 \uc120)\uc5d0\uc11c \uba40\ub9ac \uc788\ub294 \uac8c \ub2f9\uc5f0\ud55c\ub370, \uc544\ub798 \ud310\uc815\uc740 plan.boarded:true \ub85c \ubd80\ub974\uae30 \ub54c\ubb38\uc5d0
+    //   \uac77\ub294 \ub3d9\uc548 '\uc774\ud0c8'\ub85c \uc77d\ud600 \uc54c\ub9bc\uc774 \ub098\uac00\uace0 offGiveUpSec(15\ubd84) \ub4a4 \uc548\ub0b4\uac00 \ub05d\ub098 \ud655\uc815\uc774 \ud480\ub838\ub2e4. \ud0d4\ub2e4\uace0 \ud655\uc815\ub41c \ub4a4\ubd80\ud130\ub9cc \ubcf8\ub2e4.
+    var preBoard = !!st.wait || eta.boarded === false || eta.notDeparted === true;
+    if (preBoard) { st.offOn = 0; st.offAlertAt = 0; }
+    if (!preBoard && tr.length && ptsO.length >= 2 && !(st.arrivedAt)) {
       var tfO = eta.timetableFirst === true;
       var ot = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: ptsO, progIsSub: tfO, subConfirmed: tfO, boarded: true, notDeparted: false, suppress: [] }, want: { off: true, ridden: false, miss: false, bus: false, board: false } });
       offRes = ot && ot.off ? ot.off : null;

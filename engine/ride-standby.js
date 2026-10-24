@@ -684,7 +684,12 @@ function rideStandby(req) {
   var offRes = null, offActive = false;
   try {
     var ptsO = (st.stops || []).filter(function (q) { return q && isFinite(q.lat) && isFinite(q.lng); }).map(function (q) { return { lat: q.lat, lng: q.lng }; });
-    if (tr.length && ptsO.length >= 2 && !(st.arrivedAt)) {
+    // ★ 2026-10-25 (YJ: 경로확정이 계속 풀려): 아직 안 탄 대기 중(st.wait · eta.boarded:false · notDeparted)에는 이탈을 보지 않는다.
+    //   역으로 걸어가는 사람은 경로선(차량이 달리는 선)에서 멀리 있는 게 당연한데, 아래 판정은 plan.boarded:true 로 부르기 때문에
+    //   걷는 동안 '이탈'로 읽혀 알림이 나가고 offGiveUpSec(15분) 뒤 안내가 끝나 확정이 풀렸다. 탔다고 확정된 뒤부터만 본다.
+    var preBoard = !!st.wait || eta.boarded === false || eta.notDeparted === true;
+    if (preBoard) { st.offOn = 0; st.offAlertAt = 0; }
+    if (!preBoard && tr.length && ptsO.length >= 2 && !(st.arrivedAt)) {
       var tfO = eta.timetableFirst === true;
       var ot = rsTrackFn()({ nowMs: now, trail: tr, plan: { pts: ptsO, progIsSub: tfO, subConfirmed: tfO, boarded: true, notDeparted: false, suppress: [] }, want: { off: true, ridden: false, miss: false, bus: false, board: false } });
       offRes = ot && ot.off ? ot.off : null;
