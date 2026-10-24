@@ -2370,3 +2370,11 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
   - 확정이 풀리는 길: ① 찾기 결과가 두 번 올 때(근사 → 전체) 확정 사이에 둘째가 `home.setRoute` → `routeId++` → `riding()` 거짓. → `postRoute` 가 `my == rideSeq && home.riding()` 이면 버린다(`rideSeq` = 확정한 찾기 번호). ② 서비스가 `running` 인데 첫 `liveRide` 가 비어 있는 틈에 `pollRide` 가 `setRide("")` → 첫 값 전엔 지우지 않는다. ③ 시스템이 서비스를 내렸을 때 → `reviveRide()`(4초에 한 번 · 6번).
   - 엔진 쪽 후보(손대지 않음): `ride-standby.js` 이탈 판정은 대기(`st.wait`) 중에도 `boarded:true` 로 돌려, 경로선 600m 밖에 15분(`offGiveUpSec` 900) 있으면 `done` → 서비스 종료 → 확정 풀림. 탑승 전엔 이탈을 보지 않게 하려면 `RideStandbyJ` 와 `ride-standby.js` 를 같이 고쳐야 한다.
   - 오버레이: 기본 꺼짐(`K_OVL` 비어 있음). 허용만 해 둔 기기는 켜기/끄기를 고른 적이 없어 막대가 영영 안 떴다 → `ovlAuto()` 가 허용돼 있고 값이 비어 있으면 켬("1")으로(온레줌 · 확정 때). 허용이 없으면 확정 때 `askovl` 팝업(엔진이 모르면 토스트).
+
+## s189 (2026-10-25) 기본 브랜치 전환 · 웹↔네이티브 1:1 대조 · 탑승 전 대기 중 '이탈' 오판으로 확정이 풀리던 엔진 결함
+
+- **기본 브랜치**: GitHub 기본 브랜치를 `native-shell` 로 바꿨다. `main`(웹 옛 줄, s83)은 지우지 않고 그대로 둔다 — 새 일은 모두 `native-shell`. 자동 갱신 3개(`refresh-holidays`·`refresh-subway-tt`·`watch-covered-tt`)는 결과를 `native-shell` 에 올리도록 바꿨다(기본 브랜치가 바뀌면 `main` 으로 올라가 엔진 데이터가 앱에 안 닿는다).
+- **웹(`ios-reference/index.html`) ↔ 네이티브 대조 결과**: ① 화면 글자: 웹 UI 문자열 중 네이티브에 없는 것을 뽑아 하나씩 확인 — 남은 것은 죽은 코드(`gmPop` = 비어 있는 격자 노선도 팝업, `gmRouteSet` 호출자 없음)와 이미 통합된 흐름(배달앱 버튼 → 도착 팝업 통합)뿐이었다. ② 색: `ShellCore.palette` 가 웹 CSS 변수와 같다. ③ 움직임 수치: 탑승 시트 `.46s cubic-bezier(.22,1,.36,1)` · 알약 `.4s` + 지연 `.12s` · 점 `1.4s` 등이 `RsSheetView` 상수와 같다(이미 s169 에서 맞춤). **기기에서 눈으로 본 대조는 못 했다.**
+- **고친 것(엔진 s189, 시험 `ride_standby` 42개 — 새 1개)**: `ride-standby.js` 의 이탈 판정이 `plan.boarded:true` 로 불러서, **아직 안 탄 대기 중(`st.wait` · `eta.boarded:false` · `notDeparted`)에도** 경로선 600m 밖을 걸으면 '이탈'로 읽혔다 → '경로를 벗어났어요' 알림 + 15분(`offGiveUpSec`) 뒤 `done` → 서비스 종료 → **경로확정이 풀림**. 역으로 걸어가는 사람은 당연히 경로선에서 멀다. 이제 대기 중엔 이탈을 보지 않고 `offOn/offAlertAt` 을 지운다(탄 뒤부터만 판정). 시험은 30분 걸으며 이탈 알림 0 · 종료 없음 · 상주 문구가 이탈이 아님을 확인(고치기 전엔 '안내 종료'로 실패).
+- **같은 수정을 폰 안 자바에도**: `RideStandbyJ.java`(실제 기기의 5초 걸음은 이 자바가 돈다 — `RideLocal`)에 같은 `preBoard` 규칙을 넣었다. 서버 녹화본 `test/fixtures/ride_corpus.jsonl` 에 대기 중 걷기 4건을 더했고(`ride_local` 시험: 고치기 전 자바는 4건 다름, 고친 뒤 46건 모두 같음).
+- **배포**: 워커 `engine/route-v2-worker.ascii.js`(ENGINE_VERSION `route-v2-2026-10-25s189`)를 Cloudflare 에 붙여넣어야 반영된다. 앱은 `RideStandbyJ.java` 한 곳이 바뀌었으니 CI(`build-shell.yml`)로 새 APK 를 받아야 폰에 반영된다. 기기에서 눈으로 확인한 것은 아니다.
