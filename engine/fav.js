@@ -15,19 +15,45 @@ function favStnTable() {
   return [];
 }
 function favHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
-function favFind(name) {                          // 역 이름(끝의 '역' 은 뗀다) → [이름, 노선, 위도, 경도] 또는 null
-  var n = favStr(name, 30).replace(/\s+/g, '').replace(/역$/, ''), t = favStnTable();
-  if (!n) return null;
-  for (var i = 0; i < t.length; i++) if (t[i][0] === n) return [t[i][0], t[i][1], t[i][2], t[i][3]];
-  return null;
+// s208 (YJ: 수도권·지방에 같은 이름의 역이 있어도 구분): 이름이 여러 권역에 있는 지방 역은 이름 뒤에 권역을 붙여 저장한다('중동(부산)'). 수도권 역·예전에 저장한 이름·권역이 하나뿐인 역은 그대로(표시 없음).
+//   경로 찾기로 넘기는 go 는 표시를 뗀 이름 + 그 권역 역의 노선·좌표라서 앱은 그대로 쓴다.
+var FAV_REGS = ['부산', '대구', '광주', '대전'];
+function favRegOf(line) { var l = String(line || ''); for (var i = 0; i < FAV_REGS.length; i++) if (l.indexOf(FAV_REGS[i]) === 0) return FAV_REGS[i]; return ''; }
+function favSplit(name) { var m = /^(.+?)\((부산|대구|광주|대전)\)$/.exec(name); return m ? { n: m[1], r: m[2] } : { n: name, r: '' }; }
+function favBase(key) { return favSplit(key).n; }
+function favKeyOf(row) {                          // 역 행 → 저장 이름(다른 권역에도 같은 이름이 있는 지방 역만 권역 표시)
+  var rg = favRegOf(row[1]);
+  if (!rg) return row[0];
+  var t = favStnTable();
+  for (var k = 0; k < t.length; k++) if (t[k][0] === row[0] && favRegOf(t[k][1]) !== rg) return row[0] + '(' + rg + ')';
+  return row[0];
 }
-function favCands(q) {                            // 글이 들어 있는 역 이름 후보(이름 중복은 노선을 모아서, 최대 6개) — 웹 _favSearch 와 같다
-  q = favStr(q, 30).replace(/\s+/g, '').replace(/역$/, '');
+function favFind(name, line) {                    // 역 이름(끝의 '역' 은 뗀다 · 권역 표시 가능) → [저장 이름, 노선, 위도, 경도] 또는 null. line = 노선 힌트(같은 이름이 여러 권역일 때)
+  var sp = favSplit(favStr(name, 30).replace(/\s+/g, '')), n = sp.n.replace(/역$/, ''), t = favStnTable(), any = null, home = null;
+  if (!n) return null;
+  for (var i = 0; i < t.length; i++) {
+    if (t[i][0] !== n) continue;
+    var rg = favRegOf(t[i][1]);
+    if (sp.r) { if (rg === sp.r) return [favKeyOf(t[i]), t[i][1], t[i][2], t[i][3]]; continue; }
+    if (line && t[i][1] === line) return [favKeyOf(t[i]), t[i][1], t[i][2], t[i][3]];
+    if (!any) any = t[i];
+    if (!home && !rg) home = t[i];
+  }
+  var h = home || any;
+  return h ? [favKeyOf(h), h[1], h[2], h[3]] : null;
+}
+function favCands(q) {                            // 글이 들어 있는 역 이름 후보(같은 이름·같은 권역은 노선을 모아서, 최대 6개) — 웹 _favSearch 와 같다
+  q = favStr(q, 30).replace(/\s+/g, '').replace(/\(.*$/, '').replace(/역$/, '');
   if (!q) return [];
-  var t = favStnTable(), seen = {}, order = [];
-  for (var i = 0; i < t.length; i++) if (t[i][0].indexOf(q) >= 0) { if (!seen[t[i][0]]) { seen[t[i][0]] = []; order.push(t[i][0]); } if (seen[t[i][0]].indexOf(t[i][1]) < 0) seen[t[i][0]].push(t[i][1]); }
-  order.sort(function (a, b) { return (a === q ? 0 : a.indexOf(q) === 0 ? 1 : 2) - (b === q ? 0 : b.indexOf(q) === 0 ? 1 : 2); });   // 이름이 같은 것 > 앞부분이 같은 것 > 나머지
-  return order.slice(0, 6).map(function (n) { return { name: n, lines: seen[n] }; });
+  var t = favStnTable(), seen = {}, order = [], k;
+  for (var i = 0; i < t.length; i++) if (t[i][0].indexOf(q) >= 0) {
+    k = t[i][0] + '|' + favRegOf(t[i][1]);
+    if (!seen[k]) { seen[k] = { n: t[i][0], lines: [] }; order.push(k); }
+    if (seen[k].lines.indexOf(t[i][1]) < 0) seen[k].lines.push(t[i][1]);
+  }
+  var rank = function (k) { var n = seen[k].n; return n === q ? 0 : n.indexOf(q) === 0 ? 1 : 2; };
+  order.sort(function (a, b) { return rank(a) - rank(b); });   // 이름이 같은 것 > 앞부분이 같은 것 > 나머지
+  return order.slice(0, 6).map(function (k) { var e = seen[k]; return { name: favKeyOf([e.n, e.lines[0]]), lines: e.lines }; });
 }
 function favResolve(txt) {                        // 입력 글 → 역 이름: 정확히 같으면 그 역, 아니면 후보가 하나뿐일 때만 그 역, 아니면 ''
   var e = favFind(txt); if (e) return e[0];
@@ -48,7 +74,7 @@ function favScreen(opt, f) {
   f = (f && typeof f === 'object') ? f : {};
   var list = favClean(f.list), msg = '';
   var cur = null;
-  if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s), cd = favFind(f.cur.d); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }
+  if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s, favStr(f.cur.sl, 30)), cd = favFind(f.cur.d, favStr(f.cur.dl, 30)); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }      // sl · dl = 지금 경로 출발·도착 역의 노선(같은 이름이 여러 권역일 때 어느 쪽인지)
   var op = (f.op && typeof f.op === 'object') ? f.op : null;
   var fm = (f.form && typeof f.form === 'object') ? f.form : {};
   var form = { n: favStr(fm.n, 20), s: favStr(fm.s, 30), d: favStr(fm.d, 30), act: fm.act === 's' || fm.act === 'd' ? fm.act : '' };
@@ -93,7 +119,7 @@ function favScreen(opt, f) {
   var go = [];
   list.forEach(function (x, i) {
     var a = favFind(x.s), b = favFind(x.d);
-    go.push(a && b ? { s: a, d: b } : null);
+    go.push(a && b ? { s: [favBase(a[0]), a[1], a[2], a[3]], d: [favBase(b[0]), b[1], b[2], b[3]] } : null);      // 앱에는 권역 표시를 뗀 이름과 그 권역 역의 노선·좌표
     kids.push({ t: 'row', pad: [0, 4, 0, 4], gap: 8, kids: [
       { t: 'button', s: x.name, size: 14, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'fv.go.' + i } },
       { t: 'button', s: '삭제', size: 13, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: '#ff453a', act: { a: 'call', v: 'fv.del.' + i } }] });

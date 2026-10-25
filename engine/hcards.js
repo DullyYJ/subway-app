@@ -42,11 +42,17 @@ function hcNearest(la, lo) {                          // 가장 가까운 지하
   for (var i = 0; i < t.length; i++) { var d = hcHav(la, lo, t[i][2], t[i][3]); if (d < bd) { bd = d; best = [t[i][0], t[i][1], t[i][2], t[i][3], Math.round(d)]; } }
   return best;
 }
-function hcStnByName(nm) {                           // 역 이름 → [위도, 경도] (표에서 처음 만난 것), 없으면 null
+function hcStnByName(nm, ll) {                       // 역 이름 → [위도, 경도] (표에서 처음 만난 것), 없으면 null. s208: ll(경로가 알려 준 그 역의 좌표)이 있으면 같은 이름 역(수도권·지방) 중 가장 가까운 것
   if (!nm) return null;
-  var t = hcStnTable(), n = String(nm).replace(/역$/, '');
-  for (var i = 0; i < t.length; i++) if (t[i][0] === n || t[i][0] === nm) return [t[i][2], t[i][3]];
-  return null;
+  var t = hcStnTable(), n = String(nm).replace(/역$/, ''), best = null, bd = 1e18;
+  var near = Array.isArray(ll) && isFinite(Number(ll[0])) && isFinite(Number(ll[1]));
+  for (var i = 0; i < t.length; i++) {
+    if (t[i][0] !== n && t[i][0] !== nm) continue;
+    if (!near) return [t[i][2], t[i][3]];
+    var d = hcHav(Number(ll[0]), Number(ll[1]), t[i][2], t[i][3]);
+    if (d < bd) { bd = d; best = [t[i][2], t[i][3]]; }
+  }
+  return best;
 }
 // 날씨를 받아 올 두 지점(웹 _fetchWeather 와 같은 자리): wF = 지금 있는 곳(위치 없으면 경로 출발역·가까운 역), wT = 경로 도착역.
 // 날씨 값 자체는 Worker 가 subway-api /weather 에서 받아 f.wx = {wF,wT}({temp,txt,rain}) 로 넣어 준다(엔진은 시계도 네트워크도 모른다).
@@ -56,8 +62,8 @@ function hcWxPoints(f) {
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = now > 0 ? hcRoute(f.r, now, tz) : null, out = { wF: null, wT: null };
   if (gps) out.wF = gps;
-  else if (rt) out.wF = hcStnByName(rt.segs[0].from);
-  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to);
+  else if (rt) out.wF = hcStnByName(rt.segs[0].from, rt.segs[0].fromLL);
+  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to, rt.segs[rt.segs.length - 1].toLL);
   return out;
 }
 function hcWx(w) {
@@ -83,7 +89,8 @@ function hcRoute(r, now, tz) {
     var sl = ((sec.passStopList || {}).stationList) || [];
     var s = { type: tt, line: (sec.transportation || {}).name || (tt === 2 ? '버스' : tt === 4 ? '장거리' : '지하철'),
       from: sl.length ? (sl[0].stationName || '') : '', to: sl.length ? (sl[sl.length - 1].stationName || '') : '', stops: Math.max(0, sl.length - 1),
-      min: Math.max(1, Math.round((sec.duration || 0) / 60)), nextTrain: tt === 1 ? (sec.nextTrain || null) : null };
+      min: Math.max(1, Math.round((sec.duration || 0) / 60)), nextTrain: tt === 1 ? (sec.nextTrain || null) : null,
+      fromLL: sl.length && sl[0].lat != null && sl[0].lon != null ? [sl[0].lat, sl[0].lon] : null, toLL: sl.length && sl[sl.length - 1].lat != null && sl[sl.length - 1].lon != null ? [sl[sl.length - 1].lat, sl[sl.length - 1].lon] : null };
     if (tt === 4 && base != null && sec.startSec != null && sec.endSec != null && isFinite(sec.startSec) && isFinite(sec.endSec)) {
       s.depClock = hcClock(base + sec.startSec * 1000, tz); s.arrClock = hcClock(base + sec.endSec * 1000, tz); s.rideMin = Math.round(Math.max(0, sec.endSec - sec.startSec) / 60);
     }

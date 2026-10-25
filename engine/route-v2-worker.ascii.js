@@ -21429,19 +21429,45 @@ function favStnTable() {
   return [];
 }
 function favHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
-function favFind(name) {                          // \uc5ed \uc774\ub984(\ub05d\uc758 '\uc5ed' \uc740 \ub5c0\ub2e4) \u2192 [\uc774\ub984, \ub178\uc120, \uc704\ub3c4, \uacbd\ub3c4] \ub610\ub294 null
-  var n = favStr(name, 30).replace(/\s+/g, '').replace(/\uc5ed$/, ''), t = favStnTable();
-  if (!n) return null;
-  for (var i = 0; i < t.length; i++) if (t[i][0] === n) return [t[i][0], t[i][1], t[i][2], t[i][3]];
-  return null;
+// s208 (YJ: \uc218\ub3c4\uad8c\u00b7\uc9c0\ubc29\uc5d0 \uac19\uc740 \uc774\ub984\uc758 \uc5ed\uc774 \uc788\uc5b4\ub3c4 \uad6c\ubd84): \uc774\ub984\uc774 \uc5ec\ub7ec \uad8c\uc5ed\uc5d0 \uc788\ub294 \uc9c0\ubc29 \uc5ed\uc740 \uc774\ub984 \ub4a4\uc5d0 \uad8c\uc5ed\uc744 \ubd99\uc5ec \uc800\uc7a5\ud55c\ub2e4('\uc911\ub3d9(\ubd80\uc0b0)'). \uc218\ub3c4\uad8c \uc5ed\u00b7\uc608\uc804\uc5d0 \uc800\uc7a5\ud55c \uc774\ub984\u00b7\uad8c\uc5ed\uc774 \ud558\ub098\ubfd0\uc778 \uc5ed\uc740 \uadf8\ub300\ub85c(\ud45c\uc2dc \uc5c6\uc74c).
+//   \uacbd\ub85c \ucc3e\uae30\ub85c \ub118\uae30\ub294 go \ub294 \ud45c\uc2dc\ub97c \ub5c0 \uc774\ub984 + \uadf8 \uad8c\uc5ed \uc5ed\uc758 \ub178\uc120\u00b7\uc88c\ud45c\ub77c\uc11c \uc571\uc740 \uadf8\ub300\ub85c \uc4f4\ub2e4.
+var FAV_REGS = ['\ubd80\uc0b0', '\ub300\uad6c', '\uad11\uc8fc', '\ub300\uc804'];
+function favRegOf(line) { var l = String(line || ''); for (var i = 0; i < FAV_REGS.length; i++) if (l.indexOf(FAV_REGS[i]) === 0) return FAV_REGS[i]; return ''; }
+function favSplit(name) { var m = /^(.+?)\((\ubd80\uc0b0|\ub300\uad6c|\uad11\uc8fc|\ub300\uc804)\)$/.exec(name); return m ? { n: m[1], r: m[2] } : { n: name, r: '' }; }
+function favBase(key) { return favSplit(key).n; }
+function favKeyOf(row) {                          // \uc5ed \ud589 \u2192 \uc800\uc7a5 \uc774\ub984(\ub2e4\ub978 \uad8c\uc5ed\uc5d0\ub3c4 \uac19\uc740 \uc774\ub984\uc774 \uc788\ub294 \uc9c0\ubc29 \uc5ed\ub9cc \uad8c\uc5ed \ud45c\uc2dc)
+  var rg = favRegOf(row[1]);
+  if (!rg) return row[0];
+  var t = favStnTable();
+  for (var k = 0; k < t.length; k++) if (t[k][0] === row[0] && favRegOf(t[k][1]) !== rg) return row[0] + '(' + rg + ')';
+  return row[0];
 }
-function favCands(q) {                            // \uae00\uc774 \ub4e4\uc5b4 \uc788\ub294 \uc5ed \uc774\ub984 \ud6c4\ubcf4(\uc774\ub984 \uc911\ubcf5\uc740 \ub178\uc120\uc744 \ubaa8\uc544\uc11c, \ucd5c\ub300 6\uac1c) \u2014 \uc6f9 _favSearch \uc640 \uac19\ub2e4
-  q = favStr(q, 30).replace(/\s+/g, '').replace(/\uc5ed$/, '');
+function favFind(name, line) {                    // \uc5ed \uc774\ub984(\ub05d\uc758 '\uc5ed' \uc740 \ub5c0\ub2e4 \u00b7 \uad8c\uc5ed \ud45c\uc2dc \uac00\ub2a5) \u2192 [\uc800\uc7a5 \uc774\ub984, \ub178\uc120, \uc704\ub3c4, \uacbd\ub3c4] \ub610\ub294 null. line = \ub178\uc120 \ud78c\ud2b8(\uac19\uc740 \uc774\ub984\uc774 \uc5ec\ub7ec \uad8c\uc5ed\uc77c \ub54c)
+  var sp = favSplit(favStr(name, 30).replace(/\s+/g, '')), n = sp.n.replace(/\uc5ed$/, ''), t = favStnTable(), any = null, home = null;
+  if (!n) return null;
+  for (var i = 0; i < t.length; i++) {
+    if (t[i][0] !== n) continue;
+    var rg = favRegOf(t[i][1]);
+    if (sp.r) { if (rg === sp.r) return [favKeyOf(t[i]), t[i][1], t[i][2], t[i][3]]; continue; }
+    if (line && t[i][1] === line) return [favKeyOf(t[i]), t[i][1], t[i][2], t[i][3]];
+    if (!any) any = t[i];
+    if (!home && !rg) home = t[i];
+  }
+  var h = home || any;
+  return h ? [favKeyOf(h), h[1], h[2], h[3]] : null;
+}
+function favCands(q) {                            // \uae00\uc774 \ub4e4\uc5b4 \uc788\ub294 \uc5ed \uc774\ub984 \ud6c4\ubcf4(\uac19\uc740 \uc774\ub984\u00b7\uac19\uc740 \uad8c\uc5ed\uc740 \ub178\uc120\uc744 \ubaa8\uc544\uc11c, \ucd5c\ub300 6\uac1c) \u2014 \uc6f9 _favSearch \uc640 \uac19\ub2e4
+  q = favStr(q, 30).replace(/\s+/g, '').replace(/\(.*$/, '').replace(/\uc5ed$/, '');
   if (!q) return [];
-  var t = favStnTable(), seen = {}, order = [];
-  for (var i = 0; i < t.length; i++) if (t[i][0].indexOf(q) >= 0) { if (!seen[t[i][0]]) { seen[t[i][0]] = []; order.push(t[i][0]); } if (seen[t[i][0]].indexOf(t[i][1]) < 0) seen[t[i][0]].push(t[i][1]); }
-  order.sort(function (a, b) { return (a === q ? 0 : a.indexOf(q) === 0 ? 1 : 2) - (b === q ? 0 : b.indexOf(q) === 0 ? 1 : 2); });   // \uc774\ub984\uc774 \uac19\uc740 \uac83 > \uc55e\ubd80\ubd84\uc774 \uac19\uc740 \uac83 > \ub098\uba38\uc9c0
-  return order.slice(0, 6).map(function (n) { return { name: n, lines: seen[n] }; });
+  var t = favStnTable(), seen = {}, order = [], k;
+  for (var i = 0; i < t.length; i++) if (t[i][0].indexOf(q) >= 0) {
+    k = t[i][0] + '|' + favRegOf(t[i][1]);
+    if (!seen[k]) { seen[k] = { n: t[i][0], lines: [] }; order.push(k); }
+    if (seen[k].lines.indexOf(t[i][1]) < 0) seen[k].lines.push(t[i][1]);
+  }
+  var rank = function (k) { var n = seen[k].n; return n === q ? 0 : n.indexOf(q) === 0 ? 1 : 2; };
+  order.sort(function (a, b) { return rank(a) - rank(b); });   // \uc774\ub984\uc774 \uac19\uc740 \uac83 > \uc55e\ubd80\ubd84\uc774 \uac19\uc740 \uac83 > \ub098\uba38\uc9c0
+  return order.slice(0, 6).map(function (k) { var e = seen[k]; return { name: favKeyOf([e.n, e.lines[0]]), lines: e.lines }; });
 }
 function favResolve(txt) {                        // \uc785\ub825 \uae00 \u2192 \uc5ed \uc774\ub984: \uc815\ud655\ud788 \uac19\uc73c\uba74 \uadf8 \uc5ed, \uc544\ub2c8\uba74 \ud6c4\ubcf4\uac00 \ud558\ub098\ubfd0\uc77c \ub54c\ub9cc \uadf8 \uc5ed, \uc544\ub2c8\uba74 ''
   var e = favFind(txt); if (e) return e[0];
@@ -21462,7 +21488,7 @@ function favScreen(opt, f) {
   f = (f && typeof f === 'object') ? f : {};
   var list = favClean(f.list), msg = '';
   var cur = null;
-  if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s), cd = favFind(f.cur.d); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }
+  if (f.cur && typeof f.cur === 'object') { var cs = favFind(f.cur.s, favStr(f.cur.sl, 30)), cd = favFind(f.cur.d, favStr(f.cur.dl, 30)); if (cs && cd) cur = { s: cs[0], d: cd[0] }; }      // sl \u00b7 dl = \uc9c0\uae08 \uacbd\ub85c \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc5ed\uc758 \ub178\uc120(\uac19\uc740 \uc774\ub984\uc774 \uc5ec\ub7ec \uad8c\uc5ed\uc77c \ub54c \uc5b4\ub290 \ucabd\uc778\uc9c0)
   var op = (f.op && typeof f.op === 'object') ? f.op : null;
   var fm = (f.form && typeof f.form === 'object') ? f.form : {};
   var form = { n: favStr(fm.n, 20), s: favStr(fm.s, 30), d: favStr(fm.d, 30), act: fm.act === 's' || fm.act === 'd' ? fm.act : '' };
@@ -21507,7 +21533,7 @@ function favScreen(opt, f) {
   var go = [];
   list.forEach(function (x, i) {
     var a = favFind(x.s), b = favFind(x.d);
-    go.push(a && b ? { s: a, d: b } : null);
+    go.push(a && b ? { s: [favBase(a[0]), a[1], a[2], a[3]], d: [favBase(b[0]), b[1], b[2], b[3]] } : null);      // \uc571\uc5d0\ub294 \uad8c\uc5ed \ud45c\uc2dc\ub97c \ub5c0 \uc774\ub984\uacfc \uadf8 \uad8c\uc5ed \uc5ed\uc758 \ub178\uc120\u00b7\uc88c\ud45c
     kids.push({ t: 'row', pad: [0, 4, 0, 4], gap: 8, kids: [
       { t: 'button', s: x.name, size: 14, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'fv.go.' + i } },
       { t: 'button', s: '\uc0ad\uc81c', size: 13, h: 46, r: 12, bold: true, fill: 'card2', line: 'border', tc: '#ff453a', act: { a: 'call', v: 'fv.del.' + i } }] });
@@ -21583,11 +21609,17 @@ function hcNearest(la, lo) {                          // \uac00\uc7a5 \uac00\uae
   for (var i = 0; i < t.length; i++) { var d = hcHav(la, lo, t[i][2], t[i][3]); if (d < bd) { bd = d; best = [t[i][0], t[i][1], t[i][2], t[i][3], Math.round(d)]; } }
   return best;
 }
-function hcStnByName(nm) {                           // \uc5ed \uc774\ub984 \u2192 [\uc704\ub3c4, \uacbd\ub3c4] (\ud45c\uc5d0\uc11c \ucc98\uc74c \ub9cc\ub09c \uac83), \uc5c6\uc73c\uba74 null
+function hcStnByName(nm, ll) {                       // \uc5ed \uc774\ub984 \u2192 [\uc704\ub3c4, \uacbd\ub3c4] (\ud45c\uc5d0\uc11c \ucc98\uc74c \ub9cc\ub09c \uac83), \uc5c6\uc73c\uba74 null. s208: ll(\uacbd\ub85c\uac00 \uc54c\ub824 \uc900 \uadf8 \uc5ed\uc758 \uc88c\ud45c)\uc774 \uc788\uc73c\uba74 \uac19\uc740 \uc774\ub984 \uc5ed(\uc218\ub3c4\uad8c\u00b7\uc9c0\ubc29) \uc911 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uac83
   if (!nm) return null;
-  var t = hcStnTable(), n = String(nm).replace(/\uc5ed$/, '');
-  for (var i = 0; i < t.length; i++) if (t[i][0] === n || t[i][0] === nm) return [t[i][2], t[i][3]];
-  return null;
+  var t = hcStnTable(), n = String(nm).replace(/\uc5ed$/, ''), best = null, bd = 1e18;
+  var near = Array.isArray(ll) && isFinite(Number(ll[0])) && isFinite(Number(ll[1]));
+  for (var i = 0; i < t.length; i++) {
+    if (t[i][0] !== n && t[i][0] !== nm) continue;
+    if (!near) return [t[i][2], t[i][3]];
+    var d = hcHav(Number(ll[0]), Number(ll[1]), t[i][2], t[i][3]);
+    if (d < bd) { bd = d; best = [t[i][2], t[i][3]]; }
+  }
+  return best;
 }
 // \ub0a0\uc528\ub97c \ubc1b\uc544 \uc62c \ub450 \uc9c0\uc810(\uc6f9 _fetchWeather \uc640 \uac19\uc740 \uc790\ub9ac): wF = \uc9c0\uae08 \uc788\ub294 \uacf3(\uc704\uce58 \uc5c6\uc73c\uba74 \uacbd\ub85c \ucd9c\ubc1c\uc5ed\u00b7\uac00\uae4c\uc6b4 \uc5ed), wT = \uacbd\ub85c \ub3c4\ucc29\uc5ed.
 // \ub0a0\uc528 \uac12 \uc790\uccb4\ub294 Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\uc544 f.wx = {wF,wT}({temp,txt,rain}) \ub85c \ub123\uc5b4 \uc900\ub2e4(\uc5d4\uc9c4\uc740 \uc2dc\uacc4\ub3c4 \ub124\ud2b8\uc6cc\ud06c\ub3c4 \ubaa8\ub978\ub2e4).
@@ -21597,8 +21629,8 @@ function hcWxPoints(f) {
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = now > 0 ? hcRoute(f.r, now, tz) : null, out = { wF: null, wT: null };
   if (gps) out.wF = gps;
-  else if (rt) out.wF = hcStnByName(rt.segs[0].from);
-  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to);
+  else if (rt) out.wF = hcStnByName(rt.segs[0].from, rt.segs[0].fromLL);
+  if (rt) out.wT = hcStnByName(rt.segs[rt.segs.length - 1].to, rt.segs[rt.segs.length - 1].toLL);
   return out;
 }
 function hcWx(w) {
@@ -21624,7 +21656,8 @@ function hcRoute(r, now, tz) {
     var sl = ((sec.passStopList || {}).stationList) || [];
     var s = { type: tt, line: (sec.transportation || {}).name || (tt === 2 ? '\ubc84\uc2a4' : tt === 4 ? '\uc7a5\uac70\ub9ac' : '\uc9c0\ud558\ucca0'),
       from: sl.length ? (sl[0].stationName || '') : '', to: sl.length ? (sl[sl.length - 1].stationName || '') : '', stops: Math.max(0, sl.length - 1),
-      min: Math.max(1, Math.round((sec.duration || 0) / 60)), nextTrain: tt === 1 ? (sec.nextTrain || null) : null };
+      min: Math.max(1, Math.round((sec.duration || 0) / 60)), nextTrain: tt === 1 ? (sec.nextTrain || null) : null,
+      fromLL: sl.length && sl[0].lat != null && sl[0].lon != null ? [sl[0].lat, sl[0].lon] : null, toLL: sl.length && sl[sl.length - 1].lat != null && sl[sl.length - 1].lon != null ? [sl[sl.length - 1].lat, sl[sl.length - 1].lon] : null };
     if (tt === 4 && base != null && sec.startSec != null && sec.endSec != null && isFinite(sec.startSec) && isFinite(sec.endSec)) {
       s.depClock = hcClock(base + sec.startSec * 1000, tz); s.arrClock = hcClock(base + sec.endSec * 1000, tz); s.rideMin = Math.round(Math.max(0, sec.endSec - sec.startSec) / 60);
     }
