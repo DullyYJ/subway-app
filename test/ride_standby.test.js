@@ -601,13 +601,22 @@ t('실시간 도착(웹 규칙): 방향(dk → 상행/하행, 모르면 하행)�
   assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, '하'), N + 200000, '하행만');
   assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, '상'), N + 30000, '상행만');
   assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, null), N + 200000, '방향을 모르면 하행(웹 기본값)');
-  assert.strictEqual(rsPickLive([LV({ updnLine: '내선', barvlDt: '70' }), LV({ updnLine: '외선', barvlDt: '40' })], q, N, '하'), N + 40000, '맞는 방향이 하나도 없으면 전부(2호선 내·외선)');
   assert.strictEqual(rsPickLive([LV({ arvlCd: '1', barvlDt: '0' })], q, N, '하'), N, '도착(1)은 지금');
   assert.strictEqual(rsPickLive([LV({ arvlCd: '0', barvlDt: '55' })], q, N, '하'), N, '진입(0)은 barvlDt 와 상관없이 지금');
-  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '25' })], q, N, '하'), N + 25000, '그 밖의 상태는 barvlDt 초 뒤(웹과 같다)');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '3', barvlDt: '25' })], q, N, '하'), N + 25000, '그 밖의 상태는 barvlDt 초 뒤');
   assert.strictEqual(rsPickLive([LV({ barvlDt: '-5', arvlCd: '3' })], q, N, '하'), N, '음수는 0');
   assert.strictEqual(rsPickLive([LV({ barvlDt: String(30 * 60) })], q, N, '하'), N + 1800000, '시간 한도를 두지 않는다(웹과 같다)');
   assert.strictEqual(rsPickLive(null, q, N, '하'), null); assert.strictEqual(rsPickLive([], q, N, '하'), null);
+});
+t('실시간 도착(웹 약점 보완): 다른 호선 열차 거르기 · 내선/외선은 다음 역 방면으로 · 이미 출발한 열차는 건너뛰기', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), q = rsPressQuery(pressReq(x0.state, at(12, 55, 20))), N = at(12, 55, 20);
+  assert.strictEqual(rsPickLive([LV({ subwayId: '1004', barvlDt: '20' }), LV({ barvlDt: '150' })], q, N, '하'), N + 150000, '환승역에서 다른 호선(4호선) 열차를 집지 않는다');
+  assert.strictEqual(rsPickLive([LV({ subwayId: '1004', barvlDt: '20' })], q, N, '하'), null, '우리 호선 열차가 없으면 시각표로');
+  const T = q.to;
+  assert.strictEqual(rsPickLive([LV({ updnLine: '내선', trainLineNm: '성수행 - 다른역방면', barvlDt: '40' }), LV({ updnLine: '외선', trainLineNm: '성수행 - ' + T + '방면', barvlDt: '90' })], q, N, '하'), N + 90000, '방향이 안 걸러지면 다음 역 방면으로');
+  assert.strictEqual(rsPickLive([LV({ updnLine: '내선', trainLineNm: 'A행 - 다른역방면', barvlDt: '70' }), LV({ updnLine: '외선', trainLineNm: 'B행 - 또다른역방면', barvlDt: '40' })], q, N, '하'), N + 40000, '방면도 안 맞으면 웹처럼 전부 중 가장 빠른 것');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '0' })], q, N, '하'), null, '이미 출발한 열차뿐이면 시각표(방금 떠난 차 규칙)로');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '0' }), LV({ barvlDt: '180' })], q, N, '하'), N + 180000, '출발한 열차는 건너뛰고 다음 열차');
 });
 t('실시간 도착: pressTT.liveMs 가 시각표보다 먼저 — 시각표가 없어도 붙는다, 못 받으면 시각표 그대로', () => {
   const x0 = stepX(xferState(), at(12, 55, 0)), N = at(12, 55, 20);
@@ -662,7 +671,7 @@ const liveHttpTest = async () => {
     let asked = '';
     const ok = mk(async (req) => { asked = decodeURIComponent(new URL(req.url).searchParams.get('path')); return new Response(JSON.stringify({ realtimeArrivalList: [LV({ barvlDt: '90' })] }), { status: 200 }); });
     const a = await post(ok, pressReq(x0.state, N));
-    assert.ok(/^realtimeStationArrival\/1\/5\/T0$/.test(asked), asked);
+    assert.ok(/^realtimeStationArrival\/1\/20\/T0$/.test(asked), asked);
     assert.ok(a.state.eta.passes.some(p => p.idx === 4 && p.ms === N + 90000) || a.state.xPend, JSON.stringify(a.notes));
     const pend = mk(async () => new Response(JSON.stringify({ ok: false, error: 'relay pending' }), { status: 503 }));
     const b = await post(pend, pressReq(x0.state, N));
