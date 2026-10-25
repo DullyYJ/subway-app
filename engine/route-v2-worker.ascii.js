@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s201";
+var ENGINE_VERSION = "route-v2-2026-10-25s202";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20381,6 +20381,23 @@ function mapPeersOf(s, pool) {                                       // \uc6f9 _
   }
   return out;
 }
+var MAP_FIX_T = 100, MAP_FIX_X = 500, MAP_FIX_M = 400;               // \uc88c\ud45c \ubcf4\uc815 \uc5f4\uc1e0: \uc815\ub958\uc7a5 \ubaa9\ub85d t/u(100+i) \u00b7 \ubcf4\uc815 ID \ub3c4\ucc29\uc815\ubcf4 g/h(500+i)
+function mapCoordUrl(s) {                                           // \uc6f9 _tagoResolveStop \uc758 \uc8fc\uc18c(numOfRows 30)
+  return MAP_TAGO_BASE + 'BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=' + s.la + '&gpsLong=' + s.lo + '&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&numOfRows=30&pageNo=1&_type=json';
+}
+function mapCoordFix(s, text, peers) {                              // \uac19\uc740 \uc774\ub984\uc774\uba74 300m \uc6b0\ub300, 400m \uc548\ub9cc \uac19\uc740 \uc9c0\uc810\uc73c\ub85c \ubcf8\ub2e4. \uc774\ubbf8 \ubb3c\uc5b4\ubcf8 ID \uba74 \uc0c8 \uc815\ubcf4\uac00 \uc5c6\uc73c\ub2c8 null
+  var want = mapNmKey(s.nm), best = null, bestS = 1e18, bestD = 1e18, items = mapJsonItems(text);
+  items.forEach(function (it) {
+    var ila = parseFloat(it && it.gpslati), iln = parseFloat(it && it.gpslong);
+    if (!isFinite(ila) || !isFinite(iln)) return;
+    var d = mapHav(s.la, s.lo, ila, iln), sc = d - (want && mapNmKey(it.nodenm) === want ? 300 : 0);
+    if (sc < bestS) { bestS = sc; best = it; bestD = d; }
+  });
+  if (!best || bestD > MAP_FIX_M || !best.nodeid) return null;
+  var id = String(best.nodeid), alt = mapAltId(s.id);
+  if (id === s.id || id === alt || (peers || []).some(function (p) { return p.id === id; })) return null;
+  return { nodeid: id, citycode: String(best.citycode || s.city || mapCityOf(s.la, s.lo) || '') };
+}
 function mapThruUrl(s) {
   return MAP_TAGO_BASE + 'BusSttnInfoInqireService/getSttnThrghRouteList?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&nodeid=' + encodeURIComponent(s.id) + '&numOfRows=100&pageNo=1&_type=json';
 }
@@ -20420,10 +20437,24 @@ function mapBusStopRows(s, i, res, kp, pool) {
     if (mapArrMissing(res, ak)) { altWait = true; ask.push({ k: ak, url: mapBusArrUrl(s, alt, s.city || mapCityOf(s.la, s.lo)) }); }
     else rows = rows.concat(mapTagoArr(String(res[ak] || '')));
   }
+  // s202: \uc6f9 _tagoResolveStop \u2014 \uc774\uc6c3\u00b7\ubc14\uafbc ID \uae4c\uc9c0 \ubd10\ub3c4 \ube44\uba74 \uc88c\ud45c\ub85c \uac00\uae4c\uc6b4 TAGO \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ucc3e\uc544 \uadf8 ID \ub85c \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294\ub2e4(\uc61b ID\u00b7\ub2e4\ub978 \ub4f1\ub85d \ubc88\ud638\ub85c \ube44\ub358 \uc815\ub958\uc7a5)
+  var coordWait = false;
+  if (rows && !rows.length && !peerWait && !altWait && isFinite(s.la) && isFinite(s.lo)) {
+    var ck = kp.t + (MAP_FIX_T + i);
+    if (res[ck] === undefined || mapArrErr(res[ck])) { coordWait = true; ask.push({ k: ck, url: mapCoordUrl(s) }); }
+    else {
+      var fix = mapCoordFix(s, String(res[ck] || ''), peers);
+      if (fix) {
+        var fk = kp.x + (MAP_FIX_X + i);
+        if (mapArrMissing(res, fk)) { coordWait = true; ask.push({ k: fk, url: mapBusArrUrl(s, fix.nodeid, fix.citycode) }); }
+        else rows = rows.concat(mapTagoArr(String(res[fk] || '')));
+      }
+    }
+  }
   var arrEmpty = !!rows && !rows.length, tk = kp.t + i;
   if (res[tk] === undefined || mapArrErr(res[tk])) ask.push({ k: tk, url: mapThruUrl(s) });
   else if (rows) rows = mapThruFill(rows, mapThruRows(String(res[tk] || '')));
-  if (arrEmpty && (peerWait || altWait)) rows = null;                // \uc774\uc6c3\u00b7\ubc14\uafbc ID \uac00 \uc624\uae30 \uc804\uc5d0 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c' \uc904\ub9cc \uba3c\uc800 \uae54\uc9c0 \uc54a\ub294\ub2e4
+  if (arrEmpty && (peerWait || altWait || coordWait)) rows = null;                // \uc774\uc6c3\u00b7\ubc14\uafbc ID \uac00 \uc624\uae30 \uc804\uc5d0 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c' \uc904\ub9cc \uba3c\uc800 \uae54\uc9c0 \uc54a\ub294\ub2e4
   return { rows: rows, ask: ask };
 }
 function mapSecOfMsg(msg) {
@@ -20554,6 +20585,48 @@ function mapNxIn(b) {
 function mapRouteStnUrl(s, rid) {
   return MAP_TAGO_RT_STN + '?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&routeId=' + encodeURIComponent(rid) + '&numOfRows=300&pageNo=1&_type=json';
 }
+// \u2500\u2500 s202: \uc6f9 _busFindLandmark \u2014 \uc815\ub958\uc7a5 \uc774\ub984 \uc606 "(\u25cb\u25cb\uc5ed \ubc29\ud5a5)". \uc774 \uc815\ub958\uc7a5\uc5d0 \uc11c\ub294 \ub178\uc120(\ub3c4\ucc29 \uc904 \uc55e 8\uac1c \uc911 \uc11c\ub85c \ub2e4\ub978 2\uac1c)\uc758 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc5d0\uc11c, \uc9c4\ud589 \ubc29\ud5a5(\ud68c\ucc28 \uc804)\uc73c\ub85c \ucc98\uc74c \ub9cc\ub098\ub294
+//   \uc9c0\ud558\ucca0\uc5ed(1\uc21c\uc704) > \uc2dc\uccad(2) > \uad6c\uccad(3) > \ub3d9\uc0ac\ubb34\uc18c\u00b7\uc8fc\ubbfc\uc13c\ud130(4) \ub97c \ubf51\uace0, \ub178\uc120\ub9c8\ub2e4 \ub2e4\ub974\uba74 \ub2e4\uc218\uacb0. \ubc29\uba74 \uc774\ub984(nx)\uacfc \uac19\uc740 \ubaa9\ub85d(r)\uc744 \uc4f0\ubbc0\ub85c \ubc1b\uc744 \uc8fc\uc18c\uac00 \ub298\uc9c0 \uc54a\ub294\ub2e4. \uacb0\uacfc\ub294 nx['lm|'+\uc815\ub958\uc7a5ID] \uc5d0 \uc800\uc7a5(\ube48 \uac12 = \ucc3e\uc9c0 \ubabb\ud568, \ub2e4\uc2dc \uc548 \ubb3b\ub294\ub2e4).
+var MAP_LM_ROUTES = 2, MAP_LM_ROWS = 8;
+function mapLmStation(nm) {                                         // \uc6f9 _busLmStation
+  var m = String(nm).match(/^(.{1,15}?\uc5ed)(?:$|[0-9(.\s\u00b7]|\ubc88\ucd9c\uad6c|\ucd9c\uad6c|\uc785\uad6c|\ud658\uc2b9|\uad11\uc5ed|\uc0ac\uac70\ub9ac|\uc0bc\uac70\ub9ac|\uc624\uac70\ub9ac|\uc55e|\ud6c4\ubb38|\uc815\ubb38|\uac74\ub108)/);
+  return m ? m[1] : null;
+}
+function mapLmRank(nm) {                                            // \uc6f9 _busLmRank
+  if (mapLmStation(nm)) return 1;
+  if (nm.indexOf('\uc2dc\uccad') >= 0) return 2;
+  if (nm.indexOf('\uad6c\uccad') >= 0) return 3;
+  if (nm.indexOf('\ub3d9\uc0ac\ubb34\uc18c') >= 0 || nm.indexOf('\uc8fc\ubbfc\uc13c\ud130') >= 0 || nm.indexOf('\uc8fc\ubbfc\uc790\uce58\uc13c\ud130') >= 0 || nm.indexOf('\ud589\uc815\ubcf5\uc9c0\uc13c\ud130') >= 0) return 4;
+  return 99;
+}
+function mapLmNorm(s) { return String(s || '').replace(/\s+/g, '').split('(')[0]; }
+function mapLmOne(stn, ids, myNm) {                                 // \ud55c \ub178\uc120\uc758 \ubaa9\ub85d \ud558\ub098\uc5d0\uc11c {nm, rank, ahead} \ud558\ub098 (\uc5c6\uc73c\uba74 null)
+  var myIdx = -1, i;
+  for (i = 0; i < stn.length; i++) if (ids[stn[i][1]]) { myIdx = i; break; }
+  if (myIdx < 0 && myNm) for (i = 0; i < stn.length; i++) if (mapLmNorm(stn[i][2]) === myNm) { myIdx = i; break; }
+  if (myIdx < 0) return null;                                       // \ub0b4 \uc704\uce58\ub97c \ubabb \ucc3e\uc73c\uba74 \uc774 \ub178\uc120\uc740 \uac74\ub108\ub6f4\ub2e4(\uc9c0\ub098\uc628 \ubc29\ud5a5 \uc624\ud45c\uc2dc \ubc29\uc9c0)
+  var myDir = stn[myIdx][6], endIdx = stn.length, e;
+  if (myDir >= 0) for (e = myIdx + 1; e < stn.length; e++) if (stn[e][6] !== myDir) { endIdx = e; break; }       // \ud68c\ucc28 \uc9c0\uc810\uae4c\uc9c0\ub9cc(\ubc29\ud5a5\uc774 \ubc14\ub00c\uba74 \ubc18\ub300 \ubc29\uba74)
+  var found = {}, j;
+  for (j = myIdx + 1; j < endIdx; j++) {
+    var nm = String(stn[j][2] || '').split('(')[0].trim();
+    if (!nm || mapLmNorm(nm) === myNm) continue;                    // \uac19\uc740 \uc774\ub984\uc774 \uc774\uc5b4\uc9c0\ub294 \uad6c\uac04\uc740 \uac74\ub108\ub6f4\ub2e4
+    var r = mapLmRank(nm);
+    if (r < 99 && !found[r]) found[r] = { nm: r === 1 ? (mapLmStation(nm) || nm) : nm, rank: r, ahead: j - myIdx };
+    if (found[1]) break;                                            // \uc9c4\ud589 \ubc29\ud5a5 \uccab \uc5ed\uc744 \ub9cc\ub098\uba74 \ub05d
+  }
+  return found[1] || found[2] || found[3] || found[4] || null;
+}
+function mapLmVote(list) {                                          // \uc6f9: \ub178\uc120\ub9c8\ub2e4 \ub2e4\ub978 \ub2f5\uc774\uba74 \ub2e4\uc218\uacb0(\ub9ce\uc774 \ub098\uc628 \uac83 \u2192 \ub192\uc740 \uc21c\uc704 \u2192 \uac00\uae4c\uc6b4 \uac83)
+  var vote = {};
+  list.forEach(function (r) {
+    var v = vote[r.nm] || (vote[r.nm] = { nm: r.nm, rank: r.rank, ahead: r.ahead, n: 0 });
+    v.n++; if (r.ahead < v.ahead) v.ahead = r.ahead; if (r.rank < v.rank) v.rank = r.rank;
+  });
+  var cand = Object.keys(vote).map(function (k) { return vote[k]; });
+  cand.sort(function (a, b) { return (b.n - a.n) || (a.rank - b.rank) || (a.ahead - b.ahead); });
+  return cand.length ? cand[0].nm : '';
+}
 function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
   var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
   stops.forEach(function (s, i) {
@@ -20569,6 +20642,21 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
       jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url] });
     });
   });
+  var lmJobs = [];
+  stops.forEach(function (s, i) {                                    // \uc774\ub984 \uc606 \ubc29\ud5a5: \uc544\uc9c1 \ubaa8\ub974\ub294 \uc815\ub958\uc7a5\ub9cc \u00b7 \uc624\ub294 \ucc28\uac00 \uc788\uc5b4\uc57c(\uc6f9: arrivals \uc5c6\uc73c\uba74 \uc800\uc7a5\ub3c4 \uc548 \ud568)
+    var rows = rowsOf[i];
+    if (!rows || !mapTagoLike(s) || nx['lm|' + s.id] !== undefined || seen['lm|' + s.id]) return;
+    var rids = [];
+    rows.slice(0, MAP_LM_ROWS).forEach(function (r) { if (!r.none && r.rid && rids.indexOf(r.rid) < 0 && rids.length < MAP_LM_ROUTES) rids.push(r.rid); });
+    if (!rids.length) return;
+    seen['lm|' + s.id] = 1;
+    var us = rids.map(function (rid) {
+      var url = mapRouteStnUrl(s, rid);
+      if (uidx[url] === undefined) { uidx[url] = urls.length; urls.push(url); }
+      return { rid: rid, u: uidx[url] };
+    });
+    lmJobs.push({ key: 'lm|' + s.id, s: s, i: i, us: us });
+  });
   var peerIds = function (j) { var ids = {}; ids[j.s.id] = 1; var a = mapAltId(j.s.id); if (a) ids[a] = 1; mapPeersOf(j.s, pool).forEach(function (p) { ids[p.id] = 1; }); return ids; };
   jobs.forEach(function (j) {
     var rk = 'r' + j.u, txt = res[rk];
@@ -20581,6 +20669,19 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
     if (stn.length) name = at >= 0 ? stn[(at + 1) % stn.length][2] : stn[stn.length - 1][2];
     upd[j.key] = String(name || '').slice(0, 40); changed = true;
   });
+  lmJobs.forEach(function (j) {
+    var list = [], ok = true, ids = peerIds(j), myNm = mapLmNorm(j.s.nm);
+    j.us.forEach(function (x) {
+      var txt = res['r' + x.u];
+      if (x.u >= MAP_NX_ASK || txt === undefined || mapArrErr(txt)) { ok = false; return; }
+      var items = mapJsonItems(String(txt));
+      if (items.length && String(items[0].routeid || items[0].routeId || '') !== x.rid) { ok = false; return; }
+      var one = mapLmOne(mapBrStnTago(String(txt)), ids, myNm);
+      if (one) list.push(one);
+    });
+    j.done = ok;
+    if (ok) { upd[j.key] = String(mapLmVote(list)).slice(0, 40); changed = true; }
+  });
   var out = nx;
   if (changed) { out = {}; Object.keys(nx).forEach(function (k) { out[k] = nx[k]; }); Object.keys(upd).forEach(function (k) { out[k] = upd[k]; }); }
   rowsOf.forEach(function (rows, i) {
@@ -20591,14 +20692,17 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
   if (canAsk) {
     var want = {};
     jobs.forEach(function (j) { if (upd[j.key] === undefined && j.u < MAP_NX_ASK) want[j.u] = 1; });
+    lmJobs.forEach(function (j) { if (upd[j.key] === undefined) j.us.forEach(function (x) { if (x.u < MAP_NX_ASK) want[x.u] = 1; }); });
     Object.keys(want).forEach(function (u) { ask.push({ k: 'r' + u, url: urls[u] }); });
   }
-  return { ask: ask, nx: changed ? out : null };
+  var lm = stops.map(function (s) { var v = out['lm|' + s.id]; return typeof v === 'string' ? v : ''; });
+  return { ask: ask, nx: changed ? out : null, lm: lm };
 }
 function mapBusCard(s, o) {
   var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
   if (o.n) c.n = String(o.n);
   if (o.alias) c.al = o.alias;
+  if (o.lm) c.lm = o.lm;                                           // \uc774\ub984 \uc606 '(\u25cb\u25cb\uc5ed \ubc29\ud5a5)' \uc758 \u25cb\u25cb\uc5ed (\uc6f9 .bus-lm)
   if (o.mode === 'near') { c.dist = mapDistFmt(s.dist); c.fv = o.fav ? 1 : 0; c.star = { a: 'call', v: 'mp.fv.' + o.i }; if (o.pi >= 0) c.pi = o.pi;
     if (o.i === 0) { c.rol = '\ub04c\uc5b4\uc11c \uc21c\uc11c \ubcc0\uacbd'; c.rod = '\uc644\ub8cc'; }                              // \uafb9 \ub20c\ub7ec \uc21c\uc11c \ubc14\uafb8\uae30 \uc904 \uae00(\uc6f9 #busReorderBar) \u2014 \uccab \uce74\ub4dc\uc5d0\ub9cc; \uc904\uc744 \uadf8\ub9ac\ub294 \uac83\uc740 \uc571
   }
@@ -20634,7 +20738,7 @@ function mapBusBody(f, info) {
     fask = fask.concat(fnx.ask);
     if (fask.length) info.bus = { st: 'need', vw: 'fav', need: fask };
     var fb = [{ t: 'text', s: '\u2b50 \uc990\uaca8\ucc3e\uae30 ' + favs.length + '\uac1c \u00b7 30\ucd08\ub9c8\ub2e4 \uc790\ub3d9 \uac31\uc2e0', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
-    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], lm: pend ? '' : fnx.lm[i], rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
@@ -20681,7 +20785,7 @@ function mapBusBody(f, info) {
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
   });
   body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
