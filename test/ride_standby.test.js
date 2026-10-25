@@ -256,15 +256,16 @@ t('버스: GPS 가 15분 끊겼다 돌아오면 앞쪽 정류장 통과로 다�
   assert.ok(!r.notes.some(x => /재동기/.test(x)), '점 하나로 재동기');
 });
 
-t('이탈: 정거장에서 내려 택시로 멀어지면 이탈 알림이 한 번 나가고, 그 뒤 하차 알림은 보류되며, 15분이 지나면 안내를 끝낸다', () => {
-  let st = mkState(), alerts = [], doneAt = null, texts = [];
+t('이탈: 정거장에서 내려 택시로 멀어지면 이탈 알림이 한 번 나가고, 그 뒤 하차 알림은 보류되며, 시간이 아무리 지나도 안내는 끝나지 않는다(확정은 사용자가 끝내거나 도착할 때까지)', () => {
+  let st = mkState(), alerts = [], doneAt = null, texts = [], offs = [];
   const leaveMs = at(12, 56, 0), stopLng = LNG0 + DL * 2;   // 3번 정거장(12:56)에서 내린다
-  for (let ms = at(12, 53, 0); ms <= at(13, 20, 0); ms += 5000) {
+  for (let ms = at(12, 53, 0); ms <= at(15, 0, 0); ms += 5000) {      // 2시간 넘게 이탈 상태
     const onTrain = ms < leaveMs;
     const lat = onTrain ? LAT : LAT + 12 * (ms - leaveMs) / 1000 / 111320, lng = onTrain ? trainLng(ms, 0) : stopLng;
     const r = rideStandby({ nowMs: ms, fixes: [[ms, lat, lng, 15]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
     if (r.alert) alerts.push({ ms: ms, a: r.alert });
     texts.push(r.ongoing.text);
+    if (r.off) offs.push({ ms: ms, at: r.off.at });
     if (r.done) { doneAt = ms; break; }
   }
   const off = alerts.filter(x => x.a.type === 'offroute');
@@ -272,7 +273,10 @@ t('이탈: 정거장에서 내려 택시로 멀어지면 이탈 알림이 한 �
   assert.ok(off[0].ms - leaveMs > 30000 && off[0].ms - leaveMs < 260000, '이탈 알림 시각 ' + (off[0].ms - leaveMs) / 1000 + '초 뒤');
   assert.ok(!alerts.some(x => x.ms > off[0].ms && /near_arrive|arrive/.test(x.a.type)), '이탈 뒤 하차 알림');
   assert.ok(texts.some(x => /경로를 벗어났어요/.test(x)));
-  assert.ok(doneAt && doneAt - off[0].ms >= 880000 && doneAt - off[0].ms <= 960000, '안내 종료 ' + (doneAt - off[0].ms) / 1000);
+  assert.strictEqual(doneAt, null, '경로를 벗어나도 안내는 스스로 끝나지 않는다: ' + doneAt);
+  // 앱이 '지금 위치에서 다시 찾을까요?'를 한 번 묻도록 엔진이 이탈 중임을 알린다(off.at = 벗어나기 시작한 시각 — 같은 이탈 동안 바뀌지 않는다)
+  assert.ok(offs.length > 100 && offs[0].ms > leaveMs && offs.every(x => x.at === offs[0].at), '이탈 중 off.at 이 계속 같은 값: ' + offs.length);
+  assert.ok(offs[0].ms === off[0].ms, '이탈 알림과 같은 걸음부터 off 가 나온다');
 });
 t('이탈: 열차를 계속 타고 가면(지하 GPS 없음·지상 구간) 이탈 알림이 나가지 않는다', () => {
   const r = ride(mkState(), at(12, 53, 0), at(13, 1, 0), 0);
@@ -429,7 +433,7 @@ t('오버레이 탑승 줄: 대기 알약 → (알약 누름 · 출발 2분 전)
   const n = stepO(r.state, at(12, 51, 15), { act: 'undo' }, false);
   assert.ok(!n.state.wait, '시간이 지난 뒤 되돌리기는 무시');
 });
-t('도착 3분 뒤 done 과 함께 quit:true(앱도 끝낸다), 경로 이탈 포기는 quit 아님', () => {
+t('도착 3분 뒤 done 과 함께 quit:true(앱도 끝낸다), 오래 갱신 안 된 상태는 quit 아님', () => {
   let st = withOvl(mkState()), q = null, done = null;
   for (let ms = at(12, 53, 0); ms <= at(13, 10, 0); ms += 5000) {
     const r = stepO(st, ms); st = r.state;
