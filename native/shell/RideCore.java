@@ -23,6 +23,8 @@ public final class RideCore {
     public String text = "", title = "길동무 경로 안내 중";
     public long nextMs = STEP_DEFAULT_MS, savedAt = 0L;
     public boolean done;
+    /** 엔진이 알린 '경로 이탈 중' — 벗어나기 시작한 시각(ms), 아니면 0. 앱이 '지금 위치에서 다시 찾을까요?'를 한 번 묻는 데 쓴다(이탈 판정과 오차 범위는 엔진이 정한다). */
+    public long offAt;
     public int cur = -1, rev = 0;
     public String posJson = "null", arrJson = "null";
     private final List<double[]> fixes = new ArrayList<double[]>();
@@ -143,7 +145,7 @@ public final class RideCore {
             stateJson = HomeSearchCore.toJson(m.get("state"));
             Object t = m.get("text");
             text = t instanceof String ? (String) t : "";
-            title = "길동무 경로 안내 중"; done = false; cur = -1; posJson = "null"; arrJson = "null";
+            title = "길동무 경로 안내 중"; done = false; offAt = 0L; cur = -1; posJson = "null"; arrJson = "null";
             synchronized (fixes) { fixes.clear(); }
             lastSentTs = 0L; lastFixTs = 0L; nextMs = STEP_DEFAULT_MS; rev++;
             return "";
@@ -231,6 +233,8 @@ public final class RideCore {
             posJson = m.get("pos") instanceof Map ? HomeSearchCore.toJson(m.get("pos")) : "null";
             arrJson = m.get("arr") instanceof List ? HomeSearchCore.toJson(m.get("arr")) : "null";
             done = Boolean.TRUE.equals(m.get("done"));
+            Object offO = m.get("off");
+            offAt = offO instanceof Map && ((Map<String, Object>) offO).get("at") instanceof Number ? ((Number) ((Map<String, Object>) offO).get("at")).longValue() : 0L;
             quit = done && Boolean.TRUE.equals(m.get("quit"));
             Object al = m.get("alert");
             if (al instanceof Map) {
