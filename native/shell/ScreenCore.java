@@ -1306,7 +1306,9 @@ public final class ScreenCore {
         // 머리: 칩 줄은 한 줄이라 가로로 놓는다. 머리 노드는 위에서 아래로 쌓는다.
         List<Item> hi = new ArrayList<Item>();
         float y = 0f, contentW = width;
+        boolean prevChips = false;                                                            // 바로 앞 노드도 칩 줄이면 한 덩어리로 가로로 민다(시간표: 노선·요일·방면 칩 줄이 이어진다)
         for (Node n : sc.head) {
+            boolean wasChips = prevChips; prevChips = "chips".equals(n.t);
             if ("chips".equals(n.t)) {
                 float x = n.padL;
                 y += n.padT;
@@ -1324,7 +1326,8 @@ public final class ScreenCore {
                     hi.add(it); x += it.w + n.gap;
                 }
                 contentW = Math.max(contentW, x - n.gap + n.padR);
-                L.chipsTop = y - n.padT; L.chipsBot = y + n.h + n.padB;
+                if (!(wasChips && L.chipsTop >= 0f)) L.chipsTop = y - n.padT;
+                L.chipsBot = y + n.h + n.padB;
                 y += n.h + n.padB;
             } else if ("trk".equals(n.t)) {
                 float x = n.padL;
