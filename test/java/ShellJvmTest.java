@@ -931,6 +931,7 @@ public class ShellJvmTest {
             fv.onScreen("{\"info\":{\"list\":[{\"s\":\"부평\",\"d\":\"강남\",\"name\":\"출근\"}],\"msg\":\"출근 등록 완료\",\"go\":[{\"s\":[\"부평\",\"수도권 1호선\",37.489,126.724],\"d\":[\"강남\",\"2호선\",37.497,127.027]},null]}}");
             ok(fs.get(FavCore.K_FAV, "").contains("출근") && "출근 등록 완료".equals(fv.msg) && fv.go.size() == 2, "엔진이 돌려준 새 목록을 그대로 저장");
             ok(fv.act("fv.go.0", null) == FavCore.R_GO && fv.go.get(0).dName.equals("강남") && Math.abs(fv.go.get(0).dLa - 37.497) < 1e-9 && fv.act("fv.go.1", null) == FavCore.R_NONE, "즐겨찾기로 경로 찾기(풀리지 않은 것은 무시)");
+            ok(fv.request(18, "dark", "중동", "서면", "부산2호선", "부산2호선").contains("\"cur\":{\"s\":\"중동\",\"d\":\"서면\",\"sl\":\"부산2호선\",\"dl\":\"부산2호선\"}") && fv.request(18, "dark", "부평", "강남").contains("\"sl\":\"\",\"dl\":\"\""), "s208: 현재 경로 역의 노선 힌트(sl·dl)를 싣는다 — 같은 이름 지방 역은 엔진이 가른다");
             ok(fv.act("fv.del.0", null) == FavCore.R_RENDER && fv.request(18, "dark", "", "").contains("\"op\":{\"k\":\"del\",\"i\":0}") && fv.act("fv.close", null) == FavCore.R_CLOSE, "삭제 · 닫기");
             // 새로 등록 폼
             ShellCore.MemStore fsx = new ShellCore.MemStore(); FavCore fx = new FavCore(fsx);
