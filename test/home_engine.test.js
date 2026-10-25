@@ -87,11 +87,11 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   const ST = require('../engine/home-stations').HOME_STNS;
   ok(Array.isArray(ST) && ST.length > 900 && ST.every(r => Array.isArray(r) && r.length === 4 && typeof r[0] === 'string' && typeof r[1] === 'string' && isFinite(r[2]) && isFinite(r[3])), '역 표 모양');
   const sg = s => kids(s).filter(x => x.t === 'sug' && x.act.v.startsWith('sg.'));
-  // 예전 웹 방식과 같은 결과: 걸러내기(이름에 글자 포함) → 같은 이름은 하나로(호선을 ' · ' 로) → 8개까지
-  const ref = q => { const m = ST.filter(r => r[0].indexOf(q) >= 0), seen = new Set(), reps = m.filter(r => !seen.has(r[0]) && seen.add(r[0])); return reps.slice(0, 8).map(r => ({ n: r[0], l: m.filter(x => x[0] === r[0]).map(x => x[1]).filter((v, i, a) => a.indexOf(v) === i).join(' \u00b7 '), r })); };
+  // 예전 웹 방식과 같은 결과: 걸러내기(이름에 글자 포함) → 같은 이름은 하나로(호선을 ' · ' 로) → (s208d: 정확 일치 > 앞부분 일치 > 나머지) → 8개까지
+  const ref = q => { const m = ST.filter(r => r[0].indexOf(q) >= 0), seen = new Set(), reps0 = m.filter(r => !seen.has(r[0]) && seen.add(r[0])), reps = [].concat(reps0.filter(r => r[0] === q), reps0.filter(r => r[0] !== q && r[0].indexOf(q) === 0), reps0.filter(r => r[0] !== q && r[0].indexOf(q) !== 0)); return reps.slice(0, 8).map(r => ({ n: r[0], l: m.filter(x => x[0] === r[0]).map(x => x[1]).filter((v, i, a) => a.indexOf(v) === i).join(' \u00b7 '), r })); };
   for (const q of ['강남', '서울', '역', '신', '수원', '용두', '없는역이름']) {
     const f = E.homeStnFind(q), want = ref(q);
-    ok(f.u.length === want.length && f.u.every((x, i) => x.n === want[i].n && x.l === want[i].l) && f.pk.every((x, i) => x.name === want[i].r[0] && x.line === want[i].r[1] && x.lat === want[i].r[2] && x.lng === want[i].r[3]), '예전 웹 걸러내기와 같다: ' + q + ' ' + f.u.length + '개');
+    ok(f.u.length === want.length && f.u.every((x, i) => x.n === want[i].n && x.l === want[i].l) && f.pk.every((x, i) => x.name === want[i].r[0] && x.line === want[i].r[1] && x.lat === want[i].r[2] && x.lng === want[i].r[3]), '예전 웹 걸러내기와 같다(정렬만 정확 일치 먼저): ' + q + ' ' + f.u.length + '개');
   }
   ok(E.homeStnFind('').u.length === 0 && E.homeStnFind('   ').u.length === 0 && E.homeStnFind(null).u.length === 0 && E.homeStnFind(5).u.length === 0, '빈 글자·이상한 값은 후보 없음');
   ok(E.homeStnFind('  강남  ').u.length === E.homeStnFind('강남').u.length, '앞뒤 공백은 무시');
@@ -185,6 +185,17 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
     ok(E.homeFacts({ base: { ms: null, tzo: -540 } }).base.hol === false, 's207: 시각도 hol 도 없으면 평일');
     const lab = nowMs => kids(E.homeScreen({ cap: 7 }, { base: { ms: null, now: nowMs, tzo: -540, today: [2026, 9, 20] } })).find(n => n.t === 'trow').day;
     ok(lab(KST(2026, 10, 9, 10)) === '주말·공휴일' && lab(KST(2026, 10, 20, 10)) === '평일', 's207: 화면 글 — 한글날은 주말·공휴일, 화요일은 평일');
+  }
+  // s208d: 후보는 정확히 같은 이름 > 앞부분 일치 > 나머지 순(표 순서는 그 안에서 유지) — 8개 제한에 정확 일치가 밀리지 않는다
+  {
+    ['강남', '잠실', '인천', '영등포', '동대문'].forEach(q => {
+      const r = E.homeStnFind(q);
+      ok(r.u.length > 1 && r.u[0].n === q && r.pk[0].name === q, 's208d: ' + q + ' — 정확히 같은 역이 맨 앞(' + r.u.slice(0, 3).map(x => x.n).join(',') + ')');
+    });
+    const z = E.homeStnFind('중동');
+    ok(z.u[0].n === '중동' && z.u[1].n === '중동' && z.u[2].n === '신중동' && z.u[0].l !== z.u[1].l, 's208d: 중동 두 권역이 신중동보다 앞 · 권역 분리는 그대로');
+    const idx = E.homeStnFind('역');
+    ok(idx.u.length <= 8 && idx.u.length === idx.pk.length, 's208d: 후보는 여전히 최대 8개');
   }
   console.log(`home_engine: ${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
