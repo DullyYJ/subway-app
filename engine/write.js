@@ -4,7 +4,7 @@
 //   예전엔 www/index.html 의 #wsheet 안에 제목·안내·입력칸·단추 글이 박혀 있었다.
 //   이제 앱은 '기기 사실'(오늘 현장제보 횟수 · 지금 보이는 안내 글 · 등록 중인지 · 입력칸에 처음 놓을 글)만 보내고,
 //   엔진이 시트의 글·순서·입력칸·단추를 정해 화면 JSON 으로 내려 준다. 앱(네이티브 ScreenCore/ScreenView)은 그리기만 하고,
-//   단추를 누르면 {a:'call', v:'wr.close'|'wr.submit'} 과 입력칸 글자(fields)만 알린다. 욕설 거르기·서버 등록·포인트는 예전 웹 함수(submitPost)가 그대로 한다.
+//   단추를 누르면 {a:'call', v:'wr.close'|'wr.submit'} 과 입력칸 글자(fields)만 알린다. 욕설 거르기·서버 등록은 예전 웹 함수(submitPost)가 그대로 한다.
 //   웹 시트는 폴백(엔진·네이티브가 안 될 때)으로만 남는다.
 //
 // 입력  writeScreen({ cap }, facts)
