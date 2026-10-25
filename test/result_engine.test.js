@@ -214,6 +214,19 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
 {
   const e1 = E.resultScreen({ cap: 18 }, null), e2 = E.resultScreen({ cap: 18 }, { data: { result: { path: 'x' } } }), e3 = E.resultScreen({ cap: 18 }, { data: { result: { path: [{ info: null, subPath: [null, 3, {}] }] } }, tab: 'fast' });
   ok(e1.ok && e2.ok && e3.ok && flat(e1.body).some(n => n.t === 'text' && n.s === '경로 정보가 없어요'), '경로가 없거나 깨져도 죽지 않고 안내를 낸다');
+  { // 2026-10-25 경로 0건의 이유 — 웹 _svcShowNoRoute · '경로를 찾지 못했어요' 와 같은 갈래
+    const txt = d => flat(E.resultScreen({ cap: 40000 }, { data: d }).body).filter(n => n.t === 'text').map(n => n.s).join(' | ');
+    const night = txt({ result: { path: [] }, liveStat: { subOff: 20, svcOff: 76, subOffList: ['1호선'], svcOffList: [{ no: '101', state: 'after' }], subFirstTrain: '05:07' } });
+    ok(/지하철·버스 지금은 운행이 끝났어요/.test(night) && /지하철 첫차 05:07/.test(night) && /노선마다 첫차가 달라요/.test(night), '밤: 운행 종료 + 첫차 — ' + night);
+    const before = txt({ result: { path: [] }, liveStat: { svcOff: 5, svcOffList: [{ no: '9', state: 'before' }, { no: '8', state: 'before' }] } });
+    ok(/^버스 지금은 아직 운행 시작 전이에요/.test(before) && !/지하철 첫차/.test(before), '버스만 전부 시작 전: ' + before);
+    const nocov = txt({ result: { path: [] }, liveStat: {}, warnings: ['출발·도착 2.5km 안을 지나는 버스 노선이 없습니다'] });
+    ok(/이 지역은 아직 길 안내 정보가 없어요/.test(nocov) && /가까운 역이나 큰 정류장/.test(nocov), '노선 자료 없는 지역: ' + nocov);
+    const gen = txt({ result: { path: [] } });
+    ok(/^경로 정보가 없어요/.test(gen) && /경로를 찾지 못했어요/.test(gen), '그 밖: ' + gen);
+    const odd = txt({ result: { path: [] }, liveStat: 'x', warnings: 5 });
+    ok(/경로 정보가 없어요/.test(odd), '이상한 입력에도 죽지 않는다');
+  }
 }
 // ⑤-b 승차 전 '내 위치' 점(웹 htl-gps-marker-dot): 탑승 추적(lv)이 없어도 출발이 내 위치면 처음 칸, 아니면 600m 안 가까운 역·정류장 칸
 {
