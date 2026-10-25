@@ -17,6 +17,12 @@ var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: c
 var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
 var hcPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : (function () { try { return require('./pvlabel').pvlPillNode; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
+function hcHolAt(ms) {
+  try {
+    var dow = (typeof holDowKST === 'function') ? holDowKST(ms) : (typeof require === 'function' ? require('./holidays').holDowKST(ms) : new Date(ms + 324e5).getUTCDay());
+    return dow === 0 || dow === 6;
+  } catch (e) { var w = new Date(ms + 324e5).getUTCDay(); return w === 0 || w === 6; }
+}
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
 function hcStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
@@ -149,7 +155,7 @@ function hcardsScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var now = Math.floor(hcNum(f.now, 0) / 60000) * 60000, tz = hcNum(f.tz, 540);
   if (!(now > 0)) return { ok: false, error: 'now' };
-  var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;
+  var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;      // f.hol 이 참/거짓으로 오면 그대로(옛 앱), 안 오면 아래에서 엔진이 기준 날짜로 정한다(s207)
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = hcRoute(f.r, now, tz), near = gps ? hcNearest(gps[0], gps[1]) : null;
   var a = f.r && typeof f.r === 'object' ? hcStr(f.r.a, 40) : '', b = f.r && typeof f.r === 'object' ? hcStr(f.r.b, 40) : '';
@@ -166,6 +172,7 @@ function hcardsScreen(inp, f) {
   var CF = hcCong.facts(cs), cong = cs.mode === 'sub' ? hcCong.pct(CF, CF.h) : 40;
   // AI 승무원
   var ai = f.ai && typeof f.ai === 'object' ? f.ai : {};
+  if (typeof f.hol !== 'boolean') hol = hcHolAt(rt && f.r && f.r.bt != null ? rt.base : now);      // 웹 _isHolidayOrWeekend: 기준시각(미리보기면 고른 시각, 아니면 지금)의 날짜가 주말·공휴일인가
   var af = { now: now, tz: tz, busy: ai.busy === true, nextAt: hcNum(ai.nextAt, 0), hol: hol, cong: cong, hour: hour, nowMin: nowMin, rnd: Math.max(0, Math.min(1, hcNum(ai.rnd, 0))), metro: false, mode: 'empty', tk: '' };
   if (rt) {
     var rem = rt.mins > 0 ? rt.mins : 0, fromN = a || rt.segs[0].from, toN = b || rt.segs[rt.segs.length - 1].to;

@@ -115,3 +115,50 @@ async function handleFoodPub(request, env, ctx) {
   var hh = src === "stale" ? { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" } : H;
   return new Response(JSON.stringify({ response: { body: { items: rec.items } }, ok: true, src: src, at: rec.at, cell: [cla, clo], ver: ENGINE_VERSION }), { headers: hh });
 }
+
+// ── 검색 후보 중계 — GET /suggest?k=b|p&q=  (s207) ──
+// 홈·출퇴근 설정의 버스정류장(k=b, TAGO)과 장소(k=p, 카카오 키워드) 후보를 앱이 여러 서버에 직접 묻지 않고 엔진 한 곳에 묻게 한다.
+// 응답은 원래 서버 응답과 같은 모양이라 앱의 읽기(parseBus/parsePlaces)가 그대로다. 같은 검색어는 KV 에 모아 두고 모든 사용자가 나눠 쓴다(정류장 1일 · 장소 30일) — 공공 API 호출 보호.
+// 못 받으면 502 — 앱이 예전 길(직접 호출)로 받는다.
+var SUGG_TAGO = "https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList";
+var SUGG_NEWS = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+var SUGG_TTL_S = { b: 86400, p: 30 * 86400 }, SUGG_MIN_Q = 2, SUGG_MAX_Q = 60, SUGG_INFLIGHT = new Map();
+async function suggestFetch(env, k, q) {
+  if (k === "b") {
+    var r = await tagoFetch(env, "nodeNm=" + encodeURIComponent(q) + "&_type=json", SUGG_TAGO, null, 2500);
+    var items = r.items || [];
+    return { response: { header: { resultCode: "00" }, body: { items: items.length ? { item: items } : "", totalCount: items.length } } };
+  }
+  var c = new AbortController(), t = setTimeout(function () { c.abort(); }, 6000);
+  try {
+    var res = await fetch(SUGG_NEWS + "/kakao-local?path=" + encodeURIComponent("search/keyword.json") + "&qs=" + encodeURIComponent("query=" + encodeURIComponent(q) + "&size=5"), { signal: c.signal });
+    if (!res.ok) throw new Error("kakao " + res.status);
+    var j = await res.json();
+    if (!j || !Array.isArray(j.documents)) throw new Error("kakao shape");
+    return { documents: j.documents.slice(0, 8) };
+  } finally { clearTimeout(t); }
+}
+async function handleSuggest(request, env, ctx) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "public, max-age=300" };
+  var NH = { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "get-only" }), { status: 405, headers: NH });
+  var u = new URL(request.url), k = u.searchParams.get("k"), q = String(u.searchParams.get("q") || "").trim().slice(0, SUGG_MAX_Q);
+  if ((k !== "b" && k !== "p") || q.length < SUGG_MIN_Q) return new Response(JSON.stringify({ ok: false, error: "bad-query" }), { status: 400, headers: NH });
+  var key = "sg:v1:" + k + ":" + q.toLowerCase();
+  var kv = env && env.ROWS_KV ? env.ROWS_KV : null, hit = null;
+  if (kv) { try { hit = await kv.get(key, "json"); } catch (e) { hit = null; } }
+  if (hit && typeof hit === "object") return new Response(JSON.stringify(hit), { headers: Object.assign({ "X-Sugg": "hit" }, H) });
+  var job = SUGG_INFLIGHT.get(key);
+  if (!job) {
+    job = suggestFetch(env, k, q).then(async function (out) {
+      if (kv) { try { await kv.put(key, JSON.stringify(out), { expirationTtl: SUGG_TTL_S[k] }); } catch (ew) { /* 저장 실패해도 이번 응답은 준다 */ } }
+      return out;
+    });
+    SUGG_INFLIGHT.set(key, job);
+    var clear = function () { SUGG_INFLIGHT.delete(key); };
+    job.then(clear, clear);
+  }
+  try { var out = await job; return new Response(JSON.stringify(out), { headers: Object.assign({ "X-Sugg": "fresh" }, H) }); }
+  catch (ef) { return new Response(JSON.stringify({ ok: false, error: "upstream" }), { status: 502, headers: NH }); }
+}

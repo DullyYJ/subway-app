@@ -90,7 +90,7 @@ function cbNearStn(la, ln) {                                       // 출발지�
 
 function cbPlan(inp) {
   inp = (inp && typeof inp === 'object') ? inp : {};
-  var kind = inp.kind === 'eve' ? 'eve' : 'morn';
+  var kind = inp.kind === 'eve' ? 'eve' : (inp.kind === 'auto' ? (cbKst(inp.nowMs).h < 15 ? 'morn' : 'eve') : 'morn');      // 'auto' = 한국 시각 오후 3시 전이면 출근, 아니면 퇴근 브리핑(지금 미리보기 — 앱은 판단하지 않는다, s207)
   var pr = cbPair(kind, cbPlace(inp.from), cbPlace(inp.to), cbPlace(inp.eFrom), cbPlace(inp.eTo));
   var fromStn = cbResolve(pr[0]), toStn = cbResolve(pr[1]);
   var g = (inp.gps && typeof inp.gps === 'object') ? inp.gps : null;

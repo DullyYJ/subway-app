@@ -177,7 +177,7 @@ function mapStationSheet(f) {
   kids.push({ t: 'button', s: '🕒 시간표', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
   var row = mapPickRow(name, f.sl);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
-    info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null } };
+    info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null, msg: MAP_STN_MSG } };
   return mapFinish(out);
 }
 
@@ -616,6 +616,8 @@ function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).t
 
 // ── 웹 mapBusPanel: [주변 정류장][즐겨찾기][새로고침] 토글 → 고정 지도(주변만) → 정류장 카드 ──
 var MAP_FAV_MAX = 12, MAP_ALIAS_MAX = 10, MAP_SRCS = ['topis', 'gbis', 'tago', 'd1'];
+// 버스 즐겨찾기 규칙(s207): 몇 곳까지 · 별명 몇 글자 · 안내 글은 엔진이 정한다. 앱은 이 값으로 목록에 넣고 빼기만 한다(웹 toggleFav / _busEditAlias).
+var MAP_FAVP = { max: 12, al: 10, add: '즐겨찾기 추가', rm: '즐겨찾기 해제', full: '즐겨찾기는 최대 12개' };
 function mapStopKeep(s) {                                          // 즐겨찾기로 저장해도 도착정보를 다시 물을 수 있는 최소 값
   var o = { nm: mapStr(s.nm, 40), id: mapStr(s.id, 40), src: s.src, la: Number(s.la), lo: Number(s.lo) };
   ['ars', 'sid', 'no', 'city'].forEach(function (k) { if (s[k]) o[k] = mapStr(s[k], 30); });
@@ -843,7 +845,7 @@ function mapBusBody(f, info) {
   var head = [mapBusToggle(vw)], note = function (s) { return { t: 'text', s: s, size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [28, 20, 20, 20] }; };
   if (vw === 'fav') {
     var favs = mapBusFavs(b), fres = (b && b.res && typeof b.res === 'object') ? b.res : {};
-    info.bus = { st: 'ok', vw: 'fav', n: favs.length }; info.stops = favs.map(mapStopKeep);
+    info.bus = { st: 'ok', vw: 'fav', n: favs.length }; info.stops = favs.map(mapStopKeep); info.favp = MAP_FAVP;
     if (!favs.length) return { head: head, body: [
       { t: 'text', s: '⭐', size: 34, align: 'center', color: 'sub', pad: [44, 20, 6, 20] },
       { t: 'text', s: '즐겨찾기한 정류장이 없습니다', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
@@ -890,7 +892,7 @@ function mapBusBody(f, info) {
     if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '정류장', v: 'mp.pm.' + i, g: s.id }); } else pidx[i] = -1;
   });
   pts.push(mine);
-  info.stops = stops.map(mapStopKeep);
+  info.stops = stops.map(mapStopKeep); info.favp = MAP_FAVP;
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
   head.push(mapBusTmap(pts, foc));
   // 정류장마다 따로 본다: 아직 못 받은 정류장은 '도착정보 없음'이 아니라 '불러오는 중'으로 두고, 못 받은 것만 다시 받으라고 한다(받은 것까지 다시 받지 않는다)
@@ -980,11 +982,14 @@ function mapBrPos(text, gg) {                                      // → { know
   mapJsonItems(t).forEach(function (it) { buses.push([parseInt(it.nodeord, 10) || 0, String(it.vehicleno || '')]); });
   return { known: true, buses: buses };
 }
+// 지도 시트에서 출발·도착을 정할 때 띄우는 안내 글(s207) — 글은 엔진이 정하고 앱은 {n} 자리에 이름만 채워 띄운다.
+var MAP_STN_MSG = { s: '출발역: {n} · 이제 도착역을 선택하세요', e: '도착역: {n}', e2: '도착역: {n} · 출발역도 골라 주세요' };
+var MAP_BR_MSG = { same: '출발지와 다른 정류장을 눌러 주세요', s: '\uD83D\uDCCD 출발지로 설정되었습니다 · {n}', e: '\uD83C\uDFC1 도착지로 설정되었습니다 · {n}', tostn: '\uD83C\uDFC1 도착지로 설정할 역을 누르세요' };
 function mapBrCls(ud) { return ud === 0 ? 'up' : ud === 1 ? 'down' : 'na'; }
 function mapBusRouteSheet(f0) {
   var b = mapBrFacts(f0.br);
   if (!b.rid) return { ok: false, error: 'br' };
-  var res = b.res, info = { br: { st: 'ok', need: [] } }, ib = info.br;
+  var res = b.res, info = { br: { st: 'ok', need: [], msg: MAP_BR_MSG } }, ib = info.br;
   var tryGG = b.src === 'gbis' || !b.cc;
   var stn = b.stn, via = b.via;
   var url = function (k) {

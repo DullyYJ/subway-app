@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s206";
+var ENGINE_VERSION = "route-v2-2026-10-25s207";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9091,7 +9091,7 @@ var RIDE_TRACK_DEFAULTS = {
   trailMaxSpeedMps: 60, zeroLeadSec: 25, zeroWinSec: 55, zeroSlideSec: 45, zeroNearM: 200, zeroFinalNearM: 250, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30,
   // \u2605 2026-10-13 (YJ: "\uc2dc\uac04\ud45c\ubcf4\ub2e4 \ube60\ub974\uac8c \uc120\ud559\uc5d0 \uc654\uc5b4. \uc704\uce58\ub294 \ub9de\ud614\ub294\ub370 \uc2dc\uac04\uc774 \uc548\ub9de\ucdb0\uc838. \uc2dc\uac04\ub3c4 \uac19\uc774 \ubc00\uac70\ub098 \ub2f9\uae30\uba70 \uacc4\uc18d \uc601\uc810"): \uc2dc\uac01\ud45c \ucc3d(\ub3c4\ucc29 15\ucd08 \uc804~30\ucd08 \ub4a4) \ubc16\uc5d0\uc11c \ub2ff\uc740 \uc5f4\ucc28(\uc77c\ucc0d\u00b7\ub2a6\uac8c)\ub3c4 \ub193\uce58\uc9c0 \uc54a\ub3c4\ub85d
   //   pass:true \uc778 \uc815\ub958\uc7a5\uc740 '\ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01 \uc55e\ub4a4' \ub113\uc740 \ucc3d\uc5d0\uc11c GPS \uac00 \uadf8 \uc815\ub958\uc7a5 150m \uc548(\uc815\ud655\ub3c4 60m \uc774\ud558 \uc88c\ud45c)\uc5d0 \ub4e0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc21c\uac04\uc744 \ud1b5\uacfc \uc2dc\uac01(passMs)\uc73c\ub85c \ub3cc\ub824\uc900\ub2e4 \u2014 \uc571\uc740 \uadf8 \uc2dc\uac01\uc744 \ud1b5\uacfc \uc99d\uac70\ub85c \uc5d4\uc9c4\uc5d0 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4.
-  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30,
+  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
   // \u2605 2026-10-13 (YJ: "\ub9c8\ucee4\ub3c4 \uacc4\uc18d \uc5d4\uc9c4\uc5d0 \uc704\uce58\ub97c \ubb3c\uc5b4\ubcf4\uace0 \uc601\uc810 \uc7a1\uace0 \ubcf4\uc815\ud574\uc57c\uc9c0 \u2014 \ubc00\uac70\ub098 \ub2f9\uae30\uac70\ub098"): \ub2a6\uac8c \uc624\ub294 \uc5f4\ucc28 \u2014 \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\ub294\ub370 \uc2e0\uc120\ud55c GPS \uac00 '\uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 \uc0ac\uc774'\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uacfc notYetFarM \ub118\uac8c \ub5a8\uc5b4\uc838 \uc788\uc73c\uba74 notYet:true(\uc544\uc9c1 \uc548 \ub2ff\uc74c). \uc571\uc740 \uc774 \uc99d\uac70\ub97c /ride-eta \uc5d0 \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ub4a4 \uc2dc\uac01\uc744 \ubbfc\ub2e4.
   notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
   // \u2605 2026-10-19 (YJ: "\ubc84\uc2a4\ub294 \uc9c0\uc0c1\uc774 \ub300\ubd80\ubd84\uc774\ub2c8\uae4c \ub124\ube44\uac8c\uc774\uc158\ucc98\ub7fc GPS \ub97c \uc368 \u00b7 \ubc84\uc2a4\uac00 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub294\ub370 \ub9c8\ucee4\ub294 \uc815\uc9c0(\ub178\ub791)"): \uc6c0\uc9c1\uc784 \u00b7 \ubc84\uc2a4 \uc704\uce58.
@@ -9355,6 +9355,16 @@ function rtPassTime(s, tr, now, O) {
     if (d <= O.passNearM && (best == null || d < best.d)) best = { d: d, ms: q.ts, i: i };
   }
   if (!best) return null;
+  // \u2605 2026-10-26 s207 (\ubcf4\uc218\ud654): '\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc21c\uac04'\uc740 \uc9c0\ub098\uace0 \ub098\uc11c\uc57c \uc54c \uc218 \uc788\ub2e4. \uc544\uc9c1 \ub2e4\uac00\uc624\ub294 \uc911(\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc88c\ud45c\uac00 \ub9e8 \ub05d\uc774\uace0 \ub354 \uac00\uae4c\uc6cc\uc9c0\ub294 \uc911)\uc5d0 \ud1b5\uacfc\ub85c \uc801\uc73c\uba74 \uc5f4\ucc28\uac00 \ub2ff\uae30 \uc804 \uc2dc\uac01\uc774 \ubc15\ud78c\ub2e4
+  //   (\ubaa8\uc758 \uc2e4\ud5d8: \ucc98\uc74c \ubc15\ud78c \ud1b5\uacfc \uc2dc\uac01\uc774 \uc2e4\uc81c\ubcf4\ub2e4 10~25\ucd08 \uc774\ub974\ub2e4\uac00 \ub098\uc911\uc5d0 \uace0\uccd0\uc9d0). \uadf8 \ub4a4 \uc88c\ud45c\uac00 passAwayM \uc774\uc0c1 \uba40\uc5b4\uc84c\uac70\ub098, \uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc21c\uac04\uc5d0\uc11c passConfirmSec \uac00 \uc9c0\ub0ac\uc744 \ub54c(\uc815\ucc28 \u00b7 \uc88c\ud45c \ub04a\uae40 \ud3ec\ud568)\uc5d0\ub9cc \ud1b5\uacfc\ub85c \uc801\ub294\ub2e4.
+  var conf = now - tr[best.i].ts >= O.passConfirmSec * 1000;
+  for (var cj = best.i + 1; !conf && cj < tr.length; cj++) {
+    var cq = tr[cj];
+    if (cq.ts > now + 1000) break;
+    if (cq.acc != null && cq.acc > O.passAccM) continue;
+    if (rtHav(cq.lat, cq.lng, s.lat, s.lng) >= best.d + O.passAwayM) conf = true;
+  }
+  if (!conf) return null;
   // \u2605 2026-10-14 (YJ: "\uc601\uc810 \uc870\uc808 gps \uc7a1\uc744 \ub54c \ucd08 \ub2e8\uc704\uae4c\uc9c0 \ud568\uaed8 \uc55e\ub4a4\ub85c \ubc00\uc5b4\uc918. \uba87 \ucd08\uac00 \uacc4\uc18d \uc313\uc774\uba74 \ub098\uc911\uc5d0 \uc624\ucc28\uac00 \ucee4\uc9c0\ub2c8\uae4c"):
   //   '\uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc0d8\ud50c'\uc758 \uc2dc\uac01\uc740 \uc0d8\ud50c \uac04\uaca9(\uc218 \ucd08~\uc2ed\uc218 \ucd08)\ub9cc\ud07c \ud2c0\ub9b4 \uc218 \uc788\ub2e4. \uc55e\ub4a4 \uc0d8\ud50c \uc0ac\uc774\uc5d0\uc11c \uc815\ub958\uc7a5\uc5d0 \uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc21c\uac04\uc744 \uc9c1\uc120 \ubcf4\uac04\uc73c\ub85c \uad6c\ud574 \ucd08 \ub2e8\uc704(ms)\ub85c \uc4f4\ub2e4.
   var ms = best.ms, dMin = best.d, bi = best.i, gapMs = O.passInterpMaxGapSec * 1000, cand = [bi - 1, bi];
@@ -10226,7 +10236,9 @@ function rsShare(st, r, cells, map, cur, moving, dest, destName, now) {
   var curTxt = mv ? stn[hit].n + '\u2192' + nextName + ' \uc774\ub3d9 \uc911' : (st.wait ? stn[hit].n + ' \uc2b9\ucc28 \ub300\uae30' : stn[hit].n);
   var from = stn[0].n, to = destName || (dest && dest.name) || stn[stn.length - 1].n;
   return { text: from + ' - ' + curTxt + ' - ' + to + ' (\ub3c4\ucc29\uc608\uc815\uc2dc\uac04: ' + hm + ')\n[\ub0a8\uc740\uc2dc\uac04: ' + dur + ']', from: from, cur: curTxt, to: to, arr: hm, rem: dur,
-    stations: stn, hit: hit, moving: mv, left: Math.max(0, stn.length - 1 - hit), next: nextName };
+    stations: stn, hit: hit, moving: mv, left: Math.max(0, stn.length - 1 - hit), next: nextName,
+    foot: (function (left) { return mv ? '\ub2e4\uc74c \uc5ed ' + nextName + ' \uc774\ub3d9 \uc911 \u00b7 ' + left + '\uac1c \uc5ed \ub0a8\uc74c' : (left > 0 ? left + '\uac1c \uc5ed \ub0a8\uc74c' : '\ub3c4\ucc29\ud588\uc5b4\uc694'); })(Math.max(0, stn.length - 1 - hit)),
+    lb: { t: '\uae38\ub3d9\ubb34 \u00b7 \ub0b4 \uc704\uce58', a: '\ub3c4\ucc29\uc608\uc815\uc2dc\uac04: ', r: '\ub0a8\uc740\uc2dc\uac04 ' } };      // \uacf5\uc720 \uadf8\ub9bc\uc758 \uc544\ub798 \ud55c \uc904\uacfc \uae00\uba38\ub9ac\ub294 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(s207)
 }
 
 function rsRecoFn() { return (typeof arrRecoWhen === 'function') ? arrRecoWhen : (function () { try { return require('./arrive-reco').arrRecoWhen; } catch (e) { return null; } })(); }
@@ -13620,6 +13632,53 @@ async function handleFoodPub(request, env, ctx) {
   var hh = src === "stale" ? { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" } : H;
   return new Response(JSON.stringify({ response: { body: { items: rec.items } }, ok: true, src: src, at: rec.at, cell: [cla, clo], ver: ENGINE_VERSION }), { headers: hh });
 }
+
+// \u2500\u2500 \uac80\uc0c9 \ud6c4\ubcf4 \uc911\uacc4 \u2014 GET /suggest?k=b|p&q=  (s207) \u2500\u2500
+// \ud648\u00b7\ucd9c\ud1f4\uadfc \uc124\uc815\uc758 \ubc84\uc2a4\uc815\ub958\uc7a5(k=b, TAGO)\uacfc \uc7a5\uc18c(k=p, \uce74\uce74\uc624 \ud0a4\uc6cc\ub4dc) \ud6c4\ubcf4\ub97c \uc571\uc774 \uc5ec\ub7ec \uc11c\ubc84\uc5d0 \uc9c1\uc811 \ubb3b\uc9c0 \uc54a\uace0 \uc5d4\uc9c4 \ud55c \uacf3\uc5d0 \ubb3b\uac8c \ud55c\ub2e4.
+// \uc751\ub2f5\uc740 \uc6d0\ub798 \uc11c\ubc84 \uc751\ub2f5\uacfc \uac19\uc740 \ubaa8\uc591\uc774\ub77c \uc571\uc758 \uc77d\uae30(parseBus/parsePlaces)\uac00 \uadf8\ub300\ub85c\ub2e4. \uac19\uc740 \uac80\uc0c9\uc5b4\ub294 KV \uc5d0 \ubaa8\uc544 \ub450\uace0 \ubaa8\ub4e0 \uc0ac\uc6a9\uc790\uac00 \ub098\ub220 \uc4f4\ub2e4(\uc815\ub958\uc7a5 1\uc77c \u00b7 \uc7a5\uc18c 30\uc77c) \u2014 \uacf5\uacf5 API \ud638\ucd9c \ubcf4\ud638.
+// \ubabb \ubc1b\uc73c\uba74 502 \u2014 \uc571\uc774 \uc608\uc804 \uae38(\uc9c1\uc811 \ud638\ucd9c)\ub85c \ubc1b\ub294\ub2e4.
+var SUGG_TAGO = "https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnNoList";
+var SUGG_NEWS = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+var SUGG_TTL_S = { b: 86400, p: 30 * 86400 }, SUGG_MIN_Q = 2, SUGG_MAX_Q = 60, SUGG_INFLIGHT = new Map();
+async function suggestFetch(env, k, q) {
+  if (k === "b") {
+    var r = await tagoFetch(env, "nodeNm=" + encodeURIComponent(q) + "&_type=json", SUGG_TAGO, null, 2500);
+    var items = r.items || [];
+    return { response: { header: { resultCode: "00" }, body: { items: items.length ? { item: items } : "", totalCount: items.length } } };
+  }
+  var c = new AbortController(), t = setTimeout(function () { c.abort(); }, 6000);
+  try {
+    var res = await fetch(SUGG_NEWS + "/kakao-local?path=" + encodeURIComponent("search/keyword.json") + "&qs=" + encodeURIComponent("query=" + encodeURIComponent(q) + "&size=5"), { signal: c.signal });
+    if (!res.ok) throw new Error("kakao " + res.status);
+    var j = await res.json();
+    if (!j || !Array.isArray(j.documents)) throw new Error("kakao shape");
+    return { documents: j.documents.slice(0, 8) };
+  } finally { clearTimeout(t); }
+}
+async function handleSuggest(request, env, ctx) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "public, max-age=300" };
+  var NH = { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "get-only" }), { status: 405, headers: NH });
+  var u = new URL(request.url), k = u.searchParams.get("k"), q = String(u.searchParams.get("q") || "").trim().slice(0, SUGG_MAX_Q);
+  if ((k !== "b" && k !== "p") || q.length < SUGG_MIN_Q) return new Response(JSON.stringify({ ok: false, error: "bad-query" }), { status: 400, headers: NH });
+  var key = "sg:v1:" + k + ":" + q.toLowerCase();
+  var kv = env && env.ROWS_KV ? env.ROWS_KV : null, hit = null;
+  if (kv) { try { hit = await kv.get(key, "json"); } catch (e) { hit = null; } }
+  if (hit && typeof hit === "object") return new Response(JSON.stringify(hit), { headers: Object.assign({ "X-Sugg": "hit" }, H) });
+  var job = SUGG_INFLIGHT.get(key);
+  if (!job) {
+    job = suggestFetch(env, k, q).then(async function (out) {
+      if (kv) { try { await kv.put(key, JSON.stringify(out), { expirationTtl: SUGG_TTL_S[k] }); } catch (ew) { /* \uc800\uc7a5 \uc2e4\ud328\ud574\ub3c4 \uc774\ubc88 \uc751\ub2f5\uc740 \uc900\ub2e4 */ } }
+      return out;
+    });
+    SUGG_INFLIGHT.set(key, job);
+    var clear = function () { SUGG_INFLIGHT.delete(key); };
+    job.then(clear, clear);
+  }
+  try { var out = await job; return new Response(JSON.stringify(out), { headers: Object.assign({ "X-Sugg": "fresh" }, H) }); }
+  catch (ef) { return new Response(JSON.stringify({ ok: false, error: "upstream" }), { status: 502, headers: NH }); }
+}
 // ===== FOOD ENGINE END =====
 
 // ===== NEWS ENGINE BEGIN =====
@@ -15560,6 +15619,14 @@ function homeHash(s) {
   return (h >>> 0).toString(36);
 }
 function homeStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+// \ud3c9\uc77c/\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c \ud310\uc815(s207) \u2014 \uc571\uc740 \uc694\uc77c\uc744 \ubcf4\uc9c0 \uc54a\uace0 \uc9c0\uae08 \uc2dc\uac01(base.now)\ub9cc \ubcf4\ub0b8\ub2e4. \uc6f9 _isHolidayOrWeekend \uc640 \uac19\ub2e4: \uae30\uc900\uc2dc\uac01(\uc5c6\uc73c\uba74 \uc9c0\uae08)\uc758 \ud55c\uad6d \ub0a0\uc9dc\uac00 \ud1a0\u00b7\uc77c\uc774\uac70\ub098 \uacf5\ud734\uc77c(engine/holidays.js)\uc774\uba74 true.
+function homeHolAt(ms) {
+  if (ms == null) return false;
+  try {
+    var dow = (typeof holDowKST === 'function') ? holDowKST(ms) : (typeof require === 'function' ? require('./holidays').holDowKST(ms) : new Date(ms + 324e5).getUTCDay());
+    return dow === 0 || dow === 6;
+  } catch (e) { var w = new Date(ms + 324e5).getUTCDay(); return w === 0 || w === 6; }
+}
 function homeFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var b = (f.base && typeof f.base === 'object') ? f.base : {};
@@ -15574,7 +15641,7 @@ function homeFacts(f) {
     start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
     active: f.active === 'start' || f.active === 'dest' ? f.active : '',
     startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps, rs: !!f.rs,
-    base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
+    base: { ms: ms, tzo: tzo, today: today, hol: typeof b.hol === 'boolean' ? b.hol : homeHolAt(ms != null ? ms : (isFinite(Number(b.now)) && Number(b.now) > 0 ? Number(b.now) : null)) }
   };
 }
 // \uae30\uc900\uc2dc\uac01 \ubb38\uad6c: '\ud604\uc7ac' | '\uc624\ub298 \uc624\ud6c4 2:30' | '\ub0b4\uc77c \uc624\uc804 9:05' | '10/25(\ud1a0) \uc624\ud6c4 1:00'  (\uc608\uc804 _updateBaseTimeDisplay \uc640 \uac19\uc740 \uae00)
@@ -20161,7 +20228,7 @@ function mapStationSheet(f) {
   kids.push({ t: 'button', s: '\ud83d\udd52 \uc2dc\uac04\ud45c', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
   var row = mapPickRow(name, f.sl);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
-    info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null } };
+    info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null, msg: MAP_STN_MSG } };
   return mapFinish(out);
 }
 
@@ -20600,6 +20667,8 @@ function mapDistFmt(m) { m = Math.round(m || 0); return m >= 1000 ? (m / 1000).t
 
 // \u2500\u2500 \uc6f9 mapBusPanel: [\uc8fc\ubcc0 \uc815\ub958\uc7a5][\uc990\uaca8\ucc3e\uae30][\uc0c8\ub85c\uace0\uce68] \ud1a0\uae00 \u2192 \uace0\uc815 \uc9c0\ub3c4(\uc8fc\ubcc0\ub9cc) \u2192 \uc815\ub958\uc7a5 \uce74\ub4dc \u2500\u2500
 var MAP_FAV_MAX = 12, MAP_ALIAS_MAX = 10, MAP_SRCS = ['topis', 'gbis', 'tago', 'd1'];
+// \ubc84\uc2a4 \uc990\uaca8\ucc3e\uae30 \uaddc\uce59(s207): \uba87 \uacf3\uae4c\uc9c0 \u00b7 \ubcc4\uba85 \uba87 \uae00\uc790 \u00b7 \uc548\ub0b4 \uae00\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4. \uc571\uc740 \uc774 \uac12\uc73c\ub85c \ubaa9\ub85d\uc5d0 \ub123\uace0 \ube7c\uae30\ub9cc \ud55c\ub2e4(\uc6f9 toggleFav / _busEditAlias).
+var MAP_FAVP = { max: 12, al: 10, add: '\uc990\uaca8\ucc3e\uae30 \ucd94\uac00', rm: '\uc990\uaca8\ucc3e\uae30 \ud574\uc81c', full: '\uc990\uaca8\ucc3e\uae30\ub294 \ucd5c\ub300 12\uac1c' };
 function mapStopKeep(s) {                                          // \uc990\uaca8\ucc3e\uae30\ub85c \uc800\uc7a5\ud574\ub3c4 \ub3c4\ucc29\uc815\ubcf4\ub97c \ub2e4\uc2dc \ubb3c\uc744 \uc218 \uc788\ub294 \ucd5c\uc18c \uac12
   var o = { nm: mapStr(s.nm, 40), id: mapStr(s.id, 40), src: s.src, la: Number(s.la), lo: Number(s.lo) };
   ['ars', 'sid', 'no', 'city'].forEach(function (k) { if (s[k]) o[k] = mapStr(s[k], 30); });
@@ -20827,7 +20896,7 @@ function mapBusBody(f, info) {
   var head = [mapBusToggle(vw)], note = function (s) { return { t: 'text', s: s, size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [28, 20, 20, 20] }; };
   if (vw === 'fav') {
     var favs = mapBusFavs(b), fres = (b && b.res && typeof b.res === 'object') ? b.res : {};
-    info.bus = { st: 'ok', vw: 'fav', n: favs.length }; info.stops = favs.map(mapStopKeep);
+    info.bus = { st: 'ok', vw: 'fav', n: favs.length }; info.stops = favs.map(mapStopKeep); info.favp = MAP_FAVP;
     if (!favs.length) return { head: head, body: [
       { t: 'text', s: '\u2b50', size: 34, align: 'center', color: 'sub', pad: [44, 20, 6, 20] },
       { t: 'text', s: '\uc990\uaca8\ucc3e\uae30\ud55c \uc815\ub958\uc7a5\uc774 \uc5c6\uc2b5\ub2c8\ub2e4', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
@@ -20874,7 +20943,7 @@ function mapBusBody(f, info) {
     if (isFinite(sla) && isFinite(slo) && (sla !== 0 || slo !== 0)) { pidx[i] = pts.length; pts.push({ la: sla, lo: slo, k: 's', n: String(i + 1), l: s.nm || '\uc815\ub958\uc7a5', v: 'mp.pm.' + i, g: s.id }); } else pidx[i] = -1;
   });
   pts.push(mine);
-  info.stops = stops.map(mapStopKeep);
+  info.stops = stops.map(mapStopKeep); info.favp = MAP_FAVP;
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
   head.push(mapBusTmap(pts, foc));
   // \uc815\ub958\uc7a5\ub9c8\ub2e4 \ub530\ub85c \ubcf8\ub2e4: \uc544\uc9c1 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \ub450\uace0, \ubabb \ubc1b\uc740 \uac83\ub9cc \ub2e4\uc2dc \ubc1b\uc73c\ub77c\uace0 \ud55c\ub2e4(\ubc1b\uc740 \uac83\uae4c\uc9c0 \ub2e4\uc2dc \ubc1b\uc9c0 \uc54a\ub294\ub2e4)
@@ -20964,11 +21033,14 @@ function mapBrPos(text, gg) {                                      // \u2192 { k
   mapJsonItems(t).forEach(function (it) { buses.push([parseInt(it.nodeord, 10) || 0, String(it.vehicleno || '')]); });
   return { known: true, buses: buses };
 }
+// \uc9c0\ub3c4 \uc2dc\ud2b8\uc5d0\uc11c \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uc815\ud560 \ub54c \ub744\uc6b0\ub294 \uc548\ub0b4 \uae00(s207) \u2014 \uae00\uc740 \uc5d4\uc9c4\uc774 \uc815\ud558\uace0 \uc571\uc740 {n} \uc790\ub9ac\uc5d0 \uc774\ub984\ub9cc \ucc44\uc6cc \ub744\uc6b4\ub2e4.
+var MAP_STN_MSG = { s: '\ucd9c\ubc1c\uc5ed: {n} \u00b7 \uc774\uc81c \ub3c4\ucc29\uc5ed\uc744 \uc120\ud0dd\ud558\uc138\uc694', e: '\ub3c4\ucc29\uc5ed: {n}', e2: '\ub3c4\ucc29\uc5ed: {n} \u00b7 \ucd9c\ubc1c\uc5ed\ub3c4 \uace8\ub77c \uc8fc\uc138\uc694' };
+var MAP_BR_MSG = { same: '\ucd9c\ubc1c\uc9c0\uc640 \ub2e4\ub978 \uc815\ub958\uc7a5\uc744 \ub20c\ub7ec \uc8fc\uc138\uc694', s: '\uD83D\uDCCD \ucd9c\ubc1c\uc9c0\ub85c \uc124\uc815\ub418\uc5c8\uc2b5\ub2c8\ub2e4 \u00b7 {n}', e: '\uD83C\uDFC1 \ub3c4\ucc29\uc9c0\ub85c \uc124\uc815\ub418\uc5c8\uc2b5\ub2c8\ub2e4 \u00b7 {n}', tostn: '\uD83C\uDFC1 \ub3c4\ucc29\uc9c0\ub85c \uc124\uc815\ud560 \uc5ed\uc744 \ub204\ub974\uc138\uc694' };
 function mapBrCls(ud) { return ud === 0 ? 'up' : ud === 1 ? 'down' : 'na'; }
 function mapBusRouteSheet(f0) {
   var b = mapBrFacts(f0.br);
   if (!b.rid) return { ok: false, error: 'br' };
-  var res = b.res, info = { br: { st: 'ok', need: [] } }, ib = info.br;
+  var res = b.res, info = { br: { st: 'ok', need: [], msg: MAP_BR_MSG } }, ib = info.br;
   var tryGG = b.src === 'gbis' || !b.cc;
   var stn = b.stn, via = b.via;
   var url = function (k) {
@@ -21452,6 +21524,12 @@ var hcCong = (typeof congScreen === 'function') ? { screen: congScreen, facts: c
 var hcScene = (typeof sceneDecide === 'function') ? sceneDecide : (function () { try { return require('./scene').sceneDecide; } catch (e) { return null; } })();
 var hcPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : (function () { try { return require('./pvlabel').pvlPillNode; } catch (e) { return null; } })();
 var hcTalk = (typeof talkScreen === 'function') ? talkScreen : (function () { try { return require('./talkcard').talkScreen; } catch (e) { return null; } })();
+function hcHolAt(ms) {
+  try {
+    var dow = (typeof holDowKST === 'function') ? holDowKST(ms) : (typeof require === 'function' ? require('./holidays').holDowKST(ms) : new Date(ms + 324e5).getUTCDay());
+    return dow === 0 || dow === 6;
+  } catch (e) { var w = new Date(ms + 324e5).getUTCDay(); return w === 0 || w === 6; }
+}
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
 function hcStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
@@ -21584,7 +21662,7 @@ function hcardsScreen(inp, f) {
   f = (f && typeof f === 'object') ? f : {};
   var now = Math.floor(hcNum(f.now, 0) / 60000) * 60000, tz = hcNum(f.tz, 540);
   if (!(now > 0)) return { ok: false, error: 'now' };
-  var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;
+  var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;      // f.hol \uc774 \ucc38/\uac70\uc9d3\uc73c\ub85c \uc624\uba74 \uadf8\ub300\ub85c(\uc61b \uc571), \uc548 \uc624\uba74 \uc544\ub798\uc5d0\uc11c \uc5d4\uc9c4\uc774 \uae30\uc900 \ub0a0\uc9dc\ub85c \uc815\ud55c\ub2e4(s207)
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = hcRoute(f.r, now, tz), near = gps ? hcNearest(gps[0], gps[1]) : null;
   var a = f.r && typeof f.r === 'object' ? hcStr(f.r.a, 40) : '', b = f.r && typeof f.r === 'object' ? hcStr(f.r.b, 40) : '';
@@ -21601,6 +21679,7 @@ function hcardsScreen(inp, f) {
   var CF = hcCong.facts(cs), cong = cs.mode === 'sub' ? hcCong.pct(CF, CF.h) : 40;
   // AI \uc2b9\ubb34\uc6d0
   var ai = f.ai && typeof f.ai === 'object' ? f.ai : {};
+  if (typeof f.hol !== 'boolean') hol = hcHolAt(rt && f.r && f.r.bt != null ? rt.base : now);      // \uc6f9 _isHolidayOrWeekend: \uae30\uc900\uc2dc\uac01(\ubbf8\ub9ac\ubcf4\uae30\uba74 \uace0\ub978 \uc2dc\uac01, \uc544\ub2c8\uba74 \uc9c0\uae08)\uc758 \ub0a0\uc9dc\uac00 \uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c\uc778\uac00
   var af = { now: now, tz: tz, busy: ai.busy === true, nextAt: hcNum(ai.nextAt, 0), hol: hol, cong: cong, hour: hour, nowMin: nowMin, rnd: Math.max(0, Math.min(1, hcNum(ai.rnd, 0))), metro: false, mode: 'empty', tk: '' };
   if (rt) {
     var rem = rt.mins > 0 ? rt.mins : 0, fromN = a || rt.segs[0].from, toN = b || rt.segs[rt.segs.length - 1].to;
@@ -22078,7 +22157,7 @@ function cbNearStn(la, ln) {                                       // \ucd9c\ubc
 
 function cbPlan(inp) {
   inp = (inp && typeof inp === 'object') ? inp : {};
-  var kind = inp.kind === 'eve' ? 'eve' : 'morn';
+  var kind = inp.kind === 'eve' ? 'eve' : (inp.kind === 'auto' ? (cbKst(inp.nowMs).h < 15 ? 'morn' : 'eve') : 'morn');      // 'auto' = \ud55c\uad6d \uc2dc\uac01 \uc624\ud6c4 3\uc2dc \uc804\uc774\uba74 \ucd9c\uadfc, \uc544\ub2c8\uba74 \ud1f4\uadfc \ube0c\ub9ac\ud551(\uc9c0\uae08 \ubbf8\ub9ac\ubcf4\uae30 \u2014 \uc571\uc740 \ud310\ub2e8\ud558\uc9c0 \uc54a\ub294\ub2e4, s207)
   var pr = cbPair(kind, cbPlace(inp.from), cbPlace(inp.to), cbPlace(inp.eFrom), cbPlace(inp.eTo));
   var fromStn = cbResolve(pr[0]), toStn = cbResolve(pr[1]);
   var g = (inp.gps && typeof inp.gps === 'object') ? inp.gps : null;
@@ -22627,6 +22706,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/settings") return handleScreenSettings(request);
   if (url.pathname === "/screen/food") return handleScreenFood(request);
   if (url.pathname === "/food-pub") return handleFoodPub(request, env, ctx);
+  if (url.pathname === "/suggest") return handleSuggest(request, env, ctx);
   if (url.pathname === "/screen/news") return handleScreenNews(request);
   if (url.pathname === "/screen/board") return handleScreenBoard(request);
   if (url.pathname === "/screen/chat") return handleScreenChat(request);

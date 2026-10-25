@@ -78,7 +78,7 @@ var RIDE_TRACK_DEFAULTS = {
   trailMaxSpeedMps: 60, zeroLeadSec: 25, zeroWinSec: 55, zeroSlideSec: 45, zeroNearM: 200, zeroFinalNearM: 250, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30,
   // ★ 2026-10-13 (YJ: "시간표보다 빠르게 선학에 왔어. 위치는 맞혔는데 시간이 안맞춰져. 시간도 같이 밀거나 당기며 계속 영점"): 시각표 창(도착 15초 전~30초 뒤) 밖에서 닿은 열차(일찍·늦게)도 놓치지 않도록
   //   pass:true 인 정류장은 '표시 도착 시각 앞뒤' 넓은 창에서 GPS 가 그 정류장 150m 안(정확도 60m 이하 좌표)에 든 가장 가까운 순간을 통과 시각(passMs)으로 돌려준다 — 앱은 그 시각을 통과 증거로 엔진에 다시 보낸다.
-  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30,
+  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정해야지 — 밀거나 당기거나"): 늦게 오는 열차 — 표시 도착 시각이 지났는데 신선한 GPS 가 '앞 정류장과 이 정류장 사이'에서 이 정류장과 notYetFarM 넘게 떨어져 있으면 notYet:true(아직 안 닿음). 앱은 이 증거를 /ride-eta 에 보내고 엔진이 뒤 시각을 민다.
   notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
   // ★ 2026-10-19 (YJ: "버스는 지상이 대부분이니까 네비게이션처럼 GPS 를 써 · 버스가 계속 움직이는데 마커는 정지(노랑)"): 움직임 · 버스 위치.
@@ -342,6 +342,16 @@ function rtPassTime(s, tr, now, O) {
     if (d <= O.passNearM && (best == null || d < best.d)) best = { d: d, ms: q.ts, i: i };
   }
   if (!best) return null;
+  // ★ 2026-10-26 s207 (보수화): '가장 가까운 순간'은 지나고 나서야 알 수 있다. 아직 다가오는 중(가장 가까운 좌표가 맨 끝이고 더 가까워지는 중)에 통과로 적으면 열차가 닿기 전 시각이 박힌다
+  //   (모의 실험: 처음 박힌 통과 시각이 실제보다 10~25초 이르다가 나중에 고쳐짐). 그 뒤 좌표가 passAwayM 이상 멀어졌거나, 가장 가까웠던 순간에서 passConfirmSec 가 지났을 때(정차 · 좌표 끊김 포함)에만 통과로 적는다.
+  var conf = now - tr[best.i].ts >= O.passConfirmSec * 1000;
+  for (var cj = best.i + 1; !conf && cj < tr.length; cj++) {
+    var cq = tr[cj];
+    if (cq.ts > now + 1000) break;
+    if (cq.acc != null && cq.acc > O.passAccM) continue;
+    if (rtHav(cq.lat, cq.lng, s.lat, s.lng) >= best.d + O.passAwayM) conf = true;
+  }
+  if (!conf) return null;
   // ★ 2026-10-14 (YJ: "영점 조절 gps 잡을 때 초 단위까지 함께 앞뒤로 밀어줘. 몇 초가 계속 쌓이면 나중에 오차가 커지니까"):
   //   '가장 가까웠던 샘플'의 시각은 샘플 간격(수 초~십수 초)만큼 틀릴 수 있다. 앞뒤 샘플 사이에서 정류장에 가장 가까웠던 순간을 직선 보간으로 구해 초 단위(ms)로 쓴다.
   var ms = best.ms, dMin = best.d, bi = best.i, gapMs = O.passInterpMaxGapSec * 1000, cand = [bi - 1, bi];

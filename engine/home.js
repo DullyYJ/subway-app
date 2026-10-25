@@ -32,6 +32,14 @@ function homeHash(s) {
   return (h >>> 0).toString(36);
 }
 function homeStr(v, max) { return typeof v === 'string' ? v.slice(0, max) : ''; }
+// 평일/주말·공휴일 판정(s207) — 앱은 요일을 보지 않고 지금 시각(base.now)만 보낸다. 웹 _isHolidayOrWeekend 와 같다: 기준시각(없으면 지금)의 한국 날짜가 토·일이거나 공휴일(engine/holidays.js)이면 true.
+function homeHolAt(ms) {
+  if (ms == null) return false;
+  try {
+    var dow = (typeof holDowKST === 'function') ? holDowKST(ms) : (typeof require === 'function' ? require('./holidays').holDowKST(ms) : new Date(ms + 324e5).getUTCDay());
+    return dow === 0 || dow === 6;
+  } catch (e) { var w = new Date(ms + 324e5).getUTCDay(); return w === 0 || w === 6; }
+}
 function homeFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var b = (f.base && typeof f.base === 'object') ? f.base : {};
@@ -46,7 +54,7 @@ function homeFacts(f) {
     start: homeStr(f.start, 120), dest: homeStr(f.dest, 120),
     active: f.active === 'start' || f.active === 'dest' ? f.active : '',
     startSet: !!f.startSet, destSet: !!f.destSet, gps: !!f.gps, rs: !!f.rs,
-    base: { ms: ms, tzo: tzo, today: today, hol: !!b.hol }
+    base: { ms: ms, tzo: tzo, today: today, hol: typeof b.hol === 'boolean' ? b.hol : homeHolAt(ms != null ? ms : (isFinite(Number(b.now)) && Number(b.now) > 0 ? Number(b.now) : null)) }
   };
 }
 // 기준시각 문구: '현재' | '오늘 오후 2:30' | '내일 오전 9:05' | '10/25(토) 오후 1:00'  (예전 _updateBaseTimeDisplay 와 같은 글)
@@ -153,4 +161,4 @@ function homeScreen(inp, factsIn, dataIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { homeScreen: homeScreen, homeStnFind: homeStnFind, homeFacts: homeFacts, homeBaseLabel: homeBaseLabel, homePick: homePick, homeDist: homeDist, HOME_SWAP_ICON: HOME_SWAP_ICON };
+if (typeof module !== 'undefined' && module.exports) module.exports = { homeHolAt: homeHolAt, homeScreen: homeScreen, homeStnFind: homeStnFind, homeFacts: homeFacts, homeBaseLabel: homeBaseLabel, homePick: homePick, homeDist: homeDist, HOME_SWAP_ICON: HOME_SWAP_ICON };
