@@ -3376,7 +3376,8 @@ __name2(rateLimited, "rateLimited");
 // 2026-10-25 s192 (YJ: realtime must arrive within 3s max): s191 shortened these, but a 1.0s per-call timeout made slow upstream calls time out
 // and trip the 8s live breaker, so more stops ended without live data. Back to a 3.0s total budget with a 2.5s per-call cap.
 var LIVE_TIMEOUT_MS = 2500;
-var LIVE_BUDGET_MS = 3000;
+// s201 (YJ: "\uAE30\uB2E4\uB824\uB3C4 5\uCD08 \uC548\uC5D0\uB9CC \uB728\uBA74 \uB41C\uB2E4"): \uCC98\uC74C \uACB0\uACFC\uB294 \uC2E4\uC2DC\uAC04 \uC5C6\uC774 \uBC14\uB85C \uBCF4\uC774\uACE0 \uC2E4\uC2DC\uAC04\uC740 \uB4A4\uC5D0\uC11C \uC870\uC6A9\uD788 \uBC14\uB00C\uBBC0\uB85C \uB300\uAE30 \uD55C\uB3C4\uB97C 5\uCD08\uB85C \uB298\uB838\uB2E4(\uBABB \uBC1B\uB294 \uC815\uB958\uC7A5\uC774 \uC904\uC5B4\uB4E0\uB2E4).
+var LIVE_BUDGET_MS = 5000;
 function budgetLeft(dl) {
   return dl ? dl - Date.now() : LIVE_TIMEOUT_MS;
 }
