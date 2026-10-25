@@ -3718,11 +3718,12 @@ public class ShellActivity extends Activity {
                 Map<String, Object> fo = RouteFetchCore.extractFollow(b1);
                 boolean draw = b1.length() > 2 && RouteFetchCore.draws(fo);
                 boolean full1 = draw && !RouteFetchCore.wantsFull(fo);
-                if (draw && (full1 || !shown)) postRoute(my, b1, a, b, bt, rb, full1 ? sk : null);       // 옛 결과가 떠 있으면 근사 결과로 덮지 않고 전체를 기다린다
+                boolean on = shown;                                            // 이 찾기의 결과가 이미 떠 있나 — 떠 있으면 새 응답은 '바꿔 끼우기'(탭·펼침 그대로, 바뀐 칸만 스프링)
+                if (draw && (full1 || !shown)) { postRoute(my, b1, a, b, bt, rb, full1 ? sk : null, on); on = true; }       // 옛 결과가 떠 있으면 근사 결과로 덮지 않고 전체를 기다린다
                 if (!draw || RouteFetchCore.wantsFull(fo)) {
                     NetPost.Res r2 = NetPost.get(url, 30000);
                     String b2 = (r2.status == 200 && r2.body != null) ? r2.body : "";
-                    if (b2.length() > 2) { postRoute(my, b2, a, b, bt, rb, sk); fo = RouteFetchCore.extractFollow(b2); }
+                    if (b2.length() > 2) { postRoute(my, b2, a, b, bt, rb, sk, on); fo = RouteFetchCore.extractFollow(b2); }
                     else if (!draw) { postFail(my, shown); return; }
                 }
                 if (bt < 0) retryEstimated(my, url, fo);                       // 기준시각을 직접 고르지 않았을 때만(고르면 실시간 도착을 못 쓴다)
@@ -3747,7 +3748,7 @@ public class ShellActivity extends Activity {
             if (Boolean.TRUE.equals(f2.get("better"))) {
                 miss = RouteFetchCore.num(f2, "miss"); applied = RouteFetchCore.num(f2, "applied");
                 final String nb = body;
-                main.post(new Runnable() { @Override public void run() { if (my == seqRoute && home.replaceRoute(nb)) reloadHome(); } });
+                main.post(new Runnable() { @Override public void run() { if (my == seqRoute && home.replaceRoute(nb)) { body.springChanges(5000L); reloadHome(); } } });
             }
         }
     }
@@ -4535,11 +4536,15 @@ public class ShellActivity extends Activity {
     }
     private int seqRoute = 0, rideSeq = -1;
     /** sk: 이 결과를 SWR 보관함에 남길 열쇠(null 이면 남기지 않는다 — 근사 결과). 읽을 수 있는 결과만 남긴다. */
-    private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb, final String sk) {
+    private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb, final String sk, final boolean replace) {
         main.post(new Runnable() { @Override public void run() {
             if (my != seqRoute) return;
             rloadHide();
             if (my == rideSeq && home.riding()) return;                                       // 이 찾기의 결과를 보고 이미 경로를 확정했다 — 뒤늦게 온 다른 결과(근사 → 전체)가 확정을 풀지 않게 한다
+            if (replace && home.hasRoute()) {                                                  // 같은 찾기의 새 응답: 화면을 새로 시작하지 않고 바뀐 칸만 스프링으로 나타낸다
+                if (home.replaceRouteSame(raw, rb)) { if (sk != null) routeSwr.put(sk, rb + "\n" + raw, System.currentTimeMillis()); body.springChanges(5000L); reloadHome(); } else toast("경로 응답을 읽지 못했어요");
+                return;
+            }
             if (home.setRoute(raw, a, b, bt, rb)) { if (sk != null) routeSwr.put(sk, rb + "\n" + raw, System.currentTimeMillis()); reloadHome(); } else toast("경로 응답을 읽지 못했어요");
         } });
     }

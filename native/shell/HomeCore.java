@@ -97,6 +97,12 @@ public final class HomeCore {
         routeRaw = t; ld2Raw = ""; touch();
         return true;
     }
+    /** 같은 찾기의 새 응답(근사 → 전체 · 옛 결과 → 새 결과)으로 바꾼다 — 보던 탭 · 펼친 세부 · 경로 번호는 그대로, 탐색 시각만 새로. */
+    public boolean replaceRouteSame(String raw, long rb) {
+        if (!replaceRoute(raw)) return false;
+        resRb = rb;
+        return true;
+    }
     /** 공지·제보 원자료를 넣는다(60초 안에 같은 노선이면 다시 받지 않는다). */
     public void setNotes(String key, String off, String al, long now) { noteKey = key; offRaw = off == null ? "" : off; alRaw = al == null ? "" : al; noteAt = now; touch(); }
     public String secKey() { StringBuilder b = new StringBuilder(); for (String x : resSec) b.append(x).append(','); return b.toString(); }

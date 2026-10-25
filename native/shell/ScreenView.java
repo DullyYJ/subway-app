@@ -213,6 +213,9 @@ public class ScreenView extends View {
                 if (k != null) { ancKey = k; ancOff = q.y - scrollY; break; }
             }
         }
+        final long nowSp = SystemClock.uptimeMillis();
+        java.util.HashMap<String, Integer> spOld = null;
+        if (keepScroll && lay != null && nowSp < spUntil) { spOld = new java.util.HashMap<String, Integer>(); fpAdd(spOld, lay.head); fpAdd(spOld, lay.body); fpAdd(spOld, lay.foot); }
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
         mqT0 = SystemClock.uptimeMillis();
@@ -227,6 +230,7 @@ public class ScreenView extends View {
         partialFrom = before != null && before.part ? before : null;
         relayout();
         partialFrom = null;
+        if (spOld != null) markChanged(spOld, nowSp);
         trackMsgs(keepScroll);
         syncMk(keepScroll);
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
@@ -986,7 +990,39 @@ public class ScreenView extends View {
 
     // ───────────── 버스: 토글 줄 · 정류장 카드(내용·모양·색은 엔진, 앱은 그리기) ─────────────
     private static final int C_BLUE = 0xFF0066FF, C_SOON = 0xFFE74C3C, C_NOARR = 0xFFA0A0A5;
-    private boolean bcAnim, arAnim;
+    private boolean bcAnim, arAnim, spAnim;
+    private long spUntil;
+    private static final float SP_MS = 520f;
+    /** 이 시각까지 오는 새 화면(같은 화면의 새 응답)은 내용이 바뀐 칸만 스프링으로 나타나게 한다 — 새 경로가 아니라 같은 경로의 실시간 반영일 때 부른다. */
+    public void springChanges(long ms) { spUntil = SystemClock.uptimeMillis() + Math.max(0L, ms); }
+    private static String itemFp(ScreenCore.Item q) {
+        StringBuilder b = new StringBuilder(96);
+        b.append(q.kind).append('|').append(q.key).append('|').append(q.value).append('|').append(q.label).append('|').append(q.badge).append('|').append(q.tag).append('|').append(q.time).append('|').append(q.dk).append(q.gk).append(q.ps ? 'p' : '-').append(q.hr ? 'h' : '-').append('|').append(q.color).append('|').append(q.bg).append('|').append(q.sig).append('|').append(q.t1).append('|').append(q.t2).append('|').append(q.t3).append('|').append(q.dist).append('|').append(q.go).append('|').append(q.stars).append('|').append(q.rank);
+        for (String s : q.lines) b.append('\n').append(s);
+        for (String s : q.lines2) b.append('\u0001').append(s);
+        for (String s : q.sa) b.append('\u0002').append(s);
+        return b.toString();
+    }
+    private static void fpAdd(java.util.HashMap<String, Integer> m, ScreenCore.Item[] arr) {
+        for (ScreenCore.Item q : arr) { String k = itemFp(q); Integer c = m.get(k); m.put(k, c == null ? 1 : c + 1); }
+    }
+    /** 이전 배치에 없던 내용의 칸만 표시한다. 칸의 절반 넘게 새것이면(다른 화면) 표시하지 않는다. */
+    private void markChanged(java.util.HashMap<String, Integer> old, long now) {
+        if (lay == null || old == null || old.isEmpty()) return;
+        ScreenCore.Item[][] parts = { lay.head, lay.body, lay.foot };
+        int total = 0, fresh = 0;
+        java.util.ArrayList<ScreenCore.Item> hit = new java.util.ArrayList<ScreenCore.Item>();
+        for (ScreenCore.Item[] arr : parts) for (ScreenCore.Item q : arr) {
+            total++;
+            String k = itemFp(q); Integer c = old.get(k);
+            if (c != null && c > 0) { old.put(k, c - 1); continue; }
+            fresh++; hit.add(q);
+        }
+        if (fresh == 0 || fresh * 2 > total) return;
+        for (ScreenCore.Item q : hit) q.sp = now;
+        invalidate();
+    }
+
     private long arSq, arT0;                                   // 버튼 줄 전환 연출: 마지막으로 본 전환 시각 · 시작한 시계
     private final float[] arF = new float[20];
     // ── 새 말풍선 등장 애니메이션(웹 .chat-bubble.anim-l/anim-r: 0.34초 · 타인은 왼쪽에서, 내 글은 오른쪽에서 24px 미끄러지며 나타남). 처음 그린 화면·다른 화면으로 바뀐 뒤 처음에는 쓰지 않는다(기존 글은 다시 움직이지 않음).
@@ -1696,7 +1732,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1790,7 +1826,7 @@ public class ScreenView extends View {
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 9 || mode == 5 || bcAnim || arAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 9 || mode == 5 || bcAnim || arAnim || spAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
@@ -1846,6 +1882,23 @@ public class ScreenView extends View {
     }
 
     private void drawItem(Canvas cv, ScreenCore.Item it) {
+        if (it.sp > 0L) {                                                    // 바뀐 칸: 위에서 10dp 스프링으로 내려앉으며(살짝 지나쳤다 되돌아) 나타남 — 나머지 칸은 건드리지 않는다
+            float f = (SystemClock.uptimeMillis() - it.sp) / SP_MS;
+            if (f >= 1f) it.sp = 0L;
+            else {
+                float a = f <= 0f ? 0f : Math.min(1f, f * 3f), dy = f <= 0f ? -10f : -10f * (1f - spring(f));
+                spAnim = true;
+                if (a < 1f) cv.saveLayerAlpha(it.x - 4f, it.y - 14f, it.x + it.w + 4f, it.y + it.h + 14f, Math.round(255f * a));
+                cv.save(); cv.translate(0f, dy);
+                drawItem0(cv, it);
+                cv.restore();
+                if (a < 1f) cv.restore();
+                return;
+            }
+        }
+        drawItem0(cv, it);
+    }
+    private void drawItem0(Canvas cv, ScreenCore.Item it) {
         switch (it.kind) {
             case ScreenCore.K_CHIP: drawChip(cv, it); break;
             case ScreenCore.K_CARD: drawCard(cv, it); break;
