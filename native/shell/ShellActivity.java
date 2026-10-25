@@ -42,7 +42,7 @@ public class ShellActivity extends Activity {
     private ShellCore.Store store;
     private LinearLayout root;
     private RsSheetView rs, rsF;                      // rs = 하단 탭 아래에 올라오는 탑승 시트, rsF = 탭 위에 뜨는 대기 알약 · 되돌리기 캡슐
-    private final Runnable rsApply = new Runnable() { @Override public void run() { if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
+    private final Runnable rsApply = new Runnable() { @Override public void run() { rerouteAsk(); if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -255,6 +255,7 @@ public class ShellActivity extends Activity {
         if ("community".equals(tab)) { closeSheet(); store.put(ShellCore.K_TAB, "community"); showTab("community"); }
         final String go = WidgetCore.takeLaunch(this);
         if (!"morn".equals(go) && !"eve".equals(go)) return;
+        if (rideLocked()) return;
         toast("출퇴근 경로를 찾는 중이에요");
         final String body = CmCore.briefBody(store, go, System.currentTimeMillis(), null);
         new Thread(new Runnable() {
@@ -313,7 +314,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -2863,10 +2864,12 @@ public class ShellActivity extends Activity {
         switch (map.sheetAct(v)) {
             case MapCore.R_CLOSE: closeSheet(); break;
             case MapCore.R_START:
+                if (rideLocked()) { closeSheet(); break; }
                 home.setStation(HomeCore.START, map.pickName, map.pickLine, map.pickLa, map.pickLo);
                 closeSheet(); toastTx(MapCore.fill(map.msgS, map.pickName));
                 break;
             case MapCore.R_DEST:
+                if (rideLocked()) { closeSheet(); break; }
                 home.setStation(HomeCore.DEST, map.pickName, map.pickLine, map.pickLa, map.pickLo);
                 closeSheet();
                 if (home.bothSet()) {
@@ -3092,6 +3095,7 @@ public class ShellActivity extends Activity {
             case MapCore.R_BR_START: {
                 String[] r = map.brPicked();
                 if (r == null) break;
+                if (rideLocked()) { closeSheet(); break; }
                 home.pickSnap();
                 home.setBusStop(HomeCore.START, r[2], r[1], map.brCc, Double.parseDouble(r[4]), Double.parseDouble(r[5]));
                 map.brPickStart();
@@ -3105,6 +3109,7 @@ public class ShellActivity extends Activity {
             case MapCore.R_BR_FINISH: {
                 String[] r = map.brPicked();
                 if (r == null) break;
+                if (rideLocked()) { closeSheet(); break; }
                 home.setBusStop(HomeCore.DEST, r[2], r[1], map.brCc, Double.parseDouble(r[4]), Double.parseDouble(r[5]));
                 home.pickDone(); brKeep = true;
                 closeSheet();
@@ -3480,6 +3485,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_GPS: startGps(); break;
             case HomeCore.R_PICK_TIME: pickBase(); break;
             case HomeCore.R_GO: goRoute(); break;
+            case HomeCore.R_LOCK: rideLocked(); break;
             case HomeCore.R_NEED_BOTH: toast("출발지와 도착지를 입력해 주세요"); break;
             default: break;
         }
@@ -3540,6 +3546,7 @@ public class ShellActivity extends Activity {
 
     // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자)
     private void pickBase() {
+        if (rideLocked()) return;
         final Calendar c = Calendar.getInstance();
         if (home.baseMs >= 0) c.setTimeInMillis(home.baseMs);
         new android.app.DatePickerDialog(this, new android.app.DatePickerDialog.OnDateSetListener() {
@@ -3729,7 +3736,14 @@ public class ShellActivity extends Activity {
         if (d != null) { try { d.dismiss(); } catch (Throwable ignored) { } RunnerArt.release(); }
     }
 
+    /** 확정한 경로(탑승 안내)가 있으면 true — 사용자가 [안내 종료]를 누르거나 도착할 때까지는 새로 찾기·닫기·바꾸기가 확정을 건드리지 못한다. */
+    private boolean rideLocked() {
+        if (!home.riding()) return false;
+        toast("경로를 확정해 안내 중이에요. 안내를 끝낸 뒤에 새로 찾을 수 있어요");
+        return true;
+    }
     private void goRoute() {
+        if (rideLocked()) return;
         final boolean picked = home.baseMs >= 0;
         final long base = picked ? home.baseMs : System.currentTimeMillis();
         final String qs = HomeCore.routeQuery(home.loc[HomeCore.START], home.loc[HomeCore.DEST], base, picked);
@@ -4002,8 +4016,11 @@ public class ShellActivity extends Activity {
         if (RideService.running) { reviveN = 0; return false; }
         try {
             long now = System.currentTimeMillis();
-            if (reviveN >= 6 || RideCore.restore(getSharedPreferences(RideService.PREFS, MODE_PRIVATE).getString(RideService.KEY_SAVED, ""), now) == null) return false;
-            if (now - reviveAt >= 4000L) { reviveAt = now; reviveN++; RideService.start(this); }
+            if (RideCore.restore(getSharedPreferences(RideService.PREFS, MODE_PRIVATE).getString(RideService.KEY_SAVED, ""), now) == null) return false;     // 저장본이 없다 = 도착했거나 사용자가 끝냈다(서비스가 지운다)
+            if (now - reviveAt >= (reviveN >= 6 ? 30000L : 4000L)) {                      // 6번 해도 안 켜지면 포기하지 않고 30초마다 계속 — 확정은 사용자가 끝내거나 도착할 때까지 풀리지 않는다
+                reviveAt = now; reviveN++;
+                try { RideService.start(this); } catch (Throwable t) { /* 시스템이 지금은 못 켜게 한다 — 다음 번에 다시 */ }
+            }
             return true;
         } catch (Throwable t) { return false; }
     }
@@ -4013,6 +4030,48 @@ public class ShellActivity extends Activity {
         if (!RideService.running && (System.currentTimeMillis() < rideGraceUntil || reviveRide())) return;       // 서비스가 막 켜지는 중 · 시스템이 서비스를 내렸으면(저장본이 살아 있는 동안) 다시 켜고 기다린다 — 확정이 풀린 것처럼 지우지 않는다
         if (RideService.running && RideService.liveRide.length() < 3) return;                                   // 서비스는 돌지만 첫 값이 아직 안 올라왔다 — 비어 있다고 확정을 지우지 않는다(끝났으면 running 이 먼저 꺼진다)
         if (home.setRide(RideService.liveRide, RideService.liveLv)) reloadHome();
+        rerouteAsk();
+    }
+    private long offAskedAt = 0L;
+    private android.app.Dialog offDlg;
+    /** 확정한 경로를 오차 범위 넘게 벗어났다고 엔진이 알리면(RideService.liveOff) 한 번 묻는다 — 지금 위치에서 도착지까지 다시 찾을지. 같은 이탈에는 다시 묻지 않고, 경로로 돌아왔다 또 벗어나면 다시 묻는다. */
+    private void rerouteAsk() {
+        if (!resumed || isFinishing() || !home.riding() || !RideService.running) return;
+        final long at = RideService.liveOff;
+        if (at <= 0L || at == offAskedAt || (offDlg != null && offDlg.isShowing())) return;
+        offAskedAt = at;
+        try {
+            offDlg = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
+                .setTitle("경로를 벗어났어요")
+                .setMessage("지금 있는 곳에서 도착지까지 경로를 다시 찾을까요?\n다시 찾으면 지금 안내는 끝나고, 새 경로를 확정할 수 있어요.")
+                .setPositiveButton("다시 찾기", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface d, int w) { rerouteFromHere(); } })
+                .setNegativeButton("계속 안내", null).show();
+        } catch (Throwable t) { offAskedAt = 0L; }
+    }
+    /** 사용자가 '다시 찾기'를 골랐다: 지금 위치를 출발지로 같은 도착지까지 새로 찾는다(자동 확정은 하지 않는다). 위치를 못 잡으면 안내를 그대로 둔다. */
+    private void rerouteFromHere() {
+        if (!home.riding()) return;
+        HomeCore.Loc dest = home.loc[HomeCore.DEST];
+        if (dest == null || !dest.ok()) { toast("도착지를 찾지 못해 다시 찾을 수 없어요"); return; }
+        if (!hasLocPerm()) { toast("위치 권한이 없어 다시 찾을 수 없어요"); return; }
+        toast("지금 위치에서 경로를 다시 찾는 중이에요");
+        final boolean[] once = new boolean[1];
+        locateNow(12000L, 1000L, 5000L, 60000L, new LocCb() {
+            @Override public void fix(Location l) {
+                if (once[0] || !home.riding()) return;
+                once[0] = true;
+                saveLoc(l);
+                store.put(ShellCore.K_RIDESNAP, "");
+                RideService.stop(ShellActivity.this); rideGraceUntil = 0L;                    // 사용자가 새로 찾기를 골랐다 — 지난 안내를 조용히 끝낸다(도보 안내 시트 · 토스트 없이)
+                home.setRide("", "");
+                home.setGpsStart(l.getLatitude(), l.getLongitude());
+                home.baseMs = -1; home.clearRoute();
+                setHomeFields();
+                store.put(ShellCore.K_TAB, "home"); showTab("home");
+                goRoute();
+            }
+            @Override public void fail(boolean noperm) { if (!once[0]) toast("현재 위치를 찾지 못해 지금 안내를 그대로 이어가요"); }
+        });
     }
 
     // ───────────── 도보 안내 시트(웹 walkModal) ─────────────
@@ -4566,6 +4625,7 @@ public class ShellActivity extends Activity {
             case FavCore.R_GO: {
                 FavCore.Go g = fav.go.get(fav.goIdx);
                 closeSheet();
+                if (rideLocked()) break;
                 home.setStation(HomeCore.START, g.sName, g.sLine, g.sLa, g.sLo);
                 home.setStation(HomeCore.DEST, g.dName, g.dLine, g.dLa, g.dLo);
                 home.clearRoute();
