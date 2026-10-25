@@ -13,7 +13,7 @@ const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
 function flat(nodes, out) { out = out || []; nodes.forEach(n => { out.push(n); if (n.kids) flat(n.kids, out); }); return out; }
 const all = s => flat(s.body);
 const full = { id: '길동', np: { arrive: 1, transfer: 0, arrive_reco: 1 }, npd: 1, rl: 1, th: 'dark', sam: 1, samw: 1, errn: 3, cm: 1, ovl: 0,
-  pt: { total: 120, today: 15, todayStr: '2026-10-20', rc: 2, rcStr: '2026-10-20' }, day: '2026-10-20' };
+  };
 
 // ① cap
 ok(E.settingsScreen({}, full).ok === false && E.settingsScreen({ cap: 2 }, full).ok === false, 'cap 3 미만이면 만들지 않는다');
@@ -29,12 +29,8 @@ ok(!toggles.some(n => /^f\./.test(n.key)), '웹 기능 스위치(f.*)가 없다'
 const tg = k => toggles.find(n => n.key === k);
 ok(tg('n.arrive').on === true && tg('n.transfer').on === false && tg('n.arrive_reco').on === true, '알림 스위치 상태 = 저장값');
 {
-  const pn = nodes.find(n => n.t === 'box' && /^내 포인트/.test(n.s));
-  ok(pn && pn.s === '내 포인트  120 P  \u00b7 오늘 15 P\n등급  탑승객  (지하철러까지 30 P)' && pn.hl.length === 2, '포인트 칸: 규칙 엔진이 계산한 합계·오늘·등급 ' + (pn && pn.s));
-  ok(nodes.some(n => n.t === 'text' && /현장제보 3~8 P \(하루 3회, 오늘 2\/3\)/.test(n.s)), '포인트 안내: 하루 제한과 오늘 횟수');
-  const nt = all(E.settingsScreen({ cap: 3 }, Object.assign({}, full, { day: '2026-10-21' })));
-  ok(nt.some(n => n.t === 'box' && /오늘 0 P/.test(n.s)) && nt.some(n => n.t === 'text' && /오늘 0\/3/.test(n.s)), '날짜가 바뀌면 오늘 값과 현장제보 횟수는 0');
-  ok(!all(E.settingsScreen({ cap: 3 }, Object.assign({}, full, { pt: null }))).some(n => n.t === 'box' && /^내 포인트/.test(n.s)), '저장값이 없으면 포인트 칸 없음');
+  ok(!nodes.some(n => /포인트|\d+ P\b|등급/.test(n.s || '')), '포인트 칸 · 안내가 없다(s216: 포인트 기능 삭제)');
+  ok(!all(E.settingsScreen({ cap: 3 }, Object.assign({}, full, { pt: { total: 120 }, day: '2026-10-20' }))).some(n => /포인트/.test(n.s || '')), '옛 앱이 포인트 저장값을 보내도 칸을 만들지 않는다');
 }
 const boxes = nodes.filter(n => n.t === 'box').map(n => n.s);
 ok(boxes.some(t => /^알림 권한이 꺼져 있어요/.test(t)) && boxes.some(t => /^이 앱의 배터리 사용이 제한됨으로/.test(t)), '권한 거부·배터리 제한 경고 상자');
