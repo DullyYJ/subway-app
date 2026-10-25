@@ -36,6 +36,25 @@
     }
     im.count = k; im.castShadow = true; im.receiveShadow = true; parent.add(im); return im;
   }
+  // 깃털 비늘: 타원체 겉면에 납작한 타원 깃털을 물고기 비늘처럼 겹쳐 붙인다(행마다 엇갈림). keep(dir)로 범위 제한, tint = 인스턴스별 밝기 흔들림
+  function scales(parent, rx, ry, rz, o) {
+    const rows = o.rows, w = o.w, h = o.h, m = o.mat, R = rng(o.seed || 3), pts = [];
+    for (let j = 0; j < rows; j++) {
+      const v = (j + 0.5) / rows, phi = o.v0 + (o.v1 - o.v0) * v, ring = Math.max(6, Math.round(o.cols * Math.sin(phi)));
+      for (let i = 0; i < ring; i++) {
+        const th = (i + (j % 2 ? 0.5 : 0)) / ring * Math.PI * 2, dir = new T.Vector3(Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th));
+        if (o.keep && !o.keep(dir)) continue; pts.push(dir);
+      }
+    }
+    const im = new T.InstancedMesh(new T.SphereGeometry(1, 12, 8), m, pts.length), d = new T.Object3D(), c = new T.Color(), base = new T.Color(o.color);
+    pts.forEach((dir, k) => {
+      const nrm = new T.Vector3(dir.x / (rx * rx), dir.y / (ry * ry), dir.z / (rz * rz)).normalize(), pos = new T.Vector3(dir.x * rx, dir.y * ry, dir.z * rz).addScaledVector(nrm, 0.012);
+      d.position.copy(pos); d.up.set(0, 1, 0); if (Math.abs(nrm.y) > 0.97) d.up.set(1, 0, 0); d.lookAt(pos.clone().add(nrm)); d.rotateZ((R() - 0.5) * 0.25);
+      d.scale.set(w * (0.9 + R() * 0.2), h * (0.9 + R() * 0.25), 0.028); d.updateMatrix(); im.setMatrixAt(k, d.matrix);
+      c.copy(base).multiplyScalar(0.88 + R() * 0.24); im.setColorAt(k, c);
+    });
+    im.castShadow = true; im.receiveShadow = true; parent.add(im); return im;
+  }
   // ── 원본 그림 입히기: 타원체(rx,ry,rz)의 앞(+x) 반구에 그림을 평면으로 투영한다. 그림 사각형이 타원에 내접한다. ──
   const _tex = {};
   function tex(key) {
@@ -47,6 +66,7 @@
     const ex = o.ext === undefined ? 0.4 : o.ext, g = new T.SphereGeometry(1, 64, 44, Math.PI / 2 - ex, Math.PI + 2 * ex, 0, Math.PI), pos = g.attributes.position, uv = g.attributes.uv;
     for (let i = 0; i < pos.count; i++) uv.setXY(i, 0.5 - 0.5 * pos.getZ(i), 0.5 + 0.5 * pos.getY(i));
     const tx = tex(key), m = new T.MeshStandardMaterial({ map: tx, emissiveMap: tx, emissive: 0xffffff, emissiveIntensity: o.glow === undefined ? 0.5 : o.glow, color: o.tint || 0x9a9a9a, roughness: 0.95, metalness: 0, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    if (o.bump) { m.bumpMap = furBump(); m.bumpScale = o.bump; }
     const mesh = new T.Mesh(g, m); const k = o.k || 1.012; mesh.scale.set(rx * k, ry * k, rz * k); mesh.castShadow = false; mesh.receiveShadow = false; parent.add(mesh); return mesh;
   }
   let _bump = null;
@@ -54,25 +74,25 @@
     if (_bump) return _bump;
     const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); x.fillStyle = '#808080'; x.fillRect(0, 0, 256, 256);
     const R = rng(5); for (let i = 0; i < 1400; i++) { const px = R() * 256, py = R() * 256, r = 3 + R() * 9, g = x.createRadialGradient(px, py, 0, px, py, r); const v = R() > 0.5 ? 255 : 0; g.addColorStop(0, 'rgba(' + v + ',' + v + ',' + v + ',0.35)'); g.addColorStop(1, 'rgba(' + v + ',' + v + ',' + v + ',0)'); x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2); }
-    const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(3, 2); return (_bump = t);
+    const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(5, 3); return (_bump = t);
   }
-  const fur = (c) => mat(c, { roughness: 1, bumpMap: furBump(), bumpScale: 2.2 });
+  const fur = (c) => mat(c, { roughness: 1, bumpMap: furBump(), bumpScale: 1.5 });
   const eyeBlack = () => glossy(0x16110f, { roughness: 0.1, clearcoat: 1 });
 
   // ═════ 강아지 (돌솜 = 흰 비숑·파란 리본, 뽀푸 = 갈색 푸들·가죽 목줄) ═════
   function buildDog(o) {
     const root = new T.Group(), fm = fur(o.fur), P = {};
     const body = new T.Group(); body.position.y = 0.72; root.add(body); P.body = body;
-    body.add(ell(0.5, 0.36, 0.38, fm)); 
+    { const ch = ell(0.4, 0.37, 0.37, fm, 32); ch.position.set(0.14, 0.02, 0); body.add(ch); const hp = ell(0.42, 0.34, 0.34, fm, 32); hp.position.set(-0.17, -0.01, 0); body.add(hp); const mdl = ell(0.46, 0.33, 0.34, fm, 32); mdl.position.set(0, -0.02, 0); body.add(mdl); }
     const head = new T.Group(); head.position.set(0.36, 0.52, 0); body.add(head); P.head = head;
     head.add(ell(0.66, 0.58, 0.72, fm, 36));
-    P.face = decal(head, 0.66, 0.58, 0.72, o.tex); P.faceKey = o.tex;
+    P.face = decal(head, 0.66, 0.58, 0.72, o.tex, { bump: 1.0 }); P.faceKey = o.tex;
     fluff(head, 0.66, 0.58, 0.72, 46, 0.3, fm, o.seed + 1, d => d.x < -0.35);   // 뒤통수·머리 뒤쪽 털(앞은 원본 그림)
     // 귀(옆으로 늘어진 털 뭉치 — 원본의 양옆 뭉치)
     P.ears = [];
     [1, -1].forEach(sd => {
       const eg = new T.Group(); eg.position.set(-0.08, 0.02, 0.62 * sd); head.add(eg);
-      const e1 = ell(0.2, 0.34, 0.16, fm, 20); e1.position.set(0, -0.12, 0.08 * sd); eg.add(e1); fluff(e1, 0.2, 0.34, 0.16, 16, 0.13, fm, o.seed + 7 + sd);
+      const e1 = ell(0.17, 0.29, 0.14, fm, 20); e1.position.set(0, -0.12, 0.06 * sd); eg.add(e1); fluff(e1, 0.17, 0.29, 0.14, 16, 0.11, fm, o.seed + 7 + sd);
       P.ears.push(eg);
     });
     if (o.bow) {   // 리본(원본: 머리 위 화면 오른쪽) — 고리 둘이 화면 가로로 펼쳐지게
@@ -100,7 +120,9 @@
     // 다리 네 개 [앞오른, 앞왼, 뒤오른, 뒤왼] — 엉덩이 공이 몸통에 박힌 통통한 털 다리 + 발
     P.legs = [];
     [[0.3, 0.23], [0.3, -0.23], [-0.3, 0.23], [-0.3, -0.23]].forEach((p, i) => {
-      const lg = leg2({ hr: [0.2, 0.21, 0.18], up: 0.27, ru: 0.15, rk: 0.135, lo: 0.24, rl: 0.12, paw: [0.2, 0.11, 0.17, 0.06] }, fm);
+      const lg = plushLeg({ up: 0.27, lo: 0.25, r0: 0.17, r1: 0.135, r2: 0.12, paw: [0.2, 0.11, 0.17, 0.07], pawY: 0.014 }, fm);
+      { const th = ell(0.19, 0.25, 0.19, fm, 20); th.position.set(0, -0.14, 0); lg.add(th); fluff(th, 0.19, 0.25, 0.19, 14, 0.085, fm, o.seed + 20 + i);
+        const sn = ell(0.15, 0.2, 0.15, fm, 18); sn.position.set(0, -0.13, 0); lg.userData.knee.add(sn); fluff(sn, 0.15, 0.2, 0.15, 10, 0.07, fm, o.seed + 30 + i); }
       lg.position.set(p[0], -0.12, p[1]); body.add(lg); P.legs.push(lg);
     });
     root.userData = P; return root;
@@ -121,18 +143,18 @@
   //   ① 다리 = 허벅지→무릎→정강이가 한 줄로 매끈하게 가늘어지는 통통한 관(관절 공은 같은 반지름이라 이음매가 안 보인다)과 둥근 발 ② 꼬리 = 프레임마다 곡선을 따라 새로 뽑는 매끈한 관(끝이 가늘고 둥글게 말림, 원본의 S자 꼬리)
   //   ③ 몸 = 가슴이 큰 달걀형(머리가 큰 치비 비율) ④ 귀 = 넓은 밑동의 둥근 삼각형 + 분홍 안쪽 ⑤ 털 = 푸른 회색에 은빛 윤기(sheen)와 밝은 가슴·발.
   function tubeGeo(pts, rad, seg) {   // pts: Vector3[] 중심선, rad: 각 점의 반지름 → 양 끝이 닫히지 않은 관(끝은 구로 덮는다)
-    const n = pts.length, pos = [], idx = [], nor = [], fr = new T.Vector3(0, 0, 1), up = new T.Vector3(), t = new T.Vector3(), nn = new T.Vector3(), bb = new T.Vector3();
+    const n = pts.length, pos = [], idx = [], nor = [], uvs = [], fr = new T.Vector3(0, 0, 1), up = new T.Vector3(), t = new T.Vector3(), nn = new T.Vector3(), bb = new T.Vector3();
     for (let i = 0; i < n; i++) {
       t.subVectors(pts[Math.min(n - 1, i + 1)], pts[Math.max(0, i - 1)]).normalize();
       nn.crossVectors(t, fr); if (nn.lengthSq() < 1e-6) nn.crossVectors(t, up.set(0, 1, 0)); nn.normalize(); bb.crossVectors(t, nn).normalize();
       for (let k = 0; k <= seg; k++) {
         const a = k / seg * Math.PI * 2, cx = Math.cos(a), cy = Math.sin(a);
         const dx = nn.x * cx + bb.x * cy, dy = nn.y * cx + bb.y * cy, dz = nn.z * cx + bb.z * cy;
-        pos.push(pts[i].x + dx * rad[i], pts[i].y + dy * rad[i], pts[i].z + dz * rad[i]); nor.push(dx, dy, dz);
+        pos.push(pts[i].x + dx * rad[i], pts[i].y + dy * rad[i], pts[i].z + dz * rad[i]); nor.push(dx, dy, dz); uvs.push(k / seg * 3, i / Math.max(1, n - 1) * 2);
       }
     }
-    for (let i = 0; i < n - 1; i++) for (let k = 0; k < seg; k++) { const a = i * (seg + 1) + k, b = a + seg + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setIndex(idx); return g;
+    for (let i = 0; i < n - 1; i++) for (let k = 0; k < seg; k++) { const a = i * (seg + 1) + k, b = a + seg + 1; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); return g;
   }
   function plushLeg(o, m, pm) {   // 통통한 관 다리: 반지름이 허벅지 r0 → 무릎 r1 → 발목 r2 로 매끈하게 가늘어진다
     const hip = new T.Group(), knee = new T.Group(), paw = new T.Group();
@@ -142,7 +164,7 @@
     knee.add(ell(o.r1, o.r1, o.r1, m, 18));
     const sg = tubeGeo([new T.Vector3(0, 0, 0), new T.Vector3(0, -o.lo * 0.5, 0), new T.Vector3(0, -o.lo, 0)], [o.r1, (o.r1 + o.r2) / 2, o.r2], 18); knee.add(sh(new T.Mesh(sg, m)));
     paw.position.y = -o.lo; knee.add(paw);
-    const pw = ell(o.paw[0], o.paw[1], o.paw[2], pm || m, 22); pw.position.set(o.paw[3], -o.paw[1] * 0.25, 0); paw.add(pw);   // 둥근 발(앞으로 살짝)
+    const pw = ell(o.paw[0], o.paw[1], o.paw[2], pm || m, 22); pw.position.set(o.paw[3], o.pawY === undefined ? -o.paw[1] * 0.25 : o.pawY, 0); paw.add(pw);   // 둥근 발(앞으로 살짝)
     hip.userData = { knee, paw }; return hip;
   }
   function buildCat() {
@@ -161,11 +183,12 @@
     // 귀: 밑동이 넓고 끝이 둥근 삼각형(원본의 큰 귀) + 분홍 안쪽
     P.ears = [];
     const pinkM = mat(0xd9a3a8, { roughness: 0.9 });
+    const earM = gm.clone(); earM.side = T.DoubleSide;
     const earGeo = (r, h) => { const pr = [[0.001, 0], [r, 0], [r * 0.97, h * 0.12], [r * 0.82, h * 0.34], [r * 0.58, h * 0.58], [r * 0.34, h * 0.8], [r * 0.15, h * 0.94], [0.001, h]].map(p => new T.Vector2(p[0], p[1])); return new T.LatheGeometry(pr, 32); };
     [1, -1].forEach(s => {
-      const eg = new T.Group(); eg.position.set(-0.03, 0.2, 0.28 * s); head.add(eg);
-      const ec = new T.Mesh(earGeo(0.27, 0.62), gm); ec.position.y = 0.0; ec.scale.set(0.5, 1, 1.0); eg.add(sh(ec));
-      const ei = new T.Mesh(earGeo(0.19, 0.46), pinkM); ei.position.set(0.075, 0.1, 0); ei.scale.set(0.42, 1, 0.9); eg.add(ei);
+      const eg = new T.Group(); eg.position.set(-0.03, 0.17, 0.22 * s); head.add(eg);
+      const ec = new T.Mesh(earGeo(0.27, 0.62), earM); ec.position.y = 0.0; ec.scale.set(0.5, 1, 1.0); eg.add(sh(ec));
+      const ei = new T.Mesh(earGeo(0.19, 0.46), pinkM.clone()); ei.position.set(0.075, 0.1, 0); ei.scale.set(0.42, 1, 0.9); eg.add(ei);
       eg.rotation.x = -0.28 * s; eg.rotation.z = 0.08; P.ears.push(eg);
     });
     // 코랄색 목줄 + 금빛 방울
@@ -205,9 +228,11 @@
   function buildTadpole() {
     const root = new T.Group(), P = {}, bm = glossy(0x222f6c, { roughness: 0.4, clearcoat: 0.5 }), lm = glossy(0x4a68ac, { roughness: 0.4, clearcoat: 0.4 }), dm = glossy(0x16204f, { roughness: 0.4 });
     const body = new T.Group(); body.position.y = 1.0; root.add(body); P.body = body;
-    const torso = ell(0.4, 0.42, 0.36, bm, 32); torso.position.set(-0.08, -0.62, 0); body.add(torso);
+    const torso = ell(0.43, 0.46, 0.4, bm, 36); torso.position.set(-0.1, -0.58, 0); body.add(torso);
+    const neck = ell(0.44, 0.38, 0.42, bm, 32); neck.position.set(-0.03, -0.3, 0); body.add(neck);
+    const rump = ell(0.36, 0.28, 0.32, bm, 28); rump.position.set(-0.3, -0.76, 0); body.add(rump);
     const head = new T.Group(); body.add(head); P.head = head;
-    head.add(ell(0.5, 0.5, 0.56, bm, 44)); P.face = decal(head, 0.5, 0.5, 0.56, 'chaeng_head'); P.faceKey = 'chaeng_head';
+    head.add(ell(0.5, 0.5, 0.56, bm, 44)); P.face = decal(head, 0.5, 0.5, 0.56, 'chaeng_head', { glow: 0.6, ext: 0.4 }); P.faceKey = 'chaeng_head';
     // 가슴 옆 작은 손
     P.arms = [1, -1].map(s => { const f = new T.Group(); f.position.set(0.1, -0.5, 0.34 * s); body.add(f); const h = ell(0.1, 0.17, 0.1, bm, 14); h.position.set(0.0, -0.1, 0.03 * s); h.rotation.x = 0.3 * s; f.add(h); return f; });
     // 꼬리: 납작하고 넓은 지느러미 하나(곡면) — 몸통 아래에서 뒤로 뻗어 끝이 위로 말리고, 프레임마다 물결 모양으로 휜다
@@ -224,10 +249,10 @@
     const tailMesh = new T.Mesh(tg, new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.4, clearcoat: 0.4, metalness: 0 })); tailMesh.castShadow = true; tailMesh.receiveShadow = true; tailMesh.frustumCulled = false;
     const tailG = new T.Group(); tailG.position.set(-0.28, -0.72, 0); tailG.add(tailMesh); body.add(tailG); P.tailG = tailG;
     P.tailUpdate = function (a) {
-      const L = 1.5;
+      const L = 1.3;
       for (let i = 0; i < nv; i++) {
         const u = base[i * 3], cy = base[i * 3 + 1], cz = base[i * 3 + 2];
-        const hgt = (0.17 + 0.25 * Math.sin(Math.PI * Math.pow(u, 0.8))) * (1 - 0.8 * Math.pow(u, 6)) + 0.02, tk = Math.max(0.012, 0.15 - 0.13 * u);
+        const hgt = (0.17 + 0.14 * Math.sin(Math.PI * Math.pow(u, 0.8))) * (1 - 0.8 * Math.pow(u, 6)) + 0.03, tk = Math.max(0.04, 0.24 - 0.19 * u);
         const wave = 0.2 * Math.pow(u, 1.1) * Math.sin(a - 5 * u), curl = 0.38 * Math.pow(u, 2.2) + 0.05 * u;
         tp.setXYZ(i, -L * u + 0.0, curl + cy * hgt, wave + cz * tk);
       }
@@ -251,15 +276,18 @@
   function buildEagle() {
     const root = new T.Group(), P = {}, br = mat(0x7a6c5e, { roughness: 0.9 }), dk = mat(0x5d5249, { roughness: 0.9 }), lt = mat(0x938779, { roughness: 0.9 }), wh = mat(0xf6f4ee, { roughness: 0.9 }), yl = glossy(0xe9b02c, { roughness: 0.4 });
     const body = new T.Group(); body.position.y = 1.2; root.add(body); P.body = body;
-    body.add(ell(0.66, 0.62, 0.56, br, 32)); decal(body, 0.66, 0.62, 0.56, 'sul_chest');
+    body.add(ell(0.72, 0.68, 0.6, br, 36)); decal(body, 0.72, 0.68, 0.6, 'sul_chest', { ext: 0.15, glow: 0.35 });
+    scales(body, 0.72, 0.68, 0.6, { rows: 9, cols: 20, v0: 0.5, v1: 2.55, w: 0.115, h: 0.15, mat: mat(0xffffff, { roughness: 0.95 }), color: 0x8a7c6c, seed: 11, keep: d => d.x > -0.55 && d.y < 0.55 });
+    scales(body, 0.72, 0.68, 0.6, { rows: 6, cols: 18, v0: 0.5, v1: 1.5, w: 0.12, h: 0.16, mat: mat(0xffffff, { roughness: 0.95 }), color: 0x6a5e52, seed: 12, keep: d => d.x < 0.2 && d.y > 0.1 });
     const head = new T.Group(); head.position.set(0.5, 0.5, 0); body.add(head); P.head = head;
     head.add(ell(0.56, 0.55, 0.58, wh, 36)); P.face = decal(head, 0.56, 0.55, 0.58, 'sul_head'); P.faceKey = 'sul_head';
+    scales(head, 0.56, 0.55, 0.58, { rows: 4, cols: 18, v0: 1.95, v1: 2.6, w: 0.11, h: 0.15, mat: mat(0xffffff, { roughness: 0.95 }), color: 0xf4f1ea, seed: 21, keep: d => d.x < 0.55 });
     // 큼직한 노란 부리(위가 넓고 끝이 아래로 굽는다)
     const bk = new T.Mesh(new T.ConeGeometry(0.2, 0.46, 20), yl); bk.rotation.z = -Math.PI / 2; bk.position.set(0.62, -0.14, 0); bk.scale.set(1, 1, 1.25); head.add(sh(bk));
     const hook = ell(0.1, 0.11, 0.1, yl, 14); hook.position.set(0.84, -0.22, 0); head.add(hook);
     // 꽁지(흰 부채)
     P.tail = new T.Group(); P.tail.position.set(-0.55, 0.0, 0); body.add(P.tail);
-    for (let i = -2; i <= 2; i++) { const f = ell(0.4, 0.04, 0.1, wh, 14); f.position.set(-0.38, 0, i * 0.1); f.rotation.y = i * 0.1; P.tail.add(f); }
+    for (let i = -3; i <= 3; i++) { const f = ell(0.52 - Math.abs(i) * 0.03, 0.045, 0.115, i % 2 ? wh : mat(0xe8e4da, { roughness: 0.9 }), 14); f.position.set(-0.45, -0.02 - Math.abs(i) * 0.005, i * 0.105); f.rotation.y = i * 0.13; P.tail.add(f); }
     // 날개: 어깨→팔뚝→손 세 마디에 깃털. +z 쪽(오른쪽 날개)을 만들고 왼쪽은 z 반전
     P.wings = [];
     [1, -1].forEach(s => {
@@ -310,7 +338,7 @@
     P.arms = [];
     [1, -1].forEach(s => { const sg = new T.Group(); sg.position.set(0.18, 0.24, 0.52 * s); body.add(sg);
       sg.add(limb(0.5, 0.15, bm)); const paw = ell(0.2, 0.15, 0.17, skin, 18); paw.position.set(0.04, -0.54, 0); sg.add(paw);
-      for (let k = -1; k <= 1; k++) { const c = new T.Mesh(new T.ConeGeometry(0.025, 0.1, 6), mat(0xe9d3c4)); c.position.set(0.22, -0.56, k * 0.07); c.rotation.z = -Math.PI / 2; sg.add(c); }
+      for (let k = -1; k <= 1; k++) { const c = new T.Mesh(new T.ConeGeometry(0.035, 0.12, 8), mat(0xe9d3c4, { roughness: 0.6 })); c.position.set(0.22, -0.56, k * 0.07); c.rotation.z = -Math.PI / 2; sg.add(c); }
       sg.rotation.z = 0.25; P.arms.push(sg); });
     const sv = new T.Group(); sv.position.set(0.0, -0.5, 0); P.arms[1].add(sv); P.shovel = sv;
     const hd = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 1.2, 8), mat(0xa9753f, { roughness: 0.7 })); hd.position.set(0.05, 0.2, 0); sv.add(sh(hd));
@@ -383,7 +411,7 @@
     const face = { sit: null, sleep: 'closed', happy: 'happy', shiver: 'tight', pant: 'squint', squint: 'squint' }[n]; setFace(root, face);
     const perch = () => {
       P.legs.forEach(g => { g.rotation.z = 0.0; }); P.body.position.y = 0.95; P.body.rotation.z = 0.28; P.head.rotation.z = -0.28;
-      P.wings.forEach(w => { w.sh.rotation.set(0, -w.s * 1.25, 0); w.sh.position.z = 0.4 * w.s; w.fore.rotation.set(0, w.s * 2.4, 0); w.hand.rotation.set(0, w.s * 0.3, 0); });
+      P.wings.forEach(w => { w.sh.rotation.set(0, -w.s * 1.5, 0); w.sh.position.set(0.5, 0.18, 0.56 * w.s); w.sh.scale.setScalar(0.5); w.arm.rotation.set(0, 0, Math.PI / 2); w.fore.rotation.set(0, 0, 0); w.hand.rotation.set(0, 0, 0); });
       P.tail.rotation.z = -0.5;
     };
     if (n !== 'happy' && n !== 'pant') perch();
