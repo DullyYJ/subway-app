@@ -32,7 +32,10 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
   await t('탑승 서비스: 5초 걸음은 폰 안에서 계산하고, 서버는 [탑승] 시각표 한 번만 부른다', async () => {
     const s = fs.readFileSync(N('RideService.java'), 'utf8');
     const posts = s.match(/NetPost\.post\([^;]*\);/g) || [];
-    assert.strictEqual(posts.length, 2, '서버 호출은 시각표 한 번 + 추천 문구 미리 받기 한 번뿐이어야 한다: ' + posts.join(' | '));
+    assert.strictEqual(posts.length, 3, '서버 호출은 시각표 한 번 + 승차 대기 중 실시간 다음 차(/board-live) + 추천 문구 미리 받기 한 번뿐이어야 한다: ' + posts.join(' | '));
+    // 승차 대기 중 실시간 재보정(s196): 엔진이 ask 를 낼 때만(= 승차 대기 st.wait 중에만) 부른다 — 탑승이 확정되면 엔진이 묻지 않으므로 요청 0
+    assert.ok(/s\.askBody\.length\(\) > 0\) fetchBoardLive\(s\.askBody\)/.test(s) && /NetPost\.post\(ShellCore\.BASE \+ "\/board-live"/.test(s), '/board-live 는 엔진의 ask 로만');
+    assert.ok(!/fetchBoardLive\([^)]*\)[\s\S]{0,40}(RideLocal\.step)/.test(s), '걸음 계산과 섞이지 않는다');
     assert.ok(/RideLocal\.needsTable\(body\)[\s\S]{0,200}NetPost\.post\(ShellCore\.BASE \+ "\/ride-standby"/.test(s), '/ride-standby 는 needsTable 일 때만');
     assert.ok(/if \(resp == null\) resp = RideLocal\.step\(body\)/.test(s), '나머지는 로컬 엔진');
     const i = s.indexOf('private void fireReco');

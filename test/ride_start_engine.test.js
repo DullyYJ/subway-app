@@ -40,6 +40,16 @@ ok(late.ok && late.state.eta.passes.length === 1 && late.state.eta.passes[0].idx
 const busFirst = RS.rideStart({ cap: 18 }, facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(busLeg)), walk(2, 900, 1020)] }] } } }));
 ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.state.eta.boardInfo === undefined && busFirst.state.cfg.targets.length === 1 && busFirst.state.eta.nodes[1].isBus, '버스로 시작하면 시각표 기준 아님');
 
+{   // s196: 첫 구간이 버스면 승차 대기 중 실시간 재보정(/board-live)이 정류장을 바로 알 수 있게 도시코드·정류장 ID 를 싣는다
+  const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23';
+  const bb = RS.rideStart({ cap: 18 }, facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), bl, walk(2, 900, 1020)] }] } } }));
+  ok(bb.ok && bb.state.cfg.bl && bb.state.cfg.bl.kind === 'bus' && bb.state.cfg.bl.i === 1 && bb.state.cfg.bl.cc === '23' && bb.state.cfg.bl.sid === 'ICB123', '첫 구간 버스: cfg.bl = 도시코드·정류장 ID ' + JSON.stringify(bb.state && bb.state.cfg.bl));
+  ok(busFirst.ok && !busFirst.state.cfg.bl, '정류장 ID 를 모르면 cfg.bl 없음(묻지 않는다)');
+  ok(o.ok && !o.state.cfg.bl, '첫 구간이 지하철이면 cfg.bl 없음(지하철은 노선·역 이름으로 묻는다)');
+  const ask = SB.rideStandby({ nowMs: T0 - 300000, fixes: [[T0 - 300000, LAT, LNG0 - 0.004, 10]], state: JSON.parse(JSON.stringify(bb.state)) });
+  ok(ask.ask && ask.ask.body.kind === 'bus' && ask.ask.body.sid === 'ICB123' && ask.ask.body.no === '931', '그 state 로 승차 대기 중 /ride-standby 가 버스 정류장 질의를 낸다 ' + JSON.stringify(ask.ask) + JSON.stringify(ask.notes));
+}
+
 // ② 이상한 입력
 ok(RS.rideStart({ cap: 5 }, facts()).ok === false, 'cap 12 미만은 거절');
 ok(RS.rideStart({ cap: 18 }, null).error === 'route' && RS.rideStart({ cap: 18 }, { data: { result: { path: 'x' } } }).error === 'route', '경로가 없으면 route');

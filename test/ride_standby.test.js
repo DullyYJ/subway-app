@@ -658,6 +658,187 @@ t('실시간 도착: 첫 승차 [탑승](st.wait) 도 실시간 도착 시각을
   assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 53, 30)), '실시간을 못 받으면 시각표');
 });
 
+// ── s196: 승차 대기 중 실시간 재보정(웹 _applyRealBoardTime · _boardNextDep · _htlResyncBoard · _htlWaitArrived) ─────────────────────────────────────────
+const M_DEG = 88320;      // 위도 37.5 에서 경도 1도 ≈ 88,320m
+const blState = (kind) => {
+  const st = waitState();
+  if (kind === 'bus') { st.eta.nodes = st.eta.nodes.map(n => n.isOrigin ? n : Object.assign({}, n, { isSub: false, isBus: true, lineName: '100' })); st.cfg.bl = { kind: 'bus', i: 1, cc: '23', sid: 'ICB1', no: '100' }; }
+  else st.eta.nodes = st.eta.nodes.map(n => n.isOrigin ? n : Object.assign({}, n, { isSub: true, isBus: false, lineName: '2호선' }));
+  st.cfg.waitBoard = true; return st;
+};
+const blStep = (st, ms, mDist, extra) => rideStandby(Object.assign({ nowMs: ms, fixes: mDist == null ? [] : [[ms, LAT, LNG0 - mDist / M_DEG, 10]], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
+t('승차 대기 실시간: 역까지 걸어가는 중 — 15초마다 묻는다 · 내가 역에 닿는 시각은 도보 ETA(직선 × 1.25 ÷ 1.2m/s) · 멀면 앞당김은 허용 안 함', () => {
+  const T = at(12, 45, 0);
+  let r = blStep(blState(), T, 600);
+  assert.ok(r.ask && r.ask.kind === 'boardlive', JSON.stringify(r.ask));
+  const b = r.ask.body;
+  assert.strictEqual(b.kind, 'sub'); assert.strictEqual(b.i, 1); assert.strictEqual(b.line, '2호선'); assert.strictEqual(b.from, 'S0'); assert.strictEqual(b.to, 'S1');
+  assert.ok(Math.abs(b.fromMs - (T + 600 * 1.25 / 1.2 * 1000)) < 4000, '도보 ETA ' + (b.fromMs - T));
+  assert.strictEqual(b.allowEarlier, false); assert.strictEqual(b.maxWait, 30); assert.strictEqual(b.nowMs, T);
+  r = blStep(r.state, T + 5000, 590); assert.strictEqual(r.ask, null, '5초 뒤엔 안 묻는다(15초 간격)');
+  r = blStep(r.state, T + 14000, 580); assert.strictEqual(r.ask, null);
+  r = blStep(r.state, T + 15000, 570); assert.ok(r.ask, '15초 뒤엔 다시 묻는다');
+});
+t('승차 대기 실시간: 승차역 250m 안이면 앞당김 허용 · 그 시각엔 이미 그 자리에 있다(fromMs = 지금)', () => {
+  const T = at(12, 45, 0), r = blStep(blState(), T, 200);
+  assert.ok(r.ask && r.ask.body.allowEarlier === true && r.ask.body.fromMs === T, JSON.stringify(r.ask));
+});
+t('승차 대기 실시간: 역에 닿은 첫 순간은 즉시 · 앞당김 허용 · 최대 90분까지, 이후엔 평소(30분)', () => {
+  const T = at(12, 45, 0);
+  let r = blStep(blState(), T, 100);
+  assert.ok(r.ask && r.ask.body.maxWait === 90 && r.ask.body.allowEarlier === true && r.state.wait.seen === true, JSON.stringify(r.ask));
+  r = blStep(r.state, T + 5000, 90); assert.strictEqual(r.ask, null, '닿은 순간 한 번뿐');
+  r = blStep(r.state, T + 15000, 90); assert.ok(r.ask && r.ask.body.maxWait === 30 && r.ask.body.allowEarlier === true, JSON.stringify(r.ask));
+});
+t('승차 대기 실시간: 역에 닿아 예정 출발 30초 전 ~ 2분 뒤에는 다음 차로 밀지 않는다(지금 그 차를 타는 중일 수 있다)', () => {
+  let r = blStep(blState(), at(12, 49, 0), 50); assert.ok(r.ask, '닿은 순간');
+  const dep = r.state.etaMs[1];       // 화면에 보이는 승차 시각
+  r = blStep(r.state, dep - 100000, 50);
+  r = blStep(r.state, dep - 60000, 50); assert.ok(r.ask, '출발 1분 전엔 묻는다(웹: -0.5분부터 보류)');
+  r = blStep(r.state, dep - 20000, 50); assert.strictEqual(r.ask, null, '출발 20초 전');
+  r = blStep(r.state, dep - 4000, 50); assert.strictEqual(r.ask, null, '출발 직전');
+  r = blStep(r.state, dep + 60000, 50); assert.strictEqual(r.ask, null, '출발 1분 뒤');
+  r = blStep(r.state, dep + 130000, 50); assert.ok(r.ask, '2분이 지나면 다시 묻는다');
+});
+t('승차 대기 실시간: 위치를 못 받은 지 1분이 넘으면(도보 ETA 를 모른다) 묻지 않는다 · 지하철 노선이 아니고 버스 정류장 정보도 없으면 묻지 않는다', () => {
+  const T = at(12, 45, 0);
+  let r = blStep(blState(), T, 600); assert.ok(r.ask);
+  r = blStep(r.state, T + 100000, null); assert.strictEqual(r.ask, null, 'GPS 100초 끊김');
+  const bus = blState('bus'); delete bus.cfg.bl;
+  assert.strictEqual(blStep(bus, T, 600).ask, null, '정류장 ID 를 모르는 버스');
+  const ok = blStep(blState('bus'), T, 600);
+  assert.ok(ok.ask && ok.ask.body.kind === 'bus' && ok.ask.body.cc === '23' && ok.ask.body.sid === 'ICB1' && ok.ask.body.no === '100' && ok.ask.body.line === undefined, JSON.stringify(ok.ask));
+});
+const blAns = (o) => Object.assign({ ok: true, kind: 'sub', i: 1, ms: at(12, 55, 0), src: 'realtime', at: at(12, 45, 0), fromMs: at(12, 45, 0), allowEarlier: false, maxWait: 30 }, o || {});
+t('승차 대기 실시간: 받은 답으로 열차가 3분 늦으면 승차역 이후 모든 시각을 3분 민다(ride-eta boardNext) · 도착 시각도 같이', () => {
+  const T = at(12, 45, 5), base = blStep(blState(), T, 200);
+  const r = blStep(blState(), T, 200, { bl: blAns() });
+  assert.ok(r.state.eta.boardNext && r.state.eta.boardNext.ms === at(12, 55, 0) && r.state.eta.boardNext.src === 'realboard', JSON.stringify(r.state.eta.boardNext));
+  const d1 = r.state.etaMs[1] - base.state.etaMs[1], d5 = r.state.etaMs[5] - base.state.etaMs[5];
+  assert.strictEqual(r.state.etaMs[1], at(12, 55, 0), '승차역 시각 = 다음 차 출발 시각');
+  assert.ok(d1 > 0 && d5 === d1, '도착 시각도 같은 만큼 밀린다 ' + d1 + '/' + d5);
+  assert.ok(/실시간 재보정\(realtime\)/.test(r.notes.join('|')), r.notes.join('|'));
+  assert.strictEqual(r.state.wait.arrMs, r.state.etaMs[1], '감지 유예 기준도 새 시각으로');
+});
+t('승차 대기 실시간: 앞당김은 allowEarlier(역 근처·도착 순간·실시간 값)일 때만 · 허용 범위(maxWait)를 넘는 늦춤은 버린다', () => {
+  const T = at(12, 45, 5), base = blStep(blState(), T, 200).state.etaMs;
+  const early = at(12, 50, 0), bn = (x) => assert.ok(x.state.eta.boardNext, 'boardNext');
+  let r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'table', allowEarlier: false }) });
+  assert.strictEqual(r.state.etaMs[1], base[1], '시각표 값으로는 멀리서 앞당기지 않는다');
+  r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'table', allowEarlier: true }) });
+  assert.strictEqual(r.state.etaMs[1], early, '역 근처면 앞당김 허용');
+  r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'realtime', allowEarlier: false }) });
+  assert.strictEqual(r.state.etaMs[1], early, '실시간 값은 권위가 있다(웹: src === realtime 이면 앞당김 허용)');
+  r = blStep(blState(), T, 200, { bl: blAns({ ms: at(13, 40, 0), maxWait: 30 }) });
+  assert.strictEqual(r.state.etaMs[1], base[1], '48분 뒤 차는 30분 한도 밖');
+  r = blStep(blState(), T, 200, { bl: blAns({ ms: at(13, 40, 0), maxWait: 90 }) });
+  assert.strictEqual(r.state.etaMs[1], at(13, 40, 0), '도착 순간(90분)엔 허용');
+});
+t('승차 대기 실시간: 오래된 답(90초 넘음) · 다른 정류장 답 · ms 없는 답은 버린다(직전 값 유지)', () => {
+  const T = at(12, 45, 5), base = blStep(blState(), T, 200).state.etaMs;
+  for (const bad of [{ at: T - 91000 }, { at: T + 10000 }, { i: 2 }, { ms: null }]) {
+    const r = blStep(blState(), T, 200, { bl: blAns(bad) });
+    assert.strictEqual(r.state.etaMs[1], base[1], JSON.stringify(bad));
+  }
+  let r = blStep(blState(), T, 200, { bl: blAns() });
+  r = blStep(r.state, T + 5000, 190, { bl: blAns({ ms: null, at: T + 5000 }) });
+  assert.strictEqual(r.state.etaMs[1], at(12, 55, 0), 'ms 없는 답은 직전 반영을 지우지 않는다');
+});
+t('승차 대기 실시간: 승차 확정(수동 [탑승] · 감지)되면 증거를 지우고 더는 묻지 않는다 — 탑승 뒤 서버 요청 0', () => {
+  const T = at(12, 50, 5);
+  let r = blStep(blState(), T, 100, { bl: blAns({ at: T }) });
+  assert.ok(r.state.eta.boardNext && r.state.bl);
+  const p = blStep(r.state, T + 10000, 20, { act: 'press' });
+  assert.ok(!p.state.wait && !p.state.eta.boardNext && !p.state.eta.boardArriveMs && !p.state.bl, JSON.stringify(p.state.eta));
+  assert.strictEqual(p.ask, null);
+  for (let k = 1; k <= 8; k++) { const q = blStep(p.state, T + 10000 + k * 15000, 20); assert.strictEqual(q.ask, null, '탑승 뒤 ' + k); }
+  const g = blState(); g.wait.arrMs = at(12, 40, 0);
+  r = blStep(g, at(12, 49, 0), 100, { bl: blAns({ at: at(12, 49, 0) }) });
+  assert.ok(!r.state.wait && !r.state.eta.boardNext, '감지 유예 시간이 지나 승차 확정 → 증거를 지운다 ' + JSON.stringify(r.notes));
+});
+t('승차 대기 실시간: 되돌리기(undo)로 대기로 돌아오면 다시 묻는다', () => {
+  const T = at(12, 50, 5);
+  let r = blStep(blState(), T, 100, { bl: blAns({ at: T }) });
+  r = blStep(r.state, T + 5000, 20, { act: 'press' });
+  r = blStep(r.state, T + 10000, 20, { act: 'undo' });
+  assert.ok(r.state.wait, '대기로 복귀');
+  r = blStep(r.state, T + 30000, 20); assert.ok(r.ask, '다시 묻는다');
+});
+
+// 서버 쪽 — 서울 실시간 도착 목록에서 고르는 규칙(웹 _boardNextDep)
+const { rsBlLivePick, rsBlReconcile, rsBlTable, rsBlBusPick, rsBoardLive, handleBoardLive } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const BQ = { line: '2호선', from: 'S0', to: 'S1', nowMs: at(12, 45, 0), fromMs: at(12, 47, 0), tz: 540 };
+const ntFwd = (bad) => ({ forward: (line, a, b, term) => (term === bad ? false : (term === 'ZZ' ? null : true)), boardTable: (q) => ({ dk: '상', depMin: 12 * 60 + 50 }) });
+t('서버 실시간 고르기: 호선(subwayId)·도착까지 남은 초(>0)·진행 방향(종착역)·내가 닿은 뒤(+30초) 조건에서 가장 빠른 열차', () => {
+  const L = (o) => Object.assign({ subwayId: '1002', barvlDt: '300', bstatnNm: '신도림' }, o);
+  const list = [L({ barvlDt: '60' }), L({ barvlDt: '90', subwayId: '1003' }), L({ barvlDt: '0' }), L({ barvlDt: '200', bstatnNm: '반대' }), L({ barvlDt: '400' }), L({ barvlDt: '700' })];
+  // 지금 12:45, 내가 닿는 시각 12:47 = 120초 뒤 → 60초 열차는 내가 닿기 전에 떠난다. 200초(반대 방향)는 방향 때문에, 90초(다른 호선)·0초는 조건 때문에 빠진다 → 400초 열차
+  assert.strictEqual(rsBlLivePick(list, BQ, ntFwd('반대')), BQ.nowMs + 400000);
+  assert.strictEqual(rsBlLivePick(list, BQ, null), BQ.nowMs + 200000, '방향을 못 물으면 거르지 않는다(웹: 판단 불가 = 거르지 않음)');
+  assert.strictEqual(rsBlLivePick([L({ bstatnNm: 'ZZ', barvlDt: '500' })], BQ, ntFwd('반대')), BQ.nowMs + 500000, 'null(판단 불가)도 거르지 않는다');
+  assert.strictEqual(rsBlLivePick([L({ barvlDt: '110' })], BQ, ntFwd('반대')), null, '내가 닿기 10초 전 출발 → 제외(+30초 여유)');
+  assert.strictEqual(rsBlLivePick([L({ barvlDt: '150' })], BQ, ntFwd('반대')), BQ.nowMs + 150000, '내가 닿고 30초 뒤면 탈 수 있다');
+  assert.strictEqual(rsBlLivePick([L({ subwayId: '1003' })], BQ, null), null, '우리 호선 열차가 없으면 null');
+  assert.strictEqual(rsBlLivePick([L()], Object.assign({}, BQ, { to: '' }), ntFwd('신도림')), BQ.nowMs + 300000, '다음 역을 모르면 방향을 거르지 않는다');
+});
+t('서버 실시간 ↔ 시각표 맞춤: 4분 안이면 실시간(지연·조기 반영) · 더 어긋나면 시각표 · 한쪽만 있으면 그쪽', () => {
+  const tb = { ms: at(12, 50, 0), dk: '상' };
+  assert.deepStrictEqual(rsBlReconcile(at(12, 53, 50), tb), { ms: at(12, 53, 50), src: 'realtime', dk: '상' });
+  assert.deepStrictEqual(rsBlReconcile(at(12, 46, 10), tb), { ms: at(12, 46, 10), src: 'realtime', dk: '상' });
+  assert.deepStrictEqual(rsBlReconcile(at(12, 54, 30), tb), { ms: at(12, 50, 0), src: 'table', dk: '상' });
+  assert.deepStrictEqual(rsBlReconcile(null, tb), { ms: at(12, 50, 0), src: 'table', dk: '상' });
+  assert.deepStrictEqual(rsBlReconcile(at(12, 50, 0), null), { ms: at(12, 50, 0), src: 'realtime', dk: null });
+  assert.strictEqual(rsBlReconcile(null, null), null);
+  assert.deepStrictEqual(rsBlTable(BQ, ntFwd()), { ms: at(12, 50, 0), dk: '상' }, '시각표 분(12:50) → 그날 ms');
+  const mid = Object.assign({}, BQ, { nowMs: at(23, 50, 0), fromMs: at(23, 52, 0) });
+  assert.strictEqual(rsBlTable(mid, { boardTable: () => ({ dk: '하', depMin: 24 * 60 + 5 }) }).ms, DAY + (24 * 60 + 5) * 60000, '자정을 넘기는 시각표(1445분)');
+});
+t('서버 버스 고르기: 번호가 정확히 같은 노선만(웹의 1 ↔ 10 섞임 약점 보완) · 내가 닿은 뒤(+30초) 가장 빠른 차', () => {
+  const m = { '100': [30, 200, 500], '1000': [10], '10': [40], __names: ['100'] };
+  assert.strictEqual(rsBlBusPick(m, { no: '100', nowMs: 1000000, fromMs: 1000000 + 100000 }), 1000000 + 200000);
+  assert.strictEqual(rsBlBusPick(m, { no: '100', nowMs: 1000000, fromMs: 1000000 + 600000 }), null);
+  assert.strictEqual(rsBlBusPick(m, { no: '1', nowMs: 1000000, fromMs: 1000000 }), null, '1번 버스를 10·100·1000 으로 착각하지 않는다');
+  assert.strictEqual(rsBlBusPick(null, { no: '100', nowMs: 1, fromMs: 1 }), null);
+});
+const blHttp = async () => {
+  const prev = global.ntEnsure, prevF = global.fetchStopArrivalsAny, prevL = global.liveCityOk;
+  global.ntEnsure = async () => ntFwd('반대');
+  try {
+    let asked = '';
+    const mk = (lst) => ({ BUSAPI: { fetch: async (req) => { asked = decodeURIComponent(new URL(req.url).searchParams.get('path')); return new Response(JSON.stringify({ realtimeArrivalList: lst }), { status: 200 }); } } });
+    const q = () => JSON.parse(JSON.stringify(Object.assign({ kind: 'sub', i: 1, allowEarlier: true, maxWait: 30 }, BQ)));
+    let r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '300', bstatnNm: '신도림' }]), q());
+    assert.ok(/^realtimeStationArrival\/1\/20\/S0$/.test(asked), asked);
+    assert.deepStrictEqual([r.ok, r.ms, r.src, r.i, r.at, r.fromMs, r.allowEarlier, r.maxWait, r.dk], [true, BQ.nowMs + 300000, 'realtime', 1, BQ.nowMs, BQ.fromMs, true, 30, '상'], JSON.stringify(r));
+    r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '900', bstatnNm: '신도림' }]), q());
+    assert.deepStrictEqual([r.ms, r.src], [at(12, 50, 0), 'table'], '실시간이 시각표와 4분 넘게 어긋나면 시각표 ' + JSON.stringify(r));
+    r = await rsBoardLive(mk(null), q()); assert.deepStrictEqual([r.ms, r.src], [at(12, 50, 0), 'table'], '실시간을 못 받으면 시각표');
+    r = await rsBoardLive({}, q()); assert.deepStrictEqual([r.ms, r.src], [at(12, 50, 0), 'table'], 'BUSAPI 바인딩이 없어도 시각표');
+    asked = ''; const far = q(); far.fromMs = far.nowMs + 25 * 60000;
+    r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '300', bstatnNm: '신도림' }]), far);
+    assert.strictEqual(asked, '', '승차까지 20분 넘게 남으면 실시간을 부르지 않는다(웹 _RT_ARR_MAX_AHEAD)'); assert.strictEqual(r.src, 'table');
+    asked = ''; const inc = q(); inc.line = '인천1호선';
+    r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '300', bstatnNm: '신도림' }]), inc); assert.strictEqual(asked, '', '도착정보가 없는 노선은 부르지 않는다'); assert.strictEqual(r.src, 'table');
+    const t0 = Date.now(); r = await rsBoardLive({ BUSAPI: { fetch: () => new Promise(() => { }) } }, q());
+    assert.ok(Date.now() - t0 < 3600 && r.src === 'table', '응답이 없어도 3초 안에 시각표로 ' + (Date.now() - t0));
+    // 버스
+    global.liveCityOk = () => true;
+    global.fetchStopArrivalsAny = async (cc, sid) => { assert.deepStrictEqual([cc, sid], ['23', 'ICB1']); return { '100': [40, 260, 700], __names: ['100'] }; };
+    const bq = { kind: 'bus', i: 1, cc: '23', sid: 'ICB1', no: '100', nowMs: BQ.nowMs, fromMs: BQ.nowMs + 120000, allowEarlier: false, maxWait: 30 };
+    r = await rsBoardLive({}, JSON.parse(JSON.stringify(bq))); assert.deepStrictEqual([r.ms, r.src], [BQ.nowMs + 260000, 'realtime'], JSON.stringify(r));
+    global.fetchStopArrivalsAny = async () => { throw new Error('boom'); };
+    r = await rsBoardLive({}, JSON.parse(JSON.stringify(bq))); assert.strictEqual(r.ms, null); assert.strictEqual(r.ok, true);
+    global.liveCityOk = () => false; global.fetchStopArrivalsAny = async () => ({ '100': [300] });
+    r = await rsBoardLive({}, JSON.parse(JSON.stringify(bq))); assert.strictEqual(r.ms, null, '지원 안 하는 도시는 건너뛴다');
+    // HTTP
+    const post = (b, env) => handleBoardLive(new Request('https://x.test/board-live', { method: 'POST', body: b }), env || {}).then(x => x.json().then(j => [x.status, j]));
+    const [s1, j1] = await post(JSON.stringify(q())); assert.strictEqual(s1, 200); assert.strictEqual(j1.ms, at(12, 50, 0));
+    const [s2] = await post('JSON 아님'); assert.strictEqual(s2, 400);
+    const [s3, j3] = await post('{}'); assert.strictEqual(s3, 200); assert.strictEqual(j3.ok, false);
+    const g = await handleBoardLive(new Request('https://x.test/board-live'), {}); assert.strictEqual(g.status, 405);
+  } finally { if (prev) global.ntEnsure = prev; else delete global.ntEnsure; if (prevF) global.fetchStopArrivalsAny = prevF; else delete global.fetchStopArrivalsAny; if (prevL) global.liveCityOk = prevL; else delete global.liveCityOk; }
+};
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
@@ -692,5 +873,6 @@ const liveHttpTest = async () => {
   } finally { if (prev) global.ntEnsure = prev; else delete global.ntEnsure; }
 };
 liveHttpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 서울 실시간 도착을 받으면 먼저 쓰고, 못 받거나 늦으면(3초) 시각표로'); }, (e) => { fail++; console.log('  FAIL HTTP 서울 실시간', String(e && e.message).split('\n')[0]); })
+  .then(() => blHttp()).then(() => { pass++; console.log('  ok   HTTP 처리: /board-live — 실시간 ↔ 시각표 맞춤 · 20분 넘게 남으면 시각표 · 응답 없으면 3초 안에 시각표 · 버스'); }, (e) => { fail++; console.log('  FAIL HTTP board-live', String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); })
   .then(() => httpTest()).then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
   .then(() => { console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0); });
