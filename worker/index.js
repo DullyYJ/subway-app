@@ -16,6 +16,58 @@ const ALLOWED_HOSTS = [
   'apis.data.go.kr.'    // 끝에 점이 붙는 변형 방어
 ];
 
+// -- 호출량 집계 (2026-10-06) --------------------------------------------------
+// 상위(공공데이터·서울시·카카오) API 를 실제로 부른 횟수를 D1 live_usage(day,k,n) 에 gl.* 키로 모은다.
+// 서버 메모리에 모았다가 약 1분 단위로 기록(근사치). 화면: https://gildongmu-bus.phg0643.workers.dev/usage
+var USAGE = { n: {}, last: 0, ready: false };
+var _glCtx = null;
+var _glEnv = null;
+function usageAdd(k) { USAGE.n[k] = (USAGE.n[k] || 0) + 1; }
+function usageDay(ms) {
+  return new Date((ms || Date.now()) + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+function usageKeyOfTago(u) {
+  const h = String(u.hostname || '').toLowerCase().replace(/[.]$/, '');
+  const p = String(u.pathname || '');
+  if (h === 'ws.bus.go.kr') return 'gl.seoul-bus';
+  if (h === 'apis.data.go.kr') {
+    if (p.indexOf('/6410000/') >= 0) return 'gl.gbis';
+    if (p.indexOf('ArvlInfo') >= 0) return 'gl.tago.arr';
+    const seg = p.split('/').filter(function (x) { return /Info$/.test(x); })[0];
+    if (seg) return 'gl.ld.' + seg;
+    return 'gl.datago.other';
+  }
+  if (h === 'api.odcloud.kr') return 'gl.odcloud';
+  if (h === 'openapi.gbis.go.kr') return 'gl.gbis-alt';
+  return 'gl.other';
+}
+function usageFlush(env, force) {
+  try {
+    env = env || _glEnv;
+    if (!env || !env.DB) return;
+    const now = Date.now();
+    if (!force && now - USAGE.last < 60000) return;
+    const keys = Object.keys(USAGE.n);
+    if (!keys.length) return;
+    USAGE.last = now;
+    const snap = USAGE.n;
+    USAGE.n = {};
+    const day = usageDay(now);
+    const run = (async () => {
+      try {
+        if (!USAGE.ready) {
+          await env.DB.prepare('CREATE TABLE IF NOT EXISTS live_usage (day TEXT, k TEXT, n INTEGER, PRIMARY KEY (day, k))').run();
+          USAGE.ready = true;
+        }
+        await env.DB.batch(keys.map((k) => env.DB.prepare('INSERT INTO live_usage (day, k, n) VALUES (?, ?, ?) ON CONFLICT(day, k) DO UPDATE SET n = n + excluded.n').bind(day, k, snap[k])));
+      } catch (e) {
+        for (const k of keys) USAGE.n[k] = (USAGE.n[k] || 0) + snap[k];
+      }
+    })();
+    if (_glCtx && _glCtx.waitUntil) _glCtx.waitUntil(run);
+  } catch (e) { /* 집계 실패는 본 기능에 영향 없음 */ }
+}
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,OPTIONS',
@@ -415,6 +467,8 @@ async function handleKakaoLocal(request, env) {
     await ensureKakaoCache(env);
     const row = await env.DB.prepare('SELECT v, ts FROM kakao_cache WHERE k = ?').bind(key).first();
     if (row && (now - Number(row.ts || 0)) < KAKAO_TTL_MS) {
+      usageAdd('gl.kakao.saved');
+      usageFlush(env);
       return new Response(row.v, {
         headers: {
           'content-type': 'application/json; charset=utf-8',
@@ -435,10 +489,13 @@ async function handleKakaoLocal(request, env) {
 
   let body = '', status = 502;
   try {
+    usageAdd(path.indexOf('search/') === 0 ? 'gl.kakao.search' : 'gl.kakao.geo');
+    usageFlush(env);
     const r = await fetch('https://dapi.kakao.com/v2/local/' + path + (qs ? ('?' + qs) : ''), {
       headers: { Authorization: 'KakaoAK ' + key_ }
     });
     status = r.status;
+    if (status >= 400) usageAdd('gl.kakao.err');
     body   = await r.text();
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e && e.message || e) }), {
@@ -555,6 +612,8 @@ function seoulKeys(env) {
 // ══════════════════════════════════════════════════════════════
 const RELAY_MAX_AGE = { arrival: 75, position: 90, other: 1800 };   // 중계가 올린 값을 이 초 안일 때만 쓴다
 const RELAY_ALIVE_MS = 180000;
+const RELAY_WAIT_MS = 2600;        // /seoul 이 중계 값을 기다리는 최대 시간(앱·route-v2 의 3초 한도 안)
+const RELAY_WAIT_STEP_MS = 300;    // 기다리는 동안 D1 을 다시 보는 간격
 let _relayReady = false;
 let _relayAliveMem = { at: 0, v: false };
 let _relayHbAt = 0;
@@ -661,6 +720,7 @@ async function relayPush(request, env) {
 }
 
 async function handleSeoul(request, env) {
+  usageFlush(env);
   const url  = new URL(request.url);
   const path = url.searchParams.get('path') || '';
 
@@ -681,7 +741,7 @@ async function handleSeoul(request, env) {
 
   // ① 메모리
   const hit = seoulMemGet(path);
-  if (hit) { seoulStats.mem++; return seoulRes(hit.body, hit.status, 'MEM', ttl); }
+  if (hit) { seoulStats.mem++; usageAdd('gl.sw.saved'); return seoulRes(hit.body, hit.status, 'MEM', ttl); }
 
   // ② 엣지 캐시 (같은 지역 사용자끼리 공유)
   const cacheKey = new Request('https://seoul-cache/' + encodeURIComponent(path));
@@ -689,6 +749,7 @@ async function handleSeoul(request, env) {
   try { edge = await caches.default.match(cacheKey); } catch (e) { /* 캐시 없으면 그냥 진행 */ }
   if (edge) {
     seoulStats.edge++;
+    usageAdd('gl.sw.saved');
     const body = await edge.text();
     seoulMemPut(path, edge.status, body, ttl);
     return seoulRes(body, edge.status, 'EDGE', ttl);
@@ -696,7 +757,19 @@ async function handleSeoul(request, env) {
 
   // ②-b 한국 IP 중계가 살아 있으면 그 값을 쓴다(없으면 찾는 경로로 기록하고 '준비 중'을 돌려준다 → 앱은 시각표로 동작)
   if (await relayAlive(env)) {
-    const row = await relayLookup(path, env);
+    let row = await relayLookup(path, env);
+    if (!row) {
+      // 2026-10-25 s192 (YJ: 실시간은 최대 3초 안에): 값이 아직 없으면 바로 '준비 중'을 돌려주지 않고, 중계가 채워 줄 때까지 잠깐(RELAY_WAIT_MS) 기다린다.
+      //   중계(노트북·NCP)는 찾는 경로 목록을 몇 초마다 가져가 채운다 — 예전엔 첫 요청이 늘 빈손이라 다음 요청(앱의 재시도)에서야 값이 왔다.
+      await relayWant(path, env);
+      if (/^(realtimeStationArrival|realtimePosition)\//.test(path)) {
+        const until = Date.now() + RELAY_WAIT_MS;
+        while (!row && Date.now() < until) {
+          await new Promise((r) => setTimeout(r, RELAY_WAIT_STEP_MS));
+          row = await relayLookup(path, env);
+        }
+      }
+    }
     if (row) {
       await relayWant(path, env);
       seoulMemPut(path, 200, row.body, ttl);
@@ -704,6 +777,7 @@ async function handleSeoul(request, env) {
         await caches.default.put(cacheKey, new Response(row.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl } }));
       } catch (e) { /* 엣지 캐시 실패는 무시 */ }
       seoulStats.relay = (seoulStats.relay || 0) + 1;
+      usageAdd('gl.sw.relay');
       return seoulRes(row.body, 200, 'RELAY', ttl);
     }
     await relayWant(path, env);
@@ -719,6 +793,7 @@ async function handleSeoul(request, env) {
   const flying = _seoulInflight.get(path);
   if (flying) {
     seoulStats.coalesced++;
+    usageAdd('gl.sw.saved');
     const r = await flying;
     return seoulRes(r.body, r.status, 'WAIT', ttl, r.key);
   }
@@ -772,8 +847,11 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
     for (let k = 0; k < SEOUL_VARIANTS.length; k++) {
       const vi = (_seoulVariant + k) % SEOUL_VARIANTS.length;
       try {
+        usageAdd('gl.sw.k' + (i + 1));
+        usageFlush(_glEnv);
         const r = await seoulFetchVariant(SEOUL_VARIANTS[vi], keys[i], path, ttl);
         seoulStats.upstream++;
+        if (r.status >= 400) usageAdd('gl.sw.k' + (i + 1) + '.err');
         if (seoulEmptyClientErr(r.status, r.body)) { emptyErr = r; continue; }   // 본문 없는 4xx → 다른 방식으로
         got = r; _seoulVariant = vi; break;
       } catch (e) {
@@ -956,7 +1034,9 @@ async function handleBusStops(url, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
+    _glCtx = ctx || null;
+    _glEnv = env;
     const reqUrl = new URL(request.url);
 
     // CORS preflight
@@ -1168,12 +1248,17 @@ export default {
     }
 
     // 서울 TOPIS는 https를 지원하지 않는 경우가 있어 http로 시도 후 실패 시 https 재시도
+    const gk = usageKeyOfTago(u);
     const tryFetch = async (urlStr) => {
-      return await fetch(urlStr, {
+      usageAdd(gk);
+      usageFlush(env);
+      const r = await fetch(urlStr, {
         method: 'GET',
         headers: { 'Accept': '*/*', 'User-Agent': 'gildongmu/1.0' },
         cf: { cacheTtl: 5, cacheEverything: false }
       });
+      if (!r.ok) usageAdd(gk + '.err');
+      return r;
     };
 
     let upstream;
