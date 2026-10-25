@@ -104,20 +104,27 @@ function homePick(data) {
   return rows;
 }
 // 지하철 후보: 이름에 글자가 들어 있는 역을 표 순서대로 모아 같은 이름은 하나로 합치고(호선은 ' · ' 로 이어 붙임) 8개까지. 앱의 예전 걸러내기(STNDB.filter → _dedupeStnByName → slice 8)와 같다.
+// s208 (YJ: 수도권과 지방에 같은 이름의 역이 있어도 구분): 같은 이름이라도 권역(수도권·부산·대구·광주·대전)이 다르면 후보를 따로 낸다 — 노선 이름 앞글자로 권역을 가르고,
+//   각 후보가 자기 권역 역의 좌표(pk)를 들고 있어 눌러 고르면 그 역으로 길찾기가 간다. 같은 권역 안의 같은 이름(환승역)은 예전처럼 호선을 ' · ' 로 합친다.
+function homeRegOf(line) {
+  var l = typeof line === 'string' ? line : '';
+  return /^(부산|대구|광주|대전)/.test(l) ? l.slice(0, 2) : '';
+}
 function homeStnFind(q) {
   q = typeof q === 'string' ? q.trim() : '';
   var out = { u: [], pk: [] };
   if (!q || !Array.isArray(HOME_STNS)) return out;
-  var reps = [], seen = {}, lines = {}, i, s;
+  var reps = [], seen = {}, lines = {}, i, s, key;
   for (i = 0; i < HOME_STNS.length; i++) {
     s = HOME_STNS[i];
     if (!s || typeof s[0] !== 'string' || s[0].indexOf(q) < 0) continue;
-    if (!Object.prototype.hasOwnProperty.call(seen, s[0])) { seen[s[0]] = 1; reps.push(s); lines[s[0]] = [s[1]]; }
-    else if (lines[s[0]].indexOf(s[1]) < 0) lines[s[0]].push(s[1]);
+    key = s[0] + '|' + homeRegOf(s[1]);
+    if (!Object.prototype.hasOwnProperty.call(seen, key)) { seen[key] = 1; reps.push(s); lines[key] = [s[1]]; }
+    else if (lines[key].indexOf(s[1]) < 0) lines[key].push(s[1]);
   }
   for (i = 0; i < reps.length && i < HOME_STN_MAX; i++) {
-    s = reps[i];
-    out.u.push({ n: s[0], l: lines[s[0]].join(' \u00b7 ') });
+    s = reps[i]; key = s[0] + '|' + homeRegOf(s[1]);
+    out.u.push({ n: s[0], l: lines[key].join(' \u00b7 ') });
     out.pk.push({ name: s[0], line: s[1], lat: s[2], lng: s[3] });
   }
   return out;

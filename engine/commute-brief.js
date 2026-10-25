@@ -52,13 +52,20 @@ function cbPlace(p) {                                              // 입력 다
   return { nm: nm, lat: la, lng: ln, bus: p.bus === true || p.bus === 1 };
 }
 // 예전 _cmFindStn: 이름(공백·'역' 뺀 것)이 같은 역 → 앞이 같은 역 → 들어 있는 역
-function cbFindStn(nm) {
+function cbFindStn(nm, la0, ln0) {
   var S = cbStns();
   if (!nm || !Array.isArray(S)) return null;
   var q = String(nm).replace(/\s+/g, '').replace(/역$/, ''), i, k;
   if (!q) return null;
   var plain = function (s) { return String(s[0]).replace(/\s+/g, ''); };
-  for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]) === q) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
+  var ex = null, exd = 1e12;                                        // s208: 이름이 같은 역이 여러 권역에 있으면(중동 등) 저장된 좌표에 가장 가까운 역 — 좌표가 없으면 처음 만난 역(예전 그대로)
+  for (i = 0; i < S.length; i++) {
+    if (!(S[i] && typeof S[i][0] === 'string' && plain(S[i]) === q)) continue;
+    var dx = (la0 != null && ln0 != null) ? cbHav(la0, ln0, S[i][2], S[i][3]) : 0;
+    if (!ex || dx < exd) { ex = S[i]; exd = dx; }
+    if (la0 == null || ln0 == null) break;
+  }
+  if (ex) return { name: ex[0], line: ex[1] || '', lat: ex[2], lng: ex[3], bus: false };
   for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) === 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
   for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) >= 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
   return null;
@@ -66,7 +73,7 @@ function cbFindStn(nm) {
 // 예전 _cmResolvePlace: 지하철역이면 역 표에서, 버스·표에 없으면 저장 좌표로
 function cbResolve(p) {
   if (!p || !p.nm) return null;
-  if (!p.bus) { var s = cbFindStn(p.nm); if (s) return s; }
+  if (!p.bus) { var s = cbFindStn(p.nm, p.lat, p.lng); if (s) return s; }
   if (p.lat != null && p.lng != null) return { name: p.nm, lat: p.lat, lng: p.lng, line: '', bus: !!p.bus };
   return cbFindStn(p.nm);
 }

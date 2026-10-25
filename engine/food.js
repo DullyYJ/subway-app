@@ -78,7 +78,15 @@ function foodStnTable() {                          // Worker 에서는 HOME 블�
 function foodResolve(f) {
   var T = foodStnTable(), i, s;
   if (f.stn) {
-    for (i = 0; i < T.length; i++) { s = T[i]; if (String(s[0]).replace(/역$/, '') === f.stn) return { stn: f.stn, ctr: [s[2], s[3]] }; }
+    var hit = null, hd = 1e12;                          // s208: 같은 이름 역이 여러 권역에 있으면(중동 등) 앱이 알려 준 도착지 좌표(dl)에 가장 가까운 역 — 없으면 표에서 처음 만난 역
+    for (i = 0; i < T.length; i++) {
+      s = T[i];
+      if (String(s[0]).replace(/역$/, '') !== f.stn) continue;
+      var dd = f.dl ? foodHav(f.dl[0], f.dl[1], s[2], s[3]) : 0;
+      if (!hit || dd < hd) { hit = s; hd = dd; }
+      if (!f.dl) break;
+    }
+    if (hit) return { stn: f.stn, ctr: [hit[2], hit[3]] };
     return { stn: f.stn, ctr: f.dl };                // 표에 없는 이름이면 앱이 알려 준 도착지 좌표
   }
   if (f.gps) {

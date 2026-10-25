@@ -13207,7 +13207,15 @@ function foodStnTable() {                          // Worker \uc5d0\uc11c\ub294 
 function foodResolve(f) {
   var T = foodStnTable(), i, s;
   if (f.stn) {
-    for (i = 0; i < T.length; i++) { s = T[i]; if (String(s[0]).replace(/\uc5ed$/, '') === f.stn) return { stn: f.stn, ctr: [s[2], s[3]] }; }
+    var hit = null, hd = 1e12;                          // s208: \uac19\uc740 \uc774\ub984 \uc5ed\uc774 \uc5ec\ub7ec \uad8c\uc5ed\uc5d0 \uc788\uc73c\uba74(\uc911\ub3d9 \ub4f1) \uc571\uc774 \uc54c\ub824 \uc900 \ub3c4\ucc29\uc9c0 \uc88c\ud45c(dl)\uc5d0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed \u2014 \uc5c6\uc73c\uba74 \ud45c\uc5d0\uc11c \ucc98\uc74c \ub9cc\ub09c \uc5ed
+    for (i = 0; i < T.length; i++) {
+      s = T[i];
+      if (String(s[0]).replace(/\uc5ed$/, '') !== f.stn) continue;
+      var dd = f.dl ? foodHav(f.dl[0], f.dl[1], s[2], s[3]) : 0;
+      if (!hit || dd < hd) { hit = s; hd = dd; }
+      if (!f.dl) break;
+    }
+    if (hit) return { stn: f.stn, ctr: [hit[2], hit[3]] };
     return { stn: f.stn, ctr: f.dl };                // \ud45c\uc5d0 \uc5c6\ub294 \uc774\ub984\uc774\uba74 \uc571\uc774 \uc54c\ub824 \uc900 \ub3c4\ucc29\uc9c0 \uc88c\ud45c
   }
   if (f.gps) {
@@ -15691,20 +15699,27 @@ function homePick(data) {
   return rows;
 }
 // \uc9c0\ud558\ucca0 \ud6c4\ubcf4: \uc774\ub984\uc5d0 \uae00\uc790\uac00 \ub4e4\uc5b4 \uc788\ub294 \uc5ed\uc744 \ud45c \uc21c\uc11c\ub300\ub85c \ubaa8\uc544 \uac19\uc740 \uc774\ub984\uc740 \ud558\ub098\ub85c \ud569\uce58\uace0(\ud638\uc120\uc740 ' \u00b7 ' \ub85c \uc774\uc5b4 \ubd99\uc784) 8\uac1c\uae4c\uc9c0. \uc571\uc758 \uc608\uc804 \uac78\ub7ec\ub0b4\uae30(STNDB.filter \u2192 _dedupeStnByName \u2192 slice 8)\uc640 \uac19\ub2e4.
+// s208 (YJ: \uc218\ub3c4\uad8c\uacfc \uc9c0\ubc29\uc5d0 \uac19\uc740 \uc774\ub984\uc758 \uc5ed\uc774 \uc788\uc5b4\ub3c4 \uad6c\ubd84): \uac19\uc740 \uc774\ub984\uc774\ub77c\ub3c4 \uad8c\uc5ed(\uc218\ub3c4\uad8c\u00b7\ubd80\uc0b0\u00b7\ub300\uad6c\u00b7\uad11\uc8fc\u00b7\ub300\uc804)\uc774 \ub2e4\ub974\uba74 \ud6c4\ubcf4\ub97c \ub530\ub85c \ub0b8\ub2e4 \u2014 \ub178\uc120 \uc774\ub984 \uc55e\uae00\uc790\ub85c \uad8c\uc5ed\uc744 \uac00\ub974\uace0,
+//   \uac01 \ud6c4\ubcf4\uac00 \uc790\uae30 \uad8c\uc5ed \uc5ed\uc758 \uc88c\ud45c(pk)\ub97c \ub4e4\uace0 \uc788\uc5b4 \ub20c\ub7ec \uace0\ub974\uba74 \uadf8 \uc5ed\uc73c\ub85c \uae38\ucc3e\uae30\uac00 \uac04\ub2e4. \uac19\uc740 \uad8c\uc5ed \uc548\uc758 \uac19\uc740 \uc774\ub984(\ud658\uc2b9\uc5ed)\uc740 \uc608\uc804\ucc98\ub7fc \ud638\uc120\uc744 ' \u00b7 ' \ub85c \ud569\uce5c\ub2e4.
+function homeRegOf(line) {
+  var l = typeof line === 'string' ? line : '';
+  return /^(\ubd80\uc0b0|\ub300\uad6c|\uad11\uc8fc|\ub300\uc804)/.test(l) ? l.slice(0, 2) : '';
+}
 function homeStnFind(q) {
   q = typeof q === 'string' ? q.trim() : '';
   var out = { u: [], pk: [] };
   if (!q || !Array.isArray(HOME_STNS)) return out;
-  var reps = [], seen = {}, lines = {}, i, s;
+  var reps = [], seen = {}, lines = {}, i, s, key;
   for (i = 0; i < HOME_STNS.length; i++) {
     s = HOME_STNS[i];
     if (!s || typeof s[0] !== 'string' || s[0].indexOf(q) < 0) continue;
-    if (!Object.prototype.hasOwnProperty.call(seen, s[0])) { seen[s[0]] = 1; reps.push(s); lines[s[0]] = [s[1]]; }
-    else if (lines[s[0]].indexOf(s[1]) < 0) lines[s[0]].push(s[1]);
+    key = s[0] + '|' + homeRegOf(s[1]);
+    if (!Object.prototype.hasOwnProperty.call(seen, key)) { seen[key] = 1; reps.push(s); lines[key] = [s[1]]; }
+    else if (lines[key].indexOf(s[1]) < 0) lines[key].push(s[1]);
   }
   for (i = 0; i < reps.length && i < HOME_STN_MAX; i++) {
-    s = reps[i];
-    out.u.push({ n: s[0], l: lines[s[0]].join(' \u00b7 ') });
+    s = reps[i]; key = s[0] + '|' + homeRegOf(s[1]);
+    out.u.push({ n: s[0], l: lines[key].join(' \u00b7 ') });
     out.pk.push({ name: s[0], line: s[1], lat: s[2], lng: s[3] });
   }
   return out;
@@ -22138,13 +22153,20 @@ function cbPlace(p) {                                              // \uc785\ub8
   return { nm: nm, lat: la, lng: ln, bus: p.bus === true || p.bus === 1 };
 }
 // \uc608\uc804 _cmFindStn: \uc774\ub984(\uacf5\ubc31\u00b7'\uc5ed' \ube80 \uac83)\uc774 \uac19\uc740 \uc5ed \u2192 \uc55e\uc774 \uac19\uc740 \uc5ed \u2192 \ub4e4\uc5b4 \uc788\ub294 \uc5ed
-function cbFindStn(nm) {
+function cbFindStn(nm, la0, ln0) {
   var S = cbStns();
   if (!nm || !Array.isArray(S)) return null;
   var q = String(nm).replace(/\s+/g, '').replace(/\uc5ed$/, ''), i, k;
   if (!q) return null;
   var plain = function (s) { return String(s[0]).replace(/\s+/g, ''); };
-  for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]) === q) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
+  var ex = null, exd = 1e12;                                        // s208: \uc774\ub984\uc774 \uac19\uc740 \uc5ed\uc774 \uc5ec\ub7ec \uad8c\uc5ed\uc5d0 \uc788\uc73c\uba74(\uc911\ub3d9 \ub4f1) \uc800\uc7a5\ub41c \uc88c\ud45c\uc5d0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc5ed \u2014 \uc88c\ud45c\uac00 \uc5c6\uc73c\uba74 \ucc98\uc74c \ub9cc\ub09c \uc5ed(\uc608\uc804 \uadf8\ub300\ub85c)
+  for (i = 0; i < S.length; i++) {
+    if (!(S[i] && typeof S[i][0] === 'string' && plain(S[i]) === q)) continue;
+    var dx = (la0 != null && ln0 != null) ? cbHav(la0, ln0, S[i][2], S[i][3]) : 0;
+    if (!ex || dx < exd) { ex = S[i]; exd = dx; }
+    if (la0 == null || ln0 == null) break;
+  }
+  if (ex) return { name: ex[0], line: ex[1] || '', lat: ex[2], lng: ex[3], bus: false };
   for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) === 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
   for (i = 0; i < S.length; i++) if (S[i] && typeof S[i][0] === 'string' && plain(S[i]).indexOf(q) >= 0) return { name: S[i][0], line: S[i][1] || '', lat: S[i][2], lng: S[i][3], bus: false };
   return null;
@@ -22152,7 +22174,7 @@ function cbFindStn(nm) {
 // \uc608\uc804 _cmResolvePlace: \uc9c0\ud558\ucca0\uc5ed\uc774\uba74 \uc5ed \ud45c\uc5d0\uc11c, \ubc84\uc2a4\u00b7\ud45c\uc5d0 \uc5c6\uc73c\uba74 \uc800\uc7a5 \uc88c\ud45c\ub85c
 function cbResolve(p) {
   if (!p || !p.nm) return null;
-  if (!p.bus) { var s = cbFindStn(p.nm); if (s) return s; }
+  if (!p.bus) { var s = cbFindStn(p.nm, p.lat, p.lng); if (s) return s; }
   if (p.lat != null && p.lng != null) return { name: p.nm, lat: p.lat, lng: p.lng, line: '', bus: !!p.bus };
   return cbFindStn(p.nm);
 }
