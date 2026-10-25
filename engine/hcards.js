@@ -194,9 +194,9 @@ function hcardsScreen(inp, f) {
     af.wF = hcWx(wxs.wF); af.wT = hcWx(wxs.wT);
     var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];
     if (sub1 && sub1.nextTrain.found !== undefined) af.nt = sub1.nextTrain;
-  } else if (near) {
+  } else if (gps) {                                              // 경로가 없으면 현위치 기준 브리핑: 앱이 알아낸 동 이름(f.dong) > 가까운 역 이름 > '내 위치' (s216 — 동 이름을 모르거나 가까운 역이 없어도 빈 카드로 두지 않는다)
     af.wF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null);
-    af.tk = 'brief'; af.mode = 'brief'; af.from = near[0]; af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
+    af.tk = 'brief'; af.mode = 'brief'; af.from = hcStr(f.dong, 20) || (near ? near[0] : '내 위치'); af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
   }
   var aiS = hcAi({ cap: 14 }, af);
   var congS = hcCong.screen({ cap: 13 }, cs);
