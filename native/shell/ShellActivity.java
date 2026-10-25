@@ -20,7 +20,6 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -366,7 +365,6 @@ public class ShellActivity extends Activity {
                 java.util.List<String> said = new java.util.ArrayList<String>();
                 if (got.fav != null && "[]".equals(fav.listJson())) { store.put(FavCore.K_FAV, got.fav); said.add("즐겨찾기 " + LegacyCore.count(got.fav) + "개"); }
                 if (got.id != null && store.get(ShellCore.K_ID, "").length() == 0) { store.put(ShellCore.K_ID, got.id); said.add("커뮤니티 아이디"); }
-                if (got.pt != null && LegacyCore.totalOf(store.get(RulesCore.K_PT, "{}")) == 0) { store.put(RulesCore.K_PT, got.pt); said.add("포인트"); }
                 if (got.commute != null && store.get(CmCore.K_ON, "").length() == 0 && store.get(CmCore.K_MORN, "").length() == 0 && LegacyCore.applyCommute(store, got.commute)) {
                     said.add("출퇴근 브리핑 설정");
                     if (CmCore.on(store)) CommuteAlarm.reschedule(getApplicationContext());
@@ -716,7 +714,6 @@ public class ShellActivity extends Activity {
     private String fetchGeneric(String screen) {
         String[] feeds = feedsAll(ShellCore.feedUrls(screen), 8000);
         if (ShellCore.S_NEWS.equals(screen)) lastNews = ShellCore.NewsRows.from(feeds);
-        store.put(ShellCore.K_DAY, RulesCore.day(System.currentTimeMillis()));
         ShellCore.Req rq = ShellCore.request(screen, store, feeds);
         if (rq == null) return "";
         String ck = ShellCore.cacheKey(screen, store);
@@ -726,6 +723,16 @@ public class ShellActivity extends Activity {
     }
     /** 쇼핑 화면 한 번 받기: 엔진에 묻고(상품 서버는 엔진이 받는다), 엔진이 상품 서버를 못 받았다고 하면 앱이 직접 받아 실어 보낸다. */
     private String shopCall(String ck, String cat) {
+        String t = shopCall0(ck, cat);
+        shopWarm(t);
+        return t;
+    }
+    /** 쇼핑 화면 글 안의 상품 그림 주소를 뒤에서 받아 파일 캐시에 둔다 — 탭을 열었을 때 그림이 곰돌이 자리표시자로 한참 보이지 않게(s216). */
+    private void shopWarm(String txt) {
+        if (txt == null || txt.length() < 3) return;
+        try { ScreenView.ImageBank.warm(this, ScreenCore.imageUrls(txt, 240)); } catch (Throwable ignored) { }
+    }
+    private String shopCall0(String ck, String cat) {
         if ("1".equals(store.get("shop_direct", ""))) {                    // 엔진이 상품 서버를 못 받는 것으로 확인됐다 — 처음부터 앱이 받아 실어 보낸다(엔진이 헛되이 13초 기다리지 않게)
             String d = shopDirect(ck, cat);
             if (d.length() > 0) return d;
@@ -971,7 +978,6 @@ public class ShellActivity extends Activity {
     private void prefetchTabs() {
         if (pfPending.get() > 0) return;                                  // 아직 도는 중
         prefetchAt = System.currentTimeMillis();
-        store.put(ShellCore.K_DAY, RulesCore.day(prefetchAt));            // 설정 화면 열쇠에 오늘 날짜가 들어 있어 미리 정해 둔다(나중에 받을 때와 같은 열쇠)
         if (pfChat == null) pfChat = new ChatCore(store);
         if (pfMap == null) pfMap = new MapCore(store);
         if (pfMapB == null) pfMapB = new MapCore(store);
@@ -1072,6 +1078,7 @@ public class ShellActivity extends Activity {
             if (base.length() > 0) net = true;
             String src = base.length() > 0 && !isNotMod(base) ? base : onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
             if (src == null || src.length() == 0) return net;
+            shopWarm(src);
             int fails = 0;
             for (String c : ShellCore.catValues(src)) {
                 String ck = "shop|" + c;
@@ -1263,7 +1270,8 @@ public class ShellActivity extends Activity {
 
     /** 엔진이 정한 안내 글을 띄운다(비어 있으면 아무것도 안 띄운다). */
     private void toastTx(String m) { if (m != null && m.length() > 0) toast(m); }
-    private void toast(String m) { try { Toast.makeText(this, m, Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) { } }
+    /** 하단 토스트 문구는 띄우지 않는다(YJ: 하단 팝업은 전부 없앤다 · s216). 호출은 그대로 두고 여기서 삼킨다. */
+    private void toast(String m) { }
 
     // ───────────── 앱 규칙(엔진 /rules) ─────────────
     private final java.util.Random rng = new java.util.Random();
@@ -1275,10 +1283,6 @@ public class ShellActivity extends Activity {
     /** 올려도 되는지(스레드 안): 안 되면 문구, 되면 "". 엔진이 안 닿으면 막지 않는다(서버가 한 번 더 거른다). */
     private String rulesCheck(String kind, String cat, String... texts) {
         return RulesCore.checkError(rulesCall(RulesCore.checkBody(store, kind, cat, System.currentTimeMillis(), texts)));
-    }
-    /** 포인트 적립(스레드 안): 저장값을 갱신하고 보여 줄 문구를 돌려준다. */
-    private String rulesAward(String ev, boolean sent) {
-        return RulesCore.applyAward(store, rulesCall(RulesCore.awardBody(store, ev, System.currentTimeMillis(), rng.nextDouble(), sent)));
     }
     private void toastMain(final String m) { if (m != null && m.length() > 0) main.post(new Runnable() { @Override public void run() { toast(m); } }); }
 
@@ -3184,14 +3188,13 @@ public class ShellActivity extends Activity {
                 final String id = r.status == 200 ? ShellCore.jsonId(r.body) : "";
                 final boolean rejected = r.status >= 400 && r.status < 500;
                 final String why = rejected ? ShellCore.jsonError(r.body) : "";
-                final String award = rejected ? "" : rulesAward("write", id.length() > 0);
                 main.post(new Runnable() { @Override public void run() {
                     writeBusy = false;
                     if (rejected) { writeErr = why.length() > 0 ? why : "등록할 수 없어요"; loadWrite(true); return; }
                     long now = System.currentTimeMillis();
                     boolean ok = id.length() > 0;
                     board.addMine(ok ? id : "L" + now, "잡담", t, b, nick, now, !ok);
-                    toast(award.length() > 0 ? award : ok ? "글이 등록되었어요" : "글을 저장했어요. 연결되면 모두에게 보여요");
+                    toast(ok ? "글이 등록되었어요" : "글을 저장했어요. 연결되면 모두에게 보여요");
                     closeSheet();
                     reloadBoard();
                 } });
@@ -3399,6 +3402,7 @@ public class ShellActivity extends Activity {
                 if (!homeVisible()) { homeTickOn = false; return; }
                 pollHomeTalks();
                 pollRide();
+                hcEnsureDong();
                 long now = System.currentTimeMillis();
                 if (hc.aiNextAt > 0 && now >= hc.aiNextAt) { hc.refreshAi(now); reloadHome(); }
                 main.postDelayed(this, 5000);
@@ -3410,16 +3414,44 @@ public class ShellActivity extends Activity {
     private void hcFixFrom(double la, double lo) {
         long now = System.currentTimeMillis();
         boolean first = hc.fix == null, far = !first && (Math.abs(hc.fix[0] - la) > 0.003 || Math.abs(hc.fix[1] - lo) > 0.003);
-        if (!first && !far) { hc.fixAt = now; return; }
+        if (!first && !far) { hc.fixAt = now; hcEnsureDong(); return; }
         hc.setFix(la, lo, now);
+        hcEnsureDong();
         if (homeVisible()) reloadHome();
+    }
+    private volatile boolean dongBusy = false;
+    private volatile long dongTryAt = 0L;
+    /** 현위치의 동 이름을 모르면(처음 · 300m 넘게 움직임) 뒤에서 서버에 묻는다 — 경로가 없을 때 브리핑이 '○○동 일대'로 열린다. 실패하면 30초 뒤에 다시 시도, 이름은 저장해 다음 실행에서 바로 쓴다. */
+    private void hcEnsureDong() {
+        final double[] fx = hc.fix;
+        if (fx == null || hc.dongNow().length() > 0 || dongBusy) return;
+        long now = System.currentTimeMillis();
+        if (now - dongTryAt < 30000L) return;
+        dongTryAt = now; dongBusy = true;
+        final double la = fx[0], lo = fx[1];
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String nm = "";
+                try {
+                    NetPost.Res r = NetPost.get(HcardsCore.dongUrl(HomeSearchCore.DEFAULT_BASE, la, lo), 5000);
+                    if (r != null && r.status == 200 && r.body != null) nm = HcardsCore.parseDong(r.body);
+                } catch (Throwable ignored) { }
+                final String name = nm;
+                main.post(new Runnable() { @Override public void run() {
+                    dongBusy = false;
+                    if (name.length() == 0) return;
+                    if (hc.setDong(name, la, lo)) { store.put(HcardsCore.K_DONG, hc.dongSaved()); if (homeVisible()) reloadHome(); }
+                } });
+            }
+        }, "shell-dong").start();
     }
     private void quietFix() {
         long now = System.currentTimeMillis();
         if (hc.fix != null && now - hc.fixAt < 10 * 60000L) return;
         double[] seed = liveLL();
-        if (seed == null) seed = ShellCore.lastLocFresh(store, 6L * 3600000L, now);        // 몇 시간 안에 안 위치면 우선 그것으로 브리핑을 채운다(곧 새 위치로 바로잡힌다)
-        if (seed != null && hc.fix == null) { hc.setFix(seed[0], seed[1], now - 9 * 60000L); }            // 처음 그릴 때 이미 들어가 있게(다시 그리지 않는다) — 1분 뒤 새로 확인
+        if (seed == null) seed = ShellCore.lastLocFresh(store, 24L * 3600000L, now);       // 하루 안에 안 위치면 우선 그것으로 브리핑을 채운다(곧 새 위치로 바로잡힌다)
+        if (seed != null && hc.fix == null) { hc.setFix(seed[0], seed[1], now - 9 * 60000L); hc.dongLoad(store.get(HcardsCore.K_DONG, "")); }            // 처음 그릴 때 이미 들어가 있게(다시 그리지 않는다) — 1분 뒤 새로 확인. 같은 곳에서 알아낸 동 이름이 저장돼 있으면 함께
+        hcEnsureDong();
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         locateNow(8000L, 1000L, 60000L, 120000L, new LocCb() {
             @Override public void fix(Location l) { hcFixFrom(l.getLatitude(), l.getLongitude()); }
@@ -3958,7 +3990,6 @@ public class ShellActivity extends Activity {
             new Thread(new Runnable() {
                 @Override public void run() {
                     RulesCore.applyMyLines(store, rulesCall(RulesCore.mylinesBody(store.get(ChatCore.K_MY, "[]"), secs, System.currentTimeMillis())));
-                    toastMain(rulesAward("ride", true));
                 }
             }, "shell-rules-ride").start();
     }
