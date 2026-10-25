@@ -10,7 +10,6 @@
 //        facts = 앱이 모은 기기 사실(전부 선택 — 없으면 기본값):
 //          id: 현재 커뮤니티 아이디('' 이면 없음) · np:{arrive,transfer,arrive_reco: 1|0} · npd: 알림 권한 거부(1|0) · rl: 도착 오차 기록(1|0)
 //          th: 'dark'|'pastel' · sam: 갤럭시(1|0) · samw: 앱 배터리 '제한됨'(1|0) · errn: 오류 로그 개수 · cm: 출퇴근 알림(1|0|없음) · ovl: 오버레이(1|0|없음) · pgs: 앱이 열 수 있는 하위 화면 이름들(['sam','ovl','arr'] — 없으면 모두 보인다)
-//          pt: { total, today, todayStr, rc, rcStr }(규칙 엔진이 만든 포인트 저장값 그대로 — 없으면 포인트 칸 없음) · day: 오늘 날짜 글자('2026-10-20')
 // 출력  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[노드…] }  ← 노드 종류는 native/shell/ScreenCore.java 와 같다
 //        panel{kids} · text · box · toggle{key} · navrow{act} · select{act:{a:'sel'}} · field{key} · button · spacer
 //        act = {a:'set',key} (스위치 — 앱이 먼저 뒤집고 알린다) | {a:'call',v} (앱 안 함수 호출: saveId·clearId·pol.*·errlog) | {a:'web',v} (웹 카드 열기) | {a:'sel',v} (고르기)
@@ -34,7 +33,6 @@ var SETTINGS_NOTIF = [
   { key: 'arrive_reco', title: '하차 전 추천', desc: '도착 5분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' }
 ];
 // 규칙 엔진(rules.js): Worker 에서는 같은 범위의 함수, Node 시험에서는 불러온다
-function settingsRulesFn() { return (typeof rulesRun === 'function') ? rulesRun : require('./rules').rulesRun; }
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
 function settingsStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
 function settingsFacts(f) {
@@ -44,7 +42,6 @@ function settingsFacts(f) {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
     sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
-    pt: (f.pt && typeof f.pt === 'object') ? f.pt : null, day: settingsStr(f.day, 20),
     pgs: Array.isArray(f.pgs) ? f.pgs.filter(function (x) { return typeof x === 'string'; }).slice(0, 8) : null          // 앱이 실제로 열 수 있는 하위 화면 이름들(없으면 모두 보인다)
   };
   SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // 알림은 기본 켜짐(저장값이 0 일 때만 꺼짐)
@@ -108,17 +105,7 @@ function settingsScreen(inp, factsIn) {
     body.push(settingsPanelN(sk));
   }
 
-  // 4) 내 포인트(규칙 엔진이 계산한 요약 — 앱은 저장값과 오늘 날짜만 준다)
-  if (f.pt) {
-    var pv = settingsRulesFn()({ op: 'view', pt: f.pt, day: f.day });
-    if (pv && pv.ok) {
-      var pl = settingsBoldN([['내 포인트  ', 0], [pv.total + ' P', 1], ['  \u00b7 오늘 ' + pv.today + ' P\n등급  ', 0], [pv.level, 1], [pv.next ? '  (' + pv.next + '까지 ' + pv.need + ' P)' : '', 0]]);
-      body.push(settingsPanelN([settingsTitleN('포인트', 4), { t: 'box', s: pl.s, hl: pl.hl, size: 13, lh: 1.6, color: 'text', fill: 'bg', line: 'border', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 0] },
-        settingsSmallN('글쓰기 +10 P · 탑승 안내 시작 +10 P · 현장제보 3~8 P (하루 ' + pv.rcMax + '회, 오늘 ' + pv.rc + '/' + pv.rcMax + ')', 8, 0)]));
-    }
-  }
-
-  // 5) 안내 정확도
+  // 4) 안내 정확도
   body.push(settingsPanelN([
     settingsTitleN('안내 정확도 향상', 2),
     { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
