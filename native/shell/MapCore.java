@@ -29,6 +29,42 @@ public final class MapCore {
 
     // ── 버스: 이 기기의 위치 사실 + 엔진이 받아 오라고 한 주소의 본문(해석은 엔진) ──
     public double[] busLL = null;
+    /** 도착정보 열쇠: a(주변 본문) · f(즐겨찾기 본문) · g(주변: 이웃 정류장 · 바꾼 ID) · h(즐겨찾기: 바꾼 ID) + 번호 — 8초마다 비운다. 경유노선(t · u)은 한 번 받으면 둔다(정류장 목록이 바뀌면 비운다). */
+    static final String ARR_KEY = "[afgh][0-9]{1,3}", THRU_KEY = "[tu][0-9]{1,3}";
+    /** 꼭 받아야 하는 본문(a · f) — 이웃 · 바꾼 ID · 경유노선은 덤이라 못 받아도 이번 갱신을 버리지 않는다. */
+    public static boolean coreKey(String k) { return k != null && k.matches("[af][0-9]{1,3}"); }
+    // ── TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop): 엔진이 노선 경유 정류장 목록(큰 본문 · 열쇠 r+번호)에서 이름만 뽑아 info.nx 로 돌려준다 → 이름만 저장해 두었다가 다음 요청에 실어 보낸다(큰 본문은 기기에 두지 않는다).
+    static final String K_BNX = "bnx"; static final int NX_CAP = 400;
+    private final LinkedHashMap<String, String> nxMap = new LinkedHashMap<String, String>();
+    private boolean nxLoaded;
+    private void nxLoad() {
+        if (nxLoaded) return;
+        nxLoaded = true;
+        String raw = st.get(K_BNX, "");
+        if (raw.length() == 0 || raw.length() > 60000) return;
+        try { Object o = ScreenCore.parse(raw); if (o instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) o).entrySet()) if (e.getValue() instanceof String && nxMap.size() < NX_CAP) nxMap.put(e.getKey(), (String) e.getValue()); } catch (Exception e) { /* 망가진 값은 버린다 */ }
+    }
+    /** 방면 이름 표를 요청에 실을 JSON({"정류장id|노선id":"이름"}). 빈 이름(이번엔 못 알아냄)은 이번 실행 동안만 쥔다. */
+    String nxJson() {
+        nxLoad();
+        StringBuilder b = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, String> e : nxMap.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+        return b.append('}').toString();
+    }
+    private void nxTake(Map<String, Object> m) {
+        nxLoad();
+        for (Map.Entry<String, Object> e : m.entrySet()) {
+            if (!(e.getValue() instanceof String) || e.getKey().length() > 80 || ((String) e.getValue()).length() > 40) continue;
+            nxMap.remove(e.getKey()); nxMap.put(e.getKey(), (String) e.getValue());
+        }
+        java.util.Iterator<String> it = nxMap.keySet().iterator();
+        while (nxMap.size() > NX_CAP && it.hasNext()) { it.next(); it.remove(); }
+        StringBuilder b = new StringBuilder("{");
+        boolean first = true;
+        for (Map.Entry<String, String> e : nxMap.entrySet()) { if (e.getValue().length() == 0) continue; if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+        st.put(K_BNX, b.append('}').toString());
+    }
     final Map<String, String> busRes = new LinkedHashMap<String, String>();
     public final List<String[]> busNeed = new ArrayList<String[]>();           // [k, 주소]
     /** 서버가 정류장·도착정보를 한 번에 받아 준 적이 있다(그러면 갱신도 서버에 한 번에 맡긴다) · 이번 응답에서 서버가 못 받은 도착정보 수. */
@@ -113,17 +149,17 @@ public final class MapCore {
     /** 8초 갱신을 시작한다: 보던 도착정보는 따로 챙겨 두고 비운다(새로 받기가 실패하면 restoreArrivals 로 되돌린다 — 비어 버린 채 남아 "도착정보 없음"이 되지 않게). */
     public void dropArrivals() {
         if (arrStash.isEmpty()) {
-            for (Map.Entry<String, String> e : busRes.entrySet()) if (e.getKey().matches("[af][0-9]{1,3}")) arrStash.put(e.getKey(), e.getValue());
+            for (Map.Entry<String, String> e : busRes.entrySet()) if (e.getKey().matches(ARR_KEY)) arrStash.put(e.getKey(), e.getValue());
             arrStashAt = arrAt;
         }
         arrAt = 0L;
-        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
+        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches(ARR_KEY)) it.remove(); }
         busNeed.clear();
     }
     /** 보여 줄 옛 화면이 없는 처음 그리기(콜드 스타트 · 뼈대에서 시작): 옛 도착정보는 엔진에 넣지 않는다 — 옛 숫자가 화면에 올라오지 않게(정류장 목록 tp·gg·tn·d1 은 그대로). */
     public void clearArrivals() {
         arrAt = 0L; arrStash.clear(); busNeed.clear();
-        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches("[af][0-9]{1,3}")) it.remove(); }
+        java.util.Iterator<String> it = busRes.keySet().iterator(); while (it.hasNext()) { if (it.next().matches(ARR_KEY)) it.remove(); }
     }
     /** 새로 못 받은 도착정보(a · f)만 갱신 전에 보던 값으로 채운다 — 채운 개수. */
     public int fillFromStash() { int c = 0; for (Map.Entry<String, String> e : arrStash.entrySet()) if (!busRes.containsKey(e.getKey())) { busRes.put(e.getKey(), e.getValue()); c++; } return c; }
@@ -143,8 +179,10 @@ public final class MapCore {
     /** 엔진이 받아 오라고 한 목록 중 도착정보(a · f) 주소만 기억한다(기기에도 보관 — 앱을 껐다 켜도 첫 갱신이 빠르다). */
     public void rememberNeed(List<String[]> need) {
         List<String[]> keep = new ArrayList<String[]>();
-        for (String[] n : need) if (n != null && n.length == 2 && n[0].matches("[af][0-9]{1,3}") && n[1].length() > 0 && n[1].length() < 600 && n[1].indexOf('\t') < 0 && n[1].indexOf('\n') < 0) keep.add(n);
-        if (keep.isEmpty()) return;
+        for (String[] n : need) if (n != null && n.length == 2 && n[0].matches(ARR_KEY) && n[1].length() > 0 && n[1].length() < 600 && n[1].indexOf('\t') < 0 && n[1].indexOf('\n') < 0) keep.add(n);
+        boolean core = false;
+        for (String[] n : keep) if (coreKey(n[0])) core = true;
+        if (!core) return;                                                                      // 바꾼 ID 만 다시 받은 바퀴는 기억하지 않는다 — 본문 주소 전체를 가진 지난 목록을 덮지 않게
         lastArrNeed.clear(); lastArrNeed.addAll(keep); lastArrSig = arrSig();
         saveNeed();
     }
@@ -170,7 +208,7 @@ public final class MapCore {
         if (!lastArrNeed.isEmpty()) {
             String[] old = new String[perm.length];
             List<String[]> rest = new ArrayList<String[]>();
-            for (String[] n : lastArrNeed) { int ix = n[0].matches("a[0-9]{1,3}") ? Integer.parseInt(n[0].substring(1)) : -1; if (ix >= 0 && ix < old.length) old[ix] = n[1]; else rest.add(n); }
+            for (String[] n : lastArrNeed) { int ix = n[0].matches("a[0-9]{1,3}") ? Integer.parseInt(n[0].substring(1)) : -1; if (ix >= 0 && ix < old.length) old[ix] = n[1]; else if (!n[0].startsWith("g")) rest.add(n); }          // g(이웃 · 바꾼 ID)는 번호가 정류장 순서에 묶여 있어 버린다(다음에 엔진이 다시 정한다)
             lastArrNeed.clear();
             for (int j = 0; j < perm.length; j++) if (old[perm[j]] != null) lastArrNeed.add(new String[] { "a" + j, old[perm[j]] });
             lastArrNeed.addAll(rest);
@@ -180,9 +218,12 @@ public final class MapCore {
         return true;
     }
     private static void permuteArr(Map<String, String> m, int[] perm) {
-        String[] old = new String[perm.length];
-        for (int i = 0; i < perm.length; i++) old[i] = m.get("a" + i);
-        for (int j = 0; j < perm.length; j++) { if (old[perm[j]] != null) m.put("a" + j, old[perm[j]]); else m.remove("a" + j); }
+        permuteKeys(m, perm, "a", 1); permuteKeys(m, perm, "t", 1); permuteKeys(m, perm, "g", 4);       // 이웃 · 바꾼 ID(g)는 정류장마다 4칸(4i+j)
+    }
+    private static void permuteKeys(Map<String, String> m, int[] perm, String pre, int stride) {
+        String[][] old = new String[perm.length][stride];
+        for (int i = 0; i < perm.length; i++) for (int q = 0; q < stride; q++) old[i][q] = m.get(pre + (i * stride + q));
+        for (int j = 0; j < perm.length; j++) for (int q = 0; q < stride; q++) { String v = old[perm[j]][q]; if (v != null) m.put(pre + (j * stride + q), v); else m.remove(pre + (j * stride + q)); }
     }
     /** 지금 상태에서 바로 받아도 되는 도착정보 주소들([k, 주소]) — 없으면 빈 목록(평소처럼 엔진에게 묻는다). */
     public List<String[]> speculativeNeed() {
@@ -192,7 +233,7 @@ public final class MapCore {
             if (raw.length() > 0) {
                 String[] ln = raw.split("\n");
                 if (ln.length >= 2 && ln[0].equals(String.valueOf(arrSig().hashCode()))) {
-                    for (int i = 1; i < ln.length; i++) { String[] kv = ln[i].split("\t", 2); if (kv.length == 2 && kv[0].matches("[af][0-9]{1,3}") && kv[1].length() > 0) lastArrNeed.add(kv); }
+                    for (int i = 1; i < ln.length; i++) { String[] kv = ln[i].split("\t", 2); if (kv.length == 2 && kv[0].matches(ARR_KEY) && kv[1].length() > 0) lastArrNeed.add(kv); }
                     lastArrSig = arrSig();
                 }
             }
@@ -208,7 +249,7 @@ public final class MapCore {
         return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
     }
     public void addBusRes(String k, String body) {
-        boolean arr = k != null && k.matches("[af][0-9]{1,3}");
+        boolean arr = k != null && k.matches(ARR_KEY);
         if (arr) {
             long now = System.currentTimeMillis();
             if (hasArr(body)) arrKeyAt.put(k, now);
@@ -219,6 +260,8 @@ public final class MapCore {
             }
             arrAt = now;
         }
+        if (k != null && k.matches(THRU_KEY) && (body == null || body.length() == 0)) { busRes.remove(k); return; }      // 못 받은 경유노선은 없음이 아니라 아직 못 받은 것 — 엔진이 다음에 다시 부탁한다
+        if (k != null && k.matches("tp|gg|tn|d1") && body != null && !body.equals(busRes.get(k))) { java.util.Iterator<String> ti = busRes.keySet().iterator(); while (ti.hasNext()) if (ti.next().matches(THRU_KEY)) ti.remove(); }      // 정류장 목록이 달라졌다 — 번호가 다른 정류장을 가리킬 수 있으니 경유노선을 비운다
         if (k != null && k.matches("[a-z][a-z0-9]{0,3}")) busRes.put(k, body == null ? "" : (body.length() > 120000 ? body.substring(0, 120000) : body)); }
     /** 엔진이 준 주소를 공공 API 프록시 주소로 바꾼다 — /tago 는 route-v2 가 아니라 웹과 같은 버스 전용 프록시(gildongmu-bus)에 있다(정류장 표 D1 만 gentle-lab). 허용 호스트가 아니면 빈 문자열. */
     public static String busFetchUrl(String u) {
@@ -239,7 +282,7 @@ public final class MapCore {
         String u = busFetchUrl(raw);
         if (u.length() == 0) return null;
         String alt = busAltUrl(raw);
-        boolean arr = key != null && key.matches("[af][0-9]{1,3}");
+        boolean arr = key != null && key.matches(ARR_KEY);
         int pref = 0;
         if (arr) { try { pref = Integer.parseInt(key.substring(1)) & 1; } catch (NumberFormatException e) { pref = 0; } }
         if (arr) return NetPost.getBusArr(u, alt, pref, firstMs, retryMs);
@@ -269,11 +312,11 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme, boolean skel) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(",\"fav\":").append(favRaw()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
-            for (Map.Entry<String, String> e : busRes.entrySet()) { if (skel && e.getKey().matches("[af][0-9]{1,3}")) continue; if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
+            for (Map.Entry<String, String> e : busRes.entrySet()) { if (skel && e.getKey().matches(ARR_KEY)) continue; if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
             f = b.append("}}}").toString();
         }
         return "{\"cap\":" + cap + ",\"f\":" + f + "}";
@@ -349,6 +392,8 @@ public final class MapCore {
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List)
                 for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 64) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
             svFail = 0;
+            if (im.get("nx") instanceof Map) nxTake((Map<String, Object>) im.get("nx"));
+            { java.util.Iterator<String> ri = busRes.keySet().iterator(); while (ri.hasNext()) if (ri.next().matches("r[0-9]{1,3}")) ri.remove(); }          // 노선 경유 정류장 목록(큰 본문)은 엔진이 이름만 뽑은 뒤 바로 버린다
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List && !busNeed.isEmpty()) svServer = false;     // 서버가 못 받았다 — 기기가 받는 옛 길로
             if (im.get("bres") instanceof Map) {                                                   // 서버가 정류장·도착정보를 한 번에 받아 줬다 — 받은 본문을 그대로 모아 둔다(다음 갱신·즐겨찾기에 쓴다)
                 svServer = true;

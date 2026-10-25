@@ -327,6 +327,8 @@ public final class ShellCore {
 
     // ═════════════ 탭마다 보여 줄 것 ═════════════
     public static final String K_MODE = "cc_mode", K_SHOP_CAT = "shop_cat", K_NEWS_CAT = "news_cat";
+    /** 뉴스 카테고리의 처음 · 마지막 이름 — 밀어서 뉴스로 들어올 때 쓴다(엔진 news.js NW_CATS 의 처음 · 마지막과 같아야 한다 — 시험이 지킨다). */
+    public static final String NEWS_FIRST = "전체", NEWS_LAST = "IT";
     public static final String MODE_DEFAULT = "news";
     public static final String[] MODES = { "chat", "board", "news", "set" };
     public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }

@@ -143,6 +143,26 @@ public class ScreenView extends View {
     }
 
     public void setListener(Listener l) { listener = l; }
+    // ── 커뮤니티 좌우 밀기(웹 _commSwipeInit · _swipeAttach): 판정값은 웹 그대로 — 32px 이상 · 1.2초 안 · 세로로 80px 넘게 벗어나면 스크롤 · 가로가 세로 이상.
+    //    무엇으로 넘길지는 엔진이 준 칩(탭 · 카테고리 · 호선)의 순서와 켜진 칸으로 앱 쪽 SwipeHost 가 정한다. 여기서는 몸짓을 알아보고 넘어갈 때 본문이 옆에서 미끄러져 들어오는 그림만 그린다.
+    public interface SwipeHost { boolean onSwipe(ScreenView v, int dir); }
+    private SwipeHost swipeHost;
+    private float swX0, swY0; private long swT0; private boolean swBlock, swOff;
+    private int pendSlide; private long pendSlideAt, slT0; private int slDir;
+    private static final float SW_MIN_DP = 32f, SW_OFF_DP = 80f; private static final long SW_MAX_MS = 1200L, SLIDE_MS = 340L;
+    private static final float SLIDE_DP = 24f;                                         // 웹 ltSlideInLeft/Right: 24px 옆에서 + 투명→불투명 0.34초 cubic-bezier(.22,.8,.3,1)
+    private static android.view.animation.PathInterpolator slideEase;
+    public void setSwipeHost(SwipeHost h) { swipeHost = h; }
+    /** 다음에 오는 새 화면은 dir 쪽으로 밀어서 넘어온 것이다(dir -1 = 왼쪽으로 밀어 다음 칸 → 새 내용은 오른쪽에서 들어온다). 3초 안에 안 오면 잊는다. */
+    public void slideNext(int dir) { pendSlide = dir; pendSlideAt = SystemClock.uptimeMillis(); }
+    /** 머리 줄(chips)의 칩 행동들과 켜진 칸 번호(onOut[0], 없으면 -1). */
+    public ScreenCore.Act[] chipActs(int[] onOut) {
+        java.util.ArrayList<ScreenCore.Act> o = new java.util.ArrayList<ScreenCore.Act>();
+        int on = -1;
+        if (lay != null) for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.act != null) { if (it.on) on = o.size(); o.add(it.act); }
+        if (onOut != null && onOut.length > 0) onOut[0] = on;
+        return o.toArray(new ScreenCore.Act[0]);
+    }
     /** 입력칸 글자 모음(키 → 글자). 앱이 call 행동을 처리할 때 함께 받는다. */
     public Map<String, String> fields() { return new HashMap<String, String>(fieldVals); }
     public long drawAgeMs() { return lastDraw == 0L ? Long.MAX_VALUE : SystemClock.uptimeMillis() - lastDraw; }
@@ -194,6 +214,7 @@ public class ScreenView extends View {
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
         mqT0 = SystemClock.uptimeMillis();
+        if (pendSlide != 0) { if (mqT0 - pendSlideAt < 3000L) { slDir = pendSlide; slT0 = mqT0; } pendSlide = 0; }
         hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
         cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
@@ -367,11 +388,14 @@ public class ScreenView extends View {
                 if (pressed != null && pressed.kind == ScreenCore.K_BCARD && "near".equals(pressed.value) && !inHead && !inFoot && roEnabled()) ui.postDelayed(lpRun, RO_LP_MS);       // 꾹 누르면 순서 바꾸기
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
+                swX0 = x; swY0 = y; swT0 = downT; swOff = false;
+                swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || (pressed != null && (pressed.kind == ScreenCore.K_BUTTON || pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
                 invalidate();
                 return true;
             }
             case MotionEvent.ACTION_MOVE: {
                 float dx = x - lastX, dy = y - lastY;
+                { float ay = Math.abs(y - swY0), ax = Math.abs(x - swX0); if (ay > SW_OFF_DP * dpr && ay > ax) swOff = true; }
                 if (sceneTouch && scene != null) {
                     ScreenCore.Item si = sceneAt(x, y);
                     float sx = si != null ? sceneX(x, si) : x - sceneL * dpr, sy = si != null ? sceneY(y, si) : y - sceneT * dpr;
@@ -397,6 +421,13 @@ public class ScreenView extends View {
             case MotionEvent.ACTION_UP: {
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
+                if (swipeHost != null && !swBlock && !swOff && (mode == 3 || mode == 1) && !fabDown) {
+                    float sdx = x - swX0, sdy = y - swY0;
+                    if (SystemClock.uptimeMillis() - swT0 <= SW_MAX_MS && Math.abs(sdx) >= SW_MIN_DP * dpr && Math.abs(sdx) >= Math.abs(sdy)) {
+                        int sd = sdx < 0f ? -1 : 1;
+                        if (swipeHost.onSwipe(this, sd)) { pressed = null; ui.removeCallbacks(lpRun); finishTouch(); invalidate(); return true; }
+                    }
+                }
                 if (mode == 3 && fabDown) { fabDown = false; if (SystemClock.uptimeMillis() - downT < 600 && listener != null && lay != null && lay.fabAct != null) { blurInput(); listener.onAction(lay.fabAct); } finishTouch(); invalidate(); return true; }
                 if (mode == 3) {
                     if (SystemClock.uptimeMillis() - downT < 600 && pressed != null && listener != null) {
@@ -1669,6 +1700,13 @@ public class ScreenView extends View {
         cv.scale(dpr, dpr);
         float w = getWidth() / dpr, h = getHeight() / dpr;
         // 본문(머리 아래로 잘라서)
+        float slF = -1f;
+        if (slDir != 0) {                                                                  // 칸을 밀어 넘어온 직후: 본문이 옆에서 24dp 미끄러지며 나타난다
+            long el = now - slT0;
+            if (el >= SLIDE_MS) slDir = 0;
+            else { if (slideEase == null) slideEase = new android.view.animation.PathInterpolator(0.22f, 0.8f, 0.3f, 1f); slF = slideEase.getInterpolation(Math.max(0f, el) / (float) SLIDE_MS); moving = true; }
+        }
+        if (slF >= 0f) { cv.saveLayerAlpha(0f, lay.headH, w, h - lay.footH, Math.round(255f * slF), Canvas.ALL_SAVE_FLAG); cv.translate(-slDir * SLIDE_DP * (1f - slF), 0f); }
         cv.save();
         cv.clipRect(0f, lay.headH, w, h - lay.footH);
         cv.translate(0f, lay.headH - scrollY);
@@ -1687,6 +1725,7 @@ public class ScreenView extends View {
         for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind == ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);       // 두 줄 경계에 얹는 둥근 단추는 맨 위에(웹 z-index 20) — 그 밑의 구분선이 단추를 가로지르지 않게
         if (dragOn || settleOn) roDrawDragged(cv);                                        // 끌리는 카드는 맨 위에
         cv.restore();
+        if (slF >= 0f) cv.restore();
         if (roMode && roEnabled()) { cv.save(); cv.clipRect(0f, lay.headH, w, h - lay.footH); roDrawBar(cv, w); cv.restore(); }       // 위에 붙은 '끌어서 순서 변경 · 완료' 줄
         // 머리(위에 고정, 본문 위에 덮음)
         p.setStyle(Paint.Style.FILL); p.setColor(bgNow());

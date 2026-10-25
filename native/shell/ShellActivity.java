@@ -153,12 +153,15 @@ public class ShellActivity extends Activity {
         root.addView(hdr, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(43f * dpr)));
         head = new ScreenView(this);
         head.setDpr(dpr);
-        head.setListener(new Host(0));
+        hostHead = new Host(0);
+        head.setListener(hostHead);
         root.addView(head, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Math.round(44f * dpr)));
         holder = new FrameLayout(this);                 // 본문 칸의 검색 입력칸이 붙을 부모
         body = new ScreenView(this);
         body.setDpr(dpr);
-        body.setListener(new Host(1));
+        hostBody = new Host(1);
+        body.setListener(hostBody);
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
@@ -1243,6 +1246,33 @@ public class ShellActivity extends Activity {
     private void toastMain(final String m) { if (m != null && m.length() > 0) main.post(new Runnable() { @Override public void run() { toast(m); } }); }
 
     // ───────────── 눌림 ─────────────
+    private Host hostHead, hostBody;
+    /**
+     * 커뮤니티 좌우 밀기(웹 _commSwipeStep). dir -1 = 왼쪽으로 밀어 다음 · +1 = 오른쪽으로 밀어 이전.
+     * 순서·켜진 칸은 엔진이 준 칩에서 읽는다(앱은 칩 순서대로 한 칸 옮길 뿐): 실시간소통 = 호선 칩 먼저 → 끝에서 다음 탭 · 뉴스 = 카테고리 먼저(끝에서 왼쪽은 멈춤 · 처음에서 오른쪽은 게시판) · 게시판·설정 = 탭 순서(실시간소통 → 게시판 → 뉴스 → 설정).
+     * @return 몸짓을 쓴 경우(끝에서 멈추는 것도 포함) true
+     */
+    private boolean commSwipe(int dir) {
+        if (!"community".equals(ShellCore.currentTab(store)) || (dir != -1 && dir != 1)) return false;
+        String mode = ShellCore.mode(store);
+        boolean chat = "chat".equals(mode), news = "news".equals(mode);
+        if (chat || news) {
+            int[] oi = new int[1];
+            ScreenCore.Act[] inner = body.chipActs(oi);
+            int nx = oi[0] - dir;
+            if (oi[0] >= 0 && nx >= 0 && nx < inner.length) { body.slideNext(dir); hostBody.handle(inner[nx], false); return true; }
+            if (news && dir == -1) return true;                                  // 뉴스 마지막 카테고리에서 왼쪽: 설정으로 넘어가지 않고 멈춘다(웹)
+        }
+        int[] ti = new int[1];
+        ScreenCore.Act[] tabs = head.chipActs(ti);
+        int nx = ti[0] - dir;
+        if (ti[0] < 0 || nx < 0 || nx >= tabs.length) return true;               // 양 끝에서 멈춘다
+        ScreenCore.Act t = tabs[nx];
+        if (t.v != null && t.v.equals("cc.news")) store.put(ShellCore.K_NEWS_CAT, dir == -1 ? ShellCore.NEWS_FIRST : ShellCore.NEWS_LAST);          // 게시판 → 뉴스는 첫 카테고리부터 · 설정 → 뉴스는 마지막 카테고리 (웹)
+        body.slideNext(dir);
+        hostHead.handle(t, false);
+        return true;
+    }
     private final class Host implements ScreenView.Listener {
         private final int which;                      // 0 머리 · 1 본문 · 2 탭 막대
         Host(int which) { this.which = which; }
@@ -1269,7 +1299,7 @@ public class ShellActivity extends Activity {
             if (lp != null && lp.height != h) { lp.height = h; head.setLayoutParams(lp); }
         }
 
-        private void handle(ScreenCore.Act a, boolean on) {
+        void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
             if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
             if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { if (deb.gate("retry", 600L)) showTab(ShellCore.currentTab(store)); return; }
@@ -1796,7 +1826,7 @@ public class ShellActivity extends Activity {
                         if (w.busNeed.isEmpty()) break;
                         List<String[]> need = new ArrayList<String[]>(w.busNeed);
                         String[] got = fetchAll(need, 5000, 4000);
-                        for (int i = 0; i < need.size(); i++) { if (got[i] == null || got[i].length() == 0) bad = true; else { w.addBusRes(need.get(i)[0], got[i]); arrNeed.add(need.get(i)); } }
+                        for (int i = 0; i < need.size(); i++) { if (got[i] == null || got[i].length() == 0) { if (MapCore.coreKey(need.get(i)[0])) bad = true; } else { w.addBusRes(need.get(i)[0], got[i]); arrNeed.add(need.get(i)); } }
                         w.busNeed.clear();
                         if (bad) break;
                     }
@@ -2169,11 +2199,11 @@ public class ShellActivity extends Activity {
                     if (my != seqMapB) return;
                     if (busRefreshing) {                                                          // 새로 받는 중인 도착정보가 하나라도 비면 이번 갱신은 버린다(옛 값을 섞지 않는다) — 화면은 1초 카운트다운으로 이어진다
                         boolean bad = false;
-                        for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) bad = true;
+                        for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) bad = true;          // 이웃 · 바꾼 ID · 경유노선(덤)은 못 받아도 이번 갱신을 버리지 않는다
                         if (bad) { busFail(); return; }
                     }
                     int badN = 0;
-                    for (int i = 0; i < need.size(); i++) if (got[i] == null || got[i].length() == 0) badN++;
+                    for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) badN++;
                     busBadFetch = badN;
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     map.rememberNeed(need);                                                       // 다음 갱신은 이 주소들을 엔진에게 묻지 않고 곧장 받는다
@@ -2268,7 +2298,7 @@ public class ShellActivity extends Activity {
                         List<String[]> need = new ArrayList<String[]>(w.busNeed);
                         String[] got = fetchAll(need, 5000, 4000);
                         boolean bad = false;
-                        for (int i = 0; i < need.size(); i++) { if (got[i] == null || got[i].length() == 0) bad = true; w.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]); }
+                        for (int i = 0; i < need.size(); i++) { if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) bad = true; w.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]); }
                         for (String[] n : need) arrNeed.add(n);
                         w.busNeed.clear();
                         if (bad) break;                                                         // 한 곳이라도 못 받았으면 보던 화면을 그대로 둔다
@@ -2312,9 +2342,9 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (sq != seqMapB) return;                                                    // 그 사이 다른 요청이 시작됐다
                     boolean bad = false;
-                    for (String g : got) if (g == null || g.length() == 0) bad = true;
+                    for (int i = 0; i < got.length; i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(spec.get(i)[0])) bad = true;
                     if (bad) { loadMapBodyRound(body, true, 0); return; }
-                    for (int i = 0; i < spec.size(); i++) map.addBusRes(spec.get(i)[0], got[i]);
+                    for (int i = 0; i < spec.size(); i++) if (got[i] != null && got[i].length() > 0) map.addBusRes(spec.get(i)[0], got[i]);          // 덤(이웃 · 바꾼 ID)을 못 받았으면 엔진이 이어서 다시 부탁한다
                     loadMapBodyRound(body, true, 1);
                 } });
             }
