@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s191";
+var ENGINE_VERSION = "route-v2-2026-10-25s192";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3372,10 +3372,10 @@ function rateLimited(request) {
 }
 __name(rateLimited, "rateLimited");
 __name2(rateLimited, "rateLimited");
-// 2026-10-25 s191: measured on 10 cities, live arrival phase took 0.6-3.2s but applied only 0-1 stops.
-// Budget cut 3.5->2.0s total and 1.5->1.0s per call to keep cold routes fast (timeout falls back to timetable).
-var LIVE_TIMEOUT_MS = 1000;
-var LIVE_BUDGET_MS = 2000;
+// 2026-10-25 s192 (YJ: realtime must arrive within 3s max): s191 shortened these, but a 1.0s per-call timeout made slow upstream calls time out
+// and trip the 8s live breaker, so more stops ended without live data. Back to a 3.0s total budget with a 2.5s per-call cap.
+var LIVE_TIMEOUT_MS = 2500;
+var LIVE_BUDGET_MS = 3000;
 function budgetLeft(dl) {
   return dl ? dl - Date.now() : LIVE_TIMEOUT_MS;
 }
@@ -5856,7 +5856,7 @@ async function fetchStopArrivalsLive(cityCode, nodeId, env, deadline, budget) {
 }
 __name(fetchStopArrivalsLive, "fetchStopArrivalsLive");
 __name2(fetchStopArrivalsLive, "fetchStopArrivalsLive");
-var LIVE_CONC = 6;
+var LIVE_CONC = 10;
 var _liveRun = 0;
 var _liveQ = [];
 function liveAcquire(deadline) {
@@ -6484,7 +6484,7 @@ async function applyLiveWaits(out, stat, env, deadline) {
         if (rec.via) stat.via = rec.via;
       }
     })),
-    new Promise((res) => setTimeout(res, LIVE_TIMEOUT_MS))
+    new Promise((res) => setTimeout(res, Math.max(300, Math.min(LIVE_TIMEOUT_MS, budgetLeft(deadline)))))   // s192: the cut-off follows what is left of the 3s budget (was a fixed 1.5s, which dropped calls that finished at 1.5-3s)
   ]);
   let n = 0;
   for (const k in out) {
@@ -7535,7 +7535,8 @@ __name(tabNormalize, "tabNormalize");
 // \uc774 \ud30c\uc77c\uc740 \uc758\uc874\uc131\uc774 \uc5c6\ub2e4. \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 
 var ROUTE_FOLLOW_V = 1;
-var ROUTE_FOLLOW_RETRY_MS = [12000, 16000, 20000];
+// \u2605 2026-10-25 s192 (YJ: \uba3c\uc800 \ubcf4\uc5ec \uc8fc\uace0, \uc2e4\uc2dc\uac04\uc774 \uc624\uba74 \uc870\uc6a9\ud788 \ubc14\uafbc\ub2e4 \u2014 \uce74\uce74\uc624\u00b7\ub124\uc774\ubc84 \ubc29\uc2dd): 12\u00b716\u00b720\ucd08\ub294 \ub108\ubb34 \ub2a6\uc5c8\ub2e4. 3\u00b76\u00b710\u00b715\ucd08\ub85c \uc55e\ub2f9\uae34\ub2e4(\uc608\uc0c1 \uad6c\uac04\uc774 \ub0a8\uc558\uc744 \ub54c\ub9cc, \uc5d4\uc9c4\uc774 '\ub098\uc544\uc84c\ub2e4'\uace0 \ud560 \ub54c\ub9cc \ud654\uba74\uc744 \ubc14\uafbc\ub2e4).
+var ROUTE_FOLLOW_RETRY_MS = [3000, 6000, 10000, 15000];
 
 function _rfInt(x) { var v = Number(x); return isFinite(v) && v > 0 ? Math.floor(v) : 0; }
 
@@ -9776,9 +9777,64 @@ function rsAttachPressTT(req, nt) {
     return true;
   } catch (e) { return false; }
 }
+// \u2500\u2500 \uc11c\uc6b8 \uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c '\ud0c0\ub294 \uc5f4\ucc28' \uac00\ub9ac\uae30 (\uc6f9 fetchRealtimeArrival \u00b7 resolveRealtimeDepartMs \uaddc\uce59) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   \u2605 2026-10-25 s192 (YJ: "\uc11c\uc6b8\uc9c0\ud558\ucca0\uc740 \uc2e4\uc2dc\uac04 \uc704\uce58\ub97c \uc5b4\ub5bb\uac8c\ub4e0 \ubc1b\uc544\uc57c \ud574 \u00b7 \ucd5c\ub300 3\ucd08 \u00b7 \uc6f9\uc758 \uaddc\uce59\uc744 \ub530\ub77c"):
+//   \ub124\uc774\ud2f0\ube0c\ub294 [\ud0d1\uc2b9] \uc601\uc810\uc744 \uc2dc\uac01\ud45c\ub85c\ub9cc \uc7a1\uc558\ub2e4. \uc6f9\uc740 \uc11c\uc6b8\uc2dc realtimeStationArrival \uc758 barvlDt(\ub3c4\ucc29\uae4c\uc9c0 \ub0a8\uc740 \ucd08)\ub85c \uc601\uc810\uc744 \uc7a1\ub294\ub2e4.
+//   \uc6cc\ucee4 \uc5f0\uacb0\ubd80\uac00 \uc774 \uc5ed\uc758 \ub3c4\ucc29\uc815\ubcf4 \ubaa9\ub85d\uc744 \ubc1b\uc544 \uc624\uba74(3\ucd08 \uc548\uc5d0 \ubabb \ubc1b\uc73c\uba74 \uc2dc\uac01\ud45c\ub85c \u2014 \uae30\uc874 \ub3d9\uc791 \uadf8\ub300\ub85c) \uc5ec\uae30\uc11c \uc5f4\ucc28 \ud55c \ub300\ub97c \uac00\ub9b0\ub2e4.
+//   \u00b7 \ud638\uc120 \uc77c\uce58(subwayId) \u00b7 \ubc29\ud5a5 \uc77c\uce58(trainLineNm '\u25cb\u25cb\ud589 - \u25b3\u25b3\ubc29\uba74' \uc758 \u25b3\u25b3 = \uc6b0\ub9ac \uacbd\ub85c\uc758 \ub2e4\uc74c \uc5ed) \uc778 \uc5f4\ucc28\ub9cc
+//   \u00b7 \uc9c4\uc785\u00b7\ub3c4\ucc29(arvlCd 0\u00b71)\uc740 \uc9c0\uae08, \uadf8 \ubc16\uc5d4 barvlDt \ucd08 \ub4a4. \uc774\ubbf8 \ucd9c\ubc1c(2)\ud588\uac70\ub098 \uc2dc\uac01\uc744 \ubaa8\ub974\uba74 \uac74\ub108\ub6f4\ub2e4. 12\ubd84 \ub118\uac8c \uba3c \uc5f4\ucc28\ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4.
+var RS_SUBWAY_ID = { '1\ud638\uc120': '1001', '2\ud638\uc120': '1002', '3\ud638\uc120': '1003', '4\ud638\uc120': '1004', '5\ud638\uc120': '1005', '6\ud638\uc120': '1006', '7\ud638\uc120': '1007', '8\ud638\uc120': '1008', '9\ud638\uc120': '1009', '\uacf5\ud56d\ucca0\ub3c4': '1065', '\uacbd\uc758\uc911\uc559\uc120': '1067', '\uacbd\ucd98\uc120': '1069', '\uc218\uc778\ubd84\ub2f9\uc120': '1075', '\uc2e0\ubd84\ub2f9\uc120': '1077', '\uc6b0\uc774\uc2e0\uc124\uc120': '1092', '\uc11c\ud574\uc120': '1093', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778': '1094', '\uacbd\uac15\uc120': '1095', '\uc2e0\ub9bc\uc120': '1093', '\uc778\ucc9c1\ud638\uc120': '1081', '\uc778\ucc9c2\ud638\uc120': '1082', 'GTX-A': '1091' };
+function rsSubwayId(lineName) { return RS_SUBWAY_ID[lineName] || RS_SUBWAY_ID[String(lineName || '').replace(/\ud638\uc120$/, '') + '\ud638\uc120'] || ''; }
+function rsStnKey(n) { return String(n || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/\uc5ed$/, ''); }
+// \uc11c\uc6b8 \uc5ed \ub3c4\ucc29\uc815\ubcf4 \ubaa9\ub85d \u2192 \ud0c0\ub294 \uc5f4\ucc28\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms) \ub610\ub294 null. q = rsPressQuery \uacb0\uacfc, list = realtimeArrivalList
+function rsPickLive(list, q, nowMs) {
+  try {
+    if (!q || !list || !list.length || !isFinite(nowMs)) return null;
+    var sid = rsSubwayId(q.line), to = rsStnKey(q.to);
+    if (!sid || !to) return null;
+    var best = null, k;
+    for (k = 0; k < list.length; k++) {
+      var it = list[k]; if (!it || String(it.subwayId) !== sid) continue;
+      var m = /[-\u2013\u2014]\s*([^\s]+?)\s*\ubc29\uba74/.exec(String(it.trainLineNm || '')); if (!m || rsStnKey(m[1]) !== to) continue;
+      var cd = parseInt(it.arvlCd, 10), bv = parseInt(it.barvlDt, 10), ms;
+      if (cd === 0 || cd === 1) ms = nowMs;
+      else if (cd === 2) continue;
+      else if (isFinite(bv) && bv > 0) ms = nowMs + bv * 1000;
+      else continue;
+      if (ms - nowMs > RS_PICK_MAX_MIN * 60000) continue;
+      if (best == null || ms < best) best = ms;
+    }
+    return best;
+  } catch (e) { return null; }
+}
+// \uc704 \uacb0\uacfc\ub97c req.pressTT.liveMs \ub85c \ubd99\uc778\ub2e4(\uc2dc\uac01\ud45c\uac00 \uc5c6\uc5b4\ub3c4 \ub9cc\ub4e0\ub2e4). \ubd99\uc600\uc73c\uba74 true
+function rsAttachPressLive(req, list) {
+  try {
+    var q = rsPressQuery(req); if (!q) return false;
+    var ms = rsPickLive(list, q, +req.nowMs); if (ms == null) return false;
+    if (!req.pressTT || req.pressTT.i !== q.i) req.pressTT = { i: q.i, nowM: q.atMin, depMin: null, late: null };
+    req.pressTT.liveMs = ms;
+    return true;
+  } catch (e) { return false; }
+}
+// \uc11c\uc6b8 \uc911\uacc4(/seoul)\uc5d0\uc11c \uc774 \uc5ed\uc758 \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294\ub2e4 \u2014 \uc2dc\uac04 \ud55c\ub3c4 \uc548\uc5d0 \ubabb \ubc1b\uc73c\uba74 null(\uc2dc\uac01\ud45c\ub85c). \uc11c\ube44\uc2a4 \ubc14\uc778\ub529 BUSAPI \ub85c \ubd80\ub978\ub2e4.
+var RS_LIVE_MS = 2800;
+function rsFetchSeoulArrivals(env, q) {
+  if (!q || !env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function' || !rsSubwayId(q.line)) return Promise.resolve(null);
+  var path = 'realtimeStationArrival/0/20/' + encodeURIComponent(String(q.from).replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/\uc5ed$/, ''));
+  var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = null;
+  var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, RS_LIVE_MS); });
+  var go = Promise.resolve().then(function () { return env.BUSAPI.fetch(new Request('https://busapi.internal/seoul?path=' + encodeURIComponent(path), ctl ? { signal: ctl.signal } : void 0)); })
+    .then(function (r) { return r && r.status === 200 ? r.json() : null; })
+    .then(function (j) { return j && j.realtimeArrivalList && j.realtimeArrivalList.length ? j.realtimeArrivalList : null; })
+    .catch(function () { return null; });
+  return Promise.race([go, cut]).then(function (v) { if (timer) clearTimeout(timer); return v; });
+}
 // \uc2b9\ucc28 \ud1b5\uacfc \uc2dc\uac01(ms): \ubc29\uae08 \ub5a0\ub09c \ucc28(late) \u2192 \uadf8 \ucd9c\ubc1c \uc2dc\uac01 \u00b7 \uc5c6\uc73c\uba74 \ub2e4\uc74c \ucc28(depMin, 12\ubd84 \uc548) \u2192 \uadf8 \uc2dc\uac01 \u00b7 \uc544\ub2c8\uba74 \ub204\ub978 \uc2dc\uac01
 function rsPickMs(tt, i, now) {
   if (!tt || tt.i !== i) return now;
+  if (tt.liveMs != null && isFinite(tt.liveMs)) return +tt.liveMs;      // \u2605 s192: \uc11c\uc6b8 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c \uac00\ub9b0 \uc5f4\ucc28\uac00 \uc788\uc73c\uba74 \uc2dc\uac01\ud45c\ubcf4\ub2e4 \uba3c\uc800(\uc6f9 resolveRealtimeDepartMs \uc640 \uac19\uc740 \uaddc\uce59)
   var m = tt.late != null && isFinite(tt.late) ? tt.late : (tt.depMin != null && isFinite(tt.depMin) ? tt.depMin : null);
   if (m == null) return now;
   var d = m - tt.nowM; if (d < -720) d += 1440; if (d > 720) d -= 1440;
@@ -9814,7 +9870,7 @@ function rsXwait(st, tr, now, notes) {
   if (dep == null || !(pm >= L.bi - 1 || (prevAt != null && prevAt <= now) || rsAlightGps(st, tr, L.bi))) { delete st.xw; if (st.xPend && st.xPend.i !== L.bi) delete st.xPend; return; }
   var keep = st.xw && st.xw.i === L.bi ? st.xw : null;
   st.xw = { i: L.bi, k: L.k, mode: L.mode, line: L.line, name: L.name, arrMs: dep, seen: keep ? !!keep.seen : false, shr: keep ? !!keep.shr : false };
-  if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now); notes.push('\ud658\uc2b9 \uc608\uc57d \ud655\uc815(' + L.bi + '\ubc88)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
+  if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now, st.xPend.lv != null && isFinite(st.xPend.lv) ? +st.xPend.lv : null); notes.push('\ud658\uc2b9 \uc608\uc57d \ud655\uc815(' + L.bi + '\ubc88)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
 }
 function rsContrast(hex) {
   var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return '#ffffff';
@@ -9838,7 +9894,7 @@ function rsActs(st, req, now, notes) {
     var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
     var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // \ubc29\uae08 \ub5a0\ub09c \ucc28\uac00 \uc788\uc73c\uba74 \uc608\uc57d\ud558\uc9c0 \uc54a\uace0 \ubc14\ub85c \ud655\uc815
     if (!lateHit && x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // \ub3c4\ucc29 1\ubd84 \ubc18\ubcf4\ub2e4 \uc77c\ucc0d \ub204\ub978 \uac83\uc740 \uc608\uc57d\ub9cc(\ub9c8\ucee4\uac00 \ud280\uc9c0 \uc54a\uac8c) \u2014 \uadf8 \uc2dc\uac01\uc774 \ub418\uac70\ub098 \ud0c4 \uc99d\uac70\uac00 \uc7a1\ud788\uba74 \ud655\uc815
-      st.xPend = { i: x.i, at: now }; st.rsOpen = 0; x.seen = true;
+      st.xPend = { i: x.i, at: now }; if (tt && tt.liveMs != null && isFinite(tt.liveMs)) st.xPend.lv = +tt.liveMs; st.rsOpen = 0; x.seen = true;      // s192: \uc2e4\uc2dc\uac04\uc73c\ub85c \uac00\ub9b0 \uc5f4\ucc28 \uc2dc\uac01\uc744 \uc608\uc57d\uc5d0 \uc801\uc5b4 \ub454\ub2e4 \u2014 \ud655\uc815 \ub54c \uadf8 \uc2dc\uac01\uc744 \uc4f4\ub2e4
       st.rsUndo = { w: { i: x.i }, x: true, pend: true, prev: null, until: now + 20000 };
       notes.push('\ud658\uc2b9 \uc608\uc57d(' + x.i + '\ubc88 \u00b7 \ub3c4\ucc29 ' + Math.round((x.arrMs - now) / 1000) + '\ucd08 \uc804)');
     } else {
@@ -9856,7 +9912,7 @@ function rsActs(st, req, now, notes) {
     var np = { idx: w.i, ms: rsPickMs(tw && !(dW != null && dW > RS_NEAR_M && tw.late != null) ? tw : null, w.i, now), src: 'gps' };
     if (hit >= 0) passes[hit] = np; else passes.push(np);
     eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
-    notes.push('\uc2b9\ucc28 \uc218\ub3d9 \ud655\uc815(\uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \ubc84\ud2bc)' + (np.ms !== now ? ' \u00b7 \uc2dc\uac01\ud45c ' + Math.round((np.ms - now) / 1000) + '\ucd08' : ''));
+    notes.push('\uc2b9\ucc28 \uc218\ub3d9 \ud655\uc815(\uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \ubc84\ud2bc)' + (np.ms !== now ? (tw && tw.liveMs != null && np.ms === +tw.liveMs ? ' \u00b7 \uc2e4\uc2dc\uac04 ' : ' \u00b7 \uc2dc\uac01\ud45c ') + Math.round((np.ms - now) / 1000) + '\ucd08' : ''));
     rsPressVerify(st, w.i, now, notes);
   } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
 }
@@ -10372,8 +10428,12 @@ function handleRideStandby(request, env) {
       return new Response(JSON.stringify(out), { headers: H });
     };
     // \ud0d1\uc2b9 \ubc84\ud2bc\uc744 \ub20c\ub800\uace0 \uc9c0\ud558\ucca0 \uad6c\uac04\uc774\uba74 \uc2dc\uac01\ud45c(\ubc29\uae08 \ub5a0\ub09c \ucc28 \u00b7 \ub2e4\uc74c \ucc28)\ub97c \uc77d\uc5b4 \ubd99\uc778\ub2e4 \u2014 \uc2dc\uac01\ud45c\ub97c \ubabb \ubd88\ub7ec\uc640\ub3c4 \uadf8\ub0e5 \ub204\ub978 \uc2dc\uac01\uc73c\ub85c \ud655\uc815\ud55c\ub2e4
-    if (typeof ntEnsure === 'function' && rsPressQuery(body)) {
-      return Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); return run(); }, function () { return run(); });
+    // \u2605 s192: \uac19\uc740 \ub54c\uc5d0 \uc11c\uc6b8 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub3c4 \ubc1b\ub294\ub2e4(\ucd5c\ub300 RS_LIVE_MS) \u2014 \ubc1b\uc73c\uba74 \uc2dc\uac01\ud45c\ubcf4\ub2e4 \uba3c\uc800 \uc4f0\uace0, \ubabb \ubc1b\uc73c\uba74 \uc2dc\uac01\ud45c \uadf8\ub300\ub85c
+    var pq = typeof ntEnsure === 'function' ? rsPressQuery(body) : null;
+    if (pq) {
+      var pTT = Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); }, function () { });
+      var pLV = rsFetchSeoulArrivals(env, pq).then(function (list) { return list; }, function () { return null; });
+      return Promise.all([pTT, pLV]).then(function (r) { rsAttachPressLive(body, r[1]); return run(); }, function () { return run(); });
     }
     return run();
   }, function () { return new Response(JSON.stringify({ error: '\uc694\uccad\uc744 \uc77d\uc9c0 \ubabb\ud568' }), { status: 400, headers: H }); });

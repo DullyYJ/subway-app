@@ -162,9 +162,64 @@ function rsAttachPressTT(req, nt) {
     return true;
   } catch (e) { return false; }
 }
+// ── 서울 지하철 실시간 도착정보로 '타는 열차' 가리기 (웹 fetchRealtimeArrival · resolveRealtimeDepartMs 규칙) ─────────────────
+//   ★ 2026-10-25 s192 (YJ: "서울지하철은 실시간 위치를 어떻게든 받아야 해 · 최대 3초 · 웹의 규칙을 따라"):
+//   네이티브는 [탑승] 영점을 시각표로만 잡았다. 웹은 서울시 realtimeStationArrival 의 barvlDt(도착까지 남은 초)로 영점을 잡는다.
+//   워커 연결부가 이 역의 도착정보 목록을 받아 오면(3초 안에 못 받으면 시각표로 — 기존 동작 그대로) 여기서 열차 한 대를 가린다.
+//   · 호선 일치(subwayId) · 방향 일치(trainLineNm '○○행 - △△방면' 의 △△ = 우리 경로의 다음 역) 인 열차만
+//   · 진입·도착(arvlCd 0·1)은 지금, 그 밖엔 barvlDt 초 뒤. 이미 출발(2)했거나 시각을 모르면 건너뛴다. 12분 넘게 먼 열차는 쓰지 않는다.
+var RS_SUBWAY_ID = { '1호선': '1001', '2호선': '1002', '3호선': '1003', '4호선': '1004', '5호선': '1005', '6호선': '1006', '7호선': '1007', '8호선': '1008', '9호선': '1009', '공항철도': '1065', '경의중앙선': '1067', '경춘선': '1069', '수인분당선': '1075', '신분당선': '1077', '우이신설선': '1092', '서해선': '1093', '김포골드라인': '1094', '경강선': '1095', '신림선': '1093', '인천1호선': '1081', '인천2호선': '1082', 'GTX-A': '1091' };
+function rsSubwayId(lineName) { return RS_SUBWAY_ID[lineName] || RS_SUBWAY_ID[String(lineName || '').replace(/호선$/, '') + '호선'] || ''; }
+function rsStnKey(n) { return String(n || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/역$/, ''); }
+// 서울 역 도착정보 목록 → 타는 열차의 도착 시각(ms) 또는 null. q = rsPressQuery 결과, list = realtimeArrivalList
+function rsPickLive(list, q, nowMs) {
+  try {
+    if (!q || !list || !list.length || !isFinite(nowMs)) return null;
+    var sid = rsSubwayId(q.line), to = rsStnKey(q.to);
+    if (!sid || !to) return null;
+    var best = null, k;
+    for (k = 0; k < list.length; k++) {
+      var it = list[k]; if (!it || String(it.subwayId) !== sid) continue;
+      var m = /[-–—]\s*([^\s]+?)\s*방면/.exec(String(it.trainLineNm || '')); if (!m || rsStnKey(m[1]) !== to) continue;
+      var cd = parseInt(it.arvlCd, 10), bv = parseInt(it.barvlDt, 10), ms;
+      if (cd === 0 || cd === 1) ms = nowMs;
+      else if (cd === 2) continue;
+      else if (isFinite(bv) && bv > 0) ms = nowMs + bv * 1000;
+      else continue;
+      if (ms - nowMs > RS_PICK_MAX_MIN * 60000) continue;
+      if (best == null || ms < best) best = ms;
+    }
+    return best;
+  } catch (e) { return null; }
+}
+// 위 결과를 req.pressTT.liveMs 로 붙인다(시각표가 없어도 만든다). 붙였으면 true
+function rsAttachPressLive(req, list) {
+  try {
+    var q = rsPressQuery(req); if (!q) return false;
+    var ms = rsPickLive(list, q, +req.nowMs); if (ms == null) return false;
+    if (!req.pressTT || req.pressTT.i !== q.i) req.pressTT = { i: q.i, nowM: q.atMin, depMin: null, late: null };
+    req.pressTT.liveMs = ms;
+    return true;
+  } catch (e) { return false; }
+}
+// 서울 중계(/seoul)에서 이 역의 도착정보를 받는다 — 시간 한도 안에 못 받으면 null(시각표로). 서비스 바인딩 BUSAPI 로 부른다.
+var RS_LIVE_MS = 2800;
+function rsFetchSeoulArrivals(env, q) {
+  if (!q || !env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function' || !rsSubwayId(q.line)) return Promise.resolve(null);
+  var path = 'realtimeStationArrival/0/20/' + encodeURIComponent(String(q.from).replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/역$/, ''));
+  var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  var timer = null;
+  var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, RS_LIVE_MS); });
+  var go = Promise.resolve().then(function () { return env.BUSAPI.fetch(new Request('https://busapi.internal/seoul?path=' + encodeURIComponent(path), ctl ? { signal: ctl.signal } : void 0)); })
+    .then(function (r) { return r && r.status === 200 ? r.json() : null; })
+    .then(function (j) { return j && j.realtimeArrivalList && j.realtimeArrivalList.length ? j.realtimeArrivalList : null; })
+    .catch(function () { return null; });
+  return Promise.race([go, cut]).then(function (v) { if (timer) clearTimeout(timer); return v; });
+}
 // 승차 통과 시각(ms): 방금 떠난 차(late) → 그 출발 시각 · 없으면 다음 차(depMin, 12분 안) → 그 시각 · 아니면 누른 시각
 function rsPickMs(tt, i, now) {
   if (!tt || tt.i !== i) return now;
+  if (tt.liveMs != null && isFinite(tt.liveMs)) return +tt.liveMs;      // ★ s192: 서울 실시간 도착정보로 가린 열차가 있으면 시각표보다 먼저(웹 resolveRealtimeDepartMs 와 같은 규칙)
   var m = tt.late != null && isFinite(tt.late) ? tt.late : (tt.depMin != null && isFinite(tt.depMin) ? tt.depMin : null);
   if (m == null) return now;
   var d = m - tt.nowM; if (d < -720) d += 1440; if (d > 720) d -= 1440;
@@ -200,7 +255,7 @@ function rsXwait(st, tr, now, notes) {
   if (dep == null || !(pm >= L.bi - 1 || (prevAt != null && prevAt <= now) || rsAlightGps(st, tr, L.bi))) { delete st.xw; if (st.xPend && st.xPend.i !== L.bi) delete st.xPend; return; }
   var keep = st.xw && st.xw.i === L.bi ? st.xw : null;
   st.xw = { i: L.bi, k: L.k, mode: L.mode, line: L.line, name: L.name, arrMs: dep, seen: keep ? !!keep.seen : false, shr: keep ? !!keep.shr : false };
-  if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now); notes.push('환승 예약 확정(' + L.bi + '번)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
+  if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now, st.xPend.lv != null && isFinite(st.xPend.lv) ? +st.xPend.lv : null); notes.push('환승 예약 확정(' + L.bi + '번)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
 }
 function rsContrast(hex) {
   var m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '')); if (!m) return '#ffffff';
@@ -224,7 +279,7 @@ function rsActs(st, req, now, notes) {
     var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
     var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // 방금 떠난 차가 있으면 예약하지 않고 바로 확정
     if (!lateHit && x.arrMs != null && x.arrMs - now > RS_EARLY_MS) {      // 도착 1분 반보다 일찍 누른 것은 예약만(마커가 튀지 않게) — 그 시각이 되거나 탄 증거가 잡히면 확정
-      st.xPend = { i: x.i, at: now }; st.rsOpen = 0; x.seen = true;
+      st.xPend = { i: x.i, at: now }; if (tt && tt.liveMs != null && isFinite(tt.liveMs)) st.xPend.lv = +tt.liveMs; st.rsOpen = 0; x.seen = true;      // s192: 실시간으로 가린 열차 시각을 예약에 적어 둔다 — 확정 때 그 시각을 쓴다
       st.rsUndo = { w: { i: x.i }, x: true, pend: true, prev: null, until: now + 20000 };
       notes.push('환승 예약(' + x.i + '번 · 도착 ' + Math.round((x.arrMs - now) / 1000) + '초 전)');
     } else {
@@ -242,7 +297,7 @@ function rsActs(st, req, now, notes) {
     var np = { idx: w.i, ms: rsPickMs(tw && !(dW != null && dW > RS_NEAR_M && tw.late != null) ? tw : null, w.i, now), src: 'gps' };
     if (hit >= 0) passes[hit] = np; else passes.push(np);
     eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
-    notes.push('승차 수동 확정(오버레이 탑승 버튼)' + (np.ms !== now ? ' · 시각표 ' + Math.round((np.ms - now) / 1000) + '초' : ''));
+    notes.push('승차 수동 확정(오버레이 탑승 버튼)' + (np.ms !== now ? (tw && tw.liveMs != null && np.ms === +tw.liveMs ? ' · 실시간 ' : ' · 시각표 ') + Math.round((np.ms - now) / 1000) + '초' : ''));
     rsPressVerify(st, w.i, now, notes);
   } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
 }
@@ -758,11 +813,15 @@ function handleRideStandby(request, env) {
       return new Response(JSON.stringify(out), { headers: H });
     };
     // 탑승 버튼을 눌렀고 지하철 구간이면 시각표(방금 떠난 차 · 다음 차)를 읽어 붙인다 — 시각표를 못 불러와도 그냥 누른 시각으로 확정한다
-    if (typeof ntEnsure === 'function' && rsPressQuery(body)) {
-      return Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); return run(); }, function () { return run(); });
+    // ★ s192: 같은 때에 서울 실시간 도착정보도 받는다(최대 RS_LIVE_MS) — 받으면 시각표보다 먼저 쓰고, 못 받으면 시각표 그대로
+    var pq = typeof ntEnsure === 'function' ? rsPressQuery(body) : null;
+    if (pq) {
+      var pTT = Promise.resolve().then(function () { return ntEnsure(env); }).then(function (nt) { rsAttachPressTT(body, nt); }, function () { });
+      var pLV = rsFetchSeoulArrivals(env, pq).then(function (list) { return list; }, function () { return null; });
+      return Promise.all([pTT, pLV]).then(function (r) { rsAttachPressLive(body, r[1]); return run(); }, function () { return run(); });
     }
     return run();
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };

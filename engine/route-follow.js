@@ -23,7 +23,8 @@
 'use strict';
 
 var ROUTE_FOLLOW_V = 1;
-var ROUTE_FOLLOW_RETRY_MS = [12000, 16000, 20000];
+// ★ 2026-10-25 s192 (YJ: 먼저 보여 주고, 실시간이 오면 조용히 바꾼다 — 카카오·네이버 방식): 12·16·20초는 너무 늦었다. 3·6·10·15초로 앞당긴다(예상 구간이 남았을 때만, 엔진이 '나아졌다'고 할 때만 화면을 바꾼다).
+var ROUTE_FOLLOW_RETRY_MS = [3000, 6000, 10000, 15000];
 
 function _rfInt(x) { var v = Number(x); return isFinite(v) && v > 0 ? Math.floor(v) : 0; }
 
