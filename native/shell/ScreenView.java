@@ -1001,6 +1001,7 @@ public class ScreenView extends View {
         for (String s : q.lines) b.append('\n').append(s);
         for (String s : q.lines2) b.append('\u0001').append(s);
         for (String s : q.sa) b.append('\u0002').append(s);
+        b.append('\u0003').append(q.t2);
         return b.toString();
     }
     private static void fpAdd(java.util.HashMap<String, Integer> m, ScreenCore.Item[] arr) {
@@ -1279,6 +1280,7 @@ public class ScreenView extends View {
         setText(it.size, true, pal[R_TEXT]);
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, 0), tp);
         if (it.t1.length() > 0) { setText(ScreenCore.BC_ORIG, true, pal[R_SUB]); cv.drawText(it.t1, it.f1, base(it.f2, it.lineH, 0), tp); }
+        if (it.t2.length() > 0) { setText(ScreenCore.BC_LM, true, pal[R_GOLD]); cv.drawText(it.t2, it.lx, base(it.ly, it.lh, 0), tp); }
         // 머리 오른쪽: 거리 알약 · ★/× · 🗺️ · ✏️
         if (it.go.length() > 0) {
             rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + ScreenCore.BC_DIST_H);

@@ -204,6 +204,7 @@ public final class ScreenCore {
         public String key = "", title = "", sub = "", value = "";
         public String fill = "", line = "", hint = "", accent = "#e63329", tc = "", sc = "", onc = "", onl = "", chk = "", ckf = "";
         public String[] prev = new String[0];
+        public String lm = "";                           // bcard: 정류장 이름 옆 '(○○역 방향)' 의 안쪽 글('○○역') — 비면 그리지 않는다
         public String rol = "", rod = "";                  // bcard: 순서 바꾸기 줄 글('끌어서 순서 변경' · '완료') — 첫 주변 카드에만 온다
         public boolean mine, right, ind;
         public String nick = "", pre = "", time = "";
@@ -833,7 +834,7 @@ public final class ScreenCore {
             n.label = optStr(m, "al", "", 40); n.badge = optStr(m, "n", "", 3); n.tag = optStr(m, "dist", "", 12);
             n.value = optStr(m, "mode", "near", 5); if (!"near".equals(n.value) && !"fav".equals(n.value)) throw new ParseError("bcard: mode 는 near 또는 fav");
             n.on = optBool(m, "on", false); n.big = optNum(m, "fv", 0f, 0f, 1f) > 0f; n.ci = Math.round(optNum(m, "pi", -1f, -1f, 39f));
-            n.title = optStr(m, "ld", "", 60); n.sub = optStr(m, "em", "", 60); n.rol = optStr(m, "rol", "", 30); n.rod = optStr(m, "rod", "", 10);
+            n.title = optStr(m, "ld", "", 60); n.sub = optStr(m, "em", "", 60); n.rol = optStr(m, "rol", "", 30); n.rod = optStr(m, "rod", "", 10); n.lm = optStr(m, "lm", "", 30);
             n.act = act(m.get("act"), true); n.bact = act(m.get("star"), false); n.eact = act(m.get("edit"), false); n.mact = act(m.get("map"), false);
             Object ro = m.get("rows");
             if (ro != null) {
@@ -1017,7 +1018,7 @@ public final class ScreenCore {
     /** 노선 상세(웹 .brs-*): 머리 52 · 제목 · 구간 머리 34 · 회차 28 · 정류장 줄 56+ (레일 폭 5 · 점 9 · 버스 21 · 내 위치 15). */
     public static final float BR_HEAD_H = 52f, BR_BADGE_H = 28f, BR_PADX = 16f, BR_TIT = 14f, BR_CHIP = 11.5f, BR_CHIP_PX = 9f, BR_CHIP_PY = 4f, BR_CHIP_GAP = 6f,
             BR_SEC_H = 34f, BR_TURN_H = 34f, BR_ROW_MIN = 56f, BR_ROW_PY = 10f, BR_NAME = 15f, BR_ID = 11.5f, BR_NOTE = 12f, BR_RAIL_X = 26f, BR_BODY_X = 48f, BR_LAB = 11f;
-    public static final float BC_RAD = 18f, BC_PADX = 16f, BC_PADT = 16f, BC_PADB = 12f, BC_NAME = 17f, BC_NAME_LH = 1.3f, BC_BADGE = 21f, BC_BADGE_GAP = 7f, BC_ORIG = 11f, BC_DIST = 11f, BC_DIST_PX = 9f, BC_DIST_H = 20f,
+    public static final float BC_RAD = 18f, BC_PADX = 16f, BC_PADT = 16f, BC_PADB = 12f, BC_NAME = 17f, BC_NAME_LH = 1.3f, BC_BADGE = 21f, BC_BADGE_GAP = 7f, BC_ORIG = 11f, BC_LM = 11f, BC_LM_LH = 1.4f, BC_DIST = 11f, BC_DIST_PX = 9f, BC_DIST_H = 20f,
             BC_GAP = 8f, BC_EDIT_W = 18f, BC_STAR_W = 24f, BC_X_W = 20f, BC_MAP_W = 19f, BC_ROW_PY = 11f, BC_ROW_PX = 14f, BC_ROW_GAP = 10f, BC_NO = 17f, BC_NO_LH = 1.1f, BC_DIR = 11f, BC_ARR = 14f, BC_ARR_LH = 1.3f,
             BC_CNT = 11f, BC_CNT_GAP = 6f, BC_ARR_GAP = 3f, BC_BELL = 22f, BC_MSG = 13f, BC_MSG_PY = 14f, BC_LEFT_MIN = 60f, BC_LEFT_MAX = 150f;
     /** 경로 결과 머리줄 치수(웹 #transitResultHeader 와 같다: 분 숫자 28 · 단위 14 · 구간명 12 · 즐겨찾기 알약 11 · 닫기 ×) */
@@ -1075,6 +1076,7 @@ public final class ScreenCore {
         public Col[] prevC = new Col[0];
         public String key = "", value = "";
         public String rol = "", rod = "";             // 정류장 카드: 순서 바꾸기 줄 글(첫 주변 카드에만)
+        public float lx, ly, lh;                      // 정류장 카드: 방향 글(t2)의 왼쪽 · 위쪽 · 줄 높이
         public float radius = 10f;
         public float bx, by, btx, bty;               // 검색줄: 배지 · 단추 왼쪽위 (영역 좌표)
         public int maxlen = 60;
@@ -1500,6 +1502,14 @@ public final class ScreenCore {
             String last = ls.get(ls.size() - 1);
             float used = m.width(last, BC_NAME, true) + 5f, room = nameW - used;
             if (room >= 30f) { it.t1 = ellipsize(n.name, room, BC_ORIG, true, m); it.f1 = it.textX + used; it.f2 = it.textY + it.lineH * (ls.size() - 1); }
+        }
+        if (n.lm.length() > 0) {                                                     // 웹 .bus-lm: 이름 바로 뒤에 '(○○역 방향)'(금색 굵게 11) — 한 줄에 안 들어가면 다음 줄로 내려간다
+            String lt = "(" + n.lm + " \uBC29\uD5A5)";
+            float lw = m.width(lt, BC_LM, true), tailX = it.textX + m.width(ls.get(ls.size() - 1), BC_NAME, true) + 5f;
+            if (it.t1.length() > 0) tailX = it.f1 + m.width(it.t1, BC_ORIG, true) + 5f;
+            float edge = it.textX + nameW;
+            if (tailX + lw <= edge) { it.t2 = lt; it.lx = tailX; it.ly = it.textY + it.lineH * (ls.size() - 1); it.lh = it.lineH; }
+            else { it.t2 = ellipsize(lt, nameW, BC_LM, true, m); it.lx = it.textX; it.ly = it.textY + nameH; it.lh = BC_LM * BC_LM_LH; nameH += it.lh; }
         }
         float hdrH = BC_PADT + nameH + BC_PADB;
         float zy = y + 1f + BC_PADT, zh = Math.min(it.lineH, 24f);
