@@ -69,6 +69,29 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(/노선 정보 없음/.test(strs(call({ part: 'stn', stn: '없는역xyz' }).body)), '노선 모르면 안내');
 }
 
+// ③-2 s208: 수도권과 지방에 같은 이름의 역이 있어도 권역으로 구분한다(지도는 수도권 전용)
+{
+  ok(E.mapRegionOfLine('1호선') === 'seoul' && E.mapRegionOfLine('GTX-A') === 'seoul' && E.mapRegionOfLine('부산2호선') === 'busan' && E.mapRegionOfLine('대구1호선') === 'daegu' && E.mapRegionOfLine('광주1호선') === 'gwangju' && E.mapRegionOfLine('대전1호선') === 'daejeon', '노선 이름 → 권역');
+  ok(E.mapLinesOf('중동', 'seoul').join() === '1호선' && E.mapLinesOf('중동', 'busan').join() === '부산2호선', '같은 이름 역은 같은 권역 노선만');
+  ok(E.mapLinesOf('중동').join() === '1호선,부산2호선', '권역을 안 주면 예전처럼 전체(웹 MSM 과 같은 표 비교용)');
+  ok(E.mapLinesOf('부산진', 'seoul').length === E.mapLinesOf('부산진').length, '그 권역에 그 이름이 아예 없으면 전체로(빈 팝업이 되지 않게)');
+  const sj = call({ part: 'stn', stn: '중동', reg: 'seoul' });
+  ok(sj.ok && sj.info.lines.join() === '1호선' && sj.info.pick.line === '1호선', '수도권 지도에서 누른 중동: 1호선만 · 출발/도착으로 쓸 행도 수도권');
+  const sb = call({ part: 'stn', stn: '중동', sl: '부산2호선', reg: 'busan' });
+  ok(sb.ok && sb.info.lines.join() === '부산2호선' && sb.info.pick.line === '부산2호선', '부산 목록에서 누른 중동: 부산 2호선만');
+  const so = call({ part: 'stn', stn: '중동' });
+  ok(so.info.lines.join() === '1호선', '권역 정보가 없는 옛 앱 요청은 수도권으로');
+  const ts = call({ part: 'tt', stn: '중동', reg: 'seoul', tt: { st: 'loading', res: {} } });
+  ok(ts.info.lines.join() === '1호선', '시간표도 같은 권역 노선만');
+  const tb = call({ part: 'tt', stn: '중동', sl: '부산2호선', reg: 'busan', tt: { st: 'loading', res: {} } });
+  ok(tb.info.lines.join() === '부산2호선', '부산 중동 시간표는 부산 2호선만');
+  ok(E.mapPickRow('중동', '', 'seoul')[1] === '1호선' && E.mapPickRow('중동', '', 'busan')[1] === '부산2호선', '노선을 못 골라도 같은 권역의 행');
+  ok(E.mapFind('중동', 'seoul').known && E.mapFind('동백', 'seoul').name === '동백', '검색: 이 권역에서 먼저');
+  const nb = E.mapNearest(35.1676, 129.0665, 'seoul');
+  ok(nb && E.mapRegionOfLine(nb.line) === 'seoul', '가까운 역도 수도권 안에서만(부산 위치여도 수도권 지도에 부산 역이 오지 않는다)');
+  ok(call({ part: 'b', mode: 'subway', reg: 'seoul', gps: [35.1676, 129.0665] }).info.near && E.mapRegionOfLine(call({ part: 'b', mode: 'subway', reg: 'seoul', gps: [35.1676, 129.0665] }).info.near.line) === 'seoul', '화면 info.near 도 같다');
+}
+
 // ⑤ 시간표
 {
   const dirs = [{ dk: '상', toward: '잠실', times: [300, 310, 480, 485, 1450], first: 300, last: 1450, nextMin: 480 }, { dk: '하', toward: '', times: [310], first: 310, last: 310, nextMin: null, tomorrow: false }];
@@ -81,10 +104,10 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(t.ok && t.screen === 'maptt' && t.info.line === lines[0] && t.info.day === 'DAY' && t.info.dk === '상', '첫 노선·오늘 요일·첫 방향을 엔진이 고른다');
   const k = t.head;
   ok(k[1].items.length === lines.length && k[1].items[0].on && /자료 없음/.test(k[1].items[1] ? k[1].items[1].label : '자료 없음'), '노선 칩(자료 없는 노선 표시) — 머리에 고정');
-  ok(k[2].items.map(i => i.label).join() === '평일 · 오늘,토요일,일요일' && k[2].items[0].on, '요일 칩');
-  ok(k[3].items[0].label === '잠실 방면' && k[3].items[1].label === '하행' && k[3].items[0].on, '방향 칩');
-  ok(k[4].s === '첫차 05:00 · 막차 00:10 · 다음 열차 08:00', '요약 ' + k[4].s);
-  ok(k.length === 5 && t.body.every(n => n.t === 'box'), 's204: 머리(제목줄·칩 셋·요약)는 고정, 본문은 시(時)줄만 스크롤');
+  ok(k[2].items.map(i => i.label).join() === '평일 · 오늘,토요일,일요일,잠실 방면,하행' && k[2].items[0].on && k[2].items[3].on && !k[2].items[1].on && !k[2].items[4].on, 's208: 요일 칩과 방면 칩이 한 줄(요일 · 방면 각각 하나씩 켜짐)');
+  ok(k[2].items[0].act.v === 'mt.d.DAY' && k[2].items[3].act.v === 'mt.k.0' && k[2].items[4].act.v === 'mt.k.1', 's208: 한 줄이어도 누름 신호는 그대로(mt.d.· mt.k.)');
+  ok(k[3].s === '첫차 05:00 · 막차 00:10 · 다음 열차 08:00', '요약 ' + k[3].s);
+  ok(k.length === 4 && t.body.every(n => n.t === 'box'), 's204·s208: 머리(제목줄·노선 칩·요일+방면 한 줄·요약)는 고정, 본문은 시(時)줄만 스크롤');
   const b = t.body;
   ok(b[0].s === '05시   00  10' && b[1].s === '08시   00  05' && b[1].hl && b[1].hl.some(h => h[0] === 6) && b[2].s.startsWith('00시 익일'), '시(時)별 묶기·익일 표시·다음 열차 굵게 ' + b[0].s + ' | ' + b[1].s + ' | ' + b[2].s);
   ok(b[1].fc && /^n/.test(b[1].fc) && !b[0].fc && !b[2].fc, '지금 시 줄이 없으면 다음 열차가 든 줄에만 fc(스크롤 표시)가 붙는다: ' + b[1].fc);

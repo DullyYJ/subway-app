@@ -323,14 +323,14 @@ function findAndroidJar() {
   });
   await t('역 팝업 위로 끌면 시간표 · 아래로 끌면 닫힘(s140): 박스가 끌기가 확정된 순간에만 가로채고 한 번만 반응한다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), d = a.slice(a.indexOf('private android.view.View stnSheetBox('), a.indexOf('private void mapSheetAct('));
-    assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d - swapOff\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
+    assert.ok(/onInterceptTouchEvent/.test(d) && /10f \* dpr/.test(d) && /Math\.abs\(dy\) > Math\.abs\(dx\) \* 1\.2f/.test(d) && /openTimetable\(curH,/.test(d) && /setTranslationY\(Math\.max\(0f, d\)\)/.test(d), '위/아래 끌기 규칙(10dp · 1.2배) + 손가락을 따라가기(창 높이 · 창 이동)');
     assert.ok(/ShellCore\.S_MAPSTN\.equals\(sheetName\)/.test(d) && /fired = true/.test(d) && /return false;/.test(d), '역 팝업일 때만 · 한 번만 · 평소엔 가로채지 않는다');
   });
-  await t('시간표를 내리면 역 팝업이 되돌아옴 · 지도는 시트가 덮은 만큼을 빼고 역을 맞춤(s155)', () => {
+  await t('시간표를 내려 놓으면 그 높이에서 그대로 내려가 닫힌다(s208 — 역 팝업이 다시 올라오지 않는다) · 지도는 시트가 덮은 만큼을 빼고 역을 맞춤(s155)', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MetroMapView.java'), 'utf8');
-    const b = a.slice(a.indexOf('private void backToStation('), a.indexOf('private void animSheetH('));
-    assert.ok(/stnCache\.get\(json\)/.test(b) && /cached == null[\s\S]*openMapSheet\(S_STN_H\)/.test(b) && /map\.ttSeq\+\+/.test(b) && /sheetName = ShellCore\.S_MAPSTN/.test(b) && /setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, from\)/.test(b) && /alpha\(0f\)\.setDuration\(200L\)/.test(b), '캐시된 역 화면으로 되돌아오고 없으면 새로 연다');
-    assert.ok(/tt && \(ty >= 56f \* dpr[\s\S]*backToStation\(dv/.test(a), '시간표를 놓을 때 내려갔으면 역 팝업으로');
+    assert.ok(!/backToStation|stationNow|swapOff/.test(a), 's208: 시간표를 내리다 역 팝업으로 바뀌어 다시 올라오는 길을 없앴다');
+    const rel = a.slice(a.indexOf('boolean tt = ShellCore.S_MAPTT.equals(sheetName);'), a.indexOf('private void mapSheetAct('));
+    assert.ok(/if \(!cancel && \(ty >= \(tt \? 56f : 40f\) \* dpr \|\| vy > 600f \* dpr\)\) \{[\s\S]*translationY\(dv\.getHeight\(\) \+ 40f \* dpr\)[\s\S]*closeSheet\(\)/.test(rel), '놓은 자리(ty)에서 그대로 아래로 내려가 닫는다(올라가지 않는다)');
     assert.ok(/public void setCover\(float px\)/.test(m) && /cam\.viewH - cover - m/.test(m) && /\(cam\.viewH - cover\) \/ 2f/.test(m), '지도: 덮인 높이를 뺀 영역에 역을 맞춘다');
     assert.ok(/mapView\.setCover\(hpx\)/.test(a) && /mapView\.setCover\(to\)/.test(a) && /mapView\.setCover\(0f\)/.test(a), '열 때 · 시간표로 커질 때 · 닫을 때 덮개 높이');
   });
@@ -346,7 +346,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n\s*float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
     assert.ok(/mode = 8/.test(sv) && /bandX = ScreenCore\.clamp\(bandX - dx \/ dpr, lay\.bandMax\(\)\)/.test(sv) && /cv\.clipRect\(bit\.cl, bit\.y - 4f, bit\.cr/.test(sv) && /pulsing = lay\.mkBody \? pulsingB : drawMk/.test(sv), '그 줄만 가로로 밀고(세로로 쓸면 목록) 틀 안에 자르고 마커도 같이 민다');
-    assert.ok(/private boolean stationNow\(float tr\)/.test(a) && /d >= to - from && stationNow\(d - \(to - from\)\)\) swapOff = to - from/.test(a) && /swapOff = 0f; top0/.test(a), '시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다');
+    assert.ok(!/private boolean stationNow\(/.test(a), 's208: 끄는 도중 역 팝업으로 바꿔치기하지 않는다(손가락 따라 내려가다 놓으면 닫힘)');
     assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /MapCore\.busGet\(need\.get\(k\)\[0\], need\.get\(k\)\[1\], 5000, 4000\)/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
   });
   await t('실기기 3건(s158): 키보드는 화면을 누르지 않고 · 칩 전환은 캐시로 바로 · 버스 카드는 첫 정류장부터 스프링', () => {
@@ -654,6 +654,11 @@ function findAndroidJar() {
     assert.ok(/private NetPost\.Res suggestGet\(String kind, String q, String directUrl\)/.test(a) && /suggestUrl\(/.test(a) && /suggestGet\("b", q, HomeSearchCore\.busUrl/.test(a) && /suggestGet\("p", q, HomeSearchCore\.placeUrl/.test(a), '후보 검색: 엔진 /suggest 먼저, 안 되면 예전 직접 주소');
     assert.ok(/"\/suggest\?k="/.test(hs), '/suggest 주소');
     assert.ok(/final String kind = "auto";/.test(a), '출퇴근 브리핑 종류는 엔진이 시각으로');
+  });
+  await t('s208: 시간표 요일·방면 한 줄(엔진) · 켜진 전체 칩이 보인다 · 권역(reg·sl)을 엔진에 보낸다', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/boolean plainOn = it\.on && it\.plain;/.test(sv) && /int fg = plainOn \? onFill/.test(sv) && /if \(plainOn\) \{ p\.setStyle\(Paint\.Style\.FILL\); p\.setColor\(onFill\)/.test(sv), '바탕 없는 켜진 칩(전체)은 칩 색 글자 + 밑줄 — 흰 글자가 배경에 묻히지 않는다');
+    assert.ok(/\\"reg\\":" \+ ShellCore\.q\(reg\(\)\)/.test(mc) && /append\(",\\"sl\\":"\)\.append\(ShellCore\.q\(stnLine\)\)\.append\(",\\"reg\\":"\)\.append\(ShellCore\.q\(reg\(\)\)\)/.test(mc), '역 팝업·시간표 요청에 권역(reg)과 고른 노선(sl)을 싣는다 — 같은 이름의 지방 역 노선이 섞이지 않게(판단은 엔진)');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
