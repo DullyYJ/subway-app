@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s202";
+var ENGINE_VERSION = "route-v2-2026-10-25s203";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20420,11 +20420,11 @@ function mapThruFill(rows, thru) {                                   // \uc6f9 _
  * \ud55c \uc815\ub958\uc7a5\uc758 \uc904\ub4e4\uacfc \ub354 \ubc1b\uc544\uc57c \ud560 \uc8fc\uc18c. kp = \uc5f4\uc1e0 \uae00\uc790 {m \ubcf8\ubb38, x \uc774\uc6c3\u00b7\ubc14\uafbc ID, t \uacbd\uc720\ub178\uc120}.
  * rows === null \uc774\uba74 \uc544\uc9c1 \uadf8\ub9b4 \uc218 \uc5c6\ub2e4('\ubd88\ub7ec\uc624\ub294 \uc911') \u2014 \ubcf8\ubb38\uc744 \ubabb \ubc1b\uc558\uac70\ub098, \ube44\uc5c8\ub294\ub370 \uc774\uc6c3\u00b7\ubc14\uafbc ID \uac00 \uc544\uc9c1 \uc548 \uc654\ub2e4. \ubcf8\ubb38\uc5d0 \uc904\uc774 \uc788\uc73c\uba74 \uc774\uc6c3\u00b7\uacbd\uc720\ub178\uc120\uc740 \uc624\ub294 \ub300\ub85c \uc5b9\ub294\ub2e4.
  */
-function mapBusStopRows(s, i, res, kp, pool) {
+function mapBusStopRows(s, i, res, kp, pool, nx) {
   var ask = [], mk = kp.m + i, rows = null;
   if (mapArrMissing(res, mk)) { ask.push({ k: mk, url: mapBusArrUrl(s) }); }
   else rows = s.src === 'topis' ? mapSeoulArr(String(res[mk] || '')) : s.src === 'gbis' ? mapGbisArr(String(res[mk] || '')) : mapTagoArr(String(res[mk] || ''));
-  if (!mapTagoLike(s)) return { rows: rows, ask: ask };
+  if (!mapTagoLike(s)) return { rows: rows, ask: ask, fx: null };
   var peers = mapPeersOf(s, pool), peerWait = false, pi;
   for (pi = 0; pi < peers.length; pi++) {
     var xk = kp.x + (i * 4 + 1 + pi);
@@ -20438,24 +20438,23 @@ function mapBusStopRows(s, i, res, kp, pool) {
     else rows = rows.concat(mapTagoArr(String(res[ak] || '')));
   }
   // s202: \uc6f9 _tagoResolveStop \u2014 \uc774\uc6c3\u00b7\ubc14\uafbc ID \uae4c\uc9c0 \ubd10\ub3c4 \ube44\uba74 \uc88c\ud45c\ub85c \uac00\uae4c\uc6b4 TAGO \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ucc3e\uc544 \uadf8 ID \ub85c \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294\ub2e4(\uc61b ID\u00b7\ub2e4\ub978 \ub4f1\ub85d \ubc88\ud638\ub85c \ube44\ub358 \uc815\ub958\uc7a5)
-  var coordWait = false;
+  //   s203: \ucc3e\uc740 \ubc88\ud638\ub294 nx['fx|\uc815\ub958\uc7a5ID'] \ub85c \uae30\uae30\uc5d0 \uc800\uc7a5\ud574 \ub2e4\uc74c\ubd80\ud130\ub294 \uc88c\ud45c \uc870\ud68c(1\uac74)\ub97c \uac74\ub108\ub6f0\uace0 \uace7\uc7a5 \uadf8 \ubc88\ud638\ub85c \ubc1b\ub294\ub2e4(\uc6f9 _tagoNodeFix \uc800\uc7a5\uacfc \uac19\ub2e4). \ubabb \ucc3e\uc740 \uac83\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc77c\uc2dc \uc624\ub958\ub97c \uad73\ud788\uc9c0 \uc54a\uac8c \u2014 \uc6f9\uc740 \uad73\ud614\ub2e4).
+  var coordWait = false, fx = null;
   if (rows && !rows.length && !peerWait && !altWait && isFinite(s.la) && isFinite(s.lo)) {
-    var ck = kp.t + (MAP_FIX_T + i);
-    if (res[ck] === undefined || mapArrErr(res[ck])) { coordWait = true; ask.push({ k: ck, url: mapCoordUrl(s) }); }
-    else {
-      var fix = mapCoordFix(s, String(res[ck] || ''), peers);
-      if (fix) {
-        var fk = kp.x + (MAP_FIX_X + i);
-        if (mapArrMissing(res, fk)) { coordWait = true; ask.push({ k: fk, url: mapBusArrUrl(s, fix.nodeid, fix.citycode) }); }
-        else rows = rows.concat(mapTagoArr(String(res[fk] || '')));
-      }
+    var ck = kp.t + (MAP_FIX_T + i), fk = kp.x + (MAP_FIX_X + i), fxk = 'fx|' + s.id, fxv = nx && typeof nx[fxk] === 'string' ? nx[fxk] : '', fix = null;
+    if (fxv) { var fp = fxv.split('|'); if (fp[0]) fix = { nodeid: fp[0], citycode: fp[1] || '' }; }
+    else if (res[ck] === undefined || mapArrErr(res[ck])) { coordWait = true; ask.push({ k: ck, url: mapCoordUrl(s) }); }
+    else { fix = mapCoordFix(s, String(res[ck] || ''), peers); if (fix) fx = { k: fxk, v: (fix.nodeid + '|' + fix.citycode).slice(0, 40) }; }
+    if (fix) {
+      if (mapArrMissing(res, fk)) { coordWait = true; ask.push({ k: fk, url: mapBusArrUrl(s, fix.nodeid, fix.citycode) }); }
+      else rows = rows.concat(mapTagoArr(String(res[fk] || '')));
     }
   }
   var arrEmpty = !!rows && !rows.length, tk = kp.t + i;
   if (res[tk] === undefined || mapArrErr(res[tk])) ask.push({ k: tk, url: mapThruUrl(s) });
   else if (rows) rows = mapThruFill(rows, mapThruRows(String(res[tk] || '')));
   if (arrEmpty && (peerWait || altWait || coordWait)) rows = null;                // \uc774\uc6c3\u00b7\ubc14\uafbc ID \uac00 \uc624\uae30 \uc804\uc5d0 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c' \uc904\ub9cc \uba3c\uc800 \uae54\uc9c0 \uc54a\ub294\ub2e4
-  return { rows: rows, ask: ask };
+  return { rows: rows, ask: ask, fx: fx };
 }
 function mapSecOfMsg(msg) {
   var t = String(msg || '');
@@ -20627,7 +20626,8 @@ function mapLmVote(list) {                                          // \uc6f9: \
   cand.sort(function (a, b) { return (b.n - a.n) || (a.rank - b.rank) || (a.ahead - b.ahead); });
   return cand.length ? cand[0].nm : '';
 }
-function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
+function mapFxOf(list) { var o = null; list.forEach(function (r) { if (r && r.fx) { if (!o) o = {}; o[r.fx.k] = r.fx.v; } }); return o; }
+function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
   var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
   stops.forEach(function (s, i) {
     var rows = rowsOf[i];
@@ -20682,6 +20682,7 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
     j.done = ok;
     if (ok) { upd[j.key] = String(mapLmVote(list)).slice(0, 40); changed = true; }
   });
+  if (more) Object.keys(more).forEach(function (k) { if (nx[k] !== more[k]) { upd[k] = more[k]; changed = true; } });      // s203: \uc88c\ud45c\ub85c \ucc3e\uc740 \uc815\ub958\uc7a5 \ubc88\ud638(fx)
   var out = nx;
   if (changed) { out = {}; Object.keys(nx).forEach(function (k) { out[k] = nx[k]; }); Object.keys(upd).forEach(function (k) { out[k] = upd[k]; }); }
   rowsOf.forEach(function (rows, i) {
@@ -20710,8 +20711,11 @@ function mapBusCard(s, o) {
     c.star = { a: 'call', v: 'mp.fv.' + o.i };                      // \uc990\uaca8\ucc3e\uae30 \ud654\uba74\uc758 \u00d7 (\uc81c\uac70)
     if (isFinite(s.la) && isFinite(s.lo)) c.map = { a: 'open', url: 'https://map.kakao.com/link/map/' + encodeURIComponent(s.nm || '\uc815\ub958\uc7a5') + ',' + s.la + ',' + s.lo };
   }
-  if (o.rows === null) c.ld = '\ub3c4\ucc29 \uc815\ubcf4 \ubd88\ub7ec\uc624\ub294 \uc911...';
-  else if (!o.rows.length) c.em = '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c';
+  if (o.rows === null) {
+    if (o.fail) { c.em = '\uc815\ubcf4 \ubd88\ub7ec\uc624\uae30 \uc2e4\ud328'; c.rt = { a: 'call', v: 'mp.rt' }; }              // \uc6f9 .kbus-err-row: \uc790\ub3d9 \uc7ac\uc2dc\ub3c4\ub97c \ub2e4 \uc37c\ub294\ub370\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2192 \ub20c\ub7ec\uc11c \ub2e4\uc2dc
+    else c.ld = '\ub3c4\ucc29 \uc815\ubcf4 \ubd88\ub7ec\uc624\ub294 \uc911...';
+  }
+  else if (!o.rows.length) { c.em = '\uc6b4\ud589 \uc815\ubcf4 \uc5c6\uc74c'; c.rt = { a: 'call', v: 'mp.rt' }; }            // \uc6f9 .kbus-empty-row: '\uc6b4\ud589 \uc815\ubcf4 \uc5c6\uc74c' + \ub2e4\uc2dc \uc2dc\ub3c4 \u203a
   else c.rows = o.rows;
   return c;
 }
@@ -20729,16 +20733,16 @@ function mapBusBody(f, info) {
       { t: 'text', s: '\uc990\uaca8\ucc3e\uae30\ud55c \uc815\ub958\uc7a5\uc774 \uc5c6\uc2b5\ub2c8\ub2e4', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
       { t: 'text', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5\uc5d0\uc11c \ubcc4(\u2606)\uc744 \ub20c\ub7ec\n\uc6d0\ud558\ub294 \uc815\ub958\uc7a5\uc744 \ucd94\uac00\ud558\uc138\uc694', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [0, 20, 14, 20] },
       { t: 'button', s: '\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 80, 8, 80], act: { a: 'call', v: 'mp.vw.near' } }] };
-    var fkp = { m: 'f', x: 'h', t: 'u' }, fr = favs.map(function (s, i) { return mapBusStopRows(s, i, fres, fkp, null); });
+    var fkp = { m: 'f', x: 'h', t: 'u' }, fnx0 = mapNxIn(b), fr = favs.map(function (s, i) { return mapBusStopRows(s, i, fres, fkp, null, fnx0); });
     var pend = fr.some(function (r) { return r.rows === null; }), fask = [], fseen = {};
     if (pend) favs.forEach(function (s, i) { fask.push({ k: 'f' + i, url: mapBusArrUrl(s) }); fseen['f' + i] = 1; });           // \uc990\uaca8\ucc3e\uae30\ub294 \ud558\ub098\ub77c\ub3c4 \ubabb \ubc1b\uc558\uc73c\uba74 \uc804\ubd80 \ub2e4\uc2dc(\uc608\uc804 \uadf8\ub300\ub85c)
     fr.forEach(function (r) { r.ask.forEach(function (n) { if (!fseen[n.k]) { fseen[n.k] = 1; fask.push(n); } }); });          // \uc774\uc6c3\u00b7\ubc14\uafbc ID\u00b7\uacbd\uc720\ub178\uc120\uc740 \ubabb \ubc1b\uc740 \uac83\ub9cc
-    var fnx = mapNxPass(favs, fr.map(function (r) { return pend ? null : r.rows; }), fres, mapNxIn(b), [], fask.length === 0);
+    var fnx = mapNxPass(favs, fr.map(function (r) { return pend ? null : r.rows; }), fres, fnx0, [], fask.length === 0, mapFxOf(fr));
     if (fnx.nx) info.nx = fnx.nx;
     fask = fask.concat(fnx.ask);
     if (fask.length) info.bus = { st: 'need', vw: 'fav', need: fask };
     var fb = [{ t: 'text', s: '\u2b50 \uc990\uaca8\ucc3e\uae30 ' + favs.length + '\uac1c \u00b7 30\ucd08\ub9c8\ub2e4 \uc790\ub3d9 \uac31\uc2e0', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
-    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], lm: pend ? '' : fnx.lm[i], rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], lm: pend ? '' : fnx.lm[i], fail: !!(b && b.fl), rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
@@ -20775,17 +20779,17 @@ function mapBusBody(f, info) {
   head.push(mapBusTmap(pts, foc));
   // \uc815\ub958\uc7a5\ub9c8\ub2e4 \ub530\ub85c \ubcf8\ub2e4: \uc544\uc9c1 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \ub450\uace0, \ubabb \ubc1b\uc740 \uac83\ub9cc \ub2e4\uc2dc \ubc1b\uc73c\ub77c\uace0 \ud55c\ub2e4(\ubc1b\uc740 \uac83\uae4c\uc9c0 \ub2e4\uc2dc \ubc1b\uc9c0 \uc54a\ub294\ub2e4)
   var miss = [], nkp = { m: 'a', x: 'g', t: 't' }, pool = res.tn ? mapTagoStops(res.tn, la, lo) : [];                   // \uc774\uc6c3 \uc815\ub958\uc7a5 \ud6c4\ubcf4 = TAGO \uc8fc\ubcc0 \ubaa9\ub85d \uc804\uccb4(300m \ubc16\ub3c4)
-  var sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool); }), extra = [];
+  var nx0 = mapNxIn(b), sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool, nx0); }), extra = [];
   sr.forEach(function (r) { r.ask.forEach(function (n) { (/^a/.test(n.k) ? miss : extra).push(n); }); });
   miss = miss.concat(extra);                                                                       // \ubcf8\ubb38(a)\uc774 \uba3c\uc800 \u00b7 \uc774\uc6c3\u00b7\ubc14\uafbc ID\u00b7\uacbd\uc720\ub178\uc120\uc740 \ub4a4
-  var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, mapNxIn(b), pool, miss.length === 0);
+  var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, nx0, pool, miss.length === 0, mapFxOf(sr));
   if (nxr.nx) info.nx = nxr.nx;
   miss = miss.concat(nxr.ask);
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], fail: !!b.fl, rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
   });
   body.push({ t: 'text', s: '\ub3c4\ucc29 \uc2dc\uac04\uc740 \uc2e4\uc2dc\uac04 \uc815\ubcf4\ub77c \uc870\uae08\uc529 \ub2ec\ub77c\uc9c8 \uc218 \uc788\uc5b4\uc694.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };

@@ -523,11 +523,11 @@ function mapThruFill(rows, thru) {                                   // 웹 _thr
  * 한 정류장의 줄들과 더 받아야 할 주소. kp = 열쇠 글자 {m 본문, x 이웃·바꾼 ID, t 경유노선}.
  * rows === null 이면 아직 그릴 수 없다('불러오는 중') — 본문을 못 받았거나, 비었는데 이웃·바꾼 ID 가 아직 안 왔다. 본문에 줄이 있으면 이웃·경유노선은 오는 대로 얹는다.
  */
-function mapBusStopRows(s, i, res, kp, pool) {
+function mapBusStopRows(s, i, res, kp, pool, nx) {
   var ask = [], mk = kp.m + i, rows = null;
   if (mapArrMissing(res, mk)) { ask.push({ k: mk, url: mapBusArrUrl(s) }); }
   else rows = s.src === 'topis' ? mapSeoulArr(String(res[mk] || '')) : s.src === 'gbis' ? mapGbisArr(String(res[mk] || '')) : mapTagoArr(String(res[mk] || ''));
-  if (!mapTagoLike(s)) return { rows: rows, ask: ask };
+  if (!mapTagoLike(s)) return { rows: rows, ask: ask, fx: null };
   var peers = mapPeersOf(s, pool), peerWait = false, pi;
   for (pi = 0; pi < peers.length; pi++) {
     var xk = kp.x + (i * 4 + 1 + pi);
@@ -541,24 +541,23 @@ function mapBusStopRows(s, i, res, kp, pool) {
     else rows = rows.concat(mapTagoArr(String(res[ak] || '')));
   }
   // s202: 웹 _tagoResolveStop — 이웃·바꾼 ID 까지 봐도 비면 좌표로 가까운 TAGO 정류장을 다시 찾아 그 ID 로 도착정보를 받는다(옛 ID·다른 등록 번호로 비던 정류장)
-  var coordWait = false;
+  //   s203: 찾은 번호는 nx['fx|정류장ID'] 로 기기에 저장해 다음부터는 좌표 조회(1건)를 건너뛰고 곧장 그 번호로 받는다(웹 _tagoNodeFix 저장과 같다). 못 찾은 것은 저장하지 않는다(일시 오류를 굳히지 않게 — 웹은 굳혔다).
+  var coordWait = false, fx = null;
   if (rows && !rows.length && !peerWait && !altWait && isFinite(s.la) && isFinite(s.lo)) {
-    var ck = kp.t + (MAP_FIX_T + i);
-    if (res[ck] === undefined || mapArrErr(res[ck])) { coordWait = true; ask.push({ k: ck, url: mapCoordUrl(s) }); }
-    else {
-      var fix = mapCoordFix(s, String(res[ck] || ''), peers);
-      if (fix) {
-        var fk = kp.x + (MAP_FIX_X + i);
-        if (mapArrMissing(res, fk)) { coordWait = true; ask.push({ k: fk, url: mapBusArrUrl(s, fix.nodeid, fix.citycode) }); }
-        else rows = rows.concat(mapTagoArr(String(res[fk] || '')));
-      }
+    var ck = kp.t + (MAP_FIX_T + i), fk = kp.x + (MAP_FIX_X + i), fxk = 'fx|' + s.id, fxv = nx && typeof nx[fxk] === 'string' ? nx[fxk] : '', fix = null;
+    if (fxv) { var fp = fxv.split('|'); if (fp[0]) fix = { nodeid: fp[0], citycode: fp[1] || '' }; }
+    else if (res[ck] === undefined || mapArrErr(res[ck])) { coordWait = true; ask.push({ k: ck, url: mapCoordUrl(s) }); }
+    else { fix = mapCoordFix(s, String(res[ck] || ''), peers); if (fix) fx = { k: fxk, v: (fix.nodeid + '|' + fix.citycode).slice(0, 40) }; }
+    if (fix) {
+      if (mapArrMissing(res, fk)) { coordWait = true; ask.push({ k: fk, url: mapBusArrUrl(s, fix.nodeid, fix.citycode) }); }
+      else rows = rows.concat(mapTagoArr(String(res[fk] || '')));
     }
   }
   var arrEmpty = !!rows && !rows.length, tk = kp.t + i;
   if (res[tk] === undefined || mapArrErr(res[tk])) ask.push({ k: tk, url: mapThruUrl(s) });
   else if (rows) rows = mapThruFill(rows, mapThruRows(String(res[tk] || '')));
   if (arrEmpty && (peerWait || altWait || coordWait)) rows = null;                // 이웃·바꾼 ID 가 오기 전에 '도착정보 없음' 줄만 먼저 깔지 않는다
-  return { rows: rows, ask: ask };
+  return { rows: rows, ask: ask, fx: fx };
 }
 function mapSecOfMsg(msg) {
   var t = String(msg || '');
@@ -730,7 +729,8 @@ function mapLmVote(list) {                                          // 웹: 노�
   cand.sort(function (a, b) { return (b.n - a.n) || (a.rank - b.rank) || (a.ahead - b.ahead); });
   return cand.length ? cand[0].nm : '';
 }
-function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
+function mapFxOf(list) { var o = null; list.forEach(function (r) { if (r && r.fx) { if (!o) o = {}; o[r.fx.k] = r.fx.v; } }); return o; }
+function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
   var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
   stops.forEach(function (s, i) {
     var rows = rowsOf[i];
@@ -785,6 +785,7 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
     j.done = ok;
     if (ok) { upd[j.key] = String(mapLmVote(list)).slice(0, 40); changed = true; }
   });
+  if (more) Object.keys(more).forEach(function (k) { if (nx[k] !== more[k]) { upd[k] = more[k]; changed = true; } });      // s203: 좌표로 찾은 정류장 번호(fx)
   var out = nx;
   if (changed) { out = {}; Object.keys(nx).forEach(function (k) { out[k] = nx[k]; }); Object.keys(upd).forEach(function (k) { out[k] = upd[k]; }); }
   rowsOf.forEach(function (rows, i) {
@@ -813,8 +814,11 @@ function mapBusCard(s, o) {
     c.star = { a: 'call', v: 'mp.fv.' + o.i };                      // 즐겨찾기 화면의 × (제거)
     if (isFinite(s.la) && isFinite(s.lo)) c.map = { a: 'open', url: 'https://map.kakao.com/link/map/' + encodeURIComponent(s.nm || '정류장') + ',' + s.la + ',' + s.lo };
   }
-  if (o.rows === null) c.ld = '도착 정보 불러오는 중...';
-  else if (!o.rows.length) c.em = '도착정보 없음';
+  if (o.rows === null) {
+    if (o.fail) { c.em = '정보 불러오기 실패'; c.rt = { a: 'call', v: 'mp.rt' }; }              // 웹 .kbus-err-row: 자동 재시도를 다 썼는데도 못 받았다 → 눌러서 다시
+    else c.ld = '도착 정보 불러오는 중...';
+  }
+  else if (!o.rows.length) { c.em = '운행 정보 없음'; c.rt = { a: 'call', v: 'mp.rt' }; }            // 웹 .kbus-empty-row: '운행 정보 없음' + 다시 시도 ›
   else c.rows = o.rows;
   return c;
 }
@@ -832,16 +836,16 @@ function mapBusBody(f, info) {
       { t: 'text', s: '즐겨찾기한 정류장이 없습니다', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
       { t: 'text', s: '주변 정류장에서 별(☆)을 눌러\n원하는 정류장을 추가하세요', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [0, 20, 14, 20] },
       { t: 'button', s: '주변 정류장 보기', size: 13, h: 42, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 80, 8, 80], act: { a: 'call', v: 'mp.vw.near' } }] };
-    var fkp = { m: 'f', x: 'h', t: 'u' }, fr = favs.map(function (s, i) { return mapBusStopRows(s, i, fres, fkp, null); });
+    var fkp = { m: 'f', x: 'h', t: 'u' }, fnx0 = mapNxIn(b), fr = favs.map(function (s, i) { return mapBusStopRows(s, i, fres, fkp, null, fnx0); });
     var pend = fr.some(function (r) { return r.rows === null; }), fask = [], fseen = {};
     if (pend) favs.forEach(function (s, i) { fask.push({ k: 'f' + i, url: mapBusArrUrl(s) }); fseen['f' + i] = 1; });           // 즐겨찾기는 하나라도 못 받았으면 전부 다시(예전 그대로)
     fr.forEach(function (r) { r.ask.forEach(function (n) { if (!fseen[n.k]) { fseen[n.k] = 1; fask.push(n); } }); });          // 이웃·바꾼 ID·경유노선은 못 받은 것만
-    var fnx = mapNxPass(favs, fr.map(function (r) { return pend ? null : r.rows; }), fres, mapNxIn(b), [], fask.length === 0);
+    var fnx = mapNxPass(favs, fr.map(function (r) { return pend ? null : r.rows; }), fres, fnx0, [], fask.length === 0, mapFxOf(fr));
     if (fnx.nx) info.nx = fnx.nx;
     fask = fask.concat(fnx.ask);
     if (fask.length) info.bus = { st: 'need', vw: 'fav', need: fask };
     var fb = [{ t: 'text', s: '⭐ 즐겨찾기 ' + favs.length + '개 · 30초마다 자동 갱신', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
-    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], lm: pend ? '' : fnx.lm[i], rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], lm: pend ? '' : fnx.lm[i], fail: !!(b && b.fl), rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
@@ -878,17 +882,17 @@ function mapBusBody(f, info) {
   head.push(mapBusTmap(pts, foc));
   // 정류장마다 따로 본다: 아직 못 받은 정류장은 '도착정보 없음'이 아니라 '불러오는 중'으로 두고, 못 받은 것만 다시 받으라고 한다(받은 것까지 다시 받지 않는다)
   var miss = [], nkp = { m: 'a', x: 'g', t: 't' }, pool = res.tn ? mapTagoStops(res.tn, la, lo) : [];                   // 이웃 정류장 후보 = TAGO 주변 목록 전체(300m 밖도)
-  var sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool); }), extra = [];
+  var nx0 = mapNxIn(b), sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool, nx0); }), extra = [];
   sr.forEach(function (r) { r.ask.forEach(function (n) { (/^a/.test(n.k) ? miss : extra).push(n); }); });
   miss = miss.concat(extra);                                                                       // 본문(a)이 먼저 · 이웃·바꾼 ID·경유노선은 뒤
-  var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, mapNxIn(b), pool, miss.length === 0);
+  var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, nx0, pool, miss.length === 0, mapFxOf(sr));
   if (nxr.nx) info.nx = nxr.nx;
   miss = miss.concat(nxr.ask);
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], fail: !!b.fl, rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
   });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
