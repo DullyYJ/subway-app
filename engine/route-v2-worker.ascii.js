@@ -38,11 +38,11 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s210";
+var ENGINE_VERSION = "route-v2-2026-10-26s212";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
-var BD_DEFAULT = false;
+var BD_DEFAULT = "off";
 var BD_K = 8;
 async function bandedRest(db, cols, minLat, maxLat, minLng, maxLng, diag) {
   const t0 = Date.now();
@@ -7698,7 +7698,8 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
   const _csP = p.get("cs");
   const _cs = _csP === "1" || CS_DEFAULT && _csP !== "0";
   const _bdP = p.get("bd");
-  const _bdOn = _bdP === "1" || BD_DEFAULT && _bdP !== "0";
+  const _bdMode = _bdP === "1" ? "force" : _bdP === "auto" ? "auto" : _bdP === "0" ? "off" : BD_DEFAULT;
+  const _bdOn = _bdMode !== "off";
   const _ck = (_bdOn ? "b9:" : "") + (_cs ? "c8:" : "") + rowsCacheKey(minLat, maxLat, minLng, maxLng);
   const _noRC = p.get("rc") === "0";
   const _cached = _noRC ? null : rowsCacheGet(_ck);
@@ -7767,7 +7768,7 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
       maxLng,
       MAX_STOPS
     ).all().then((q) => ({ q }), (e) => ({ e }));
-    const _restP = _bdOn ? bandedRest(_dbR, SQL_COLS, minLat, maxLat, minLng, maxLng, _d1Diag) : _dbR.prepare(
+    const _restP = _bdMode === "force" ? bandedRest(_dbR, SQL_COLS, minLat, maxLat, minLng, maxLng, _d1Diag) : _dbR.prepare(
       SQL_COLS + "WHERE brs.lat BETWEEN ?1 AND ?2 AND brs.lng BETWEEN ?3 AND ?4 LIMIT ?5"
       // \u2605 2026-09-24: ORDER BY \uc81c\uac70(\uacb0\uacfc \ub3d9\uc77c, D1\ub9cc \ube68\ub77c\uc9d0)
     ).bind(minLat, maxLat, minLng, maxLng, MAX_STOPS).all().then((q) => ({ q }), (e) => ({ e }));
@@ -7809,6 +7810,28 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
         if (seenRow[_k]) continue;
         seenRow[_k] = 1;
         rows.push(_r);
+      }
+    }
+    if (_bdMode === "auto" && !_rr.e && !_nr.e && rows.length >= MAX_STOPS) {
+      try {
+        const _b = await bandedRest(_dbR, SQL_COLS, minLat, maxLat, minLng, maxLng, _d1Diag);
+        if (_b.e) {
+          _d1Diag.bdErr = String(_b.e && _b.e.message || _b.e).slice(0, 80);
+        } else {
+          const _rows3 = rows.slice(0, _nearRowsCnt), _seen3 = /* @__PURE__ */ Object.create(null);
+          for (const _x of _rows3) _seen3[_x.route_key + "|" + _x.seq] = 1;
+          const _bl = _b.q.results || [];
+          for (let _i = 0; _i < _bl.length && _rows3.length < MAX_STOPS; _i++) {
+            const _k3 = _bl[_i].route_key + "|" + _bl[_i].seq;
+            if (_seen3[_k3]) continue;
+            _seen3[_k3] = 1;
+            _rows3.push(_bl[_i]);
+          }
+          rows = _rows3;
+          if (_d1Diag.bd) _d1Diag.bd.auto = 1;
+        }
+      } catch (e) {
+        _d1Diag.bdErr = String(e && e.message || e).slice(0, 80);
       }
     }
     if (_cs && !_rr.e && !_nr.e && rows.length >= MAX_STOPS) {
