@@ -39,6 +39,7 @@ public class RideService extends Service {
     static volatile boolean running = false;
     static volatile int liveRev = 0;
     static volatile String liveRowSlot = ""; static volatile boolean liveRowCan;
+    static volatile long liveOff = 0L;                       // 엔진이 알린 이탈 시작 시각(없으면 0)
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
     static volatile OvCore.Ov liveOv;                        // 앱 탑승 시트(RsSheetView)가 그릴 엔진 값(overlay.rs 포함)
@@ -85,7 +86,7 @@ public class RideService extends Service {
     }
     static void stop(Context c) {
         clearSaved(c);
-        running = false; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -211,7 +212,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
+        liveOff = core.offAt; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -219,7 +220,7 @@ public class RideService extends Service {
         stopped = true; running = false;
         if (ov != null) ov.hide();
         clearSaved(this);
-        liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();
