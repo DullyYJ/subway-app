@@ -910,6 +910,17 @@ public class ShellJvmTest {
             ok(h2.actResult("rh.stop") == HomeCore.R_STOP && h2.actDetail("rd.stop") == HomeCore.D_STOP && h2.actDetail("rd.confirm") == HomeCore.D_NONE, "탑승 중: 종료만 가능");
             String rf = h2.resultFacts(new HomeCore.Env(), "dark");
             ok(rf.contains("\"ride\":{\"on\":1,\"text\":\"다음 부평\"}") && rf.contains("\"lv\":{\"cur\":2"), "결과 사실에 탑승 상태(r.ride)와 내 위치(r.lv)가 실린다");
+            {   // s214: 확정한 경로는 닫기 · 새로 찾기 · 바꾸기로 풀리지 않는다 — 안내를 끝내야(또는 도착해야) 풀린다
+                HomeCore h4 = new HomeCore();
+                h4.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L); h4.text[0] = "부평"; h4.text[1] = "강남";
+                ok(h4.act("rt.go", null) == HomeCore.R_GO && h4.actResult("rh.close") == HomeCore.R_RENDER && !h4.hasRoute(), "s214: 확정 전엔 닫기 · 찾기가 그대로 된다");
+                h4.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L); h4.text[0] = "부평"; h4.text[1] = "강남";
+                h4.rideRouteId = h4.routeId; h4.setRide("{\"on\":1}", "{}");
+                ok(h4.riding() && h4.actResult("rh.close") == HomeCore.R_LOCK && h4.hasRoute() && h4.riding(), "s214: 확정한 경로는 닫기(X)로 풀리지 않는다");
+                ok(h4.act("rt.go", null) == HomeCore.R_LOCK && h4.act("rt.enter", null) == HomeCore.R_RENDER && h4.act("rt.swap", null) == HomeCore.R_LOCK && "부평".equals(h4.text[0]) && h4.riding(), "s214: 확정 중엔 새로 찾기 · 출발/도착 바꾸기를 받지 않는다");
+                h4.setRide("", "");
+                ok(!h4.riding() && h4.actResult("rh.close") == HomeCore.R_RENDER && !h4.hasRoute(), "s214: 안내가 끝나면(사용자 종료 · 도착) 다시 닫을 수 있다");
+            }
             h2.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L);
             ok(!h2.riding() && !h2.resultFacts(new HomeCore.Env(), "dark").contains("\"ride\""), "새 탐색이면 이전 탑승 표시는 붙지 않는다");
             h2.setRide("", "");
