@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s194";
+var ENGINE_VERSION = "route-v2-2026-10-25s195";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9787,7 +9787,8 @@ function rsAttachPressTT(req, nt) {
 //     \u2461 \ubc29\ud5a5\uc774 \uc548 \uac78\ub7ec\uc9c8 \ub54c(2\ud638\uc120 \ub0b4\uc120\u00b7\uc678\uc120 \ub4f1 updnLine \uc774 \uc0c1\ud589/\ud558\ud589\uc774 \uc544\ub2cc \ub54c)\ub294 \ub3c4\ucc29\uc815\ubcf4\uc758 '\u25b3\u25b3\ubc29\uba74'(= \uc6b0\ub9ac \uacbd\ub85c\uc758 \ub2e4\uc74c \uc5ed)\uc73c\ub85c \uac00\ub9b0\ub2e4
 //     \u2462 \uc774\ubbf8 \ucd9c\ubc1c(arvlCd 2)\ud55c \uc5f4\ucc28\ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4(\uc6f9\uc740 '\uc9c0\uae08'\uc73c\ub85c \uc7a1\uc558\ub2e4 \u2014 \ub193\uce5c \uc5f4\ucc28\ub2e4). \ub0a8\ub294 \uc5f4\ucc28\uac00 \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c(\ubc29\uae08 \ub5a0\ub09c \ucc28 \uc778\uc815 \uaddc\uce59\uc774 \uc788\ub2e4)
 //   \ubabb \ubc1b\uc73c\uba74(null) \uc2dc\uac01\ud45c \uadf8\ub300\ub85c \u2014 \uc6f9\uacfc \uac19\ub2e4.
-var RS_SUBWAY_ID = { '1\ud638\uc120': '1001', '2\ud638\uc120': '1002', '3\ud638\uc120': '1003', '4\ud638\uc120': '1004', '5\ud638\uc120': '1005', '6\ud638\uc120': '1006', '7\ud638\uc120': '1007', '8\ud638\uc120': '1008', '9\ud638\uc120': '1009', '\uacf5\ud56d\ucca0\ub3c4': '1065', '\uacbd\uc758\uc911\uc559\uc120': '1067', '\uacbd\ucd98\uc120': '1069', '\uc218\uc778\ubd84\ub2f9\uc120': '1075', '\uc2e0\ubd84\ub2f9\uc120': '1077', '\uc6b0\uc774\uc2e0\uc124\uc120': '1092', '\uc11c\ud574\uc120': '1093', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778': '1094', '\uacbd\uac15\uc120': '1095', '\uc2e0\ub9bc\uc120': '1093', '\uc778\ucc9c1\ud638\uc120': '1081', '\uc778\ucc9c2\ud638\uc120': '1082', 'GTX-A': '1091' };
+// \u2605 \ud638\uc120 \u2192 \uc11c\uc6b8 \ub3c4\ucc29\uc815\ubcf4 subwayId: \uc6f9\uc758 _RT_LINE2ID + _RT_ARR_LINE2ID(\uc2e4\uae30\uae30 \uc9c4\ub2e8\uc73c\ub85c \ud655\uc778\ud55c \uac12). \uc6f9\uc5d0\ub294 getSubwayIdByLine \uc774\ub77c\ub294 \ub2e4\ub978 \ud45c\ub3c4 \uc788\ub294\ub370 \uacbd\uc758\uc911\uc559\u00b7\uacbd\ucd98\u00b7\uacbd\uac15\u00b7\uc2e0\ub9bc \uac12\uc774 \ub2ec\ub77c \uc4f0\uc9c0 \uc54a\uc558\ub2e4(s195 \uc815\uc815).
+var RS_SUBWAY_ID = { '1\ud638\uc120': '1001', '2\ud638\uc120': '1002', '3\ud638\uc120': '1003', '4\ud638\uc120': '1004', '5\ud638\uc120': '1005', '6\ud638\uc120': '1006', '7\ud638\uc120': '1007', '8\ud638\uc120': '1008', '9\ud638\uc120': '1009', '\uacbd\uc758\uc911\uc559\uc120': '1063', '\uc218\uc778\ubd84\ub2f9\uc120': '1075', '\uacf5\ud56d\ucca0\ub3c4': '1065', '\uacbd\ucd98\uc120': '1067', '\uc2e0\ubd84\ub2f9\uc120': '1077', '\uc11c\ud574\uc120': '1093', '\uacbd\uac15\uc120': '1081', '\uc2e0\ub9bc\uc120': '1094', '\uc6b0\uc774\uc2e0\uc124\uc120': '1092' };
 function rsSubwayId(lineName) { return RS_SUBWAY_ID[lineName] || RS_SUBWAY_ID[String(lineName || '').replace(/\ud638\uc120$/, '') + '\ud638\uc120'] || ''; }
 function rsStnKey(n) { return String(n || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/\uc5ed$/, ''); }
 // \uc11c\uc6b8 \uc5ed \ub3c4\ucc29\uc815\ubcf4 \ubaa9\ub85d \u2192 \ud0c0\ub294 \uc5f4\ucc28\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms) \ub610\ub294 null. list = realtimeArrivalList, dk = \uc2dc\uac01\ud45c\uac00 \uc815\ud55c \ubc29\ud5a5('\uc0c1'/'\ud558')
