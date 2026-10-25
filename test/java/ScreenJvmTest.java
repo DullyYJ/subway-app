@@ -353,6 +353,16 @@ public class ScreenJvmTest {
         ok(FL.head[1].y >= bar.y + bar.h + 8f - 0.01f && near(FL.chipsTop, bar.y + bar.h + 8f), "칩 줄은 머리줄 아래");
         ok(FL.head[1].ac != null && "gold".equals(FL.head[1].ac.role) && FL.head[1].tc != null && FL.head[1].tc.role == null, "칩 켜진 색: 금색 바탕 · 글자 #121214");
         ok(ScreenCore.layout(s, 360f, M).head[0].ac != null && "orange".equals(ScreenCore.layout(s, 360f, M).head[0].ac.role), "쇼핑 칩은 예전처럼 주황");
+        // s204: 시간표 머리(제목줄 · 칩 셋 · 요약)는 head 에 고정 · 이어진 칩 줄 셋은 한 덩어리로 민다
+        ScreenCore.Screen tts = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"maptt\",\"head\":[{\"t\":\"bar\",\"title\":\"서대문 시간표\"},"
+            + "{\"t\":\"chips\",\"pad\":[16,4,16,6],\"h\":30,\"items\":[{\"label\":\"5호선\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"mt.l.0\"}}]},"
+            + "{\"t\":\"chips\",\"pad\":[16,0,16,6],\"h\":28,\"items\":[{\"label\":\"평일\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"mt.d.DAY\"}}]},"
+            + "{\"t\":\"chips\",\"pad\":[16,0,16,8],\"h\":30,\"items\":[{\"label\":\"상행\",\"on\":true,\"act\":{\"a\":\"call\",\"v\":\"mt.k.0\"}}]},"
+            + "{\"t\":\"text\",\"s\":\"첫차 05:45\",\"size\":12}],\"body\":[{\"t\":\"box\",\"s\":\"05시   45\",\"size\":13,\"hl\":[[0,3,\"#b86e00\"]],\"fill\":\"rgba(245,166,35,.2)\",\"line\":\"#f5a623\",\"color\":\"sub\"}]}");
+        ScreenCore.Layout TTL = ScreenCore.layout(tts, 360f, M);
+        ok(TTL.head.length >= 5 && TTL.head[0].kind == ScreenCore.K_BAR && TTL.head[0].sw == 0f && TTL.head[0].fixed, "시간표 머리: 제목줄은 단추(닫기) 없이 고정");
+        ok(near(TTL.chipsTop, TTL.head[1].y - 4f) && near(TTL.chipsBot, TTL.head[3].y + 30f + 8f), "이어진 칩 줄 셋이 한 덩어리 가로 미는 구역");
+        ok(TTL.body.length == 1 && TTL.body[0].kind == ScreenCore.K_BOX && TTL.body[0].fill != null && TTL.body[0].line != null, "본문 시(時)줄: 바탕·테두리 강조를 읽는다");
         ScreenCore.Layout narrowF = ScreenCore.layout(ScreenCore.load(foodJ.replace("강남역 인근", "아주아주 긴 역 이름 근처 인근 인근")), 300f, M);
         ok(!narrowF.head[0].top && narrowF.head[0].subY > narrowF.head[0].textY && narrowF.head[0].h > bar.h, "좁으면 작은 글이 아래 줄로 내려간다");
         ScreenCore.Item p0 = FL.body[0], pp = FL.body[2];
