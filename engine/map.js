@@ -198,7 +198,8 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' 시간표', btn: '닫기', act: { a: 'call', v: 'mp.close' } }];
+  // 머리(제목줄·칩·요약)는 head 에 둬 스크롤해도 제자리에 고정한다(웹 #nmTtSheet 의 머리 + 따로 스크롤하는 #nmTtBody). 닫기 단추는 없다 — 아래로 끌어 닫는다.
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' 시간표' }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
@@ -206,7 +207,7 @@ function mapTimetableSheet(f) {
     else if (nod) o.label = l + ' (자료 없음)';
     return o;
   }) });
-  var dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
+  var head = [], dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
   if (d && d.days && d.days.length) kids.push({ t: 'chips', pad: [0, 0, 0, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: d.days.map(function (x) {
     return { label: mapStr(x.label, 10) + (x.code === d.today ? ' · 오늘' : ''), on: x.code === d.dayCode, act: { a: 'call', v: 'mt.d.' + mapStr(x.code, 6) } };
   }) });
@@ -217,6 +218,7 @@ function mapTimetableSheet(f) {
       return { label: x.toward ? mapStr(x.toward, 20) + ' 방면' : (x.dk === '상' ? '상행' : '하행'), on: x === dir, act: { a: 'call', v: 'mt.k.' + i } };
     }) });
   }
+  head = kids.map(mapSheetPad); kids = [];                                         // 여기까지(제목줄·칩)가 머리 — 고정
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
   if (st === 'loading' && !d) kids.push(msg('시간표를 불러오는 중…'));
   else if (st === 'fail' && !d) { kids.push(msg('시간표를 불러오지 못했어요.')); kids.push({ t: 'button', s: '다시 시도', size: 13, h: 40, r: 11, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mt.retry' } }); }
@@ -224,22 +226,33 @@ function mapTimetableSheet(f) {
   else {
     var s = '첫차 ' + mapClock(dir.first) + ' · 막차 ' + mapClock(dir.last);
     if (dir.nextMin != null) s += ' · ' + (dir.tomorrow ? '내일 첫차 ' : '다음 열차 ') + mapClock(dir.nextMin);
-    kids.push({ t: 'text', s: s, size: 12, color: 'gold', lh: 1.5, pad: [0, 0, 0, 8] });
-    var rows = [], cur = null, nx = dir.nextMin;
+    head.push(mapSheetPad({ t: 'text', s: s, size: 12, color: 'gold', lh: 1.5, pad: [0, 0, 0, 8] }));            // 첫차·막차·다음 열차 요약도 머리에 고정
+    var rows = [], cur = null, nx = dir.nextMin, dk = f.th === 'dark';
     (dir.times || []).forEach(function (t) { var h = Math.floor(t / 60); if (!cur || cur.h !== h) { cur = { h: h, m: [] }; rows.push(cur); } cur.m.push(t); });
+    // 지금 시각(오늘 요일일 때만): 지금 시(時)의 줄을 눈에 띄게(바탕·테두리·시각 글자), 그 시 이전 줄은 흐리게(웹 .past). 지금 시 줄이 없으면(열차가 없는 시간대) 다음 열차가 든 줄.
+    var isToday = !!d.today && d.dayCode === d.today && !dir.tomorrow, curH = -1;
+    if (isToday && isFinite(d.nowMin)) {
+      var nh = Math.floor(Number(d.nowMin) / 60);
+      for (var ri = 0; ri < rows.length; ri++) if (rows[ri].h === nh || (nh < 4 && rows[ri].h === nh + 24)) curH = rows[ri].h;
+      if (curH < 0 && nx != null) for (var rj = 0; rj < rows.length; rj++) if (rows[rj].m.indexOf(nx) >= 0) curH = rows[rj].h;
+    } else if (isToday && nx != null) { for (var rk = 0; rk < rows.length; rk++) if (rows[rk].m.indexOf(nx) >= 0) curH = rows[rk].h; }
+    var gold = dk ? '#ffb340' : '#b86e00', fk = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : ''));
     rows.forEach(function (r) {
-      var label = mapP2(r.h % 24) + '시' + (r.h >= 24 ? ' 익일' : ''), txt = label + '   ', hl = [];
+      var label = mapP2(r.h % 24) + '시' + (r.h >= 24 ? ' 익일' : ''), txt = label + '   ', hl = [], now = r.h === curH;
+      if (now) hl.push([0, label.length, gold]);
       r.m.forEach(function (t, i) {
         var mm = mapP2(t % 60);
-        if (nx != null && t === nx && !dir.tomorrow) hl.push([txt.length, txt.length + 2, '#f5a623']);
+        if (nx != null && t === nx && !dir.tomorrow) hl.push([txt.length, txt.length + 2, now ? gold : '#f5a623']);
         txt += mm + (i < r.m.length - 1 ? '  ' : '');
       });
-      var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
-      if (hl.length) { n.hl = hl; n.fc = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : '')); }      // 지금 시각 다음 열차가 든 줄 — 앱이 시간표를 열 때 그 줄로 내려 보인다
+      var past = isToday && curH >= 0 && r.h < curH;
+      var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: past ? 'sub' : 'text', fill: now ? (dk ? 'rgba(245,166,35,.16)' : 'rgba(245,166,35,.20)') : 'card2', line: now ? (dk ? 'rgba(245,166,35,.75)' : '#f5a623') : 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
+      if (hl.length) n.hl = hl;
+      if (now) n.fc = fk;                                                          // 지금 시 줄 — 앱이 시간표를 열 때 그 줄로 내려 보인다
       kids.push(n);
     });
   }
-  var out = { ok: true, v: 1, screen: 'maptt', cover: 'tab', head: [], body: kids.map(mapSheetPad),
+  var out = { ok: true, v: 1, screen: 'maptt', cover: 'tab', head: head, body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, line: line, day: day, dk: dir ? dir.dk : '', dks: dirs.map(function (x) { return mapStr(x.dk, 4); }), days: (d && d.days ? d.days : []).map(function (x) { return mapStr(x.code, 6); }), need: (line && st !== 'fail' && !d) ? { line: line, day: day } : null } };
   return mapFinish(out);
 }

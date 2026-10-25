@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s203";
+var ENGINE_VERSION = "route-v2-2026-10-25s204";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20095,7 +20095,8 @@ function mapTimetableSheet(f) {
   var day = mapStr(sel.day, 6);
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' \uc2dc\uac04\ud45c', btn: '\ub2eb\uae30', act: { a: 'call', v: 'mp.close' } }];
+  // \uba38\ub9ac(\uc81c\ubaa9\uc904\u00b7\uce69\u00b7\uc694\uc57d)\ub294 head \uc5d0 \ub46c \uc2a4\ud06c\ub864\ud574\ub3c4 \uc81c\uc790\ub9ac\uc5d0 \uace0\uc815\ud55c\ub2e4(\uc6f9 #nmTtSheet \uc758 \uba38\ub9ac + \ub530\ub85c \uc2a4\ud06c\ub864\ud558\ub294 #nmTtBody). \ub2eb\uae30 \ub2e8\ucd94\ub294 \uc5c6\ub2e4 \u2014 \uc544\ub798\ub85c \ub04c\uc5b4 \ub2eb\ub294\ub2e4.
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' \uc2dc\uac04\ud45c' }];
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
@@ -20103,7 +20104,7 @@ function mapTimetableSheet(f) {
     else if (nod) o.label = l + ' (\uc790\ub8cc \uc5c6\uc74c)';
     return o;
   }) });
-  var dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
+  var head = [], dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
   if (d && d.days && d.days.length) kids.push({ t: 'chips', pad: [0, 0, 0, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: d.days.map(function (x) {
     return { label: mapStr(x.label, 10) + (x.code === d.today ? ' \u00b7 \uc624\ub298' : ''), on: x.code === d.dayCode, act: { a: 'call', v: 'mt.d.' + mapStr(x.code, 6) } };
   }) });
@@ -20114,6 +20115,7 @@ function mapTimetableSheet(f) {
       return { label: x.toward ? mapStr(x.toward, 20) + ' \ubc29\uba74' : (x.dk === '\uc0c1' ? '\uc0c1\ud589' : '\ud558\ud589'), on: x === dir, act: { a: 'call', v: 'mt.k.' + i } };
     }) });
   }
+  head = kids.map(mapSheetPad); kids = [];                                         // \uc5ec\uae30\uae4c\uc9c0(\uc81c\ubaa9\uc904\u00b7\uce69)\uac00 \uba38\ub9ac \u2014 \uace0\uc815
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
   if (st === 'loading' && !d) kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\u2026'));
   else if (st === 'fail' && !d) { kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.')); kids.push({ t: 'button', s: '\ub2e4\uc2dc \uc2dc\ub3c4', size: 13, h: 40, r: 11, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mt.retry' } }); }
@@ -20121,22 +20123,33 @@ function mapTimetableSheet(f) {
   else {
     var s = '\uccab\ucc28 ' + mapClock(dir.first) + ' \u00b7 \ub9c9\ucc28 ' + mapClock(dir.last);
     if (dir.nextMin != null) s += ' \u00b7 ' + (dir.tomorrow ? '\ub0b4\uc77c \uccab\ucc28 ' : '\ub2e4\uc74c \uc5f4\ucc28 ') + mapClock(dir.nextMin);
-    kids.push({ t: 'text', s: s, size: 12, color: 'gold', lh: 1.5, pad: [0, 0, 0, 8] });
-    var rows = [], cur = null, nx = dir.nextMin;
+    head.push(mapSheetPad({ t: 'text', s: s, size: 12, color: 'gold', lh: 1.5, pad: [0, 0, 0, 8] }));            // \uccab\ucc28\u00b7\ub9c9\ucc28\u00b7\ub2e4\uc74c \uc5f4\ucc28 \uc694\uc57d\ub3c4 \uba38\ub9ac\uc5d0 \uace0\uc815
+    var rows = [], cur = null, nx = dir.nextMin, dk = f.th === 'dark';
     (dir.times || []).forEach(function (t) { var h = Math.floor(t / 60); if (!cur || cur.h !== h) { cur = { h: h, m: [] }; rows.push(cur); } cur.m.push(t); });
+    // \uc9c0\uae08 \uc2dc\uac01(\uc624\ub298 \uc694\uc77c\uc77c \ub54c\ub9cc): \uc9c0\uae08 \uc2dc(\u6642)\uc758 \uc904\uc744 \ub208\uc5d0 \ub744\uac8c(\ubc14\ud0d5\u00b7\ud14c\ub450\ub9ac\u00b7\uc2dc\uac01 \uae00\uc790), \uadf8 \uc2dc \uc774\uc804 \uc904\uc740 \ud750\ub9ac\uac8c(\uc6f9 .past). \uc9c0\uae08 \uc2dc \uc904\uc774 \uc5c6\uc73c\uba74(\uc5f4\ucc28\uac00 \uc5c6\ub294 \uc2dc\uac04\ub300) \ub2e4\uc74c \uc5f4\ucc28\uac00 \ub4e0 \uc904.
+    var isToday = !!d.today && d.dayCode === d.today && !dir.tomorrow, curH = -1;
+    if (isToday && isFinite(d.nowMin)) {
+      var nh = Math.floor(Number(d.nowMin) / 60);
+      for (var ri = 0; ri < rows.length; ri++) if (rows[ri].h === nh || (nh < 4 && rows[ri].h === nh + 24)) curH = rows[ri].h;
+      if (curH < 0 && nx != null) for (var rj = 0; rj < rows.length; rj++) if (rows[rj].m.indexOf(nx) >= 0) curH = rows[rj].h;
+    } else if (isToday && nx != null) { for (var rk = 0; rk < rows.length; rk++) if (rows[rk].m.indexOf(nx) >= 0) curH = rows[rk].h; }
+    var gold = dk ? '#ffb340' : '#b86e00', fk = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : ''));
     rows.forEach(function (r) {
-      var label = mapP2(r.h % 24) + '\uc2dc' + (r.h >= 24 ? ' \uc775\uc77c' : ''), txt = label + '   ', hl = [];
+      var label = mapP2(r.h % 24) + '\uc2dc' + (r.h >= 24 ? ' \uc775\uc77c' : ''), txt = label + '   ', hl = [], now = r.h === curH;
+      if (now) hl.push([0, label.length, gold]);
       r.m.forEach(function (t, i) {
         var mm = mapP2(t % 60);
-        if (nx != null && t === nx && !dir.tomorrow) hl.push([txt.length, txt.length + 2, '#f5a623']);
+        if (nx != null && t === nx && !dir.tomorrow) hl.push([txt.length, txt.length + 2, now ? gold : '#f5a623']);
         txt += mm + (i < r.m.length - 1 ? '  ' : '');
       });
-      var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: 'text', fill: 'card2', line: 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
-      if (hl.length) { n.hl = hl; n.fc = 'n' + mapHash(line + '|' + (day || '-') + '|' + (dir ? dir.dk : '')); }      // \uc9c0\uae08 \uc2dc\uac01 \ub2e4\uc74c \uc5f4\ucc28\uac00 \ub4e0 \uc904 \u2014 \uc571\uc774 \uc2dc\uac04\ud45c\ub97c \uc5f4 \ub54c \uadf8 \uc904\ub85c \ub0b4\ub824 \ubcf4\uc778\ub2e4
+      var past = isToday && curH >= 0 && r.h < curH;
+      var n = { t: 'box', s: txt, size: 13, lh: 1.5, color: past ? 'sub' : 'text', fill: now ? (dk ? 'rgba(245,166,35,.16)' : 'rgba(245,166,35,.20)') : 'card2', line: now ? (dk ? 'rgba(245,166,35,.75)' : '#f5a623') : 'border', r: 9, ip: [10, 7, 10, 7], pad: [0, 0, 0, 4] };
+      if (hl.length) n.hl = hl;
+      if (now) n.fc = fk;                                                          // \uc9c0\uae08 \uc2dc \uc904 \u2014 \uc571\uc774 \uc2dc\uac04\ud45c\ub97c \uc5f4 \ub54c \uadf8 \uc904\ub85c \ub0b4\ub824 \ubcf4\uc778\ub2e4
       kids.push(n);
     });
   }
-  var out = { ok: true, v: 1, screen: 'maptt', cover: 'tab', head: [], body: kids.map(mapSheetPad),
+  var out = { ok: true, v: 1, screen: 'maptt', cover: 'tab', head: head, body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, line: line, day: day, dk: dir ? dir.dk : '', dks: dirs.map(function (x) { return mapStr(x.dk, 4); }), days: (d && d.days ? d.days : []).map(function (x) { return mapStr(x.code, 6); }), need: (line && st !== 'fail' && !d) ? { line: line, day: day } : null } };
   return mapFinish(out);
 }
