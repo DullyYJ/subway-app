@@ -622,6 +622,14 @@ function findAndroidJar() {
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'route-v2-worker.ascii.js'), 'utf8');
     assert.ok(/var LIVE_BUDGET_MS = 5000;/.test(w), '서버 실시간 대기 한도 5초');
   });
+  await t('s202·s203: 버스 카드 이름 옆 방향 글(lmt) · 안내 줄 다시 시도(rt) · 실패 신호(fl) — 앱은 그리기와 신호만', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/n\.lm = optStr\(m, "lm"/.test(sc) && /public String lmt = "";/.test(sc) && /it\.lmt = lt;/.test(sc) && !/it\.t2 = lt;/.test(sc), '방향 글은 t2(안내 줄 글)와 따로 lmt 에 둔다 — 안내 줄과 함께 있어도 안 덮는다');
+    assert.ok(/it\.lmt\.length\(\) > 0\) \{ setText\(ScreenCore\.BC_LM, true, pal\[R_GOLD\]\)/.test(sv) && /append\(q\.lmt\)/.test(sv), '금색 굵게 11 로 그리고 지문에 넣는다');
+    assert.ok(/n\.ract = act\(m\.get\("rt"\), false\)/.test(sc) && /z2\[12\]/.test(sc) && /it\.za\.length > 3 && it\.za\[3\] != null/.test(sv), "안내 줄 '다시 시도 ›' 누르는 자리는 네 번째 칸");
+    assert.ok(/public boolean busFailShow;/.test(mc) && /"mp\.rt"\.equals\(v\)/.test(mc) && /busFailShow \? ",\\"fl\\":1" : ""/.test(mc), '요청에 fl · mp.rt 는 도착정보·경유노선만 비운다');
+    assert.ok(/map\.busFailShow = busRetryN >= 3;/.test(a) && /case MapCore\.R_BUS_REF: busRetryN = 0;/.test(a), '자동 재시도 세 번 뒤에만 실패로 그린다 · 다시 시도는 횟수를 처음부터');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
