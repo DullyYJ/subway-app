@@ -36,7 +36,7 @@ var RIDE_STANDBY_DEFAULTS = {
   trailMaxAgeSec: 600,     // 이보다 오래된 점은 버린다
   notYetKeepSec: 45,       // notYet 증거를 유지하는 시간
   gpsGapDeadReckonSec: 180, // 시각표 기준이 아닌 여정(버스): GPS 가 이만큼 끊기면 계획 시각표대로 이어간다(멈춰 서 있지 않게)
-  offGiveUpSec: 900,       // 경로를 벗어난 채 이만큼 지나면 안내를 끝낸다(내리고도 서비스가 계속 도는 것을 막는다)
+  // (offGiveUpSec 는 없앴다 — 2026-10-26 YJ: "경로는 확정되면 사용자가 강제로 취소하거나 도착할 때까지 풀리면 안 된다". 경로를 벗어나도 알림만 하고 안내는 끝내지 않는다.)
   doneAfterSec: 180,       // 목적지 도착 알림 뒤 이 시간이 지나면 done
   maxStaleSec: 3 * 3600,   // 상태가 이보다 오래 갱신되지 않았으면 done(안전 장치)
   // ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에"): 다음 호출까지의 간격도 엔진이 정한다(네이티브는 nextMs 를 그대로 따른다).
@@ -1024,7 +1024,6 @@ function rideStandby(req) {
   if (offActive) text = '경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요';
   var done = false, quit = false;
   if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; quit = true; notes.push('목적지 도착 ' + O.doneAfterSec + '초 뒤 종료'); }
-  if (offActive && st.offOn && now - st.offOn >= O.offGiveUpSec * 1000) { done = true; notes.push('경로를 벗어난 채 ' + O.offGiveUpSec + '초 — 안내 종료'); }
   var lastAt = st.lastAt || now; if (now - lastAt > O.maxStaleSec * 1000) done = true;
   st.lastAt = now;
   var moving = !!(r.pos && r.pos.moving), overlay = null;
@@ -1037,7 +1036,7 @@ function rideStandby(req) {
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
   var row = done ? null : rsRowOut(st, now);
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? { at: st.offOn || now } : undefined, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
 }
 
 function handleRideStandby(request, env) {
