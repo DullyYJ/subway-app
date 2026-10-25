@@ -122,6 +122,9 @@ function homeStnFind(q) {
     if (!Object.prototype.hasOwnProperty.call(seen, key)) { seen[key] = 1; reps.push(s); lines[key] = [s[1]]; }
     else if (lines[key].indexOf(s[1]) < 0) lines[key].push(s[1]);
   }
+  var ex = [], pf = [], rest = [];                                                      // 정확히 같은 이름 > 앞부분 일치 > 나머지(표 순서 유지) — 8개 제한에 정확 일치가 잘리지 않게
+  for (i = 0; i < reps.length; i++) { if (reps[i][0] === q) ex.push(reps[i]); else if (reps[i][0].indexOf(q) === 0) pf.push(reps[i]); else rest.push(reps[i]); }
+  reps = ex.concat(pf, rest);
   for (i = 0; i < reps.length && i < HOME_STN_MAX; i++) {
     s = reps[i]; key = s[0] + '|' + homeRegOf(s[1]);
     out.u.push({ n: s[0], l: lines[key].join(' \u00b7 ') });

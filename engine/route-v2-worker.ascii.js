@@ -15717,6 +15717,9 @@ function homeStnFind(q) {
     if (!Object.prototype.hasOwnProperty.call(seen, key)) { seen[key] = 1; reps.push(s); lines[key] = [s[1]]; }
     else if (lines[key].indexOf(s[1]) < 0) lines[key].push(s[1]);
   }
+  var ex = [], pf = [], rest = [];                                                      // \uc815\ud655\ud788 \uac19\uc740 \uc774\ub984 > \uc55e\ubd80\ubd84 \uc77c\uce58 > \ub098\uba38\uc9c0(\ud45c \uc21c\uc11c \uc720\uc9c0) \u2014 8\uac1c \uc81c\ud55c\uc5d0 \uc815\ud655 \uc77c\uce58\uac00 \uc798\ub9ac\uc9c0 \uc54a\uac8c
+  for (i = 0; i < reps.length; i++) { if (reps[i][0] === q) ex.push(reps[i]); else if (reps[i][0].indexOf(q) === 0) pf.push(reps[i]); else rest.push(reps[i]); }
+  reps = ex.concat(pf, rest);
   for (i = 0; i < reps.length && i < HOME_STN_MAX; i++) {
     s = reps[i]; key = s[0] + '|' + homeRegOf(s[1]);
     out.u.push({ n: s[0], l: lines[key].join(' \u00b7 ') });
