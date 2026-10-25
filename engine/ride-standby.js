@@ -158,45 +158,37 @@ function rsAttachPressTT(req, nt) {
     var q = rsPressQuery(req); if (!q || !nt || typeof nt.boardTable !== 'function') return false;
     var bl = nt.boardTable({ line: q.line, from: q.from, to: q.to, atMin: q.atMin - RS_LATE_BACK_MIN, baseMs: q.baseMs });
     var dep = bl && bl.depMin, ok = dep != null && isFinite(dep) && dep <= q.atMin && dep >= q.atMin - RS_LATE_BACK_MIN;
-    req.pressTT = { i: q.i, nowM: q.atMin, depMin: dep != null && isFinite(dep) ? dep : null, late: ok ? dep : null };
+    req.pressTT = { i: q.i, nowM: q.atMin, depMin: dep != null && isFinite(dep) ? dep : null, late: ok ? dep : null, dk: bl && bl.dk ? bl.dk : null };
     return true;
   } catch (e) { return false; }
 }
-// ── 서울 지하철 실시간 도착정보로 '타는 열차' 가리기 (웹 fetchRealtimeArrival · resolveRealtimeDepartMs 규칙) ─────────────────
-//   ★ 2026-10-25 s192 (YJ: "서울지하철은 실시간 위치를 어떻게든 받아야 해 · 최대 3초 · 웹의 규칙을 따라"):
-//   네이티브는 [탑승] 영점을 시각표로만 잡았다. 웹은 서울시 realtimeStationArrival 의 barvlDt(도착까지 남은 초)로 영점을 잡는다.
-//   워커 연결부가 이 역의 도착정보 목록을 받아 오면(3초 안에 못 받으면 시각표로 — 기존 동작 그대로) 여기서 열차 한 대를 가린다.
-//   · 호선 일치(subwayId) · 방향 일치(trainLineNm '○○행 - △△방면' 의 △△ = 우리 경로의 다음 역) 인 열차만
-//   · 진입·도착(arvlCd 0·1)은 지금, 그 밖엔 barvlDt 초 뒤. 이미 출발(2)했거나 시각을 모르면 건너뛴다. 12분 넘게 먼 열차는 쓰지 않는다.
+// ── 서울 지하철 실시간 도착정보로 '타는 열차' 가리기 — 웹 fetchRealtimeArrival · _filterByDirection · resolveRealtimeDepartMs 와 같은 규칙 ─────────
+//   ★ 2026-10-25 s192 (YJ: "서울지하철은 실시간 위치를 어떻게든 받아야 해 · 최대 3초 · 웹의 규칙을 따라" · "네이티브화는 무조건 웹과 100% 세부적인 것까지 일치"):
+//   웹은 [탑승] 영점을 시각표가 아니라 서울시 realtimeStationArrival 로 잡는다(없을 때만 시각표).
+//   · 요청: /seoul?path=realtimeStationArrival/1/5/역명(끝의 '역' 뗀 것) — 웹과 같은 경로(중계 캐시도 같이 쓴다). 기다리는 시간만 5초 → 2.8초(YJ 한도 · 앱의 서버 대기 5초 안)
+//   · 방향: 시각표가 정한 방향(boardTable 의 dk '상'/'하' → 상행/하행, 모르면 하행)과 updnLine 이 같거나 포함하는 열차만, 하나도 없으면 전부
+//   · 고르기: barvlDt(도착까지 남은 초)가 가장 작은 열차 · arvlCd 0(진입)·1(도착)이면 지금, 아니면 barvlDt 초 뒤(음수는 0)
+//   · 웹과 다른 곳은 없다(호선 거르기·시간 한도도 두지 않았다). 못 받으면(null) 시각표 그대로 — 웹과 같다.
 var RS_SUBWAY_ID = { '1호선': '1001', '2호선': '1002', '3호선': '1003', '4호선': '1004', '5호선': '1005', '6호선': '1006', '7호선': '1007', '8호선': '1008', '9호선': '1009', '공항철도': '1065', '경의중앙선': '1067', '경춘선': '1069', '수인분당선': '1075', '신분당선': '1077', '우이신설선': '1092', '서해선': '1093', '김포골드라인': '1094', '경강선': '1095', '신림선': '1093', '인천1호선': '1081', '인천2호선': '1082', 'GTX-A': '1091' };
 function rsSubwayId(lineName) { return RS_SUBWAY_ID[lineName] || RS_SUBWAY_ID[String(lineName || '').replace(/호선$/, '') + '호선'] || ''; }
-function rsStnKey(n) { return String(n || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/역$/, ''); }
-// 서울 역 도착정보 목록 → 타는 열차의 도착 시각(ms) 또는 null. q = rsPressQuery 결과, list = realtimeArrivalList
-function rsPickLive(list, q, nowMs) {
+// 서울 역 도착정보 목록 → 타는 열차의 도착 시각(ms) 또는 null. list = realtimeArrivalList, dk = 시각표가 정한 방향('상'/'하')
+function rsPickLive(list, q, nowMs, dk) {
   try {
-    if (!q || !list || !list.length || !isFinite(nowMs)) return null;
-    var sid = rsSubwayId(q.line), to = rsStnKey(q.to);
-    if (!sid || !to) return null;
-    var best = null, k;
-    for (k = 0; k < list.length; k++) {
-      var it = list[k]; if (!it || String(it.subwayId) !== sid) continue;
-      var m = /[-–—]\s*([^\s]+?)\s*방면/.exec(String(it.trainLineNm || '')); if (!m || rsStnKey(m[1]) !== to) continue;
-      var cd = parseInt(it.arvlCd, 10), bv = parseInt(it.barvlDt, 10), ms;
-      if (cd === 0 || cd === 1) ms = nowMs;
-      else if (cd === 2) continue;
-      else if (isFinite(bv) && bv > 0) ms = nowMs + bv * 1000;
-      else continue;
-      if (ms - nowMs > RS_PICK_MAX_MIN * 60000) continue;
-      if (best == null || ms < best) best = ms;
-    }
-    return best;
+    if (!list || !list.length || !isFinite(nowMs)) return null;
+    var dir = dk === '상' ? '상행' : '하행', byDir = [], k;
+    for (k = 0; k < list.length; k++) { var it = list[k]; if (!it) continue; var ud = String(it.updnLine || ''); if (ud === dir || ud.indexOf(dir) >= 0) byDir.push(it); }
+    var c = byDir.length ? byDir : list.filter(function (x) { return !!x; });
+    if (!c.length) return null;
+    c = c.slice().sort(function (a, b) { return parseInt(a.barvlDt || 9999, 10) - parseInt(b.barvlDt || 9999, 10); });
+    var t = c[0], cd = parseInt(t.arvlCd || '99', 10), bv = parseInt(t.barvlDt || '0', 10);
+    return (cd === 0 || cd === 1) ? nowMs : nowMs + Math.max(0, (isFinite(bv) ? bv : 0) * 1000);
   } catch (e) { return null; }
 }
 // 위 결과를 req.pressTT.liveMs 로 붙인다(시각표가 없어도 만든다). 붙였으면 true
 function rsAttachPressLive(req, list) {
   try {
     var q = rsPressQuery(req); if (!q) return false;
-    var ms = rsPickLive(list, q, +req.nowMs); if (ms == null) return false;
+    var ms = rsPickLive(list, q, +req.nowMs, req.pressTT && req.pressTT.dk); if (ms == null) return false;
     if (!req.pressTT || req.pressTT.i !== q.i) req.pressTT = { i: q.i, nowM: q.atMin, depMin: null, late: null };
     req.pressTT.liveMs = ms;
     return true;
@@ -206,7 +198,7 @@ function rsAttachPressLive(req, list) {
 var RS_LIVE_MS = 2800;
 function rsFetchSeoulArrivals(env, q) {
   if (!q || !env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function' || !rsSubwayId(q.line)) return Promise.resolve(null);
-  var path = 'realtimeStationArrival/0/20/' + encodeURIComponent(String(q.from).replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/역$/, ''));
+  var path = 'realtimeStationArrival/1/5/' + encodeURIComponent(String(q.from).replace(/역$/, '').trim());
   var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   var timer = null;
   var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, RS_LIVE_MS); });
