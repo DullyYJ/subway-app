@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s212";
+var ENGINE_VERSION = "route-v2-2026-10-26s214";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9778,7 +9778,7 @@ var RIDE_STANDBY_DEFAULTS = {
   trailMaxAgeSec: 600,     // \uc774\ubcf4\ub2e4 \uc624\ub798\ub41c \uc810\uc740 \ubc84\ub9b0\ub2e4
   notYetKeepSec: 45,       // notYet \uc99d\uac70\ub97c \uc720\uc9c0\ud558\ub294 \uc2dc\uac04
   gpsGapDeadReckonSec: 180, // \uc2dc\uac01\ud45c \uae30\uc900\uc774 \uc544\ub2cc \uc5ec\uc815(\ubc84\uc2a4): GPS \uac00 \uc774\ub9cc\ud07c \ub04a\uae30\uba74 \uacc4\ud68d \uc2dc\uac01\ud45c\ub300\ub85c \uc774\uc5b4\uac04\ub2e4(\uba48\ucdb0 \uc11c \uc788\uc9c0 \uc54a\uac8c)
-  offGiveUpSec: 900,       // \uacbd\ub85c\ub97c \ubc97\uc5b4\ub09c \ucc44 \uc774\ub9cc\ud07c \uc9c0\ub098\uba74 \uc548\ub0b4\ub97c \ub05d\ub0b8\ub2e4(\ub0b4\ub9ac\uace0\ub3c4 \uc11c\ube44\uc2a4\uac00 \uacc4\uc18d \ub3c4\ub294 \uac83\uc744 \ub9c9\ub294\ub2e4)
+  // (offGiveUpSec removed - 2026-10-26: a confirmed ride must end only by user cancel or arrival)
   doneAfterSec: 180,       // \ubaa9\uc801\uc9c0 \ub3c4\ucc29 \uc54c\ub9bc \ub4a4 \uc774 \uc2dc\uac04\uc774 \uc9c0\ub098\uba74 done
   maxStaleSec: 3 * 3600,   // \uc0c1\ud0dc\uac00 \uc774\ubcf4\ub2e4 \uc624\ub798 \uac31\uc2e0\ub418\uc9c0 \uc54a\uc558\uc73c\uba74 done(\uc548\uc804 \uc7a5\uce58)
   // \u2605 2026-10-19 (YJ: "\uc601\uc810\uc740 \uc5ed\u00b7\uc815\ub958\uc7a5 \ub3c4\ucc29 \ud6c4 5\ucd08 \uc548\uc5d0"): \ub2e4\uc74c \ud638\ucd9c\uae4c\uc9c0\uc758 \uac04\uaca9\ub3c4 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(\ub124\uc774\ud2f0\ube0c\ub294 nextMs \ub97c \uadf8\ub300\ub85c \ub530\ub978\ub2e4).
@@ -10766,7 +10766,6 @@ function rideStandby(req) {
   if (offActive) text = '\uacbd\ub85c\ub97c \ubc97\uc5b4\ub0ac\uc5b4\uc694 \u00b7 \uc571\uc744 \uc5f4\uba74 \ub2e4\uc2dc \ucc3e\uc544 \ub4dc\ub824\uc694';
   var done = false, quit = false;
   if (st.arrivedAt && now - st.arrivedAt >= O.doneAfterSec * 1000) { done = true; quit = true; notes.push('\ubaa9\uc801\uc9c0 \ub3c4\ucc29 ' + O.doneAfterSec + '\ucd08 \ub4a4 \uc885\ub8cc'); }
-  if (offActive && st.offOn && now - st.offOn >= O.offGiveUpSec * 1000) { done = true; notes.push('\uacbd\ub85c\ub97c \ubc97\uc5b4\ub09c \ucc44 ' + O.offGiveUpSec + '\ucd08 \u2014 \uc548\ub0b4 \uc885\ub8cc'); }
   var lastAt = st.lastAt || now; if (now - lastAt > O.maxStaleSec * 1000) done = true;
   st.lastAt = now;
   var moving = !!(r.pos && r.pos.moving), overlay = null;
@@ -10779,7 +10778,7 @@ function rideStandby(req) {
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('\ucd94\ucc9c \ud310\ub2e8 \uc2e4\ud328: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
   var row = done ? null : rsRowOut(st, now);
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? { at: st.offOn || now } : undefined, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
 }
 
 function handleRideStandby(request, env) {
@@ -11845,6 +11844,54 @@ async function ntEnsure(env) {
     return _NT;
   })();
   try { return await _NT_P; } finally { _NT_P = null; }
+}
+
+function ntNz(x) { return String(x || '').replace(/\uc5ed$/, '').trim(); }
+function ntLiveKey(line, from, to, offSec) { return String(line || '') + '|' + ntNz(from) + '|' + ntNz(to) + '|' + Math.round(+offSec || 0); }
+// \uacbd\ub85c \uacc4\uc0b0 \uacb0\uacfc(out)\uc5d0\uc11c '\uccab \ub300\uc911\uad50\ud1b5\uc774 \uc9c0\ud558\ucca0'\uc778 \uac83\ub4e4\uc758 \ub300\uc0c1 \ubaa9\ub85d \u2014 { key, line, from, to, offSec }
+function ntLiveTargets(out, id) {
+  var res = [], seen = {}, k, r, i, L, sl, key, off;
+  for (k in out) {
+    r = out[k]; if (!r || !r.legs) continue;
+    L = null; for (i = 0; i < r.legs.length; i++) { var m = r.legs[i] && r.legs[i].mode; if (m === 'subway' || m === 'bus' || m === 'longdist') { L = r.legs[i]; break; } }
+    if (!L || L.mode !== 'subway') continue;
+    sl = L.stopList || []; if (sl.length < 2 || !L.line || !id(L.line)) continue;
+    off = (r.accessWalkMin || 0) * 60;                                     // \uccab \uad6c\uac04\uc5d0 \ub2ff\ub294 \uc2dc\uac01 = \ud0d0\uc0c9 \uc2dc\uac01 + \uc811\uadfc \ub3c4\ubcf4(legsToSubPath \uc758 arriveSec \uc640 \uac19\ub2e4)
+    key = ntLiveKey(L.line, sl[0], sl[1], off);
+    if (seen[key]) continue; seen[key] = 1;
+    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off });
+  }
+  return res;
+}
+// \ub300\uc0c1\ubcc4\ub85c \uc2e4\uc2dc\uac04 \uc5f4\ucc28 \uc2dc\uac01(ms)\uc744 \uac00\ub9b0\ub2e4 \u2192 { key: { ms, src:'realtime' } } (\uc2dc\uac01\ud45c\ub85c \uac00\ub824\uc9c4 \uac83\u00b7\ubabb \ubc1b\uc740 \uac83\uc740 \ub123\uc9c0 \uc54a\ub294\ub2e4)
+//   d = { fetch, id, pick, table, rec, aheadMax } \u2014 \uae30\ubcf8\uc740 ride-standby \ubaa8\ub4c8\uc758 \uac19\uc740 \ud568\uc218\ub4e4. baseMs: \ud0d0\uc0c9 \uae30\uc900 \uc2dc\uac01, nowMs: \uc9c0\uae08.
+async function ntLiveFirst(env, out, baseMs, nowMs, d) {
+  var res = {};
+  try {
+    d = d || (typeof rsBlLivePick === 'function' ? { fetch: rsFetchSeoulPath, id: rsSubwayId, pick: rsBlLivePick, table: rsBlTable, rec: rsBlReconcile, aheadMax: RS_BL_AHEAD_MAX_MIN, ms: RS_LIVE_MS } : null);
+    if (!d) return res;
+    nowMs = nowMs != null ? nowMs : Date.now();
+    if (Math.abs(baseMs - nowMs) > 10 * 60000) return res;                                   // \uc9c0\uae08 \ud0d0\uc0c9\uc774 \uc544\ub2c8\uba74(\uc608\uc0c1 \uc2dc\uac01) \uc2e4\uc2dc\uac04\uc740 \uc758\ubbf8\uac00 \uc5c6\ub2e4
+    var tg = ntLiveTargets(out, d.id), stns = [], by = {}, j;
+    for (j = 0; j < tg.length; j++) { var f = tg[j].from; if (!by[f]) { by[f] = 1; stns.push(f); } }
+    if (!stns.length) return res;
+    var got = await Promise.all([
+      ntEnsure(env),
+      Promise.all(stns.map(function (s) { return d.fetch(env, 'realtimeStationArrival/1/20/' + encodeURIComponent(ntNz(s)), d.ms || 2800).then(function (l) { return [s, l]; }, function () { return [s, null]; }); }))
+    ]);
+    var nt = got[0], lists = {}, e;
+    for (j = 0; j < got[1].length; j++) lists[got[1][j][0]] = got[1][j][1];
+    for (j = 0; j < tg.length; j++) {
+      e = tg[j];
+      var list = lists[e.from]; if (!list) continue;
+      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + e.offSec * 1000), tz: 540 };
+      if ((q.fromMs - nowMs) / 60000 > d.aheadMax) continue;                                // 20\ubd84 \ub118\uac8c \uba3c \uc2b9\ucc28\ub294 \uc2dc\uac01\ud45c
+      var live = d.pick(list, q, nt); if (live == null) continue;
+      var rc = d.rec(live, d.table(q, nt));
+      if (rc && rc.src === 'realtime') res[e.key] = { ms: Math.round(rc.ms), src: 'realtime' };
+    }
+  } catch (err) {}
+  return res;
 }
 
 // \uacbd\ub85c \ud558\ub098(path = { info, subPath })\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04\ub9c8\ub2e4 nextTrain(\uc548\ub0b4\uc6a9)\uacfc ttWaitMs(\ud0c0\uc784\ub77c\uc778 \ub300\uae30)\ub97c \ubd99\uc778\ub2e4.
