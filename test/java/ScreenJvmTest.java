@@ -922,6 +922,15 @@ public class ScreenJvmTest {
                 ok(ro_a.kind == ScreenCore.K_BCARD && "끌어서 순서 변경".equals(ro_a.rol) && "완료".equals(ro_a.rod) && ro_b.rol.length() == 0 && ro_b.rod.length() == 0, "bcard: 순서 바꾸기 줄 글은 첫 카드에만 실린다(rol · rod)");
                 ok(ro_b.y >= ro_a.y + ro_a.h && ro_b.y - (ro_a.y + ro_a.h) < 40f, "bcard: 카드 사이 간격이 있어 끌기가 칸 계산을 한다");
             } catch (Exception ex) { ok(false, "bcard 순서 바꾸기 글: " + ex); }
+            try {                                                                       // s202: 이름 옆 '(○○역 방향)' — 한 줄에 들어가면 이름 바로 뒤, 안 들어가면 다음 줄
+                String lm_c = "{\"t\":\"bcard\",\"k\":\"SEOUL:%d\",\"nm\":\"%s\",\"mode\":\"near\",\"act\":{\"a\":\"call\",\"v\":\"mp.pc.%d\"}%s}";
+                String lm_j = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[" + String.format(lm_c, 1, "가", 0, ",\"lm\":\"검단역\"") + "," + String.format(lm_c, 2, "가", 1, ",\"lm\":\"가나다라마바사아자차카타파하가나다라마바사아자차카타파하\"") + "," + String.format(lm_c, 3, "가", 2, "") + "]}";
+                ScreenCore.Layout lm_l = ScreenCore.layout(ScreenCore.load(lm_j), 360f, M);
+                ScreenCore.Item lm_a = lm_l.body[0], lm_b = lm_l.body[1], lm_n = lm_l.body[2];
+                ok("(검단역 방향)".equals(lm_a.t2) && lm_a.lx > lm_a.textX && lm_a.ly == lm_a.textY && lm_a.h == lm_n.h, "bcard: 이름 옆 방향 글이 이름 뒤 같은 줄에 붙고 카드 높이는 그대로");
+                ok(lm_b.t2.length() > 0 && lm_b.lx == lm_b.textX && lm_b.ly > lm_b.textY && lm_b.h > lm_n.h, "bcard: 이름이 길어 한 줄에 안 들어가면 방향 글은 다음 줄로 내려가고 카드가 그만큼 커진다");
+                ok(lm_n.t2.length() == 0, "bcard: lm 이 없으면 방향 글 없음");
+            } catch (Exception ex) { ok(false, "bcard 방향 글: " + ex); }
         }
 
         // ── 버스 탭 노드(btog · bcard · tmap 확장) ──
