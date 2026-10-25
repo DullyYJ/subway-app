@@ -646,6 +646,15 @@ function findAndroidJar() {
     assert.ok(/foodDataNow\(su, pfFood\.sharedUrl\(\), pu\)/.test(a) && /foodPubPages\(shared, pu\)/.test(a) && /final String shared = food\.sharedUrl\(\);/.test(a), '미리받기 · 맛집 탭 모두 공유 저장소를 먼저 쓴다');
     assert.ok(/if \(tp\.isAlive\(\) && sbody\.length\(\) > 0\) foodStage/.test(a), '서버 가게 먼저 그리는 1단계는 그대로');
   });
+  await t('s207: 앱이 하던 판단을 엔진으로 — 공휴일(now만 보냄) · 별 한도/문구 · 토스트 문구 · 후보 검색(/suggest 먼저) · 출퇴근 auto', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MapCore.java'), 'utf8'), h = fs.readFileSync(N('HomeCore.java'), 'utf8'), hs = fs.readFileSync(N('HomeSearchCore.java'), 'utf8');
+    assert.ok(/\\"now\\":" \+ env\.nowMs/.test(h) && !/\.hol\b/.test(h) && !/DAY_OF_WEEK/.test(a.slice(a.indexOf('homeEnv'), a.indexOf('homeEnv') + 900)), '홈: 평일/휴일은 앱이 계산하지 않는다(now만 보냄)');
+    assert.ok(/private void toastTx\(String m\) \{ if \(m != null && m\.length\(\) > 0\) toast\(m\); \}/.test(a) && /toastTx\(MapCore\.fill\(map\.msgS, map\.pickName\)\)/.test(a) && /toastTx\(map\.msgSame\)/.test(a), '지도 고르기 토스트는 엔진 문구를 채워 쓰기만');
+    assert.ok(/favMax = 12/.test(m) && /info\.favp|"favp"/.test(m) && /static String fill\(/.test(m), '별 한도·문구는 엔진 info.favp (없으면 예전 값)');
+    assert.ok(/private NetPost\.Res suggestGet\(String kind, String q, String directUrl\)/.test(a) && /suggestUrl\(/.test(a) && /suggestGet\("b", q, HomeSearchCore\.busUrl/.test(a) && /suggestGet\("p", q, HomeSearchCore\.placeUrl/.test(a), '후보 검색: 엔진 /suggest 먼저, 안 되면 예전 직접 주소');
+    assert.ok(/"\/suggest\?k="/.test(hs), '/suggest 주소');
+    assert.ok(/final String kind = "auto";/.test(a), '출퇴근 브리핑 종류는 엔진이 시각으로');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();

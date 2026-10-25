@@ -166,6 +166,20 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
     ok(has("'/screen/home'") && has('cap: 7'), '웹: 홈 연결부 + 엔진 주소 + 규격 수준 7');
     ok(has('id="homeRouteWrap"'), '웹: 홈 카드 감싸개');
   }
+  // s207: 평일/주말·공휴일은 엔진이 기준시각(없으면 지금)의 한국 날짜로 정한다 — 앱은 지금 시각만 보낸다(웹 _isHolidayOrWeekend 와 같다)
+  {
+    const KST = (y, mo, d, h) => Date.UTC(y, mo - 1, d, h - 9, 0);
+    const hol = (now, ms) => E.homeFacts({ base: { ms: ms == null ? null : ms, now, tzo: -540, today: [2026, 9, 20] } }).base.hol;
+    ok(hol(KST(2026, 10, 20, 10)) === false, 's207: 평일(화) 낮은 평일');
+    ok(hol(KST(2026, 10, 24, 10)) === true && hol(KST(2026, 10, 25, 10)) === true, 's207: 토·일은 주말');
+    ok(hol(KST(2026, 10, 9, 10)) === true, 's207: 평일(금)이라도 한글날(공휴일)은 공휴일');
+    ok(hol(KST(2026, 10, 20, 10), KST(2026, 10, 24, 9)) === true && hol(KST(2026, 10, 24, 10), KST(2026, 10, 20, 9)) === false, 's207: 기준시각을 고르면 그 날짜로 판정(지금이 아니라)');
+    ok(hol(KST(2026, 10, 23, 23)) === false && hol(KST(2026, 10, 23, 23) + 3600e3) === true, 's207: 자정 넘기면 한국 날짜로 바뀐다(금 23시 → 토 0시)');
+    ok(E.homeFacts({ base: { ms: null, now: KST(2026, 10, 20, 10), hol: true, tzo: -540 } }).base.hol === true, 's207: 옛 앱이 hol 을 보내면 그대로 따른다');
+    ok(E.homeFacts({ base: { ms: null, tzo: -540 } }).base.hol === false, 's207: 시각도 hol 도 없으면 평일');
+    const lab = nowMs => kids(E.homeScreen({ cap: 7 }, { base: { ms: null, now: nowMs, tzo: -540, today: [2026, 9, 20] } })).find(n => n.t === 'trow').day;
+    ok(lab(KST(2026, 10, 9, 10)) === '주말·공휴일' && lab(KST(2026, 10, 20, 10)) === '평일', 's207: 화면 글 — 한글날은 주말·공휴일, 화요일은 평일');
+  }
   console.log(`home_engine: ${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
 })();

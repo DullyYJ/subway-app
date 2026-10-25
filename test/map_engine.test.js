@@ -480,6 +480,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(cs.every(c => c.mode === 'near' && c.fv === 0 && c.star.v === 'mp.fv.' + cs.indexOf(c) && c.edit.v === 'mp.al.' + cs.indexOf(c) && c.dist), '주변 카드: ☆ · ✏️ · 거리');
   const fv = b.info.stops[0];
   ok(fv.id === 'SEOUL:11111' && fv.src === 'topis' && fv.ars === '11111' && !('dist' in fv), 'info.stops: 도착정보를 다시 물을 수 있는 최소 값');
+  ok(b.info.favp && b.info.favp.max === 12 && b.info.favp.al === 10 && b.info.favp.add === '즐겨찾기 추가' && b.info.favp.rm === '즐겨찾기 해제' && /최대 12/.test(b.info.favp.full), 's207: 버스 즐겨찾기 규칙(곳 수 · 별명 글자 수 · 안내 글)을 엔진이 알린다');
   b = near({ fav: [fv], al: { 'SEOUL:11111': '출근길' } });
   const c0 = b.body.filter(n => n.t === 'bcard')[0];
   ok(c0.fv === 1 && c0.al === '출근길', '즐겨찾기한 정류장은 ★, 별명이 있으면 별명');

@@ -178,6 +178,10 @@ t('내 위치 공유: 출발 - 현재 - 도착 (도착예정시간) [남은시�
   assert.ok(shs.every(x => x.hit >= 0 && x.hit < x.stations.length && x.left === x.stations.length - 1 - x.hit));
   assert.ok(/^\d\d시\d\d분$/.test(a.arr) && /^\d\d시\d\d분$/.test(a.rem));
   const kst = new Date(at(13, 0, 0) + 9 * 3600000); assert.ok(typeof kst.getUTCHours() === 'number');
+  // s207: 그림 아래 한 줄과 글머리는 엔진이 정한다 — 앱(ShareCore/ShareArt)은 글을 짓지 않는다
+  assert.ok(shs.every(x => x.foot === (x.moving && x.next ? '다음 역 ' + x.next + ' 이동 중 · ' + x.left + '개 역 남음' : (x.left > 0 ? x.left + '개 역 남음' : '도착했어요'))), '아래 한 줄(foot)');
+  assert.ok(shs.some(x => /이동 중 · \d+개 역 남음$/.test(x.foot)) && z.foot === '도착했어요', '이동 중 줄 · 도착 줄');
+  assert.deepStrictEqual(a.lb, { t: '길동무 · 내 위치', a: '도착예정시간: ', r: '남은시간 ' });
 });
 t('오버레이: 열차가 가는 대로 현위치 칸이 움직이고(도보 칸은 건너뜀) 이동 중이면 알약에 다음역(이동중)', () => {
   let st = withOvl(mkState()), curs = [], pills = new Set(), l1 = [];

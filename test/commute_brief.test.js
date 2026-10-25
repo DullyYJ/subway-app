@@ -15,6 +15,13 @@ t('출근은 출발→도착, 퇴근은 출근의 반대', () => {
   const e = M.cbPlan({ kind: 'eve', from: { nm: '인하대' }, to: { nm: '강남' } });
   assert.strictEqual(e.fromStn.name, '강남'); assert.strictEqual(e.toStn.name, '인하대');
 });
+t("s207: kind:'auto' — 한국 시각 오후 3시 전이면 출근, 3시부터는 퇴근(앱은 판단하지 않는다)", () => {
+  const P = (iso) => M.cbPlan({ kind: 'auto', nowMs: Date.parse(iso), from: { nm: '인하대' }, to: { nm: '강남' } });
+  assert.strictEqual(P('2026-10-26T08:30:00+09:00').kind, 'morn'); assert.strictEqual(P('2026-10-26T14:59:00+09:00').kind, 'morn');
+  assert.strictEqual(P('2026-10-26T15:00:00+09:00').kind, 'eve'); assert.strictEqual(P('2026-10-26T23:40:00+09:00').kind, 'eve');
+  assert.strictEqual(P('2026-10-26T08:30:00+09:00').fromStn.name, '인하대'); assert.strictEqual(P('2026-10-26T19:00:00+09:00').fromStn.name, '강남');
+  assert.strictEqual(M.cbPlan({ kind: 'zzz', from: { nm: '인하대' }, to: { nm: '강남' } }).kind, 'morn');
+});
 t('퇴근 장소를 따로 정했으면 그대로, 한쪽만 채우면 나머지는 출근의 반대편', () => {
   const both = M.cbPlan({ kind: 'eve', from: { nm: '인하대' }, to: { nm: '강남' }, eFrom: { nm: '사당' }, eTo: { nm: '수원' } });
   assert.strictEqual(both.fromStn.name, '사당'); assert.strictEqual(both.toStn.name, '수원');

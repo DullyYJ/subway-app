@@ -187,6 +187,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   ok(body.indexOf(esc(fs.readFileSync(R('engine/food-worker.js'), 'utf8').trimEnd())) >= 0, '워커 연결부도 같다');
   ok(w.indexOf('if (url.pathname === "/screen/food") return handleScreenFood(request);') > 0, '경로 등록');
   ok(w.indexOf('if (url.pathname === "/food-pub") return handleFoodPub(request, env, ctx);') > 0, 's206: /food-pub 경로 등록');
+  ok(w.indexOf('if (url.pathname === "/suggest") return handleSuggest(request, env, ctx);') > 0, 's207: /suggest 경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
 }
 
@@ -363,6 +364,46 @@ const FoodRowsOk = j => !!(j && j.response && j.response.body && Array.isArray(j
       ok((await g('?lat=37.5&lng=127', { method: 'OPTIONS' })).status === 204, 's206: OPTIONS 204');
       const nokv = await w.fetch(new Request('https://x/food-pub?lat=37.5&lng=127'), {}, { waitUntil() { } });
       ok(nokv.status === 503, 's206: 저장소 연결이 없으면 503(앱이 예전 방식)');
+      globalThis.fetch = real;
+    }
+    // s207: 검색 후보 중계 /suggest — 원래 응답과 같은 모양 · KV 에 모아 두고 나눠 쓴다 · 못 받으면 502
+    {
+      const real = globalThis.fetch;
+      const kvm = new Map(), puts = [];
+      const KV = { get: async (k, t) => { const v = kvm.get(k); return v == null ? null : JSON.parse(v); }, put: async (k, v, o) => { kvm.set(k, v); puts.push([k, o]); } };
+      const env = { ROWS_KV: KV, TAGO_KEY: 'k1' };
+      let calls = [], mode = 'ok';
+      globalThis.fetch = async u => {
+        u = String(u);
+        if (/getSttnNoList/.test(decodeURIComponent(u))) {
+          calls.push(u);
+          if (mode === 'down') throw new Error('net');
+          return { ok: true, status: 200, text: async () => JSON.stringify({ response: { header: { resultCode: '00' }, body: { items: { item: [{ nodenm: '강남역', nodeid: 'A1', gpslati: 37.49, gpslong: 127.03 }, { nodenm: '강남역사거리', nodeid: 'A2', gpslati: 37.5, gpslong: 127.03 }] } } } }) };
+        }
+        if (/kakao-local/.test(u)) {
+          calls.push(u);
+          if (mode === 'down') return { ok: false, status: 404, json: async () => ({}) };
+          return { ok: true, status: 200, json: async () => ({ documents: [{ place_name: '강남역 2호선', x: '127.02', y: '37.49', road_address_name: '서울 강남구', address_name: '' }] }) };
+        }
+        return { ok: true, status: 200, text: async () => '{}', json: async () => ({}) };
+      };
+      const g = (q, init) => w.fetch(new Request('https://x/suggest' + q, init), env, { waitUntil() { } });
+      const b1 = await g('?k=b&q=' + encodeURIComponent('강남역')), jb = await b1.json();
+      ok(b1.status === 200 && jb.response.body.items.item.length === 2 && jb.response.body.items.item[0].nodenm === '강남역', 's207: 버스정류장 후보는 TAGO 원래 응답 모양(parseBus 가 그대로 읽는다)');
+      ok(calls.length === 1 && puts.length === 1 && puts[0][1].expirationTtl === 86400, 's207: 정류장은 1일 모아 둔다');
+      calls = [];
+      const b2 = await g('?k=b&q=' + encodeURIComponent(' 강남역 ')), jb2 = await b2.json();
+      ok(b2.headers.get('x-sugg') === 'hit' && calls.length === 0 && jb2.response.body.items.item.length === 2, 's207: 같은 검색어(공백 달라도)는 호출 없이 나눠 쓴다');
+      const p1 = await g('?k=p&q=' + encodeURIComponent('강남역')), jp = await p1.json();
+      ok(p1.status === 200 && jp.documents.length === 1 && jp.documents[0].place_name === '강남역 2호선' && puts[1][1].expirationTtl === 30 * 86400, 's207: 장소 후보는 카카오 원래 응답 모양 · 30일 모아 둔다');
+      mode = 'down'; calls = [];
+      const e1 = await g('?k=b&q=' + encodeURIComponent('없는곳')), e2 = await g('?k=p&q=' + encodeURIComponent('없는곳'));
+      ok(e1.status === 502 && e2.status === 502 && !kvm.has('sg:v1:b:없는곳') && !kvm.has('sg:v1:p:없는곳'), 's207: 못 받으면 502 · 빈 값을 저장하지 않는다(앱이 예전 길로 받는다)');
+      mode = 'ok'; calls = [];
+      const two = await Promise.all([g('?k=b&q=' + encodeURIComponent('수원역')), g('?k=b&q=' + encodeURIComponent('수원역'))]);
+      ok(two.every(x => x.status === 200) && calls.length === 1, 's207: 같은 검색어를 동시에 물어도 한 번만 받는다 ' + calls.length);
+      ok((await g('?k=x&q=ab')).status === 400 && (await g('?k=b&q=a')).status === 400 && (await g('')).status === 400, 's207: 종류가 틀리거나 검색어가 한 글자면 400');
+      ok((await g('?k=b&q=ab', { method: 'POST', body: 'x' })).status === 405 && (await g('?k=b&q=ab', { method: 'OPTIONS' })).status === 204, 's207: GET 만 · OPTIONS 204');
       globalThis.fetch = real;
     }
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }

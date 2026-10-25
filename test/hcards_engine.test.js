@@ -102,6 +102,17 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
   ok(/\/\/ ===== HCARDS ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/screen/hcards") return handleScreenHcards(request);') > 0, '워커에 내장됨');
 }
+// s207: hol 을 안 보내면 엔진이 기준 날짜(미리보기면 고른 시각)로 정한다 — 보내면(옛 앱) 그대로 따른다
+{
+  const sat = Date.UTC(2026, 9, 23, 23, 30, 0);            // KST 토 08:30
+  const noHol = f => { const g = base(f); delete g.hol; return g; };
+  const wk = o => /주말|공휴일/.test(JSON.stringify(o));
+  ok(wk(call(base({ now: sat, hol: true }))) && !wk(call(base({ now: sat, hol: false }))), 's207: (기준) hol 값이 카드 글을 바꾼다');
+  ok(wk(call(noHol({ now: sat }))), 's207: 토요일엔 hol 을 안 보내도 주말·공휴일 카드');
+  ok(!wk(call(noHol({}))), 's207: 수요일엔 hol 을 안 보내도 평일 카드');
+  const hanguel = Date.UTC(2026, 9, 8, 23, 30, 0);          // KST 금 10/9 한글날 08:30
+  ok(wk(call(noHol({ now: hanguel }))), 's207: 평일(금)이라도 공휴일(한글날)이면 주말·공휴일 카드');
+}
 (async () => {
   const os = require('os'), tmp = path.join(os.tmpdir(), 'rv2_hc_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
