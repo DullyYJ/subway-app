@@ -39,6 +39,8 @@ public class RideService extends Service {
     static volatile boolean running = false;
     static volatile int liveRev = 0;
     static volatile String liveRowSlot = ""; static volatile boolean liveRowCan;
+    /** 서비스가 끝난 까닭 — "user"(사용자가 끝냄) · "arrive"(도착) 만 확정을 풀어도 되는 끝이다. 그 밖("engine-done" · "no-saved" · 시스템이 내림)은 뜻밖의 끝 — 앱은 확정을 풀지 않고 다시 켠다. */
+    static volatile String endReason = "";
     static volatile long liveOff = 0L;                       // 엔진이 알린 이탈 시작 시각(없으면 0)
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
@@ -81,10 +83,12 @@ public class RideService extends Service {
     }
     static void clearSaved(Context c) { try { c.getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_SAVED).apply(); } catch (Throwable ignored) { } }
     static void start(Context c) {
+        endReason = "";
         Intent i = new Intent(c, RideService.class).setAction(ACT_START);
         if (Build.VERSION.SDK_INT >= 26) c.startForegroundService(i); else c.startService(i);
     }
     static void stop(Context c) {
+        endReason = "user";
         clearSaved(c);
         running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         c.stopService(new Intent(c, RideService.class));
@@ -95,9 +99,10 @@ public class RideService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         ErrLog.install(this);
         String act = intent == null ? null : intent.getAction();
-        if (ACT_STOP.equals(act)) { finishRide(false); return START_NOT_STICKY; }
+        if (ACT_STOP.equals(act)) { finishRide("user"); return START_NOT_STICKY; }
         RideCore restored = RideCore.restore(getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SAVED, ""), System.currentTimeMillis());
         if (restored == null) {                                   // 저장본이 없거나 너무 낡았다 — 더 이어갈 안내가 없다
+            endReason = "no-saved"; try { ErrLog.record(this, new IllegalStateException("RIDE_END no-saved"), false); } catch (Throwable ignored) { }
             if (Build.VERSION.SDK_INT >= 26) { ensureChannels(); startFg(baseNotification("길동무", "")); }
             stopSelf(); return START_NOT_STICKY;
         }
@@ -174,7 +179,7 @@ public class RideService extends Service {
                         publish();
                         updateOngoing();
                         updateOverlay();
-                        if (s.done) { stepping = false; boolean q = core.quit; finishRide(true); if (q) ShellActivity.quitAll(); return; }
+                        if (s.done) { stepping = false; boolean q = core.quit; finishRide(q ? "arrive" : "engine-done"); if (q) ShellActivity.quitAll(); return; }
                         delay = core.nextMs;
                     }
                 }
@@ -196,8 +201,8 @@ public class RideService extends Service {
             RecoGo.open(RideService.this, core == null ? null : core.lastRecoAd(), core == null ? null : core.recoLoc, r);
         }
         @Override public void recoOk(long at) { if (core != null) core.dismissReco(at); if (h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } }); }
-        @Override public void quitApp() { finishRide(false); ShellActivity.quitAll(); }
-        @Override public void endRide() { finishRide(false); }
+        @Override public void quitApp() { finishRide("user"); ShellActivity.quitAll(); }
+        @Override public void endRide() { finishRide("user"); }
     };
 
     /** 설정에서 '다른 앱 위에 표시'를 켰으면 엔진이 정한 안내 값을 창에 그린다(끄면 치운다). */
@@ -216,10 +221,12 @@ public class RideService extends Service {
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
-    private void finishRide(boolean arrived) {
-        stopped = true; running = false;
+    private void finishRide(String reason) {
+        final boolean legit = "arrive".equals(reason) || "user".equals(reason), arrived = "arrive".equals(reason);
+        stopped = true; running = false; endReason = reason;
         if (ov != null) ov.hide();
-        clearSaved(this);
+        if (legit) clearSaved(this);                                                          // 사용자가 끝냈거나 도착했다 — 저장본을 지운다. 뜻밖의 끝은 남겨 두어 앱이 다시 켠다
+        else { try { ErrLog.record(this, new IllegalStateException("RIDE_END " + reason), false); } catch (Throwable ignored) { } }
         liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
