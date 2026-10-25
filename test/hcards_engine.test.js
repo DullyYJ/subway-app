@@ -49,6 +49,16 @@ ok(o.info.near === '강남' && o.info.cong === 'sub' && o.info.stn === '강남' 
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now } }));
 { const sb = flat(o.body).filter(n => n.act && n.act.v === 'share.loc'); ok(sb.length === 1 && sb[0].t === 'sec', '공유 단추: 제목줄에 하나'); }
 // 아무 사실도 없음
+// s216: 동 이름(f.dong)을 알면 그 이름 기준으로, 가까운 역이 없는 곳(제주 바다 한가운데 등)에서도 '내 위치' 기준으로 브리핑이 열린다
+o = call(base({ r: null, gps: [37.4979, 127.0276], dong: '역삼동' }));
+ok(o.info.ai === 'brief' && flat(o.body).some(n => n.t === 'aih' && /^역삼동 · /.test(n.s) && !/강남/.test(n.s)) && flat(o.body).some(n => /역삼동/.test(n.s || '') && !/aih/.test(n.t)), '경로 없이 위치+동 이름: 제목·문장이 동 이름(역삼동) 기준 ' + JSON.stringify(flat(o.body).filter(n => n.t === 'aih').map(n => n.s)));
+ok(o.info.near === '강남' && o.info.cong === 'sub', '혼잡도 카드는 그대로 가까운 역 기준');
+o = call(base({ r: null, gps: [33.0, 124.0] }));
+ok(o.info.ai === 'brief' && flat(o.body).some(n => n.t === 'aih' && /^내 위치 · /.test(n.s)), '가까운 역도 동 이름도 없으면 내 위치 기준(빈 안내 대신 브리핑)');
+o = call(base({ r: null, gps: [37.4979, 127.0276] }));
+ok(flat(o.body).some(n => n.t === 'aih' && /강남/.test(n.s)), '동 이름이 없으면(옛 앱) 가까운 역 이름 그대로');
+o = call(base({ r: { data: mk([walk(3), sub('부평', '강남', '수도권 1호선', 18), walk(3)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now }, gps: [37.4979, 127.0276], dong: '역삼동' }));
+ok(flat(o.body).some(n => n.t === 'aih' && /부평/.test(n.s) && !/역삼동/.test(n.s)), '경로가 있으면 동 이름은 쓰지 않는다');
 o = call(base({ r: null, gps: null }));
 ok(!JSON.stringify(o.body[1]).includes('AI 승무원') && o.body[2].s === 'AI 승무원' && JSON.stringify(o.body[4]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 5, '아무것도 없으면 안내 문구');
