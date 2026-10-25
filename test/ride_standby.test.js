@@ -594,19 +594,20 @@ t('버튼 줄 칸: 처음엔 탑승(밀고 들어옴) → 첫 구간 뒤 환승(
 });
 
 // ── s192: 서울 지하철 실시간 도착정보로 [탑승] 영점(웹 resolveRealtimeDepartMs 규칙) ─────────────────
-const LV = (o) => Object.assign({ subwayId: '1002', trainLineNm: '신도림행 - T1방면', arvlCd: '99', barvlDt: '120', updnLine: '내선' }, o || {});
-t('실시간 도착: 호선·방향(다음 역 방면)이 맞는 열차만, 가장 먼저 오는 것을 가린다', () => {
+const LV = (o) => Object.assign({ subwayId: '1002', trainLineNm: '신도림행 - T1방면', arvlCd: '99', barvlDt: '120', updnLine: '하행' }, o || {});
+t('실시간 도착(웹 규칙): 방향(dk → 상행/하행, 모르면 하행)이 맞는 열차 중 barvlDt 가 가장 작은 것 · 진입·도착은 지금', () => {
   const x0 = stepX(xferState(), at(12, 55, 0)), q = rsPressQuery(pressReq(x0.state, at(12, 55, 20))), N = at(12, 55, 20);
-  assert.strictEqual(rsPickLive([LV({ barvlDt: '300' }), LV({ barvlDt: '90' })], q, N), N + 90000, '더 빨리 오는 열차');
-  assert.strictEqual(rsPickLive([LV({ trainLineNm: '성수행 - T9방면', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N), N + 200000, '반대 방향(다른 방면)은 건너뛴다');
-  assert.strictEqual(rsPickLive([LV({ subwayId: '1003', barvlDt: '30' })], q, N), null, '다른 호선은 쓰지 않는다');
-  assert.strictEqual(rsPickLive([LV({ arvlCd: '1', barvlDt: '0' })], q, N), N, '도착(1)은 지금');
-  assert.strictEqual(rsPickLive([LV({ arvlCd: '0', barvlDt: '0' })], q, N), N, '진입(0)은 지금');
-  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '0' })], q, N), null, '이미 출발(2)한 열차는 건너뛴다');
-  assert.strictEqual(rsPickLive([LV({ barvlDt: '0' })], q, N), null, '시각을 모르면 건너뛴다');
-  assert.strictEqual(rsPickLive([LV({ barvlDt: String(13 * 60) })], q, N), null, '12분보다 먼 열차는 쓰지 않는다');
-  assert.strictEqual(rsPickLive([LV({ trainLineNm: '신도림행 - T1역방면' })], q, N), N + 120000, "'역' 글자는 무시");
-  assert.strictEqual(rsPickLive(null, q, N), null); assert.strictEqual(rsPickLive([], q, N), null);
+  assert.strictEqual(rsPickLive([LV({ barvlDt: '300' }), LV({ barvlDt: '90' })], q, N, '하'), N + 90000, '더 빨리 오는 열차');
+  assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, '하'), N + 200000, '하행만');
+  assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, '상'), N + 30000, '상행만');
+  assert.strictEqual(rsPickLive([LV({ updnLine: '상행', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N, null), N + 200000, '방향을 모르면 하행(웹 기본값)');
+  assert.strictEqual(rsPickLive([LV({ updnLine: '내선', barvlDt: '70' }), LV({ updnLine: '외선', barvlDt: '40' })], q, N, '하'), N + 40000, '맞는 방향이 하나도 없으면 전부(2호선 내·외선)');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '1', barvlDt: '0' })], q, N, '하'), N, '도착(1)은 지금');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '0', barvlDt: '55' })], q, N, '하'), N, '진입(0)은 barvlDt 와 상관없이 지금');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '25' })], q, N, '하'), N + 25000, '그 밖의 상태는 barvlDt 초 뒤(웹과 같다)');
+  assert.strictEqual(rsPickLive([LV({ barvlDt: '-5', arvlCd: '3' })], q, N, '하'), N, '음수는 0');
+  assert.strictEqual(rsPickLive([LV({ barvlDt: String(30 * 60) })], q, N, '하'), N + 1800000, '시간 한도를 두지 않는다(웹과 같다)');
+  assert.strictEqual(rsPickLive(null, q, N, '하'), null); assert.strictEqual(rsPickLive([], q, N, '하'), null);
 });
 t('실시간 도착: pressTT.liveMs 가 시각표보다 먼저 — 시각표가 없어도 붙는다, 못 받으면 시각표 그대로', () => {
   const x0 = stepX(xferState(), at(12, 55, 0)), N = at(12, 55, 20);
@@ -634,9 +635,9 @@ t('실시간 도착: 첫 승차 [탑승](st.wait) 도 실시간 도착 시각을
   let r = rideStandby(rq);
   assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === T + 100000) && /실시간 100초/.test(r.notes.join('|')), JSON.stringify(r.state.eta.passes) + JSON.stringify(r.notes));
   rq = { nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' };
-  rsAttachPressTT(rq, fakeNt(12 * 60 + 53)); rsAttachPressLive(rq, [LV({ subwayId: '1005' })]);
+  rsAttachPressTT(rq, fakeNt(12 * 60 + 53)); assert.strictEqual(rsAttachPressLive(rq, null), false);
   r = rideStandby(rq);
-  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 53, 30)), '맞는 열차가 없으면 시각표');
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 53, 30)), '실시간을 못 받으면 시각표');
 });
 
 const httpTest = async () => {
@@ -661,7 +662,7 @@ const liveHttpTest = async () => {
     let asked = '';
     const ok = mk(async (req) => { asked = decodeURIComponent(new URL(req.url).searchParams.get('path')); return new Response(JSON.stringify({ realtimeArrivalList: [LV({ barvlDt: '90' })] }), { status: 200 }); });
     const a = await post(ok, pressReq(x0.state, N));
-    assert.ok(/^realtimeStationArrival\/0\/20\/T0$/.test(asked), asked);
+    assert.ok(/^realtimeStationArrival\/1\/5\/T0$/.test(asked), asked);
     assert.ok(a.state.eta.passes.some(p => p.idx === 4 && p.ms === N + 90000) || a.state.xPend, JSON.stringify(a.notes));
     const pend = mk(async () => new Response(JSON.stringify({ ok: false, error: 'relay pending' }), { status: 503 }));
     const b = await post(pend, pressReq(x0.state, N));
