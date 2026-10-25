@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s197";
+var ENGINE_VERSION = "route-v2-2026-10-25s198";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10039,10 +10039,10 @@ function rsRsState0(st, r, now) {
   return { st: 'hidden' };
 }
 // \ud558\ub2e8 \uc904: \uc6b0\uc120\uc21c\uc704 \ub0b4\ub9b4 \uc900\ube44(2) > \ucd94\ucc9c(1) > \uc5c6\uc74c, \ud55c \ubc88 \ubcf4\uc778 \uc904\uc740 30\ucd08 \ubd99\uc7a1\ub294\ub2e4(\uc785\ub825\uc774 \ud754\ub4e4\ub824\ub3c4 \uae5c\ubc15\uc774\uc9c0 \uc54a\uac8c).
-function rsRows(st, r, now, dest, lv, bTg, arrived) {
+function rsRows(st, r, now, dest, finLv, arrived) {
   var cfg = st.cfg || {}, ad = st.rcAd, dn = dest ? dest.nodeIdx : -1, k = 0, reco = null, getoff = null;
   var rem = (dn >= 0 && r.etaMs && r.etaMs[dn] != null && isFinite(r.etaMs[dn])) ? Math.round((r.etaMs[dn] - now) / 1000) : null;
-  if (!arrived && lv === 1 && bTg && bTg.kind === 'dest' && !st.wait) {
+  if (!arrived && finLv === 1 && !st.wait) {
     var cf = rsCheerFn(), cheer = '\uc624\ub298\ub3c4 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694';
     try { if (cf) cheer = cf(now, (st.eta && st.eta.tzOffsetMin) != null ? st.eta.tzOffsetMin : 540, null) || cheer; } catch (e) { }
     var gat = (st.ovlAlert && st.ovlAlert.at) || 0;
@@ -10076,9 +10076,19 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
     if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= curIdx) cur = j; }
   }
   if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
+  var arrived = !!(dest && curPos >= dest.seqPos);
+  var rs = arrived ? { st: 'board', end: true, bt: '\uc548\ub0b4 \uc885\ub8cc', k: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud588\uc5b4\uc694', ch: '\ub3c4\ucc29', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
+  // \u2605 2026-10-19 (YJ: "\ud658\uc2b9\ubc84\ud2bc\uc774 \ub098\uc624\uba74 \ub9c8\ucee4\uac00 \ud658\uc2b9\uc5d0\uac00\uc11c \ub300\uae30\ud574\uc57c\ud574", s198 \uc5d4\uc9c4\uc73c\ub85c): \ud658\uc2b9 \ud0d1\uc2b9 \ubc84\ud2bc(\uc2dc\ud2b8\u00b7\uc54c\uc57d)\uc774 \ub5a0 \uc788\ub294 \ub3d9\uc548 \ud604\uc704\uce58 \uce78\uc740 \ud658\uc2b9 \uac77\uae30 \uce78(\uc5c6\uc73c\uba74 \ud658\uc2b9 \uc9c1\uc804 \uc5ed)\uc5d0\uc11c \uba48\ucdb0 \uae30\ub2e4\ub9b0\ub2e4.
+  //   \uc904 \ubb38\uad6c(line1)\ub294 \uc6d0\ub798 \ud604\uc704\uce58 \uae30\uc900 \uadf8\ub300\ub85c \ub450\uace0, \uce78 \ud45c\uc2dc\u00b7\uc6c0\uc9c1\uc784\ub9cc \ubc14\ub010\ub2e4.
+  var xf = false, cur0 = cur;
+  if (!arrived && !st.wait && st.xw && rs && (rs.st === 'board' || rs.st === 'wait')) {
+    var xj = rsXferCell(map, cur, st.xw.i);
+    if (xj > cur) { cur = xj; xf = true; }
+  }
+  if (xf) moving = false;
   var nextJ = -1;
-  for (j = cur + 1; j < cells.length; j++) if (map[j] != null && map[j] >= 0) { nextJ = j; break; }
-  var cn = cells[cur] ? cells[cur].n : '', nn = nextJ >= 0 ? cells[nextJ].n : '';
+  for (j = cur0 + 1; j < cells.length; j++) if (map[j] != null && map[j] >= 0) { nextJ = j; break; }
+  var cn = cells[cur0] ? cells[cur0].n : '', nn = nextJ >= 0 ? cells[nextJ].n : '';
   var line1 = nn ? cn + ' \u25b8 ' + nn : '\u25cf ' + cn;
   var pill = (moving && nextJ >= 0) ? (cells[nextJ].m || '') : '';
   // \ub0a8\uc740\uc2dc\uac04 \uc904 \u2014 \ubaa9\uc801\uc9c0 \ub3c4\ucc29 \uc2dc\uac01 \uae30\uc900
@@ -10088,29 +10098,86 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
     var mm = Math.max(0, Math.round((r.etaMs[dn] - now) / 60000));
     line2 = '\ub0a8\uc740\uc2dc\uac04: ' + p2(Math.floor(mm / 60)) + '\uc2dc\uac04 ' + p2(mm % 60) + '\ubd84' + (r.arr && r.arr[dn] ? ' \u00b7 ' + r.arr[dn] + '\ub3c4\ucc29' : '');
   }
-  // \ud558\ucc28 \uc784\ubc15 \ub2e8\uacc4: \ud658\uc2b9\u00b7\ubaa9\uc801\uc9c0 2\uc815\uac70\uc7a5 \uc804 = 2, 1\uc815\uac70\uc7a5 \uc804 = 1 (\uc571 _ovlAlertLevel \uacfc \uac19\uc740 \uaddc\uce59), \ubaa9\uc801\uc9c0 3\uc815\uac70\uc7a5 \uc804 = pre
-  var lv = 0, pre = 0, tg = (st.cfg && st.cfg.targets) || [], i, bTg = null;
+  // \uc571 \ud654\uba74(\uc7ac\uac1c \ud654\uba74)\uc774 \ud06c\uac8c \ubcf4\uc5ec \uc904 \ubb38\uad6c \u2014 \ubb38\uad6c\ub3c4 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(\ub0a8\uc740 \uc815\uac70\uc7a5 1\u00b72 \uc778 \ub300\uc0c1 \uae30\uc900)
+  var lv = 0, tg = (st.cfg && st.cfg.targets) || [], i, bTg = null;
   for (i = 0; i < tg.length; i++) {
     var rem = tg[i].seqPos - curPos;
     if (curPos >= 0 && (rem === 1 || rem === 2)) { if (!lv || rem < lv) { lv = rem; bTg = tg[i]; } }
-    if (curPos >= 0 && tg[i].kind === 'dest' && rem === 3) pre = 1;
   }
-  // \uc571 \ud654\uba74(\uc7ac\uac1c \ud654\uba74)\uc774 \ud06c\uac8c \ubcf4\uc5ec \uc904 \ubb38\uad6c \u2014 \ubb38\uad6c\ub3c4 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4
   var banner = '';
   if (bTg && !(dest && curPos >= dest.seqPos)) {
     banner = bTg.kind === 'transfer' ? (lv === 1 ? '\ub2e4\uc74c \uc815\uac70\uc7a5 ' + bTg.name + ' \u2014 ' + (bTg.nextLine || '\ub2e4\uc74c \ub178\uc120') + ' \ud658\uc2b9 \uc900\ube44' : bTg.name + '\uc5d0\uc11c ' + (bTg.nextLine || '\ub2e4\uc74c \ub178\uc120') + ' \ud658\uc2b9 \u00b7 2\uc815\uac70\uc7a5 \uc804')
       : (lv === 1 ? '\ub2e4\uc74c \uc815\uac70\uc7a5 ' + bTg.name + ' \u2014 \ub0b4\ub9b4 \uc900\ube44\ud558\uc138\uc694' : bTg.name + '\uae4c\uc9c0 2\uc815\uac70\uc7a5 \ub0a8\uc558\uc5b4\uc694');
   } else if (dest && curPos >= dest.seqPos) banner = (destName || dest.name || '\ubaa9\uc801\uc9c0') + '\uc5d0 \ub3c4\ucc29\ud588\uc5b4\uc694';
+  // \u2605 \ud558\uc774\ub77c\uc774\ud2b8 \ub2e8\uacc4(\uc6f9 _ovlAlertLevelRaw): \ud0c0\uace0 \uc788\ub294 \uad6c\uac04 \uae30\uc900, \ud658\uc2b9\uc5ed\uc740 1\uc815\uac70\uc7a5 \uc804\ubd80\ud130, \ucd5c\uc885\uc740 2\u00b71\uc815\uac70\uc7a5 \uc804, \ud55c \ubc88 \ucf1c\uc9c4 \ub2e8\uacc4\ub294 \ud658\uc2b9 \uc2b9\ucc28/\ud558\ucc28 \ud310\uc815\uae4c\uc9c0 \uc720\uc9c0
+  var al = rsOvlLevel(st, curIdx, curPos);
   var oa = st.ovlAlert || (st.ovlAlert = { lv: 0, at: 0 });
-  if (oa.lv !== lv) { oa.lv = lv; if (lv > 0) oa.at = now; }
-  var arrived = !!(dest && curPos >= dest.seqPos);
-  var rs = arrived ? { st: 'board', end: true, bt: '\uc548\ub0b4 \uc885\ub8cc', k: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud588\uc5b4\uc694', ch: '\ub3c4\ucc29', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
-  var rows = rsRows(st, r, now, dest, lv, bTg, arrived);
-  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: rows.reco, getoff: rows.getoff, cells: cells };
+  if (oa.lv !== al.lv) { oa.lv = al.lv; if (al.lv > 0) oa.at = now; }
+  var allowed = (st.cfg && st.cfg.allowed) || {};
+  var vibe = !arrived && al.lv > 0 && allowed[al.fin ? 'near_arrive' : 'transfer'] !== false;
+  var rows = rsRows(st, r, now, dest, al.finLv, arrived);
+  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : al.lv, alertAt: oa.at || 0, alertVibe: vibe, banner: banner, destName: destName || '', pre: !arrived && al.lv === 0 && al.pre === 1, moving: !!moving, rs: rs, reco: rows.reco, getoff: rows.getoff, cells: cells };
+  out.pillTxt = rsPillTxt(rs, line1, line2, pill, cells, cur0);
+  if (xf) out.xfer = true;
   if (ov.theme) out.theme = ov.theme;
-  var sh = rsShare(st, r, cells, map, cur, moving, dest, destName, now);
+  var sh = rsShare(st, r, cells, map, cur0, moving, dest, destName, now);
   if (sh) out.share = sh;
   return out;
+}
+
+// \uc811\ud78c \uc54c\uc57d\uc5d0 \ubcf4\uc77c \ud55c \uc904(\uc6f9 OverlayPlugin.pillText): \ud0d1\uc2b9 \ub300\uae30\uba74 '\ub300\uae30 \u00b7 \ud0c8 \uac83', \ud0c4 \ub4a4\uc5d0\ub294 '\ud604\uc704\uce58 \u00b7 HH:MM \ub3c4\ucc29'(\uc774\ub3d9 \uc911\uc774\uba74 \ud604\uc704\uce58 \ub300\uc2e0 '\ub2e4\uc74c\uc5ed(\uc774\ub3d9\uc911)'). \uc624\ubc84\ub808\uc774\ub294 \uc774 \uae00\uc744 \uadf8\ub300\ub85c \uadf8\ub9b0\ub2e4.
+function rsPillTxt(rs, line1, line2, pill, cells, cur) {
+  if (rs && !rs.end && (rs.st === 'wait' || rs.st === 'board')) { var lab = rs.ch || rs.chip || rs.nm || ''; return lab ? '\ub300\uae30 \u00b7 ' + lab : '\ub300\uae30'; }
+  var c = String(line1 || ''), k = c.indexOf(' \u25b8 ');
+  if (k > 0) c = c.slice(0, k);
+  if (c.indexOf('\u25cf ') === 0) c = c.slice(2);
+  c = c.trim();
+  if (pill) c = pill;
+  if (!c && cells && cells[cur] && cells[cur].n) c = String(cells[cur].n);
+  var m = /(\d{1,2}:\d{2})\s*\ub3c4\ucc29/.exec(String(line2 || '')), arr = m ? m[1] : '';
+  if (!c) return arr ? arr + ' \ub3c4\ucc29' : '';
+  return arr ? c + ' \u00b7 ' + arr + ' \ub3c4\ucc29' : c;
+}
+// \ud658\uc2b9 \uce78: \ub2e4\uc74c \uad6c\uac04 \ud0d1\uc2b9 \ub178\ub4dc(bi) \uc55e\uc758 \ud658\uc2b9 \uac77\uae30 \uce78(\ub178\ub4dc\uac00 \uc544\ub2cc \uce78) \u2014 \uc5c6\uc73c\uba74 \ud0d1\uc2b9 \ub178\ub4dc \ubc14\ub85c \uc55e \uce78. \ud604\uc704\uce58 \uce78(cur) \ub4a4\uac00 \uc544\ub2c8\uba74 -1.
+function rsXferCell(map, cur, bi) {
+  var bj = -1, j;
+  for (j = 0; j < map.length; j++) if (map[j] === bi) { bj = j; break; }
+  if (bj <= cur) return -1;
+  for (j = bj - 1; j > cur; j--) if (!(map[j] != null && map[j] >= 0)) return j;
+  return (bj - 1 > cur) ? bj - 1 : -1;
+}
+// \ud558\ucc28\u00b7\ud658\uc2b9 \ud558\uc774\ub77c\uc774\ud2b8 \ub2e8\uacc4 \u2014 \uc6f9 _ovlAlertLevelRaw \ub97c \uc62e\uacbc\ub2e4. \ubc18\ud658 { lv(0|1|2), fin(\ub9c8\uc9c0\ub9c9 \uad6c\uac04 \uc5ec\ubd80), pre(\ucd5c\uc885 3\uc815\uac70\uc7a5 \uc804), finLv(\ub9c8\uc9c0\ub9c9 \uad6c\uac04 \ud55c \uc815\uac70\uc7a5 \uc804) }.
+//   \u00b7 \ud0c0\uace0 \uc788\ub294 \uad6c\uac04(\uc2b9\ucc28 \ub300\uae30\u00b7\ud658\uc2b9 \ub300\uae30\uac00 \uc544\ub2c8\uace0 \ucc28\ub7c9 \ub178\ub4dc \uc704)\uc758 \ud558\ucc28 \ub300\uc0c1\uae4c\uc9c0 \ub0a8\uc740 \uc815\uac70\uc7a5: 2 \u2192 2, 1 \uc774\ud558 \u2192 1, \ud658\uc2b9\uc5ed(\ub4a4\uc5d0 \ub354 \ud0c8 \uad6c\uac04)\uc740 2\uc815\uac70\uc7a5 \uc804\uc744 \uc54c\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+//   \u00b7 \ud55c \ubc88 \ucf1c\uc9c4 \ub2e8\uacc4\ub294 \ub798\uce58(st.ovlLatch)\ub85c \ubd99\uc7a1\ub294\ub2e4 \u2014 2\u21921 \ub85c\ub9cc. \ud658\uc2b9\uc774\uba74 \ub2e4\uc74c \uad6c\uac04 \uc2b9\ucc28\uac00 \ud655\uc778\ub420 \ub54c(\ud0d1\uc2b9 \uae30\ub85d\u00b7\ud1b5\uacfc \uc99d\uac70\u00b7\uc9c4\ud589\ub3c4), \ub9c8\uc9c0\ub9c9\uc774\uba74 \ud558\ucc28 \ub178\ub4dc\ub97c \uc9c0\ub0a0 \ub54c \ud47c\ub2e4.
+function rsOvlLevel(st, curIdx, curPos) {
+  var cfg = st.cfg || {}, tg = cfg.targets || [], eta = st.eta || {}, nodes = eta.nodes || [], i;
+  var L = st.ovlLatch || (st.ovlLatch = { a: -1, lv: 0, fin: true });
+  if (L.a >= 0) {
+    var legs = rsLegsOf(eta), bNext = -1, released;
+    for (i = 0; i < legs.length; i++) if (legs[i].bi > L.a) { bNext = legs[i].bi; break; }
+    if (bNext >= 0) released = !!(st.rsDone || {})[bNext] || rsMaxPass(eta) >= bNext || (curIdx > bNext && !(st.xw && st.xw.i === bNext));
+    else released = curIdx > L.a;
+    if (released) { L.a = -1; L.lv = 0; }
+  }
+  var lv = 0, pre = 0, fin = true, aNow = -1, seg = null;
+  var nd = nodes[curIdx], riding = curPos >= 0 && !!nd && !nd.isOrigin && !nd.isWalk && (nd.isBus || nd.isSub) && !st.wait && !st.xw;
+  if (riding) {
+    for (i = 0; i < tg.length; i++) if (tg[i].seqPos >= curPos && (!seg || tg[i].seqPos < seg.seqPos)) seg = tg[i];
+    if (seg) {
+      aNow = seg.nodeIdx;
+      var rem = seg.seqPos - curPos;
+      lv = rem === 2 ? 2 : (rem <= 1 ? 1 : 0);
+      fin = seg.kind !== 'transfer';
+      if (!fin && lv === 2) lv = 0;
+      pre = (fin && rem === 3) ? 1 : 0;
+    }
+  }
+  if (lv > 0 && aNow >= 0) {
+    if (L.a !== aNow) { L.a = aNow; L.lv = lv; L.fin = fin; }
+    else if (L.lv === 0 || lv < L.lv) L.lv = lv;
+  }
+  var latched = L.a >= 0;
+  return { lv: latched ? L.lv : lv, fin: latched ? L.fin !== false : fin, pre: pre, finLv: (latched ? (L.fin !== false && L.lv === 1) : (fin && lv === 1)) ? 1 : 0 };
 }
 
 // \ub0b4 \uc704\uce58 \uacf5\uc720(\uc608\uc804 \uc6f9 _shLoc \u00b7 _shText): \ucd9c\ubc1c - \ud604\uc7ac - \ub3c4\ucc29 (\ub3c4\ucc29\uc608\uc815\uc2dc\uac04) [\ub0a8\uc740\uc2dc\uac04] \uae00\uacfc, \uadf8\ub9bc\uc6a9 \uc555\ucd95 \ud0c0\uc784\ub77c\uc778 \uc7ac\ub8cc. \ud55c\uad6d \uc2dc\uac01 \uae30\uc900.

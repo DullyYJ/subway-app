@@ -417,10 +417,10 @@ function rsRsState0(st, r, now) {
   return { st: 'hidden' };
 }
 // 하단 줄: 우선순위 내릴 준비(2) > 추천(1) > 없음, 한 번 보인 줄은 30초 붙잡는다(입력이 흔들려도 깜박이지 않게).
-function rsRows(st, r, now, dest, lv, bTg, arrived) {
+function rsRows(st, r, now, dest, finLv, arrived) {
   var cfg = st.cfg || {}, ad = st.rcAd, dn = dest ? dest.nodeIdx : -1, k = 0, reco = null, getoff = null;
   var rem = (dn >= 0 && r.etaMs && r.etaMs[dn] != null && isFinite(r.etaMs[dn])) ? Math.round((r.etaMs[dn] - now) / 1000) : null;
-  if (!arrived && lv === 1 && bTg && bTg.kind === 'dest' && !st.wait) {
+  if (!arrived && finLv === 1 && !st.wait) {
     var cf = rsCheerFn(), cheer = '오늘도 수고 많았어요';
     try { if (cf) cheer = cf(now, (st.eta && st.eta.tzOffsetMin) != null ? st.eta.tzOffsetMin : 540, null) || cheer; } catch (e) { }
     var gat = (st.ovlAlert && st.ovlAlert.at) || 0;
@@ -454,9 +454,19 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
     if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= curIdx) cur = j; }
   }
   if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
+  var arrived = !!(dest && curPos >= dest.seqPos);
+  var rs = arrived ? { st: 'board', end: true, bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
+  // ★ 2026-10-19 (YJ: "환승버튼이 나오면 마커가 환승에가서 대기해야해", s198 엔진으로): 환승 탑승 버튼(시트·알약)이 떠 있는 동안 현위치 칸은 환승 걷기 칸(없으면 환승 직전 역)에서 멈춰 기다린다.
+  //   줄 문구(line1)는 원래 현위치 기준 그대로 두고, 칸 표시·움직임만 바뀐다.
+  var xf = false, cur0 = cur;
+  if (!arrived && !st.wait && st.xw && rs && (rs.st === 'board' || rs.st === 'wait')) {
+    var xj = rsXferCell(map, cur, st.xw.i);
+    if (xj > cur) { cur = xj; xf = true; }
+  }
+  if (xf) moving = false;
   var nextJ = -1;
-  for (j = cur + 1; j < cells.length; j++) if (map[j] != null && map[j] >= 0) { nextJ = j; break; }
-  var cn = cells[cur] ? cells[cur].n : '', nn = nextJ >= 0 ? cells[nextJ].n : '';
+  for (j = cur0 + 1; j < cells.length; j++) if (map[j] != null && map[j] >= 0) { nextJ = j; break; }
+  var cn = cells[cur0] ? cells[cur0].n : '', nn = nextJ >= 0 ? cells[nextJ].n : '';
   var line1 = nn ? cn + ' ▸ ' + nn : '● ' + cn;
   var pill = (moving && nextJ >= 0) ? (cells[nextJ].m || '') : '';
   // 남은시간 줄 — 목적지 도착 시각 기준
@@ -466,29 +476,86 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
     var mm = Math.max(0, Math.round((r.etaMs[dn] - now) / 60000));
     line2 = '남은시간: ' + p2(Math.floor(mm / 60)) + '시간 ' + p2(mm % 60) + '분' + (r.arr && r.arr[dn] ? ' · ' + r.arr[dn] + '도착' : '');
   }
-  // 하차 임박 단계: 환승·목적지 2정거장 전 = 2, 1정거장 전 = 1 (앱 _ovlAlertLevel 과 같은 규칙), 목적지 3정거장 전 = pre
-  var lv = 0, pre = 0, tg = (st.cfg && st.cfg.targets) || [], i, bTg = null;
+  // 앱 화면(재개 화면)이 크게 보여 줄 문구 — 문구도 엔진이 정한다(남은 정거장 1·2 인 대상 기준)
+  var lv = 0, tg = (st.cfg && st.cfg.targets) || [], i, bTg = null;
   for (i = 0; i < tg.length; i++) {
     var rem = tg[i].seqPos - curPos;
     if (curPos >= 0 && (rem === 1 || rem === 2)) { if (!lv || rem < lv) { lv = rem; bTg = tg[i]; } }
-    if (curPos >= 0 && tg[i].kind === 'dest' && rem === 3) pre = 1;
   }
-  // 앱 화면(재개 화면)이 크게 보여 줄 문구 — 문구도 엔진이 정한다
   var banner = '';
   if (bTg && !(dest && curPos >= dest.seqPos)) {
     banner = bTg.kind === 'transfer' ? (lv === 1 ? '다음 정거장 ' + bTg.name + ' — ' + (bTg.nextLine || '다음 노선') + ' 환승 준비' : bTg.name + '에서 ' + (bTg.nextLine || '다음 노선') + ' 환승 · 2정거장 전')
       : (lv === 1 ? '다음 정거장 ' + bTg.name + ' — 내릴 준비하세요' : bTg.name + '까지 2정거장 남았어요');
   } else if (dest && curPos >= dest.seqPos) banner = (destName || dest.name || '목적지') + '에 도착했어요';
+  // ★ 하이라이트 단계(웹 _ovlAlertLevelRaw): 타고 있는 구간 기준, 환승역은 1정거장 전부터, 최종은 2·1정거장 전, 한 번 켜진 단계는 환승 승차/하차 판정까지 유지
+  var al = rsOvlLevel(st, curIdx, curPos);
   var oa = st.ovlAlert || (st.ovlAlert = { lv: 0, at: 0 });
-  if (oa.lv !== lv) { oa.lv = lv; if (lv > 0) oa.at = now; }
-  var arrived = !!(dest && curPos >= dest.seqPos);
-  var rs = arrived ? { st: 'board', end: true, bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
-  var rows = rsRows(st, r, now, dest, lv, bTg, arrived);
-  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : lv, alertAt: oa.at || 0, alertVibe: false, banner: banner, destName: destName || '', pre: !arrived && pre === 1, moving: !!moving, rs: rs, reco: rows.reco, getoff: rows.getoff, cells: cells };
+  if (oa.lv !== al.lv) { oa.lv = al.lv; if (al.lv > 0) oa.at = now; }
+  var allowed = (st.cfg && st.cfg.allowed) || {};
+  var vibe = !arrived && al.lv > 0 && allowed[al.fin ? 'near_arrive' : 'transfer'] !== false;
+  var rows = rsRows(st, r, now, dest, al.finLv, arrived);
+  var out = { active: true, line1: line1, pill: pill, track: [], cur: cur, base: ov.base || 0, line2: line2, line3: '', alert: arrived ? 0 : al.lv, alertAt: oa.at || 0, alertVibe: vibe, banner: banner, destName: destName || '', pre: !arrived && al.lv === 0 && al.pre === 1, moving: !!moving, rs: rs, reco: rows.reco, getoff: rows.getoff, cells: cells };
+  out.pillTxt = rsPillTxt(rs, line1, line2, pill, cells, cur0);
+  if (xf) out.xfer = true;
   if (ov.theme) out.theme = ov.theme;
-  var sh = rsShare(st, r, cells, map, cur, moving, dest, destName, now);
+  var sh = rsShare(st, r, cells, map, cur0, moving, dest, destName, now);
   if (sh) out.share = sh;
   return out;
+}
+
+// 접힌 알약에 보일 한 줄(웹 OverlayPlugin.pillText): 탑승 대기면 '대기 · 탈 것', 탄 뒤에는 '현위치 · HH:MM 도착'(이동 중이면 현위치 대신 '다음역(이동중)'). 오버레이는 이 글을 그대로 그린다.
+function rsPillTxt(rs, line1, line2, pill, cells, cur) {
+  if (rs && !rs.end && (rs.st === 'wait' || rs.st === 'board')) { var lab = rs.ch || rs.chip || rs.nm || ''; return lab ? '대기 · ' + lab : '대기'; }
+  var c = String(line1 || ''), k = c.indexOf(' ▸ ');
+  if (k > 0) c = c.slice(0, k);
+  if (c.indexOf('● ') === 0) c = c.slice(2);
+  c = c.trim();
+  if (pill) c = pill;
+  if (!c && cells && cells[cur] && cells[cur].n) c = String(cells[cur].n);
+  var m = /(\d{1,2}:\d{2})\s*도착/.exec(String(line2 || '')), arr = m ? m[1] : '';
+  if (!c) return arr ? arr + ' 도착' : '';
+  return arr ? c + ' · ' + arr + ' 도착' : c;
+}
+// 환승 칸: 다음 구간 탑승 노드(bi) 앞의 환승 걷기 칸(노드가 아닌 칸) — 없으면 탑승 노드 바로 앞 칸. 현위치 칸(cur) 뒤가 아니면 -1.
+function rsXferCell(map, cur, bi) {
+  var bj = -1, j;
+  for (j = 0; j < map.length; j++) if (map[j] === bi) { bj = j; break; }
+  if (bj <= cur) return -1;
+  for (j = bj - 1; j > cur; j--) if (!(map[j] != null && map[j] >= 0)) return j;
+  return (bj - 1 > cur) ? bj - 1 : -1;
+}
+// 하차·환승 하이라이트 단계 — 웹 _ovlAlertLevelRaw 를 옮겼다. 반환 { lv(0|1|2), fin(마지막 구간 여부), pre(최종 3정거장 전), finLv(마지막 구간 한 정거장 전) }.
+//   · 타고 있는 구간(승차 대기·환승 대기가 아니고 차량 노드 위)의 하차 대상까지 남은 정거장: 2 → 2, 1 이하 → 1, 환승역(뒤에 더 탈 구간)은 2정거장 전을 알리지 않는다.
+//   · 한 번 켜진 단계는 래치(st.ovlLatch)로 붙잡는다 — 2→1 로만. 환승이면 다음 구간 승차가 확인될 때(탑승 기록·통과 증거·진행도), 마지막이면 하차 노드를 지날 때 푼다.
+function rsOvlLevel(st, curIdx, curPos) {
+  var cfg = st.cfg || {}, tg = cfg.targets || [], eta = st.eta || {}, nodes = eta.nodes || [], i;
+  var L = st.ovlLatch || (st.ovlLatch = { a: -1, lv: 0, fin: true });
+  if (L.a >= 0) {
+    var legs = rsLegsOf(eta), bNext = -1, released;
+    for (i = 0; i < legs.length; i++) if (legs[i].bi > L.a) { bNext = legs[i].bi; break; }
+    if (bNext >= 0) released = !!(st.rsDone || {})[bNext] || rsMaxPass(eta) >= bNext || (curIdx > bNext && !(st.xw && st.xw.i === bNext));
+    else released = curIdx > L.a;
+    if (released) { L.a = -1; L.lv = 0; }
+  }
+  var lv = 0, pre = 0, fin = true, aNow = -1, seg = null;
+  var nd = nodes[curIdx], riding = curPos >= 0 && !!nd && !nd.isOrigin && !nd.isWalk && (nd.isBus || nd.isSub) && !st.wait && !st.xw;
+  if (riding) {
+    for (i = 0; i < tg.length; i++) if (tg[i].seqPos >= curPos && (!seg || tg[i].seqPos < seg.seqPos)) seg = tg[i];
+    if (seg) {
+      aNow = seg.nodeIdx;
+      var rem = seg.seqPos - curPos;
+      lv = rem === 2 ? 2 : (rem <= 1 ? 1 : 0);
+      fin = seg.kind !== 'transfer';
+      if (!fin && lv === 2) lv = 0;
+      pre = (fin && rem === 3) ? 1 : 0;
+    }
+  }
+  if (lv > 0 && aNow >= 0) {
+    if (L.a !== aNow) { L.a = aNow; L.lv = lv; L.fin = fin; }
+    else if (L.lv === 0 || lv < L.lv) L.lv = lv;
+  }
+  var latched = L.a >= 0;
+  return { lv: latched ? L.lv : lv, fin: latched ? L.fin !== false : fin, pre: pre, finLv: (latched ? (L.fin !== false && L.lv === 1) : (fin && lv === 1)) ? 1 : 0 };
 }
 
 // 내 위치 공유(예전 웹 _shLoc · _shText): 출발 - 현재 - 도착 (도착예정시간) [남은시간] 글과, 그림용 압축 타임라인 재료. 한국 시각 기준.
