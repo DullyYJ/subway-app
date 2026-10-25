@@ -4541,7 +4541,10 @@ public class ShellActivity extends Activity {
         loadFav();
     }
     private void loadFav() {
-        final String json = fav.request(ShellCore.CAP, ShellCore.theme(store), home.hasRoute() ? home.resA : home.text[HomeCore.START], home.hasRoute() ? home.resB : home.text[HomeCore.DEST]);
+        final String favA = home.hasRoute() ? home.resA : home.text[HomeCore.START], favB = home.hasRoute() ? home.resB : home.text[HomeCore.DEST];
+        final HomeCore.Loc favLa = home.loc[HomeCore.START], favLb = home.loc[HomeCore.DEST];                  // 같은 이름 역이 수도권·지방에 있으면 어느 쪽인지 노선으로 알린다(고르는 건 엔진)
+        final String json = fav.request(ShellCore.CAP, ShellCore.theme(store), favA, favB,
+            favLa != null && "subway".equals(favLa.type) && favLa.name.equals(favA) ? favLa.line : "", favLb != null && "subway".equals(favLb.type) && favLb.name.equals(favB) ? favLb.line : "");
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/fav", json, 8000);

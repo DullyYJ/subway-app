@@ -32,10 +32,12 @@ public final class FavCore {
         return s != null && s.length() > 1 && s.length() < 8000 && s.charAt(0) == '[' && s.charAt(s.length() - 1) == ']' ? s : "[]";
     }
     /** 엔진 POST /screen/fav 본문. curS·curD 는 지금 보는 경로의 출발·도착 이름(없으면 빈 글). */
-    public String request(int cap, String theme, String curS, String curD) {
+    public String request(int cap, String theme, String curS, String curD) { return request(cap, theme, curS, curD, "", ""); }
+    /** curSL·curDL = 그 출발·도착 역의 노선(없으면 빈 글) — 같은 이름의 역이 수도권·지방에 있을 때 엔진이 어느 쪽인지 가른다. */
+    public String request(int cap, String theme, String curS, String curD, String curSL, String curDL) {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"list\":").append(listJson());
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
-        if (curS != null && curD != null && curS.length() > 0 && curD.length() > 0) b.append(",\"cur\":{\"s\":").append(ShellCore.q(curS)).append(",\"d\":").append(ShellCore.q(curD)).append('}');
+        if (curS != null && curD != null && curS.length() > 0 && curD.length() > 0) b.append(",\"cur\":{\"s\":").append(ShellCore.q(curS)).append(",\"d\":").append(ShellCore.q(curD)).append(",\"sl\":").append(ShellCore.q(curSL == null ? "" : curSL)).append(",\"dl\":").append(ShellCore.q(curDL == null ? "" : curDL)).append('}');
         b.append(",\"form\":{\"n\":").append(ShellCore.q(fn)).append(",\"s\":").append(ShellCore.q(fs)).append(",\"d\":").append(ShellCore.q(fd)).append(",\"act\":").append(ShellCore.q(fact)).append('}');
         if ("quick".equals(op)) b.append(",\"op\":{\"k\":\"quick\"}");
         else if ("new".equals(op)) b.append(",\"op\":{\"k\":\"new\"}");
