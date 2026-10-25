@@ -26,6 +26,25 @@ const btn = flat(o.body).filter(n => n.t === 'button').map(n => n.act.v);
 ok(btn.join() === 'fv.new,fv.go.0,fv.del.0,fv.go.1,fv.del.1', '단추: 새로 등록 / 누르면 찾기 / 삭제 ' + btn.join());
 ok(o.info.go[0] && o.info.go[0].s[0] === '부평' && o.info.go[0].d[0] === '강남' && typeof o.info.go[0].s[2] === 'number', '경로 찾기용 역 정보(이름·노선·좌표)는 엔진이 준다');
 ok(call({ list: [{ s: '없는역', d: '강남', name: 'q' }] }).info.go[0] === null, '표에 없는 역은 go null');
+// s208: 같은 이름 역(수도권 ↔ 지방) 구분 — 여러 권역에 있는 지방 역만 이름 뒤에 권역 표시
+{
+  const F = E.favFind, C = E.favCands;
+  ok(F('중동')[0] === '중동' && F('중동')[1] === '1호선' && F('중동(부산)')[0] === '중동(부산)' && F('중동(부산)')[1] === '부산2호선' && F('중동(부산)')[2] < 36, '글: 표시 없으면 수도권 · 표시가 있으면 그 권역');
+  ok(F('중동', '부산2호선')[0] === '중동(부산)' && F('중동', '1호선')[0] === '중동' && F('중동', '엉뚱한선')[0] === '중동', '노선 힌트로 어느 쪽인지 · 힌트가 안 맞으면 수도권');
+  ok(F('서면')[0] === '서면' && F('서면')[1].indexOf('부산') === 0, '권역이 하나뿐인 지방 역은 표시 없이 그대로(예전 저장 이름도 그대로)');
+  ok(F('중동(대구)') === null && F('zzzz(부산)') === null, '없는 권역 · 없는 이름은 null');
+  const cc = C('중동').map(c => c.name + ':' + c.lines.join('/'));
+  ok(cc.indexOf('중동:1호선') >= 0 && cc.indexOf('중동(부산):부산2호선') >= 0, '후보: 권역별로 따로 + 이름 뒤 표시 ' + cc.join(' | '));
+  ok(C('중동(부').some(c => c.name === '중동(부산)') && E.favResolve('중동(부산)') === '중동(부산)' && E.favResolve('중동') === '중동', '쓰다 만 표시 글도 후보를 찾고 정확한 표시는 그대로 그 역');
+  let g = call({ list: [{ s: '중동(부산)', d: '서면', name: '출근' }] }).info.go[0];
+  ok(g && g.s[0] === '중동' && g.s[1] === '부산2호선' && g.s[2] < 36 && g.d[0] === '서면', 'go: 앱에는 표시를 뗀 이름 + 그 권역 역의 노선·좌표');
+  g = call({ list: [{ s: '중동', d: '강남', name: '출근' }] }).info.go[0];
+  ok(g && g.s[1] === '1호선' && g.s[2] > 37, 'go: 예전에 저장한 표시 없는 이름은 수도권(그대로)');
+  const q = call({ list: [], cur: { s: '중동', d: '서면', sl: '부산2호선', dl: '부산2호선' }, op: { k: 'quick' } });
+  ok(q.info.list.length === 1 && q.info.list[0].s === '중동(부산)' && q.info.list[0].d === '서면' && q.info.msg === '중동(부산)→서면 등록 완료', '빠른 등록: 현재 경로의 노선 힌트로 지방 중동을 구분해 저장 ' + JSON.stringify(q.info.list));
+  const q2 = call({ list: [], cur: { s: '중동', d: '강남' }, op: { k: 'quick' } });
+  ok(q2.info.list[0].s === '중동' && q2.info.list[0].d === '강남', '힌트가 없으면 예전처럼(수도권)');
+}
 // 새로 등록 폼
 {
   const C = E.favCands;

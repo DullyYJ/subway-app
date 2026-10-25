@@ -655,6 +655,11 @@ function findAndroidJar() {
     assert.ok(/"\/suggest\?k="/.test(hs), '/suggest 주소');
     assert.ok(/final String kind = "auto";/.test(a), '출퇴근 브리핑 종류는 엔진이 시각으로');
   });
+  await t('s208: 즐겨찾기 — 현재 경로 역의 노선 힌트(sl·dl)를 엔진에 알린다(같은 이름 지방 역 구분은 엔진)', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), f = fs.readFileSync(N('FavCore.java'), 'utf8');
+    assert.ok(/public String request\(int cap, String theme, String curS, String curD, String curSL, String curDL\)/.test(f) && /\.append\(",\\"sl\\":"\)\.append\(ShellCore\.q\(curSL == null \? "" : curSL\)\)/.test(f), '요청에 노선 힌트');
+    assert.ok(/final HomeCore\.Loc favLa = home\.loc\[HomeCore\.START\]/.test(a) && /"subway"\.equals\(favLa\.type\) && favLa\.name\.equals\(favA\) \? favLa\.line : ""/.test(a), '지하철 역으로 정한 곳의 노선만 보낸다(이름이 다르면 빈 글)');
+  });
   await t('s208: 시간표 요일·방면 한 줄(엔진) · 켜진 전체 칩이 보인다 · 권역(reg·sl)을 엔진에 보낸다', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/boolean plainOn = it\.on && it\.plain;/.test(sv) && /int fg = plainOn \? onFill/.test(sv) && /if \(plainOn\) \{ p\.setStyle\(Paint\.Style\.FILL\); p\.setColor\(onFill\)/.test(sv), '바탕 없는 켜진 칩(전체)은 칩 색 글자 + 밑줄 — 흰 글자가 배경에 묻히지 않는다');

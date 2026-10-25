@@ -84,6 +84,11 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   ok(Math.abs(wq.wF[0] - 37.489457) < 1e-5 && Math.abs(wq.wT[1] - 127.027539) < 1e-5, '위치가 없으면 wF=경로 출발역(부평)');
   const wn = E.hcWxPoints(base({ r: null, gps: null }));
   ok(wn.wF === null && wn.wT === null && E.hcWxPoints(null).wF === null, '경로도 위치도 없으면 날씨 지점 없음');
+  // s208: 같은 이름 역(수도권 ↔ 부산 중동)은 경로가 알려 준 그 역의 좌표에 가까운 쪽
+  const jd = (nm, y, x) => ({ trafficType: 1, lane: [{ name: '1호선' }], sectionTime: 10, distance: 6000, startName: '시작', endName: nm, passStopList: { stations: [{ stationName: '시작', y: y, x: x }, { stationName: nm, y: y, x: x }] } });
+  const wBusan = E.hcWxPoints(base({ r: { data: mk([jd('중동', 35.1667, 129.1686)]), tab: 'fast', a: '시작', b: '중동', bt: null, rb: now }, gps: null }));
+  const wSeoul = E.hcWxPoints(base({ r: { data: mk([jd('중동', 37.4866, 126.7644)]), tab: 'fast', a: '시작', b: '중동', bt: null, rb: now }, gps: null }));
+  ok(wBusan.wT && wBusan.wT[0] < 36 && wSeoul.wT && wSeoul.wT[0] > 37, 's208: 도착역 날씨 지점 — 같은 이름이면 경로 좌표에 가까운 역 ' + JSON.stringify([wBusan.wT, wSeoul.wT]));
   const wb = E.hcWxPoints(base({ r: { data: mk([walk(2), bus('6', 20)]), tab: 'fast', a: '집', b: '회사', bt: null, rb: now }, gps: null }));
   ok(wb.wF === null && wb.wT === null, '정류장 이름은 역 표에 없으니 지점 없음(지어내지 않는다)');
   const txt = o => JSON.stringify(o.body);
