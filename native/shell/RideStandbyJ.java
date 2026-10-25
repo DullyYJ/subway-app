@@ -20,7 +20,7 @@ final class RideStandbyJ {
     private RideStandbyJ() { }
 
     // ── 조정값(RIDE_STANDBY_DEFAULTS) ──
-    static final double trailMax = 60, trailMaxAgeSec = 600, notYetKeepSec = 45, gpsGapDeadReckonSec = 180, offGiveUpSec = 900, doneAfterSec = 180, maxStaleSec = 3 * 3600,
+    static final double trailMax = 60, trailMaxAgeSec = 600, notYetKeepSec = 45, gpsGapDeadReckonSec = 180, doneAfterSec = 180, maxStaleSec = 3 * 3600,
         stepMs = 5000, nearStepMs = 2500, nearBeforeSec = 30, nearAfterSec = 40,
         waitNearM = 150, waitAwayM = 400, waitMoveMps = 4.0, waitSpanSec = 15, waitWinSec = 60, waitFreshSec = 25, waitStartLateSec = 90, waitGraceSec = 480;
     static final String ongoingTitle = "길동무 경로 안내 중";
@@ -981,7 +981,6 @@ final class RideStandbyJ {
         if (offActive) text = "경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요";
         boolean done = false, quit = false;
         if (truthy(st.get("arrivedAt")) && now - num(st.get("arrivedAt")) >= doneAfterSec * 1000) { done = true; quit = true; notes.add("목적지 도착 " + ns(doneAfterSec) + "초 뒤 종료"); }
-        if (offActive && truthy(st.get("offOn")) && now - num(st.get("offOn")) >= offGiveUpSec * 1000) { done = true; notes.add("경로를 벗어난 채 " + ns(offGiveUpSec) + "초 — 안내 종료"); }
         double lastAt = truthy(st.get("lastAt")) ? num(st.get("lastAt")) : now;
         if (now - lastAt > maxStaleSec * 1000) done = true;
         st.put("lastAt", now);
@@ -998,7 +997,7 @@ final class RideStandbyJ {
         catch (RuntimeException eRc) { notes.add("추천 판단 실패: " + eRc.getMessage()); }
         Map<String, Object> view = obj("text", text, "line1", overlay != null && truthy(overlay.get("line1")) ? overlay.get("line1") : "", "line2", overlay != null && truthy(overlay.get("line2")) ? overlay.get("line2") : "", "curIdx", curIdx, "at", now);
         Map<String, Object> row = done ? null : rowOut(st, now);
-        return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
+        return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "off", offActive && !done ? obj("at", truthy(st.get("offOn")) ? st.get("offOn") : (Object) Double.valueOf(now)) : null, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
             "pos", rpos != null ? obj("from", rpos.get("from"), "to", rpos.get("to"), "ratio", rpos.get("ratio"), "moving", truthy(rpos.get("moving"))) : null,
             "arr", r.get("arr"), "zero", zero, "nextMs", done ? stepMs : nextMsV, "motion", motion, "ask", askBl == null ? null : obj("kind", "boardlive", "body", askBl), "notes", notes);
     }
