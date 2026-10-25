@@ -3748,7 +3748,7 @@ public class ShellActivity extends Activity {
             if (Boolean.TRUE.equals(f2.get("better"))) {
                 miss = RouteFetchCore.num(f2, "miss"); applied = RouteFetchCore.num(f2, "applied");
                 final String nb = body;
-                main.post(new Runnable() { @Override public void run() { if (my == seqRoute && home.replaceRoute(nb)) { body.springChanges(5000L); reloadHome(); } } });
+                main.post(new Runnable() { @Override public void run() { if (my == seqRoute && home.replaceRoute(nb)) { ShellActivity.this.body.springChanges(5000L); reloadHome(); } } });
             }
         }
     }
