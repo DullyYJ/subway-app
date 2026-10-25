@@ -186,6 +186,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   ok(body.indexOf(esc(src)) >= 0, '워커 내장 사본이 engine/food.js 와 같다');
   ok(body.indexOf(esc(fs.readFileSync(R('engine/food-worker.js'), 'utf8').trimEnd())) >= 0, '워커 연결부도 같다');
   ok(w.indexOf('if (url.pathname === "/screen/food") return handleScreenFood(request);') > 0, '경로 등록');
+  ok(w.indexOf('if (url.pathname === "/food-pub") return handleFoodPub(request, env, ctx);') > 0, 's206: /food-pub 경로 등록');
   ok(!/[^\x00-\x7f]/.test(body), '내장 블록은 ASCII 만');
 }
 
@@ -257,6 +258,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   ok(o.ok && o.body[0].kids[1].pts.length === 1 && o.info.need.length === 0 && o.body[0].kids[1].line === undefined, '펼침: 도착역 좌표가 없으면 가게 핀 하나만');
 }
 
+const FoodRowsOk = j => !!(j && j.response && j.response.body && Array.isArray(j.response.body.items));
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_food_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
@@ -296,6 +298,71 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
       globalThis.fetch = async () => { throw new Error('net'); };
       const k2 = await (await post(JSON.stringify({ op: 'kakaoId', name: '맛있는 국밥집', la: 37.5, lo: 127 }))).json();
       ok(k2.ok && k2.id === null && k2.app === '', '워커: 조회가 실패하면 id 없음(앱이 이름 검색으로 연다)');
+      globalThis.fetch = real;
+    }
+    // s206: 공유 저장소 /food-pub — 칸별로 KV 에 계속 저장, 30일 지나면 요청이 올 때 갱신, 실패하면 묵은 것을 준다
+    {
+      const real = globalThis.fetch;
+      const kvm = new Map(), puts = [];
+      const KV = { get: async (k, t) => { const v = kvm.get(k); return v == null ? null : (t === 'json' || (t && t.type === 'json')) ? JSON.parse(v) : v; }, put: async (k, v, o) => { kvm.set(k, v); puts.push([k, o]); } };
+      const env = { ROWS_KV: KV, TAGO_KEY: 'k1' };
+      const mk = (n, tag) => { const a = []; for (let i = 0; i < n; i++) a.push({ bizesNm: tag + i, indsMclsNm: '음식', indsSclsNm: '한식', rdnmAdr: '서울 어딘가 ' + i, lnoAdr: '지번 ' + i, lat: 37.5, lon: 127.0, extra: 'x'.repeat(50), bizesId: 'ID' + i }); return a; };
+      let calls = [], mode = 'ok', tag = 'A';
+      const pageData = { 1: () => mk(200, tag), 2: () => mk(50, tag + 'p2'), 3: () => [] };
+      globalThis.fetch = async u => {
+        u = String(u);
+        if (!/storeListInRadius/.test(u)) return { ok: true, status: 200, text: async () => '{}', json: async () => ({}) };
+        calls.push(u);
+        if (mode === 'down') throw new Error('net');
+        if (mode === 'authfail' && !/gentle-lab/.test(u)) return { ok: true, status: 200, text: async () => JSON.stringify({ OpenAPI_ServiceResponse: { cmmMsgHeader: { errMsg: 'SERVICE ERROR', returnAuthMsg: 'SERVICE_KEY_IS_NOT_REGISTERED_ERROR' } } }) };
+        const pg = Number(/pageNo=(\d+)/.exec(decodeURIComponent(u))[1]);
+        return { ok: true, status: 200, text: async () => JSON.stringify({ response: { header: { resultCode: '00' }, body: { items: pageData[pg](), totalCount: 250 } } }) };
+      };
+      const g = (q, init) => w.fetch(new Request('https://x/food-pub' + q, init), env, { waitUntil() { } });
+      let r1 = await g('?lat=37.5001&lng=127.0003'), j1 = await r1.json();
+      ok(r1.status === 200 && j1.ok && j1.src === 'fresh' && j1.response.body.items.length === 250, 's206: 처음 누르면 공공데이터에서 3쪽을 받아 250곳을 준다 ' + j1.src);
+      ok(calls.length === 3 && calls.every(u => /radius=1500/.test(u) && /indsLclsCd=I2/.test(u) && /numOfRows=200/.test(u)), 's206: 공공 서버 호출은 3번(1쪽이 200이면 2·3쪽도)');
+      ok(Object.keys(j1.response.body.items[0]).sort().join() === 'bizesNm,indsMclsNm,indsSclsNm,lat,lnoAdr,lon,rdnmAdr', 's206: 저장 항목은 필요한 7개 칸만');
+      ok(puts.length === 1 && /^fpub:v1:\d+:\d+$/.test(puts[0][0]) && puts[0][1].expirationTtl === 400 * 86400, 's206: 칸 번호로 KV 에 저장(400일 뒤 정리)');
+      ok(Math.abs(j1.cell[0] - 37.5) < 1e-9 && Math.abs(j1.cell[1] - 127) < 1e-9, 's206: 칸 중심으로 맞춰 받는다 ' + j1.cell);
+      ok(FoodRowsOk(j1), 's206: 응답이 공공데이터 원래 모양({response:{body:{items}}})');
+      calls = [];
+      let r2 = await g('?lat=37.5009&lng=127.0008'), j2 = await r2.json();
+      ok(j2.src === 'hit' && calls.length === 0 && j2.response.body.items.length === 250 && puts.length === 1, 's206: 같은 칸의 다른 사람은 저장본을 받는다(공공 서버 호출 0번)');
+      ok(/max-age=600/.test(r2.headers.get('cache-control')) && r2.headers.get('access-control-allow-origin') === '*', 's206: 짧게 캐시 · CORS');
+      calls = [];
+      let r3 = await g('?lat=37.5101&lng=127.0003'), j3 = await r3.json();
+      ok(j3.src === 'fresh' && calls.length === 3 && puts.length === 2, 's206: 이웃 칸은 따로 받아 저장한다');
+      // 30일 경과: 요청이 오면 갱신
+      const key = puts[0][0], rec = JSON.parse(kvm.get(key)); rec.at -= 29 * 86400000; kvm.set(key, JSON.stringify(rec));
+      calls = []; tag = 'B';
+      let r4 = await (await g('?lat=37.5001&lng=127.0003')).json();
+      ok(r4.src === 'hit' && calls.length === 0, 's206: 29일 된 칸은 그대로 쓴다');
+      rec.at -= 2 * 86400000; kvm.set(key, JSON.stringify(rec));
+      let r5 = await (await g('?lat=37.5001&lng=127.0003')).json();
+      ok(r5.src === 'fresh' && calls.length === 3 && r5.response.body.items[0].bizesNm === 'B0' && JSON.parse(kvm.get(key)).at > rec.at, 's206: 31일 된 칸은 요청이 올 때 다시 받아 덮어쓴다');
+      // 갱신 실패 → 묵은 것
+      const rec2 = JSON.parse(kvm.get(key)); rec2.at -= 40 * 86400000; kvm.set(key, JSON.stringify(rec2)); mode = 'down'; calls = [];
+      let r6 = await g('?lat=37.5001&lng=127.0003'), j6 = await r6.json();
+      ok(r6.status === 200 && j6.src === 'stale' && j6.response.body.items[0].bizesNm === 'B0' && JSON.parse(kvm.get(key)).at === rec2.at, 's206: 갱신이 실패하면 묵은 것을 주고 저장본은 그대로 둔다');
+      // 처음인데 실패 → 502
+      let r7 = await g('?lat=35.1001&lng=129.0003');
+      ok(r7.status === 502 && (await r7.json()).error === 'upstream' && !kvm.has('fpub:v1:' + Math.round(35.1001 / 0.002) + ':' + Math.round(129.0003 / 0.002)), 's206: 저장본도 없고 받기도 실패하면 502(앱이 예전 방식으로 받는다) · 빈 저장 안 함');
+      // 키가 이 서비스를 허락하지 않으면 gentle-lab 길로
+      mode = 'authfail'; calls = []; tag = 'C';
+      let r8 = await (await g('?lat=36.1001&lng=128.0003')).json();
+      ok(r8.src === 'fresh' && r8.response.body.items.length === 250 && calls.some(u => /gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/tago\?url=/.test(u)), 's206: 직접 길이 막히면 기존 /tago 길로 받는다');
+      // 동시에 같은 칸 두 번 → 공공 호출은 한 벌
+      mode = 'ok'; calls = []; tag = 'D';
+      const two = await Promise.all([g('?lat=36.7001&lng=128.7003'), g('?lat=36.7002&lng=128.7004')]);
+      const [ja, jb2] = await Promise.all(two.map(x => x.json()));
+      ok(ja.response.body.items.length === 250 && jb2.response.body.items.length === 250 && calls.length === 3, 's206: 같은 칸을 동시에 눌러도 공공 서버는 한 벌만 부른다 ' + calls.length);
+      // 잘못된 입력
+      ok((await g('?lat=abc&lng=127')).status === 400 && (await g('?lat=10&lng=127')).status === 400 && (await g('')).status === 400, 's206: 좌표가 없거나 한국 밖이면 400');
+      ok((await g('?lat=37.5&lng=127', { method: 'POST', body: 'x' })).status === 405, 's206: GET 만');
+      ok((await g('?lat=37.5&lng=127', { method: 'OPTIONS' })).status === 204, 's206: OPTIONS 204');
+      const nokv = await w.fetch(new Request('https://x/food-pub?lat=37.5&lng=127'), {}, { waitUntil() { } });
+      ok(nokv.status === 503, 's206: 저장소 연결이 없으면 503(앱이 예전 방식)');
       globalThis.fetch = real;
     }
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }

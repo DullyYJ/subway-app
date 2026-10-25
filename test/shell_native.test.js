@@ -298,7 +298,7 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/stnCache\.get\(json\)/.test(v) && /private void stnCachePut/.test(v) && /main\.postDelayed\(startSlide, 450L\)/.test(v), '역 시트: 본 역은 먼저 채우고, 처음 보는 역은 내용이 올 때까지 잠깐 기다렸다 올린다');
     assert.ok(/tt && top0 && dy > 0f/.test(v) && /curH - from >= 28f \* dpr/.test(v) && /ty >= \(tt \? 56f : 40f\) \* dpr/.test(v), '시간표 맨 위에서 아래로 끌면 닫힘 · 위로 끌면 시간표(손가락을 따라가다 놓으면 마무리)');
-    assert.ok(/private void foodStage\(/.test(v) && /if \(food\.ctr != null && food\.needData\(\)\) fetchFoodData\(my, v\);/.test(v) && /FoodCore\.parseData\(res\[0\]\.body, new ArrayList<String>\(\)\)/.test(v), '맛집: 중심을 알면 엔진 왕복과 동시에 · 서버 가게 먼저 그린 뒤 공공데이터까지');
+    assert.ok(/private void foodStage\(/.test(v) && /if \(food\.ctr != null && food\.needData\(\)\) fetchFoodData\(my, v\);/.test(v) && /FoodCore\.parseData\(sbody, new ArrayList<String>\(\)\)/.test(v), '맛집: 중심을 알면 엔진 왕복과 동시에 · 서버 가게 먼저 그린 뒤 공공데이터까지');
     assert.ok(/PathInterpolator\(0\.32f, 0\.72f, 0f, 1f\)/.test(v) && /ValueAnimator\.ofInt\(a, b\)/.test(v), '아이폰 곡선 · 시간표 시트가 자란다');
   });
   await t('순수 네이티브 프로젝트: 소스는 native/shell 뿐 · 매니페스트에 ShellActivity 가 런처 · 웹뷰/Capacitor 흔적 없음', async () => {
@@ -637,6 +637,14 @@ function findAndroidJar() {
     assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
     assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
     assert.ok(/deb\.trailing\("chatsel", 220L/.test(a) && /if \(!shown\) showSkeleton\(body, ShellCore\.S_CHAT\)/.test(a) && /private void chatWarmSoon\(\)/.test(a) && /new int\[\] \{ 1, -1, 2, -2 \}/.test(a) && /CHAT_NEAR_FRESH_MS = 45000L/.test(a) && /private boolean pfChatRoom\(/.test(a), '호선 방 밀기: 뼈대 먼저 · 연달아 밀면 마지막만 받기 · 앞뒤 2칸 미리');
+  });
+  await t('s206: 맛집 공공데이터 — 공유 저장소(/food-pub) 먼저, 실패하면 예전 3쪽 직접', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), f = fs.readFileSync(N('FoodCore.java'), 'utf8');
+    assert.ok(/public String sharedUrl\(\) \{ return ShellCore\.BASE \+ "\/food-pub\?lat="/.test(f), '공유 저장소 주소');
+    assert.ok(/private List<String> foodPubPages\(String shared, String\[\] pu\)/.test(a) && /NetPost\.get\(shared, 9000\)/.test(a) && /FoodCore\.pageCount\(sr\.body\) >= 0\) \{ out\.add\(sr\.body\); return out; \}/.test(a), '공유 저장소에서 한 번 받고 읽히면 그것으로 끝');
+    assert.ok(/res\[ii\] = NetPost\.get\(pu\[ii\], 10000\)/.test(a), '못 받으면 예전처럼 공공 서버 3쪽을 동시에');
+    assert.ok(/foodDataNow\(su, pfFood\.sharedUrl\(\), pu\)/.test(a) && /foodPubPages\(shared, pu\)/.test(a) && /final String shared = food\.sharedUrl\(\);/.test(a), '미리받기 · 맛집 탭 모두 공유 저장소를 먼저 쓴다');
+    assert.ok(/if \(tp\.isAlive\(\) && sbody\.length\(\) > 0\) foodStage/.test(a), '서버 가게 먼저 그리는 1단계는 그대로');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
