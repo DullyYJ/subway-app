@@ -130,6 +130,8 @@ public final class FoodCore {
 
     // ── 주소 ──
     public String serverUrl() { return FOOD_BASE + "/food?lat=" + ctr[0] + "&lng=" + ctr[1] + "&r=" + RADIUS + "&limit=" + LIMIT; }
+    /** 공유 저장소(엔진 /food-pub): 같은 칸(약 200m)을 먼저 누른 사람이 받아 둔 공공데이터를 한 번에 받는다. 30일 넘은 칸은 엔진이 다시 받아 덮어쓴다. */
+    public String sharedUrl() { return ShellCore.BASE + "/food-pub?lat=" + ctr[0] + "&lng=" + ctr[1]; }
     public String publicUrl(int page) {
         String inner = PUB_URL + "?serviceKey=" + "&radius=" + RADIUS + "&cx=" + ctr[1] + "&cy=" + ctr[0] + "&indsLclsCd=I2&type=json&numOfRows=" + PUB_PAGE_SIZE + "&pageNo=" + page;
         return ShellCore.NEWS_BASE + "/tago?url=" + ShellCore.enc(inner);

@@ -915,7 +915,7 @@ public class ShellActivity extends Activity {
                 String su = pfFood.serverUrl();
                 String[] pu = new String[FoodCore.PUB_PAGES];
                 for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
-                pfFood.setData(foodDataNow(su, pu));
+                pfFood.setData(foodDataNow(su, pfFood.sharedUrl(), pu));
                 NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
                 if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(key, r2.body, false); }
             } else prefetchPut(key, r.body, false);
@@ -1687,25 +1687,35 @@ public class ShellActivity extends Activity {
     }
     private int foodFetching = -1, foodStageSeq; private String foodSu = "";
     /** 서버 맛집 + 공공데이터(최대 3쪽)를 받아 FoodCore 에 넣고 엔진에 다시 묻는다. */
-    /** (스레드 안) 맛집 원자료 — 서버 가게와 공공데이터 쪽을 받아 읽는다. */
-    private FoodCore.Data foodDataNow(final String su, final String[] pu) {
-        // 서버 가게와 공공데이터 쪽을 동시에 받는다(차례로 받으면 느린 공공 서버 3쪽이 30초까지 늘어진다) — 늦게 온 쪽 때문에 먼저 온 쪽이 기다리지 않는다.
-        final NetPost.Res[] res = new NetPost.Res[1 + pu.length];
+    /** (스레드 안) 공공데이터 쪽: 먼저 공유 저장소(한 번)에서 받고, 못 받으면 예전처럼 공공 서버에서 3쪽을 동시에 받는다. */
+    private List<String> foodPubPages(String shared, String[] pu) {
+        List<String> out = new ArrayList<String>();
+        NetPost.Res sr = NetPost.get(shared, 9000);
+        if (sr != null && sr.status == 200 && sr.body != null && FoodCore.pageCount(sr.body) >= 0) { out.add(sr.body); return out; }
+        final NetPost.Res[] res = new NetPost.Res[pu.length];
         Thread[] th = new Thread[res.length];
         for (int i = 0; i < res.length; i++) {
             final int ii = i;
-            th[i] = new Thread(new Runnable() { @Override public void run() { res[ii] = ii == 0 ? NetPost.get(su, 8000) : NetPost.get(pu[ii - 1], 10000); } }, "shell-foodpart");
+            th[i] = new Thread(new Runnable() { @Override public void run() { res[ii] = NetPost.get(pu[ii], 10000); } }, "shell-foodpub");
             th[i].start();
         }
-        for (Thread t : th) { try { t.join(13000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; } }
-        List<String> pubs = new ArrayList<String>();
-        for (int i = 1; i < res.length; i++) {
+        for (Thread t : th) { try { t.join(11000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; } }
+        for (int i = 0; i < res.length; i++) {
             NetPost.Res pr = res[i];
             String t = pr != null && pr.status == 200 ? pr.body : "";
-            pubs.add(t);
+            out.add(t);
             if (FoodCore.pageCount(t) < FoodCore.PUB_PAGE_SIZE) break;
         }
-        return FoodCore.parseData(res[0] != null && res[0].status == 200 ? res[0].body : "", pubs);
+        return out;
+    }
+    /** (스레드 안) 맛집 원자료 — 서버 가게와 공공데이터 쪽을 동시에 받아 읽는다. */
+    private FoodCore.Data foodDataNow(final String su, final String shared, final String[] pu) {
+        final NetPost.Res[] sres = new NetPost.Res[1];
+        Thread ts = new Thread(new Runnable() { @Override public void run() { sres[0] = NetPost.get(su, 8000); } }, "shell-foodpart");
+        ts.start();
+        List<String> pubs = foodPubPages(shared, pu);
+        try { ts.join(9000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        return FoodCore.parseData(sres[0] != null && sres[0].status == 200 && sres[0].body != null ? sres[0].body : "", pubs);
     }
     /** 맛집 원자료: 서버 가게가 먼저 오면 그것으로 곧바로 한 번 그리고(대개 1초 안), 느린 공공데이터 쪽이 오면 그것까지 합쳐 다시 그린다 — 가장 느린 통신을 기다리지 않는다. */
     private void fetchFoodData(final int my, final ScreenView v) {
@@ -1715,29 +1725,21 @@ public class ShellActivity extends Activity {
         foodSu = su;
         final String[] pu = new String[FoodCore.PUB_PAGES];
         for (int i = 0; i < pu.length; i++) pu[i] = food.publicUrl(i + 1);
+        final String shared = food.sharedUrl();
         new Thread(new Runnable() {
             @Override public void run() {
-                final NetPost.Res[] res = new NetPost.Res[1 + pu.length];
-                Thread[] th = new Thread[res.length];
-                for (int i = 0; i < res.length; i++) {
-                    final int ii = i;
-                    th[i] = new Thread(new Runnable() { @Override public void run() { res[ii] = ii == 0 ? NetPost.get(su, 8000) : NetPost.get(pu[ii - 1], 10000); } }, "shell-foodpart");
-                    th[i].start();
-                }
+                final NetPost.Res[] sres = new NetPost.Res[1];
+                final List<String> pubOut = java.util.Collections.synchronizedList(new ArrayList<String>());
+                Thread ts = new Thread(new Runnable() { @Override public void run() { sres[0] = NetPost.get(su, 8000); } }, "shell-foodpart");
+                Thread tp = new Thread(new Runnable() { @Override public void run() { pubOut.addAll(foodPubPages(shared, pu)); } }, "shell-foodpub");
+                ts.start(); tp.start();
                 long t0 = System.currentTimeMillis();
-                try { th[0].join(9000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
-                boolean allDone = true;
-                for (int i = 1; i < th.length; i++) if (th[i].isAlive()) allDone = false;
-                if (!allDone && res[0] != null && res[0].status == 200 && res[0].body != null) foodStage(my, v, su, FoodCore.parseData(res[0].body, new ArrayList<String>()));      // 1단계: 서버 가게만으로 먼저
-                for (int i = 1; i < th.length; i++) { try { th[i].join(Math.max(1L, 13000L - (System.currentTimeMillis() - t0))); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; } }
-                List<String> pubs = new ArrayList<String>();
-                for (int i = 1; i < res.length; i++) {
-                    NetPost.Res pr = res[i];
-                    String t = pr != null && pr.status == 200 ? pr.body : "";
-                    pubs.add(t);
-                    if (FoodCore.pageCount(t) < FoodCore.PUB_PAGE_SIZE) break;
-                }
-                foodStage(my, v, su, FoodCore.parseData(res[0] != null && res[0].status == 200 && res[0].body != null ? res[0].body : "", pubs));      // 2단계: 공공데이터까지 합쳐
+                try { ts.join(9000L); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                String sbody = sres[0] != null && sres[0].status == 200 && sres[0].body != null ? sres[0].body : "";
+                if (tp.isAlive() && sbody.length() > 0) foodStage(my, v, su, FoodCore.parseData(sbody, new ArrayList<String>()));      // 1단계: 서버 가게만으로 먼저
+                try { tp.join(Math.max(1L, 24000L - (System.currentTimeMillis() - t0))); } catch (InterruptedException e) { Thread.currentThread().interrupt(); return; }
+                List<String> pubs; synchronized (pubOut) { pubs = new ArrayList<String>(pubOut); }
+                foodStage(my, v, su, FoodCore.parseData(sbody, pubs));      // 2단계: 공공데이터까지 합쳐
             }
         }, "shell-fooddata").start();
     }
