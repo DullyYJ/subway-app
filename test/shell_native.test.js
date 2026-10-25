@@ -630,6 +630,14 @@ function findAndroidJar() {
     assert.ok(/public boolean busFailShow;/.test(mc) && /"mp\.rt"\.equals\(v\)/.test(mc) && /busFailShow \? ",\\"fl\\":1" : ""/.test(mc), '요청에 fl · mp.rt 는 도착정보·경유노선만 비운다');
     assert.ok(/map\.busFailShow = busRetryN >= 3;/.test(a) && /case MapCore\.R_BUS_REF: busRetryN = 0;/.test(a), '자동 재시도 세 번 뒤에만 실패로 그린다 · 다시 시도는 횟수를 처음부터');
   });
+  await t('s205: 미리받기 — 맛집(도착지·위치 확정 · 장소별 열쇠 · 호출 한도) · 호선 방 밀기(앞뒤 방 미리 · 뼈대 · 디바운스 · 캐시 120)', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/size\(\) > 120; if \(over\) scrKeys\.remove/.test(a) && /return size\(\) > 48; \}/.test(a), '화면 캐시 120 · 읽어 둔 화면 48(미리 받은 화면이 밀려나지 않게)');
+    assert.ok(/if \(ShellCore\.S_FOOD\.equals\(screen\)\) foodSyncSig\(\);/.test(a) && /private void foodSyncSig\(\)/.test(a) && /ShellCore\.K_FOODSIG/.test(a), '맛집을 열 때 장소 표시를 맞춘다');
+    assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
+    assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
+    assert.ok(/deb\.trailing\("chatsel", 220L/.test(a) && /if \(!shown\) showSkeleton\(body, ShellCore\.S_CHAT\)/.test(a) && /private void chatWarmSoon\(\)/.test(a) && /new int\[\] \{ 1, -1, 2, -2 \}/.test(a) && /CHAT_NEAR_FRESH_MS = 45000L/.test(a) && /private boolean pfChatRoom\(/.test(a), '호선 방 밀기: 뼈대 먼저 · 연달아 밀면 마지막만 받기 · 앞뒤 2칸 미리');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
