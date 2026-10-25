@@ -426,7 +426,7 @@ public class ShellJvmTest {
         HomeCore h = new HomeCore();
         HomeCore.Env env = new HomeCore.Env(); env.nowMs = 0; env.tzoMin = -540; env.y = 2026; env.m = 9; env.d = 20;
         String hrq = h.request(env, 18);
-        ok(hrq.equals("{\"cap\":18,\"f\":{\"start\":\"\",\"dest\":\"\",\"active\":\"\",\"startSet\":false,\"destSet\":false,\"gps\":false,\"rs\":false,\"base\":{\"ms\":null,\"tzo\":-540,\"today\":[2026,9,20],\"hol\":false}},\"d\":{}}"), "홈 요청 본문(빈 상태): " + hrq);
+        ok(hrq.equals("{\"cap\":18,\"f\":{\"start\":\"\",\"dest\":\"\",\"active\":\"\",\"startSet\":false,\"destSet\":false,\"gps\":false,\"rs\":false,\"base\":{\"ms\":null,\"tzo\":-540,\"today\":[2026,9,20],\"now\":0}},\"d\":{}}"), "홈 요청 본문(빈 상태): " + hrq);
         ok(h.onText("start", "강남", "focus") && h.active == HomeCore.START, "입력칸 눌림 → 활성");
         ok(h.onText("start", "강남역", "edit") && "강남역".equals(h.text[0]), "글 고침");
         ok("강남역".equals(h.wantQuery()) && h.wantQuery().isEmpty(), "후보 찾을 글은 한 번만");
@@ -813,7 +813,7 @@ public class ShellJvmTest {
         {
             ShellCore.MemStore bsv = new ShellCore.MemStore(); MapCore bm = new MapCore(bsv);
             bm.setBusLoc(37.5, 127.0);
-            bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"가\",\"id\":\"SEOUL:1\",\"src\":\"topis\",\"la\":37.5,\"lo\":127.0,\"ars\":\"1\"},{\"nm\":\"나\",\"id\":\"SEOUL:2\",\"src\":\"topis\",\"la\":37.6,\"lo\":127.1,\"ars\":\"2\"}],\"bus\":{\"st\":\"ok\"}}}");
+            bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"가\",\"id\":\"SEOUL:1\",\"src\":\"topis\",\"la\":37.5,\"lo\":127.0,\"ars\":\"1\"},{\"nm\":\"나\",\"id\":\"SEOUL:2\",\"src\":\"topis\",\"la\":37.6,\"lo\":127.1,\"ars\":\"2\"}],\"favp\":{\"max\":12,\"al\":10,\"add\":\"즐겨찾기 추가\",\"rm\":\"즐겨찾기 해제\",\"full\":\"즐겨찾기는 최대 12개\"},\"bus\":{\"st\":\"ok\"}}}");
             ok(bm.stopJson.size() == 2 && bm.busView().equals("near"), "info.stops 를 읽어 둔다 · 처음은 주변");
             ok(bm.act("mp.pc.1", null) == MapCore.R_BUS_SEL && bm.busSel == 1 && bm.bodyRequest(18, "dark").contains("\"sel\":1") && bm.act("mp.pm.9", null) == MapCore.R_NONE && bm.busSel == 1, "카드·핀 누름 = 선택(범위 밖은 무시)");
             {   // s203: 카드 '다시 시도 ›'(mp.rt) — 도착정보·경유노선은 비우고 정류장 목록은 둔다 · 실패 신호(fl)는 요청에만
@@ -829,6 +829,14 @@ public class ShellJvmTest {
             for (int i = 0; i < 12; i++) { bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"s" + i + "\",\"id\":\"SEOUL:" + (10 + i) + "\",\"src\":\"topis\"}"); bm.act("mp.fv.0", null); }
             bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"x\",\"id\":\"SEOUL:99\",\"src\":\"topis\"}");
             ok(bm.act("mp.fv.0", null) == MapCore.R_NONE && "즐겨찾기는 최대 12개".equals(bm.toast) && !bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:99"), "즐겨찾기는 12곳까지");
+            {   // s207: 한도 · 안내 글 · 별명 글자 수는 엔진이 알려 준 값을 따른다(앱에 박아 두지 않는다)
+                bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"z\",\"id\":\"SEOUL:77\",\"src\":\"topis\"}],\"favp\":{\"max\":13,\"al\":4,\"add\":\"담음\",\"rm\":\"뺌\",\"full\":\"가득\"},\"bus\":{\"st\":\"ok\"}}}");
+                ok(bm.act("mp.fv.0", null) == MapCore.R_BUS_SEL && "담음".equals(bm.toast) && bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:77"), "엔진이 한도를 13으로 알리면 13번째가 들어가고 글도 엔진 글");
+                bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"y\",\"id\":\"SEOUL:78\",\"src\":\"topis\"}");
+                ok(bm.act("mp.fv.0", null) == MapCore.R_NONE && "가득".equals(bm.toast), "14번째는 엔진 글로 거절");
+                bm.setAlias("k1", "일이삼사오육"); ok(bsv.get(MapCore.K_BUSAL, "").contains("일이삼사\"") && !bsv.get(MapCore.K_BUSAL, "").contains("오"), "별명은 엔진이 알린 4글자까지");
+                bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[],\"favp\":{\"max\":12,\"al\":10,\"add\":\"즐겨찾기 추가\",\"rm\":\"즐겨찾기 해제\",\"full\":\"즐겨찾기는 최대 12개\"},\"bus\":{\"st\":\"ok\"}}}"); bsv.put(MapCore.K_BUSAL, "{}");
+            }
             {   // s179: 버스 '주변' 화면 캐시는 위치 칸마다 따로 — 다른 동네의 정류장이 먼저 뜨지 않는다
                 ShellCore.MemStore kcs = new ShellCore.MemStore();
                 MapCore kcm = new MapCore(kcs); kcm.primary = true; kcm.setBusLoc(37.5827, 126.7078);
@@ -1015,7 +1023,7 @@ public class ShellJvmTest {
             ok(back != null && back.hasState() && back.text.equals(rc.text) && RideCore.restore(sv, 10000L + RideCore.MAX_AGE_MS + 1) == null && RideCore.restore("", 1L) == null && RideCore.restore("{\"at\":1}", 5L) == null, "저장 · 복원(30분 지나면 버린다)");
             ok(RideCore.vibPattern(null).length == 2 && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[1] == 1000L && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[2] == 0L, "진동 무늬 안전 범위");
             HcardsCore hcc = new HcardsCore();
-            HomeCore.Env en = new HomeCore.Env(); en.nowMs = 1000000L; en.tzoMin = -540; en.hol = false;
+            HomeCore.Env en = new HomeCore.Env(); en.nowMs = 1000000L; en.tzoMin = -540;
             ok(hcc.ensureNext(1000L) && hcc.aiNextAt == 1000L + HcardsCore.AI_EVERY_MS && !hcc.ensureNext(2000L), "AI 갱신 시각: 없을 때만 새로 정한다");
             String rq3 = hcc.request(18, "dark", en, "null", "[]");
             ok(rq3.contains("\"gps\":null") && rq3.contains("\"r\":null") && rq3.contains("\"tz\":540") && rq3.contains("\"nextAt\":" + hcc.aiNextAt) && rq3.contains("\"tk\":{\"m\":[],\"fold\":0,\"tzo\":-540}"), "홈 카드 요청: 사실만 싣는다");
@@ -1027,8 +1035,9 @@ public class ShellJvmTest {
             String ks0 = hcc.key(1, "fast", 60000L, 0, ""); hcc.share = true;
             ok(hcc.request(18, "dark", en, "null", "[]").contains(",\"sh\":1") && !ks0.equals(hcc.key(1, "fast", 60000L, 0, "")), "공유 재료가 있으면 요청에 sh=1 이 실리고 열쇠가 바뀐다");
             hcc.share = false;
-            ShareCore.Share shr = ShareCore.parse("{\"text\":\"임학 - 계양 - 아라 (도착예정시간: 07시10분)\\n[남은시간: 00시14분]\",\"from\":\"임학\",\"cur\":\"계양\",\"to\":\"아라\",\"arr\":\"07:10\",\"rem\":\"14분\",\"stations\":[{\"n\":\"임학\",\"t\":\"06:50\"},{\"n\":\"박촌\",\"t\":\"06:53\"},{\"n\":\"계양\",\"t\":\"06:56\"},{\"n\":\"경인교대\",\"t\":\"06:59\"},{\"n\":\"작전\",\"t\":\"07:02\"},{\"n\":\"갈산\",\"t\":\"07:05\"},{\"n\":\"아라\",\"t\":\"07:10\"}],\"hit\":2,\"moving\":true,\"left\":4,\"next\":\"경인교대\"}");
+            ShareCore.Share shr = ShareCore.parse("{\"text\":\"임학 - 계양 - 아라 (도착예정시간: 07시10분)\\n[남은시간: 00시14분]\",\"from\":\"임학\",\"cur\":\"계양\",\"to\":\"아라\",\"arr\":\"07:10\",\"rem\":\"14분\",\"foot\":\"다음 역 경인교대 이동 중 · 4개 역 남음\",\"lb\":{\"t\":\"글머리\",\"a\":\"도착: \",\"r\":\"남음 \"},\"stations\":[{\"n\":\"임학\",\"t\":\"06:50\"},{\"n\":\"박촌\",\"t\":\"06:53\"},{\"n\":\"계양\",\"t\":\"06:56\"},{\"n\":\"경인교대\",\"t\":\"06:59\"},{\"n\":\"작전\",\"t\":\"07:02\"},{\"n\":\"갈산\",\"t\":\"07:05\"},{\"n\":\"아라\",\"t\":\"07:10\"}],\"hit\":2,\"moving\":true,\"left\":4,\"next\":\"경인교대\"}");
             ok(shr != null && shr.names.size() == 7 && shr.hit == 2 && shr.left == 4 && shr.text.startsWith("임학 - 계양") && "다음 역 경인교대 이동 중 · 4개 역 남음".equals(ShareCore.footer(shr)), "위치 공유 재료를 읽는다");
+            ok("글머리".equals(shr.lbT) && "도착: ".equals(shr.lbA) && "남음 ".equals(shr.lbR) && ShareCore.parse("{\"text\":\"a\",\"stations\":[{\"n\":\"가\"}]}").foot.length() == 0, "s207: 그림 아래 한 줄·글머리는 엔진 글을 그대로(없으면 비어 있다 — 앱이 글을 짓지 않는다)");
             ok(java.util.Arrays.equals(ShareCore.slots(7, 2), new int[] { 0, 1, 2, 3, -2, 6 }) && java.util.Arrays.equals(ShareCore.slots(3, 1), new int[] { 0, 1, 2 }) && ShareCore.slots(0, 0).length == 0, "그림 칸: 출발·앞뒤·도착만 남기고 사이는 건너뛴 역 수");
             OvCore.Ov ovv = OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"계양 ▸ 경인교대\",\"pill\":\"경인교대 (이동중)\",\"cur\":2,\"base\":0,\"alert\":2,\"alertAt\":5,\"moving\":true,\"pre\":true,\"banner\":\"아라까지 2정거장\",\"line2\":\"남은시간: 00시간 14분\",\"theme\":{\"bg\":\"#ffffff\",\"fg\":\"#1a2533\",\"sub\":\"#6b8299\"},\"rs\":{\"st\":\"board\",\"end\":true,\"bt\":\"안내 종료\",\"k\":\"도착\"},\"cells\":[{\"n\":\"임학\",\"t\":\"06:50\",\"dk\":2,\"rc\":\"#0052a4\",\"dc\":\"#0052a4\",\"g\":\"1호선\"},{\"n\":\"박촌\",\"t\":\"06:53\",\"lc\":\"#0052a4\",\"rc\":\"#0052a4\"},{\"n\":\"계양\",\"t\":\"06:56\",\"lc\":\"#0052a4\",\"gp\":true,\"g\":\"↔ 공항\",\"gc\":\"#0090d2\"}]}"));
             ok(ovv.active && ovv.alert == 2 && ovv.cur == 2 && ovv.cells.length == 3 && ovv.moving && ovv.pre && ovv.hasTheme && ovv.bg == 0xFFFFFFFF && ovv.fg == 0xFF1A2533 && OvCore.arrived(ovv), "오버레이 값을 읽는다(칸 · 색 · 경고 · 도착 줄)");
