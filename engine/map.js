@@ -54,11 +54,23 @@ function mapHav(la1, lo1, la2, lo2) {
 }
 
 // ── 역 → 노선 (웹 MSM · _metroLines) ──
-function mapLinesOf(name) {
+// s208 (YJ: 수도권과 지방에 같은 역 이름이 있어도 구분 — 지도는 수도권 전용): 노선 이름 앞글자로 어느 권역인지 가리고, 역 이름만으로 노선을 모을 때 같은 권역 노선만 모은다.
+//   예) '중동'은 수도권에서는 1호선만, 부산에서는 부산 2호선만. 그 권역에 그 이름이 아예 없으면 예전처럼 전체(빈 팝업이 되지 않게).
+function mapRegionOfLine(line) {
+  var l = String(line || '');
+  for (var k in MAP_REGION_PREFIX) if (MAP_REGION_PREFIX.hasOwnProperty(k) && l.indexOf(MAP_REGION_PREFIX[k]) === 0) return k;
+  return 'seoul';
+}
+function mapRegOf(f) {                              // 역 팝업·시간표가 속한 권역: 고른 노선이 있으면 그 노선의 권역, 아니면 지금 보는 권역(없으면 수도권)
+  if (f && f.sl) return mapRegionOfLine(f.sl);
+  return (f && MAP_REGIONS.some(function (r) { return r[0] === f.reg; })) ? f.reg : 'seoul';
+}
+function mapLinesOf(name, reg) {
   var T = mapStnTable(), out = [], i;
-  var add = function (nm) { for (i = 0; i < T.length; i++) if (T[i][0] === nm && out.indexOf(T[i][1]) < 0) out.push(T[i][1]); };
-  add(name);
-  if (MAP_ALIAS[name]) add(MAP_ALIAS[name]);
+  var add = function (nm, rg) { for (i = 0; i < T.length; i++) if (T[i][0] === nm && (!rg || mapRegionOfLine(T[i][1]) === rg) && out.indexOf(T[i][1]) < 0) out.push(T[i][1]); };
+  add(name, reg);
+  if (MAP_ALIAS[name]) add(MAP_ALIAS[name], reg);
+  if (reg && !out.length) { add(name, ''); if (MAP_ALIAS[name]) add(MAP_ALIAS[name], ''); }
   return out;
 }
 function mapCleanName(s) { return mapStr(s, 40).replace(/\s+/g, '').trim(); }
@@ -68,27 +80,30 @@ function mapIsStationLabel(name) {                 // 지도 글자가 역 이�
   return true;
 }
 // 역 하나(이름 + 고른 노선 힌트) → 출발/도착으로 쓸 행(웹 svgSetRoute: 노선 힌트 → 같은 이름 첫 행)
-function mapPickRow(name, line) {
-  var T = mapStnTable(), i, first = null;
+function mapPickRow(name, line, reg) {
+  var T = mapStnTable(), i, first = null, firstAny = null;
   for (i = 0; i < T.length; i++) {
     if (T[i][0] !== name) continue;
     if (line && T[i][1] === line) return T[i];
-    if (!first) first = T[i];
+    if (!firstAny) firstAny = T[i];
+    if (!first && (!reg || mapRegionOfLine(T[i][1]) === reg)) first = T[i];       // 노선을 못 골랐으면 같은 권역의 행을 먼저(같은 이름의 지방 역이 먼저 걸리지 않게)
   }
-  return first;
+  return first || firstAny;
 }
 // 역 검색(웹 mapSearchStation): 공백 뺀 이름이 같은 것 → 포함하는 것 → 그 글자 그대로
-function mapFind(q) {
+function mapFind(q, reg) {
   q = mapStr(q, 40).replace(/\s+/g, '').trim();
   if (q.length < 2) return null;
-  var T = mapStnTable(), i, m = null;
-  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '') === q) m = T[i];
-  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '').indexOf(q) >= 0) m = T[i];
+  var T = mapStnTable(), i, m = null, pass, inReg = function (r) { return !reg || pass === 1 || mapRegionOfLine(r[1]) === reg; };
+  for (pass = 0; pass < 2 && !m; pass++) {                                           // 0 = 이 권역 안에서 먼저, 1 = 없으면 전국(예전 그대로)
+    for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '') === q && inReg(T[i])) m = T[i];
+    for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '').indexOf(q) >= 0 && inReg(T[i])) m = T[i];
+  }
   return { name: m ? m[0] : q, known: !!m };
 }
-function mapNearest(la, lo) {                       // 웹 mapGoToMyLocation: 위도·경도 차의 제곱합이 가장 작은 역
+function mapNearest(la, lo, reg) {                  // 웹 mapGoToMyLocation: 위도·경도 차의 제곱합이 가장 작은 역(s208: 지금 보는 권역의 역만 — 수도권 지도에 지방 역이 오지 않게)
   var T = mapStnTable(), best = null, bd = 1e18;
-  for (var i = 0; i < T.length; i++) { var dx = T[i][2] - la, dy = T[i][3] - lo, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = T[i]; } }
+  for (var i = 0; i < T.length; i++) { if (reg && mapRegionOfLine(T[i][1]) !== reg) continue; var dx = T[i][2] - la, dy = T[i][3] - lo, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = T[i]; } }
   return best ? { name: best[0], line: best[1], la: best[2], lo: best[3] } : null;
 }
 
@@ -163,8 +178,9 @@ function mapRegionBody(f, ctx) {
 function mapStationSheet(f) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
-  var lines = f.sl ? [f.sl].concat(mapLinesOf(name).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name);
-  if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
+  var rg = mapRegOf(f);
+  var lines = f.sl ? [f.sl].concat(mapLinesOf(name, rg).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name, rg);
+  if (f.sl && mapLinesOf(name, rg).indexOf(f.sl) < 0) lines = mapLinesOf(name, rg);
   var dk = f.th === 'dark';                                                                   // 웹 .nmp: 이름 22 굵게 · 노선 알약 · 🚉/🏁 버튼(패딩 15, 반지름 14) · 🕒 시간표(패딩 13). 손잡이는 앱이 맨 위에 그린다.
   var kids = [
     { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, rw: MAP_PLAY_RW, mq: true, pad: [0, MAP_STN_TOP, 0, 12] }
@@ -175,7 +191,7 @@ function mapStationSheet(f) {
     { t: 'button', s: '🚉 출발역', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
     { t: 'button', s: '🏁 도착역', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#ff2d55' : '#e0455a', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
   kids.push({ t: 'button', s: '🕒 시간표', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
-  var row = mapPickRow(name, f.sl);
+  var row = mapPickRow(name, f.sl, rg);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null, msg: MAP_STN_MSG } };
   return mapFinish(out);
@@ -187,7 +203,7 @@ function mapP2(n) { return (n < 10 ? '0' : '') + n; }
 function mapTimetableSheet(f) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
-  var T = f.tt, lines = mapLinesOf(name).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
+  var T = f.tt, lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
   var st = ['loading', 'ok', 'fail'].indexOf(T.st) >= 0 ? T.st : 'loading';
   var line = lines.indexOf(sel.line) >= 0 ? sel.line : '';
   // 처음엔 시간표 자료가 있는 첫 노선을 고른다(웹: 이 역의 모든 노선을 한 번에 묻고 자료 있는 첫 노선)
@@ -208,16 +224,19 @@ function mapTimetableSheet(f) {
     return o;
   }) });
   var head = [], dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
-  if (d && d.days && d.days.length) kids.push({ t: 'chips', pad: [0, 0, 0, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: d.days.map(function (x) {
+  // s208 (YJ: '토·일·공휴일'과 'ㅇㅇ 방면'을 한 줄로): 요일 칩과 방면 칩을 한 줄에 이어 놓는다(넘치면 이 줄이 가로로 밀린다)
+  var dayItems = (d && d.days && d.days.length) ? d.days.map(function (x) {
     return { label: mapStr(x.label, 10) + (x.code === d.today ? ' · 오늘' : ''), on: x.code === d.dayCode, act: { a: 'call', v: 'mt.d.' + mapStr(x.code, 6) } };
-  }) });
+  }) : [];
+  var dirItems = [];
   if (dirs.length) {
     for (var k = 0; k < dirs.length; k++) if (dirs[k].dk === mapStr(sel.dk, 4)) { dir = dirs[k]; dirIdx = k; }
     if (!dir) { dir = dirs[0]; dirIdx = 0; }
-    kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dirs.map(function (x, i) {
+    dirItems = dirs.map(function (x, i) {
       return { label: x.toward ? mapStr(x.toward, 20) + ' 방면' : (x.dk === '상' ? '상행' : '하행'), on: x === dir, act: { a: 'call', v: 'mt.k.' + i } };
-    }) });
+    });
   }
+  if (dayItems.length || dirItems.length) kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dayItems.concat(dirItems) });
   head = kids.map(mapSheetPad); kids = [];                                         // 여기까지(제목줄·칩)가 머리 — 고정
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
   if (st === 'loading' && !d) kids.push(msg('시간표를 불러오는 중…'));
@@ -265,8 +284,8 @@ function mapScreen(inp, factsIn, dataIn) {
   if (f.part === 'tt') return mapTimetableSheet(f);
   if (f.part === 'br') return mapBusRouteSheet(f);
   var info = { mode: f.mode, reg: f.reg, flt: f.flt };
-  if (f.q) { var fd = mapFind(f.q); info.find = fd; }
-  if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1]);
+  if (f.q) { var fd = mapFind(f.q, f.reg); info.find = fd; }
+  if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1], f.reg);
   if (f.part === 'h') {
     var head = mapHead(f);
     return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: head, body: [], info: info }, 'h');
@@ -1113,4 +1132,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, mapBusReady: mapBusReady, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapRegionOfLine: mapRegionOfLine, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, mapBusReady: mapBusReady, MAP_FILTERS: MAP_FILTERS };

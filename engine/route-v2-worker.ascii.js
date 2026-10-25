@@ -20105,11 +20105,23 @@ function mapHav(la1, lo1, la2, lo2) {
 }
 
 // \u2500\u2500 \uc5ed \u2192 \ub178\uc120 (\uc6f9 MSM \u00b7 _metroLines) \u2500\u2500
-function mapLinesOf(name) {
+// s208 (YJ: \uc218\ub3c4\uad8c\uacfc \uc9c0\ubc29\uc5d0 \uac19\uc740 \uc5ed \uc774\ub984\uc774 \uc788\uc5b4\ub3c4 \uad6c\ubd84 \u2014 \uc9c0\ub3c4\ub294 \uc218\ub3c4\uad8c \uc804\uc6a9): \ub178\uc120 \uc774\ub984 \uc55e\uae00\uc790\ub85c \uc5b4\ub290 \uad8c\uc5ed\uc778\uc9c0 \uac00\ub9ac\uace0, \uc5ed \uc774\ub984\ub9cc\uc73c\ub85c \ub178\uc120\uc744 \ubaa8\uc744 \ub54c \uac19\uc740 \uad8c\uc5ed \ub178\uc120\ub9cc \ubaa8\uc740\ub2e4.
+//   \uc608) '\uc911\ub3d9'\uc740 \uc218\ub3c4\uad8c\uc5d0\uc11c\ub294 1\ud638\uc120\ub9cc, \ubd80\uc0b0\uc5d0\uc11c\ub294 \ubd80\uc0b0 2\ud638\uc120\ub9cc. \uadf8 \uad8c\uc5ed\uc5d0 \uadf8 \uc774\ub984\uc774 \uc544\uc608 \uc5c6\uc73c\uba74 \uc608\uc804\ucc98\ub7fc \uc804\uccb4(\ube48 \ud31d\uc5c5\uc774 \ub418\uc9c0 \uc54a\uac8c).
+function mapRegionOfLine(line) {
+  var l = String(line || '');
+  for (var k in MAP_REGION_PREFIX) if (MAP_REGION_PREFIX.hasOwnProperty(k) && l.indexOf(MAP_REGION_PREFIX[k]) === 0) return k;
+  return 'seoul';
+}
+function mapRegOf(f) {                              // \uc5ed \ud31d\uc5c5\u00b7\uc2dc\uac04\ud45c\uac00 \uc18d\ud55c \uad8c\uc5ed: \uace0\ub978 \ub178\uc120\uc774 \uc788\uc73c\uba74 \uadf8 \ub178\uc120\uc758 \uad8c\uc5ed, \uc544\ub2c8\uba74 \uc9c0\uae08 \ubcf4\ub294 \uad8c\uc5ed(\uc5c6\uc73c\uba74 \uc218\ub3c4\uad8c)
+  if (f && f.sl) return mapRegionOfLine(f.sl);
+  return (f && MAP_REGIONS.some(function (r) { return r[0] === f.reg; })) ? f.reg : 'seoul';
+}
+function mapLinesOf(name, reg) {
   var T = mapStnTable(), out = [], i;
-  var add = function (nm) { for (i = 0; i < T.length; i++) if (T[i][0] === nm && out.indexOf(T[i][1]) < 0) out.push(T[i][1]); };
-  add(name);
-  if (MAP_ALIAS[name]) add(MAP_ALIAS[name]);
+  var add = function (nm, rg) { for (i = 0; i < T.length; i++) if (T[i][0] === nm && (!rg || mapRegionOfLine(T[i][1]) === rg) && out.indexOf(T[i][1]) < 0) out.push(T[i][1]); };
+  add(name, reg);
+  if (MAP_ALIAS[name]) add(MAP_ALIAS[name], reg);
+  if (reg && !out.length) { add(name, ''); if (MAP_ALIAS[name]) add(MAP_ALIAS[name], ''); }
   return out;
 }
 function mapCleanName(s) { return mapStr(s, 40).replace(/\s+/g, '').trim(); }
@@ -20119,27 +20131,30 @@ function mapIsStationLabel(name) {                 // \uc9c0\ub3c4 \uae00\uc790\
   return true;
 }
 // \uc5ed \ud558\ub098(\uc774\ub984 + \uace0\ub978 \ub178\uc120 \ud78c\ud2b8) \u2192 \ucd9c\ubc1c/\ub3c4\ucc29\uc73c\ub85c \uc4f8 \ud589(\uc6f9 svgSetRoute: \ub178\uc120 \ud78c\ud2b8 \u2192 \uac19\uc740 \uc774\ub984 \uccab \ud589)
-function mapPickRow(name, line) {
-  var T = mapStnTable(), i, first = null;
+function mapPickRow(name, line, reg) {
+  var T = mapStnTable(), i, first = null, firstAny = null;
   for (i = 0; i < T.length; i++) {
     if (T[i][0] !== name) continue;
     if (line && T[i][1] === line) return T[i];
-    if (!first) first = T[i];
+    if (!firstAny) firstAny = T[i];
+    if (!first && (!reg || mapRegionOfLine(T[i][1]) === reg)) first = T[i];       // \ub178\uc120\uc744 \ubabb \uace8\ub790\uc73c\uba74 \uac19\uc740 \uad8c\uc5ed\uc758 \ud589\uc744 \uba3c\uc800(\uac19\uc740 \uc774\ub984\uc758 \uc9c0\ubc29 \uc5ed\uc774 \uba3c\uc800 \uac78\ub9ac\uc9c0 \uc54a\uac8c)
   }
-  return first;
+  return first || firstAny;
 }
 // \uc5ed \uac80\uc0c9(\uc6f9 mapSearchStation): \uacf5\ubc31 \ube80 \uc774\ub984\uc774 \uac19\uc740 \uac83 \u2192 \ud3ec\ud568\ud558\ub294 \uac83 \u2192 \uadf8 \uae00\uc790 \uadf8\ub300\ub85c
-function mapFind(q) {
+function mapFind(q, reg) {
   q = mapStr(q, 40).replace(/\s+/g, '').trim();
   if (q.length < 2) return null;
-  var T = mapStnTable(), i, m = null;
-  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '') === q) m = T[i];
-  for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '').indexOf(q) >= 0) m = T[i];
+  var T = mapStnTable(), i, m = null, pass, inReg = function (r) { return !reg || pass === 1 || mapRegionOfLine(r[1]) === reg; };
+  for (pass = 0; pass < 2 && !m; pass++) {                                           // 0 = \uc774 \uad8c\uc5ed \uc548\uc5d0\uc11c \uba3c\uc800, 1 = \uc5c6\uc73c\uba74 \uc804\uad6d(\uc608\uc804 \uadf8\ub300\ub85c)
+    for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '') === q && inReg(T[i])) m = T[i];
+    for (i = 0; i < T.length && !m; i++) if (String(T[i][0]).replace(/\s+/g, '').indexOf(q) >= 0 && inReg(T[i])) m = T[i];
+  }
   return { name: m ? m[0] : q, known: !!m };
 }
-function mapNearest(la, lo) {                       // \uc6f9 mapGoToMyLocation: \uc704\ub3c4\u00b7\uacbd\ub3c4 \ucc28\uc758 \uc81c\uacf1\ud569\uc774 \uac00\uc7a5 \uc791\uc740 \uc5ed
+function mapNearest(la, lo, reg) {                  // \uc6f9 mapGoToMyLocation: \uc704\ub3c4\u00b7\uacbd\ub3c4 \ucc28\uc758 \uc81c\uacf1\ud569\uc774 \uac00\uc7a5 \uc791\uc740 \uc5ed(s208: \uc9c0\uae08 \ubcf4\ub294 \uad8c\uc5ed\uc758 \uc5ed\ub9cc \u2014 \uc218\ub3c4\uad8c \uc9c0\ub3c4\uc5d0 \uc9c0\ubc29 \uc5ed\uc774 \uc624\uc9c0 \uc54a\uac8c)
   var T = mapStnTable(), best = null, bd = 1e18;
-  for (var i = 0; i < T.length; i++) { var dx = T[i][2] - la, dy = T[i][3] - lo, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = T[i]; } }
+  for (var i = 0; i < T.length; i++) { if (reg && mapRegionOfLine(T[i][1]) !== reg) continue; var dx = T[i][2] - la, dy = T[i][3] - lo, d = dx * dx + dy * dy; if (d < bd) { bd = d; best = T[i]; } }
   return best ? { name: best[0], line: best[1], la: best[2], lo: best[3] } : null;
 }
 
@@ -20214,8 +20229,9 @@ function mapRegionBody(f, ctx) {
 function mapStationSheet(f) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
-  var lines = f.sl ? [f.sl].concat(mapLinesOf(name).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name);
-  if (f.sl && mapLinesOf(name).indexOf(f.sl) < 0) lines = mapLinesOf(name);
+  var rg = mapRegOf(f);
+  var lines = f.sl ? [f.sl].concat(mapLinesOf(name, rg).filter(function (l) { return l !== f.sl; })) : mapLinesOf(name, rg);
+  if (f.sl && mapLinesOf(name, rg).indexOf(f.sl) < 0) lines = mapLinesOf(name, rg);
   var dk = f.th === 'dark';                                                                   // \uc6f9 .nmp: \uc774\ub984 22 \uad75\uac8c \u00b7 \ub178\uc120 \uc54c\uc57d \u00b7 \ud83d\ude89/\ud83c\udfc1 \ubc84\ud2bc(\ud328\ub529 15, \ubc18\uc9c0\ub984 14) \u00b7 \ud83d\udd52 \uc2dc\uac04\ud45c(\ud328\ub529 13). \uc190\uc7a1\uc774\ub294 \uc571\uc774 \ub9e8 \uc704\uc5d0 \uadf8\ub9b0\ub2e4.
   var kids = [
     { t: 'text', s: name, size: 22, bold: true, color: 'text', lines: 1, rw: MAP_PLAY_RW, mq: true, pad: [0, MAP_STN_TOP, 0, 12] }
@@ -20226,7 +20242,7 @@ function mapStationSheet(f) {
     { t: 'button', s: '\ud83d\ude89 \ucd9c\ubc1c\uc5ed', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#0a84ff' : '#1d9bf0', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.start' } },
     { t: 'button', s: '\ud83c\udfc1 \ub3c4\ucc29\uc5ed', size: 15, h: 48, r: 14, bold: true, fill: dk ? '#ff2d55' : '#e0455a', line: 'none', tc: '#ffffff', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mp.dest' } }] });
   kids.push({ t: 'button', s: '\ud83d\udd52 \uc2dc\uac04\ud45c', size: 15, h: 44, r: 14, bold: true, fill: 'card2', line: 'none', tc: '', pad: [0, 0, 0, 36], act: { a: 'call', v: 'mp.tt' } });
-  var row = mapPickRow(name, f.sl);
+  var row = mapPickRow(name, f.sl, rg);
   var out = { ok: true, v: 1, screen: 'mapstn', cover: 'tab', head: [], body: kids.map(mapSheetPad),
     info: { name: name, lines: lines, pick: row ? { name: row[0], line: row[1], la: row[2], lo: row[3] } : null, msg: MAP_STN_MSG } };
   return mapFinish(out);
@@ -20238,7 +20254,7 @@ function mapP2(n) { return (n < 10 ? '0' : '') + n; }
 function mapTimetableSheet(f) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
-  var T = f.tt, lines = mapLinesOf(name).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
+  var T = f.tt, lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
   var st = ['loading', 'ok', 'fail'].indexOf(T.st) >= 0 ? T.st : 'loading';
   var line = lines.indexOf(sel.line) >= 0 ? sel.line : '';
   // \ucc98\uc74c\uc5d4 \uc2dc\uac04\ud45c \uc790\ub8cc\uac00 \uc788\ub294 \uccab \ub178\uc120\uc744 \uace0\ub978\ub2e4(\uc6f9: \uc774 \uc5ed\uc758 \ubaa8\ub4e0 \ub178\uc120\uc744 \ud55c \ubc88\uc5d0 \ubb3b\uace0 \uc790\ub8cc \uc788\ub294 \uccab \ub178\uc120)
@@ -20259,16 +20275,19 @@ function mapTimetableSheet(f) {
     return o;
   }) });
   var head = [], dir = null, dirs = d && d.dirs ? d.dirs : [], dirIdx = 0;
-  if (d && d.days && d.days.length) kids.push({ t: 'chips', pad: [0, 0, 0, 6], gap: 6, h: 28, onc: 'gold', onfg: '#121214', items: d.days.map(function (x) {
+  // s208 (YJ: '\ud1a0\u00b7\uc77c\u00b7\uacf5\ud734\uc77c'\uacfc '\u3147\u3147 \ubc29\uba74'\uc744 \ud55c \uc904\ub85c): \uc694\uc77c \uce69\uacfc \ubc29\uba74 \uce69\uc744 \ud55c \uc904\uc5d0 \uc774\uc5b4 \ub193\ub294\ub2e4(\ub118\uce58\uba74 \uc774 \uc904\uc774 \uac00\ub85c\ub85c \ubc00\ub9b0\ub2e4)
+  var dayItems = (d && d.days && d.days.length) ? d.days.map(function (x) {
     return { label: mapStr(x.label, 10) + (x.code === d.today ? ' \u00b7 \uc624\ub298' : ''), on: x.code === d.dayCode, act: { a: 'call', v: 'mt.d.' + mapStr(x.code, 6) } };
-  }) });
+  }) : [];
+  var dirItems = [];
   if (dirs.length) {
     for (var k = 0; k < dirs.length; k++) if (dirs[k].dk === mapStr(sel.dk, 4)) { dir = dirs[k]; dirIdx = k; }
     if (!dir) { dir = dirs[0]; dirIdx = 0; }
-    kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dirs.map(function (x, i) {
+    dirItems = dirs.map(function (x, i) {
       return { label: x.toward ? mapStr(x.toward, 20) + ' \ubc29\uba74' : (x.dk === '\uc0c1' ? '\uc0c1\ud589' : '\ud558\ud589'), on: x === dir, act: { a: 'call', v: 'mt.k.' + i } };
-    }) });
+    });
   }
+  if (dayItems.length || dirItems.length) kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dayItems.concat(dirItems) });
   head = kids.map(mapSheetPad); kids = [];                                         // \uc5ec\uae30\uae4c\uc9c0(\uc81c\ubaa9\uc904\u00b7\uce69)\uac00 \uba38\ub9ac \u2014 \uace0\uc815
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
   if (st === 'loading' && !d) kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\u2026'));
@@ -20316,8 +20335,8 @@ function mapScreen(inp, factsIn, dataIn) {
   if (f.part === 'tt') return mapTimetableSheet(f);
   if (f.part === 'br') return mapBusRouteSheet(f);
   var info = { mode: f.mode, reg: f.reg, flt: f.flt };
-  if (f.q) { var fd = mapFind(f.q); info.find = fd; }
-  if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1]);
+  if (f.q) { var fd = mapFind(f.q, f.reg); info.find = fd; }
+  if (f.gps) info.near = mapNearest(f.gps[0], f.gps[1], f.reg);
   if (f.part === 'h') {
     var head = mapHead(f);
     return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: head, body: [], info: info }, 'h');
