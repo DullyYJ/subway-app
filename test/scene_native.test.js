@@ -24,7 +24,7 @@ const { sceneDecide } = require('../engine/scene.js');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 1, boarded: false, key: 'k', nodes: bus }, { temp: 12, rain: 80, txt: '비' }), 'scn_wait_bus_rain');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k', nodes: bus }, { temp: 12, rain: 0, txt: '맑음' }), 'scn_ride_bus');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 0, boarded: false, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }, { name: '도착' }] }, null), 'scn_wait_sub');
-    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
+    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls].concat(files), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr || r.stdout);
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', cls, 'com.dullyyj.subway.SceneJvmTest', 'check', dir], { env: ENV, encoding: 'utf8', timeout: 240000 });
@@ -39,8 +39,19 @@ const { sceneDecide } = require('../engine/scene.js');
     const drv = fs.readFileSync(N('SceneDriver.java'), 'utf8');
     assert.ok(/DIR = "chars3d\/"/.test(drv), '읽는 폴더가 assets/chars3d 가 아님');
   });
+  await t('자세 시트(s209): 6종 <id>_pose.webp 가 앱 assets 에 있고(4×2 칸), 앱은 없어도 걷기 시트로 그린다 · 날씨 반응 동작 8가지가 등록돼 있다', async () => {
+    for (const id of ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng']) {
+      const f = path.join(ROOT, 'shell-android/app/src/main/assets/chars3d', id + '_pose.webp'); assert.ok(fs.existsSync(f), id + '_pose 없음');
+      const b = fs.readFileSync(f); assert.ok(b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' && b.length > 10000 && b.length < 120000, id + '_pose 크기·형식');
+    }
+    const drv = fs.readFileSync(N('SceneDriver.java'), 'utf8'), core = fs.readFileSync(N('SceneCore.java'), 'utf8'), acts = fs.readFileSync(N('SceneActs.java'), 'utf8');
+    assert.ok(/_pose\.webp/.test(drv) && /catch \(Throwable t2\)/.test(drv), '자세 시트는 읽기에 실패해도 장면이 멈추지 않는다');
+    assert.ok(/psh != null/.test(core) && /host\.sheet\(a\.id \+ "_pose"\)/.test(core), '자세 시트가 없으면 걷기 시트');
+    for (const n of ['shiver', 'pant', 'squint', 'gust', 'splash', 'shakeoff', 'snowcatch', 'peer']) assert.ok(new RegExp('A_\\(S, "' + n + '"').test(acts), n + ' 동작 등록');
+    assert.ok(/wsay\(S, a, "shiver"/.test(acts) && /traits\.get\(a\.id\)/.test(acts), '말은 엔진(traits.say)이 정한 글만 띄운다');
+  });
   await t('SceneCore·SceneArt·SceneActs 는 android.* 를 쓰지 않는다(순수 자바)', async () => {
-    for (const n of ['SceneCore', 'SceneActs', 'SceneArt', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
+    for (const n of ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
   });
   await t('ScreenView 가 장면 노드를 그리고 · 손가락으로 잡을 수 있고 · 떼면 놓고 · 안 보이면 저절로 멈춘다', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8');

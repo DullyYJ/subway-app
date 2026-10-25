@@ -121,6 +121,30 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert(!sum.traits.ppopu.acts.includes('dive'), '여름엔 다이빙 없음');
     const a2 = decide({ nowMs: ms('2026-10-16T12:01:00'), locked: false }, null); assert.deepStrictEqual(a2.traits, aut.traits, '같은 시각대(10분)면 같은 대본');
   });
+  await t('장소(YJ 10-25): 경로가 없을 때만 바뀌고(20분 단위·같은 시각이면 같다) 7곳이 골고루 나오며, 정류장·역이 있는 장면은 늘 거리, 겨울·추위엔 바닷가가 없다', () => {
+    const PL = E.SCENE_PLACES; assert.strictEqual(PL.length, 7);
+    const wxC = { temp: 20, feel: 20, txt: '맑음', rain: 0, wind: 5, uv: 3 };
+    const seen = new Set(); for (let i = 0; i < 60; i++) { const r = decide({ nowMs: ms('2026-10-15T10:00:00') + i * 21 * 6e4, locked: false, key: 'k' }, wxC); assert(PL.includes(r.look.place), r.look.place); assert(r.look.placeKo); seen.add(r.look.place); }
+    assert(seen.size >= 5, '장소가 골고루: ' + [...seen]);
+    const a = decide({ nowMs: ms('2026-10-15T10:01:00'), locked: false, key: 'k' }, wxC), b = decide({ nowMs: ms('2026-10-15T10:03:00'), locked: false, key: 'k' }, wxC); assert.strictEqual(a.look.place, b.look.place);
+    assert.strictEqual(decide({ nowMs: ms('2026-10-15T10:00:00'), locked: true, key: 'k', here: 1, nodes: BUS }, wxC).look.place, 'street', '정류장 장면은 거리');
+    for (let i = 0; i < 80; i++) assert.notStrictEqual(decide({ nowMs: ms('2026-01-15T10:00:00') + i * 21 * 6e4, locked: false, key: 'w' }, { temp: -3, feel: -6, txt: '맑음', rain: 0, wind: 5, uv: 1 }).look.place, 'beach', '겨울·추위엔 바닷가 없음');
+  });
+  await t('날씨 반응(YJ 10-25): 추위·더위·햇빛·바람·비·눈·안개마다 반응 동작과 말이 있고, 날씨를 모르면 없다', () => {
+    const run = (wx, when) => decide({ nowMs: ms(when || '2026-10-15T13:00:00'), locked: false, key: 'r' }, wx);
+    const has = (r, name) => SCENE_IDS.every(id => !r.traits[id].acts.includes(name)) ? false : SCENE_IDS.every(id => r.traits[id].acts.includes(name) && typeof r.traits[id].say[name] === 'string' && r.traits[id].say[name]);
+    const SCENE_IDS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
+    const cold = run({ temp: -4, feel: -9, txt: '맑음', rain: 0, wind: 5, uv: 1 }, '2026-01-15T09:00:00'); assert(has(cold, 'shiver'), '추위');
+    const hot = run({ temp: 33, feel: 36, txt: '맑음', rain: 0, wind: 4, uv: 8 }, '2026-07-15T14:00:00'); assert(has(hot, 'pant'), '더위');
+    const sun = run({ temp: 22, feel: 22, txt: '맑음', rain: 0, wind: 4, uv: 7 }); assert(has(sun, 'squint'), '햇빛');
+    const wind = run({ temp: 15, feel: 13, txt: '맑음', rain: 0, wind: 35, uv: 2 }, '2026-10-15T09:00:00'); assert(wind.look.wind === 2); assert(has(wind, 'gust') || has(wind, 'squint') || has(wind, 'pant') || SCENE_IDS.every(id => wind.traits[id].acts.includes('gust')), '바람');
+    const rain = run({ temp: 18, feel: 18, txt: '비', rain: 90, wind: 5, uv: 0 }); assert(SCENE_IDS.every(id => rain.traits[id].acts.includes('splash') || rain.traits[id].acts.includes('shakeoff')), '비');
+    const snow = run({ temp: -1, feel: -4, txt: '눈', rain: 0, wind: 5, uv: 0 }, '2026-01-15T10:00:00'); assert(SCENE_IDS.every(id => snow.traits[id].acts.includes('snowcatch')), '눈');
+    const fog = run({ temp: 12, feel: 12, txt: '안개', rain: 0, wind: 2, uv: 0 }); assert(SCENE_IDS.every(id => fog.traits[id].acts.includes('peer')), '안개');
+    const none = decide({ nowMs: ms('2026-10-15T13:00:00'), locked: false, key: 'r' }, null);
+    SCENE_IDS.forEach(id => ['shiver', 'pant', 'squint', 'gust', 'splash', 'shakeoff', 'snowcatch', 'peer'].forEach(x => assert(!none.traits[id].acts.includes(x), '날씨를 모르면 반응을 지어내지 않는다: ' + x)));
+    const a2 = run({ temp: -4, feel: -9, txt: '맑음', rain: 0, wind: 5, uv: 1 }, '2026-01-15T09:00:00'); assert.deepStrictEqual(a2.traits, cold.traits, '같은 입력이면 같은 대본');
+  });
   await t('잘못된 입력에도 죽지 않는다', () => {
     assert.strictEqual(decide({ locked: true, nodes: [] }, null).mode, null); assert.strictEqual(decide({ locked: true, here: 99, nodes: BUS }, null).mode, 'alight'); assert.strictEqual(decide(null, null).mode, 'idle');
     assert.strictEqual(decide({ locked: true, here: -5, nodes: BUS }, null).mode, 'wait');
