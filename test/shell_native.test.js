@@ -507,6 +507,31 @@ function findAndroidJar() {
     assert.ok(/askUnburn\(setPage\); setupNoEngine = true;/.test(a) && /setupNoEngine \|\| setupPhase != 0/.test(a) && /K_SETUPV, ""\)\)\) \{ store\.put\(ShellCore\.K_SETUPV, "2"\)/.test(a) && /K_SETUPV = "setup_v"/.test(sc), '엔진이 모르는 안내는 건너뛰되 표시는 지우고 · 한 번 되돌린다');
     assert.ok(/RideService\.running && RideService\.liveRide\.length\(\) < 3\) return;/.test(a), '서비스가 돌지만 첫 값이 아직이면 확정을 지우지 않는다');
     assert.ok(/my == rideSeq && home\.riding\(\)\) return;/.test(a) && /rideSeq = seqRoute;/.test(a), '확정한 찾기의 뒤늦은 결과(근사 → 전체)가 확정을 풀지 않는다');
+    {   // s214: 경로 확정은 사용자가 끝내거나 도착할 때까지 풀리지 않는다
+        const rl = a.slice(a.indexOf('private boolean rideLocked()'), a.indexOf('private void goRoute()') + 80);
+        assert.ok(/private boolean rideLocked\(\) \{\s*if \(!home\.riding\(\)\) return false;/.test(rl) && /private void goRoute\(\) \{\s*if \(rideLocked\(\)\) return;/.test(rl), '길찾기는 확정 중이면 시작하지 않는다');
+        assert.ok(/private void pickBase\(\) \{\s*if \(rideLocked\(\)\) return;/.test(a) && /case HomeCore\.R_LOCK: rideLocked\(\); break;/.test(a), '기준시각 바꾸기 · 닫기/찾기/바꾸기 눌림은 확정 중이면 토스트만');
+        assert.ok(/FavCore\.Go g = fav\.go\.get\(fav\.goIdx\);\s*closeSheet\(\);\s*if \(rideLocked\(\)\) break;/.test(a), '즐겨찾기 길찾기는 확정을 지우기 전에 막는다');
+        const wl = a.slice(a.indexOf('private void widgetLaunch()'), a.indexOf('private int gwSeq'));
+        assert.ok(/if \(rideLocked\(\)\) return;\s*toast\("출퇴근 경로를 찾는 중이에요"\)/.test(wl), '위젯 출퇴근 길찾기도 확정을 지우지 않는다');
+        assert.ok(/case MapCore\.R_START:\s*if \(rideLocked\(\)\)/.test(a) && /case MapCore\.R_DEST:\s*if \(rideLocked\(\)\)/.test(a), '지도에서 출발/도착을 골라도 확정 중엔 바뀌지 않는다');
+        const rv = a.slice(a.indexOf('private boolean reviveRide()'), a.indexOf('private void pollRide()'));
+        assert.ok(/reviveN >= 6 \? 30000L : 4000L/.test(rv) && /try \{ RideService\.start\(this\); \} catch \(Throwable t\)/.test(rv) && !/reviveN >= 6\) return false/.test(rv), '서비스를 몇 번 못 켜도 확정을 포기하지 않고 계속 다시 켠다');
+        const hc2 = fs.readFileSync(N('HomeCore.java'), 'utf8');
+        assert.ok(/R_LOCK = 15/.test(hc2) && /"rh\.close"\.equals\(v\)\) \{ if \(riding\(\)\) return R_LOCK;/.test(hc2), '확정한 경로는 닫기로 풀리지 않는다');
+        const rs = fs.readFileSync(path.join(ROOT, 'engine', 'ride-standby.js'), 'utf8');
+        assert.ok(!/offGiveUpSec\s*:/.test(rs) && !/O\.offGiveUpSec/.test(rs), '탑승 엔진은 경로를 벗어났다고 스스로 안내를 끝내지 않는다');
+        // 경로 이탈 팝업: 엔진이 알린 이탈(off.at) → 서비스(liveOff) → 앱이 한 번 묻고, 고르면 지금 위치에서 다시 찾는다
+        const rcj = fs.readFileSync(N('RideCore.java'), 'utf8'), rsv = fs.readFileSync(N('RideService.java'), 'utf8');
+        assert.ok(/public long offAt;/.test(rcj) && /m\.get\("off"\)/.test(rcj) && /offAt = 0L; cur = -1;/.test(rcj), 'RideCore 가 엔진의 off.at 을 읽는다');
+        assert.ok(/static volatile long liveOff/.test(rsv) && /liveOff = core\.offAt;/.test(rsv) && (rsv.match(/liveOff = 0L;/g) || []).length >= 2, '서비스가 이탈 시각을 앱에 알리고 끝나면 지운다');
+        const ra = a.slice(a.indexOf('private void rerouteAsk()'), a.indexOf('private void rerouteFromHere()'));
+        assert.ok(/!home\.riding\(\) \|\| !RideService\.running\) return;/.test(ra) && /at == offAskedAt/.test(ra) && /setPositiveButton\("다시 찾기"/.test(ra) && /setNegativeButton\("계속 안내", null\)/.test(ra), '확정 중에만 · 같은 이탈엔 한 번만 · [다시 찾기] / [계속 안내]');
+        const rf2 = a.slice(a.indexOf('private void rerouteFromHere()'), a.indexOf('// ───────────── 도보 안내 시트'));
+        assert.ok(/locateNow\(/.test(rf2) && /home\.setGpsStart\(l\.getLatitude\(\), l\.getLongitude\(\)\)/.test(rf2) && /RideService\.stop\(ShellActivity\.this\)/.test(rf2) && /goRoute\(\);/.test(rf2) && !/startRide\(/.test(rf2), '지금 위치를 출발지로 새로 찾는다(자동 확정은 안 한다)');
+        assert.ok(/fail\(boolean noperm\) \{ if \(!once\[0\]\) toast\(/.test(rf2), '위치를 못 잡으면 안내를 그대로 둔다');
+        assert.ok(/rsApply = new Runnable\(\) \{ @Override public void run\(\) \{ rerouteAsk\(\);/.test(a) && /rerouteAsk\(\); \}\s*\}, 1500L\)/.test(a) && /home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) reloadHome\(\);\s*rerouteAsk\(\);/.test(a), '서비스가 알릴 때 · 앱을 다시 열 때 · 홈 5초 틱에서 확인');
+    }
     assert.ok(/private void ovlAuto\(\)/.test(a) && /RideOverlay\.allowed\(this\) && store\.get\(ShellCore\.K_OVL, ""\)\.length\(\) == 0\) store\.put\(ShellCore\.K_OVL, "1"\)/.test(a) && /ovlAuto\(\); if \(home\.riding\(\)/.test(a), '허용만 해 둔 기기는 오버레이를 켠 것으로');
     assert.ok(/private void prefetchIfCold\(\)/.test(a) && /prefetchIfCold\(\); \} \}, 1500L\)/.test(a), '캐시에 없는 탭이 있으면 미리 받기를 다시');
   });
