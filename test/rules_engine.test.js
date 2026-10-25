@@ -1,5 +1,5 @@
 // 앱 규칙 엔진(engine/rules.js) 시험.  실행: node test/rules_engine.test.js
-//  ① 욕설 거르기가 웹(_BAD_WORDS · _containsBadWord)과 같다 ② 글 올리기 검사(check) ③ 포인트(award · view) ④ 탄 노선 기록(mylines) ⑤ 워커 내장
+//  ① 욕설 거르기가 웹(_BAD_WORDS · _containsBadWord)과 같다 ② 글 올리기 검사(check) ③ 포인트가 없다(award · view 거절) ④ 탄 노선 기록(mylines) ⑤ 워커 내장
 const fs = require('fs'), path = require('path');
 const E = require('../engine/rules');
 let pass = 0, fail = 0;
@@ -23,34 +23,12 @@ const D = '2026-10-20';
   ok(c({ texts: ['제목', '내용'], kind: 'post' }).ok === true, '정상 글');
   ok(c({ texts: ['', '내용'], kind: 'post' }).msg === '제목을 입력해주세요' && c({ texts: ['제목', '  '], kind: 'post' }).msg === '내용을 입력해주세요', '비었을 때');
   ok(/욕설·비방/.test(c({ texts: ['제목', '이 병 신'], kind: 'post' }).msg) && c({ texts: ['그냥 채팅'], kind: 'chat' }).ok === true && c({ texts: ['ㅈㄹ'], kind: 'chat' }).ok === false, '욕설은 글·채팅 모두 거른다');
-  ok(c({ texts: ['제목', '내용'], kind: 'post', cat: '현장제보', pt: { rc: 2, rcStr: D } }).ok === true, '현장제보 2번째까지는 가능');
-  const full = c({ texts: ['제목', '내용'], kind: 'post', cat: '현장제보', pt: { rc: 3, rcStr: D } });
-  ok(full.ok === false && /하루 3회까지/.test(full.msg) && /3\/3/.test(full.msg), '현장제보 하루 3회 제한');
-  ok(c({ texts: ['제목', '내용'], kind: 'post', cat: '현장제보', pt: { rc: 3, rcStr: '2026-10-19' } }).ok === true, '날짜가 바뀌면 다시 가능');
-  ok(c({ texts: ['제목', '내용'], kind: 'post', cat: '잡담', pt: { rc: 9, rcStr: D } }).ok === true, '잡담은 제한 없음');
+  ok(c({ texts: ['제목', '내용'], kind: 'post', cat: '현장제보', pt: { rc: 9, rcStr: D } }).ok === true, '현장제보도 하루 한도 없음(포인트 없음 · s216)');
 }
-// ③ 포인트
+// ③ 포인트는 없다 — 적립·요약 요청은 모르는 op 로 거절한다
 {
-  const a = o => E.rulesRun(Object.assign({ op: 'award', day: D, rnd: 0.5 }, o));
-  const w = a({ ev: 'write', pt: { total: 5, today: 5, todayStr: D } });
-  ok(w.ok && w.add === 10 && w.pt.total === 15 && w.pt.today === 15 && /글이 등록되었어요! \+10P/.test(w.msg), '글쓰기 +10P');
-  ok(/연결되면 모두에게 보여요/.test(a({ ev: 'write', sent: false }).msg), '보류 글 문구');
-  const nd = a({ ev: 'write', pt: { total: 100, today: 40, todayStr: '2026-10-19' } });
-  ok(nd.pt.total === 110 && nd.pt.today === 10 && nd.pt.todayStr === D, '날짜가 바뀌면 오늘 값부터 다시');
-  ok(a({ ev: 'ride' }).add === 10 && /탑승 안내 시작 \+10P/.test(a({ ev: 'ride' }).msg), '탑승 안내 시작 +10P');
-  // 현장제보: 3~8P 차등, 확률표 35/25/18/12/7/3
-  const draw = r => E.rulesDraw(r);
-  ok(draw(0) === 3 && draw(0.349) === 3 && draw(0.35) === 4 && draw(0.59) === 4 && draw(0.6) === 5 && draw(0.78) === 6 && draw(0.9) === 7 && draw(0.97) === 8 && draw(0.999) === 8 && draw(NaN) === 4, '추첨표');
-  let cnt = { 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0 }; for (let i = 0; i < 10000; i++) cnt[draw(i / 10000)]++;
-  ok(cnt[3] === 3500 && cnt[4] === 2500 && cnt[5] === 1800 && cnt[6] === 1200 && cnt[7] === 700 && cnt[8] === 300, '추첨 비율 35/25/18/12/7/3');
-  const r = a({ ev: 'report', rnd: 0.0, pt: { rc: 1, rcStr: D, total: 0, today: 0, todayStr: D } });
-  ok(r.add === 3 && r.pt.rc === 2 && /현장제보 등록! \+3P \(오늘 2\/3\)/.test(r.msg), '현장제보 포인트와 횟수');
-  ok(a({ ev: 'zzz' }).ok === false, '모르는 사건');
-  const odd = a({ ev: 'write', pt: { total: 'x', today: -4, rc: 1e12 } });
-  ok(odd.ok && odd.pt.total === 10 && odd.pt.rc === 0, '이상한 저장값은 0 으로');
-  const v = E.rulesRun({ op: 'view', day: D, pt: { total: 120, today: 15, todayStr: D, rc: 2, rcStr: D } });
-  ok(v.ok && v.level === '탑승객' && v.next === '지하철러' && v.need === 30 && v.today === 15 && v.rc === 2, '요약: 등급·다음 등급까지');
-  ok(E.rulesLevel(0).name === '입문자' && E.rulesLevel(1000).name === '철도마스터' && E.rulesLevel(1000).next === '' && E.rulesLevel(599).name === '환승왕', '등급 경계');
+  ok(E.rulesRun({ op: 'award', ev: 'write', day: D, rnd: 0.5 }).ok === false && E.rulesRun({ op: 'view', day: D }).ok === false, '적립(award) · 요약(view) 은 없다');
+  ok(E.rulesLevel === undefined && E.rulesDraw === undefined, '등급 · 추첨 함수가 내보내지지 않는다');
 }
 // ④ 탄 노선 기록
 {
