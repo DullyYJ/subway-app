@@ -19,7 +19,7 @@ final class RidePosFusionJ {
     private RidePosFusionJ() { }
 
     static final double DWELL_S = 30, DWELL_XFER_S = 150, DEP_AFTER_ARR_S = 20, SEG_DEFAULT_S = 120, OVERDUE_FLOOR_S = 75, EARLY_BRAKE = 0.12, BACK_LEAK = 5e-4, FLOOR = 1e-4,
-        GPS_MAX_ACC = 80, GPS_MAX_AGE_S = 10, GPS_EPS = 0.02, MOTION_CONF = 0.82, CELL_EPS = 0.15, CELL_SIGMA = 0.9, SIG_DWELL_S = 18, SIG_SEG_S = 25, STEP_S = 5;
+        GPS_MAX_ACC = 80, GPS_MAX_AGE_S = 10, GPS_EPS = 0.02, CELL_EPS = 0.15, CELL_SIGMA = 0.9, SIG_DWELL_S = 18, SIG_SEG_S = 25, STEP_S = 5;
 
     static double erfc(double x) {
         double z = Math.abs(x), t = 1 / (1 + 0.5 * z);
@@ -161,19 +161,6 @@ final class RidePosFusionJ {
             }
             normW();
         }
-        void motion(String state, double nowMs, double conf) {
-            if (!"moving".equals(state) && !"stopped".equals(state)) return;
-            final double c = Double.isNaN(conf) ? MOTION_CONF : conf; final boolean moving = "moving".equals(state);
-            applyEvidence(new Lik() {
-                @Override public double at(int j) {
-                    boolean isDwell = (j % 2 == 0); int idx = j >> 1;
-                    boolean neutral = isDwell ? isXferDwell(idx) : xfer[idx + 1];
-                    if (neutral) return 0.5;
-                    if (isDwell) return moving ? (1 - c) : c;
-                    return moving ? c : (1 - c) * 0.8 + 0.02;
-                }
-            }, 0.6);
-        }
         boolean gps(double lat, double lng, double ts, double accIn, double nowMs) {
             if (Double.isNaN(lat)) return false;
             if (ts != 0 && !Double.isNaN(ts) && ts == lastGpsTs) return false;
@@ -281,7 +268,7 @@ final class RidePosFusionJ {
             xf[i] = truthy(g(s, "xferFromPrev"));
         }
         Fuser f = new Fuser(lat, lng, sched, xf);
-        int fedGps = 0, fedMotion = 0, fedCell = 0, fedArrived = 0, skipped = 0;
+        int fedGps = 0, fedCell = 0, fedArrived = 0, skipped = 0;
         boolean restored = truthy(inp.get("state")) ? f.importState(inp.get("state")) : false;
         List<Object> evAll = l(inp.get("ev")); if (evAll == null) evAll = new ArrayList<Object>();
         if (!restored) {
@@ -305,13 +292,12 @@ final class RidePosFusionJ {
                 Object ao = g(fx, "acc"); double acc = ao == null ? Double.NaN : numOrNaN(ao);
                 if (f.gps(fl, fo, ts, acc, at)) fedGps++; else skipped++;
             }
-            else if ("motion".equals(t)) { f.motion(pfStr(g(e, "state"), 8), at, numOrNaN(g(e, "conf"))); fedMotion++; }
             else if ("cell".equals(t)) { f.cell(num(g(e, "idx")), numOrNaN(g(e, "conf")), at); fedCell++; }
             else if ("arrived".equals(t)) { f.arrived(num(g(e, "idx")), at, numOrNaN(g(e, "strength"))); fedArrived++; }
             else skipped++;
         }
         f.predict(nowMs);
         Map<String, Object> b = f.best(), m = f.median();
-        return obj("ok", Boolean.TRUE, "state", f.exportState(), "best", b, "median", m, "fed", obj("gps", fedGps, "motion", fedMotion, "cell", fedCell, "arrived", fedArrived, "skipped", skipped));
+        return obj("ok", Boolean.TRUE, "state", f.exportState(), "best", b, "median", m, "fed", obj("gps", fedGps, "cell", fedCell, "arrived", fedArrived, "skipped", skipped));
     }
 }
