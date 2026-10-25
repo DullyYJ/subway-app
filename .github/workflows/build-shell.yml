@@ -51,6 +51,7 @@ jobs:
           - map_server_fetch.test.js
           - route_follow.test.js
           - route_view.test.js
+          - next_train_live_first.test.js
           - store_sync.test.js
     steps:
       - uses: actions/checkout@v4
