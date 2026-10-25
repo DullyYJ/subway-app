@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s200";
+var ENGINE_VERSION = "route-v2-2026-10-25s201";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3385,6 +3385,7 @@ __name2(budgetLeft, "budgetLeft");
 var CATCH_BUFFER_SEC = 30;
 var LIVE_MAX_STOPS = 3;
 var LIVE_ACCESS_STOPS = 6;
+var LIVE_ACCESS_FIRST = 3;
 var LIVE_BOARD_STOPS = 6;
 var LIVE_CACHE_MS = 6e4;
 var _liveCache = /* @__PURE__ */ new Map();
@@ -6325,19 +6326,23 @@ async function prefetchAccessLive(G, busCoord, SY, SX, EY, EX, env, stat, deadli
   }
   const _coordOf = /* @__PURE__ */ __name((id) => busCoord && busCoord[id] || (coordOfG(G) ? coordOfG(G)(id) : null), "_coordOf");
   const pick = cand.slice(0, LIVE_ACCESS_STOPS);
-  if (stat) stat.preStops = pick.length;
+  if (stat) stat.preStops = Math.min(pick.length, LIVE_ACCESS_FIRST);
   if (budgetLeft(deadline) <= 300) {
     if (stat) stat.preSkip = true;
     return;
   }
   const _skipLiveGPS = !!(G && G._baseCustom);
   if (_skipLiveGPS && stat) stat.preSkipCustom = true;
-  await Promise.all(pick.map(async (e) => {
+  // s201 (API \uD638\uCD9C \uC808\uAC10): \uAC77\uAE30 \uAC00\uAE5D\uACE0 \uBAA9\uC801\uC9C0 \uCABD\uC778 \uC55E \uC815\uB958\uC7A5 LIVE_ACCESS_FIRST \uACF3\uB9CC \uBA3C\uC800 \uC870\uD68C\uD55C\uB2E4.
+  //   \uBC84\uC2A4\uAC00 \uC7A1\uD78C \uC815\uB958\uC7A5\uC774 2\uACF3 \uBBF8\uB9CC\uC77C \uB54C\uB9CC(\uC57C\uAC04\u00B7\uB178\uC120 \uC801\uC74C) \uB098\uBA38\uC9C0 \uD6C4\uBCF4\uAE4C\uC9C0 \uB113\uD78C\uB2E4. \uC2B9\uCC28 \uC815\uB958\uC7A5\uC774 \uC870\uD68C \uBC16\uC774\uBA74
+  //   \uB4A4\uC758 fillBoardStopLive \uAC00 \uADF8 \uC815\uB958\uC7A5\uB9CC \uCC44\uC6CC \uB2E4\uC2DC \uCC3E\uB294\uB2E4(\uAE30\uC874 \uC548\uC804\uB9DD \uADF8\uB300\uB85C).
+  //   \uBC18\uD658: -1 \uC624\uB958, 0 \uAC74\uB108\uB700, 1 \uC870\uD68C\uD588\uC73C\uB098 \uBC84\uC2A4 \uC5C6\uC74C, 2 \uBC84\uC2A4 \uC788\uC74C
+  const _one = async (e) => {
     const sid = e[0];
     G.accessSec[stopNorm(sid)] = e[1];
-    if (_skipLiveGPS) return;
+    if (_skipLiveGPS) return 0;
     const cc = G.stopCity && G.stopCity[sid] || "";
-    if (!/^[0-9]{2,5}$/.test(cc)) return;
+    if (!/^[0-9]{2,5}$/.test(cc)) return 0;
     try {
       const ck = cc + "|" + stopNorm(sid);
       let m = liveCacheGet(ck);
@@ -6346,10 +6351,28 @@ async function prefetchAccessLive(G, busCoord, SY, SX, EY, EX, env, stat, deadli
         liveCacheSet(ck, m);
       }
       G.live[stopNorm(sid)] = m;
+      return m && (m.__names || []).length ? 2 : 1;
     } catch (err) {
       if (stat && !stat.preErr) stat.preErr = String(err && err.message || err).slice(0, 60);
+      return -1;
     }
-  }));
+  };
+  const _first = pick.slice(0, LIVE_ACCESS_FIRST), _rest = pick.slice(LIVE_ACCESS_FIRST);
+  const _r1 = await Promise.all(_first.map(_one));
+  const _withBus = _r1.filter((v) => v === 2).length, _errN = _r1.filter((v) => v === -1).length;
+  if (_rest.length) {
+    if (_withBus < 2 && _errN < _first.length && budgetLeft(deadline) > 900) {
+      await Promise.all(_rest.map(_one));
+      if (stat) {
+        stat.preWide = true;
+        stat.preStops = pick.length;
+      }
+      usageAdd("pre.wide");
+    } else {
+      for (const e of _rest) G.accessSec[stopNorm(e[0])] = e[1];
+      usageAdd("pre.narrow");
+    }
+  }
   if (stat) {
     stat.preOk = Object.keys(G.live).length;
     stat.preDetail = Object.keys(G.live).map((k) => (G.live[k].__id || k) + ":" + ((G.live[k].__names || []).join(",") || "0\uAC1C"));
