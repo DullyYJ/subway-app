@@ -646,6 +646,7 @@ public class ShellJvmTest {
         fd.onScreen("{\"info\":{\"ctr\":[37.5,127.0],\"stn\":\"강남\",\"go\":{\"c.0\":[\"맛집\",\"음식 > 한식\",\"서울 1\",37.5,127.0]}},\"alts\":{\"전체\":{\"ok\":true},\"카페\":{\"ok\":true,\"v\":1}}}");
         ok(fd.ctr != null && fd.ctr[0] == 37.5 && fd.needData(), "엔진이 정한 중심을 받으면 원자료를 받아야 한다");
         ok(fd.serverUrl().equals("https://gildongmu-food.phg0643.workers.dev/food?lat=37.5&lng=127.0&r=1500&limit=400") && ScreenCore.netAllowed(fd.serverUrl()), "서버 주소 · 통신 허용");
+        ok(fd.sharedUrl().equals(ShellCore.BASE + "/food-pub?lat=37.5&lng=127.0") && ScreenCore.netAllowed(fd.sharedUrl()), "s206: 공유 저장소 주소(엔진 /food-pub) · 통신 허용");
         String pu = fd.publicUrl(2);
         ok(pu.startsWith(ShellCore.NEWS_BASE + "/tago?url=") && pu.contains("indsLclsCd%3DI2") && pu.contains("pageNo%3D2") && pu.contains("cx%3D127.0%26cy%3D37.5") && ScreenCore.netAllowed(pu), "공공데이터 주소(서버 대리)");
         ok(FoodCore.pageCount("{\"body\":{\"items\":[{\"bizesNm\":\"A\"},{\"bizesNm\":\"B\"}]}}") == 2 && FoodCore.pageCount("{\"response\":{\"body\":{\"items\":{\"bizesNm\":\"A\"}}}}") == 1 && FoodCore.pageCount("zzz") == -1 && FoodCore.pageCount("") == -1, "공공데이터 쪽 항목 수(두 가지 모양)");
