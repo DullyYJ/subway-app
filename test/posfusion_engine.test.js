@@ -33,7 +33,6 @@ for (let t = T0 + 5000; t < T0 + 50 * 60000; t += 3000) {
   const lat = ST[i0].lat + (ST[i1].lat - ST[i0].lat) * f + (rnd() - 0.5) * 0.0005, lng = ST[i0].lng + (ST[i1].lng - ST[i0].lng) * f + (rnd() - 0.5) * 0.0005;
   EV.push({ t: 'gps', at: t, fix: { lat, lng, ts: t - 500, acc: 20 + rnd() * 30 } });
   if (rnd() < 0.05) EV.push({ t: 'cell', at: t + 1, idx: Math.round(x), conf: 0.6 });
-  if (rnd() < 0.04) EV.push({ t: 'motion', at: t + 2, state: rnd() < 0.5 ? 'moving' : 'stopped', conf: 0.8 });
 }
 EV.sort((p, q) => p.at - q.at);
 const END = EV[EV.length - 1].at + 4000;
@@ -46,7 +45,6 @@ function runOrig(upto, snapshots) {
     if (e.at > upto) break;
     f.predict(e.at);
     if (e.t === 'gps') f.gps({ lat: e.fix.lat, lng: e.fix.lng, ts: e.fix.ts, acc: e.fix.acc }, e.at);
-    else if (e.t === 'motion') f.motion(e.state, e.at, e.conf);
     else if (e.t === 'cell') f.cell(e.idx, e.conf, e.at);
     if (snapshots && snapshots.has(e.at)) out.push(f.best());
   }
@@ -61,7 +59,7 @@ const O = runOrig(END);
   ok(r.ok && r.best.idx === O.best.idx && r.best.conf === O.best.conf && r.best.kind === O.best.kind && r.best.delayS === O.best.delayS, '한 번에 돌린 결과가 웹 원본과 소수 끝까지 같다 idx ' + r.best.idx + ' conf ' + r.best.conf + ' vs ' + O.best.conf);
   ok(r.median.idx === O.median.idx && r.median.delayS === O.median.delayS, '중앙값도 같다 ' + r.median.idx);
   ok(r.best.idx >= 15, '시나리오 끝에서 진행도가 앞쪽으로 가 있다(원본과 같은 값) ' + r.best.idx);
-  ok(r.fed.gps > 500 && r.fed.cell > 5 && r.fed.motion > 5, '증거 개수 gps ' + r.fed.gps + ' cell ' + r.fed.cell + ' motion ' + r.fed.motion);
+  ok(r.fed.gps > 500 && r.fed.cell > 5 && r.fed.motion === undefined, '증거 개수 gps ' + r.fed.gps + ' cell ' + r.fed.cell + ' (가속도 입력은 없다)');
 }
 // ① 나눠서(상태를 JSON 으로 오가며): 채택 역이 구간마다 같다
 {
