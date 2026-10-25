@@ -2771,15 +2771,15 @@ public class ShellActivity extends Activity {
     /** 웹 .nmp 역 팝업의 손잡이(40x4, 위 16)와 아래로 밀어 닫기 — 화면 글은 엔진이 그리고 손잡이는 뷰가 맨 위에 얹는다. */
     private android.view.View stnSheetBox(ScreenView sv, int[] pal) {
         FrameLayout box = new FrameLayout(this) {
-            // 웹 svgShowPopup · _nmDragDismiss: 팝업 어디서든 위로 끌면 시간표가 손가락을 따라 자라 오르고(놓으면 이어서 올라가거나 되돌아간다), 아래로 끌면 시트가 손가락을 따라 내려가다 놓으면 닫힌다(또는 제자리).
+            // 웹 svgShowPopup · _nmDragDismiss: 팝업 어디서든 위로 끌면 시간표가 손가락을 따라 자라 오르고(놓으면 이어서 올라가거나 되돌아간다), 아래로 끌면 시트가 손가락을 따라 내려가다 놓으면 그 높이에서 그대로 내려가 닫힌다(또는 제자리). s208: 시간표를 내려 놓아도 역 팝업이 다시 올라오지 않는다(YJ 실기기 — 올라갔다 내려가 어색).
             // 단추·알약 누르기는 그대로 — 세로로 10dp 이상 끌려(세로가 가로의 1.2배 이상) 끌기가 확정된 순간에만 가로채고, 그 전에는 건드리지 않는다. 손가락 따라가기는 창 높이(위로)와 창 이동(아래로)뿐이라 새 객체가 없다.
             private float dx0, dy0, base; private boolean fired, top0, busy, up; private android.view.VelocityTracker vt;
-            private int curH; private float swapOff;                                      // swapOff = 끌다가 시간표가 역 팝업으로 바뀐 순간까지 내려온 거리(그 뒤로는 팝업이 손가락을 따라간다)
+            private int curH;
             @Override public boolean onInterceptTouchEvent(android.view.MotionEvent e) {
                 int a = e.getActionMasked();
                 if (busy) return true;
                 if (a == android.view.MotionEvent.ACTION_DOWN) {
-                    dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; swapOff = 0f; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f;
+                    dx0 = e.getRawX(); dy0 = e.getRawY(); fired = false; top0 = sheetView == null || sheetView.scrollPos() <= 0.5f;
                     if (vt == null) vt = android.view.VelocityTracker.obtain(); else vt.clear();
                     vt.addMovement(e);
                 } else if (a == android.view.MotionEvent.ACTION_MOVE && !fired) {
@@ -2807,8 +2807,7 @@ public class ShellActivity extends Activity {
                         int h = Math.max(from, Math.min(to, from + Math.round(-d)));
                         if (Math.abs(h - curH) >= 2) { curH = h; try { w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, h); } catch (Throwable ignored) { } }
                     } else if (!up) {
-                        if (swapOff == 0f && ShellCore.S_MAPTT.equals(sheetName) && d >= to - from && stationNow(d - (to - from))) swapOff = to - from;      // 시간표가 팝업 높이까지 내려오면 그 자리에서 역 팝업을 다시 만들어 손가락을 이어 따라간다
-                        w.getDecorView().setTranslationY(Math.max(0f, d - swapOff));
+                        w.getDecorView().setTranslationY(Math.max(0f, d));                        // 시간표든 역 팝업이든 손가락을 그대로 따라 내려간다(중간에 다른 화면으로 바뀌지 않는다)
                     }
                 } else if (a == android.view.MotionEvent.ACTION_UP || a == android.view.MotionEvent.ACTION_CANCEL) {
                     float vy = 0f;
@@ -2821,9 +2820,7 @@ public class ShellActivity extends Activity {
                         final android.view.View dv = w.getDecorView();
                         float ty = dv.getTranslationY();
                         boolean tt = ShellCore.S_MAPTT.equals(sheetName);
-                        if (!cancel && tt && (ty >= 56f * dpr || vy > 600f * dpr)) {
-                            busy = true; backToStation(dv, new Runnable() { @Override public void run() { busy = false; } });          // 웹: 시간표를 내리면 역 팝업이 되돌아온다
-                        } else if (!cancel && (ty >= (tt ? 56f : 40f) * dpr || vy > 600f * dpr)) {
+                        if (!cancel && (ty >= (tt ? 56f : 40f) * dpr || vy > 600f * dpr)) {
                             busy = true;
                             final android.app.Dialog me = sheet;
                             dv.animate().translationY(dv.getHeight() + 40f * dpr).setDuration(Math.round(160f + 80f * Math.max(0f, 1f - ty / Math.max(1f, dv.getHeight())))).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f))
@@ -2896,55 +2893,6 @@ public class ShellActivity extends Activity {
         sheetName = ShellCore.S_MAPTT;
         ttRender();
         ttFetch();
-    }
-    /**
-     * 시간표를 아래로 내리면 역 팝업이 되돌아온다(웹 nmTtOpen 의 backOK). 시간표는 손가락이 놓인 자리에서 팝업 자리까지 내려가며 옅어지고(.2초),
-     * 그 자리에서 창을 팝업 높이로 줄여 본 역 화면(캐시)을 채운 뒤 또렷하게 나타난다. 캐시가 없으면 팝업을 새로 연다. done = 끝난 뒤 할 일.
-     */
-    private void backToStation(final android.view.View dv, final Runnable done) {
-        final android.app.Dialog me = sheet; final ScreenView sv = sheetView;
-        if (me == null || sv == null) { if (done != null) done.run(); return; }
-        final String json = map.stnRequest(ShellCore.CAP, ShellCore.theme(store));
-        final String cached = stnCache.get(json);
-        if (cached == null) { if (done != null) done.run(); closeSheet(); openMapSheet(S_STN_H); return; }
-        map.ttSeq++;                                                                       // 늦게 오는 시간표 답이 이 화면을 덮지 않게
-        final int from = Math.round(S_STN_H * dpr), to = Math.round(getResources().getDisplayMetrics().heightPixels * 0.62f);
-        final android.view.animation.PathInterpolator ez = new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f);
-        sv.animate().alpha(0f).setDuration(200L).setInterpolator(ez).start();
-        dv.animate().translationY(Math.max(0, to - from)).setDuration(200L).setInterpolator(ez).withEndAction(new Runnable() {
-            @Override public void run() {
-                try {
-                    if (sheet != me || sheetView != sv) return;
-                    map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false);
-                    sheetName = ShellCore.S_MAPSTN;
-                    me.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, from);
-                    dv.setTranslationY(0f);
-                    if (mapView != null) { mapView.setCover(from); mapView.ensureVisible(map.stn); }
-                    sv.animate().alpha(1f).setDuration(160L).setInterpolator(ez).start();
-                    sv.post(new Runnable() { @Override public void run() { if (sv == sheetView) playPlace(); } });
-                } catch (Throwable t) { if (sheet == me) closeSheet(); }
-                finally { if (done != null) done.run(); }
-            }
-        }).start();
-    }
-    /** 끄는 도중 시간표를 그 자리에서 역 팝업으로 바꾼다(손가락 밑 위쪽 가장자리는 그대로 — 창을 팝업 높이로 줄이고 그만큼 덜 내려 놓는다). 캐시가 없으면 false(놓을 때 새로 연다). */
-    private boolean stationNow(float tr) {
-        final android.app.Dialog me = sheet; final ScreenView sv = sheetView;
-        if (me == null || sv == null) return false;
-        final String cached = stnCache.get(map.stnRequest(ShellCore.CAP, ShellCore.theme(store)));
-        if (cached == null) return false;
-        try {
-            final int from = Math.round(S_STN_H * dpr);
-            map.ttSeq++;                                                                   // 늦게 오는 시간표 답이 이 화면을 덮지 않게
-            map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false);
-            sheetName = ShellCore.S_MAPSTN;
-            me.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, from);
-            me.getWindow().getDecorView().setTranslationY(Math.max(0f, tr));
-            if (mapView != null) { mapView.setCover(from); mapView.ensureVisible(map.stn); }
-            sv.setAlpha(0.35f); sv.animate().alpha(1f).setDuration(140L).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.2f, 1f)).start();
-            sv.post(new Runnable() { @Override public void run() { if (sv == sheetView) playPlace(); } });
-            return true;
-        } catch (Throwable t) { return false; }
     }
     /** 시트 창 높이를 부드럽게 바꾼다(웹 시트 곡선). 창이 바뀌었거나 닫혔으면 조용히 멈춘다. */
     private void animSheetH(int a, int b, long ms, final Runnable done) {

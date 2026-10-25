@@ -1975,11 +1975,13 @@ public class ScreenView extends View {
         rf2.set(it.x + bwd / 2f, it.y + bwd / 2f, it.x + it.w - bwd / 2f, it.y + it.h - bwd / 2f);
         cv.drawRoundRect(rf2, rad - bwd / 2f, rad - bwd / 2f, p);
         p.setStyle(Paint.Style.FILL);
-        int fg = it.on ? cc(it.tc, pal[R_WHITE]) : (web ? cc(it.otx, pal[R_SUB]) : (tinted ? pal[R_SUB] : pal[R_TEXT]));
+        boolean plainOn = it.on && it.plain;                                        // s208: 켜진 '전체'는 바탕이 없어 흰 글자가 안 보였다 — 칩 색(금색) 굵은 글자 + 밑줄로 켜짐을 보인다
+        int fg = plainOn ? onFill : (it.on ? cc(it.tc, pal[R_WHITE]) : (web ? cc(it.otx, pal[R_SUB]) : (tinted ? pal[R_SUB] : pal[R_TEXT])));
         float fs = it.size > 0f ? it.size : 12f, px = it.sx > 0f ? it.sx : ScreenCore.CHIP_PADX;
         setText(fs, true, fg);
         float b = base(it.y, it.h, 0);
         cv.drawText(it.label, it.x + px, b, tp);
+        if (plainOn) { p.setStyle(Paint.Style.FILL); p.setColor(onFill); float uy = b + 3f; cv.drawRoundRect(it.x + px, uy, it.x + px + it.labelW, uy + 2f, 1f, 1f, p); }
         if (it.badge.length() > 0) {
             tp.setColor(alpha(fg, 0.7f));
             cv.drawText(it.badge, it.x + px + it.labelW + 6f, b, tp);

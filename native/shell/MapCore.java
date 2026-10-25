@@ -336,10 +336,10 @@ public final class MapCore {
         return "{\"cap\":" + cap + ",\"f\":" + f + "}";
     }
     public String stnRequest(int cap, String theme) {
-        return "{\"cap\":" + cap + ",\"f\":{\"part\":\"stn\",\"stn\":" + ShellCore.q(stn) + ",\"sl\":" + ShellCore.q(stnLine) + ",\"th\":" + ShellCore.q(theme(theme)) + "}}";
+        return "{\"cap\":" + cap + ",\"f\":{\"part\":\"stn\",\"stn\":" + ShellCore.q(stn) + ",\"sl\":" + ShellCore.q(stnLine) + ",\"reg\":" + ShellCore.q(reg()) + ",\"th\":" + ShellCore.q(theme(theme)) + "}}";
     }
     public String ttRequest(int cap, String theme) {
-        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"part\":\"tt\",\"stn\":").append(ShellCore.q(stn)).append(",\"th\":").append(ShellCore.q(theme(theme)));
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"part\":\"tt\",\"stn\":").append(ShellCore.q(stn)).append(",\"sl\":").append(ShellCore.q(stnLine)).append(",\"reg\":").append(ShellCore.q(reg())).append(",\"th\":").append(ShellCore.q(theme(theme)));
         b.append(",\"tt\":{\"st\":").append(ShellCore.q(ttState)).append(",\"sel\":{\"line\":").append(ShellCore.q(ttLine)).append(",\"day\":").append(ShellCore.q(ttDay)).append(",\"dk\":").append(ShellCore.q(ttDk)).append("},\"res\":{");
         boolean first = true;
         for (Map.Entry<String, String> e : ttRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(e.getValue()); }
