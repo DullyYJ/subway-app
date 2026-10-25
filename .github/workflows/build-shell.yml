@@ -30,6 +30,7 @@ jobs:
           - fav_engine.test.js
           - hcards_engine.test.js
           - ride_start_engine.test.js
+          - prefetch_access_live.test.js
           - rules_engine.test.js
           - scene_native.test.js
           - result_engine.test.js
