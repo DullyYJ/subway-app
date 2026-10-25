@@ -23,7 +23,7 @@ public final class HomeCore {
 
     /** 요청 시점의 시계(순수 계산에서 시계를 부르지 않으려고 밖에서 받는다). m 은 JS getMonth 처럼 0부터. */
     public static final class Env {
-        public long nowMs; public int tzoMin, y, m, d; public boolean hol;
+        public long nowMs; public int tzoMin, y, m, d;
     }
 
     // ── 상태 ──
@@ -265,7 +265,7 @@ public final class HomeCore {
         b.append(",\"startSet\":").append(loc[START] != null).append(",\"destSet\":").append(loc[DEST] != null).append(",\"gps\":").append(gps).append(",\"rs\":").append(routing);
         b.append(",\"base\":{\"ms\":").append(baseMs >= 0 ? String.valueOf(baseMs) : "null");
         b.append(",\"tzo\":").append(env.tzoMin).append(",\"today\":[").append(env.y).append(',').append(env.m).append(',').append(env.d).append(']');
-        b.append(",\"hol\":").append(env.hol).append("}}");
+        b.append(",\"now\":").append(env.nowMs).append("}}");        // 평일/주말·공휴일은 엔진이 기준시각 날짜로 정한다(앱은 지금 시각만)
         b.append(",\"d\":");
         if (active >= 0) {
             Cand c = cand[active];

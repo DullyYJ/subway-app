@@ -13,6 +13,7 @@ public final class ShareCore {
 
     public static final class Share {
         public String text = "", from = "", cur = "", to = "", arr = "", rem = "", next = "";
+        public String foot = "", lbT = "", lbA = "", lbR = "";                       // 그림 아래 한 줄 · 글머리 — 엔진이 정한 글(s207)
         public final List<String> names = new ArrayList<String>(), times = new ArrayList<String>();
         public int hit, left;
         public boolean moving;
@@ -33,6 +34,8 @@ public final class ShareCore {
             s.text = BoardCore.s(m.get("text"), 300); s.from = BoardCore.s(m.get("from"), 60); s.cur = BoardCore.s(m.get("cur"), 120); s.to = BoardCore.s(m.get("to"), 60);
             s.arr = BoardCore.s(m.get("arr"), 12); s.rem = BoardCore.s(m.get("rem"), 12); s.next = BoardCore.s(m.get("next"), 60);
             s.moving = Boolean.TRUE.equals(m.get("moving"));
+            s.foot = BoardCore.s(m.get("foot"), 80);
+            if (m.get("lb") instanceof Map) { Map<String, Object> lb = (Map<String, Object>) m.get("lb"); s.lbT = BoardCore.s(lb.get("t"), 30); s.lbA = BoardCore.s(lb.get("a"), 30); s.lbR = BoardCore.s(lb.get("r"), 30); }
             if (!(m.get("stations") instanceof List)) return null;
             for (Object x : (List<Object>) m.get("stations")) {
                 if (!(x instanceof Map)) continue;
@@ -71,8 +74,5 @@ public final class ShareCore {
     }
 
     /** 그림 아래 한 줄. */
-    public static String footer(Share s) {
-        if (s.moving && s.next.length() > 0) return "다음 역 " + s.next + " 이동 중 · " + s.left + "개 역 남음";
-        return s.left > 0 ? s.left + "개 역 남음" : "도착했어요";
-    }
+    public static String footer(Share s) { return s.foot; }
 }

@@ -33,7 +33,7 @@ public final class HcardsCore {
     /** 엔진 POST /screen/hcards 본문. resultFacts 는 HomeCore.resultFacts() 값(경로가 없으면 "null"), talks 는 ChatCore.recentTalksJson() 값. */
     public String request(int cap, String theme, HomeCore.Env env, String resultFacts, String talks) {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"now\":").append(env.nowMs).append(",\"tz\":").append(-env.tzoMin);
-        b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel")).append(",\"hol\":").append(env.hol);
+        b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         if (rideScene != null && rideScene.length() > 2) b.append(",\"rd\":").append(rideScene);
         if (share) b.append(",\"sh\":1");
         b.append(",\"gps\":").append(fix == null ? "null" : "[" + fix[0] + "," + fix[1] + "]");

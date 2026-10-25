@@ -542,6 +542,9 @@ final class RideStandbyJ {
     }
     private static String jstr(Object o) { return o == null ? "undefined" : str(o); }
 
+    static String shareFoot(boolean mv, String nextName, int left) {
+        return mv ? "다음 역 " + nextName + " 이동 중 · " + left + "개 역 남음" : (left > 0 ? left + "개 역 남음" : "도착했어요");
+    }
     static Map<String, Object> share(Map<String, Object> st, Map<String, Object> r, List<Object> cells, List<Object> map, int cur, boolean moving, Map<String, Object> dest, String destName, double now) {
         List<String[]> stn = new ArrayList<String[]>(); List<Integer> at = new ArrayList<Integer>(); int j;
         for (j = 0; j < cells.size(); j++) {
@@ -565,7 +568,8 @@ final class RideStandbyJ {
         List<Object> sl = new ArrayList<Object>();
         for (String[] s : stn) sl.add(obj("n", s[0], "t", s[1]));
         return obj("text", from + " - " + curTxt + " - " + to + " (도착예정시간: " + hm + ")\n[남은시간: " + dur + "]", "from", from, "cur", curTxt, "to", to, "arr", hm, "rem", dur,
-            "stations", sl, "hit", hit, "moving", mv, "left", Math.max(0, stn.size() - 1 - hit), "next", nextName);
+            "stations", sl, "hit", hit, "moving", mv, "left", Math.max(0, stn.size() - 1 - hit), "next", nextName,
+            "foot", shareFoot(mv, nextName, Math.max(0, stn.size() - 1 - hit)), "lb", obj("t", "길동무 · 내 위치", "a", "도착예정시간: ", "r", "남은시간 "));      // 공유 그림의 아래 한 줄과 글머리는 엔진이 정한다(s207)
     }
 
     // ═════════════ 하차 7분 전 추천 판단(arrive-reco) ═════════════

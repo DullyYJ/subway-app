@@ -21,10 +21,10 @@ final class ShareArt {
         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(border);
         g.drawRoundRect(new RectF(0.5f, 0.5f, W - 0.5f, H - 0.5f), 18, 18, p);
         p.setStyle(Paint.Style.FILL);
-        text(g, p, "길동무 · 내 위치", 18, 26, 11, false, sub, Paint.Align.LEFT, W - 36);
+        text(g, p, d.lbT, 18, 26, 11, false, sub, Paint.Align.LEFT, W - 36);
         text(g, p, d.from + " - " + d.cur + " - " + d.to, 18, 48, 14, true, text, Paint.Align.LEFT, W - 36);
-        text(g, p, "도착예정시간: " + d.arr, 18, 68, 12, false, sub, Paint.Align.LEFT, W - 36);
-        text(g, p, "남은시간 " + d.rem, 18, 100, 26, true, acc, Paint.Align.LEFT, W - 36);
+        text(g, p, d.lbA + d.arr, 18, 68, 12, false, sub, Paint.Align.LEFT, W - 36);
+        text(g, p, d.lbR + d.rem, 18, 100, 26, true, acc, Paint.Align.LEFT, W - 36);
         int[] slots = ShareCore.slots(d.names.size(), d.hit);
         float x0 = 18, x1 = W - 18, ly = 138, step = slots.length > 1 ? (x1 - x0 - 40) / (slots.length - 1) : 0f;
         p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(3f); p.setColor(acc); p.setAlpha(140);

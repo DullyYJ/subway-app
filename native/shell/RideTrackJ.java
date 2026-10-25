@@ -31,7 +31,7 @@ final class RideTrackJ {
         busStopNearReachM = 200, busGpsSnapM = 500, busAdvanceSec = 8,
         trailMaxSpeedMps = 60, zeroLeadSec = 25, zeroWinSec = 55, zeroSlideSec = 45, zeroNearM = 200, zeroFinalNearM = 250, zeroFarM = 600,
         zeroApplyLeadSec = 3, zeroKeepSec = 20, zeroFinalKeepMin = 30,
-        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 60, passInterpMaxGapSec = 30,
+        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 60, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
         notYetFarM = 400, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
         motionWinSec = 14, motionMinSpanSec = 4, motionMaxAcc = 60, motionMoveMps = 1.4, motionStopMps = 0.7,
         busPosOffM = 150, busPosFixAccM = 60, busPosMinStops = 2, busPosMinGapM = 15;
@@ -346,6 +346,15 @@ final class RideTrackJ {
             if (d <= passNearM && (bi < 0 || d < bd)) { bd = d; bms = q.ts; bi = i; }
         }
         if (bi < 0) return null;
+        // s207 보수화(엔진 rtPassTime 과 같다): 가장 가까운 순간이 지난 뒤에야 통과로 적는다 — 아직 다가오는 중이면 null. 그 뒤 좌표가 passAwayM 이상 멀어졌거나, 그 순간에서 passConfirmSec 가 지났을 때(정차 · 좌표 끊김 포함) 확인.
+        boolean conf = now - tr.get(bi).ts >= passConfirmSec * 1000;
+        for (int cj = bi + 1; !conf && cj < tr.size(); cj++) {
+            Fix cq = tr.get(cj);
+            if (cq.ts > now + 1000) break;
+            if (!cq.noAcc() && cq.acc > passAccM) continue;
+            if (hav(cq.lat, cq.lng, lat, lng) >= bd + passAwayM) conf = true;
+        }
+        if (!conf) return null;
         double ms = bms, dMin = bd, gapMs = passInterpMaxGapSec * 1000;
         int[] cand = { bi - 1, bi };
         for (int c = 0; c < cand.length; c++) {

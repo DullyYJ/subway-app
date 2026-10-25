@@ -1260,6 +1260,8 @@ public class ShellActivity extends Activity {
         try { v.setAlpha(0.35f); v.animate().alpha(1f).setDuration(240L).setInterpolator(new android.view.animation.DecelerateInterpolator(1.4f)).start(); } catch (Throwable ignored) { v.setAlpha(1f); }
     }
 
+    /** 엔진이 정한 안내 글을 띄운다(비어 있으면 아무것도 안 띄운다). */
+    private void toastTx(String m) { if (m != null && m.length() > 0) toast(m); }
     private void toast(String m) { try { Toast.makeText(this, m, Toast.LENGTH_SHORT).show(); } catch (Throwable ignored) { } }
 
     // ───────────── 앱 규칙(엔진 /rules) ─────────────
@@ -2865,16 +2867,16 @@ public class ShellActivity extends Activity {
             case MapCore.R_CLOSE: closeSheet(); break;
             case MapCore.R_START:
                 home.setStation(HomeCore.START, map.pickName, map.pickLine, map.pickLa, map.pickLo);
-                closeSheet(); toast("출발역: " + map.pickName + " · 이제 도착역을 선택하세요");
+                closeSheet(); toastTx(MapCore.fill(map.msgS, map.pickName));
                 break;
             case MapCore.R_DEST:
                 home.setStation(HomeCore.DEST, map.pickName, map.pickLine, map.pickLa, map.pickLo);
                 closeSheet();
                 if (home.bothSet()) {
-                    toast("도착역: " + map.pickName);
+                    toastTx(MapCore.fill(map.msgE, map.pickName));
                     store.put(ShellCore.K_TAB, "home"); showTab("home");
                     main.postDelayed(new Runnable() { @Override public void run() { goRoute(); } }, 400);
-                } else toast("도착역: " + map.pickName + " · 출발역도 골라 주세요");
+                } else toastTx(MapCore.fill(map.msgE2, map.pickName));
                 break;
             case MapCore.R_TT: openTimetable(); break;
             case MapCore.R_TT_LOAD: ttFetch(); break;
@@ -3138,14 +3140,14 @@ public class ShellActivity extends Activity {
             case MapCore.R_BR_CLOSE: closeSheet(); break;
             case MapCore.R_BR_REFRESH: brBusy = true; brBusyAt = System.currentTimeMillis(); brAt = brBusyAt; brFlight.clear(); brRound(brGen, false); break;
             case MapCore.R_BR_RENDER: brRender(); break;
-            case MapCore.R_BR_SAME: toast("출발지와 다른 정류장을 눌러 주세요"); break;
+            case MapCore.R_BR_SAME: toastTx(map.msgSame); break;
             case MapCore.R_BR_START: {
                 String[] r = map.brPicked();
                 if (r == null) break;
                 home.pickSnap();
                 home.setBusStop(HomeCore.START, r[2], r[1], map.brCc, Double.parseDouble(r[4]), Double.parseDouble(r[5]));
                 map.brPickStart();
-                toast("\uD83D\uDCCD 출발지로 설정되었습니다 · " + r[2]);
+                toastTx(MapCore.fill(map.msgBrS, r[2]));
                 brRender();
                 break;
             }
@@ -3159,7 +3161,7 @@ public class ShellActivity extends Activity {
                 home.pickDone(); brKeep = true;
                 closeSheet();
                 store.put(ShellCore.K_TAB, "home"); showTab("home");
-                toast("\uD83C\uDFC1 도착지로 설정되었습니다 · " + r[2]);
+                toastTx(MapCore.fill(map.msgBrE, r[2]));
                 if (home.bothSet()) main.postDelayed(new Runnable() { @Override public void run() { goRoute(); } }, 400);
                 break;
             }
@@ -3167,7 +3169,7 @@ public class ShellActivity extends Activity {
                 brKeep = true;
                 closeSheet();
                 map.cat("m:subway"); reloadMap(true);
-                toast("\uD83C\uDFC1 도착지로 설정할 역을 누르세요");
+                toastTx(map.msgToStn);
                 break;
             default: break;
         }
@@ -3251,8 +3253,6 @@ public class ShellActivity extends Activity {
         e.nowMs = System.currentTimeMillis();
         e.tzoMin = -(c.getTimeZone().getOffset(e.nowMs) / 60000);
         e.y = c.get(Calendar.YEAR); e.m = c.get(Calendar.MONTH); e.d = c.get(Calendar.DAY_OF_MONTH);
-        int w = c.get(Calendar.DAY_OF_WEEK);
-        e.hol = w == Calendar.SATURDAY || w == Calendar.SUNDAY;
         return e;
     }
 
@@ -3490,15 +3490,21 @@ public class ShellActivity extends Activity {
         reloadHome();
     }
 
+    /** (스레드 안) 검색 후보: 먼저 엔진(/suggest, 모아 둔 결과를 나눠 쓴다)에 묻고, 못 받으면 예전처럼 원래 서버에 직접 묻는다. */
+    private NetPost.Res suggestGet(String kind, String q, String directUrl) {
+        NetPost.Res r = NetPost.get(HomeSearchCore.suggestUrl(kind, q), 5000);
+        if (r != null && r.status == 200 && r.body != null && r.body.length() > 0) return r;
+        return NetPost.get(directUrl, 6000);
+    }
     /** 눌려 있는 칸의 글자에 대한 버스정류장·장소 후보를 받아 온다(글이 같으면 다시 받지 않는다). */
     private void fetchCands() {
         final String q = home.wantQuery();
         if (q.length() == 0) return;
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q), 6000);
+                NetPost.Res rb = suggestGet("b", q, HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q));
                 final List<Map<String, Object>> bus = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
-                NetPost.Res rp = NetPost.get(HomeSearchCore.placeUrl(HomeSearchCore.DEFAULT_BASE, q), 6000);
+                NetPost.Res rp = suggestGet("p", q, HomeSearchCore.placeUrl(HomeSearchCore.DEFAULT_BASE, q));
                 final List<Map<String, Object>> pl = rp.status == 200 ? HomeSearchCore.parsePlaces(rp.body) : new java.util.ArrayList<Map<String, Object>>();
                 main.post(new Runnable() { @Override public void run() {
                     boolean a = home.setCands(q, true, bus), b = home.setCands(q, false, pl);
@@ -4374,7 +4380,7 @@ public class ShellActivity extends Activity {
         final int my = ++cmBusSeq;
         new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res rb = NetPost.get(HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q.trim()), 6000);
+                NetPost.Res rb = suggestGet("b", q.trim(), HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q.trim()));
                 final List<Map<String, Object>> raw = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
                 main.post(new Runnable() { @Override public void run() {
                     if (my != cmBusSeq || !"cm".equals(setPage) || !cm.picking() || sheet == null || !sheet.isShowing()) return;
@@ -4390,11 +4396,11 @@ public class ShellActivity extends Activity {
             }
         }, "shell-cmbus").start();
     }
-    /** '지금 미리보기': 지금이 오후 3시 전이면 출근, 아니면 퇴근 브리핑을 알림으로 한 번 띄운다(글은 엔진). */
+    /** '지금 미리보기': 출근/퇴근 중 어느 브리핑인지와 글은 엔진이 정해(kind:auto) 알림으로 한 번 띄운다. */
     private void testBrief() {
         toast("브리핑을 만드는 중이에요");
         final android.content.Context app = getApplicationContext();
-        final String kind = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) < 15 ? "morn" : "eve";
+        final String kind = "auto";                               // 출근/퇴근 어느 쪽인지는 엔진이 시각으로 정한다
         new Thread(new Runnable() { @Override public void run() { CommuteAlarm.send(app, kind); } }, "shell-cmtest").start();
     }
     private void setPageAct(String a, String v, String key, boolean on) {

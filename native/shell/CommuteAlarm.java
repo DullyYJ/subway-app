@@ -95,7 +95,7 @@ final class CommuteAlarm {
                 if (r.status == 200) tb = CmCore.parseBrief(r.body);
             } catch (Throwable ignored) { }
         }
-        if (tb == null) tb = new String[] { "eve".equals(kind) ? "퇴근길 브리핑" : "출근길 브리핑", "브리핑을 받지 못했어요. 앱에서 확인해 보세요" };
+        if (tb == null) tb = new String[] { "eve".equals(kind) ? "퇴근길 브리핑" : ("morn".equals(kind) ? "출근길 브리핑" : "출퇴근 브리핑"), "브리핑을 받지 못했어요. 앱에서 확인해 보세요" };
         show(c, tb[0], tb[1]);
         return true;
     }

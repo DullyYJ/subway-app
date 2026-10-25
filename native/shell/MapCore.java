@@ -302,10 +302,15 @@ public final class MapCore {
     public String view = "";                                   // 'metro' | 'list' | 'bus'
     final List<String[]> regionStns = new ArrayList<String[]>();   // 지방 노선 목록의 눌림 번호 → [역, 노선]
     public String findName = "", nearName = "";
+    int favMax = 12, aliasMax = 10;                                  // 엔진(info.favp)이 알려 주기 전의 안전 한도 — 글은 엔진이 줄 때만 보인다
+    String favTxAdd = "", favTxRm = "", favTxFull = "";
 
     // ── 역 팝업 / 시간표 ──
     public String stn = "", stnLine = "";
     public String pickName = "", pickLine = ""; public double pickLa, pickLo;
+    /** 출발·도착 지정 때 띄울 안내 글 — 엔진이 시트 응답(info.msg)에 실어 준 것. {n} 자리에 이름을 채운다. 엔진이 안 준 동안은 비어 있어 아무것도 띄우지 않는다. */
+    public String msgS = "", msgE = "", msgE2 = "", msgSame = "", msgBrS = "", msgBrE = "", msgToStn = "";
+    public static String fill(String t, String n) { return t == null ? "" : t.replace("{n}", n == null ? "" : n); }
     public final List<String> ttLines = new ArrayList<String>(), ttDks = new ArrayList<String>(), ttDays = new ArrayList<String>();
     public String ttLine = "", ttDay = "", ttDk = "", ttState = "loading";
     final Map<String, String> ttRes = new LinkedHashMap<String, String>();
@@ -411,6 +416,12 @@ public final class MapCore {
             }
             stopJson.clear();
             if (im.get("stops") instanceof List) for (Object x : (List<Object>) im.get("stops")) if (x instanceof Map && stopJson.size() < 40) stopJson.add(HomeSearchCore.toJson(x));
+            if (im.get("favp") instanceof Map) {                                                   // 버스 즐겨찾기 규칙(곳 수 · 별명 글자 수 · 안내 글)은 엔진이 정한다
+                Map<String, Object> fp = (Map<String, Object>) im.get("favp");
+                if (fp.get("max") instanceof Double) favMax = (int) ((Double) fp.get("max")).doubleValue();
+                if (fp.get("al") instanceof Double) aliasMax = (int) ((Double) fp.get("al")).doubleValue();
+                favTxAdd = BoardCore.s(fp.get("add"), 40); favTxRm = BoardCore.s(fp.get("rm"), 40); favTxFull = BoardCore.s(fp.get("full"), 60);
+            }
             nearName = im.get("near") instanceof Map ? BoardCore.s(((Map<String, Object>) im.get("near")).get("name"), 40) : "";
             rts.clear();
             if (im.get("rts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) im.get("rts")).entrySet()) {
@@ -428,6 +439,8 @@ public final class MapCore {
             Object o = ScreenCore.parse(json);
             Object i = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
             if (!(i instanceof Map)) return;
+            Object mg = ((Map<String, Object>) i).get("msg");
+            if (mg instanceof Map) { Map<String, Object> mm = (Map<String, Object>) mg; msgS = BoardCore.s(mm.get("s"), 80); msgE = BoardCore.s(mm.get("e"), 80); msgE2 = BoardCore.s(mm.get("e2"), 80); }
             Object p = ((Map<String, Object>) i).get("pick");
             if (p instanceof Map) { Map<String, Object> pm = (Map<String, Object>) p; pickName = BoardCore.s(pm.get("name"), 40); pickLine = BoardCore.s(pm.get("line"), 30); pickLa = BoardCore.d(pm.get("la")); pickLo = BoardCore.d(pm.get("lo")); }
         } catch (Exception e) { /* 비움 */ }
@@ -507,7 +520,7 @@ public final class MapCore {
     private List<Object> favList() {
         try { Object o = ScreenCore.parse(favRaw()); return o instanceof List ? (List<Object>) o : new ArrayList<Object>(); } catch (Exception e) { return new ArrayList<Object>(); }
     }
-    /** 별(주변) 또는 ×(즐겨찾기)를 눌렀다 — 웹 toggleFavBusStop. 12곳까지. 알림 글은 toast. */
+    /** 별(주변) 또는 ×(즐겨찾기)를 눌렀다 — 웹 toggleFavBusStop. 곳 수 · 알림 글은 엔진이 알려 준 값(info.favp). 알림 글은 toast. */
     @SuppressWarnings("unchecked")
     private boolean toggleFav(int i) {
         Map<String, Object> sm = stopAt(i);
@@ -517,10 +530,10 @@ public final class MapCore {
         List<Object> fl = favList();
         int at = -1;
         for (int k = 0; k < fl.size(); k++) if (fl.get(k) instanceof Map && id.equals(BoardCore.s(((Map<String, Object>) fl.get(k)).get("id"), 40))) { at = k; break; }
-        if (at >= 0) { fl.remove(at); toast = "즐겨찾기 해제"; }
+        if (at >= 0) { fl.remove(at); toast = favTxRm; }
         else {
-            if (fl.size() >= 12) { toast = "즐겨찾기는 최대 12개"; return false; }
-            fl.add(sm); toast = "즐겨찾기 추가";
+            if (fl.size() >= favMax) { toast = favTxFull; return false; }
+            fl.add(sm); toast = favTxAdd;
         }
         st.put(K_BUSFAV, HomeSearchCore.toJson(fl));
         return true;
@@ -531,7 +544,7 @@ public final class MapCore {
         if (key == null || key.length() == 0) return;
         Map<String, Object> am = aliasMap();
         String t = text == null ? "" : text.trim();
-        if (t.length() > 10) t = t.substring(0, 10);
+        if (t.length() > aliasMax) t = t.substring(0, aliasMax);
         if (t.length() == 0) am.remove(key); else am.put(key, t);
         st.put(K_BUSAL, HomeSearchCore.toJson(am));
     }
@@ -604,6 +617,7 @@ public final class MapCore {
             if (!(i instanceof Map) || !(((Map<String, Object>) i).get("br") instanceof Map)) return;
             Map<String, Object> b = (Map<String, Object>) ((Map<String, Object>) i).get("br");
             brSt = BoardCore.s(b.get("st"), 6);
+            if (b.get("msg") instanceof Map) { Map<String, Object> mm = (Map<String, Object>) b.get("msg"); msgSame = BoardCore.s(mm.get("same"), 80); msgBrS = BoardCore.s(mm.get("s"), 80); msgBrE = BoardCore.s(mm.get("e"), 80); msgToStn = BoardCore.s(mm.get("tostn"), 80); }
             if (b.get("need") instanceof List) for (Object x : (List<Object>) b.get("need")) if (x instanceof Map && brNeed.size() < 4) brNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
             if (b.get("stn") instanceof List && brStnJson.length() == 0) {
                 brStnJson = HomeSearchCore.toJson(b.get("stn")); brVia = BoardCore.s(b.get("via"), 6); brCc = BoardCore.s(b.get("cc"), 4);

@@ -54,6 +54,9 @@ public final class HomeSearchCore {
         return s;
     }
 
+    /** 후보 중계(엔진 GET /suggest): kind "b"=버스정류장 · "p"=장소. 응답 모양은 아래 두 주소의 원래 응답과 같다. 같은 검색어는 엔진이 모아 두고 모든 사용자가 나눠 쓴다. */
+    public static String suggestUrl(String kind, String q) { return ShellCore.BASE + "/suggest?k=" + ("b".equals(kind) ? "b" : "p") + "&q=" + enc(q); }
+
     /** 버스정류장: <서버>/tago?url=<TAGO 주소>  (서비스 키는 서버가 넣는다 — 웹의 _busStopSearchByName 과 같은 주소). */
     public static String busUrl(String serverBase, String q) {
         String inner = TAGO_URL + "?serviceKey=" + "&nodeNm=" + enc(q) + "&_type=json";

@@ -78,7 +78,7 @@ public final class CmCore {
     // ═════════════ 엔진 요청 본문 ═════════════
     /** POST /commute-brief 본문. gps 가 null 이면 싣지 않는다. */
     public static String briefBody(ShellCore.Store st, String kind, long nowMs, double[] gps) {
-        StringBuilder b = new StringBuilder("{\"kind\":").append(ShellCore.q("eve".equals(kind) ? "eve" : "morn")).append(",\"nowMs\":").append(nowMs);
+        StringBuilder b = new StringBuilder("{\"kind\":").append(ShellCore.q("eve".equals(kind) ? "eve" : ("auto".equals(kind) ? "auto" : "morn"))).append(",\"nowMs\":").append(nowMs);
         for (String k : PK) { String p = placeJson(st, k); if (p != null) b.append(',').append(ShellCore.q(k)).append(':').append(p); }
         if (gps != null) b.append(",\"gps\":{\"lat\":").append(gps[0]).append(",\"lng\":").append(gps[1]).append('}');
         return b.append('}').toString();
