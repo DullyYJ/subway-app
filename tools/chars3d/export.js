@@ -1,3 +1,4 @@
+// (s209) 자세 시트: python3 faces.py dolsom,ppopu,lovel,chaeng,sul,dudung closed,happy,squint,tight,open → faces.json 을 tex.js 에 합쳐 tex_all.js 로 → node exportpose.js <ids> → python3 assemble_pose.py → out/<id>_pose.webp. 카메라는 fr/meta_all.json(걷기 시트와 같은 view).
 // 사용: cd tools/chars3d && npm i three@0.160.0 playwright && cp node_modules/three/build/three.min.js . && python3 prep_tex.py src2d && node export.js lovel,dolsom,ppopu,chaeng,sul,dudung 16 14 && python3 assemble.py  → out/*.webp 를 www/chars3d 로 복사(바닥줄·중심은 fr/meta.json 을 앱 D3·OverlayPlugin.cfg3 에 옮긴다)
 // 순서: ① 넉넉한 카메라로 모든 프레임의 범위를 재서 ② 캐릭터마다 카메라(view)를 딱 맞추고 ③ 다시 렌더 → fr/<id>/*.png, fr/meta.json(칸 안 바닥줄·몸 중심·크기)
 const {chromium}=require('playwright');const fs=require('fs');

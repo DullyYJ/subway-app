@@ -1,5 +1,5 @@
 <!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c></canvas>
-<script src="three.min.js"></script><script src="tex.js"></script><script src="models.js"></script>
+<script src="three.min.js"></script><script src="tex_all.js"></script><script src="models.js"></script>
 <script>
 const S=512;const cv=document.getElementById('c');cv.width=cv.height=S;
 const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true,preserveDrawingBuffer:true});
@@ -13,6 +13,7 @@ const rim=new THREE.DirectionalLight(0xdfeaff,0.9);rim.position.set(4,3,-4);scen
 const fill=new THREE.DirectionalLight(0xffffff,0.5);fill.position.set(4,2,6);scene.add(fill);
 let cur=null,curId=null,extra=null;
 window.setup=function(id){if(cur)scene.remove(cur);if(extra){scene.remove(extra);extra=null;}const C=CHARS[id];cur=new THREE.Group();const m=C.build();m.userData._m=1;cur.add(m);cur.rotation.y=C.yaw;scene.add(cur);{const v=window.OV||C.view||[4.9,1.75];cam.left=-v[0]/2;cam.right=v[0]/2;cam.top=v[0]/2;cam.bottom=-v[0]/2;cam.updateProjectionMatrix();const cx=v[2]||0;cam.position.set(cx,v[1]+dist*Math.sin(el),dist*Math.cos(el));cam.lookAt(cx,v[1],0);}cur.userData.model=m;curId=id;};
+window.framePose=function(name,dy){const C=CHARS[curId];C.poseX(cur.userData.model,name);cur.position.y=dy||0;r.render(scene,cam);return cv.toDataURL('image/png');};
 window.frame=function(ph,opt){const C=CHARS[curId];C.pose(cur.userData.model,ph);if(opt&&opt.cb)opt.cb(cur,scene);r.render(scene,cam);return cv.toDataURL('image/png');};
 
 let mound=null;const clipPl=new THREE.Plane(new THREE.Vector3(0,1,0),0);

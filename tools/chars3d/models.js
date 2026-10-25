@@ -66,7 +66,7 @@
     body.add(ell(0.5, 0.36, 0.38, fm)); 
     const head = new T.Group(); head.position.set(0.36, 0.52, 0); body.add(head); P.head = head;
     head.add(ell(0.66, 0.58, 0.72, fm, 36));
-    decal(head, 0.66, 0.58, 0.72, o.tex);
+    P.face = decal(head, 0.66, 0.58, 0.72, o.tex); P.faceKey = o.tex;
     fluff(head, 0.66, 0.58, 0.72, 46, 0.3, fm, o.seed + 1, d => d.x < -0.35);   // 뒤통수·머리 뒤쪽 털(앞은 원본 그림)
     // 귀(옆으로 늘어진 털 뭉치 — 원본의 양옆 뭉치)
     P.ears = [];
@@ -157,7 +157,7 @@
     const belly = ell(0.42, 0.18, 0.26, gl, 24); belly.position.set(0.02, -0.2, 0); body.add(belly);
     const head = new T.Group(); head.position.set(0.5, 0.4, 0); body.add(head); P.head = head;
     head.add(ell(0.55, 0.47, 0.55, gm, 40));
-    decal(head, 0.55, 0.47, 0.55, 'lovel_head');
+    P.face = decal(head, 0.55, 0.47, 0.55, 'lovel_head'); P.faceKey = 'lovel_head';
     // 귀: 밑동이 넓고 끝이 둥근 삼각형(원본의 큰 귀) + 분홍 안쪽
     P.ears = [];
     const pinkM = mat(0xd9a3a8, { roughness: 0.9 });
@@ -207,7 +207,7 @@
     const body = new T.Group(); body.position.y = 1.0; root.add(body); P.body = body;
     const torso = ell(0.4, 0.42, 0.36, bm, 32); torso.position.set(-0.08, -0.62, 0); body.add(torso);
     const head = new T.Group(); body.add(head); P.head = head;
-    head.add(ell(0.5, 0.5, 0.56, bm, 44)); decal(head, 0.5, 0.5, 0.56, 'chaeng_head');
+    head.add(ell(0.5, 0.5, 0.56, bm, 44)); P.face = decal(head, 0.5, 0.5, 0.56, 'chaeng_head'); P.faceKey = 'chaeng_head';
     // 가슴 옆 작은 손
     P.arms = [1, -1].map(s => { const f = new T.Group(); f.position.set(0.1, -0.5, 0.34 * s); body.add(f); const h = ell(0.1, 0.17, 0.1, bm, 14); h.position.set(0.0, -0.1, 0.03 * s); h.rotation.x = 0.3 * s; f.add(h); return f; });
     // 꼬리: 납작하고 넓은 지느러미 하나(곡면) — 몸통 아래에서 뒤로 뻗어 끝이 위로 말리고, 프레임마다 물결 모양으로 휜다
@@ -253,7 +253,7 @@
     const body = new T.Group(); body.position.y = 1.2; root.add(body); P.body = body;
     body.add(ell(0.66, 0.62, 0.56, br, 32)); decal(body, 0.66, 0.62, 0.56, 'sul_chest');
     const head = new T.Group(); head.position.set(0.5, 0.5, 0); body.add(head); P.head = head;
-    head.add(ell(0.56, 0.55, 0.58, wh, 36)); decal(head, 0.56, 0.55, 0.58, 'sul_head');
+    head.add(ell(0.56, 0.55, 0.58, wh, 36)); P.face = decal(head, 0.56, 0.55, 0.58, 'sul_head'); P.faceKey = 'sul_head';
     // 큼직한 노란 부리(위가 넓고 끝이 아래로 굽는다)
     const bk = new T.Mesh(new T.ConeGeometry(0.2, 0.46, 20), yl); bk.rotation.z = -Math.PI / 2; bk.position.set(0.62, -0.14, 0); bk.scale.set(1, 1, 1.25); head.add(sh(bk));
     const hook = ell(0.1, 0.11, 0.1, yl, 14); hook.position.set(0.84, -0.22, 0); head.add(hook);
@@ -296,7 +296,7 @@
     const body = new T.Group(); body.position.y = 0.62; root.add(body); P.body = body;
     body.add(ell(0.5, 0.48, 0.52, bm, 36)); decal(body, 0.5, 0.48, 0.52, 'dudung_belly');
     const head = new T.Group(); head.position.set(0.0, 0.56, 0); body.add(head); P.head = head;
-    head.add(ell(0.5, 0.4, 0.54, bm, 36)); decal(head, 0.5, 0.4, 0.54, 'dudung_head');
+    head.add(ell(0.5, 0.4, 0.54, bm, 36)); P.face = decal(head, 0.5, 0.4, 0.54, 'dudung_head'); P.faceKey = 'dudung_head';
     // 분홍 코(원본 그림을 입힌 볼록한 코)
     const sn = ell(0.24, 0.23, 0.2, mat(0xe8a39b, { roughness: 0.55 }), 28); sn.position.set(0.44, -0.07, 0.1); head.add(sn); decal(sn, 0.24, 0.23, 0.2, 'dudung_snout', { k: 1.02 });
     // 안전모
@@ -330,13 +330,88 @@
   }
   function dirt(n) { const g = new T.Group(), m = mat(0x6b4a30, { roughness: 1 }), R = rng(77); for (let i = 0; i < n; i++) { const d = ell(0.1, 0.07, 0.1, m, 8); d.userData.k = [R() * 6.28, 0.4 + R() * 0.7, 0.8 + R() * 1.2, 0.05 + R() * 0.07]; g.add(d); } return g; }
 
+
+  // ═════ 자세·표정 시트(2026-10-25 YJ "캐릭터들을 좀더 3d로 세심하게 · 각 상황을 섬세하게 묘사") ═════
+  //   걷는 16프레임과 같은 카메라로, 앉기·잠자기·웃는 눈·덜덜·헥헥·눈 찡그림 6자세를 한 장씩 뽑는다(<id>_pose.webp, 4×2 칸).
+  function setFace(root, v) {
+    const P = root.userData; if (!P.face) return; const k = v ? P.faceKey + '_' + v : P.faceKey, t = tex(k);
+    P.face.material.map = t; P.face.material.emissiveMap = t; P.face.material.needsUpdate = true;
+  }
+  const PN = ['sit', 'sleep', 'happy', 'shiver', 'pant', 'squint'];
+  function legsTo(P, L) { L.forEach((q, i) => setLeg(P.legs[i], q[0], q[1], q[2], q[3])); }
+  // 네발 짐승(강아지·고양이): spec = {rz:몸 기울기, y:내리기, f:[앞다리 swing,lift,kmax], h:[뒷다리 …], hd:[머리 기울기, 높이], ear:귀, tail:꼬리 기울기, face}
+  function quad(root, S, base) {
+    const P = root.userData; base(root);
+    root.position.y = S.y || 0; P.body.rotation.z = S.rz || 0; P.body.rotation.x = S.rx || 0;
+    legsTo(P, [[S.f[0], S.f[1], S.f[2], S.f[3]], [S.f[0], S.f[1], S.f[2], S.f[3]], [S.h[0], S.h[1], S.h[2], S.h[3]], [S.h[0], S.h[1], S.h[2], S.h[3]]]);
+    if (S.fx) { setLeg(P.legs[1], S.fx[0], S.fx[1], S.fx[2], S.fx[3]); }
+    P.head.rotation.z = S.hd[0]; P.head.rotation.x = S.hx || 0; if (P.head0 === undefined) P.head0 = P.head.position.y; P.head.position.y = P.head0 + (S.hd[1] || 0);
+    P.ears.forEach((e, i) => { e.rotation.z = S.ear[0]; if (S.ear[1] !== undefined) e.rotation.x = (i ? 1 : -1) * S.ear[1]; });
+    if (P.tail) { P.tail.rotation.z = S.tail; P.tail.rotation.x = 0; } else if (P.tailRoot) { P.tailRoot.rotation.z = S.tail; }
+    setFace(root, S.face);
+  }
+  const DOGP = {
+    sit: { y: -0.2, rz: 0.52, f: [-0.5, 0, 1], h: [1.25, 1, 2.2, 0.3], hd: [-0.45, 0.0], ear: [0.1], tail: 0.1 },
+    sleep: { y: -0.36, rz: -0.02, f: [1.15, 1, 2.0, 0.3], h: [1.3, 1, 2.3, 0.3], hd: [-0.3, -0.16], ear: [0.35, 0.1], tail: -0.1, face: 'closed' },
+    happy: { y: 0.1, rz: 0.12, f: [0.55, 0.45, 1.3], h: [-0.45, 0.25, 1.1], hd: [0.18, 0.02], ear: [-0.2], tail: 0.6, face: 'happy' },
+    shiver: { y: -0.08, rz: -0.1, f: [0.15, 0.25, 1.3], h: [0.2, 0.3, 1.4], hd: [-0.22, -0.04], ear: [0.55, 0.15], tail: -0.7, face: 'tight' },
+    pant: { y: 0.0, rz: 0.06, f: [0.25, 0, 1], h: [-0.2, 0, 1], hd: [0.14, 0.02], ear: [0.1], tail: 0.25, face: 'open' },
+    squint: { y: 0.0, rz: 0.1, f: [0.1, 0, 1], h: [-0.1, 0, 1], hd: [0.3, 0.02], ear: [0.0], tail: 0.2, face: 'squint' },
+  };
+  const CATP = {
+    sit: { y: -0.16, rz: 0.5, f: [-0.5, 0, 1, 0.9], h: [1.2, 1, 2.0, 0.9], hd: [-0.45, 0.0], ear: [0.05], tail: 0.15 },
+    sleep: { y: -0.3, rz: -0.02, f: [1.05, 1, 1.9, 0.9], h: [1.25, 1, 2.2, 0.9], hd: [-0.35, -0.1], ear: [0.3, 0.1], tail: -0.2, face: 'closed' },
+    happy: { y: -0.02, rz: 0.04, f: [0.4, 0.4, 1.2, 0.9], h: [-0.4, 0.2, 1.0, 0.9], hd: [0.08, 0.0], ear: [-0.05], tail: 0.4, face: 'happy' },
+    shiver: { y: -0.07, rz: -0.1, f: [0.15, 0.25, 1.2, 0.9], h: [0.2, 0.3, 1.3, 0.9], hd: [-0.22, -0.03], ear: [0.5, 0.2], tail: -0.5, face: 'tight' },
+    pant: { y: 0, rz: 0.06, f: [0.2, 0, 1, 0.9], h: [-0.2, 0, 1, 0.9], hd: [0.14, 0.02], ear: [0.05], tail: 0.2, face: 'open' },
+    squint: { y: 0, rz: 0.1, f: [0.1, 0, 1, 0.9], h: [-0.1, 0, 1, 0.9], hd: [0.28, 0.02], ear: [0.0], tail: 0.1, face: 'squint' },
+  };
+  function poseDogX(o) { return (root, n) => quad(root, DOGP[n], r => poseDog(r, 0.25, o)); }
+  function poseCatX(root, n) { quad(root, CATP[n], r => poseCat(r, 0.1)); }
+  function poseTadX(root, n) {
+    const P = root.userData; poseTadpole(root, 0.2); P.bubbles.forEach(b => { b.visible = false; });
+    const face = { sit: null, sleep: 'closed', happy: 'happy', shiver: 'tight', pant: 'open', squint: 'squint' }[n]; setFace(root, face);
+    if (n === 'sleep') { P.body.rotation.z = -0.32; P.head.rotation.z = -0.2; P.body.position.y = 0.92; P.tailUpdate(1.0); P.arms.forEach(f => { f.rotation.x = 0; }); }
+    if (n === 'happy') { P.body.position.y = 1.18; P.head.rotation.z = 0.12; P.arms.forEach((f, i) => { f.rotation.x = (i ? 1 : -1) * 1.0; f.rotation.z = 0.6; }); P.tailUpdate(2.2); }
+    if (n === 'shiver') { P.body.scale.set(1.06, 0.93, 1.06); P.body.position.y = 0.95; P.arms.forEach((f, i) => { f.rotation.x = (i ? 1 : -1) * 1.0; f.rotation.z = -0.4; }); P.head.rotation.z = -0.15; P.tailUpdate(0.4); }
+    if (n === 'pant') { P.head.rotation.z = 0.12; P.arms.forEach(f => { f.rotation.x = 0.1; }); P.tailUpdate(1.4); }
+    if (n === 'squint') { P.head.rotation.z = 0.28; P.body.rotation.z = 0.08; }
+    if (n === 'sit') { P.body.position.y = 0.96; P.tailUpdate(0.6); P.arms.forEach(f => { f.rotation.x = 0; }); }
+  }
+  function poseEagleX(root, n) {
+    const P = root.userData; poseEagle(root, 0.3);
+    const face = { sit: null, sleep: 'closed', happy: 'happy', shiver: 'tight', pant: 'squint', squint: 'squint' }[n]; setFace(root, face);
+    const perch = () => {
+      P.legs.forEach(g => { g.rotation.z = 0.0; }); P.body.position.y = 0.95; P.body.rotation.z = 0.28; P.head.rotation.z = -0.28;
+      P.wings.forEach(w => { w.sh.rotation.set(0, -w.s * 1.25, 0); w.sh.position.z = 0.4 * w.s; w.fore.rotation.set(0, w.s * 2.4, 0); w.hand.rotation.set(0, w.s * 0.3, 0); });
+      P.tail.rotation.z = -0.5;
+    };
+    if (n !== 'happy' && n !== 'pant') perch();
+    if (n === 'sleep') { P.head.rotation.z = -0.55; P.head.position.y = 0.42; P.body.position.y = 0.88; }
+    if (n === 'happy') { P.body.position.y = 1.15; P.wings.forEach(w => { w.sh.rotation.x = -w.s * 0.9; w.fore.rotation.x = -w.s * 0.1; w.hand.rotation.x = -w.s * 0.2; }); P.head.rotation.z = 0.15; }
+    if (n === 'shiver') { P.body.scale.set(1.05, 0.94, 1.05); P.head.rotation.z = -0.4; P.wings.forEach(w => { w.sh.rotation.y = -w.s * 1.4; }); }
+    if (n === 'pant') { P.body.position.y = 1.05; P.wings.forEach(w => { w.sh.rotation.x = -w.s * 0.5; w.fore.rotation.x = 0; w.hand.rotation.x = 0; }); P.head.rotation.z = 0.2; }
+    if (n === 'squint') { P.head.rotation.z = -0.05; }
+  }
+  function poseMoleX(root, n) {
+    const P = root.userData; poseMoleWalk(root, 0.0);
+    const face = { sit: null, sleep: 'closed', happy: 'happy', shiver: 'tight', pant: null, squint: 'squint' }[n]; setFace(root, face);
+    P.legs.forEach(g => { g.rotation.z = 0; g.position.y = -0.42; });
+    if (n === 'sit') { P.body.position.y = 0.4; P.body.rotation.z = 0.0; P.legs.forEach(g => { g.rotation.z = 1.25; g.position.y = -0.34; }); P.arms.forEach(a => { a.rotation.z = 0.2; }); }
+    if (n === 'sleep') { P.body.position.y = 0.42; P.body.rotation.z = -0.15; P.head.rotation.z = -0.3; P.head.position.y = 0.5; P.legs.forEach(g => { g.rotation.z = 1.25; g.position.y = -0.34; }); P.arms.forEach(a => { a.rotation.z = 0.7; }); P.shovel.rotation.z = -0.7; }
+    if (n === 'happy') { P.body.position.y = 0.78; P.arms.forEach((a, i) => { a.rotation.z = -2.4; }); P.head.rotation.z = 0.12; P.legs.forEach(g => { g.position.y = -0.34; }); P.shovel.rotation.z = -0.5; }
+    if (n === 'shiver') { P.body.scale.set(1.05, 0.94, 1.05); P.body.position.y = 0.56; P.arms.forEach((a, i) => { a.rotation.z = -0.5; a.rotation.x = (i ? 1 : -1) * 0.7; }); P.head.rotation.z = -0.2; }
+    if (n === 'pant') { P.body.rotation.z = 0.06; P.arms.forEach(a => { a.rotation.z = 0.15; }); P.head.rotation.z = 0.15; }
+    if (n === 'squint') { P.head.rotation.z = 0.28; P.body.rotation.z = 0.05; }
+  }
+  window.POSE_NAMES = PN;
   window.CHARS = {
-    lovel: { name: '러블', build: () => buildCat(), pose: poseCat, yaw: -0.85, frames: 16, view: [3.3, 0.95, -0.12] },
-    dolsom: { name: '돌솜', build: () => buildDog({ fur: 0xeeeeea, bow: 0x3d7edb, seed: 31, tex: 'dolsom_head', tail: 'long' }), pose: (r, p) => poseDog(r, p, { gait: 1.0, air: 0.22 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
-    ppopu: { name: '뽀푸', build: () => buildDog({ fur: 0xb39a7a, collar: 0x5b3b24, seed: 57, tex: 'ppopu_head', tail: 'short' }), pose: (r, p) => poseDog(r, p, { gait: 0.85, air: 0.3 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
-    chaeng: { name: '챙챙', build: () => buildTadpole(), pose: poseTadpole, yaw: -0.8, frames: 16, view: [3.9, 1.1, -0.3] },
-    sul: { name: '술', build: () => buildEagle(), pose: poseEagle, yaw: -0.8, frames: 16, view: [5.6, 1.35] },
-    dudung: { name: '두덩', build: () => buildMole(), pose: poseMoleWalk, yaw: -0.85, frames: 16, view: [3.3, 1.05] },
+    lovel: { name: '러블', build: () => buildCat(), pose: poseCat, poseX: poseCatX, yaw: -0.85, frames: 16, view: [3.3, 0.95, -0.12] },
+    dolsom: { name: '돌솜', build: () => buildDog({ fur: 0xeeeeea, bow: 0x3d7edb, seed: 31, tex: 'dolsom_head', tail: 'long' }), pose: (r, p) => poseDog(r, p, { gait: 1.0, air: 0.22 }), poseX: poseDogX({ gait: 1.0, air: 0.22 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
+    ppopu: { name: '뽀푸', build: () => buildDog({ fur: 0xb39a7a, collar: 0x5b3b24, seed: 57, tex: 'ppopu_head', tail: 'short' }), pose: (r, p) => poseDog(r, p, { gait: 0.85, air: 0.3 }), poseX: poseDogX({ gait: 0.85, air: 0.3 }), yaw: -0.85, frames: 16, view: [3.3, 0.95] },
+    chaeng: { name: '챙챙', build: () => buildTadpole(), pose: poseTadpole, poseX: poseTadX, yaw: -0.8, frames: 16, view: [3.9, 1.1, -0.3] },
+    sul: { name: '술', build: () => buildEagle(), pose: poseEagle, poseX: poseEagleX, yaw: -0.8, frames: 16, view: [5.6, 1.35] },
+    dudung: { name: '두덩', build: () => buildMole(), pose: poseMoleWalk, poseX: poseMoleX, yaw: -0.85, frames: 16, view: [3.3, 1.05] },
   };
   window.dirt = dirt;
 })();
