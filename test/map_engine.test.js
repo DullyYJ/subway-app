@@ -144,9 +144,9 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: ENV } });
     const c0 = b.body.filter(n => n.t === 'bcard')[0];
     ok(b.info.bus.st === 'need' && b.info.bus.need.filter(n => /^a/.test(n.k)).length === 1 && b.info.bus.need[0].k === 'a0' && c0.ld === '도착 정보 불러오는 중...' && !c0.em, '오류 봉투는 받지 못한 것: 불러오는 중 + 다시 받기(need)');
-    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}', g0: '', t0: '{}' } });
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}', g0: '', t0: '{}', t100: '{}' } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', '정상 응답인데 버스가 없으면 그대로 "도착정보 없음"');
-    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '', g0: '', t0: '{}' } });
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '', g0: '', t0: '{}', t100: '{}' } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', "빈 본문('')은 예전처럼 없음(기기는 못 받으면 아예 보내지 않는다)"); }
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '' } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=450$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
@@ -217,17 +217,17 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}';
     b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, t0: '{}' } }));
     ok(cd(b).ld === '도착 정보 불러오는 중...' && b.info.bus.need.some(n => n.k === 'g0' && /nodeId=ICB168001467/.test(n.url)), 's199: 본문이 비면 ICB3→ICB1 로 바꿔 다시 받기(그동안은 불러오는 중)');
-    const NX = { 'ICB368001467|R9701': '검단사거리' };
+    const NX = { 'ICB368001467|R9701': '검단사거리', 'lm|ICB368001467': '' };
     b = mk(Object.assign({}, solo, { nx: NX, res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: arr(['9701', 200]), t0: '{}' } }));
     ok(cd(b).rows.length === 1 && cd(b).rows[0].no === '9701' && b.info.bus.st === 'ok', 's199: 바꾼 ID 로 받으면 그 줄을 그린다');
     b = mk(Object.assign({}, solo, { nx: NX, res: { tp: '', gg: '', tn: only, a0: arr(['9701', 200]), t0: '{}' } }));
     ok(!(b.info.bus.need || []).some(n => n.k === 'g0') && b.info.bus.st === 'ok', 's199: 본문에 줄이 있으면 바꾼 ID 는 묻지 않는다');
-    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: '{}' } }));
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: '{}', t100: '{}' } }));
     ok(cd(b).em === '도착정보 없음' && b.info.bus.st === 'ok', 's199: 바꿔 봐도 비면 그제서야 "도착정보 없음"');
     // ③ 경유노선: 오는 차가 하나도 없어도 노선을 줄로 보인다(웹 _thruFill)
-    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: THRU } }));
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: THRU, t100: '{}' } }));
     ok(cd(b).rows.map(r => r.no).join() === '991,77,583' && cd(b).rows.every(r => r.a.length === 1 && r.a[0].s === '도착정보 없음') && !cd(b).em && b.info.rts[0][0][0] === 'R991', 's199: 경유노선만 알아도 줄로 보인다(누르면 노선 상세)');
-    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR"}}}' } }));
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t100: '{}', t0: '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR"}}}' } }));
     ok(b.info.bus.need.some(n => n.k === 't0') && cd(b).em === '도착정보 없음', 's199: 경유노선 오류 봉투는 받지 못한 것 — 다시 받는다');
     // 서울·경기 정류장은 이웃·바꾼 ID·경유노선을 묻지 않는다(웹과 같다)
     b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
@@ -236,7 +236,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const favS = [{ nm: '검단대성베르힐', id: 'ICB368001467', src: 'tago', la: 37.582405, lo: 126.708497, city: '23' }];
     b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, res: { f0: EMPTY } } });
     ok(b.info.bus.need.map(n => n.k).join() === 'f0,h0,u0' && /nodeId=ICB168001467/.test(b.info.bus.need[1].url), 's199: 즐겨찾기도 바꾼 ID·경유노선 ' + b.info.bus.need.map(n => n.k).join());
-    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, nx: { 'ICB368001467|R991': 'A', 'ICB368001467|R77': 'B', 'ICB368001467|R583': 'C' }, res: { f0: EMPTY, h0: EMPTY, u0: THRU } } });
+    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, nx: { 'ICB368001467|R991': 'A', 'ICB368001467|R77': 'B', 'ICB368001467|R583': 'C' }, res: { f0: EMPTY, h0: EMPTY, u0: THRU, u100: '{}' } } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].rows.length === 3, 's199: 즐겨찾기 경유노선 줄');
     // ④ TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop) — 경유 정류장 목록에서 이 정류장 다음 정류장 이름, 없으면 종점
     {
@@ -252,13 +252,40 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
       ok(b.info.nx['ICB368001467|R9701'] === '종점', 's199: 목록에 이 정류장이 없으면 종점(웹과 같다)');
       b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: stnList('R-OTHER', ['가', '나'], ['X1', 'X2']) }) }));
       ok(!b.info.nx && b.info.bus.need.some(n => n.k === 'r0'), 's199: 다른 노선의 본문이 섞이면 쓰지 않고 다시 부탁');
-      b = mk(Object.assign({}, solo, { nx: { 'ICB368001467|R9701': '검단사거리' }, res: res0 }));
+      b = mk(Object.assign({}, solo, { nx: { 'ICB368001467|R9701': '검단사거리', 'lm|ICB368001467': '' }, res: res0 }));
       ok(b.info.bus.st === 'ok' && cd(b).rows[0].dir === '→ 검단사거리방향' && !b.info.nx, 's199: 기기가 저장해 둔 이름이 있으면 다시 안 묻는다');
       b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: arr(['9701', 200]) } }));
       ok(!b.info.bus.need.some(n => /^r/.test(n.k)), 's199: 다른 받기(경유노선 등)가 남아 있는 동안은 방면을 부탁하지 않는다');
       b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: '' }) }));
       ok(b.info.nx && b.info.nx['ICB368001467|R9701'] === '' && b.info.bus.st === 'ok' && !cd(b).rows[0].dir, 's199: 목록이 비어 오면 이번엔 포기(빈 이름) — 계속 다시 묻지 않는다');
     }
+  }
+  // s202: 웹 _busFindLandmark — 정류장 이름 옆 "(○○역 방향)" (지하철역 > 시청 > 구청 > 동사무소, 진행 방향·회차 전·노선 다수결)
+  {
+    const arr2 = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+    const stn = (rid, rows) => JSON.stringify({ response: { body: { items: { item: rows.map((r, k) => ({ routeid: rid, nodeord: k + 1, nodeid: r[1], nodenm: r[0], gpslati: 37.5, gpslong: 126.7, updowncd: r[2] === undefined ? 0 : r[2] })) } } } });
+    const ME = ['검단대성베르힐', 'ICB368001467'];
+    const one = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'ICB368001467', nodenm: '검단대성베르힐', gpslati: 37.582405, gpslong: 126.708497, citycode: '23' }] } } } });
+    const mk2 = (extra) => call({ part: 'b', mode: 'bus', th: 'dark', bus: { nx: { 'ICB368001467|R9701': 'x', 'ICB368001467|R77': 'y' }, lat: 37.5824, lng: 126.7085, res: Object.assign({ tp: '', gg: '', tn: one, a0: arr2(['9701', 200], ['77', 300]), t0: '{}' }, extra) } });
+    const c = b => b.body.filter(n => n.t === 'bcard')[0];
+    let b = mk2({});
+    ok(c(b).rows.length === 2 && !c(b).lm && b.info.bus.need.map(n => n.k).join() === 'r0,r1', 's202: 오는 차가 있으면 서로 다른 노선 2개의 경유 정류장 목록을 부탁(방면 이름과 같은 목록) ' + b.info.bus.need.map(n => n.k).join());
+    b = mk2({ r0: stn('R9701', [['가', 'X1'], ME, ['중간', 'X2'], ['검단역2번출구', 'X3'], ['종점시청', 'X4']]), r1: stn('R77', [ME, ['검단역', 'Y2']]) });
+    ok(c(b).lm === '검단역' && b.info.nx['lm|ICB368001467'] === '검단역' && b.info.bus.st === 'ok', 's202: 진행 방향 첫 지하철역 이름(출구 표기는 역 이름만) — 카드에 lm ' + c(b).lm);
+    b = mk2({ r0: stn('R9701', [['가', 'X1'], ME, ['중간', 'X2'], ['OO시청앞', 'X3'], ['OO구청', 'X4']]), r1: stn('R77', [ME, ['OO시청앞', 'X3']]) });
+    ok(c(b).lm === 'OO시청앞', 's202: 역이 없으면 시청 > 구청 순');
+    b = mk2({ r0: stn('R9701', [['가', 'X1'], ME, ['중간', 'X2', 0], ['반대편역', 'X3', 1]]), r1: stn('R77', [ME, ['다른중간', 'Y1']]) });
+    ok(c(b).lm === undefined && b.info.nx['lm|ICB368001467'] === '', 's202: 회차(방향 코드가 바뀜) 뒤의 역은 반대 방면이라 쓰지 않는다 → 못 찾으면 빈 값을 저장해 다시 안 묻는다');
+    b = mk2({ r0: stn('R9701', [ME, ['A역', 'X1']]), r1: stn('R77', [ME, ['B역', 'Y1']]) });
+    ok(c(b).lm === 'A역', 's202: 노선마다 다르고 표 수가 같으면 가까운 것 → 먼저 나온 것');
+    b = mk2({ r0: stn('R9701', [ME, ['A역', 'X1']]) });
+    ok(!c(b).lm && b.info.bus.st === 'need' && b.info.bus.need.some(n => n.k === 'r1'), 's202: 목록이 하나만 왔으면 다 올 때까지 기다린다(그동안 이름 옆은 비워 둔다)');
+    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { nx: { 'ICB368001467|R9701': 'x', 'ICB368001467|R77': 'y', 'lm|ICB368001467': '검단역' }, lat: 37.5824, lng: 126.7085, res: { tp: '', gg: '', tn: one, a0: arr2(['9701', 200]), t0: '{}' } } });
+    ok(c(b).lm === '검단역' && !(b.info.bus.need || []).some(n => /^r/.test(n.k)), 's202: 기기가 저장해 둔 방향이 있으면 바로 그리고 다시 안 묻는다');
+    const fb = call({ part: 'b', mode: 'bus', th: 'dark', bus: { nx: { 'ICB368001467|R9701': 'x', 'lm|ICB368001467': '검단역' }, vw: 'fav', fav: [{ nm: '검단대성베르힐', id: 'ICB368001467', src: 'tago', la: 37.582405, lo: 126.708497, city: '23' }], res: { f0: arr2(['9701', 200]), h0: '', u0: '{}' } } });
+    ok(c(fb).lm === '검단역', 's202: 즐겨찾기 카드도 같다');
+    // 화면 검증기(앱)와 배치: lm 이 카드에 들어간 화면도 통과해야 한다 — ScreenCore 가 읽는지는 shell 시험에서
+    ok(/"lm":"검단역"/.test(JSON.stringify(b.body)), 's202: 카드 JSON 에 lm');
   }
   // s200: 기기가 엔진과 주고받는 바퀴 수 — 처음 그릴 때 끝까지(st ok)가 몇 바퀴째인가(옛 한도 3 바퀴로는 마지막 그림이 화면에 못 올랐다)
   {
@@ -290,6 +317,52 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     ok(cards.length === 3 && cards.every(c => !c.ld && c.rows && c.rows.length >= 1), 's200: 마지막 바퀴에는 모든 카드가 줄을 가진다(불러오는 중 · 없음 아님)');
     ok(rounds.length - 1 > 3, 's200: 옛 한도(3바퀴)로는 마지막 그림이 못 오른다 — 앱은 BUS_ROUNDS 로 늘렸다');
     ok(rounds[rounds.length - 2] === 'r0,r1,r2', 's200: 마지막 직전 바퀴는 방면 목록(r)만 남은 상태 → 앱은 그 화면을 먼저 그린다 ' + rounds[rounds.length - 2]);
+  }
+  // s202: 웹 _tagoResolveStop — 이웃·바꾼 ID 까지 비면 좌표로 가까운 TAGO 정류장을 다시 찾아 그 ID 로 도착정보를 받는다
+  {
+    const it = (id, nm, la, lo, cc) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: cc || '23' });
+    const LIST = items => JSON.stringify({ response: { body: { items: { item: items } } } });
+    const arr = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}';
+    const only = LIST([it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)]);
+    const run = (coordJson, arrOf) => {
+      let res = {}, keys = [], last = null;
+      for (let round = 0; round < 10; round++) {
+        const b = call({ part: 'b', mode: 'bus', th: 'dark', nx: { 'ICB368001467|R9701': 'x' }, bus: { lat: 37.5824, lng: 126.7085, res } });
+        const need = (b.info.bus && b.info.bus.need) || [];
+        keys.push(need.map(n => n.k).join());
+        last = b;
+        if (!need.length) break;
+        need.forEach(n => {
+          if (/getCrdntPrxmtSttnList/.test(n.url)) res[n.k] = coordJson;
+          else if (/getSttnAcctoArvlPrearngeInfoList/.test(n.url)) res[n.k] = arrOf(n.url.match(/nodeId=(\w+)/)[1]);
+          else if (/getSttnThrghRouteList/.test(n.url)) res[n.k] = '{}';
+          else res[n.k] = n.k === 'tn' ? only : n.k === 'tp' || n.k === 'gg' || n.k === 'd1' ? '' : '';
+        });
+        res.tn = only; res.tp = ''; res.gg = '';
+      }
+      return { last, keys, res };
+    };
+    // 좌표로 찾은 다른 번호(같은 이름 · 가까움)에서 도착정보가 나온다
+    let r = run(LIST([it('ICB368007777', '검단대성베르힐', 37.58260, 126.70870), it('ICB368009999', '다른', 37.5825, 126.7086)]), id => id === 'ICB368007777' ? arr(['9701', 200]) : EMPTY);
+    const c0 = r.last.body.filter(n => n.t === 'bcard')[0];
+    ok(r.last.info.bus.st === 'ok' && c0.rows && c0.rows.length === 1 && c0.rows[0].no === '9701', 's202: 본문·바꾼 ID 가 비어도 좌표로 찾은 번호(ICB368007777)의 도착정보를 그린다 ' + r.keys.join(' | '));
+    ok(r.keys.some(k => /t100/.test(k)) && r.keys.some(k => /g500/.test(k)), 's202: 좌표 조회(t100) → 보정 ID 도착(g500) 순서로 요청한다');
+    const prelast = r.keys.findIndex(k => /g500/.test(k));
+    const mid = call({ part: 'b', mode: 'bus', th: 'dark', nx: { 'ICB368001467|R9701': 'x' }, bus: { lat: 37.5824, lng: 126.7085, res: Object.assign({}, r.res, { g500: undefined }) } });
+    ok(mid.body.filter(n => n.t === 'bcard')[0].ld === '도착 정보 불러오는 중...' && prelast > 0, 's202: 보정 ID 도착이 오기 전에는 "도착정보 없음"이 아니라 불러오는 중');
+    // 후보가 없거나 400m 밖이거나 이미 물어본 번호뿐이면 그제서야 없음
+    for (const [nm, cj] of [['후보 0건', EMPTY], ['400m 밖', LIST([it('ICB368005555', '검단대성베르힐', 37.5900, 126.7085)])], ['같은 번호뿐', only], ['바꾼 번호뿐', LIST([it('ICB168001467', '검단대성베르힐', 37.58241, 126.7085)])]]) {
+      r = run(cj, () => EMPTY);
+      const c = r.last.body.filter(n => n.t === 'bcard')[0];
+      ok(r.last.info.bus.st === 'ok' && c.em === '도착정보 없음' && !r.keys.some(k => /g500/.test(k)), 's202: ' + nm + ' → 보정 없이 "도착정보 없음" ' + r.keys.join(' | '));
+    }
+    // 이름이 같으면 300m 우대: 더 가깝지만 이름이 다른 것보다 멀어도 같은 이름을 고른다
+    r = run(LIST([it('ICB368006001', '엉뚱한이름', 37.58242, 126.70851), it('ICB368006002', '검단대성베르힐', 37.5845, 126.7085)]), id => id === 'ICB368006002' ? arr(['77', 90]) : EMPTY);
+    ok(r.last.body.filter(n => n.t === 'bcard')[0].rows[0].no === '77', 's202: 같은 이름 후보를 우대(웹: 거리 − 300m)');
+    // 웹과 같다: 좌표 목록에서 가장 좋은 후보가 자기 자신이면(이름 같고 0m) 보정할 것이 없다
+    r = run(LIST([it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497), it('ICB368007777', '검단대성베르힐', 37.5826, 126.7087)]), id => id === 'ICB368007777' ? arr(['9701', 200]) : EMPTY);
+    ok(r.last.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음' && !r.keys.some(k => /g500/.test(k)), 's202: 가장 좋은 후보가 자기 자신이면 웹처럼 보정 없음');
   }
   // s177: 정류장 목록 준비 판정(서버가 '충분하면 느린 출처는 안 기다린다')
   {

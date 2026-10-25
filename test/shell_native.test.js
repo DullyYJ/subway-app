@@ -596,7 +596,7 @@ function findAndroidJar() {
   });
   await t('s200: 버스 정류장이 다른 탭을 다녀와야 나오던 일 — 엔진과 주고받는 바퀴 한도(3)가 이웃·바꾼 ID·방면으로 길어진 체인보다 짧아 마지막 그림을 버렸다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
-    assert.ok(/BUS_ROUNDS = 6/.test(mc) && /public boolean needOptionalOnly\(\)/.test(mc) && /matches\("r\[0-9\]\{1,3\}"\)/.test(mc), '바퀴 한도 6 · 남은 것이 방면 목록(r)뿐이면 완성된 화면');
+    assert.ok(/BUS_ROUNDS = 8/.test(mc) && /public boolean needOptionalOnly\(\)/.test(mc) && /matches\("r\[0-9\]\{1,3\}"\)/.test(mc), '바퀴 한도 8 · 남은 것이 방면 목록(r)뿐이면 완성된 화면');
     assert.ok(/round >= MapCore\.BUS_ROUNDS \|\| map\.needOptionalOnly\(\)/.test(a) && /round < MapCore\.BUS_ROUNDS\) fetchBusNeed\(/.test(a), '앱: 방면만 남았거나 바퀴가 끝나면 지금 화면을 그린다 · 한도까지 계속 받는다');
     assert.ok(!/round < 3\) fetchBusNeed|round < 4; round\+\+\) \{\s*NetPost\.Res (br|r) = NetPost\.post\(ShellCore\.BASE \+ "\/screen\/map", (pfMap|w)\.bodyRequest/.test(a) && (a.match(/MapCore\.BUS_ROUNDS/g) || []).length >= 5, '미리 받기 · 조용한 새로고침도 같은 한도');
   });
