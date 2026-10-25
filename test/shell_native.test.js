@@ -214,7 +214,7 @@ function findAndroidJar() {
     assert.ok(v.indexOf('requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION', v.indexOf('private void startGps()')) < v.indexOf('deb.gate("gps"'), '내 위치: 권한을 받는 순간은 막지 않는다(권한 뒤에 연타를 센다)');
     const gr = v.slice(v.indexOf('private void goRoute()'), v.indexOf('/** \'예상\'으로 남은 버스 구간'));
     assert.ok(/routeSwr\.get\(sk, rb, ROUTE_FRESH_MS, ROUTE_STALE_MS\)/.test(gr) && /hit\.state == Swr\.FRESH\) \{[^}]*return;/.test(gr) && /postFail\(my, shown\)/.test(gr), '경로: 지난 결과를 0초에 먼저 · 신선하면 통신 없음 · 실패해도 옛 결과 유지');
-    assert.ok(/if \(draw && \(full1 \|\| !shown\)\) postRoute/.test(gr), '옛 결과가 떠 있으면 근사 결과로 덮지 않는다');
+    assert.ok(/if \(draw && \(full1 \|\| !shown\)\) \{ postRoute/.test(gr), '옛 결과가 떠 있으면 근사 결과로 덮지 않는다');
     assert.ok(/routeSwr\.put\(sk, rb \+ "\\n" \+ raw/.test(v) && /if \(keep && v\.itemCount\(\) > 0\) return;/.test(v) && /!\(keep && v\.itemCount\(\) > 0\)\) toast\("맛집 화면을 받지 못했어요"\)/.test(v), '읽을 수 있는 결과만 보관 · 뒤에서 받다 실패해도 옛 화면은 그대로(알림 없음)');
   });
   await t('경로 탐색 로딩(s133): 카드는 엔진(rload)이 그리고 앱은 보이고 숨기기만 · 새 통신이 있고 옛 결과가 없을 때만 · 어떤 끝이든 닫힘(50초 안전) · 캐릭터는 순수 장식', () => {
@@ -612,6 +612,15 @@ function findAndroidJar() {
     assert.ok(/K_BNX = "bnx"/.test(mc) && /private void nxTake\(/.test(mc) && /append\(",\\"nx\\":"\)\.append\(nxJson\(\)\)/.test(mc) && /im\.get\("nx"\) instanceof Map\) nxTake/.test(mc), '엔진이 준 info.nx 를 저장하고 다음 요청 bus.nx 로 보낸다');
     assert.ok(/matches\("r\[0-9\]\{1,3\}"\)\) ri\.remove\(\)/.test(mc), '노선 경유 정류장 목록(r)은 엔진이 쓴 뒤 바로 버린다');
     assert.ok(/\^r\[0-9\]/.test(w) && /break;\s*\/\/ s199/.test(w), '서버(mapSvResolve)는 r 열쇠를 기다리지 않는다');
+  });
+  await t('s201: 경로 결과가 새로 조회돼도 화면 전체를 다시 시작하지 않는다 — 같은 찾기의 새 응답은 바꿔 끼우고(탭·펼침 그대로) 내용이 바뀐 칸만 스프링으로 나타난다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/boolean on = shown;/.test(a) && /postRoute\(my, b1, a, b, bt, rb, full1 \? sk : null, on\); on = true;/.test(a) && /postRoute\(my, b2, a, b, bt, rb, sk, on\)/.test(a), '이미 이 찾기의 결과가 떠 있으면(옛 결과 · 근사 결과) 다음 응답은 바꿔 끼우기');
+    assert.ok(/if \(replace && home\.hasRoute\(\)\) \{/.test(a) && /home\.replaceRouteSame\(raw, rb\)/.test(a) && /body\.springChanges\(5000L\)/.test(a) && /home\.replaceRoute\(nb\)\) \{ body\.springChanges\(5000L\)/.test(a), '바꿔 끼울 때 setRoute(탭·펼침 초기화) 대신 replaceRouteSame · 5초 안의 새 화면은 바뀐 칸만 스프링');
+    assert.ok(/public long sp;/.test(sc) && /private static String itemFp\(/.test(sv) && /private void markChanged\(/.test(sv) && /fresh \* 2 > total\) return;/.test(sv), '칸마다 내용 지문 · 이전에 없던 칸만 표시 · 절반 넘게 새것이면(다른 화면) 표시 안 함');
+    assert.ok(/if \(keepScroll && lay != null && nowSp < spUntil\)/.test(sv) && /if \(spOld != null\) markChanged\(spOld, nowSp\)/.test(sv) && /private void drawItem0\(/.test(sv) && /SP_MS = 520f/.test(sv) && /-10f \* \(1f - spring\(f\)\)/.test(sv) && /\|\| bcAnim \|\| arAnim \|\| spAnim \|\|/.test(sv), '스프링: 위에서 10dp · 0.52초 · 바뀐 칸만 그리고 끝날 때까지 다시 그린다');
+    const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'route-v2-worker.ascii.js'), 'utf8');
+    assert.ok(/var LIVE_BUDGET_MS = 5000;/.test(w), '서버 실시간 대기 한도 5초');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
