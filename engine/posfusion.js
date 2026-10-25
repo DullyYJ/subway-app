@@ -5,10 +5,10 @@
 //   내는지 시험이 대조한다). 엔진은 기억하지 않으므로(stateless) 상태(지연 가정 31개 × 상태 확률)가 요청에 실려 가서 갱신된 채로 돌아온다.
 //   앱(네이티브)은 GPS · 기지국 · (선택) 움직임 증거를 '받은 순서 그대로' 모아 보내고, 돌려받은 채택 역(best.idx)과 확신도를 그대로 따른다.
 //
-// 입력  posFuseRun({ nowMs, stations:[{lat,lng,schedMs|null,xferFromPrev,name?}], state?, seed?:{idx,conf}, ev:[{t:'gps',at,fix:{lat,lng,ts,acc}} | {t:'motion',at,state,conf} |
+// 입력  posFuseRun({ nowMs, stations:[{lat,lng,schedMs|null,xferFromPrev,name?}], state?, seed?:{idx,conf}, ev:[{t:'gps',at,fix:{lat,lng,ts,acc}} |
 //                                                                                          {t:'cell',at,idx,conf} | {t:'arrived',at,idx,strength}] })
 //   state 없음(처음) → 판단기를 만들고 seed(기본 0역 0.9, idx>0 이면 0.8)로 시작. ev 는 시각(at) 오름차순으로 처리하고, 마지막에 nowMs 까지 시간을 진행한다.
-// 출력  { ok, state, best:{idx,conf,kind,nextConf,delayS,delayW}, median:{idx,delayS,delayW}, fed:{gps,motion,cell,arrived,skipped} }
+// 출력  { ok, state, best:{idx,conf,kind,nextConf,delayS,delayW}, median:{idx,delayS,delayW}, fed:{gps,cell,arrived,skipped} }
 //   best.idx/median.idx = stations 배열 번호(=웹의 _pf.st 번호)
 var pfuLib = (function(){
 'use strict';
@@ -25,7 +25,6 @@ var pfuLib = (function(){
     GPS_MAX_ACC: 80,      // 이보다 부정확한 fix 는 쓰지 않는다(m) — 2026-10-12: 150 → 80 (지하에서 살아난 기지국식 좌표 100m 안팎이 위치를 흔들었다)
     GPS_MAX_AGE_S: 10,    // 이보다 오래된 fix 는 쓰지 않는다
     GPS_EPS: 0.02,        // GPS 이상값 허용
-    MOTION_CONF: 0.82,    // 정차/주행 판정이 맞을 확률
     CELL_EPS: 0.15,       // 셀 증거가 틀렸을 때의 최소 가능도
     CELL_SIGMA: 0.9,      // 셀 증거가 가리키는 역 주변 폭(역 단위)
     SIG_DWELL_S: 18,      // 출발 시각 흔들림(초) — 시각표가 분 단위라 오차 포함
@@ -185,18 +184,6 @@ var pfuLib = (function(){
       normW();
     }
 
-    self.motion = function(state, nowMs, conf){
-      if(state !== 'moving' && state !== 'stopped') return;
-      var c = conf == null ? cfg.MOTION_CONF : conf, moving = state === 'moving';
-      applyEvidence(function(j){
-        var isDwell = (j % 2 === 0), idx = j >> 1;
-        var neutral = isDwell ? isXferDwell(idx) : !!stations[idx+1].xferFromPrev;
-        if(neutral) return 0.5;
-        if(isDwell) return moving ? (1 - c) : c;
-        return moving ? c : (1 - c) * 0.8 + 0.02;
-      }, 0.6);
-    };
-
     self.gps = function(fix, nowMs){
       if(!fix || fix.lat == null) return false;
       if(fix.ts && fix.ts === lastGpsTs) return false;
@@ -313,7 +300,7 @@ function posFuseRun(inp) {
     var lat = (typeof s.lat === 'number' && isFinite(s.lat)) ? s.lat : null, lng = (typeof s.lng === 'number' && isFinite(s.lng)) ? s.lng : null;
     st.push({ lat: lat, lng: lng, schedMs: (typeof s.schedMs === 'number' && isFinite(s.schedMs)) ? s.schedMs : null, xferFromPrev: !!s.xferFromPrev, name: pfuStr(s.name, 40) });
   }
-  var f = pfuLib.create(st), fed = { gps: 0, motion: 0, cell: 0, arrived: 0, skipped: 0 };
+  var f = pfuLib.create(st), fed = { gps: 0, cell: 0, arrived: 0, skipped: 0 };
   var restored = inp.state ? f.importState(inp.state) : false;
   if (!restored) {
     var sd = (inp.seed && typeof inp.seed === 'object') ? inp.seed : {};
@@ -329,7 +316,6 @@ function posFuseRun(inp) {
     if (at > nowMs) { fed.skipped++; continue; }
     f.predict(at);
     if (e.t === 'gps') { var fx = e.fix || {}; if (f.gps({ lat: fx.lat, lng: fx.lng, ts: fx.ts, acc: fx.acc }, at)) fed.gps++; else fed.skipped++; }
-    else if (e.t === 'motion') { f.motion(pfuStr(e.state, 8), at, typeof e.conf === 'number' ? e.conf : null); fed.motion++; }
     else if (e.t === 'cell') { f.cell(Number(e.idx), typeof e.conf === 'number' ? e.conf : null, at); fed.cell++; }
     else if (e.t === 'arrived') { f.arrived(Number(e.idx), at, typeof e.strength === 'number' ? e.strength : null); fed.arrived++; }
     else fed.skipped++;

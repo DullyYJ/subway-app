@@ -54,11 +54,64 @@ async function ntEnsure(env) {
   try { return await _NT_P; } finally { _NT_P = null; }
 }
 
+// ── s197: 경로 목록의 지하철 첫 구간 대기를 서울 실시간 도착정보로 조용히 바꾼다 (웹 _boardNextDep 와 같은 규칙) ──
+//   웹: 승차역 실시간 목록에서 호선(subwayId)·내 방향(forward)·내가 닿은 뒤(+30초)에 오는 가장 빠른 차를 고르고,
+//       시각표의 같은 차와 4분 안이면 실시간을, 아니면 시각표를 쓴다. 이 규칙은 승차 대기 재보정(/board-live)과 같은 함수를 쓴다.
+//   범위: 경로의 '첫 대중교통'이 서울권 지하철(실시간 도착 제공 노선)일 때만. 실시간은 '지금부터 N분 뒤' 정보라 20분 넘게 먼 승차는 시각표.
+//   못 받으면(중계가 비었거나 2.8초 안에 못 옴) 아무것도 바꾸지 않는다 — 시각표 대기(ttWaitMs)가 그대로 간다.
+function ntNz(x) { return String(x || '').replace(/역$/, '').trim(); }
+function ntLiveKey(line, from, to, offSec) { return String(line || '') + '|' + ntNz(from) + '|' + ntNz(to) + '|' + Math.round(+offSec || 0); }
+// 경로 계산 결과(out)에서 '첫 대중교통이 지하철'인 것들의 대상 목록 — { key, line, from, to, offSec }
+function ntLiveTargets(out, id) {
+  var res = [], seen = {}, k, r, i, L, sl, key, off;
+  for (k in out) {
+    r = out[k]; if (!r || !r.legs) continue;
+    L = null; for (i = 0; i < r.legs.length; i++) { var m = r.legs[i] && r.legs[i].mode; if (m === 'subway' || m === 'bus' || m === 'longdist') { L = r.legs[i]; break; } }
+    if (!L || L.mode !== 'subway') continue;
+    sl = L.stopList || []; if (sl.length < 2 || !L.line || !id(L.line)) continue;
+    off = (r.accessWalkMin || 0) * 60;                                     // 첫 구간에 닿는 시각 = 탐색 시각 + 접근 도보(legsToSubPath 의 arriveSec 와 같다)
+    key = ntLiveKey(L.line, sl[0], sl[1], off);
+    if (seen[key]) continue; seen[key] = 1;
+    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off });
+  }
+  return res;
+}
+// 대상별로 실시간 열차 시각(ms)을 가린다 → { key: { ms, src:'realtime' } } (시각표로 가려진 것·못 받은 것은 넣지 않는다)
+//   d = { fetch, id, pick, table, rec, aheadMax } — 기본은 ride-standby 모듈의 같은 함수들. baseMs: 탐색 기준 시각, nowMs: 지금.
+async function ntLiveFirst(env, out, baseMs, nowMs, d) {
+  var res = {};
+  try {
+    d = d || (typeof rsBlLivePick === 'function' ? { fetch: rsFetchSeoulPath, id: rsSubwayId, pick: rsBlLivePick, table: rsBlTable, rec: rsBlReconcile, aheadMax: RS_BL_AHEAD_MAX_MIN, ms: RS_LIVE_MS } : null);
+    if (!d) return res;
+    nowMs = nowMs != null ? nowMs : Date.now();
+    if (Math.abs(baseMs - nowMs) > 10 * 60000) return res;                                   // 지금 탐색이 아니면(예상 시각) 실시간은 의미가 없다
+    var tg = ntLiveTargets(out, d.id), stns = [], by = {}, j;
+    for (j = 0; j < tg.length; j++) { var f = tg[j].from; if (!by[f]) { by[f] = 1; stns.push(f); } }
+    if (!stns.length) return res;
+    var got = await Promise.all([
+      ntEnsure(env),
+      Promise.all(stns.map(function (s) { return d.fetch(env, 'realtimeStationArrival/1/20/' + encodeURIComponent(ntNz(s)), d.ms || 2800).then(function (l) { return [s, l]; }, function () { return [s, null]; }); }))
+    ]);
+    var nt = got[0], lists = {}, e;
+    for (j = 0; j < got[1].length; j++) lists[got[1][j][0]] = got[1][j][1];
+    for (j = 0; j < tg.length; j++) {
+      e = tg[j];
+      var list = lists[e.from]; if (!list) continue;
+      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + e.offSec * 1000), tz: 540 };
+      if ((q.fromMs - nowMs) / 60000 > d.aheadMax) continue;                                // 20분 넘게 먼 승차는 시각표
+      var live = d.pick(list, q, nt); if (live == null) continue;
+      var rc = d.rec(live, d.table(q, nt));
+      if (rc && rc.src === 'realtime') res[e.key] = { ms: Math.round(rc.ms), src: 'realtime' };
+    }
+  } catch (err) {}
+  return res;
+}
+
 // 경로 하나(path = { info, subPath })의 지하철 구간마다 nextTrain(안내용)과 ttWaitMs(타임라인 대기)를 붙인다.
 //   baseMs: 탐색 기준 시각(요청의 baseMs).  bf: 앱이 '예상 시각 모드'라 운행종료 보정(svcWarn.shift)을 쓰지 않을 때 true.
 //   ttWaitMs 의 의미 = 앱의 옛 계산과 같다: 그 구간을 타러 가는 시각(탐색 시각 + 구간 startSec + 앞 구간 대기 누적)에 승차역에 닿으면
 //   다음 열차까지 기다리는 시간. 0~30분일 때만 붙는다. 앞 구간의 대기는 뒤 구간 시각에 그대로 이어진다(앱이 합산해 그린다).
-function ntAttachPath(nt, path, baseMs, bf) {
+function ntAttachPath(nt, path, baseMs, bf, live) {
   var sub = path && path.subPath;
   if (!nt || !sub || !sub.length) return 0;
   var shiftMs = 0;
@@ -69,11 +122,12 @@ function ntAttachPath(nt, path, baseMs, bf) {
       if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { shiftMs = v * 60000; break; }
     }
   }
-  var base0 = baseMs + shiftMs, acc = 0, n = 0;
+  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1;
+  for (var f0 = 0; f0 < sub.length; f0++) { var tt0 = sub[f0] && sub[f0].trafficType; if (tt0 === 1 || tt0 === 2 || tt0 === 4) { firstT = f0; break; } }      // 첫 대중교통 구간 자리
   for (var k = 0; k < sub.length; k++) {
     var leg = sub[k];
     if (!leg || leg.trafficType !== 1) continue;
-    delete leg.ttWaitMs; delete leg.nextTrain;          // 캐시된 경로 객체에 남은 이전 요청 값을 지운다
+    delete leg.ttWaitMs; delete leg.nextTrain; delete leg.ttLive;          // 캐시된 경로 객체에 남은 이전 요청 값을 지운다
     var st = (leg.passStopList && leg.passStopList.stations) || [];
     var line = (leg.lane && leg.lane[0] && leg.lane[0].name) || '';
     if (!line || !st.length) continue;
@@ -86,6 +140,14 @@ function ntAttachPath(nt, path, baseMs, bf) {
     var bm = Math.floor(sod / 3600) * 60 + Math.floor((sod % 3600) / 60) + (sod % 60) / 60;
     var dep = null;
     try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, baseMs, bm); } catch (e) {}
+    // s197: 첫 대중교통이 서울 지하철이고 실시간 열차가 가려졌으면 시각표 대기 대신 그 열차까지의 대기(조용한 교체)
+    if (live && k === firstT && shiftMs === 0 && st.length > 1) {
+      var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];
+      if (lv && lv.ms != null) {
+        var wl = (lv.ms - t) / 60000;
+        if (wl > 0 && wl <= NT_MAX_WAIT_MIN) { var wlMs = Math.round(wl * 60000); leg.ttWaitMs = wlMs; leg.ttLive = true; acc += wlMs; n++; if (path.info) path.info.ttLive = (path.info.ttLive || 0) + 1; continue; }
+      }
+    }
     if (dep != null) {
       var w = dep - bm;
       if (w > 0 && w <= NT_MAX_WAIT_MIN) { var wMs = Math.round(w * 60000); leg.ttWaitMs = wMs; acc += wMs; n++; }
@@ -95,7 +157,7 @@ function ntAttachPath(nt, path, baseMs, bf) {
   return n;
 }
 
-async function ntAttachAll(env, od, baseMs, bf) {
+async function ntAttachAll(env, od, baseMs, bf, live) {
   try {
     var paths = od && od.result && od.result.path;
     if (!paths || !paths.length) return;
@@ -107,7 +169,7 @@ async function ntAttachAll(env, od, baseMs, bf) {
     if (!any) return;                                  // 지하철 구간이 없는 응답은 시각표를 불러오지도 않는다
     var nt = await ntEnsure(env);
     if (!nt) return;
-    for (var p = 0; p < paths.length; p++) ntAttachPath(nt, paths[p], baseMs, bf);
+    for (var p = 0; p < paths.length; p++) ntAttachPath(nt, paths[p], baseMs, bf, live);
     od.ntVer = nt.version || null;
   } catch (e) {}
 }
@@ -186,4 +248,4 @@ async function handleRideEtaNT(request, env) {
   return handleRideEta(request);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; _NT_WHY = ''; _NT_SRC = ''; } };
+if (typeof module !== 'undefined' && module.exports) module.exports = { ntLiveFirst: ntLiveFirst, ntLiveTargets: ntLiveTargets, ntLiveKey: ntLiveKey, ntEnsure: ntEnsure, ntAttachPath: ntAttachPath, ntAttachAll: ntAttachAll, ntAnswer: ntAnswer, handleNextTrain: handleNextTrain, handleRideEtaNT: handleRideEtaNT, _ntReset: function () { _NT = null; _NT_AT = 0; _NT_P = null; _NT_FAIL_AT = 0; _NT_WHY = ''; _NT_SRC = ''; } };

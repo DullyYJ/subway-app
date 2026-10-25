@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s196";
+var ENGINE_VERSION = "route-v2-2026-10-25s197";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -7860,6 +7860,10 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
     _liveStat.boardErr = String(e && e.message || e).slice(0, 60);
   }
   const _msSearch = Date.now() - _tS;
+  let _subLiveP = Promise.resolve(null);
+  if (!_isCustomTime && p.get("live") !== "0" && p.get("bf") !== "1" && (p.get("format") === "app" || url.pathname === "/route-v2-app")) {
+    _subLiveP = ntLiveFirst(env, out, _baseMs, Date.now()).catch(() => null);
+  }
   if (_isCustomTime || p.get("live") === "0") {
     if (_isCustomTime) _liveStat.liveSkipCustom = true;
     else {
@@ -8087,7 +8091,9 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
   if (p.get("format") === "app" || url.pathname === "/route-v2-app") {
     const _od = buildAppResponse(out, { sx: SX, sy: SY, ex: EX, ey: EY, sn: p.get("SN"), en: p.get("EN"), ldPick: !!(p.get("ldMode") || p.get("ldGrade") || p.get("ldDepTs")) });
     await xferAnnotateAll(env, _od, ctx);
-    await ntAttachAll(env, _od, _baseMs, p.get("bf") === "1");
+    const _subLive = await _subLiveP;
+    _liveStat.subLiveN = _subLive ? Object.keys(_subLive).length : 0;
+    await ntAttachAll(env, _od, _baseMs, p.get("bf") === "1", _subLive);
     if (p.get("rv") === "1") {
       try {
         rvAnnotate(_od);
@@ -11645,7 +11651,7 @@ async function ntEnsure(env) {
 //   baseMs: \ud0d0\uc0c9 \uae30\uc900 \uc2dc\uac01(\uc694\uccad\uc758 baseMs).  bf: \uc571\uc774 '\uc608\uc0c1 \uc2dc\uac01 \ubaa8\ub4dc'\ub77c \uc6b4\ud589\uc885\ub8cc \ubcf4\uc815(svcWarn.shift)\uc744 \uc4f0\uc9c0 \uc54a\uc744 \ub54c true.
 //   ttWaitMs \uc758 \uc758\ubbf8 = \uc571\uc758 \uc61b \uacc4\uc0b0\uacfc \uac19\ub2e4: \uadf8 \uad6c\uac04\uc744 \ud0c0\ub7ec \uac00\ub294 \uc2dc\uac01(\ud0d0\uc0c9 \uc2dc\uac01 + \uad6c\uac04 startSec + \uc55e \uad6c\uac04 \ub300\uae30 \ub204\uc801)\uc5d0 \uc2b9\ucc28\uc5ed\uc5d0 \ub2ff\uc73c\uba74
 //   \ub2e4\uc74c \uc5f4\ucc28\uae4c\uc9c0 \uae30\ub2e4\ub9ac\ub294 \uc2dc\uac04. 0~30\ubd84\uc77c \ub54c\ub9cc \ubd99\ub294\ub2e4. \uc55e \uad6c\uac04\uc758 \ub300\uae30\ub294 \ub4a4 \uad6c\uac04 \uc2dc\uac01\uc5d0 \uadf8\ub300\ub85c \uc774\uc5b4\uc9c4\ub2e4(\uc571\uc774 \ud569\uc0b0\ud574 \uadf8\ub9b0\ub2e4).
-function ntAttachPath(nt, path, baseMs, bf) {
+function ntAttachPath(nt, path, baseMs, bf, live) {
   var sub = path && path.subPath;
   if (!nt || !sub || !sub.length) return 0;
   var shiftMs = 0;
@@ -11656,11 +11662,12 @@ function ntAttachPath(nt, path, baseMs, bf) {
       if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { shiftMs = v * 60000; break; }
     }
   }
-  var base0 = baseMs + shiftMs, acc = 0, n = 0;
+  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1;
+  for (var f0 = 0; f0 < sub.length; f0++) { var tt0 = sub[f0] && sub[f0].trafficType; if (tt0 === 1 || tt0 === 2 || tt0 === 4) { firstT = f0; break; } }      // \uccab \ub300\uc911\uad50\ud1b5 \uad6c\uac04 \uc790\ub9ac
   for (var k = 0; k < sub.length; k++) {
     var leg = sub[k];
     if (!leg || leg.trafficType !== 1) continue;
-    delete leg.ttWaitMs; delete leg.nextTrain;          // \uce90\uc2dc\ub41c \uacbd\ub85c \uac1d\uccb4\uc5d0 \ub0a8\uc740 \uc774\uc804 \uc694\uccad \uac12\uc744 \uc9c0\uc6b4\ub2e4
+    delete leg.ttWaitMs; delete leg.nextTrain; delete leg.ttLive;          // \uce90\uc2dc\ub41c \uacbd\ub85c \uac1d\uccb4\uc5d0 \ub0a8\uc740 \uc774\uc804 \uc694\uccad \uac12\uc744 \uc9c0\uc6b4\ub2e4
     var st = (leg.passStopList && leg.passStopList.stations) || [];
     var line = (leg.lane && leg.lane[0] && leg.lane[0].name) || '';
     if (!line || !st.length) continue;
@@ -11673,6 +11680,14 @@ function ntAttachPath(nt, path, baseMs, bf) {
     var bm = Math.floor(sod / 3600) * 60 + Math.floor((sod % 3600) / 60) + (sod % 60) / 60;
     var dep = null;
     try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, baseMs, bm); } catch (e) {}
+    // s197: \uccab \ub300\uc911\uad50\ud1b5\uc774 \uc11c\uc6b8 \uc9c0\ud558\ucca0\uc774\uace0 \uc2e4\uc2dc\uac04 \uc5f4\ucc28\uac00 \uac00\ub824\uc84c\uc73c\uba74 \uc2dc\uac01\ud45c \ub300\uae30 \ub300\uc2e0 \uadf8 \uc5f4\ucc28\uae4c\uc9c0\uc758 \ub300\uae30(\uc870\uc6a9\ud55c \uad50\uccb4)
+    if (live && k === firstT && shiftMs === 0 && st.length > 1) {
+      var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];
+      if (lv && lv.ms != null) {
+        var wl = (lv.ms - t) / 60000;
+        if (wl > 0 && wl <= NT_MAX_WAIT_MIN) { var wlMs = Math.round(wl * 60000); leg.ttWaitMs = wlMs; leg.ttLive = true; acc += wlMs; n++; if (path.info) path.info.ttLive = (path.info.ttLive || 0) + 1; continue; }
+      }
+    }
     if (dep != null) {
       var w = dep - bm;
       if (w > 0 && w <= NT_MAX_WAIT_MIN) { var wMs = Math.round(w * 60000); leg.ttWaitMs = wMs; acc += wMs; n++; }
@@ -11682,7 +11697,7 @@ function ntAttachPath(nt, path, baseMs, bf) {
   return n;
 }
 
-async function ntAttachAll(env, od, baseMs, bf) {
+async function ntAttachAll(env, od, baseMs, bf, live) {
   try {
     var paths = od && od.result && od.result.path;
     if (!paths || !paths.length) return;
@@ -11694,7 +11709,7 @@ async function ntAttachAll(env, od, baseMs, bf) {
     if (!any) return;                                  // \uc9c0\ud558\ucca0 \uad6c\uac04\uc774 \uc5c6\ub294 \uc751\ub2f5\uc740 \uc2dc\uac01\ud45c\ub97c \ubd88\ub7ec\uc624\uc9c0\ub3c4 \uc54a\ub294\ub2e4
     var nt = await ntEnsure(env);
     if (!nt) return;
-    for (var p = 0; p < paths.length; p++) ntAttachPath(nt, paths[p], baseMs, bf);
+    for (var p = 0; p < paths.length; p++) ntAttachPath(nt, paths[p], baseMs, bf, live);
     od.ntVer = nt.version || null;
   } catch (e) {}
 }
@@ -18924,10 +18939,10 @@ async function handleScreenPvl(request) {
 //   \ub0b4\ub294\uc9c0 \uc2dc\ud5d8\uc774 \ub300\uc870\ud55c\ub2e4). \uc5d4\uc9c4\uc740 \uae30\uc5b5\ud558\uc9c0 \uc54a\uc73c\ubbc0\ub85c(stateless) \uc0c1\ud0dc(\uc9c0\uc5f0 \uac00\uc815 31\uac1c \u00d7 \uc0c1\ud0dc \ud655\ub960)\uac00 \uc694\uccad\uc5d0 \uc2e4\ub824 \uac00\uc11c \uac31\uc2e0\ub41c \ucc44\ub85c \ub3cc\uc544\uc628\ub2e4.
 //   \uc571(\ub124\uc774\ud2f0\ube0c)\uc740 GPS \u00b7 \uae30\uc9c0\uad6d \u00b7 (\uc120\ud0dd) \uc6c0\uc9c1\uc784 \uc99d\uac70\ub97c '\ubc1b\uc740 \uc21c\uc11c \uadf8\ub300\ub85c' \ubaa8\uc544 \ubcf4\ub0b4\uace0, \ub3cc\ub824\ubc1b\uc740 \ucc44\ud0dd \uc5ed(best.idx)\uacfc \ud655\uc2e0\ub3c4\ub97c \uadf8\ub300\ub85c \ub530\ub978\ub2e4.
 //
-// \uc785\ub825  posFuseRun({ nowMs, stations:[{lat,lng,schedMs|null,xferFromPrev,name?}], state?, seed?:{idx,conf}, ev:[{t:'gps',at,fix:{lat,lng,ts,acc}} | {t:'motion',at,state,conf} |
+// \uc785\ub825  posFuseRun({ nowMs, stations:[{lat,lng,schedMs|null,xferFromPrev,name?}], state?, seed?:{idx,conf}, ev:[{t:'gps',at,fix:{lat,lng,ts,acc}} |
 //                                                                                          {t:'cell',at,idx,conf} | {t:'arrived',at,idx,strength}] })
 //   state \uc5c6\uc74c(\ucc98\uc74c) \u2192 \ud310\ub2e8\uae30\ub97c \ub9cc\ub4e4\uace0 seed(\uae30\ubcf8 0\uc5ed 0.9, idx>0 \uc774\uba74 0.8)\ub85c \uc2dc\uc791. ev \ub294 \uc2dc\uac01(at) \uc624\ub984\ucc28\uc21c\uc73c\ub85c \ucc98\ub9ac\ud558\uace0, \ub9c8\uc9c0\ub9c9\uc5d0 nowMs \uae4c\uc9c0 \uc2dc\uac04\uc744 \uc9c4\ud589\ud55c\ub2e4.
-// \ucd9c\ub825  { ok, state, best:{idx,conf,kind,nextConf,delayS,delayW}, median:{idx,delayS,delayW}, fed:{gps,motion,cell,arrived,skipped} }
+// \ucd9c\ub825  { ok, state, best:{idx,conf,kind,nextConf,delayS,delayW}, median:{idx,delayS,delayW}, fed:{gps,cell,arrived,skipped} }
 //   best.idx/median.idx = stations \ubc30\uc5f4 \ubc88\ud638(=\uc6f9\uc758 _pf.st \ubc88\ud638)
 var pfuLib = (function(){
 'use strict';
@@ -18944,7 +18959,6 @@ var pfuLib = (function(){
     GPS_MAX_ACC: 80,      // \uc774\ubcf4\ub2e4 \ubd80\uc815\ud655\ud55c fix \ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4(m) \u2014 2026-10-12: 150 \u2192 80 (\uc9c0\ud558\uc5d0\uc11c \uc0b4\uc544\ub09c \uae30\uc9c0\uad6d\uc2dd \uc88c\ud45c 100m \uc548\ud30e\uc774 \uc704\uce58\ub97c \ud754\ub4e4\uc5c8\ub2e4)
     GPS_MAX_AGE_S: 10,    // \uc774\ubcf4\ub2e4 \uc624\ub798\ub41c fix \ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
     GPS_EPS: 0.02,        // GPS \uc774\uc0c1\uac12 \ud5c8\uc6a9
-    MOTION_CONF: 0.82,    // \uc815\ucc28/\uc8fc\ud589 \ud310\uc815\uc774 \ub9de\uc744 \ud655\ub960
     CELL_EPS: 0.15,       // \uc140 \uc99d\uac70\uac00 \ud2c0\ub838\uc744 \ub54c\uc758 \ucd5c\uc18c \uac00\ub2a5\ub3c4
     CELL_SIGMA: 0.9,      // \uc140 \uc99d\uac70\uac00 \uac00\ub9ac\ud0a4\ub294 \uc5ed \uc8fc\ubcc0 \ud3ed(\uc5ed \ub2e8\uc704)
     SIG_DWELL_S: 18,      // \ucd9c\ubc1c \uc2dc\uac01 \ud754\ub4e4\ub9bc(\ucd08) \u2014 \uc2dc\uac01\ud45c\uac00 \ubd84 \ub2e8\uc704\ub77c \uc624\ucc28 \ud3ec\ud568
@@ -19104,18 +19118,6 @@ var pfuLib = (function(){
       normW();
     }
 
-    self.motion = function(state, nowMs, conf){
-      if(state !== 'moving' && state !== 'stopped') return;
-      var c = conf == null ? cfg.MOTION_CONF : conf, moving = state === 'moving';
-      applyEvidence(function(j){
-        var isDwell = (j % 2 === 0), idx = j >> 1;
-        var neutral = isDwell ? isXferDwell(idx) : !!stations[idx+1].xferFromPrev;
-        if(neutral) return 0.5;
-        if(isDwell) return moving ? (1 - c) : c;
-        return moving ? c : (1 - c) * 0.8 + 0.02;
-      }, 0.6);
-    };
-
     self.gps = function(fix, nowMs){
       if(!fix || fix.lat == null) return false;
       if(fix.ts && fix.ts === lastGpsTs) return false;
@@ -19232,7 +19234,7 @@ function posFuseRun(inp) {
     var lat = (typeof s.lat === 'number' && isFinite(s.lat)) ? s.lat : null, lng = (typeof s.lng === 'number' && isFinite(s.lng)) ? s.lng : null;
     st.push({ lat: lat, lng: lng, schedMs: (typeof s.schedMs === 'number' && isFinite(s.schedMs)) ? s.schedMs : null, xferFromPrev: !!s.xferFromPrev, name: pfuStr(s.name, 40) });
   }
-  var f = pfuLib.create(st), fed = { gps: 0, motion: 0, cell: 0, arrived: 0, skipped: 0 };
+  var f = pfuLib.create(st), fed = { gps: 0, cell: 0, arrived: 0, skipped: 0 };
   var restored = inp.state ? f.importState(inp.state) : false;
   if (!restored) {
     var sd = (inp.seed && typeof inp.seed === 'object') ? inp.seed : {};
@@ -19248,7 +19250,6 @@ function posFuseRun(inp) {
     if (at > nowMs) { fed.skipped++; continue; }
     f.predict(at);
     if (e.t === 'gps') { var fx = e.fix || {}; if (f.gps({ lat: fx.lat, lng: fx.lng, ts: fx.ts, acc: fx.acc }, at)) fed.gps++; else fed.skipped++; }
-    else if (e.t === 'motion') { f.motion(pfuStr(e.state, 8), at, typeof e.conf === 'number' ? e.conf : null); fed.motion++; }
     else if (e.t === 'cell') { f.cell(Number(e.idx), typeof e.conf === 'number' ? e.conf : null, at); fed.cell++; }
     else if (e.t === 'arrived') { f.arrived(Number(e.idx), at, typeof e.strength === 'number' ? e.strength : null); fed.arrived++; }
     else fed.skipped++;
