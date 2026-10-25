@@ -242,6 +242,25 @@ public final class ScreenCore {
 
     private static final String[] ROLES = { "bg", "card", "border", "text", "sub", "gold", "orange", "imgbg", "white", "border2", "none", "card2", "nav", "gold2", "ongold" };
     private static boolean role(String s) { for (String r : ROLES) if (r.equals(s)) return true; return false; }
+    /** 화면 글 안의 그림 주소들(img 칸 · http/https 만 · 중복 없이 · 최대 max 개) — 쇼핑처럼 그림이 많은 화면을 열기 전에 그림 파일을 미리 받아 둘 때 쓴다. 못 읽으면 빈 목록. */
+    public static java.util.List<String> imageUrls(String json, int max) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<String>();
+        try { collectImg(parse(json), out, max, 0); } catch (Throwable e) { return new java.util.ArrayList<String>(); }
+        return new java.util.ArrayList<String>(out);
+    }
+    @SuppressWarnings("unchecked")
+    private static void collectImg(Object o, java.util.Set<String> out, int max, int depth) {
+        if (o == null || out.size() >= max || depth > 12) return;
+        if (o instanceof Map) {
+            for (Map.Entry<String, Object> e : ((Map<String, Object>) o).entrySet()) {
+                Object v = e.getValue();
+                if ("img".equals(e.getKey()) && v instanceof String) { String u = (String) v; if (u.length() > 0 && u.length() <= 1500 && httpUrl(u) && out.size() < max) out.add(u); }
+                else if (v instanceof Map || v instanceof java.util.List) collectImg(v, out, max, depth + 1);
+            }
+        } else if (o instanceof java.util.List) {
+            for (Object x : (java.util.List<Object>) o) { if (out.size() >= max) return; collectImg(x, out, max, depth + 1); }
+        }
+    }
     private static boolean httpUrl(String u) {
         if (u == null || u.length() == 0 || u.length() > 1500) return false;
         String l = u.length() > 8 ? u.substring(0, 8).toLowerCase() : u.toLowerCase();
