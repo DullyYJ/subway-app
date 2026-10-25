@@ -375,14 +375,14 @@ final class RideStandbyJ {
     }
 
     // ═════════════ 하단 줄(추천 · 내릴 준비) ═════════════
-    static Map<String, Object> rows(Map<String, Object> st, Map<String, Object> r, double now, Map<String, Object> dest, int lv, Map<String, Object> bTg, boolean arrived) {
+    static Map<String, Object> rows(Map<String, Object> st, Map<String, Object> r, double now, Map<String, Object> dest, int finLv, boolean arrived) {
         Map<String, Object> cfg = mm(st.get("cfg")); if (cfg == null) cfg = obj();
         Map<String, Object> ad = mm(st.get("rcAd"));
         int dn = dest != null ? (int) num(dest.get("nodeIdx")) : -1, k = 0;
         Map<String, Object> reco = null, getoff = null;
         Object etaMs = r.get("etaMs");
         double rem = (dn >= 0 && etaMs != null && hasEta(etaMs, dn)) ? round((etaAt(etaMs, dn) - now) / 1000) : Double.NaN;
-        if (!arrived && lv == 1 && bTg != null && "dest".equals(bTg.get("kind")) && st.get("wait") == null) {
+        if (!arrived && finLv == 1 && st.get("wait") == null) {
             String cheer = "오늘도 수고 많았어요";
             try {
                 Map<String, Object> eta = mm(st.get("eta"));
@@ -408,6 +408,72 @@ final class RideStandbyJ {
         return obj("reco", reco != null ? reco : obj("on", Boolean.FALSE), "getoff", getoff != null ? getoff : obj("on", Boolean.FALSE));
     }
 
+    /** 접힌 알약에 보일 한 줄(JS rsPillTxt) */
+    static String pillTxt(Map<String, Object> rs, String line1, String line2, String pill, List<Object> cells, int cur) {
+        if (rs != null && !truthy(rs.get("end")) && ("wait".equals(rs.get("st")) || "board".equals(rs.get("st")))) {
+            String lab = truthy(rs.get("ch")) ? str(rs.get("ch")) : (truthy(rs.get("chip")) ? str(rs.get("chip")) : (truthy(rs.get("nm")) ? str(rs.get("nm")) : ""));
+            return lab.length() > 0 ? "대기 · " + lab : "대기";
+        }
+        String c = line1 == null ? "" : line1; int k = c.indexOf(" ▸ ");
+        if (k > 0) c = c.substring(0, k);
+        if (c.startsWith("● ")) c = c.substring(2);
+        c = jsTrim(c);
+        if (pill != null && pill.length() > 0) c = pill;
+        if (c.length() == 0 && cur >= 0 && cur < cells.size() && truthy(g(cells.get(cur), "n"))) c = str(g(cells.get(cur), "n"));
+        String arr = "";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d{1,2}:\\d{2})\\s*도착").matcher(line2 == null ? "" : line2);
+        if (m.find()) arr = m.group(1);
+        if (c.length() == 0) return arr.length() > 0 ? arr + " 도착" : "";
+        return arr.length() > 0 ? c + " · " + arr + " 도착" : c;
+    }
+    private static String jsTrim(String s) { int a = 0, b = s.length(); while (a < b && Character.isWhitespace(s.charAt(a))) a++; while (b > a && Character.isWhitespace(s.charAt(b - 1))) b--; return s.substring(a, b); }
+    /** 환승 칸: 다음 구간 탑승 노드(bi) 앞의 환승 걷기 칸(노드가 아닌 칸) — 없으면 탑승 노드 바로 앞 칸. 현위치 칸(cur) 뒤가 아니면 -1. (JS rsXferCell) */
+    static int xferCell(List<Object> map, int cur, int bi) {
+        int bj = -1, j;
+        for (j = 0; j < map.size(); j++) { Object mo = map.get(j); if (mo != null && num(mo) == bi) { bj = j; break; } }
+        if (bj <= cur) return -1;
+        for (j = bj - 1; j > cur; j--) { Object mo = map.get(j); if (!(mo != null && num(mo) >= 0)) return j; }
+        return (bj - 1 > cur) ? bj - 1 : -1;
+    }
+    /** 하차·환승 하이라이트 단계(웹 _ovlAlertLevelRaw, JS rsOvlLevel) → { 단계, 마지막 구간(1|0), 최종 3정거장 전(1|0), 마지막 구간 한 정거장 전(1|0) } */
+    static int[] ovlLevel(Map<String, Object> st, double curIdx, int curPos) {
+        Map<String, Object> cfg = mm(st.get("cfg")); if (cfg == null) cfg = obj();
+        List<Object> tg = l(cfg.get("targets")); if (tg == null) tg = new ArrayList<Object>();
+        Map<String, Object> eta = mm(st.get("eta")); if (eta == null) eta = obj();
+        List<Object> nodes = l(eta.get("nodes")); if (nodes == null) nodes = new ArrayList<Object>();
+        Map<String, Object> L = mm(st.get("ovlLatch"));
+        if (L == null) { L = obj("a", -1, "lv", 0, "fin", Boolean.TRUE); st.put("ovlLatch", L); }
+        if (num(L.get("a")) >= 0) {
+            List<Leg> legs = legsOf(eta); double bNext = -1; boolean released;
+            for (Leg lg : legs) if (lg.bi > num(L.get("a"))) { bNext = lg.bi; break; }
+            if (bNext >= 0) {
+                Map<String, Object> xw = mm(st.get("xw"));
+                released = doneAt(st, bNext) || maxPass(eta) >= bNext || (curIdx > bNext && !(xw != null && num(xw.get("i")) == bNext));
+            } else released = curIdx > num(L.get("a"));
+            if (released) { L.put("a", -1.0); L.put("lv", 0.0); }
+        }
+        int lv = 0, pre = 0; boolean fin = true; double aNow = -1; Map<String, Object> seg = null;
+        Object nd = curIdx >= 0 ? at(nodes, (int) curIdx) : null;
+        boolean riding = curPos >= 0 && truthy(nd) && !truthy(g(nd, "isOrigin")) && !truthy(g(nd, "isWalk")) && (truthy(g(nd, "isBus")) || truthy(g(nd, "isSub"))) && st.get("wait") == null && !truthy(st.get("xw"));
+        if (riding) {
+            for (Object to : tg) { Map<String, Object> t = mm(to); if (num(t.get("seqPos")) >= curPos && (seg == null || num(t.get("seqPos")) < num(seg.get("seqPos")))) seg = t; }
+            if (seg != null) {
+                aNow = num(seg.get("nodeIdx"));
+                int rem = (int) (num(seg.get("seqPos")) - curPos);
+                lv = rem == 2 ? 2 : (rem <= 1 ? 1 : 0);
+                fin = !"transfer".equals(seg.get("kind"));
+                if (!fin && lv == 2) lv = 0;
+                pre = (fin && rem == 3) ? 1 : 0;
+            }
+        }
+        if (lv > 0 && aNow >= 0) {
+            if (num(L.get("a")) != aNow) { L.put("a", aNow); L.put("lv", (double) lv); L.put("fin", fin); }
+            else if (num(L.get("lv")) == 0 || lv < num(L.get("lv"))) L.put("lv", (double) lv);
+        }
+        boolean latched = num(L.get("a")) >= 0, lfin = !Boolean.FALSE.equals(L.get("fin"));
+        return new int[] { latched ? (int) num(L.get("lv")) : lv, (latched ? lfin : fin) ? 1 : 0, pre, (latched ? (lfin && num(L.get("lv")) == 1) : (fin && lv == 1)) ? 1 : 0 };
+    }
+
     // ═════════════ 오버레이 ═════════════
     static String p2(double n) { return (n < 10 ? "0" : "") + ns(n); }
     static Map<String, Object> overlay(Map<String, Object> st, Map<String, Object> r, double curIdx, int curPos, double now, Map<String, Object> dest, String destName, boolean moving, boolean done) {
@@ -425,9 +491,17 @@ final class RideStandbyJ {
             if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= curIdx) cur = j; }
         }
         if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
+        boolean arrived = dest != null && curPos >= num(dest.get("seqPos"));
+        Map<String, Object> rs = arrived ? obj("st", "board", "end", Boolean.TRUE, "bt", "안내 종료", "k", "목적지에 도착했어요", "ch", "도착", "nm", destName == null ? "" : destName, "bar", -1, "cbg", "", "cfg", "#0a84ff") : rsState(st, r, now);
+        boolean xf = false; int cur0 = cur;
+        if (!arrived && st.get("wait") == null && truthy(st.get("xw")) && rs != null && ("board".equals(rs.get("st")) || "wait".equals(rs.get("st")))) {
+            int xj = xferCell(map, cur, (int) num(mm(st.get("xw")).get("i")));
+            if (xj > cur) { cur = xj; xf = true; }
+        }
+        if (xf) moving = false;
         int nextJ = -1;
-        for (j = cur + 1; j < cells.size(); j++) { Object mo = at(map, j); if (mo != null && num(mo) >= 0) { nextJ = j; break; } }
-        String cn = cur < cells.size() ? jstr(g(cells.get(cur), "n")) : "", nn = nextJ >= 0 ? jstr(g(cells.get(nextJ), "n")) : "";
+        for (j = cur0 + 1; j < cells.size(); j++) { Object mo = at(map, j); if (mo != null && num(mo) >= 0) { nextJ = j; break; } }
+        String cn = cur0 < cells.size() ? jstr(g(cells.get(cur0), "n")) : "", nn = nextJ >= 0 ? jstr(g(cells.get(nextJ), "n")) : "";
         String line1 = truthy(nn) && nn.length() > 0 ? cn + " ▸ " + nn : "● " + cn;
         String pill = (moving && nextJ >= 0) ? or(g(cells.get(nextJ), "m"), "") : "";
         String line2 = ""; int dn = dest != null ? (int) num(dest.get("nodeIdx")) : -1;
@@ -437,13 +511,12 @@ final class RideStandbyJ {
             Object ad = at(arr, dn);
             line2 = "남은시간: " + p2(Math.floor(mmn / 60)) + "시간 " + p2(mmn % 60) + "분" + (truthy(ad) ? " · " + str(ad) + "도착" : "");
         }
-        int lv = 0, pre = 0; List<Object> tg = l(mm(st.get("cfg")) == null ? null : mm(st.get("cfg")).get("targets")); if (tg == null) tg = new ArrayList<Object>();
+        int lv = 0; List<Object> tg = l(mm(st.get("cfg")) == null ? null : mm(st.get("cfg")).get("targets")); if (tg == null) tg = new ArrayList<Object>();
         Map<String, Object> bTg = null;
         for (int i = 0; i < tg.size(); i++) {
             Map<String, Object> t = mm(tg.get(i));
             int rem = (int) (num(t.get("seqPos")) - curPos);
             if (curPos >= 0 && (rem == 1 || rem == 2)) { if (lv == 0 || rem < lv) { lv = rem; bTg = t; } }
-            if (curPos >= 0 && "dest".equals(t.get("kind")) && rem == 3) pre = 1;
         }
         String banner = "";
         if (bTg != null && !(dest != null && curPos >= num(dest.get("seqPos")))) {
@@ -451,16 +524,19 @@ final class RideStandbyJ {
             banner = "transfer".equals(bTg.get("kind")) ? (lv == 1 ? "다음 정거장 " + bn + " — " + nl + " 환승 준비" : bn + "에서 " + nl + " 환승 · 2정거장 전")
                 : (lv == 1 ? "다음 정거장 " + bn + " — 내릴 준비하세요" : bn + "까지 2정거장 남았어요");
         } else if (dest != null && curPos >= num(dest.get("seqPos"))) banner = (truthy(destName) ? destName : or(dest.get("name"), "목적지")) + "에 도착했어요";
+        int[] al = ovlLevel(st, curIdx, curPos);      // { 단계, 마지막 구간(1|0), 최종 3정거장 전, 마지막 구간 한 정거장 전 }
         Map<String, Object> oa = mm(st.get("ovlAlert")); if (oa == null) { oa = obj("lv", 0, "at", 0); st.put("ovlAlert", oa); }
-        if (num(oa.get("lv")) != lv) { oa.put("lv", (double) lv); if (lv > 0) oa.put("at", now); }
-        boolean arrived = dest != null && curPos >= num(dest.get("seqPos"));
-        Map<String, Object> rs = arrived ? obj("st", "board", "end", Boolean.TRUE, "bt", "안내 종료", "k", "목적지에 도착했어요", "ch", "도착", "nm", destName == null ? "" : destName, "bar", -1, "cbg", "", "cfg", "#0a84ff") : rsState(st, r, now);
-        Map<String, Object> rowsO = rows(st, r, now, dest, lv, bTg, arrived);
+        if (num(oa.get("lv")) != al[0]) { oa.put("lv", (double) al[0]); if (al[0] > 0) oa.put("at", now); }
+        Map<String, Object> alw = mm(mm(st.get("cfg")) == null ? null : mm(st.get("cfg")).get("allowed"));
+        boolean vibe = !arrived && al[0] > 0 && !Boolean.FALSE.equals(alw == null ? null : alw.get(al[1] == 1 ? "near_arrive" : "transfer"));
+        Map<String, Object> rowsO = rows(st, r, now, dest, al[3], arrived);
         Map<String, Object> out = obj("active", Boolean.TRUE, "line1", line1, "pill", pill, "track", new ArrayList<Object>(), "cur", cur, "base", truthy(ov.get("base")) ? ov.get("base") : 0, "line2", line2, "line3", "",
-            "alert", arrived ? 0 : lv, "alertAt", truthy(oa.get("at")) ? oa.get("at") : 0, "alertVibe", Boolean.FALSE, "banner", banner, "destName", destName == null ? "" : destName,
-            "pre", !arrived && pre == 1, "moving", moving, "rs", rs, "reco", rowsO.get("reco"), "getoff", rowsO.get("getoff"), "cells", cells);
+            "alert", arrived ? 0 : al[0], "alertAt", truthy(oa.get("at")) ? oa.get("at") : 0, "alertVibe", vibe, "banner", banner, "destName", destName == null ? "" : destName,
+            "pre", !arrived && al[0] == 0 && al[2] == 1, "moving", moving, "rs", rs, "reco", rowsO.get("reco"), "getoff", rowsO.get("getoff"), "cells", cells);
+        out.put("pillTxt", pillTxt(rs, line1, line2, pill, cells, cur0));
+        if (xf) out.put("xfer", Boolean.TRUE);
         if (truthy(ov.get("theme"))) out.put("theme", ov.get("theme"));
-        Map<String, Object> sh = share(st, r, cells, map, cur, moving, dest, destName, now);
+        Map<String, Object> sh = share(st, r, cells, map, cur0, moving, dest, destName, now);
         if (sh != null) out.put("share", sh);
         return out;
     }

@@ -25,8 +25,8 @@ public final class OvCore {
         public long at;
     }
     public static final class Ov {
-        public boolean active, moving, pre;
-        public String line1 = "", line2 = "", line3 = "", pill = "", banner = "", destName = "";
+        public boolean active, moving, pre, alertVibe;
+        public String line1 = "", line2 = "", line3 = "", pill = "", pillTxt = "", banner = "", destName = "";
         public int alert, cur, base;
         public long alertAt;
         public Cell[] cells = new Cell[0];
@@ -63,7 +63,7 @@ public final class OvCore {
         if (!(o instanceof Map)) return v;
         Map<String, Object> m = (Map<String, Object>) o;
         v.line1 = BoardCore.s(m.get("line1"), 60); v.line2 = BoardCore.s(m.get("line2"), 60); v.line3 = BoardCore.s(m.get("line3"), 60);
-        v.pill = BoardCore.s(m.get("pill"), 40); v.banner = BoardCore.s(m.get("banner"), 60); v.destName = BoardCore.s(m.get("destName"), 40);
+        v.pill = BoardCore.s(m.get("pill"), 40); v.pillTxt = BoardCore.s(m.get("pillTxt"), 60); v.alertVibe = Boolean.TRUE.equals(m.get("alertVibe")); v.banner = BoardCore.s(m.get("banner"), 60); v.destName = BoardCore.s(m.get("destName"), 40);
         v.active = Boolean.TRUE.equals(m.get("active")) && v.line1.length() > 0;
         v.moving = Boolean.TRUE.equals(m.get("moving")); v.pre = Boolean.TRUE.equals(m.get("pre"));
         v.alert = m.get("alert") instanceof Number ? Math.max(0, Math.min(2, ((Number) m.get("alert")).intValue())) : 0;
@@ -140,6 +140,7 @@ public final class OvCore {
     }
     /** 접힌 알약에 보일 글: 이동 중 문구 → 현위치 칸 이름 → 첫 줄. */
     public static String pillText(Ov v) {
+        if (v.pillTxt.length() > 0) return v.pillTxt;      // 엔진이 만든 한 줄(대기 · 탈 것 / 현위치 · 도착 시각)
         if (v.pill.length() > 0) return v.pill;
         if (v.cells.length > 0 && v.cur < v.cells.length && v.cells[v.cur].n.length() > 0) return v.cells[v.cur].n;
         return v.line1;
@@ -150,6 +151,6 @@ public final class OvCore {
     public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsEnd && v.rsBt.length() > 0; }
     /** 앱 탑승 시트가 보일 상태인가(올라온 시트 · 기록 직후 되돌리기 · 대기 알약). 도착 줄(안내 종료)은 앱에서는 따로 있으니 제외. */
     public static boolean rsShown(Ov v) { return v != null && !v.rsEnd && ("board".equals(v.rsSt) || "wait".equals(v.rsSt) || "undo".equals(v.rsSt)); }
-    /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 6초(웹), 1정거장 전 빠르게, 없으면 0. */
-    public static long spinMs(int alert) { return alert == 1 ? 1400L : (alert == 2 ? 6000L : 0L); }
+    /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 6초 · 1정거장 전 1.1초(웹과 같다), 없으면 0. */
+    public static long spinMs(int alert) { return alert == 1 ? 1100L : (alert == 2 ? 6000L : 0L); }
 }

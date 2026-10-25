@@ -22,7 +22,15 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
+import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
+import android.view.animation.OvershootInterpolator;
+import android.view.VelocityTracker;
+import android.view.ViewTreeObserver;
+import android.content.SharedPreferences;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -32,7 +40,7 @@ import android.widget.TextView;
  *
  * ★ 원칙(YJ): "모든 계산은 엔진이 한다. 앱은 그림만 그린다." 글 · 색 · 점 모양 · 현위치 칸 · 경고 단계(alert 0·1·2)는 엔진(/ride-standby 의 overlay)이 정한 값 그대로이고
  *   OvCore 가 읽어 준다. 여기는 창을 만들고 그리고 손짓(누르기 · 쓸기 · 꾹 눌러 옮기기)을 받을 뿐이다.
- * 경고 단계에서는 카드 테두리에 무지개가 돈다(2정거장 전 천천히 · 1정거장 전 빠르게). 진동은 알림(RideService)이 이미 울리므로 여기서는 울리지 않는다.
+ * 경고 단계에서는 카드 테두리에 무지개가 돈다(2정거장 전 천천히 · 1정거장 전 빠르게). 진동도 웹과 같다 — 엔진이 alertVibe(설정이 허용했나)와 alertAt(단계가 켜진/바뀐 시각)을 주고, 여기서는 새 alertAt 일 때 한 번 울리기만 한다.
  * 권한: '다른 앱 위에 표시'(SYSTEM_ALERT_WINDOW). 없으면 아무것도 하지 않는다. 설정에서 스위치를 켰을 때만 뜬다. 모든 창 조작은 메인 스레드에서.
  */
 final class RideOverlay {
@@ -50,13 +58,14 @@ final class RideOverlay {
     private Border border;
     private GradientDrawable bg;
     private WindowManager.LayoutParams lp;
-    private boolean shown, userPill, blinkOn = true, blinking, userScrolling, forcedOpen;
-    private int savedY = -1;
-    private long dismissedRecoAt = -1L;
+    private boolean shown, userPill, blinkOn = true, blinking, userScrolling, curPill, movedForAlert, popReady;
+    private int restoreX, restoreY, pillX;
+    private long dismissedRecoAt = -1L, dismissedAlertAt = -1L, lastVibeAt = 0L;
+    private ValueAnimator flingAnim, recenterAnim;
+    private static final String PREF = "overlay_pos";       // 웹 때와 같은 이름 — 저장된 위치 · 접힘(pill) · 알약 가로 위치(px)를 이어 쓴다
     private OvCore.Ov cur = new OvCore.Ov();
     private float scrollPos;
     private ValueAnimator pulseAnim, pillAnim;
-    private static int lastY = -1;
     private static final long BLINK_MS = 550L;
 
     /** 오버레이의 손짓을 받는 쪽(탑승 서비스). 없으면 안내 종료만 스스로 한다. */
@@ -87,15 +96,17 @@ final class RideOverlay {
                 cur = v;
                 if (!shown) addNow();
                 if (!shown) return;
+                // 엔진이 정한 진동: 단계가 켜졌고(alert) 설정이 허용했고(alertVibe) 새 경고(alertAt)일 때 한 번만(20초 지난 묵은 경고는 울리지 않는다)
+                if (v.alert > 0 && v.alertVibe && v.alertAt > 0L && v.alertAt != lastVibeAt && System.currentTimeMillis() - v.alertAt < 20000L) { lastVibeAt = v.alertAt; vibrateAlert(v.alert); }
                 apply();
             } catch (Throwable ignored) { /* 창을 못 띄워도 안내는 알림으로 이어진다 */ }
         } });
     }
     void hide() { ui.post(new Runnable() { @Override public void run() { removeNow(); } }); }
 
-    /** 접힌 알약으로 보일지. 접어 둬도 1정거장 전(alert 1)이거나 새 추천(row)이 오면 저절로 펼친다 — 2정거장 전(alert 2)은 펼치지 않고 알약 둘레 무지개만 돈다(웹 OverlayPlugin). 접은 그 추천으로는 다시 펼치지 않는다. */
+    /** 접힌 알약으로 보일지. 접어 둬도 1정거장 전(alert 1, 이미 접어 끈 경고는 제외)이거나 새 추천(row)이 오면 저절로 펼친다 — 2정거장 전(alert 2)은 펼치지 않고 알약 둘레 무지개만 돈다(웹 OverlayPlugin.applyMode 와 같다). */
     private boolean pillMode() { return userPill && !wantOpen(); }
-    private boolean wantOpen() { return cur.alert == 1 || (cur.row.kind > 0 && cur.row.at != dismissedRecoAt); }
+    private boolean wantOpen() { return (cur.alert == 1 && cur.alertAt != dismissedAlertAt) || (cur.row.kind > 0 && cur.row.at != dismissedRecoAt); }
 
     private void apply() {
         OvCore.Ov v = cur;
@@ -105,13 +116,20 @@ final class RideOverlay {
         bg.setCornerRadius(dp(pill ? 15 : 14));
         border.pill = pill;
         bg.setStroke(Math.max(1, dp(1)), 0x33808080);
-        boolean forced = userPill && !pill;                                   // 접어 둔 알약이 경고 · 추천 때문에 저절로 펼쳐졌다: 맨 위로 옮기고, 끝나면 원래 자리의 알약으로
-        if (forced && !forcedOpen) { savedY = lp.y; lp.y = Math.min(lp.y, dp(36)); }
-        else if (!forced && forcedOpen && savedY >= 0) { lp.y = savedY; savedY = -1; }
-        forcedOpen = forced;
+        // 알약 ↔ 펼침 전환(웹 applyMode): 경고·추천으로 저절로 펼칠 땐 알약 자리를 기억하고 맨 위로 옮기며, 끝나 다시 접을 땐 기억해 둔 자리로 돌려놓는다
+        boolean changed = pill != curPill;
+        if (changed) {
+            if (pill) { if (movedForAlert) { lp.x = restoreX; lp.y = restoreY; movedForAlert = false; } else lp.x = pillX; }
+            else if (userPill) { restoreX = lp.x; restoreY = lp.y; movedForAlert = true; lp.x = 0; lp.y = dp(36); }
+            else { pillX = lp.x; lp.x = 0; movedForAlert = false; }
+            curPill = pill;
+        }
         lp.width = pill ? WindowManager.LayoutParams.WRAP_CONTENT : WindowManager.LayoutParams.MATCH_PARENT;
         pillT.setVisibility(pill ? View.VISIBLE : View.GONE);
-        pillT.setText("●  " + OvCore.pillText(v)); pillT.setTextColor(fg);
+        boolean wt = "wait".equals(v.rsSt) || "board".equals(v.rsSt);
+        SpannableString ps = new SpannableString("●  " + OvCore.pillText(v));
+        ps.setSpan(new ForegroundColorSpan(v.moving && !wt ? 0xFF0A84FF : 0xFFF0A500), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);   // 웹 PillView: 달리는 중 파랑 · 그 밖 주황
+        pillT.setText(ps); pillT.setTextColor(fg);
         col.setVisibility(pill ? View.GONE : View.VISIBLE);
         strip.setVisibility(hasStrip ? View.VISIBLE : View.GONE);
         t1.setVisibility(hasStrip ? View.GONE : View.VISIBLE);
@@ -136,18 +154,37 @@ final class RideOverlay {
         border.setMode(pill ? (v.alert == 2 ? 2 : 0) : v.alert);          // 접힌 알약도 2정거장 전엔 둘레 무지개(6초에 한 바퀴)
         startAnims();
         try { wm.updateViewLayout(box, lp); } catch (Throwable ignored) { }
+        if (changed && popReady) popIn();
+        popReady = true;
+    }
+
+    /** 모드가 바뀐 직후 스프링처럼(살짝 넘쳤다가 안착) 커지며 나타난다. 위쪽 가운데를 기준으로(웹 popIn). */
+    private void popIn() {
+        final View r = box;
+        if (r == null) return;
+        r.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                try { r.getViewTreeObserver().removeOnGlobalLayoutListener(this); } catch (Throwable ignored) { }
+                try {
+                    r.animate().cancel();
+                    r.setPivotX(r.getWidth() / 2f); r.setPivotY(0f);
+                    r.setScaleX(0.55f); r.setScaleY(0.55f);
+                    r.animate().scaleX(1f).scaleY(1f).setDuration(520L).setInterpolator(new OvershootInterpolator(2.4f)).start();
+                } catch (Throwable ignored) { }
+            }
+        });
     }
 
     private void startAnims() {
         if (pulseAnim == null) {
-            pulseAnim = ValueAnimator.ofFloat(0f, 1f); pulseAnim.setDuration(1100L); pulseAnim.setRepeatMode(ValueAnimator.REVERSE); pulseAnim.setRepeatCount(ValueAnimator.INFINITE);
+            pulseAnim = ValueAnimator.ofFloat(0f, 1f); pulseAnim.setDuration(650L); pulseAnim.setRepeatMode(ValueAnimator.REVERSE); pulseAnim.setRepeatCount(ValueAnimator.INFINITE);
             pulseAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { strip.pulse = (Float) a.getAnimatedValue(); if (strip.getVisibility() == View.VISIBLE) strip.invalidate(); if (rowView != null && rowView.getVisibility() == View.VISIBLE) rowView.invalidate(); } });
             pulseAnim.start();
         }
-        // 접힌 알약: 목적지 3정거장 전(pre)부터 깜박인다
+        // 접힌 알약: 목적지 3정거장 전(pre)부터 깜박인다(웹: 카드 전체가 1 → 0.28 로 650ms 마다)
         if (pillAnim == null) {
-            pillAnim = ValueAnimator.ofFloat(1f, 0.35f); pillAnim.setDuration(600L); pillAnim.setRepeatMode(ValueAnimator.REVERSE); pillAnim.setRepeatCount(ValueAnimator.INFINITE);
-            pillAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { pillT.setAlpha(cur.pre ? (Float) a.getAnimatedValue() : 1f); } });
+            pillAnim = ValueAnimator.ofFloat(1f, 0.28f); pillAnim.setDuration(650L); pillAnim.setRepeatMode(ValueAnimator.REVERSE); pillAnim.setRepeatCount(ValueAnimator.INFINITE);
+            pillAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { if (box != null) box.setAlpha(curPill && cur.pre ? (Float) a.getAnimatedValue() : 1f); } });
             pillAnim.start();
         }
         if (cur.moving && !blinking) { blinking = true; ui.postDelayed(blinker, BLINK_MS); }
@@ -160,17 +197,78 @@ final class RideOverlay {
             ui.postDelayed(this, BLINK_MS);
         }
     };
-    private final Runnable recenter = new Runnable() { @Override public void run() { userScrolling = false; if (shown) { scrollPos = OvCore.centerPos(cur.cur, cur.base, cur.cells.length); strip.invalidate(); } } };
+    /** 손을 뗀 지 10초 뒤 현위치로 부드럽게 돌아온다(웹 recenter: 380ms 감속). */
+    private final Runnable recenter = new Runnable() { @Override public void run() {
+        stopFling(); userScrolling = false;
+        if (!shown) return;
+        final float from = scrollPos, to = OvCore.centerPos(cur.cur, cur.base, cur.cells.length);
+        recenterAnim = ValueAnimator.ofFloat(0f, 1f); recenterAnim.setDuration(380L); recenterAnim.setInterpolator(new DecelerateInterpolator(1.6f));
+        recenterAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator an) {
+            if (userScrolling) { an.cancel(); return; }
+            scrollPos = from + (to - from) * (Float) an.getAnimatedValue(); if (strip != null) strip.invalidate();
+        } });
+        recenterAnim.start();
+    } };
+
+    /** 손가락을 뗀 뒤 관성으로 미끄러지는 칸 줄(속도 = 초당 칸 수). 천천히 감속하며 끝에서 멈춘다(웹 startFling). */
+    private void startFling(float cellsPerSec) {
+        stopFling();
+        if (strip == null || !shown) return;
+        float dist = cellsPerSec * 0.38f;
+        if (Math.abs(dist) < 0.25f) return;
+        final float from = scrollPos, to = OvCore.clampPos(from + dist, cur.base, cur.cells.length);
+        if (Math.abs(to - from) < 0.05f) return;
+        long dur = (long) Math.max(320, Math.min(1200, 320 + Math.abs(to - from) * 150));
+        flingAnim = ValueAnimator.ofFloat(0f, 1f); flingAnim.setDuration(dur); flingAnim.setInterpolator(new DecelerateInterpolator(2.2f));
+        flingAnim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator an) {
+            scrollPos = from + (to - from) * (Float) an.getAnimatedValue(); if (strip != null) strip.invalidate();
+        } });
+        flingAnim.start();
+    }
+    private void stopFling() {
+        try { if (flingAnim != null) flingAnim.cancel(); } catch (Throwable ignored) { }
+        try { if (recenterAnim != null) recenterAnim.cancel(); } catch (Throwable ignored) { }
+        flingAnim = null; recenterAnim = null;
+    }
+
+    /** 경고 진동(웹 vibrateAlert): 1정거장 전·환승 = 세 번, 2정거장 전 = 두 번. */
+    private void vibrateAlert(int level) {
+        try {
+            android.os.Vibrator vb = (android.os.Vibrator) ctx.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vb == null || !vb.hasVibrator()) return;
+            long[] pat = (level == 1) ? new long[] { 0, 300, 100, 300, 100, 300 } : new long[] { 0, 400, 150, 400 };
+            if (Build.VERSION.SDK_INT >= 26) vb.vibrate(android.os.VibrationEffect.createWaveform(pat, -1)); else vb.vibrate(pat, -1);
+        } catch (Throwable ignored) { }
+    }
+
+    /** 저장된 위치(웹과 같은 overlay_pos): 세로 위치 y · 알약 가로 위치 px · 접어 둔 상태 pill. */
+    private void savePos() {
+        try {
+            SharedPreferences.Editor ed = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit();
+            if (curPill) { pillX = lp.x; ed.putInt("px", lp.x); }
+            ed.putInt("y", lp.y).apply();
+        } catch (Throwable ignored) { }
+    }
+
+    /** 사용자가 알약으로 접거나(true) 펼친다(false). 접은 상태는 저장된다. 경고·추천으로 펼쳐진 중에 접으면 그 경고·추천으로는 다시 펼치지 않는다(웹 setUserPill). */
+    private void setUserPill(boolean v) {
+        userPill = v;
+        if (v) { if (cur.alert > 0) dismissedAlertAt = cur.alertAt; if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; }
+        else { dismissedAlertAt = -1L; dismissedRecoAt = -1L; }
+        try { ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("pill", v).apply(); } catch (Throwable ignored) { }
+        if (shown) apply();
+    }
 
     private void removeNow() {
-        ui.removeCallbacks(blinker); ui.removeCallbacks(recenter);
+        ui.removeCallbacks(blinker); ui.removeCallbacks(recenter); stopFling();
         if (pulseAnim != null) { pulseAnim.cancel(); pulseAnim = null; }
         if (pillAnim != null) { pillAnim.cancel(); pillAnim = null; }
+        if (box != null) box.setAlpha(1f);
         if (border != null) border.setMode(0);
         blinking = false; blinkOn = true; userScrolling = false;
         if (!shown) return;
         try { wm.removeViewImmediate(box); } catch (Throwable ignored) { }
-        shown = false;
+        shown = false; curPill = false; movedForAlert = false; popReady = false;
     }
 
     private void openApp() {
@@ -205,7 +303,7 @@ final class RideOverlay {
         col.addView(rsRow, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         rowView = new RowView(ctx);
         col.addView(rowView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(64)));
-        pillT = text(13f, true); pillT.setPadding(dp(14), dp(7), dp(14), dp(7));
+        pillT = text(12f, true); pillT.setPadding(dp(14), dp(7), dp(14), dp(7)); pillT.setMaxWidth(Math.round(ctx.getResources().getDisplayMetrics().widthPixels * 0.72f));
         card.addView(pillT, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT));
         border = new Border(ctx);
         card.addView(border, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
@@ -213,7 +311,14 @@ final class RideOverlay {
         lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.WRAP_CONTENT, type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        lp.y = lastY >= 0 ? lastY : dp(36);
+        try {   // 저장된 위치 · 접힘(웹과 같은 overlay_pos). 화면 밖이면 안쪽으로
+            SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+            android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+            lp.y = Math.max(0, Math.min(sp.getInt("y", dp(36)), Math.max(0, dm.heightPixels - dp(120))));
+            userPill = sp.getBoolean("pill", userPill);
+            pillX = Math.max(-dm.widthPixels / 2, Math.min(dm.widthPixels / 2, sp.getInt("px", 0)));
+        } catch (Throwable t) { lp.y = dp(36); }
+        curPill = false; movedForAlert = false; popReady = false;
         box.setOnTouchListener(touch());
         try { wm.addView(box, lp); shown = true; } catch (Throwable t) { shown = false; }
     }
@@ -222,16 +327,17 @@ final class RideOverlay {
     private View.OnTouchListener touch() {
         final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         return new View.OnTouchListener() {
-            float x0, y0, lastX, lastY0, startPos; int startY; boolean armed, dragged, scrolling, swiping, inStrip, onBtn, onRs; int rowHit;
+            float x0, y0, lastX, lastY0, startPos; int startY, startX; VelocityTracker vt; boolean armed, dragged, scrolling, swiping, inStrip, onBtn, onRs; int rowHit;
             final Runnable arm = new Runnable() { @Override public void run() {
                 if (dragged || scrolling || swiping) return;
-                armed = true; y0 = lastY0; startY = lp.y;
+                armed = true; x0 = lastX; y0 = lastY0; startY = lp.y; startX = lp.x;
                 try { box.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) { }
             } };
             @Override public boolean onTouch(View v, MotionEvent e) {
                 switch (e.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN: {
-                        x0 = e.getRawX(); y0 = e.getRawY(); lastX = x0; lastY0 = y0; startY = lp.y; startPos = scrollPos;
+                        x0 = e.getRawX(); y0 = e.getRawY(); lastX = x0; lastY0 = y0; startY = lp.y; startX = lp.x; startPos = scrollPos; stopFling();
+                        try { if (vt != null) vt.recycle(); vt = VelocityTracker.obtain(); vt.addMovement(e); } catch (Throwable t) { vt = null; }
                         armed = dragged = scrolling = swiping = false;
                         float rx = e.getRawX(), ry = e.getRawY();
                         inStrip = !pillMode() && hit(strip, rx, ry);
@@ -243,6 +349,7 @@ final class RideOverlay {
                     }
                     case MotionEvent.ACTION_MOVE: {
                         lastX = e.getRawX(); lastY0 = e.getRawY();
+                        try { if (vt != null) vt.addMovement(e); } catch (Throwable ignored) { }
                         float mx = lastX - x0, my = lastY0 - y0;
                         if (!dragged && !scrolling && !swiping && (Math.abs(mx) > slop || Math.abs(my) > slop)) {
                             if (armed) dragged = true;
@@ -253,26 +360,32 @@ final class RideOverlay {
                             }
                         }
                         if (scrolling && strip.getWidth() > 0) { scrollPos = OvCore.clampPos(startPos - mx / (strip.getWidth() / (float) OvCore.COLS), cur.base, cur.cells.length); strip.invalidate(); }
-                        else if (dragged) { lp.y = Math.max(0, startY + Math.round(my)); lastY = lp.y; try { wm.updateViewLayout(box, lp); } catch (Throwable ignored) { } }
+                        else if (dragged) { lp.y = Math.max(0, startY + Math.round(my)); if (curPill) lp.x = startX + Math.round(mx); try { wm.updateViewLayout(box, lp); } catch (Throwable ignored) { } }   // 알약은 가로로도 옮긴다(웹과 같다) · 펼친 카드는 폭이 화면 가득이라 세로만
                         return true;
                     }
                     case MotionEvent.ACTION_UP:
                     case MotionEvent.ACTION_CANCEL: {
                         ui.removeCallbacks(arm);
                         boolean up = e.getActionMasked() == MotionEvent.ACTION_UP;
-                        if (scrolling) ui.postDelayed(recenter, 10000L);
+                        if (scrolling) {
+                            try {   // 떼는 순간의 속도로 관성 스크롤(웹 startFling)
+                                if (vt != null && up && strip.getWidth() > 0) { vt.addMovement(e); vt.computeCurrentVelocity(1000); startFling(-vt.getXVelocity() / (strip.getWidth() / (float) OvCore.COLS)); }
+                            } catch (Throwable ignored) { }
+                            ui.postDelayed(recenter, 10000L);
+                        }
                         else if (swiping) {
                             float my = lastY0 - y0;
-                            if (up && my > dp(22)) {
-                                if (userPill) { userPill = false; apply(); }
-                                else if (!"board".equals(cur.rsSt) && !"undo".equals(cur.rsSt)) dAct("open");            // 아래로 쓸면 탑승 줄이 열린다
-                            } else if (up && my < -dp(22)) {
-                                if ("board".equals(cur.rsSt) && !OvCore.arrived(cur)) dAct("close");                  // 위로 쓸면 열린 탑승 줄부터 닫고
-                                else if (!userPill && cur.alert != 1) { userPill = true; if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; apply(); }      // 그다음엔 알약으로 접는다(1정거장 전엔 못 접는다 · 접은 추천은 다시 안 펼친다)
-                                else if (userPill && forcedOpen && cur.alert != 1) { if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; apply(); }
+                            if (up) {
+                                if (pillMode()) { if (my > dp(22)) setUserPill(false); }                                  // 알약에서 아래로 쓸어도 펼쳐진다
+                                else if (my > dp(22)) { if (!"board".equals(cur.rsSt) && !"undo".equals(cur.rsSt)) dAct("open"); }   // 아래로 쓸면 탑승 줄이 열린다
+                                else if (my < -dp(22)) {
+                                    if ("board".equals(cur.rsSt) && !OvCore.arrived(cur)) dAct("close");                // 위로 쓸면 열린 탑승 줄부터 닫고
+                                    else setUserPill(true);                                                              // 그다음엔 알약으로 접는다(웹과 같다 — 경고 중에 접으면 그 경고로는 다시 펼치지 않는다)
+                                }
                             }
-                        } else if (!dragged && !armed && up) {
-                            if (pillMode()) { userPill = false; apply(); }
+                        } else if (dragged) savePos();
+                        else if (!dragged && !armed && up) {
+                            if (pillMode()) setUserPill(false);
                             else if (rowHit > 0 && cur.row.kind == 1) { if (rowHit == 1) { if (host != null) host.recoGo(cur.row); else openApp(); } else if (host != null) host.recoOk(cur.row.at); }
                             else if (rowHit > 0 && cur.row.kind == 2) { if (host != null) host.quitApp(); else RideService.stop(ctx); }
                             else if (onBtn) {
@@ -283,6 +396,7 @@ final class RideOverlay {
                             else openApp();
                         }
                         armed = false;
+                        try { if (vt != null) { vt.recycle(); vt = null; } } catch (Throwable ignored) { }
                         return true;
                     }
                     default: return false;
@@ -381,9 +495,9 @@ final class RideOverlay {
         @Override protected void onDetachedFromWindow() { super.onDetachedFromWindow(); if (anim != null) { anim.cancel(); anim = null; mode = 0; } }
         @Override protected void onDraw(Canvas cv) {
             if (mode == 0 || getWidth() == 0) return;
-            float w = mode == 1 ? dp(3) : dp(2);
+            float w = dp(2.5f);
             p.setStrokeWidth(w);
-            p.setShader(new SweepGradient(getWidth() / 2f, getHeight() / 2f, new int[] { 0xFFFF453A, 0xFFFF9F0A, 0xFFFFD60A, 0xFF30D158, 0xFF64D2FF, 0xFF0A84FF, 0xFFBF5AF2, 0xFFFF453A }, null));
+            p.setShader(new SweepGradient(getWidth() / 2f, getHeight() / 2f, new int[] { 0xFFFF3B30, 0xFFFF9500, 0xFFFFD60A, 0xFF34C759, 0xFF00C7BE, 0xFF0A84FF, 0xFFAF52DE, 0xFFFF2D92, 0xFFFF3B30 }, null));
             rf.set(w / 2f, w / 2f, getWidth() - w / 2f, getHeight() - w / 2f);
             cv.save(); cv.rotate(angle, getWidth() / 2f, getHeight() / 2f);
             cv.drawRoundRect(rf, dp(pill ? 15 : 14), dp(pill ? 15 : 14), p);
