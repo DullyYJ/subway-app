@@ -216,42 +216,32 @@ public class ShellJvmTest {
             ok(LegacyCore.count(String.valueOf(LegacyCore.shape(many.toString()))) == 8, "예전 즐겨찾기: 최대 8개");
         }
 
-        // ── 예전 값들: 아이디 · 포인트 · 출퇴근 브리핑(앱 본체 저장소 kv · localStorage 파일) ──
+        // ── 예전 값들: 아이디 · 출퇴근 브리핑(앱 본체 저장소 kv · localStorage 파일) ──
         {
             String kv = "{\"mk_favorites\":\"[{\\\"s\\\":\\\"A\\\",\\\"d\\\":\\\"B\\\"}]\",\"mk_comm_id\":\"\\\"홍길동_1\\\"\",\"mk_pt\":\"{\\\"total\\\":120,\\\"today\\\":5,\\\"today_str\\\":\\\"Wed Oct 21 2026\\\"}\",\"mk_pts\":\"{\\\"total\\\":150,\\\"date\\\":\\\"x\\\"}\","
                 + "\"commuteAlarm\":\"{\\\"on\\\":true,\\\"morn\\\":\\\"08:10\\\",\\\"eve\\\":\\\"19:00\\\",\\\"from\\\":\\\"인하대\\\",\\\"to\\\":\\\"강남\\\",\\\"days\\\":[1,3,9],\\\"eFrom\\\":\\\"정류장Z\\\",\\\"eFromLat\\\":37.1,\\\"eFromLng\\\":127.2,\\\"eFromBus\\\":true,\\\"lastKey\\\":\\\"k\\\"}\"}";
             LegacyCore.Found fd = LegacyCore.find(null, kv);
-            ok(fd.any() && LegacyCore.count(fd.fav) == 1 && "홍길동_1".equals(fd.id) && fd.pt.startsWith("{\"total\":150,") && fd.commute != null, "예전 값(앱 본체 저장소): 즐겨찾기 · 아이디 · 포인트(큰 쪽) · 출퇴근");
+            ok(fd.any() && LegacyCore.count(fd.fav) == 1 && "홍길동_1".equals(fd.id) && fd.commute != null, "예전 값(앱 본체 저장소): 즐겨찾기 · 아이디 · 출퇴근(포인트는 가져오지 않는다)");
             ShellCore.MemStore ls = new ShellCore.MemStore();
             ok(LegacyCore.applyCommute(ls, fd.commute) && CmCore.on(ls) && "08:10".equals(CmCore.morn(ls)) && "19:00".equals(CmCore.eve(ls)) && CmCore.days(ls).toString().equals("[1, 3]")
                && "인하대".equals(CmCore.place(ls, "from")) && CmCore.placeJson(ls, "to").equals("{\"nm\":\"강남\"}") && CmCore.placeJson(ls, "eFrom").equals("{\"nm\":\"정류장Z\",\"lat\":37.1,\"lng\":127.2,\"bus\":true}"), "예전 출퇴근 설정 옮기기: " + ls.m);
-            ok(!LegacyCore.applyCommute(new ShellCore.MemStore(), "{\"x\":1}") && !LegacyCore.applyCommute(new ShellCore.MemStore(), "망가짐") && LegacyCore.find(null, "{}").pt == null && LegacyCore.find(null, null).any() == false, "엉뚱한 값은 옮기지 않는다");
+            ok(!LegacyCore.applyCommute(new ShellCore.MemStore(), "{\"x\":1}") && !LegacyCore.applyCommute(new ShellCore.MemStore(), "망가짐") && LegacyCore.find(null, null).any() == false, "엉뚱한 값은 옮기지 않는다");
             ok(LegacyCore.idOf("\"a\"") == null && LegacyCore.idOf("\"새 이름!\"") == null && "abc".equals(LegacyCore.idOf("abc")) && LegacyCore.idOf("{\"a\":1}") == null, "아이디 규칙 검사");
-            // localStorage 파일에서: 쓰기 기록 모양(UTF-16) 으로 아이디·포인트·출퇴근
+            // localStorage 파일에서: 쓰기 기록 모양(UTF-16) 으로 아이디·출퇴근
             java.util.List<byte[]> files = new java.util.ArrayList<byte[]>();
             files.add(logRec("mk_comm_id", "\"길동무_7\""));
-            files.add(logRec("mk_pt", "{\"total\":77,\"today\":1,\"today_str\":\"x\"}"));
             files.add(logRec("commuteAlarm", "{\"on\":false,\"morn\":\"07:00\",\"eve\":\"18:00\",\"from\":\"사당\"}"));
             LegacyCore.Found fg = LegacyCore.find(files, null);
-            ok("길동무_7".equals(fg.id) && fg.pt != null && fg.pt.startsWith("{\"total\":77,") && fg.commute != null && fg.fav == null, "예전 값(localStorage 파일): 아이디 · 포인트 · 출퇴근");
-            files.add(logRec("mk_pts", "{\"total\":90}"));
-            ok(LegacyCore.find(files, null).pt.startsWith("{\"total\":90,"), "mk_pt 와 mk_pts 중 큰 포인트");
+            ok("길동무_7".equals(fg.id) && fg.commute != null && fg.fav == null, "예전 값(localStorage 파일): 아이디 · 출퇴근");
         }
 
         // ── 앱 규칙(엔진 /rules 쪽 껍데기) ──
         ShellCore.MemStore rs = new ShellCore.MemStore();
         long t0 = 1792454400000L;
-        ok(RulesCore.day(t0).matches("20\\d\\d-\\d\\d-\\d\\d"), "오늘 날짜 글자: " + RulesCore.day(t0));
         String cb = RulesCore.checkBody(rs, "post", "잡담", t0, "제목", "내\"용");
-        ok(cb.startsWith("{\"op\":\"check\",\"kind\":\"post\",\"cat\":\"잡담\"") && cb.contains("\"pt\":{}") && cb.endsWith("\"texts\":[\"제목\",\"내\\\"용\"]}"), "검사 요청: " + cb);
+        ok(cb.startsWith("{\"op\":\"check\",\"kind\":\"post\",\"cat\":\"잡담\"") && !cb.contains("\"pt\"") && !cb.contains("\"day\"") && cb.endsWith("\"texts\":[\"제목\",\"내\\\"용\"]}"), "검사 요청: " + cb);
         ok("".equals(RulesCore.checkError("{\"ok\":true}")) && "".equals(RulesCore.checkError("")) && "".equals(RulesCore.checkError("<html>")), "통과 · 엔진 못 닿음 · 깨진 답은 막지 않는다");
         ok("욕설 안 돼요".equals(RulesCore.checkError("{\"ok\":false,\"msg\":\"욕설 안 돼요\"}")) && "등록할 수 없어요".equals(RulesCore.checkError("{\"ok\":false}")), "거절 문구");
-        String rab = RulesCore.awardBody(rs, "report", t0, 0.25, false);
-        ok(rab.contains("\"ev\":\"report\"") && rab.contains("\"rnd\":0.25") && rab.contains("\"sent\":false") && rab.contains("\"pt\":{}"), "적립 요청: " + rab);
-        String msg = RulesCore.applyAward(rs, "{\"ok\":true,\"add\":10,\"msg\":\"글이 등록되었어요! +10P\",\"pt\":{\"total\":15,\"today\":15,\"todayStr\":\"2026-10-20\",\"rc\":0,\"rcStr\":\"\"}}");
-        ok("글이 등록되었어요! +10P".equals(msg) && rs.get(RulesCore.K_PT, "").contains("\"total\":15") && rs.get(RulesCore.K_PT, "").contains("\"todayStr\":\"2026-10-20\""), "적립 → 문구 + 저장값: " + rs.get(RulesCore.K_PT, ""));
-        ok(RulesCore.awardBody(rs, "write", t0, 0.5, true).contains("\"total\":15"), "저장값을 다음 요청에 그대로 실어 보낸다");
-        ok("".equals(RulesCore.applyAward(rs, "{\"ok\":false}")) && rs.get(RulesCore.K_PT, "").contains("\"total\":15") && "".equals(RulesCore.applyAward(rs, "")), "실패하면 저장값을 건드리지 않는다");
         java.util.List<String> sec = new java.util.ArrayList<String>(); sec.add("2호선"); sec.add("수도권 1호선");
         String mb = RulesCore.mylinesBody("[{\"l\":\"2호선\",\"n\":3,\"t\":5}]", sec, t0);
         ok(mb.equals("{\"op\":\"mylines\",\"now\":1792454400000,\"my\":[{\"l\":\"2호선\",\"n\":3,\"t\":5}],\"sec\":[\"2호선\",\"수도권 1호선\"]}") && RulesCore.mylinesBody(null, null, 1L).contains("\"my\":[],\"sec\":[]"), "탄 노선 요청: " + mb);
@@ -260,7 +250,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\",\"pt\":{},\"day\":\"\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");
@@ -1045,6 +1035,36 @@ public class ShellJvmTest {
             String k1 = hcc.key(1, "fast", 60000L, 3, "3:99"); hcc.refreshAi(70000L);
             ok(!k1.equals(hcc.key(1, "fast", 60000L, 3, "3:99")) && hcc.key(1, "fast", 60000L, 3, "3:99").equals(hcc.key(1, "fast", 61000L, 3, "3:99")), "열쇠: 새로고침하면 바뀌고 같은 분이면 같다");
             ok(hcc.act("share.loc", null) == HcardsCore.R_SHARE, "눌림: 내 위치 공유");
+            // s216: 현위치 동 이름(경로 없이 브리핑을 '○○동 일대'로 연다)
+            {
+                HcardsCore hd = new HcardsCore();
+                ok(hd.dongNow().length() == 0 && !hd.request(18, "dark", en, "null", "[]").contains("\"dong\""), "동 이름: 처음엔 요청에 싣지 않는다");
+                hd.setFix(37.4979, 127.0276, 5L);
+                int rv = hd.rev;
+                ok(hd.setDong("역삼동", 37.4979, 127.0276) && hd.rev == rv + 1 && !hd.setDong("역삼동", 37.4979, 127.0276) && hd.rev == rv + 1 && !hd.setDong("", 1, 1), "동 이름: 바뀔 때만 rev 가 오른다 · 빈 이름은 받지 않는다");
+                ok(hd.request(18, "dark", en, "null", "[]").contains("\"dong\":\"역삼동\"") && "역삼동".equals(hd.dongNow()), "동 이름: 같은 곳이면 요청에 싣는다");
+                hd.setFix(37.52, 127.0276, 6L);
+                ok(hd.dongNow().length() == 0 && !hd.request(18, "dark", en, "null", "[]").contains("\"dong\""), "동 이름: 300m 넘게 옮기면 옛 이름은 싣지 않는다");
+                String dsv = hd.dongSaved();
+                HcardsCore h2 = new HcardsCore(); h2.dongLoad(dsv);
+                ok(dsv.endsWith(",역삼동") && h2.dongNow().length() == 0, "동 이름 저장: 위치(fix)가 없으면 쓰지 않는다");
+                h2.setFix(37.4981, 127.0279, 1L); h2.dongLoad(dsv);
+                HcardsCore h3 = new HcardsCore(); h3.setFix(37.60, 127.10, 1L); h3.dongLoad(dsv);
+                ok("역삼동".equals(h2.dongNow()) && h3.dongNow().length() == 0 && new HcardsCore().dongSaved().length() == 0, "동 이름 저장: 같은 곳에서만 되살린다");
+                String du = HcardsCore.dongUrl("https://x.workers.dev", 37.49791, 127.02761);
+                ok(du.startsWith("https://x.workers.dev/kakao-local?path=geo%2Fcoord2regioncode.json&qs=") && du.endsWith("x%3D127.028%26y%3D37.498"), "동 이름 주소: 서버 캐시 격자(소수 3자리): " + du);
+                String kb = "{\"meta\":{\"total_count\":2},\"documents\":[{\"region_type\":\"B\",\"region_2depth_name\":\"강남구\",\"region_3depth_name\":\"역삼동\"},{\"region_type\":\"H\",\"region_2depth_name\":\"강남구\",\"region_3depth_name\":\"역삼1동\"}]}";
+                ok("역삼1동".equals(HcardsCore.parseDong(kb)), "동 이름 읽기: 행정동(H) 먼저");
+                ok("역삼동".equals(HcardsCore.parseDong("{\"documents\":[{\"region_type\":\"B\",\"region_3depth_name\":\"역삼동\"}]}")) && "강남구".equals(HcardsCore.parseDong("{\"documents\":[{\"region_type\":\"H\",\"region_2depth_name\":\"강남구\",\"region_3depth_name\":\"\"}]}")), "동 이름 읽기: 법정동 · 구 이름으로 대신");
+                ok(HcardsCore.parseDong("").length() == 0 && HcardsCore.parseDong("<html>").length() == 0 && HcardsCore.parseDong("{\"documents\":[]}").length() == 0 && HcardsCore.parseDong(null).length() == 0, "동 이름 읽기: 못 읽으면 빈 글");
+            }
+            // s216: 화면 글 안의 그림 주소(쇼핑 미리 받기)
+            {
+                String imgj = "{\"body\":[{\"t\":\"grid\",\"items\":[{\"t\":\"card\",\"name\":\"a\",\"img\":\"https://i.example.com/1.jpg\"},{\"t\":\"card\",\"name\":\"b\",\"img\":\"https://i.example.com/2.jpg\"},{\"t\":\"card\",\"name\":\"c\",\"img\":\"https://i.example.com/1.jpg\"},{\"t\":\"card\",\"name\":\"d\",\"img\":\"javascript:alert(1)\"},{\"t\":\"card\",\"name\":\"e\"}]}]}";
+                java.util.List<String> iu = ScreenCore.imageUrls(imgj, 10);
+                ok(iu.size() == 2 && iu.get(0).endsWith("/1.jpg") && iu.get(1).endsWith("/2.jpg"), "그림 주소: 중복 · 이상한 주소 · 없는 칸은 뺀다: " + iu);
+                ok(ScreenCore.imageUrls(imgj, 1).size() == 1 && ScreenCore.imageUrls("깨짐", 5).isEmpty() && ScreenCore.imageUrls(null, 5).isEmpty() && ScreenCore.imageUrls("{\"x\":1}", 5).isEmpty(), "그림 주소: 개수 제한 · 깨진 글 · 그림 없음");
+            }
             String ks0 = hcc.key(1, "fast", 60000L, 0, ""); hcc.share = true;
             ok(hcc.request(18, "dark", en, "null", "[]").contains(",\"sh\":1") && !ks0.equals(hcc.key(1, "fast", 60000L, 0, "")), "공유 재료가 있으면 요청에 sh=1 이 실리고 열쇠가 바뀐다");
             hcc.share = false;
