@@ -52,6 +52,7 @@ jobs:
           - route_follow.test.js
           - route_view.test.js
           - next_train_live_first.test.js
+          - ride_overlay_level.test.js
           - store_sync.test.js
     steps:
       - uses: actions/checkout@v4
