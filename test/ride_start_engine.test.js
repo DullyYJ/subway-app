@@ -50,6 +50,28 @@ ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.st
   ok(ask.ask && ask.ask.body.kind === 'bus' && ask.ask.body.sid === 'ICB123' && ask.ask.body.no === '931', '그 state 로 승차 대기 중 /ride-standby 가 버스 정류장 질의를 낸다 ' + JSON.stringify(ask.ask) + JSON.stringify(ask.notes));
 }
 
+{   // s200: 첫 구간이 버스면 10분 안에 오는 버스를 골라 타게 — 엔진이 묻고(rideBusAsk) · 목록을 만들고(rideBusItems) · 고른 차를 state 에 실어 따라가게(pickMs) 한다
+  const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23';
+  const fb = ex => facts(Object.assign({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(bl)), walk(2, 900, 1020)] }] } } }, ex || {}));
+  const ask = RS.rideBusAsk({ cap: 18 }, fb());
+  ok(ask && ask.cc === '23' && ask.sid === 'ICB123' && ask.no === '931' && ask.stop === 'B0', 's200: 첫 구간이 버스면 정류장·노선을 알려 준다 ' + JSON.stringify(ask));
+  ok(RS.rideBusAsk({ cap: 18 }, facts()) === null && RS.rideBusAsk({ cap: 18 }, busFirst.ok ? facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(busLeg)), walk(2, 900, 1020)] }] } } }) : null) === null && RS.rideBusAsk({ cap: 5 }, fb()) === null, 's200: 첫 구간이 지하철이거나 정류장 ID 를 모르면 묻지 않는다');
+  const it = RS.rideBusItems([700, 400, 90, 0, -5, 'x', 250, 30, 590], T0);
+  ok(it.length === 4 && it.map(x => x.sec).join() === '30,90,250,400' && it[0].ms === T0 + 30000 && it[3].ms === T0 + 400000, 's200: 10분(600초) 안에 오는 차만 빠른 순 최대 4대 ' + JSON.stringify(it));
+  ok(RS.rideBusItems(null, T0).length === 0 && RS.rideBusItems([100], NaN).length === 0 && RS.rideBusItems([601], T0).length === 0, 's200: 목록이 없거나 시각이 이상하거나 10분 밖이면 비어 있다');
+  const pk = RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 240000 } }));
+  ok(pk.ok && pk.state.cfg.bl.pickMs === T0 + 240000, 's200: 고른 버스의 도착 시각이 cfg.bl.pickMs 로 실린다');
+  ok(RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 99 * 60000 } })).state.cfg.bl.pickMs === undefined && RS.rideStart({ cap: 18 }, fb({ pick: 'x' })).state.cfg.bl.pickMs === undefined && RS.rideStart({ cap: 18 }, fb()).state.cfg.bl.pickMs === undefined, 's200: 30분 넘게 떨어진 값 · 이상한 값 · 안 고름은 싣지 않는다');
+  // 승차 대기 중: 고른 차를 따라간다(직전에 따라간 시각에 가장 가까운 도착)
+  const stepAsk = state => SB.rideStandby({ nowMs: T0 - 300000, fixes: [[T0 - 300000, LAT, LNG0 - 0.004, 10]], state: JSON.parse(JSON.stringify(state)) });
+  const a1 = stepAsk(pk.state);
+  ok(a1.ask && a1.ask.body.kind === 'bus' && a1.ask.body.near === T0 + 240000, 's200: 질의에 near(고른 차의 도착 시각)가 실린다 ' + JSON.stringify(a1.ask && a1.ask.body));
+  const a0 = stepAsk(RS.rideStart({ cap: 18 }, fb()).state);
+  ok(a0.ask && a0.ask.body.near === undefined, 's200: 안 골랐으면 near 없음(예전 그대로 — 탈 수 있는 첫 차)');
+  ok(SB.rsBlBusPick({ '931': [200, 400, 900] }, { no: '931', nowMs: T0, fromMs: T0 + 60000 }) === T0 + 200000 && SB.rsBlBusPick({ '931': [200, 400, 900] }, { no: '931', nowMs: T0, fromMs: T0 + 60000, near: T0 + 410000 }) === T0 + 400000, 's200: near 가 있으면 가장 가까운 차를 고르고 없으면 첫 차');
+  ok(SB.rsBlBusPick({ '931': [200, 900] }, { no: '931', nowMs: T0, fromMs: T0 + 60000, near: T0 + 500000 }) === T0 + 200000, 's200: 고른 차가 2분 반 넘게 어긋나면(지나갔다) 탈 수 있는 첫 차로');
+}
+
 // ② 이상한 입력
 ok(RS.rideStart({ cap: 5 }, facts()).ok === false, 'cap 12 미만은 거절');
 ok(RS.rideStart({ cap: 18 }, null).error === 'route' && RS.rideStart({ cap: 18 }, { data: { result: { path: 'x' } } }).error === 'route', '경로가 없으면 route');
@@ -155,5 +177,35 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
   ok(!wr.state.pf, '승차 대기 중에는 판단기를 안 쓴다');
 }
 
-console.log(pass + ' 통과 / ' + fail + ' 실패');
-if (fail) process.exit(1);
+// s200: 워커 내장 /ride/buspick — 정류장 도착정보를 받아 10분 안에 오는 버스를 고르는 안내창을 낸다(받아 오는 함수는 흉내)
+(async () => {
+  const W = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8'), vm = require('vm');
+  ok(W.indexOf('if (url.pathname === "/ride/buspick") return handleRideBusPick(request, env);') > 0 && /function rideBusAsk/.test(W) && /function dlgBpick/.test(W), 's200: 워커에 /ride/buspick · rideBusAsk · dlgBpick 가 들어 있다');
+  const blk = n => (W.match(new RegExp('// ===== ' + n + ' ENGINE BEGIN =====[\\s\\S]*?// ===== ' + n + ' ENGINE END ====='))) [0];
+  const rd = (W.match(/\/\/ ===== RESULT ENGINE BEGIN =====[\s\S]*?\/\/ ===== RESULT ENGINE END =====/) || [''])[0], rh = (W.match(/\/\/ ===== RHEAD ENGINE BEGIN =====[\s\S]*?\/\/ ===== RHEAD ENGINE END =====/) || [''])[0];
+  let seen = null, arr = { '931': [200, 500, 800, 1200] };
+  const ctx = { Response: class { constructor(b, o) { this.b = b; this.status = (o && o.status) || 200; } }, console, setTimeout, clearTimeout, ENGINE_VERSION: 'x', LIVE_BUDGET_REF: { used: 0 },
+    liveCityOk: () => true, noKey: x => String(x), fetchStopArrivalsAny: async (cc, sid) => { seen = [cc, sid]; return arr; } };
+  vm.createContext(ctx);
+  try {
+    const ra = W.slice(W.indexOf('// ===== ride-alert ('), W.indexOf('// ===== ride-alert \\ub05d =====')); ok(ra.length > 500, 's200: ride-alert 구간을 찾았다');
+    vm.runInContext(rd + '\n' + rh + '\n' + ra + '\n' + blk('DIALOG') + '\n' + blk('RIDESTART') + '\nthis.__h = handleRideBusPick;', ctx);
+    const rq = (obj, method) => ({ method: method || 'POST', text: () => Promise.resolve(typeof obj === 'string' ? obj : JSON.stringify(obj)) });
+    const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23';
+    const fb = (ex) => facts(Object.assign({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(bl)), walk(2, 900, 1020)] }] } } }, ex || {}));
+    const a = await ctx.__h(rq({ cap: 23, r: fb() }), { }), ja = JSON.parse(a.b);
+    ok(a.status === 200 && ja.ask === true && ja.screen === 'dlg' && seen && seen[0] === '23' && seen[1] === 'ICB123' && ja.info.items.length === 2 && ja.info.items[0].ms === T0 + 200000 && ja.info.items[1].sec === 500, 's200: 첫 구간이 버스면 정류장 도착정보로 10분 안의 두 대를 안내창에 낸다 ' + a.b.slice(0, 160));
+    arr = { '931': [900, 1200] };
+    const b = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b);
+    ok(b.ok && b.ask === false, 's200: 10분 안에 오는 차가 없으면 묻지 않는다');
+    arr = null;
+    ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b).ask === false, 's200: 도착정보를 못 받아도 묻지 않고 그냥 시작하게 둔다');
+    arr = { '931': [100] };
+    ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: facts() }))).b).ask === false, 's200: 첫 구간이 지하철이면 묻지 않는다');
+    const x = await Promise.all([ctx.__h(rq('{bad')), ctx.__h(rq({}, 'GET')), ctx.__h(rq({}, 'OPTIONS'))]);
+    ok(x[0].status === 400 && x[1].status === 405 && x[2].status === 204, 's200: 나쁜 JSON 400 · GET 405 · OPTIONS 204');
+  } catch (e) { ok(false, 's200: 워커 /ride/buspick 시험 예외 ' + (e && e.stack || e)); }
+  console.log(pass + ' 통과 / ' + fail + ' 실패');
+  if (fail) process.exit(1);
+})();
+

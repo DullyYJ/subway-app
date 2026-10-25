@@ -260,6 +260,37 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
       ok(b.info.nx && b.info.nx['ICB368001467|R9701'] === '' && b.info.bus.st === 'ok' && !cd(b).rows[0].dir, 's199: 목록이 비어 오면 이번엔 포기(빈 이름) — 계속 다시 묻지 않는다');
     }
   }
+  // s200: 기기가 엔진과 주고받는 바퀴 수 — 처음 그릴 때 끝까지(st ok)가 몇 바퀴째인가(옛 한도 3 바퀴로는 마지막 그림이 화면에 못 올랐다)
+  {
+    const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+    const TNP = JSON.stringify({ response: { body: { items: { item: [it('ICB368001466', '검단A', 37.5824, 126.7085), it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497), it('ICB368001468', '검단대성베르힐', 37.58243, 126.7085), it('ICB368001500', '먼곳', 37.584, 126.711)] } } } });
+    const arr = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}';
+    const THRU = JSON.stringify({ response: { body: { items: { item: [{ routeno: '991', routeid: 'R991', routetp: '광역버스' }, { routeno: '77', routeid: 'R77', routetp: '일반버스' }] } } } });
+    const mock = url => {
+      if (/getCrdntPrxmtSttnList/.test(url)) return TNP;
+      if (/getSttnThrghRouteList/.test(url)) return THRU;
+      if (/getSttnAcctoArvlPrearngeInfoList/.test(url)) { const id = url.match(/nodeId=(\w+)/)[1]; return id === 'ICB368001466' ? arr(['77', 120]) : id.startsWith('ICB1') ? arr(['9701', 200]) : EMPTY; }
+      if (/getRouteAcctoThrghSttnList/.test(url)) { const rid = url.match(/routeId=(\w+)/)[1]; return JSON.stringify({ response: { body: { items: { item: [{ routeid: rid, nodeid: 'ICB368001467', nodenm: 'x', nodeord: 3 }, { routeid: rid, nodeid: 'Z', nodenm: '다음', nodeord: 4 }] } } } }); }
+      return '';
+    };
+    let res = {}, nx = {}, last = null, rounds = [];
+    for (let round = 0; round < 10; round++) {
+      const b = call({ part: 'b', mode: 'bus', th: 'dark', nx, bus: { lat: 37.5824, lng: 126.7085, res } });
+      const need = (b.info.bus && b.info.bus.need) || [];
+      rounds.push(need.map(n => n.k).join());
+      last = b;
+      if (b.info.nx) nx = b.info.nx;
+      if (!need.length) break;
+      Object.keys(res).forEach(k => { if (/^r\d/.test(k)) delete res[k]; });
+      need.forEach(n => { res[n.k] = mock(n.url); });
+    }
+    const cards = last.body.filter(n => n.t === 'bcard');
+    ok(last.info.bus.st === 'ok' && rounds.length >= 5 && rounds.length <= 6, 's200: 이웃·바꾼 ID·방면까지 한 정류장 화면이 완성되려면 5바퀴 안팎이 든다 ' + JSON.stringify(rounds));
+    ok(cards.length === 3 && cards.every(c => !c.ld && c.rows && c.rows.length >= 1), 's200: 마지막 바퀴에는 모든 카드가 줄을 가진다(불러오는 중 · 없음 아님)');
+    ok(rounds.length - 1 > 3, 's200: 옛 한도(3바퀴)로는 마지막 그림이 못 오른다 — 앱은 BUS_ROUNDS 로 늘렸다');
+    ok(rounds[rounds.length - 2] === 'r0,r1,r2', 's200: 마지막 직전 바퀴는 방면 목록(r)만 남은 상태 → 앱은 그 화면을 먼저 그린다 ' + rounds[rounds.length - 2]);
+  }
   // s177: 정류장 목록 준비 판정(서버가 '충분하면 느린 출처는 안 기다린다')
   {
     const rd = (la, lo, res) => E.mapBusReady({ bus: { lat: la, lng: lo, res } });

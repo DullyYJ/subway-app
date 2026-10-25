@@ -585,12 +585,27 @@ function findAndroidJar() {
   });
   await t('s199: 커뮤니티 좌우 밀기(웹 _commSwipeStep) — 판정값은 웹 그대로 · 순서는 엔진 칩에서 읽는다 · 넘어갈 때 24dp 슬라이드+페이드 0.34초', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
-    assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /SW_MAX_MS = 1200L/.test(sv) && /Math\.abs\(sdx\) >= Math\.abs\(sdy\)/.test(sv), '웹 판정값: 32px · 세로 80px 넘게 벗어나면 스크롤 · 1.2초 · 가로 ≥ 세로');
+    assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /Math\.abs\(sdx\) >= SW_MIN_DP \* dpr/.test(sv) && /ay9 > SW_OFF_DP \* dpr && ay9 > ax9/.test(sv), '웹 판정값: 32px 넘게 밀면 넘김 · 세로로 80px 넘게 벗어나면 스크롤로 되돌린다');
+    assert.ok(/adx > ady \* SW_LOCK && swipeHost\.canSwipe\(\)\) \{ mode = 9;/.test(sv) && /else if \(mode == 9\) \{ swOx = swShift;/.test(sv) && /if \(mode == 9\) \{/.test(sv) && !/\(mode == 3 \|\| mode == 1\) && !fabDown/.test(sv), 's200: 가로로 먼저 움직이면 가로로 잠가(mode 9) 세로 스크롤을 멈춘다 — 비스듬히 밀어도 목록이 위아래로 흔들리지 않는다 · 스크롤 중에는 넘김이 안 된다');
+    assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /oi\[0\] - dir/.test(a) && /ti\[0\] - dir/.test(a) && /canSwipe\(\) \{ return "community"\.equals/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
     assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '웹 _swipeBlocked: 칩 줄 · 가로 영역 · 단추 · 입력칸에서 시작한 몸짓은 무시');
     assert.ok(/SLIDE_DP = 24f/.test(sv) && /SLIDE_MS = 340L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
     assert.ok(/private boolean commSwipe\(int dir\)/.test(a) && /body\.chipActs\(oi\)/.test(a) && /head\.chipActs\(ti\)/.test(a) && /news && dir == -1\) return true/.test(a) && /ShellCore\.NEWS_FIRST : ShellCore\.NEWS_LAST/.test(a), '실시간소통·뉴스는 안쪽 칩 먼저 · 뉴스 끝에서 왼쪽은 멈춤 · 뉴스로 들어올 때 첫/마지막 카테고리');
     const nw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nw)[1].split(',').map(x => x.replace(/['\s]/g, ''));
     assert.ok(sc.indexOf('NEWS_FIRST = "' + cats[0] + '", NEWS_LAST = "' + cats[cats.length - 1] + '"') > 0, '뉴스 처음·마지막 카테고리 이름이 엔진 목록과 같다');
+  });
+  await t('s200: 버스 정류장이 다른 탭을 다녀와야 나오던 일 — 엔진과 주고받는 바퀴 한도(3)가 이웃·바꾼 ID·방면으로 길어진 체인보다 짧아 마지막 그림을 버렸다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/BUS_ROUNDS = 6/.test(mc) && /public boolean needOptionalOnly\(\)/.test(mc) && /matches\("r\[0-9\]\{1,3\}"\)/.test(mc), '바퀴 한도 6 · 남은 것이 방면 목록(r)뿐이면 완성된 화면');
+    assert.ok(/round >= MapCore\.BUS_ROUNDS \|\| map\.needOptionalOnly\(\)/.test(a) && /round < MapCore\.BUS_ROUNDS\) fetchBusNeed\(/.test(a), '앱: 방면만 남았거나 바퀴가 끝나면 지금 화면을 그린다 · 한도까지 계속 받는다');
+    assert.ok(!/round < 3\) fetchBusNeed|round < 4; round\+\+\) \{\s*NetPost\.Res (br|r) = NetPost\.post\(ShellCore\.BASE \+ "\/screen\/map", (pfMap|w)\.bodyRequest/.test(a) && (a.match(/MapCore\.BUS_ROUNDS/g) || []).length >= 5, '미리 받기 · 조용한 새로고침도 같은 한도');
+  });
+  await t('s200: 첫 구간이 버스면 10분 안에 오는 버스를 고르는 팝업 — 엔진이 목록·카드를 만들고 앱은 띄워서 고른 번호의 도착 시각을 시작 엔진에 돌려준다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8');
+    assert.ok(/\/ride\/buspick/.test(a) && /tp\.join\(5000\)/.test(a) && /startOk && pick\.length\(\) > 0\) \{ busPickAsk\(/.test(a), '시작 요청과 동시에 /ride/buspick 을 보내고 고를 것이 있을 때만 카드');
+    assert.ok(/private void busPickAsk\(/.test(a) && /Boolean\.TRUE\.equals\(m\.get\("ask"\)\)/.test(a) && /get\("items"\) instanceof List/.test(a) && /RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, ms\.get\(ix\)\)/.test(a), '카드와 함께 온 info.items 의 ms 를 읽어 고른 번호의 도착 시각을 그대로 돌려준다');
+    assert.ok(/v\.startsWith\("dl\.bp\."\)/.test(a) && /dlgPick = Integer\.parseInt\(v\.substring\(6\)\)/.test(a) && /if \(!shown\) rideCommit\(txt0, rid\)/.test(a) && /private void rideCommit\(final String txt, final int rid\)/.test(a), '단추 dl.bp.N → 번호 · 카드를 못 띄우면 예전처럼 바로 시작');
+    assert.ok(/pickMs > 0L/.test(rc) && /\\"pick\\":\{\\"ms\\":/.test(rc), '시작 본문에 r.pick.ms');
   });
   await t('s199: TAGO 줄 방면("→ ○○방향") — 큰 노선 목록은 기기에 두지 않고 이름만(info.nx) 저장해 요청에 실어 보낸다 · 서버는 기다리지 않는다', () => {
     const mc = fs.readFileSync(N('MapCore.java'), 'utf8'), w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');

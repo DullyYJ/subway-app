@@ -98,10 +98,22 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   ok(/'kakaomap:\/\/route\?'/.test(html) && /by=FOOT/.test(html) && /nmap:\/\/route\/walk\?/.test(html) && /appname=com\.dullyyj\.subway/.test(html) && /Math\.round\(dist \/ 67\)/.test(html) && /setInterval\(_walkRefresh, 30000\)/.test(html) && /1분 미만/.test(html), '도보: 계산식이 웹 walkModal 과 같다(67m/분 · 30초 · FOOT)');
 }
 
+// ④-2 s200: 탈 버스 고르기(첫 구간이 버스일 때 10분 안에 오는 버스)
+{
+  const it = [{ sec: 45, ms: 1000045 }, { sec: 200, ms: 1000200 }, { sec: 0, ms: 5 }, { sec: 'x', ms: 6 }, { sec: 590, ms: 1000590 }];
+  const o = G({ kind: 'bpick', no: '9701', stop: '검단대성베르힐', items: it }), b = btns(o);
+  ok(o.ok && o.screen === 'dlg' && o.dlg.tap.v === 'dl.no' && o.dlg.dim === 0.5, 'bpick: 카드 모양 · 흐린 곳 누르면 취소');
+  ok(o.info.items.length === 3 && o.info.items.map(x => x.ms).join() === '1000045,1000200,1000590', 'bpick: 값이 이상한 줄은 버리고 info.items 에 단추 순서대로 ms');
+  ok(b.length === 5 && b[0].act.v === 'dl.bp.0' && b[1].act.v === 'dl.bp.1' && b[2].act.v === 'dl.bp.2' && b[3].label === '취소' && b[3].act.v === 'dl.no' && b[4].label === '고르지 않고 시작' && b[4].act.v === 'dl.ok', 'bpick: 버스 단추 dl.bp.N · 취소 · 고르지 않고 시작');
+  ok(b[0].label === '1번째  45초 후 도착' && b[1].label === '2번째  3분 20초 후 도착' && b[2].label === '3번째  9분 50초 후 도착', 'bpick: 몇 분 몇 초 뒤 ' + b.slice(0, 3).map(x => x.label).join(' / '));
+  ok(JSON.stringify(o).includes('탈 버스를 골라 주세요') && JSON.stringify(o).includes('검단대성베르힐 · 9701번 · 10분 안에 오는 버스') && !EMOJI.test(JSON.stringify(o)), 'bpick: 제목 · 부제 · 이모지 없음');
+  ok(G({ kind: 'bpick', items: [] }).ok === true && btns(G({ kind: 'bpick', items: [] })).length === 2 && G({ kind: 'bpick' }, 15).error === 'cap', 'bpick: 버스가 없어도 그려진다(단추 둘) · cap 16 미만 거절');
+}
+
 // ⑤ 앱 검증기
 {
   const L = []; for (let i = 0; i < 60; i++) L.push('줄 ' + i + ' ' + 'k'.repeat(60));
-  const cases = [G({ kind: 'perm' }), G({ kind: 'exit' }), G({ kind: 'report' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' }), G({ kind: 'walk', walk: { my: { lat: 37.5, lng: 127 }, dest: { lat: 37.505, lng: 127.004, name: '강남역' }, nowMs: 1e12, tzoMin: -540 } }), G({ kind: 'walk' })];
+  const cases = [G({ kind: 'perm' }), G({ kind: 'bpick', no: '9701', stop: '정류장', items: [{ sec: 60, ms: 1 }, { sec: 300, ms: 2 }] }), G({ kind: 'exit' }), G({ kind: 'report' }), G({ kind: 'diag', lines: L }), G({ kind: 'diag', lines: [] }), G({ kind: 'pop', msg: '안내', sub: '둘째 줄' }), G({ kind: 'pop', msg: '공유', cls: 'sh' }), G({ kind: 'walk', walk: { my: { lat: 37.5, lng: 127 }, dest: { lat: 37.505, lng: 127.004, name: '강남역' }, nowMs: 1e12, tzoMin: -540 } }), G({ kind: 'walk' })];
   const r = screenCheck(cases);
   ok(!r.err && r.out.length === cases.length && r.out.every(l => /^OK/.test(l)), '앱 검증기 통과 ' + (r.err || r.out.join(' / ')));
 }
