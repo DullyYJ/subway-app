@@ -3314,6 +3314,39 @@ public class ScreenView extends View {
         private static final Map<String, Long> failed = new HashMap<String, Long>();
         private static final Handler main = new Handler(Looper.getMainLooper());
 
+        private static ExecutorService warmPool;
+        private static final Set<String> warming = new HashSet<String>();
+        /** 미리 받기: 그림 파일만 뒤에서 받아 파일 캐시에 둔다(동시 2개 · 낮은 우선순위). 이미 있거나 받는 중이거나 최근에 실패한 것은 건너뛴다. 화면에 그릴 때는 파일에서 곧바로 읽는다. */
+        static void warm(Context c, java.util.List<String> urls) {
+            if (urls == null || urls.isEmpty()) return;
+            init(c);
+            synchronized (ImageBank.class) {
+                if (warmPool == null) {
+                    warmPool = Executors.newFixedThreadPool(2, new java.util.concurrent.ThreadFactory() {
+                        @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "scr-img-warm"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY + 1); return t; }
+                    });
+                }
+            }
+            for (final String url : urls) {
+                synchronized (ImageBank.class) {
+                    if (warming.contains(url) || loading.contains(url)) continue;
+                    Long f = failed.get(url);
+                    if (f != null && SystemClock.uptimeMillis() - f < 60000L) continue;
+                    if (mem.get(url) != null) continue;
+                    File ff = new File(dir, key(url));
+                    if (ff.exists() && ff.length() > 0) continue;
+                    warming.add(url);
+                }
+                warmPool.execute(new Runnable() {
+                    @Override public void run() {
+                        boolean ok = false;
+                        try { ok = fetch(url) != null; } catch (Throwable ignored) { ok = false; }
+                        synchronized (ImageBank.class) { warming.remove(url); if (!ok) failed.put(url, SystemClock.uptimeMillis()); }
+                    }
+                });
+            }
+        }
+
         static synchronized void init(Context c) {
             if (mem != null) return;
             int kb = (int) (Runtime.getRuntime().maxMemory() / 1024L / 12L);
@@ -3351,7 +3384,8 @@ public class ScreenView extends View {
 
         private static String key(String url) { return Integer.toHexString(url.hashCode()) + "_" + url.length(); }
 
-        private static Bitmap load(String url, int w, int h) throws Exception {
+        /** 그림 파일이 파일 캐시에 없으면 받아 둔다(내려받기만 · 풀어 읽지 않는다). 받지 못하면 null. */
+        private static File fetch(String url) throws Exception {
             File f = new File(dir, key(url));
             if (!f.exists() || f.length() == 0) {
                 HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -3367,6 +3401,12 @@ public class ScreenView extends View {
                 if (!tmp.renameTo(f)) { tmp.delete(); return null; }
                 trim();
             }
+            return f;
+        }
+
+        private static Bitmap load(String url, int w, int h) throws Exception {
+            File f = fetch(url);
+            if (f == null) return null;
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(f.getPath(), o);
