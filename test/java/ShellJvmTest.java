@@ -917,6 +917,20 @@ public class ShellJvmTest {
         {
             RideCore rc = new RideCore();
             ShellCore.MemStore ns = new ShellCore.MemStore();
+            {   // 승차 대기 중 실시간 다음 차(s196): 엔진 ask → 서비스가 /board-live 로 → 받은 답은 다음 걸음 요청의 bl 로 한 번만
+                RideCore rb = new RideCore();
+                RideCore.Step s1 = rb.onStep("{\"v\":1,\"state\":{\"v\":1},\"ask\":{\"kind\":\"boardlive\",\"body\":{\"kind\":\"sub\",\"i\":1,\"line\":\"2호선\",\"nowMs\":5,\"fromMs\":9}}}");
+                ok(s1.ok && s1.askBody.contains("\"kind\":\"sub\"") && s1.askBody.contains("\"line\":\"2호선\"") && !s1.askBody.contains("boardlive"), "엔진 ask 의 본문만 /board-live 로 보낸다");
+                ok(rb.onStep("{\"v\":1,\"state\":{\"v\":1},\"ask\":null}").askBody.length() == 0 && rb.onStep("{\"v\":1,\"state\":{\"v\":1}}").askBody.length() == 0, "ask 가 없으면 묻지 않는다");
+                ok(!rb.stepBody(1000L).contains("\"bl\""), "받은 답이 없으면 bl 을 싣지 않는다");
+                rb.setBl("{\"ok\":true,\"kind\":\"sub\",\"i\":1,\"ms\":77,\"src\":\"realtime\",\"at\":5}");
+                String sb = rb.stepBody(2000L);
+                ok(sb.contains(",\"bl\":{\"ok\":true,\"kind\":\"sub\",\"i\":1,\"ms\":77"), "받은 답을 다음 걸음 요청에 bl 로 싣는다");
+                rb.onStep("{\"v\":1,\"state\":{\"v\":1}}");
+                ok(!rb.stepBody(3000L).contains("\"bl\""), "걸음이 끝나면 한 번 실은 답은 지운다");
+                rb.setBl(""); rb.setBl(null); rb.setBl("{}");
+                ok(!rb.stepBody(4000L).contains("\"bl\""), "빈 답·깨진 답은 싣지 않는다");
+            }
             ok(RideCore.offKinds(ns).isEmpty() && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{}}}"), "알림을 안 껐으면 allowed 를 싣지 않는다");
             ns.put("np_arrive", "0"); ns.put("np_transfer", "0");
             ok(RideCore.offKinds(ns).size() == 5 && RideCore.startBody(18, "{\"data\":{}}", RideCore.offKinds(ns)).equals("{\"cap\":18,\"r\":{\"data\":{},\"allowed\":{\"near_arrive2\":false,\"near_arrive\":false,\"arrive\":false,\"transfer2\":false,\"transfer\":false}}}"), "끈 알림 종류가 allowed 로 실린다");
