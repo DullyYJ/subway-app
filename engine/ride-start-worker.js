@@ -15,3 +15,35 @@ async function handleRideStart(request) {
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { status: out.ok ? 200 : 400, headers: H });
 }
+
+// ★ s200 POST /ride/buspick — 첫 구간이 버스면 정류장 도착정보에서 10분 안에 오는 버스를 골라 보여 줄 안내창(kind:bpick)을 만든다. route-v2 의 handleFetch 에 `if (url.pathname === "/ride/buspick") return handleRideBusPick(request, env);` 를 넣는다.
+//   본문은 /ride/start 와 같다({ cap, r }). 답: { ok:true, ask:false } (고를 것이 없다 — 그냥 시작) | 안내창 화면(dialogScreen) + ask:true + info.items:[{ sec, ms }]. 앱은 단추 dl.bp.N 의 N 번째 ms 를 /ride/start 의 r.pick.ms 로 보낸다.
+async function handleRideBusPick(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var nil = function () { return new Response(JSON.stringify({ ok: true, v: 1, ask: false, ver: ENGINE_VERSION }), { headers: H }); };
+  var cap = Number(body.cap) || 0, ask = null;
+  try { ask = rideBusAsk({ cap: cap }, body.r); } catch (e2) { ask = null; }
+  if (!ask) return nil();
+  var m = null;
+  try {
+    if (typeof liveCityOk === "function" && !liveCityOk(env, ask.cc, ask.sid)) return nil();
+    var timer = null, cut = new Promise(function (res) { timer = setTimeout(function () { res(null); }, 3800); });
+    m = await Promise.race([Promise.resolve().then(function () { return fetchStopArrivalsAny(ask.cc, ask.sid, env, Date.now() + 3500, typeof LIVE_BUDGET_REF !== "undefined" ? LIVE_BUDGET_REF : { used: 0 }, null); }), cut]);
+    if (timer) clearTimeout(timer);
+  } catch (e3) { m = null; }
+  var list = m ? (m[ask.no] || (typeof noKey === "function" ? m[noKey(ask.no)] : null)) : null;
+  var items = rideBusItems(list, body.r && body.r.now);
+  if (!items.length) return nil();
+  var card;
+  try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }
+  if (!card || !card.ok) return nil();
+  card.ask = true; card.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(card), { headers: H });
+}

@@ -86,6 +86,9 @@ function rideStart(opt, r) {
     for (qq = 0; qq < rawSub.length; qq++) { var sp0 = rawSub[qq]; if (sp0 && (sp0.trafficType === 1 || sp0.trafficType === 2 || sp0.trafficType === 4)) { fsp = sp0; break; } }
     if (fsp && fsp.trafficType === 2 && fsp.boardStopId) { var cc0 = String(fsp.boardCc || fsp.line || '').split('_')[0]; if (/^[0-9]{2,5}$/.test(cc0)) firstBl = { kind: 'bus', i: 1, cc: cc0, sid: String(fsp.boardStopId) }; }
   } catch (eBl) { firstBl = null; }
+  // ★ s200 (YJ: 첫 구간이 버스면 10분 안에 오는 버스를 팝업으로 골라 타게): 앱이 고른 버스의 도착 시각(ms). 승차 대기 중 실시간 재보정(/board-live)이 그 차를 따라간다.
+  var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
+  if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // 첫 정류장 시각이 이미 지났다면 지난 것으로
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -99,4 +102,26 @@ function rideStart(opt, r) {
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V };
+// ── ★ s200 첫 구간이 버스일 때 '10분 안에 오는 버스' 고르기 ──
+//   rideBusAsk(opt, r)   : 이 경로의 첫 대중교통 구간이 버스면 { cc, sid, no, stop } (도시코드 · 정류장 ID · 노선 번호 · 정류장 이름), 아니면 null. 시작 엔진과 같은 계산을 쓴다.
+//   rideBusItems(list, nowMs) : 정류장 도착정보(초 목록)에서 10분 안에 오는 차를 빠른 순 최대 4대로 — [{ sec, ms }]
+var RST_PICK_MAX_SEC = 600, RST_PICK_MAX_N = 4;
+function rideBusAsk(opt, r) {
+  var s = rideStart(opt, r);
+  if (!s || !s.ok || !s.state || !s.state.cfg) return null;
+  var b = s.state.cfg.bl;
+  if (!b || b.kind !== 'bus' || !b.cc || !b.sid) return null;
+  var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
+  var no = nd && nd.isBus ? String(nd.lineName || '') : '';
+  if (!no) return null;
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '' };
+}
+function rideBusItems(list, nowMs) {
+  var out = [], k, n = Number(nowMs);
+  if (!Array.isArray(list) || !isFinite(n)) return out;
+  var s = list.map(Number).filter(function (v) { return isFinite(v) && v > 0 && v <= RST_PICK_MAX_SEC; }).sort(function (a, b) { return a - b; });
+  for (k = 0; k < s.length && out.length < RST_PICK_MAX_N; k++) out.push({ sec: Math.round(s[k]), ms: Math.round(n + s[k] * 1000) });
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V, rideBusAsk: rideBusAsk, rideBusItems: rideBusItems };

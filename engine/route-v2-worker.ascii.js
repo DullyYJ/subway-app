@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s199";
+var ENGINE_VERSION = "route-v2-2026-10-25s200";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10339,6 +10339,7 @@ var RS_BL_FIX_MS = 60000;         // \uc704\uce58\uac00 \uc774\ubcf4\ub2e4 \uc62
 var RS_BL_WALK_MPS = 1.2, RS_BL_DETOUR = 1.25;     // \uc6f9 _BOARD_WALK_MPS \u00b7 _BOARD_ETA_DETOUR
 var RS_BL_HOLD_MIN = 2;           // \uc6f9 _HTL_BOARD_HOLD_MIN
 var RS_BL_AHEAD_MAX_MIN = 20;     // \uc6f9 _RT_ARR_MAX_AHEAD
+var RS_BL_PICK_TOL_MS = 150000;   // s200: \uace0\ub978 \ubc84\uc2a4\ub97c \ub530\ub77c\uac08 \ub54c \ud5c8\uc6a9\ud558\ub294 \uc5b4\uae0b\ub0a8(2\ubd84 \ubc18)
 var RS_BL_BUF_MS = 30000;         // \uc6f9 _BOARD_CATCH_BUFFER_MIN 0.5\ubd84
 var RS_BL_SNAP_MS = 4 * 60000;    // \uc6f9 _RT_SNAP_TOL
 var RS_BL_MAXWAIT = 30, RS_BL_MAXWAIT_ARR = 90;     // \ubc18\uc601\ud560 \ucd5c\ub300 \ub300\uae30(\ubd84): \ud3c9\uc18c 30 \u00b7 \uc5ed\uc5d0 \ub2ff\uc740 \uc21c\uac04 90
@@ -10371,7 +10372,11 @@ function rsBlAsk(st, tr, now) {
     var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
     var fromMs = near ? now : now + (dist * RS_BL_DETOUR / RS_BL_WALK_MPS) * 1000;      // \uc2b9\ucc28\uc5ed\uc5d0 \uc788\uac8c \ub418\ub294 \uc2dc\uac01(\uc6f9 _boardEtaMin)
     var o = { kind: tg.kind, i: w.i, nowMs: now, fromMs: Math.round(fromMs), allowEarlier: near || arrivedNow, maxWait: arrivedNow ? RS_BL_MAXWAIT_ARR : RS_BL_MAXWAIT, tz: tz };
-    if (tg.kind === 'sub') { o.line = tg.line; o.from = tg.from; o.to = tg.to; } else { o.cc = tg.cc; o.sid = tg.sid; o.no = tg.no; }
+    if (tg.kind === 'sub') { o.line = tg.line; o.from = tg.from; o.to = tg.to; } else {
+      o.cc = tg.cc; o.sid = tg.sid; o.no = tg.no;
+      var cb = st.cfg && st.cfg.bl;
+      if (cb && cb.pickMs != null && isFinite(+cb.pickMs)) o.near = Math.round(st.bl && st.bl.ms != null && isFinite(+st.bl.ms) ? +st.bl.ms : +cb.pickMs);      // s200: \uc0ac\uc6a9\uc790\uac00 \ud31d\uc5c5\uc5d0\uc11c \uace0\ub978 \ubc84\uc2a4 \u2014 \uc9c1\uc804\uc5d0 \ub530\ub77c\uac04 \ub3c4\ucc29 \uc2dc\uac01\uc5d0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \ucc28\ub97c \uacc4\uc18d \ub530\ub77c\uac04\ub2e4
+    }
     return o;
   } catch (e) { return null; }
 }
@@ -10440,9 +10445,15 @@ function rsBlBusPick(m, q) {
     if (!m) return null;
     var list = m[q.no] || (typeof noKey === 'function' ? m[noKey(q.no)] : null);
     if (!Array.isArray(list) || !list.length) return null;
-    var sorted = list.slice().sort(function (a, b) { return a - b; }), k;
-    for (k = 0; k < sorted.length; k++) { var arr = q.nowMs + sorted[k] * 1000; if (sorted[k] > 0 && arr >= q.fromMs + RS_BL_BUF_MS) return arr; }
-    return null;
+    var sorted = list.slice().sort(function (a, b) { return a - b; }), k, cand = [];
+    for (k = 0; k < sorted.length; k++) { var arr = q.nowMs + sorted[k] * 1000; if (sorted[k] > 0 && arr >= q.fromMs + RS_BL_BUF_MS) cand.push(arr); }
+    if (!cand.length) return null;
+    if (q.near != null && isFinite(+q.near)) {                                                      // s200: \uace0\ub978 \ubc84\uc2a4\uac00 \uc788\uc73c\uba74 \uadf8 \ucc28(\uc9c1\uc804 \uc2dc\uac01\uc5d0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \ub3c4\ucc29)\ub97c \ub530\ub77c\uac04\ub2e4 \u2014 2\ubd84 \ubc18 \ub118\uac8c \uc5b4\uae0b\ub098\uba74(\uc9c0\ub098\uac14\uac70\ub098 \ubabb \ucc3e\uc74c) \ub2e4\uc74c\uc5d0 \ud0c8 \uc218 \uc788\ub294 \ucc28\ub85c
+      var bi = -1, bd = 1e18, d;
+      for (k = 0; k < cand.length; k++) { d = Math.abs(cand[k] - +q.near); if (d < bd) { bd = d; bi = k; } }
+      if (bi >= 0 && bd <= RS_BL_PICK_TOL_MS) return cand[bi];
+    }
+    return cand[0];
   } catch (e) { return null; }
 }
 function rsBlBus(env, q) {
@@ -18735,7 +18746,7 @@ async function handleScreenTalk(request) {
 //        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit \u00b7 report) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(\uacbd\ub85c \ud0d0\uc0c9 \ub85c\ub529)\ub294 runner \ub178\ub4dc\ub97c \uc544\ub294 \uc571(CAP 19)\ubd80\ud130 \u2014 \uc61b \uc571\uc740 kind \ub97c \ubab0\ub77c \uadf8\ub0e5 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -18774,6 +18785,38 @@ function dlgReport() {
     ],
     body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
   };
+}
+
+// \u2605 s200 (YJ: \uacbd\ub85c\ud0d0\uc0c9\uc5d0\uc11c \ucc98\uc74c\uc5d0 \ubc84\uc2a4\ub97c \ud0c0\uba74 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4\ub97c \ud31d\uc5c5\uc73c\ub85c \uace8\ub77c \ud0c0\uac8c): \ud0c8 \ubc84\uc2a4 \uace0\ub974\uae30 \uce74\ub4dc.
+//   f = { no(\ub178\uc120 \ubc88\ud638), stop(\uc815\ub958\uc7a5 \uc774\ub984), items:[{ sec(\uba87 \ucd08 \ub4a4 \ub3c4\ucc29), ms }\u2026] }. \ub2e8\ucd94: dl.bp.N(N \ubc88\uc9f8 \ubc84\uc2a4) \u00b7 dl.ok(\uace0\ub974\uc9c0 \uc54a\uace0 \uacbd\ub85c \uc2dc\uac01\ub300\ub85c \uc2dc\uc791) \u00b7 dl.no(\ucde8\uc18c).
+//   info.items \ub294 \ub2e8\ucd94 \uc21c\uc11c \uadf8\ub300\ub85c\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms) \u2014 \uc571\uc774 \uace0\ub978 \ubc88\ud638\uc758 ms \ub97c \uc2dc\uc791 \uc5d4\uc9c4(/ride/start)\uc5d0 \uadf8\ub300\ub85c \ub3cc\ub824\uc900\ub2e4(\uc571\uc740 \uacc4\uc0b0\ud558\uc9c0 \uc54a\ub294\ub2e4).
+function dlgBpickLabel(sec) {
+  var s = Math.max(0, Math.round(Number(sec) || 0)), m = Math.floor(s / 60), r = s % 60;
+  if (s < 60) return s + '\ucd08 \ud6c4 \ub3c4\ucc29';
+  return m + '\ubd84 ' + (r < 10 ? '0' : '') + r + '\ucd08 \ud6c4 \ub3c4\ucc29';
+}
+function dlgBpick(f) {
+  var src = Array.isArray(f.items) ? f.items : [], items = [], k;
+  for (k = 0; k < src.length && items.length < 4; k++) {
+    var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms) });
+  }
+  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
+  var head = [
+    { t: 'text', pad: [22, 24, 22, 6], s: '\ud0c8 \ubc84\uc2a4\ub97c \uace8\ub77c \uc8fc\uc138\uc694', size: 17, bold: true, lh: 1.4, color: 'text' },
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + (no ? no + '\ubc88 \u00b7 ' : '') + '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4', size: 13, lh: 1.55, color: 'sub' }
+  ];
+  items.forEach(function (it2, i) {
+    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
+      { label: (i + 1) + '\ubc88\uc9f8  ' + dlgBpickLabel(it2.sec), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }
+    ] });
+  });
+  head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
+    { label: '\ucde8\uc18c', fill: 'card2', line: 'border', tc: 'sub', act: nope },
+    { label: '\uace0\ub974\uc9c0 \uc54a\uace0 \uc2dc\uc791', fill: 'card2', line: 'border', tc: 'sub', act: { a: 'call', v: 'dl.ok' } }
+  ] });
+  return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
+    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
 }
 
 function dlgExit() {
@@ -18903,7 +18946,7 @@ function dialogScreen(inp, f) {
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : dlgPop(f)))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : dlgPop(f))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
@@ -21481,6 +21524,12 @@ function rideStart(opt, r) {
     for (qq = 0; qq < rawSub.length; qq++) { var sp0 = rawSub[qq]; if (sp0 && (sp0.trafficType === 1 || sp0.trafficType === 2 || sp0.trafficType === 4)) { fsp = sp0; break; } }
     if (fsp && fsp.trafficType === 2 && fsp.boardStopId) { var cc0 = String(fsp.boardCc || fsp.line || '').split('_')[0]; if (/^[0-9]{2,5}$/.test(cc0)) firstBl = { kind: 'bus', i: 1, cc: cc0, sid: String(fsp.boardStopId) }; }
   } catch (eBl) { firstBl = null; }
+  // \u2605 s200 (YJ: \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4\ub97c \ud31d\uc5c5\uc73c\ub85c \uace8\ub77c \ud0c0\uac8c): \uc571\uc774 \uace0\ub978 \ubc84\uc2a4\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms). \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(/board-live)\uc774 \uadf8 \ucc28\ub97c \ub530\ub77c\uac04\ub2e4.
+  var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
+  if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
+  // \u2605 s200 (YJ: \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4\ub97c \ud31d\uc5c5\uc73c\ub85c \uace8\ub77c \ud0c0\uac8c): \uc571\uc774 \uace0\ub978 \ubc84\uc2a4\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms). \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(/board-live)\uc774 \uadf8 \ucc28\ub97c \ub530\ub77c\uac04\ub2e4.
+  var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
+  if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // \uccab \uc815\ub958\uc7a5 \uc2dc\uac01\uc774 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4\uba74 \uc9c0\ub09c \uac83\uc73c\ub85c
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -21493,6 +21542,28 @@ function rideStart(opt, r) {
   return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
     info: { n: nodes.length, first: { name: pts[0].nm, hm: pts[0].arrT || '' }, dest: dest, tab: tab, legs: legs, sig: sig } };
 }
+// \u2500\u2500 \u2605 s200 \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uc77c \ub54c '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4' \uace0\ub974\uae30 \u2500\u2500
+//   rideBusAsk(opt, r)   : \uc774 \uacbd\ub85c\uc758 \uccab \ub300\uc911\uad50\ud1b5 \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 { cc, sid, no, stop } (\ub3c4\uc2dc\ucf54\ub4dc \u00b7 \uc815\ub958\uc7a5 ID \u00b7 \ub178\uc120 \ubc88\ud638 \u00b7 \uc815\ub958\uc7a5 \uc774\ub984), \uc544\ub2c8\uba74 null. \uc2dc\uc791 \uc5d4\uc9c4\uacfc \uac19\uc740 \uacc4\uc0b0\uc744 \uc4f4\ub2e4.
+//   rideBusItems(list, nowMs) : \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4(\ucd08 \ubaa9\ub85d)\uc5d0\uc11c 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ucc28\ub97c \ube60\ub978 \uc21c \ucd5c\ub300 4\ub300\ub85c \u2014 [{ sec, ms }]
+var RST_PICK_MAX_SEC = 600, RST_PICK_MAX_N = 4;
+function rideBusAsk(opt, r) {
+  var s = rideStart(opt, r);
+  if (!s || !s.ok || !s.state || !s.state.cfg) return null;
+  var b = s.state.cfg.bl;
+  if (!b || b.kind !== 'bus' || !b.cc || !b.sid) return null;
+  var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
+  var no = nd && nd.isBus ? String(nd.lineName || '') : '';
+  if (!no) return null;
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '' };
+}
+function rideBusItems(list, nowMs) {
+  var out = [], k, n = Number(nowMs);
+  if (!Array.isArray(list) || !isFinite(n)) return out;
+  var s = list.map(Number).filter(function (v) { return isFinite(v) && v > 0 && v <= RST_PICK_MAX_SEC; }).sort(function (a, b) { return a - b; });
+  for (k = 0; k < s.length && out.length < RST_PICK_MAX_N; k++) out.push({ sec: Math.round(s[k]), ms: Math.round(n + s[k] * 1000) });
+  return out;
+}
+
 // \ud0d1\uc2b9 \uc2dc\uc791 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /ride/start (engine/ride-start.js \uc758 rideStart). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/ride/start") return handleRideStart(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(12 \uc774\uc0c1), r:{ data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, allowed? } }
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \ub3cc\ub824\uc8fc\ub294 state \ub294 \uc571\uc774 \uadf8\ub300\ub85c \ub4e4\uace0 \uc788\ub2e4\uac00 5\ucd08\ub9c8\ub2e4 /ride-standby \uc5d0 \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4.
@@ -21509,6 +21580,37 @@ async function handleRideStart(request) {
   try { out = rideStart({ cap: Number(body.cap) || 0 }, body.r); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { status: out.ok ? 200 : 400, headers: H });
+}
+// \u2605 s200 POST /ride/buspick \u2014 \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4\uc5d0\uc11c 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4\ub97c \uace8\ub77c \ubcf4\uc5ec \uc904 \uc548\ub0b4\ucc3d(kind:bpick)\uc744 \ub9cc\ub4e0\ub2e4. route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/ride/buspick") return handleRideBusPick(request, env);` \ub97c \ub123\ub294\ub2e4.
+//   \ubcf8\ubb38\uc740 /ride/start \uc640 \uac19\ub2e4({ cap, r }). \ub2f5: { ok:true, ask:false } (\uace0\ub97c \uac83\uc774 \uc5c6\ub2e4 \u2014 \uadf8\ub0e5 \uc2dc\uc791) | \uc548\ub0b4\ucc3d \ud654\uba74(dialogScreen) + ask:true + info.items:[{ sec, ms }]. \uc571\uc740 \ub2e8\ucd94 dl.bp.N \uc758 N \ubc88\uc9f8 ms \ub97c /ride/start \uc758 r.pick.ms \ub85c \ubcf4\ub0b8\ub2e4.
+async function handleRideBusPick(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  var raw = await request.text();
+  if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
+  var body;
+  try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
+  if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
+  var nil = function () { return new Response(JSON.stringify({ ok: true, v: 1, ask: false, ver: ENGINE_VERSION }), { headers: H }); };
+  var cap = Number(body.cap) || 0, ask = null;
+  try { ask = rideBusAsk({ cap: cap }, body.r); } catch (e2) { ask = null; }
+  if (!ask) return nil();
+  var m = null;
+  try {
+    if (typeof liveCityOk === "function" && !liveCityOk(env, ask.cc, ask.sid)) return nil();
+    var timer = null, cut = new Promise(function (res) { timer = setTimeout(function () { res(null); }, 3800); });
+    m = await Promise.race([Promise.resolve().then(function () { return fetchStopArrivalsAny(ask.cc, ask.sid, env, Date.now() + 3500, typeof LIVE_BUDGET_REF !== "undefined" ? LIVE_BUDGET_REF : { used: 0 }, null); }), cut]);
+    if (timer) clearTimeout(timer);
+  } catch (e3) { m = null; }
+  var list = m ? (m[ask.no] || (typeof noKey === "function" ? m[noKey(ask.no)] : null)) : null;
+  var items = rideBusItems(list, body.r && body.r.now);
+  if (!items.length) return nil();
+  var card;
+  try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }
+  if (!card || !card.ok) return nil();
+  card.ask = true; card.ver = ENGINE_VERSION;
+  return new Response(JSON.stringify(card), { headers: H });
 }
 // ===== RIDESTART ENGINE END =====
 
@@ -22313,6 +22415,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request);
+  if (url.pathname === "/ride/buspick") return handleRideBusPick(request, env);
   if (url.pathname === "/rules") return handleRules(request);
   if (url.pathname === "/commute-brief") return handleCommuteBrief(request);
   if (url.pathname === "/screen/hdr") return handleScreenHdr(request);

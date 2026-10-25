@@ -717,6 +717,7 @@ var RS_BL_FIX_MS = 60000;         // 위치가 이보다 오래됐으면 도보 
 var RS_BL_WALK_MPS = 1.2, RS_BL_DETOUR = 1.25;     // 웹 _BOARD_WALK_MPS · _BOARD_ETA_DETOUR
 var RS_BL_HOLD_MIN = 2;           // 웹 _HTL_BOARD_HOLD_MIN
 var RS_BL_AHEAD_MAX_MIN = 20;     // 웹 _RT_ARR_MAX_AHEAD
+var RS_BL_PICK_TOL_MS = 150000;   // s200: 고른 버스를 따라갈 때 허용하는 어긋남(2분 반)
 var RS_BL_BUF_MS = 30000;         // 웹 _BOARD_CATCH_BUFFER_MIN 0.5분
 var RS_BL_SNAP_MS = 4 * 60000;    // 웹 _RT_SNAP_TOL
 var RS_BL_MAXWAIT = 30, RS_BL_MAXWAIT_ARR = 90;     // 반영할 최대 대기(분): 평소 30 · 역에 닿은 순간 90
@@ -749,7 +750,11 @@ function rsBlAsk(st, tr, now) {
     var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
     var fromMs = near ? now : now + (dist * RS_BL_DETOUR / RS_BL_WALK_MPS) * 1000;      // 승차역에 있게 되는 시각(웹 _boardEtaMin)
     var o = { kind: tg.kind, i: w.i, nowMs: now, fromMs: Math.round(fromMs), allowEarlier: near || arrivedNow, maxWait: arrivedNow ? RS_BL_MAXWAIT_ARR : RS_BL_MAXWAIT, tz: tz };
-    if (tg.kind === 'sub') { o.line = tg.line; o.from = tg.from; o.to = tg.to; } else { o.cc = tg.cc; o.sid = tg.sid; o.no = tg.no; }
+    if (tg.kind === 'sub') { o.line = tg.line; o.from = tg.from; o.to = tg.to; } else {
+      o.cc = tg.cc; o.sid = tg.sid; o.no = tg.no;
+      var cb = st.cfg && st.cfg.bl;
+      if (cb && cb.pickMs != null && isFinite(+cb.pickMs)) o.near = Math.round(st.bl && st.bl.ms != null && isFinite(+st.bl.ms) ? +st.bl.ms : +cb.pickMs);      // s200: 사용자가 팝업에서 고른 버스 — 직전에 따라간 도착 시각에 가장 가까운 차를 계속 따라간다
+    }
     return o;
   } catch (e) { return null; }
 }
@@ -818,9 +823,15 @@ function rsBlBusPick(m, q) {
     if (!m) return null;
     var list = m[q.no] || (typeof noKey === 'function' ? m[noKey(q.no)] : null);
     if (!Array.isArray(list) || !list.length) return null;
-    var sorted = list.slice().sort(function (a, b) { return a - b; }), k;
-    for (k = 0; k < sorted.length; k++) { var arr = q.nowMs + sorted[k] * 1000; if (sorted[k] > 0 && arr >= q.fromMs + RS_BL_BUF_MS) return arr; }
-    return null;
+    var sorted = list.slice().sort(function (a, b) { return a - b; }), k, cand = [];
+    for (k = 0; k < sorted.length; k++) { var arr = q.nowMs + sorted[k] * 1000; if (sorted[k] > 0 && arr >= q.fromMs + RS_BL_BUF_MS) cand.push(arr); }
+    if (!cand.length) return null;
+    if (q.near != null && isFinite(+q.near)) {                                                      // s200: 고른 버스가 있으면 그 차(직전 시각에 가장 가까운 도착)를 따라간다 — 2분 반 넘게 어긋나면(지나갔거나 못 찾음) 다음에 탈 수 있는 차로
+      var bi = -1, bd = 1e18, d;
+      for (k = 0; k < cand.length; k++) { d = Math.abs(cand[k] - +q.near); if (d < bd) { bd = d; bi = k; } }
+      if (bi >= 0 && bd <= RS_BL_PICK_TOL_MS) return cand[bi];
+    }
+    return cand[0];
   } catch (e) { return null; }
 }
 function rsBlBus(env, q) {

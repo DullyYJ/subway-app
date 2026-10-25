@@ -16,7 +16,7 @@
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(경로 탐색 로딩)는 runner 노드를 아는 앱(CAP 19)부터 — 옛 앱은 kind 를 몰라 그냥 쓰지 않는다
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -55,6 +55,38 @@ function dlgReport() {
     ],
     body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
   };
+}
+
+// ★ s200 (YJ: 경로탐색에서 처음에 버스를 타면 10분 안에 오는 버스를 팝업으로 골라 타게): 탈 버스 고르기 카드.
+//   f = { no(노선 번호), stop(정류장 이름), items:[{ sec(몇 초 뒤 도착), ms }…] }. 단추: dl.bp.N(N 번째 버스) · dl.ok(고르지 않고 경로 시각대로 시작) · dl.no(취소).
+//   info.items 는 단추 순서 그대로의 도착 시각(ms) — 앱이 고른 번호의 ms 를 시작 엔진(/ride/start)에 그대로 돌려준다(앱은 계산하지 않는다).
+function dlgBpickLabel(sec) {
+  var s = Math.max(0, Math.round(Number(sec) || 0)), m = Math.floor(s / 60), r = s % 60;
+  if (s < 60) return s + '초 후 도착';
+  return m + '분 ' + (r < 10 ? '0' : '') + r + '초 후 도착';
+}
+function dlgBpick(f) {
+  var src = Array.isArray(f.items) ? f.items : [], items = [], k;
+  for (k = 0; k < src.length && items.length < 4; k++) {
+    var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms) });
+  }
+  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
+  var head = [
+    { t: 'text', pad: [22, 24, 22, 6], s: '탈 버스를 골라 주세요', size: 17, bold: true, lh: 1.4, color: 'text' },
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (no ? no + '번 · ' : '') + '10분 안에 오는 버스', size: 13, lh: 1.55, color: 'sub' }
+  ];
+  items.forEach(function (it2, i) {
+    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
+      { label: (i + 1) + '번째  ' + dlgBpickLabel(it2.sec), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }
+    ] });
+  });
+  head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
+    { label: '취소', fill: 'card2', line: 'border', tc: 'sub', act: nope },
+    { label: '고르지 않고 시작', fill: 'card2', line: 'border', tc: 'sub', act: { a: 'call', v: 'dl.ok' } }
+  ] });
+  return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
+    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
 }
 
 function dlgExit() {
@@ -184,7 +216,7 @@ function dialogScreen(inp, f) {
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : dlgPop(f)))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : dlgPop(f))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;
