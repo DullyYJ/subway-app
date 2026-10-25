@@ -22,7 +22,7 @@ t('보통 응답: 그린다 · 뒤따를 것 없음 · 재조회 없음', () => 
 t('빠른 응답(livePending): 그리고 전체를 뒤따라 받는다 · miss=1 이라 재조회 목록도 있다', () => {
   const f = routeFollow({ liveStat: { livePending: true, liveSkipFast: true }, n: 2 });
   assert.strictEqual(f.draw, true); assert.strictEqual(f.next, 'full'); assert.strictEqual(f.miss, 1);
-  assert.deepStrictEqual(f.retry, [12000, 16000, 20000]);
+  assert.deepStrictEqual(f.retry, [3000, 6000, 10000, 15000]);
 });
 t('ldWait: 이 응답은 그리지 않고 전체를 받는다', () => {
   const f = routeFollow({ liveStat: { ldWait: true, livePending: true }, n: 1 });
@@ -34,11 +34,11 @@ t('liveMissing 이 있으면 그 수가 miss 다(livePending 이어도 숫자가
 });
 t('기준시각을 직접 골랐으면(bf) 재조회 안 한다', () => {
   assert.strictEqual(routeFollow({ liveStat: { liveMissing: 2 }, bf: true }).retry, null);
-  assert.deepStrictEqual(routeFollow({ liveStat: { liveMissing: 2 }, bf: false }).retry, [12000, 16000, 20000]);
+  assert.deepStrictEqual(routeFollow({ liveStat: { liveMissing: 2 }, bf: false }).retry, [3000, 6000, 10000, 15000]);
 });
 t('재조회 목록은 호출마다 새 배열이다(바깥에서 고쳐도 상수가 안 변함)', () => {
   const a = routeFollow({ liveStat: { liveMissing: 1 } }); a.retry.push(1);
-  assert.deepStrictEqual(routeFollow({ liveStat: { liveMissing: 1 } }).retry, [12000, 16000, 20000]);
+  assert.deepStrictEqual(routeFollow({ liveStat: { liveMissing: 1 } }).retry, [3000, 6000, 10000, 15000]);
 });
 t('나아졌나(better): miss 가 줄었다 / 같은데 applied 가 늘었다 / 그 밖엔 아니다 — 예전 웹 규칙과 같다', () => {
   const cases = [[3, 1, 2, 1], [2, 1, 2, 1], [2, 2, 2, 1], [2, 1, 2, 2], [1, 0, 2, 0], [0, 0, 0, 0], [0, 5, 1, 0], [4, 2, 3, 9]];

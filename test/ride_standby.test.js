@@ -4,7 +4,7 @@
 'use strict';
 const assert = require('assert');
 const path = require('path');
-const { rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const { rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
 
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
@@ -593,6 +593,52 @@ t('버튼 줄 칸: 처음엔 탑승(밀고 들어옴) → 첫 구간 뒤 환승(
   assert.strictEqual(stepO(withOvl(mkState()), at(12, 59, 0)).row.slot !== undefined, true);
 });
 
+// ── s192: 서울 지하철 실시간 도착정보로 [탑승] 영점(웹 resolveRealtimeDepartMs 규칙) ─────────────────
+const LV = (o) => Object.assign({ subwayId: '1002', trainLineNm: '신도림행 - T1방면', arvlCd: '99', barvlDt: '120', updnLine: '내선' }, o || {});
+t('실시간 도착: 호선·방향(다음 역 방면)이 맞는 열차만, 가장 먼저 오는 것을 가린다', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), q = rsPressQuery(pressReq(x0.state, at(12, 55, 20))), N = at(12, 55, 20);
+  assert.strictEqual(rsPickLive([LV({ barvlDt: '300' }), LV({ barvlDt: '90' })], q, N), N + 90000, '더 빨리 오는 열차');
+  assert.strictEqual(rsPickLive([LV({ trainLineNm: '성수행 - T9방면', barvlDt: '30' }), LV({ barvlDt: '200' })], q, N), N + 200000, '반대 방향(다른 방면)은 건너뛴다');
+  assert.strictEqual(rsPickLive([LV({ subwayId: '1003', barvlDt: '30' })], q, N), null, '다른 호선은 쓰지 않는다');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '1', barvlDt: '0' })], q, N), N, '도착(1)은 지금');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '0', barvlDt: '0' })], q, N), N, '진입(0)은 지금');
+  assert.strictEqual(rsPickLive([LV({ arvlCd: '2', barvlDt: '0' })], q, N), null, '이미 출발(2)한 열차는 건너뛴다');
+  assert.strictEqual(rsPickLive([LV({ barvlDt: '0' })], q, N), null, '시각을 모르면 건너뛴다');
+  assert.strictEqual(rsPickLive([LV({ barvlDt: String(13 * 60) })], q, N), null, '12분보다 먼 열차는 쓰지 않는다');
+  assert.strictEqual(rsPickLive([LV({ trainLineNm: '신도림행 - T1역방면' })], q, N), N + 120000, "'역' 글자는 무시");
+  assert.strictEqual(rsPickLive(null, q, N), null); assert.strictEqual(rsPickLive([], q, N), null);
+});
+t('실시간 도착: pressTT.liveMs 가 시각표보다 먼저 — 시각표가 없어도 붙는다, 못 받으면 시각표 그대로', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), N = at(12, 55, 20);
+  const rq = pressReq(x0.state, N); rsAttachPressTT(rq, fakeNt(12 * 60 + 58));
+  assert.ok(rsAttachPressLive(rq, [LV({ barvlDt: '150' })]) && rq.pressTT.liveMs === N + 150000 && rq.pressTT.depMin === 778);
+  assert.strictEqual(rsPickMs(rq.pressTT, 4, N), N + 150000, '실시간이 먼저');
+  const rq2 = pressReq(x0.state, N); assert.ok(rsAttachPressLive(rq2, [LV({ barvlDt: '150' })]) && rq2.pressTT.liveMs === N + 150000 && rq2.pressTT.late === null);
+  let rq3 = pressReq(x0.state, N); rsAttachPressTT(rq3, fakeNt(12 * 60 + 58));
+  assert.strictEqual(rsAttachPressLive(rq3, null), false); assert.strictEqual(rq3.pressTT.liveMs, undefined);
+  assert.strictEqual(rsPickMs(rq3.pressTT, 4, N), at(12, 58, 30), '실시간이 없으면 시각표');
+  const r = rideStandby(rq);
+  assert.ok(r.state.xPend && r.state.xPend.lv === N + 150000, '일찍 누르면 예약 — 실시간으로 가린 열차 시각을 예약에 적어 둔다 ' + JSON.stringify(r.state.xPend));
+  const arr = r.state.xw.arrMs, c = rideStandby({ nowMs: arr - 60000, fixes: [], state: r.state });
+  assert.ok(!c.state.xPend && c.state.eta.passes.some(p => p.idx === 4 && p.ms === N + 150000), '예약 확정 때 그 시각을 통과로 적는다 ' + JSON.stringify(c.state.eta.passes) + JSON.stringify(c.notes));
+  const r0 = rideStandby(rq3 = pressReq(x0.state, N)); assert.ok(r0.state.xPend && r0.state.xPend.lv === undefined, '실시간이 없으면 예전처럼');
+});
+t('실시간 도착: 첫 승차 [탑승](st.wait) 도 실시간 도착 시각을 통과 시각으로 잡는다 · 못 받으면 시각표', () => {
+  const w0 = waitState(); w0.eta.nodes = w0.eta.nodes.map(n => Object.assign({}, n, n.isOrigin ? {} : { isSub: true, isBus: false, lineName: '2호선' }));
+  const T = at(12, 50, 35), q0 = rsPressQuery({ nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' });
+  assert.ok(q0 && q0.i === 1, JSON.stringify(q0));
+  const lv = LV({ trainLineNm: '종점행 - ' + q0.to + '방면', barvlDt: '100' });
+  let rq = { nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' };
+  rsAttachPressTT(rq, fakeNt(12 * 60 + 53));
+  assert.ok(rsAttachPressLive(rq, [lv]));
+  let r = rideStandby(rq);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === T + 100000) && /실시간 100초/.test(r.notes.join('|')), JSON.stringify(r.state.eta.passes) + JSON.stringify(r.notes));
+  rq = { nowMs: T, fixes: [], state: JSON.parse(JSON.stringify(withOvl(w0))), act: 'press' };
+  rsAttachPressTT(rq, fakeNt(12 * 60 + 53)); rsAttachPressLive(rq, [LV({ subwayId: '1005' })]);
+  r = rideStandby(rq);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 53, 30)), '맞는 열차가 없으면 시각표');
+});
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
@@ -606,5 +652,26 @@ const httpTest = async () => {
   const [s3] = await call('이건 JSON 이 아님'); assert.strictEqual(s3, 400);
 };
 
-httpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
+const liveHttpTest = async () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), N = at(12, 55, 20), prev = global.ntEnsure;
+  global.ntEnsure = async () => fakeNt(12 * 60 + 58);
+  try {
+    const mk = (fn) => ({ BUSAPI: { fetch: fn } });
+    const post = (env, rq) => handleRideStandby(new Request('https://x.test/ride-standby', { method: 'POST', body: JSON.stringify(rq) }), env).then(r => r.json());
+    let asked = '';
+    const ok = mk(async (req) => { asked = decodeURIComponent(new URL(req.url).searchParams.get('path')); return new Response(JSON.stringify({ realtimeArrivalList: [LV({ barvlDt: '90' })] }), { status: 200 }); });
+    const a = await post(ok, pressReq(x0.state, N));
+    assert.ok(/^realtimeStationArrival\/0\/20\/T0$/.test(asked), asked);
+    assert.ok(a.state.eta.passes.some(p => p.idx === 4 && p.ms === N + 90000) || a.state.xPend, JSON.stringify(a.notes));
+    const pend = mk(async () => new Response(JSON.stringify({ ok: false, error: 'relay pending' }), { status: 503 }));
+    const b = await post(pend, pressReq(x0.state, N));
+    assert.ok(b.state.xPend && !b.state.eta.passes.some(p => p.idx === 4), '중계가 준비 중이면 시각표 그대로(예약)');
+    const t0 = Date.now(), hang = mk(() => new Promise(() => { }));
+    const c = await post(hang, pressReq(x0.state, N)), dt = Date.now() - t0;
+    assert.ok(dt >= 2700 && dt < 3600 && c.state, '응답이 없어도 3초 안에 시각표로 넘어간다 ' + dt);
+    const d = await post({}, pressReq(x0.state, N)); assert.ok(d.state, 'BUSAPI 바인딩이 없어도 동작');
+  } finally { if (prev) global.ntEnsure = prev; else delete global.ntEnsure; }
+};
+liveHttpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 서울 실시간 도착을 받으면 먼저 쓰고, 못 받거나 늦으면(3초) 시각표로'); }, (e) => { fail++; console.log('  FAIL HTTP 서울 실시간', String(e && e.message).split('\n')[0]); })
+  .then(() => httpTest()).then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
   .then(() => { console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0); });
