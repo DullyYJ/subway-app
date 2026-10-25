@@ -465,6 +465,13 @@ public class ShellJvmTest {
         // 같은 칸의 변형(방·방식)은 캐시 열쇠가 다르다 · 흐르는 문구 주소
         {
             ShellCore.MemStore ks = new ShellCore.MemStore();
+            // s205: 맛집 캐시 열쇠는 도착지(없으면 지금 동네)마다 따로 — 미리 받아 둔 그 장소 화면이 바로 뜨고 다른 곳 화면이 먼저 뜨지 않는다
+            ShellCore.MemStore fs0 = new ShellCore.MemStore();
+            String fd = ShellCore.foodSig(true, 37.5665, 126.9780, null), fg = ShellCore.foodSig(false, 0, 0, new double[] { 37.5665, 126.9780 });
+            ok(fd.startsWith("d") && fg.startsWith("g") && !fd.equals(fg) && fd.equals(ShellCore.foodSig(true, 37.56651, 126.97801, new double[] { 1, 2 })) && !fd.equals(ShellCore.foodSig(true, 37.5765, 126.9780, null)), "맛집 장소 표시: 도착지가 위치보다 먼저 · 55m 안은 같은 칸");
+            ok("".equals(ShellCore.foodSig(false, 0, 0, null)) && "".equals(ShellCore.foodSig(true, 0, 0, null)) && fg.equals(ShellCore.foodSig(false, 0, 0, new double[] { 37.5666, 126.9781 })), "도착지도 위치도 없으면 빈 표시 · 위치는 550m 칸");
+            String fk0 = ShellCore.cacheKey("food", fs0); fs0.put(ShellCore.K_FOODSIG, fd);
+            ok(!fk0.equals(ShellCore.cacheKey("food", fs0)) && ShellCore.cacheKey("food", fs0).startsWith("food|") && "food".equals(ShellCore.expectId(ShellCore.cacheKey("food", fs0))) && ShellCore.diskTtl(ShellCore.cacheKey("food", fs0)) > 0L, "맛집 캐시 열쇠: 장소마다 따로 · 화면 이름은 food · 디스크에 둔다");
             String k0 = ShellCore.cacheKey("chat", ks); ks.put(ChatCore.K_SEL, "2호선");
             ok(!k0.equals(ShellCore.cacheKey("chat", ks)) && ShellCore.cacheKey("chat", ks).startsWith("chat|") && "chat".equals(ShellCore.expectId(ShellCore.cacheKey("chat", ks))), "채팅 방마다 다른 캐시 열쇠");
             String m0 = ShellCore.cacheKey("mapb", ks); ks.put(MapCore.K_MODE, "subway");
@@ -1101,7 +1108,7 @@ public class ShellJvmTest {
             ok(wk.size() > 5 && wk.get(0).equals(ShellCore.S_HDR) && wk.get(1).equals("tabs|shop") && wk.get(2).startsWith(ShellCore.S_SHOP), "미리 읽기: 머리글 → 지금 탭 → 그 탭 화면 순서");
             boolean all = true;
             for (String t : ShellCore.TABS) all &= wk.contains("tabs|" + t);
-            ok(all && wk.contains(ShellCore.S_HOME) && wk.contains(ShellCore.S_FOOD) && wk.contains(ShellCore.S_CCHIPS + "|" + ShellCore.mode(ws)), "미리 읽기: 모든 탭의 탭바와 화면이 들어간다");
+            ok(all && wk.contains(ShellCore.S_HOME) && wk.contains(ShellCore.cacheKey(ShellCore.S_FOOD, ws)) && wk.contains(ShellCore.S_CCHIPS + "|" + ShellCore.mode(ws)), "미리 읽기: 모든 탭의 탭바와 화면이 들어간다");
             ok(new java.util.HashSet<String>(wk).size() == wk.size(), "미리 읽기: 중복 없음");
             boolean disk = true;
             for (String k : wk) disk &= ShellCore.diskTtl(k) > 0L;
