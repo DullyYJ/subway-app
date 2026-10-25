@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s193";
+var ENGINE_VERSION = "route-v2-2026-10-25s194";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9777,23 +9777,35 @@ function rsAttachPressTT(req, nt) {
     return true;
   } catch (e) { return false; }
 }
-// \u2500\u2500 \uc11c\uc6b8 \uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c '\ud0c0\ub294 \uc5f4\ucc28' \uac00\ub9ac\uae30 \u2014 \uc6f9 fetchRealtimeArrival \u00b7 _filterByDirection \u00b7 resolveRealtimeDepartMs \uc640 \uac19\uc740 \uaddc\uce59 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-//   \u2605 2026-10-25 s192 (YJ: "\uc11c\uc6b8\uc9c0\ud558\ucca0\uc740 \uc2e4\uc2dc\uac04 \uc704\uce58\ub97c \uc5b4\ub5bb\uac8c\ub4e0 \ubc1b\uc544\uc57c \ud574 \u00b7 \ucd5c\ub300 3\ucd08 \u00b7 \uc6f9\uc758 \uaddc\uce59\uc744 \ub530\ub77c" \u00b7 "\ub124\uc774\ud2f0\ube0c\ud654\ub294 \ubb34\uc870\uac74 \uc6f9\uacfc 100% \uc138\ubd80\uc801\uc778 \uac83\uae4c\uc9c0 \uc77c\uce58"):
-//   \uc6f9\uc740 [\ud0d1\uc2b9] \uc601\uc810\uc744 \uc2dc\uac01\ud45c\uac00 \uc544\ub2c8\ub77c \uc11c\uc6b8\uc2dc realtimeStationArrival \ub85c \uc7a1\ub294\ub2e4(\uc5c6\uc744 \ub54c\ub9cc \uc2dc\uac01\ud45c).
-//   \u00b7 \uc694\uccad: /seoul?path=realtimeStationArrival/1/5/\uc5ed\uba85(\ub05d\uc758 '\uc5ed' \ub5c0 \uac83) \u2014 \uc6f9\uacfc \uac19\uc740 \uacbd\ub85c(\uc911\uacc4 \uce90\uc2dc\ub3c4 \uac19\uc774 \uc4f4\ub2e4). \uae30\ub2e4\ub9ac\ub294 \uc2dc\uac04\ub9cc 5\ucd08 \u2192 2.8\ucd08(YJ \ud55c\ub3c4 \u00b7 \uc571\uc758 \uc11c\ubc84 \ub300\uae30 5\ucd08 \uc548)
-//   \u00b7 \ubc29\ud5a5: \uc2dc\uac01\ud45c\uac00 \uc815\ud55c \ubc29\ud5a5(boardTable \uc758 dk '\uc0c1'/'\ud558' \u2192 \uc0c1\ud589/\ud558\ud589, \ubaa8\ub974\uba74 \ud558\ud589)\uacfc updnLine \uc774 \uac19\uac70\ub098 \ud3ec\ud568\ud558\ub294 \uc5f4\ucc28\ub9cc, \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \uc804\ubd80
-//   \u00b7 \uace0\ub974\uae30: barvlDt(\ub3c4\ucc29\uae4c\uc9c0 \ub0a8\uc740 \ucd08)\uac00 \uac00\uc7a5 \uc791\uc740 \uc5f4\ucc28 \u00b7 arvlCd 0(\uc9c4\uc785)\u00b71(\ub3c4\ucc29)\uc774\uba74 \uc9c0\uae08, \uc544\ub2c8\uba74 barvlDt \ucd08 \ub4a4(\uc74c\uc218\ub294 0)
-//   \u00b7 \uc6f9\uacfc \ub2e4\ub978 \uacf3\uc740 \uc5c6\ub2e4(\ud638\uc120 \uac70\ub974\uae30\u00b7\uc2dc\uac04 \ud55c\ub3c4\ub3c4 \ub450\uc9c0 \uc54a\uc558\ub2e4). \ubabb \ubc1b\uc73c\uba74(null) \uc2dc\uac01\ud45c \uadf8\ub300\ub85c \u2014 \uc6f9\uacfc \uac19\ub2e4.
+// \u2500\u2500 \uc11c\uc6b8 \uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c '\ud0c0\ub294 \uc5f4\ucc28' \uac00\ub9ac\uae30 \u2014 \uc6f9 fetchRealtimeArrival \u00b7 _filterByDirection \u00b7 resolveRealtimeDepartMs \uc640 \uac19\uc740 \uaddc\uce59 + \uc6f9\uc758 \uc57d\uc810 \ubcf4\uc644 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   \u2605 2026-10-25 s192~s194 (YJ: "\uc11c\uc6b8\uc9c0\ud558\ucca0\uc740 \uc2e4\uc2dc\uac04 \uc704\uce58\ub97c \uc5b4\ub5bb\uac8c\ub4e0 \ubc1b\uc544\uc57c \ud574 \u00b7 \ucd5c\ub300 3\ucd08" \u00b7 "\uc571\uc774\ub77c \ub2e4 \ub611\uac19\uc774 \ud558\uace0 \uc57d\uc810\uc740 \uac1c\uc120\ud574 \u00b7 100% \ub124\uc774\ud2f0\ube0c\ud654, \uc6f9\uc740 \ub370\uc774\ud130\uc6a9"):
+//   \uc6f9\uc740 [\ud0d1\uc2b9] \uc601\uc810\uc744 \uc2dc\uac01\ud45c\uac00 \uc544\ub2c8\ub77c \uc11c\uc6b8\uc2dc realtimeStationArrival \ub85c \uc7a1\ub294\ub2e4(\ubabb \ubc1b\uc744 \ub54c\ub9cc \uc2dc\uac01\ud45c). \uaddc\uce59\uc740 \uc6f9 \uadf8\ub300\ub85c\uc774\uace0, \uc6f9\uc758 \uc57d\uc810 \ub137\ub9cc \uace0\ucce4\ub2e4.
+//   \u00b7 \uc694\uccad: /seoul?path=realtimeStationArrival/1/20/\uc5ed\uba85(\ub05d\uc758 '\uc5ed' \ub5c0 \uac83). \uc6f9\uc740 1/5 \u2014 \ud658\uc2b9\uc5ed\uc5d0\uc11c \ub2e4\ub978 \ud638\uc120 \uc5f4\ucc28 5\ub300\uac00 \ub2f5\uc744 \ucc44\uc6cc \uc6b0\ub9ac \ud638\uc120\uc774 \ube60\uc9c0\ub358 \uac83\uc744 \uc904\uc774\ub824 20\uc73c\ub85c. \uae30\ub2e4\ub9ac\ub294 \uc2dc\uac04\uc740 \uc6f9 5\ucd08 \u2192 2.8\ucd08(YJ 3\ucd08 \ud55c\ub3c4)
+//   \u00b7 \ubc29\ud5a5(\uc6f9 \uadf8\ub300\ub85c): \uc2dc\uac01\ud45c\uac00 \uc815\ud55c \ubc29\ud5a5(boardTable \uc758 dk '\uc0c1'/'\ud558' \u2192 \uc0c1\ud589/\ud558\ud589, \ubaa8\ub974\uba74 \ud558\ud589)\uacfc updnLine \uc774 \uac19\uac70\ub098 \ud3ec\ud568\ud558\ub294 \uc5f4\ucc28, \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \uc804\ubd80
+//   \u00b7 \uace0\ub974\uae30(\uc6f9 \uadf8\ub300\ub85c): barvlDt(\ub3c4\ucc29\uae4c\uc9c0 \ub0a8\uc740 \ucd08)\uac00 \uac00\uc7a5 \uc791\uc740 \uc5f4\ucc28 \u00b7 arvlCd 0(\uc9c4\uc785)\u00b71(\ub3c4\ucc29)\uc774\uba74 \uc9c0\uae08, \uc544\ub2c8\uba74 barvlDt \ucd08 \ub4a4(\uc74c\uc218\ub294 0)
+//   \u00b7 \uc57d\uc810 \ubcf4\uc644 \u2460 \ud638\uc120(subwayId)\uc774 \ub2e4\ub978 \uc5f4\ucc28\ub294 \uac70\ub978\ub2e4(\uc6f9\uc740 \ud658\uc2b9\uc5ed\uc5d0\uc11c \ub2e4\ub978 \ud638\uc120 \uc5f4\ucc28\ub97c \uc9d1\uc5c8\ub2e4). \uc6b0\ub9ac \ud638\uc120 \uc5f4\ucc28\uac00 \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c\ub85c
+//     \u2461 \ubc29\ud5a5\uc774 \uc548 \uac78\ub7ec\uc9c8 \ub54c(2\ud638\uc120 \ub0b4\uc120\u00b7\uc678\uc120 \ub4f1 updnLine \uc774 \uc0c1\ud589/\ud558\ud589\uc774 \uc544\ub2cc \ub54c)\ub294 \ub3c4\ucc29\uc815\ubcf4\uc758 '\u25b3\u25b3\ubc29\uba74'(= \uc6b0\ub9ac \uacbd\ub85c\uc758 \ub2e4\uc74c \uc5ed)\uc73c\ub85c \uac00\ub9b0\ub2e4
+//     \u2462 \uc774\ubbf8 \ucd9c\ubc1c(arvlCd 2)\ud55c \uc5f4\ucc28\ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4(\uc6f9\uc740 '\uc9c0\uae08'\uc73c\ub85c \uc7a1\uc558\ub2e4 \u2014 \ub193\uce5c \uc5f4\ucc28\ub2e4). \ub0a8\ub294 \uc5f4\ucc28\uac00 \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c(\ubc29\uae08 \ub5a0\ub09c \ucc28 \uc778\uc815 \uaddc\uce59\uc774 \uc788\ub2e4)
+//   \ubabb \ubc1b\uc73c\uba74(null) \uc2dc\uac01\ud45c \uadf8\ub300\ub85c \u2014 \uc6f9\uacfc \uac19\ub2e4.
 var RS_SUBWAY_ID = { '1\ud638\uc120': '1001', '2\ud638\uc120': '1002', '3\ud638\uc120': '1003', '4\ud638\uc120': '1004', '5\ud638\uc120': '1005', '6\ud638\uc120': '1006', '7\ud638\uc120': '1007', '8\ud638\uc120': '1008', '9\ud638\uc120': '1009', '\uacf5\ud56d\ucca0\ub3c4': '1065', '\uacbd\uc758\uc911\uc559\uc120': '1067', '\uacbd\ucd98\uc120': '1069', '\uc218\uc778\ubd84\ub2f9\uc120': '1075', '\uc2e0\ubd84\ub2f9\uc120': '1077', '\uc6b0\uc774\uc2e0\uc124\uc120': '1092', '\uc11c\ud574\uc120': '1093', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778': '1094', '\uacbd\uac15\uc120': '1095', '\uc2e0\ub9bc\uc120': '1093', '\uc778\ucc9c1\ud638\uc120': '1081', '\uc778\ucc9c2\ud638\uc120': '1082', 'GTX-A': '1091' };
 function rsSubwayId(lineName) { return RS_SUBWAY_ID[lineName] || RS_SUBWAY_ID[String(lineName || '').replace(/\ud638\uc120$/, '') + '\ud638\uc120'] || ''; }
+function rsStnKey(n) { return String(n || '').replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/\uc5ed$/, ''); }
 // \uc11c\uc6b8 \uc5ed \ub3c4\ucc29\uc815\ubcf4 \ubaa9\ub85d \u2192 \ud0c0\ub294 \uc5f4\ucc28\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms) \ub610\ub294 null. list = realtimeArrivalList, dk = \uc2dc\uac01\ud45c\uac00 \uc815\ud55c \ubc29\ud5a5('\uc0c1'/'\ud558')
 function rsPickLive(list, q, nowMs, dk) {
   try {
     if (!list || !list.length || !isFinite(nowMs)) return null;
-    var dir = dk === '\uc0c1' ? '\uc0c1\ud589' : '\ud558\ud589', byDir = [], k;
-    for (k = 0; k < list.length; k++) { var it = list[k]; if (!it) continue; var ud = String(it.updnLine || ''); if (ud === dir || ud.indexOf(dir) >= 0) byDir.push(it); }
-    var c = byDir.length ? byDir : list.filter(function (x) { return !!x; });
-    if (!c.length) return null;
+    var sid = q ? rsSubwayId(q.line) : '', k, it, same = [];
+    if (!sid) return null;
+    for (k = 0; k < list.length; k++) { it = list[k]; if (it && String(it.subwayId) === sid && parseInt(it.arvlCd, 10) !== 2) same.push(it); }      // \uc57d\uc810 \u2460 \u2462
+    if (!same.length) return null;
+    var dir = dk === '\uc0c1' ? '\uc0c1\ud589' : '\ud558\ud589', byDir = [];
+    for (k = 0; k < same.length; k++) { var ud = String(same[k].updnLine || ''); if (ud === dir || ud.indexOf(dir) >= 0) byDir.push(same[k]); }
+    var c = byDir;
+    if (!c.length) {                                             // \uc6f9\uc740 \uc5ec\uae30\uc11c \uc804\ubd80\ub97c \uc4f4\ub2e4 \u2014 \uc57d\uc810 \u2461: \ub2e4\uc74c \uc5ed \ubc29\uba74\uc774 \ub9de\ub294 \uc5f4\ucc28\uac00 \uc788\uc73c\uba74 \uadf8\uac83\ub9cc
+      var to = rsStnKey(q.to), byTo = [];
+      if (to) for (k = 0; k < same.length; k++) { var m = /[-\u2013\u2014]\s*([^\s]+?)\s*\ubc29\uba74/.exec(String(same[k].trainLineNm || '')); if (m && rsStnKey(m[1]) === to) byTo.push(same[k]); }
+      c = byTo.length ? byTo : same;
+    }
     c = c.slice().sort(function (a, b) { return parseInt(a.barvlDt || 9999, 10) - parseInt(b.barvlDt || 9999, 10); });
     var t = c[0], cd = parseInt(t.arvlCd || '99', 10), bv = parseInt(t.barvlDt || '0', 10);
     return (cd === 0 || cd === 1) ? nowMs : nowMs + Math.max(0, (isFinite(bv) ? bv : 0) * 1000);
@@ -9813,7 +9825,7 @@ function rsAttachPressLive(req, list) {
 var RS_LIVE_MS = 2800;
 function rsFetchSeoulArrivals(env, q) {
   if (!q || !env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function' || !rsSubwayId(q.line)) return Promise.resolve(null);
-  var path = 'realtimeStationArrival/1/5/' + encodeURIComponent(String(q.from).replace(/\uc5ed$/, '').trim());
+  var path = 'realtimeStationArrival/1/20/' + encodeURIComponent(String(q.from).replace(/\uc5ed$/, '').trim());
   var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   var timer = null;
   var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, RS_LIVE_MS); });
