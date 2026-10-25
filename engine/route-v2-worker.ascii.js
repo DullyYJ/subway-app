@@ -38,10 +38,71 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s207";
+var ENGINE_VERSION = "route-v2-2026-10-26s210";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
+var BD_DEFAULT = false;
+var BD_K = 8;
+async function bandedRest(db, cols, minLat, maxLat, minLng, maxLng, diag) {
+  const t0 = Date.now();
+  const K = BD_K, per = Math.ceil(MAX_STOPS / K * 1.5), h = (maxLat - minLat) / K;
+  const sql = cols + "WHERE brs.lat BETWEEN ?1 AND ?2 AND brs.lng BETWEEN ?3 AND ?4 LIMIT ?5";
+  const lo = [], hi = [];
+  for (let i = 0; i < K; i++) {
+    lo.push(minLat + h * i);
+    hi.push(i === K - 1 ? maxLat : minLat + h * (i + 1));
+  }
+  const run = (a, b, lim) => db.prepare(sql).bind(a, b, minLng, maxLng, lim).all().then((q) => ({ q }), (e) => ({ e }));
+  const res = await Promise.all(lo.map((a, i) => run(a, hi[i], per)));
+  for (const r of res) if (r.e) return { e: r.e };
+  const bands = res.map((r) => (r.q && r.q.results || []).slice());
+  const full = bands.map((b) => b.length >= per);
+  let total = 0, rr = 0, dur = 0;
+  for (let i = 0; i < K; i++) {
+    total += bands[i].length;
+    const m = res[i].q && res[i].q.meta;
+    if (m) {
+      rr += m.rows_read || 0;
+      dur = Math.max(dur, m.duration || 0);
+    }
+  }
+  let r2 = 0;
+  const idx = [];
+  for (let i = 0; i < K; i++) if (full[i]) idx.push(i);
+  if (total < MAX_STOPS && idx.length) {
+    const share = Math.ceil((MAX_STOPS - total) / idx.length) + 50;
+    const res2 = await Promise.all(idx.map((i) => run(bands[i][bands[i].length - 1].lat, hi[i], share)));
+    r2 = 1;
+    res2.forEach((r, j) => {
+      if (r.e) return;
+      const i = idx[j], got = r.q && r.q.results || [];
+      const seen = /* @__PURE__ */ Object.create(null);
+      for (const x of bands[i]) seen[x.route_key + "|" + x.seq] = 1;
+      for (const x of got) if (!seen[x.route_key + "|" + x.seq]) bands[i].push(x);
+      full[i] = got.length >= share;
+      const m = r.q && r.q.meta;
+      if (m) rr += m.rows_read || 0;
+    });
+  }
+  const out = [];
+  let mx = 0;
+  for (const b of bands) if (b.length > mx) mx = b.length;
+  const seenO = /* @__PURE__ */ Object.create(null);
+  for (let j = 0; j < mx && out.length < MAX_STOPS; j++) {
+    for (let i = 0; i < K && out.length < MAX_STOPS; i++) {
+      if (j >= bands[i].length) continue;
+      const x = bands[i][j], k = x.route_key + "|" + x.seq;
+      if (seenO[k]) continue;
+      seenO[k] = 1;
+      out.push(x);
+    }
+  }
+  const trunc = full.some(Boolean);
+  diag.bd = { k: K, per, n: bands.map((b) => b.length), r2, trunc, ms: Date.now() - t0 };
+  return { q: { results: out, meta: { duration: dur, rows_read: rr } } };
+}
+__name(bandedRest, "bandedRest");
 function corridorBoxes(SY, SX, EY, EX, hw) {
   var cl = Math.cos((SY + EY) / 2 * Math.PI / 180);
   var dLat = Math.abs(EY - SY), dLng = Math.abs(EX - SX) * cl;
@@ -7636,7 +7697,9 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
   const _tD1 = Date.now();
   const _csP = p.get("cs");
   const _cs = _csP === "1" || CS_DEFAULT && _csP !== "0";
-  const _ck = (_cs ? "c8:" : "") + rowsCacheKey(minLat, maxLat, minLng, maxLng);
+  const _bdP = p.get("bd");
+  const _bdOn = _bdP === "1" || BD_DEFAULT && _bdP !== "0";
+  const _ck = (_bdOn ? "b9:" : "") + (_cs ? "c8:" : "") + rowsCacheKey(minLat, maxLat, minLng, maxLng);
   const _noRC = p.get("rc") === "0";
   const _cached = _noRC ? null : rowsCacheGet(_ck);
   const seenRow = /* @__PURE__ */ Object.create(null);
@@ -7704,7 +7767,7 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
       maxLng,
       MAX_STOPS
     ).all().then((q) => ({ q }), (e) => ({ e }));
-    const _restP = _dbR.prepare(
+    const _restP = _bdOn ? bandedRest(_dbR, SQL_COLS, minLat, maxLat, minLng, maxLng, _d1Diag) : _dbR.prepare(
       SQL_COLS + "WHERE brs.lat BETWEEN ?1 AND ?2 AND brs.lng BETWEEN ?3 AND ?4 LIMIT ?5"
       // \u2605 2026-09-24: ORDER BY \uc81c\uac70(\uacb0\uacfc \ub3d9\uc77c, D1\ub9cc \ube68\ub77c\uc9d0)
     ).bind(minLat, maxLat, minLng, maxLng, MAX_STOPS).all().then((q) => ({ q }), (e) => ({ e }));
@@ -7798,7 +7861,7 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
     nearRoutes: _nearKeySet ? _nearKeySet.size : _cached || _kvHit ? btNearCount(rows, SY, SX, EY, EX, NEAR_BOX) : 0,
     nearRows: _cached || _kvHit ? rows.length : _nearRowsCnt,
     rows: rows.length,
-    capped: rows.length >= MAX_STOPS,
+    capped: rows.length >= MAX_STOPS || !!(_d1Diag.bd && _d1Diag.bd.trunc),
     nearErr: _nearErr,
     cached: !!(_cached || _kvHit),
     iso: isoId(),
