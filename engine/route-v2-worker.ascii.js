@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s195";
+var ENGINE_VERSION = "route-v2-2026-10-25s196";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3130,7 +3130,8 @@ function legsToSubPath(legs, r, o) {
         waitReal: L.mode === "bus" ? !!L.waitReal : false,
         waitLive: L.mode === "bus" ? !!L.waitLive : false,
         waitEstimated: L.mode === "bus" ? !!L.waitEstimated : false,
-        boardStopId: L.mode === "bus" ? L.boardStopId || null : null
+        boardStopId: L.mode === "bus" ? L.boardStopId || null : null,
+        boardCc: L.mode === "bus" ? String(L.line || "").split("_")[0] || null : null
       });
     } else if (L.mode === "longdist") {
       const _arr = cum;
@@ -9824,17 +9825,21 @@ function rsAttachPressLive(req, list) {
 }
 // \uc11c\uc6b8 \uc911\uacc4(/seoul)\uc5d0\uc11c \uc774 \uc5ed\uc758 \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294\ub2e4 \u2014 \uc2dc\uac04 \ud55c\ub3c4 \uc548\uc5d0 \ubabb \ubc1b\uc73c\uba74 null(\uc2dc\uac01\ud45c\ub85c). \uc11c\ube44\uc2a4 \ubc14\uc778\ub529 BUSAPI \ub85c \ubd80\ub978\ub2e4.
 var RS_LIVE_MS = 2800;
-function rsFetchSeoulArrivals(env, q) {
-  if (!q || !env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function' || !rsSubwayId(q.line)) return Promise.resolve(null);
-  var path = 'realtimeStationArrival/1/20/' + encodeURIComponent(String(q.from).replace(/\uc5ed$/, '').trim());
+// \uc11c\uc6b8 \uc911\uacc4(/seoul)\uc5d0\uc11c path \ub97c \ubc1b\ub294\ub2e4 \u2014 ms \uc548\uc5d0 \ubabb \ubc1b\uc73c\uba74 null. \uc11c\ube44\uc2a4 \ubc14\uc778\ub529 BUSAPI \ub85c \ubd80\ub978\ub2e4(\ud0a4\ub294 \uc911\uacc4\uac00 \ub123\ub294\ub2e4).
+function rsFetchSeoulPath(env, path, ms) {
+  if (!env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function') return Promise.resolve(null);
   var ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   var timer = null;
-  var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, RS_LIVE_MS); });
+  var cut = new Promise(function (res) { timer = setTimeout(function () { try { if (ctl) ctl.abort(); } catch (e) { } res(null); }, ms); });
   var go = Promise.resolve().then(function () { return env.BUSAPI.fetch(new Request('https://busapi.internal/seoul?path=' + encodeURIComponent(path), ctl ? { signal: ctl.signal } : void 0)); })
     .then(function (r) { return r && r.status === 200 ? r.json() : null; })
     .then(function (j) { return j && j.realtimeArrivalList && j.realtimeArrivalList.length ? j.realtimeArrivalList : null; })
     .catch(function () { return null; });
   return Promise.race([go, cut]).then(function (v) { if (timer) clearTimeout(timer); return v; });
+}
+function rsFetchSeoulArrivals(env, q) {
+  if (!q || !rsSubwayId(q.line)) return Promise.resolve(null);
+  return rsFetchSeoulPath(env, 'realtimeStationArrival/1/20/' + encodeURIComponent(String(q.from).replace(/\uc5ed$/, '').trim()), RS_LIVE_MS);
 }
 // \uc2b9\ucc28 \ud1b5\uacfc \uc2dc\uac01(ms): \ubc29\uae08 \ub5a0\ub09c \ucc28(late) \u2192 \uadf8 \ucd9c\ubc1c \uc2dc\uac01 \u00b7 \uc5c6\uc73c\uba74 \ub2e4\uc74c \ucc28(depMin, 12\ubd84 \uc548) \u2192 \uadf8 \uc2dc\uac01 \u00b7 \uc544\ub2c8\uba74 \ub204\ub978 \uc2dc\uac01
 function rsPickMs(tt, i, now) {
@@ -9916,7 +9921,7 @@ function rsActs(st, req, now, notes) {
     st.rsUndo = { w: w, prev: hit >= 0 ? passes[hit] : null, until: now + 20000 };
     var np = { idx: w.i, ms: rsPickMs(tw && !(dW != null && dW > RS_NEAR_M && tw.late != null) ? tw : null, w.i, now), src: 'gps' };
     if (hit >= 0) passes[hit] = np; else passes.push(np);
-    eta.boarded = true; eta.notDeparted = false; delete st.wait; st.rsOpen = 0;
+    eta.boarded = true; eta.notDeparted = false; delete st.wait; rsBlClear(st); st.rsOpen = 0;
     notes.push('\uc2b9\ucc28 \uc218\ub3d9 \ud655\uc815(\uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \ubc84\ud2bc)' + (np.ms !== now ? (tw && tw.liveMs != null && np.ms === +tw.liveMs ? ' \u00b7 \uc2e4\uc2dc\uac04 ' : ' \u00b7 \uc2dc\uac01\ud45c ') + Math.round((np.ms - now) / 1000) + '\ucd08' : ''));
     rsPressVerify(st, w.i, now, notes);
   } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
@@ -10242,8 +10247,160 @@ function rsWait(st, tr, now, O, notes) {
   for (k = 0; k < passes.length; k++) if (passes[k].idx === w.i) { hit = k; break; }
   var np = { idx: w.i, ms: ms, src: 'gps' };
   if (hit >= 0) passes[hit] = np; else passes.push(np);
-  eta.boarded = true; eta.notDeparted = false; delete st.wait;
+  eta.boarded = true; eta.notDeparted = false; delete st.wait; rsBlClear(st);
   notes.push('\uc2b9\ucc28 \ud655\uc815(' + why + ')');
+}
+
+// \u2500\u2500 \u2605 2026-10-25 s196 (YJ: "\uc6f9\uc758 \ubaa8\ub4e0 \uae30\ub2a5\uc740 \ub124\uc774\ud2f0\ube0c\ub85c \ub2e4 \uc571\uc5d0 \uc62e\uaca8\uc57c \ud574") \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+//   \uc6f9 _applyRealBoardTime \u00b7 _boardNextDep \u00b7 _htlResyncBoard \u00b7 _htlWaitArrived \ub97c \uc5d4\uc9c4\uc73c\ub85c \uc62e\uacbc\ub2e4. \ud655\uc815\ud55c \uacbd\ub85c\ub97c \ub530\ub77c \uc2b9\ucc28\uc5ed\uc73c\ub85c \uac00\ub294 \ub3d9\uc548(\uc2b9\ucc28 \ub300\uae30 st.wait)
+//   15\ucd08\ub9c8\ub2e4 '\ub0b4\uac00 \ud0c8 \uc218 \uc788\ub294 \ub2e4\uc74c \ucc28'\uc758 \uc2e4\uc81c \ub3c4\ucc29(\uc9c0\ud558\ucca0 = \uc11c\uc6b8 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4 \u2194 \uc2dc\uac01\ud45c, \ubc84\uc2a4 = \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4)\uc744 \ubb3b\uace0, \uc5f4\ucc28\u00b7\ubc84\uc2a4\uac00 \ub2f9\uaca8\uc9c0\uac70\ub098 \ubc00\ub9ac\uba74
+//   \uc2b9\ucc28\uc5ed \uc774\ud6c4\uc758 \ubaa8\ub4e0 \uc2dc\uac01\uc744 \uadf8\ub9cc\ud07c \uc62e\uae34\ub2e4(ride-eta \uc758 boardNext). \uc2b9\ucc28\uac00 \ud655\uc815\ub418\uba74(st.wait \uac00 \uc0ac\ub77c\uc9c0\uba74) \ub354\ub294 \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ud0d1\uc2b9 \ub4a4 \uc11c\ubc84 \uc694\uccad 0 \uc740 \uadf8\ub300\ub85c.
+//   \u00b7 \uc5d4\uc9c4\uc740 \ubb3b\uc9c0 \ubabb\ud55c\ub2e4(\uc21c\uc218 \ud568\uc218) \u2192 \uc751\ub2f5\uc5d0 ask:{kind:'boardlive', body} \ub97c \uc2e4\uc5b4 '\uc9c0\uae08 \ubb3c\uc5b4\ub77c'\uace0 \uc54c\ub9b0\ub2e4. \ud3f0\uc774 POST /board-live \ub85c \ubcf4\ub0b4\uace0, \ubc1b\uc740 \ub2f5\uc744 \ub2e4\uc74c \uac78\uc74c \uc694\uccad\uc758 bl \uc5d0 \uc2e4\uc5b4 \uc900\ub2e4.
+//   \u00b7 \uc6f9\uacfc \uac19\uc740 \uaddc\uce59: 15\ucd08 \uac04\uaca9(\ub3c4\ucc29 \uc21c\uac04\uc740 \uc989\uc2dc \u00b7 90\ubd84\uae4c\uc9c0 \ud5c8\uc6a9) \u00b7 \uc2b9\ucc28\uc5ed 250m \uc548\uc774\uba74 \uc55e\ub2f9\uae40\ub3c4 \ud5c8\uc6a9(\ubc16\uc774\uba74 \ub2a6\ucda4\ub9cc) \u00b7 \ub0b4\uac00 \ub2ff\uae30 \uc804\uc5d0 \ub5a0\ub098\ub294 \ucc28\ub294 \uc81c\uc678(\ub0b4\uac00 \ub2ff\ub294 \uc2dc\uac01 + 30\ucd08) \u00b7
+//     \uc5ed\uc5d0 \ub2ff\uc544 \uc608\uc815 \uc2dc\uac01 \u00b12\ubd84 \uc548\uc774\uba74 \ub2e4\uc74c \ucc28\ub85c \ubc00\uc9c0 \uc54a\ub294\ub2e4(\uc9c0\uae08 \uadf8 \ucc28\ub97c \ud0c0\ub294 \uc911\uc77c \uc218 \uc788\ub2e4) \u00b7 \uc2b9\ucc28\uae4c\uc9c0 20\ubd84 \ub118\uac8c \ub0a8\uc73c\uba74 \uc2e4\uc2dc\uac04\uc740 \uac74\ub108\ub6f0\uace0 \uc2dc\uac01\ud45c \u00b7 \uc2e4\uc2dc\uac04\uc774 \uc2dc\uac01\ud45c\uc640 4\ubd84 \ub118\uac8c \uc5b4\uae0b\ub098\uba74 \uc2dc\uac01\ud45c.
+//   \u00b7 \uc6f9\uc758 \uc57d\uc810 \ubcf4\uc644: \ubc84\uc2a4\ub294 \uc6f9\ucc98\ub7fc '\ubc88\ud638\uac00 \ube44\uc2b7\ud55c \ub178\uc120'(1 \uacfc 10)\uc744 \uc11e\uc9c0 \uc54a\uace0 \uc815\ud655\ud788 \uac19\uc740 \ubc88\ud638\ub9cc \u00b7 \uc815\ub958\uc7a5\uc740 \uacbd\ub85c\uac00 \uc544\ub294 ID \ub97c \uadf8\ub300\ub85c(\uc6f9\uc740 \ucd9c\ubc1c\uc9c0 \ub458\ub808 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ucc3e\uc558\ub2e4) \u00b7
+//     \uc11c\uc6b8 \ub3c4\ucc29\uc815\ubcf4\ub97c 20\uac74\uae4c\uc9c0(\uc6f9 10\uac74 \u2014 \ud658\uc2b9\uc5ed\uc5d0\uc11c \ub2e4\ub978 \ud638\uc120\uc774 \ubaa9\ub85d\uc744 \ucc44\uc6cc \uc6b0\ub9ac \ud638\uc120\uc774 \ube60\uc9c0\ub358 \uac83\uc744 \uc904\uc784) \u00b7 [\ud0d1\uc2b9]\uacfc \uac19\uc740 \uc8fc\uc18c(1/20)\ub85c \ubc1b\uc544 \uc11c\uc6b8 \uc911\uacc4\uc758 \uce90\uc2dc\ub97c \ud568\uaed8 \uc4f4\ub2e4(\uc5ed\ub9c8\ub2e4 \ub530\ub85c \ubc1b\uc73c\uba74 \uc77c\uc77c \ud55c\ub3c4\ub97c \ub450 \ubc30\ub85c \uc4f4\ub2e4) \u00b7 \ub3c4\ucc29 \ub2f5\uc774 \ub2a6\uac8c \uc628 \uac83(90\ucd08 \ub118\uc74c)\uc740 \ubc84\ub9b0\ub2e4.
+var RS_BL_STEP_MS = 15000;        // \ubb3b\ub294 \uac04\uaca9(\uc6f9 _htlResyncBoard \uc758 15\ucd08)
+var RS_BL_NEAR_M = 250;           // \uc2b9\ucc28\uc5ed\uc5d0\uc11c \uc774 \uc548\uc774\uba74 '\uc5ed \uadfc\ucc98'(\uc6f9 _htlBoardNear) \u2014 \uc55e\ub2f9\uae40 \ud5c8\uc6a9
+var RS_BL_FIX_MS = 60000;         // \uc704\uce58\uac00 \uc774\ubcf4\ub2e4 \uc624\ub798\ub410\uc73c\uba74 \ub3c4\ubcf4 ETA \ub97c \ubaa8\ub978\ub2e4 \u2192 \ubb3b\uc9c0 \uc54a\ub294\ub2e4
+var RS_BL_WALK_MPS = 1.2, RS_BL_DETOUR = 1.25;     // \uc6f9 _BOARD_WALK_MPS \u00b7 _BOARD_ETA_DETOUR
+var RS_BL_HOLD_MIN = 2;           // \uc6f9 _HTL_BOARD_HOLD_MIN
+var RS_BL_AHEAD_MAX_MIN = 20;     // \uc6f9 _RT_ARR_MAX_AHEAD
+var RS_BL_BUF_MS = 30000;         // \uc6f9 _BOARD_CATCH_BUFFER_MIN 0.5\ubd84
+var RS_BL_SNAP_MS = 4 * 60000;    // \uc6f9 _RT_SNAP_TOL
+var RS_BL_MAXWAIT = 30, RS_BL_MAXWAIT_ARR = 90;     // \ubc18\uc601\ud560 \ucd5c\ub300 \ub300\uae30(\ubd84): \ud3c9\uc18c 30 \u00b7 \uc5ed\uc5d0 \ub2ff\uc740 \uc21c\uac04 90
+var RS_BL_ANS_MS = 90000;         // \uc774\ubcf4\ub2e4 \uc624\ub798\ub41c \ub2f5\uc740 \ubc84\ub9b0\ub2e4
+
+// \uc9c0\uae08 \uc2b9\ucc28 \ub300\uae30\uc758 \ub300\uc0c1 \u2014 { kind:'sub', line, from, to } | { kind:'bus', cc, sid, no } | null
+function rsBlTarget(st) {
+  var w = st && st.wait, eta = st && st.eta; if (!w || !eta) return null;
+  var nodes = eta.nodes || [], n = nodes[w.i], nx = nodes[w.i + 1];
+  if (!n) return null;
+  if (n.isSub && !n.isBus && n.lineName && n.name) return { kind: 'sub', line: String(n.lineName), from: String(n.name), to: (nx && nx.name) ? String(nx.name) : '' };
+  var b = st.cfg && st.cfg.bl;
+  if (n.isBus && !n.isSub && b && b.kind === 'bus' && b.i === w.i && b.cc && b.sid && n.lineName) return { kind: 'bus', cc: String(b.cc), sid: String(b.sid), no: String(n.lineName) };
+  return null;
+}
+// \uc774\ubc88 \uac78\uc74c\uc5d0 \uc11c\ubc84\uc5d0 \ubb3c\uc744 \uac83 \u2014 { kind, i, \u2026, nowMs, fromMs, allowEarlier, maxWait, tz } | null. \ubb3c\uc744 \ub54c\ub9cc st.bl \uc744 \uac31\uc2e0\ud55c\ub2e4.
+function rsBlAsk(st, tr, now) {
+  try {
+    var w = st.wait, tg = rsBlTarget(st); if (!w || !tg || !tr.length) return null;
+    var q = tr[tr.length - 1]; if (!q || now - q[0] > RS_BL_FIX_MS || !isFinite(q[1]) || !isFinite(q[2])) return null;
+    var bl = st.bl = st.bl || {};
+    var dist = rsHav(q[1], q[2], w.lat, w.lng), near = !!w.seen || dist <= RS_BL_NEAR_M;
+    var arrivedNow = !!w.seen && !bl.arr;                                    // \uc2b9\ucc28\uc5ed\uc5d0 \ub2ff\uc740 \uccab \uc21c\uac04(\uc6f9 _htlWaitArrived): \uc989\uc2dc \u00b7 \uc55e\ub2f9\uae40 \ud5c8\uc6a9 \u00b7 90\ubd84\uae4c\uc9c0
+    if (!arrivedNow) {
+      if (now - (bl.askAt || 0) < RS_BL_STEP_MS) return null;                // 15\ucd08 \uac04\uaca9
+      var dep = st.etaMs && st.etaMs[w.i];
+      if (w.seen && dep != null && isFinite(dep)) { var past = (now - dep) / 60000; if (past >= -0.5 && past <= RS_BL_HOLD_MIN) return null; }   // \uc9c0\uae08 \uadf8 \ucc28\ub97c \ud0c0\ub294 \uc911\uc77c \uc218 \uc788\ub2e4
+    }
+    bl.askAt = now; if (arrivedNow) bl.arr = 1;
+    var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
+    var fromMs = near ? now : now + (dist * RS_BL_DETOUR / RS_BL_WALK_MPS) * 1000;      // \uc2b9\ucc28\uc5ed\uc5d0 \uc788\uac8c \ub418\ub294 \uc2dc\uac01(\uc6f9 _boardEtaMin)
+    var o = { kind: tg.kind, i: w.i, nowMs: now, fromMs: Math.round(fromMs), allowEarlier: near || arrivedNow, maxWait: arrivedNow ? RS_BL_MAXWAIT_ARR : RS_BL_MAXWAIT, tz: tz };
+    if (tg.kind === 'sub') { o.line = tg.line; o.from = tg.from; o.to = tg.to; } else { o.cc = tg.cc; o.sid = tg.sid; o.no = tg.no; }
+    return o;
+  } catch (e) { return null; }
+}
+// \ubc1b\uc544 \uc628 \ub2f5(req.bl)\uc744 \ub2e4\uc74c \ucc28 \uc2dc\uac01(eta.boardNext)\uc73c\ub85c \ubc18\uc601\ud55c\ub2e4 \u2014 \uc2b9\ucc28\uc5ed \uc774\ud6c4 \uc2dc\uac01\uc744 \uc62e\uae30\ub294 \uc77c\uc740 ride-eta \uac00 \ud55c\ub2e4.
+function rsBlApply(st, req, now, notes) {
+  var b = req && req.bl, w = st && st.wait, eta = st && st.eta;
+  if (!b || !w || !eta || b.i !== w.i) return;
+  var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000) return;       // \uc624\ub798\ub410\uac70\ub098 \ubbf8\ub798\uc758 \ub2f5\uc740 \ubc84\ub9b0\ub2e4
+  if (b.ms == null || !isFinite(+b.ms)) return;                                                     // \ubabb \ubc1b\uc74c \u2192 \uc9c1\uc804 \uac12 \uc720\uc9c0(\uc6f9 applyDelay(null))
+  var mw = (b.maxWait != null && isFinite(+b.maxWait)) ? +b.maxWait : RS_BL_MAXWAIT;
+  eta.boardNext = { ms: +b.ms, src: 'realboard', allowEarlier: !!b.allowEarlier || b.src === 'realtime', maxWaitMin: mw };
+  if (b.fromMs != null && isFinite(+b.fromMs)) eta.boardArriveMs = +b.fromMs;                      // \uc6f9 _htlBoardFixWait: \uc2b9\ucc28\uc5ed \uc2dc\uac01 \u2265 \ub0b4\uac00 \ub2ff\ub294 \uc2dc\uac01
+  var bl = st.bl = st.bl || {}; bl.src = b.src || ''; bl.ms = +b.ms; bl.okAt = now;
+  notes.push('\uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(' + (b.src || '?') + ') \ub2e4\uc74c \ucc28 ' + Math.round((+b.ms - now) / 1000) + '\ucd08 \ub4a4');
+}
+// \uc2b9\ucc28 \ud655\uc815(\ub300\uae30 \ub05d) \u2014 \uc2b9\ucc28 \uc804 \uc99d\uac70\ub294 \uc9c0\uc6b4\ub2e4
+function rsBlClear(st) { if (st.eta) { delete st.eta.boardNext; delete st.eta.boardArriveMs; } delete st.bl; }
+
+// \u2500\u2500 \uc11c\ubc84 \ucabd: POST /board-live \u2014 \uc6f9 _boardNextDep \uc640 \uac19\uc740 \uaddc\uce59\uc73c\ub85c '\ub0b4\uac00 \ud0c8 \uc218 \uc788\ub294 \ub2e4\uc74c \ucc28'\uc758 \uc2dc\uac01(ms)\uc744 \ub0b8\ub2e4 \u2500\u2500
+function rsMinOfDay(ms, tz) { return (((ms / 60000 + tz) % 1440) + 1440) % 1440; }
+// \uc11c\uc6b8 \uc2e4\uc2dc\uac04 \ub3c4\ucc29 \ubaa9\ub85d \u2192 \ub0b4\uac00 \ub2ff\uc740 \ub4a4 \uac00\uc7a5 \ube68\ub9ac \uc624\ub294 \ub0b4 \ubc29\ud5a5 \uc5f4\ucc28\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms) | null (\uc6f9 _boardNextDep \uc758 realtime \ucabd)
+//   list = realtimeArrivalList, nt = \ub2e4\uc74c \uc5f4\ucc28 \uc5d4\uc9c4(forward), q = { line, from, to, nowMs, fromMs }
+function rsBlLivePick(list, q, nt) {
+  try {
+    var sid = rsSubwayId(q.line); if (!sid || !list || !list.length) return null;
+    var best = null, k, it, sec, term;
+    for (k = 0; k < list.length; k++) {
+      it = list[k]; if (!it || String(it.subwayId || '') !== sid) continue;
+      sec = parseInt(it.barvlDt, 10); if (!isFinite(sec) || sec <= 0) continue;
+      term = String(it.bstatnNm || '');
+      if (q.to && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.from, q.to, term); if (fw === false) continue; }       // \ubc18\ub300 \ubc29\ud5a5 \uc5f4\ucc28\ub294 \ube80\ub2e4(\ud310\ub2e8 \ubd88\uac00 = \uac70\ub974\uc9c0 \uc54a\uc74c)
+      var arr = q.nowMs + sec * 1000;
+      if (arr < q.fromMs + RS_BL_BUF_MS) continue;                                                     // \ub0b4\uac00 \ub2ff\uae30 \uc804\uc5d0 \ub5a0\ub098\ub294 \ucc28\ub294 \uc81c\uc678
+      if (best == null || arr < best) best = arr;
+    }
+    return best;
+  } catch (e) { return null; }
+}
+// \uc2dc\uac01\ud45c\uc758 \ub2e4\uc74c \uc5f4\ucc28 \uc2dc\uac01(ms) \u2014 { ms, dk } | null
+function rsBlTable(q, nt) {
+  try {
+    if (!nt || typeof nt.boardTable !== 'function') return null;
+    var tz = q.tz != null && isFinite(+q.tz) ? +q.tz : 540, mod = rsMinOfDay(q.fromMs, tz);
+    var bt = nt.boardTable({ line: q.line, from: q.from, to: q.to || '', atMin: mod, baseMs: q.fromMs });
+    if (!bt || bt.depMin == null || !isFinite(bt.depMin)) return null;
+    return { ms: Math.round(q.fromMs - mod * 60000 + bt.depMin * 60000), dk: bt.dk || null };
+  } catch (e) { return null; }
+}
+// \uc2e4\uc2dc\uac04 \u2194 \uc2dc\uac01\ud45c \ub9de\ucda4(\uc6f9: \uc2dc\uac01\ud45c\uac00 1\uc21c\uc704, \uc2e4\uc2dc\uac04\uc740 \uadf8 \uc5f4\ucc28\uc758 \uc9c0\uc5f0\u00b7\uc870\uae30 \ubcf4\uc815 \u2014 4\ubd84 \ub118\uac8c \uc5b4\uae0b\ub098\uba74 \uc2dc\uac01\ud45c)
+function rsBlReconcile(live, tbl) {
+  if (live == null) return tbl ? { ms: tbl.ms, src: 'table', dk: tbl.dk } : null;
+  if (!tbl) return { ms: live, src: 'realtime', dk: null };
+  return Math.abs(live - tbl.ms) <= RS_BL_SNAP_MS ? { ms: live, src: 'realtime', dk: tbl.dk } : { ms: tbl.ms, src: 'table', dk: tbl.dk };
+}
+function rsBlSub(env, q, nt) {
+  var tbl = function () { return rsBlTable(q, nt); };
+  var ahead = (q.fromMs - q.nowMs) / 60000;
+  if (!rsSubwayId(q.line) || ahead > RS_BL_AHEAD_MAX_MIN) return Promise.resolve(rsBlReconcile(null, tbl()));       // \uba3c \ubbf8\ub798\uc5d4 \uc2e4\uc2dc\uac04 \ubaa9\ub85d\uc5d0 \uadf8 \uc5f4\ucc28\uac00 \uc5c6\ub2e4 \u2192 \uc2dc\uac01\ud45c
+  return rsFetchSeoulPath(env, 'realtimeStationArrival/1/20/' + encodeURIComponent(String(q.from).replace(/\uc5ed$/, '').trim()), RS_LIVE_MS).then(function (list) {
+    return rsBlReconcile(rsBlLivePick(list, q, nt), tbl());
+  }, function () { return rsBlReconcile(null, tbl()); });
+}
+// \ubc84\uc2a4: \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4(\ubc88\ud638\uac00 \uc815\ud655\ud788 \uac19\uc740 \ub178\uc120\ub9cc)\uc5d0\uc11c \ub0b4\uac00 \ub2ff\uc740 \ub4a4 \uac00\uc7a5 \ube68\ub9ac \uc624\ub294 \ucc28\uc758 \uc2dc\uac01(ms) | null
+function rsBlBusPick(m, q) {
+  try {
+    if (!m) return null;
+    var list = m[q.no] || (typeof noKey === 'function' ? m[noKey(q.no)] : null);
+    if (!Array.isArray(list) || !list.length) return null;
+    var sorted = list.slice().sort(function (a, b) { return a - b; }), k;
+    for (k = 0; k < sorted.length; k++) { var arr = q.nowMs + sorted[k] * 1000; if (sorted[k] > 0 && arr >= q.fromMs + RS_BL_BUF_MS) return arr; }
+    return null;
+  } catch (e) { return null; }
+}
+function rsBlBus(env, q) {
+  if (typeof fetchStopArrivalsAny !== 'function' || !q.cc || !q.sid || !q.no) return Promise.resolve(null);
+  try { if (typeof liveCityOk === 'function' && !liveCityOk(env, q.cc, q.sid)) return Promise.resolve(null); } catch (e0) { }
+  var timer = null, cut = new Promise(function (res) { timer = setTimeout(function () { res(null); }, RS_LIVE_MS); });
+  var go = Promise.resolve().then(function () { return fetchStopArrivalsAny(q.cc, q.sid, env, Date.now() + RS_LIVE_MS, typeof LIVE_BUDGET_REF !== 'undefined' ? LIVE_BUDGET_REF : { used: 0 }, null); })
+    .then(function (m) { var ms = rsBlBusPick(m, q); return ms == null ? null : { ms: Math.round(ms), src: 'realtime', dk: null }; }, function () { return null; });
+  return Promise.race([go, cut]).then(function (v) { if (timer) clearTimeout(timer); return v; });
+}
+// \uc9c8\uc758 \ud55c \uac74 \u2192 \ub2f5 { ok, kind, i, ms|null, src, at, fromMs, allowEarlier, maxWait } (\ubabb \uad6c\ud558\uba74 ms:null \u2014 \ud3f0\uc740 \uc9c1\uc804 \uac12\uc744 \uadf8\ub300\ub85c \ub454\ub2e4)
+function rsBoardLive(env, q) {
+  q = q || {};
+  var base = { ok: true, kind: q.kind, i: q.i, ms: null, src: null, at: +q.nowMs, fromMs: +q.fromMs, allowEarlier: !!q.allowEarlier, maxWait: isFinite(+q.maxWait) ? +q.maxWait : RS_BL_MAXWAIT };
+  if (!isFinite(base.at) || !isFinite(base.fromMs)) return Promise.resolve(Object.assign(base, { ok: false }));
+  q.nowMs = base.at; q.fromMs = base.fromMs;
+  var fin = function (r) { if (r && r.ms != null && isFinite(r.ms)) { base.ms = r.ms; base.src = r.src; if (r.dk) base.dk = r.dk; } return base; };
+  if (q.kind === 'sub') {
+    return Promise.resolve().then(function () { return typeof ntEnsure === 'function' ? ntEnsure(env) : null; }).then(function (nt) { return rsBlSub(env, q, nt); }, function () { return rsBlSub(env, q, null); }).then(fin, function () { return base; });
+  }
+  if (q.kind === 'bus') return rsBlBus(env, q).then(fin, function () { return base; });
+  return Promise.resolve(Object.assign(base, { ok: false }));
+}
+function handleBoardLive(request, env) {
+  var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
+  if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
+  if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ error: 'POST only' }), { status: 405, headers: H }));
+  return request.text().then(function (txt) {
+    var q; try { q = JSON.parse(txt); } catch (e) { return new Response(JSON.stringify({ error: 'JSON \uc544\ub2d8' }), { status: 400, headers: H }); }
+    return rsBoardLive(env, q).then(function (r) { return new Response(JSON.stringify(r), { headers: H }); }, function () { return new Response(JSON.stringify({ ok: false }), { headers: H }); });
+  }, function () { return new Response(JSON.stringify({ error: '\uc694\uccad\uc744 \uc77d\uc9c0 \ubabb\ud568' }), { status: 400, headers: H }); });
 }
 
 // \u2605 2026-10-21 (s101): \uc0c8 \uc704\uce58 \ud310\ub2e8\uae30 \ubcf4\uc815(\uc2e4\ud5d8, cfg.pfLive) \u2014 \uc704\uce58 \ud310\ub2e8\uae30(PosFusion, \uc740\ub2c9 \ub9c8\ub974\ucf54\ud504)\uac00 \ubc1b\uc740 \uc704\uce58\ub4e4\ub85c '\uc9c0\uae08 \uc5b4\ub290 \uc5ed\uc5d0 \uc11c \uc788\ub098'\ub97c \ud655\ub960\ub85c \ub0b8\ub2e4.
@@ -10291,8 +10448,10 @@ function rideStandby(req) {
   if (!st.firstAt) st.firstAt = now;
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
+  rsBlApply(st, req, now, notes);                 // 1.45) \ubc1b\uc544 \uc628 \uc2e4\uc2dc\uac04 \ub2e4\uc74c \ucc28(s196)
   rsWait(st, tr, now, O, notes);                  // 1.5) \uc2b9\ucc28 \ub300\uae30 \u00b7 \uc2b9\ucc28 \uac10\uc9c0
   rsXwait(st, tr, now, notes);                    // 1.55) \ud658\uc2b9 \uad6c\uac04 \uc2b9\ucc28 \ub300\uae30
+  var askBl = rsBlAsk(st, tr, now);               // 1.56) \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \ub2e4\uc74c \ucc28\ub97c \ubb3c\uc744 \ub54c\uc778\uac00(s196)
   rsActs(st, req, now, notes);                    // 1.6) \uc571\uc774 \uc54c\ub824 \uc900 \ucd94\ucc9c \uc904 \u00b7 \ub2eb\uae30 \u00b7 \uc624\ubc84\ub808\uc774 \ud0d1\uc2b9 \uc190\uc9d3
   // 2) \uc601\uc810: \uc815\ub958\uc7a5 \ub3c4\ucc29 \uc2dc\uac01\uc744 \ucd5c\uc2e0 etaMs \ub85c \ub9de\ucdb0 ride-track \uc5d0 \ubb3b\ub294\ub2e4 \u2192 \ud1b5\uacfc \uc2dc\uac01(passMs)\uc740 gps \uc99d\uac70\ub85c, \uc544\uc9c1 \uc548 \ub2ff\uc74c\uc740 notYet \uc73c\ub85c
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
@@ -10348,6 +10507,7 @@ function rideStandby(req) {
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['\ub3c4\ucc29 \uc2dc\uac01 \uacc4\uc0b0 \uc2e4\ud328'] };
   st.etaMs = r.etaMs;
+  if (st.wait && eta.boardNext && r.etaMs[st.wait.i] != null && isFinite(r.etaMs[st.wait.i])) st.wait.arrMs = r.etaMs[st.wait.i];     // \ub2e4\uc74c \ucc28\uac00 \ubc00\ub9ac\uba74(\ub2f9\uaca8\uc9c0\uba74) \uac10\uc9c0 \uc720\uc608\ub3c4 \uadf8 \uc2dc\uac01 \uae30\uc900(s196)
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }
   // 4) \uc9c0\uae08 \uc5b4\ub290 \uc5ed\uae4c\uc9c0 \uc654\ub098 \u2192 \uc54c\ub9bc \ud310\uc815 \u00b7 \uc0c1\uc8fc \uc54c\ub9bc \ubb38\uad6c
   var nodes = eta.nodes || [], cfg = st.cfg || {}, curIdx = -1;
@@ -10413,7 +10573,7 @@ function rideStandby(req) {
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('\ucd94\ucc9c \ud310\ub2e8 \uc2e4\ud328: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
   var row = done ? null : rsRowOut(st, now);
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
 }
 
 function handleRideStandby(request, env) {
@@ -21113,13 +21273,20 @@ function rideStart(opt, r) {
   if (stops.length < 2) return rstFail('nocoords', '\uc815\ub958\uc7a5 \uc704\uce58\ub97c \uc54c \uc218 \uc5c6\uc5b4\uc694');
   var tg = D.targets(tnodes);
   var dest = bName || pts[last].nm;
+  // \u2605 s196: \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(/board-live)\uc774 \uc815\ub958\uc7a5\uc744 \ubc14\ub85c \uc54c \uc218 \uc788\uac8c \ub3c4\uc2dc\ucf54\ub4dc\u00b7\uc815\ub958\uc7a5 ID \ub97c \uc2e3\ub294\ub2e4(\uacbd\ub85c \uc751\ub2f5\uc758 \uccab \ub300\uc911\uad50\ud1b5 \uad6c\uac04 boardCc \u00b7 boardStopId).
+  var firstBl = null;
+  try {
+    var rawSub = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fsp = null, qq;
+    for (qq = 0; qq < rawSub.length; qq++) { var sp0 = rawSub[qq]; if (sp0 && (sp0.trafficType === 1 || sp0.trafficType === 2 || sp0.trafficType === 4)) { fsp = sp0; break; } }
+    if (fsp && fsp.trafficType === 2 && fsp.boardStopId) { var cc0 = String(fsp.boardCc || fsp.line || '').split('_')[0]; if (/^[0-9]{2,5}$/.test(cc0)) firstBl = { kind: 'bus', i: 1, cc: cc0, sid: String(fsp.boardStopId) }; }
+  } catch (eBl) { firstBl = null; }
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // \uccab \uc815\ub958\uc7a5 \uc2dc\uac01\uc774 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4\uba74 \uc9c0\ub09c \uac83\uc73c\ub85c
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
   if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
-  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, bl: firstBl, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
     ovl: rstOvl(pts, r.th) };   // \ub5a0 \uc788\ub294 \uc548\ub0b4(\uc624\ubc84\ub808\uc774)\uac00 \uadf8\ub9b4 \uce78 \ud2c0: \uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \ub3c4\ucc29 \uc2dc\uac01
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '\ub2e4\uc74c ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' \u00b7 ' + dest + '\uae4c\uc9c0 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '\uc815\uac70\uc7a5',
@@ -21908,6 +22075,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/ride-eta") return handleRideEtaNT(request, env);
   if (url.pathname === "/ride-track") return handleRideTrack(request);
   if (url.pathname === "/ride-standby") return handleRideStandby(request, env);
+  if (url.pathname === "/board-live") return handleBoardLive(request, env);
   if (url.pathname === "/store-policy") return handleStorePolicy(request);
   if (url.pathname === "/store-merge") return handleStoreMerge(request);
   if (url.pathname === "/ride-alert") return handleRideAlert(request);

@@ -79,13 +79,20 @@ function rideStart(opt, r) {
   if (stops.length < 2) return rstFail('nocoords', '정류장 위치를 알 수 없어요');
   var tg = D.targets(tnodes);
   var dest = bName || pts[last].nm;
+  // ★ s196: 첫 구간이 버스면 승차 대기 중 실시간 재보정(/board-live)이 정류장을 바로 알 수 있게 도시코드·정류장 ID 를 싣는다(경로 응답의 첫 대중교통 구간 boardCc · boardStopId).
+  var firstBl = null;
+  try {
+    var rawSub = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fsp = null, qq;
+    for (qq = 0; qq < rawSub.length; qq++) { var sp0 = rawSub[qq]; if (sp0 && (sp0.trafficType === 1 || sp0.trafficType === 2 || sp0.trafficType === 4)) { fsp = sp0; break; } }
+    if (fsp && fsp.trafficType === 2 && fsp.boardStopId) { var cc0 = String(fsp.boardCc || fsp.line || '').split('_')[0]; if (/^[0-9]{2,5}$/.test(cc0)) firstBl = { kind: 'bus', i: 1, cc: cc0, sid: String(fsp.boardStopId) }; }
+  } catch (eBl) { firstBl = null; }
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // 첫 정류장 시각이 이미 지났다면 지난 것으로
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
   if (firstSub) { eta.timetableFirst = true; eta.boardInfo = { boardIdx: 1, line: String(pts[0].lineNm || ''), from: pts[0].nm, to: pts[1] ? pts[1].nm : '' }; }
   var allowed = (r.allowed && typeof r.allowed === 'object') ? r.allowed : {};
   var sig = rstHash(nodes.map(function (n) { return n.name + '|' + (n.lineName || ''); }).join('>') + '@' + Math.floor(now / 3600000));
-  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
+  var state = { v: 1, tripSig: sig, eta: eta, stops: stops, trail: [], cfg: { targets: tg.targets, seq: tg.seq, allowed: allowed, destName: dest, waitBoard: r.wait !== false, bl: firstBl, pfLive: r.pf === true }, fired: {}, notYet: {}, etaMs: etaMs, steps: 0, startedAt: now,
     ovl: rstOvl(pts, r.th) };   // 떠 있는 안내(오버레이)가 그릴 칸 틀: 정류장 이름 · 도착 시각
   var legs = 0; for (i = 1; i < tnodes.length; i++) if (i === 1 || tnodes[i].l !== tnodes[i - 1].l) legs++;
   return { ok: true, v: RST_V, state: state, text: '다음 ' + pts[0].nm + (pts[0].arrT ? ' ' + pts[0].arrT : '') + ' · ' + dest + '까지 ' + (tg.seq.length ? tg.seq.length - 1 : 0) + '정거장',
