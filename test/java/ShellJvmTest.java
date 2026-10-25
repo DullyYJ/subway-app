@@ -893,6 +893,12 @@ public class ShellJvmTest {
             ok(rq2.contains("\"ld2\":{") && rq2.contains("\"off\":{") && rq2.contains("\"al\":{"), "다시 받은 응답·공지 원자료를 엔진에 그대로 보낸다");
             ok(!h2.needNotes(1500L) && h2.needNotes(62000L), "공지는 60초 안에는 다시 받지 않는다");
             ok(h2.replaceRoute("{\"a\":1}") && h2.ld2Raw.isEmpty() && !h2.replaceRoute("zz"), "예상 재조회 결과로 바꾸기");
+            {   // s201: 같은 찾기의 새 응답으로 바꿔 끼우기 — 보던 탭 · 경로 번호는 그대로, 탐색 시각만 새로
+                HomeCore h3 = new HomeCore();
+                h3.setRoute("{\"result\":{}}", "부평", "강남", -1, 10L);
+                h3.resTab = "less"; int id3 = h3.routeId; int rev3 = h3.dataRev;
+                ok(h3.replaceRouteSame("{\"b\":2}", 99L) && "less".equals(h3.resTab) && h3.routeId == id3 && h3.resRb == 99L && h3.dataRev != rev3 && !h3.replaceRouteSame("zz", 1L) && h3.resRb == 99L, "s201: 같은 찾기 새 응답은 탭·경로 번호를 지키고 시각만 새로");
+            }
             ShellCore.MemStore fs = new ShellCore.MemStore();
             FavCore fv = new FavCore(fs);
             ok("[]".equals(fv.listJson()) && fv.request(18, "dark", "부평", "강남").contains("\"cur\":{\"s\":\"부평\""), "즐겨찾기 요청: 빈 목록 + 지금 경로");
