@@ -184,7 +184,7 @@ final class RideStandbyJ {
         Map<String, Object> old = mm(st.get("xw")), keep = (old != null && gn(old, "i") == L.bi) ? old : null;
         st.put("xw", obj("i", L.bi, "k", L.k, "mode", L.mode, "line", L.line, "name", L.name, "arrMs", dep, "seen", keep != null && truthy(keep.get("seen")), "shr", keep != null && truthy(keep.get("shr"))));
         if (st.get("xPend") != null && gn(st.get("xPend"), "i") == L.bi && dep - now <= RS_EARLY_MS) {
-            Map<String, Object> pv = xCommit(st, L.bi, now, Double.NaN); notes.add("환승 예약 확정(" + L.bi + "번)");
+            Object lvO = mm(st.get("xPend")).get("lv"); Map<String, Object> pv = xCommit(st, L.bi, now, fin(lvO) ? num(lvO) : Double.NaN); notes.add("환승 예약 확정(" + L.bi + "번)");
             if (st.get("rsUndo") != null && truthy(mm(st.get("rsUndo")).get("x"))) mm(st.get("rsUndo")).put("prev", pv);
         }
     }
