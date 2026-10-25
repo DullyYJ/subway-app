@@ -808,6 +808,14 @@ public class ShellJvmTest {
             bm.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"가\",\"id\":\"SEOUL:1\",\"src\":\"topis\",\"la\":37.5,\"lo\":127.0,\"ars\":\"1\"},{\"nm\":\"나\",\"id\":\"SEOUL:2\",\"src\":\"topis\",\"la\":37.6,\"lo\":127.1,\"ars\":\"2\"}],\"bus\":{\"st\":\"ok\"}}}");
             ok(bm.stopJson.size() == 2 && bm.busView().equals("near"), "info.stops 를 읽어 둔다 · 처음은 주변");
             ok(bm.act("mp.pc.1", null) == MapCore.R_BUS_SEL && bm.busSel == 1 && bm.bodyRequest(18, "dark").contains("\"sel\":1") && bm.act("mp.pm.9", null) == MapCore.R_NONE && bm.busSel == 1, "카드·핀 누름 = 선택(범위 밖은 무시)");
+            {   // s203: 카드 '다시 시도 ›'(mp.rt) — 도착정보·경유노선은 비우고 정류장 목록은 둔다 · 실패 신호(fl)는 요청에만
+                bm.addBusRes("tn", "TN"); bm.addBusRes("a0", "A0"); bm.addBusRes("g1", "G1"); bm.addBusRes("t100", "T100"); bm.addBusRes("t0", "T0");
+                bm.busFailShow = true;
+                ok(bm.bodyRequest(18, "dark").contains("\"fl\":1"), "실패 신호가 켜지면 요청에 fl:1");
+                ok(bm.act("mp.rt", null) == MapCore.R_BUS_REF && !bm.busFailShow && !bm.bodyRequest(18, "dark").contains("\"fl\":1"), "다시 시도 = 다시 받기 + 실패 신호 끔");
+                String rq3 = bm.bodyRequest(18, "dark");
+                ok(rq3.contains("\"tn\":\"TN\"") && !rq3.contains("\"a0\"") && !rq3.contains("\"g1\"") && !rq3.contains("\"t100\"") && !rq3.contains("\"t0\""), "다시 시도: 정류장 목록(tn)은 두고 도착정보·경유노선·좌표 보정은 비운다");
+            }
             ok(bm.act("mp.fv.0", null) == MapCore.R_BUS_SEL && "즐겨찾기 추가".equals(bm.toast) && bsv.get(MapCore.K_BUSFAV, "").contains("SEOUL:1") && bm.bodyRequest(18, "dark").contains("\"fav\":[{"), "별 → 즐겨찾기 추가(저장 + 요청에 실림)");
             ok(bm.act("mp.fv.0", null) == MapCore.R_BUS_SEL && "즐겨찾기 해제".equals(bm.toast) && "[]".equals(bsv.get(MapCore.K_BUSFAV, "")), "다시 누르면 해제");
             for (int i = 0; i < 12; i++) { bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"s" + i + "\",\"id\":\"SEOUL:" + (10 + i) + "\",\"src\":\"topis\"}"); bm.act("mp.fv.0", null); }

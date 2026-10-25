@@ -927,9 +927,14 @@ public class ScreenJvmTest {
                 String lm_j = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[" + String.format(lm_c, 1, "가", 0, ",\"lm\":\"검단역\"") + "," + String.format(lm_c, 2, "가", 1, ",\"lm\":\"가나다라마바사아자차카타파하가나다라마바사아자차카타파하\"") + "," + String.format(lm_c, 3, "가", 2, "") + "]}";
                 ScreenCore.Layout lm_l = ScreenCore.layout(ScreenCore.load(lm_j), 360f, M);
                 ScreenCore.Item lm_a = lm_l.body[0], lm_b = lm_l.body[1], lm_n = lm_l.body[2];
-                ok("(검단역 방향)".equals(lm_a.t2) && lm_a.lx > lm_a.textX && lm_a.ly == lm_a.textY && lm_a.h == lm_n.h, "bcard: 이름 옆 방향 글이 이름 뒤 같은 줄에 붙고 카드 높이는 그대로");
-                ok(lm_b.t2.length() > 0 && lm_b.lx == lm_b.textX && lm_b.ly > lm_b.textY && lm_b.h > lm_n.h, "bcard: 이름이 길어 한 줄에 안 들어가면 방향 글은 다음 줄로 내려가고 카드가 그만큼 커진다");
-                ok(lm_n.t2.length() == 0, "bcard: lm 이 없으면 방향 글 없음");
+                ok("(검단역 방향)".equals(lm_a.lmt) && lm_a.lx > lm_a.textX && lm_a.ly == lm_a.textY && lm_a.h == lm_n.h, "bcard: 이름 옆 방향 글이 이름 뒤 같은 줄에 붙고 카드 높이는 그대로");
+                ok(lm_b.lmt.length() > 0 && lm_b.lx == lm_b.textX && lm_b.ly > lm_b.textY && lm_b.h > lm_n.h, "bcard: 이름이 길어 한 줄에 안 들어가면 방향 글은 다음 줄로 내려가고 카드가 그만큼 커진다");
+                ok(lm_n.lmt.length() == 0, "bcard: lm 이 없으면 방향 글 없음");
+                String rt_j = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[" + String.format(lm_c, 4, "가", 3, ",\"em\":\"운행 정보 없음\",\"rt\":{\"a\":\"call\",\"v\":\"mp.rt\"},\"lm\":\"검단역\"") + "," + String.format(lm_c, 5, "가", 4, ",\"em\":\"운행 정보 없음\"") + "]}";
+                ScreenCore.Layout rt_l = ScreenCore.layout(ScreenCore.load(rt_j), 360f, M);
+                ScreenCore.Item rt_a = rt_l.body[0], rt_b = rt_l.body[1];
+                ok("운행 정보 없음".equals(rt_a.t2) && rt_a.lmt.length() > 0 && rt_a.zs.length == 16 && rt_a.za.length == 4 && rt_a.za[3] != null && "mp.rt".equals(rt_a.za[3].v) && rt_a.zs[14] > 0f && rt_a.zs[13] > rt_a.y + rt_a.h * 0.4f && rt_a.zs[12] + rt_a.zs[14] <= rt_a.x + rt_a.w, "bcard: 안내 줄 오른쪽 '다시 시도 ›' 누르는 자리(네 번째 칸) · 방향 글과 안내 글이 함께 있어도 서로 안 덮는다");
+                ok(rt_b.zs.length == 12 && rt_b.za.length == 3, "bcard: rt 가 없으면 누르는 자리는 세 칸 그대로");
             } catch (Exception ex) { ok(false, "bcard 방향 글: " + ex); }
         }
 
