@@ -57,6 +57,7 @@ public class SceneJvmTest {
         File sheets = new File(a[1]); int W = 340, H = 120; double dens = 2.0;
         TestHost h = new TestHost();
         for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        for (String id : SceneModel.ORDER) { File fp = new File(sheets, id + "_pose.png"); if (fp.exists()) h.sheets.put(id + "_pose", new AwtCv.Img(ImageIO.read(fp))); }
         File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
         SceneCore c = core(h, 7); c.layout(W, H, dens, false); c.apply(SceneModel.parse(read(new File(a[3])))); c.debugTick(3);
         c.apply(SceneModel.parse(read(new File(a[4]))));
@@ -75,6 +76,7 @@ public class SceneJvmTest {
         int W = Integer.parseInt(a[4]), H = Integer.parseInt(a[5]), seed = Integer.parseInt(a[6]); double sec = Double.parseDouble(a[7]); boolean dark = a[8].equals("dark");
         TestHost h = new TestHost();
         for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        for (String id : SceneModel.ORDER) { File fp = new File(sheets, id + "_pose.png"); if (fp.exists()) h.sheets.put(id + "_pose", new AwtCv.Img(ImageIO.read(fp))); }
         File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
         SceneCore c = core(h, seed);
         c.layout(W, H, 1.0, dark); c.apply(res);
