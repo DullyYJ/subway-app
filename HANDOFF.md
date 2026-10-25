@@ -2438,3 +2438,15 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - **시험**: `ride_standby` 62(+14: 질문 간격 · 도보 ETA · 역 근처 · 도착 순간 · 보류 구간 · 위치 끊김 · 늦음/앞당김/한도 · 오래된 답 · 탑승 확정 뒤 0 · 되돌리기 · 서버 고르기 · 맞춤 · 버스 · HTTP) · `ride_start_engine` 44(+4) · `ride_local`(서비스가 서버를 부르는 곳은 시각표 · /board-live · 추천 문구 미리 받기 3곳뿐) · `ShellJvmTest`(RideCore 의 ask → 본문 · bl 한 번만 싣기). 전체 50개 통과.
 - **기기·서버에서 아직 확인 못 한 것**: 실제 폰에서 15초 질문이 나가고 시각이 움직이는 것 · 서울 중계가 `1/20` 을 캐시해 두 번째 질문부터 즉시 답하는 것 · 버스 정류장 ID(`boardCc`) 로 TAGO 도착정보가 받아지는 것.
 - 엔진 버전 `route-v2-2026-10-25s196` — route-v2 에 `engine/route-v2-worker.ascii.js` 를 다시 붙여넣는다(`/board-live` 와 `boardCc` 가 들어 있어 **붙여넣기 전에는 앱이 물어도 404 라 시각이 안 움직인다** — 오류는 없고 s195 와 같게 동작). gentle-lab 은 s192 에서 붙인 것 그대로다.
+
+## s197 (2026-10-25) 경로 목록의 지하철 첫 구간 대기를 서울 실시간으로 조용히 교체 + 가속도 입력 제거
+
+- **YJ 지시**: "계속 개선 및 웹과 모든 기능 100% 네이티브 맞춰줘" · "가속도는 의미없어 제거해".
+- **웹 승차 추적 함수 대조(이번에 한 것)**: `_htl*`·`_pf*`·`_rs*`·`_pip*` 이름을 엔진·앱과 하나씩 맞춰 봤다. 엔진에 없는 것은 ① `_htlDriftCheck`(시각표가 확정 위치보다 2역 앞서면 재동기화) — 엔진 `ride-eta` 가 통과 증거로 뒤 시각을 밀어 같은 일을 하므로 따로 옮기지 않음 ② `_pfMotionFeed`/`_pfPulseFeed`(가속도 센서) — 웹에서도 2026-10-13 에 꺼 둔 기능이고 YJ 가 제거를 지시 → 아래 '가속도 제거'. 나머지(`_rsPressTrain/_rsPressVerify/_rsLateCheck/_rsAlightGps/_htlResyncBoard` 등)는 s196 이전에 엔진에 있다.
+- **새 기능(엔진 `next-train-worker.js`)**: `/route-v2-app` 응답을 만들 때, 경로의 **첫 대중교통이 서울권 지하철**이면 승차역 `realtimeStationArrival/1/20/<역>`(중계 캐시 경로는 [탑승] 영점·`/board-live` 와 같다)을 최대 2.8초 받아 `ttWaitMs`(시각표 대기)를 **실시간으로 가린 열차까지의 대기**로 바꾼다. 가리는 규칙은 s196 `/board-live` 와 같은 함수(`rsBlLivePick`·`rsBlTable`·`rsBlReconcile`): 호선(subwayId) · 내 방향(`nt.forward`) · 내가 닿은 뒤(+30초) 가장 빠른 차 · 시각표 차와 4분 안이면 실시간, 아니면 시각표. 20분 넘게 먼 승차·예상 시각 모드(`baseMs` 가 지금과 10분 넘게 다름, `bf=1`, `live=0` 빠른 응답)·운행 종료 보정(`svcWarn.shift`)이 걸린 경로는 건드리지 않는다. 못 받으면 아무것도 안 바꾼다(시각표 그대로).
+  - 동시 실행: 버스 `applyLiveWaits` 와 같은 때에 시작(`_subLiveP`)해 응답 시간이 더해지지 않는다. 경로 목록의 합계·도착 시각은 `rhead.js` 가 `ttWaitMs` 를 더해 만들므로 폰 쪽은 바꿀 게 없다(앱 코드 변경 없음). `_liveStat.subLiveN` = 실시간으로 바꾼 경로 수(진단).
+  - 웹과 다른 점(알려 둠): 웹은 이 교체를 [탑승] 눌렀을 때 한 번만 했고 경로 목록은 시각표였다. 이번엔 YJ 요구("먼저 보여 주고 실시간이 오면 조용히 교체")대로 목록 단계에서 한다. 첫 구간만 — 환승 뒤 지하철은 시각표(그때엔 실시간 목록에 그 차가 없다).
+- **가속도 제거**: 엔진 `posfusion.js` 의 `motion` 증거 통로(`self.motion`·`MOTION_CONF`·`{t:'motion'}` 입력·`fed.motion`)와 자바 쌍둥이 `RidePosFusionJ` 의 같은 부분을 지웠다. 네이티브는 처음부터 센서를 안 읽었고 이 통로에 먹이는 곳도 없어서 동작은 같다(옛 클라이언트가 `motion` 이벤트를 보내도 '건너뜀'으로 센다). GPS 속도로 정하는 `ride-track` 의 `motion`(버스 달리는 중/정지 표시)은 가속도가 아니라 GPS 라 그대로 둔다. 웹(`ios-reference`)의 센서 코드는 이미 꺼져 있고 웹은 데이터용이라 건드리지 않았다. `main` 브랜치의 `native/MotionPlugin.java`(Capacitor 센서 플러그인)는 이제 쓸 곳이 없다 — 지우고 싶으면 YJ 가 직접 지울 것.
+- **시험**: 새 `test/next_train_live_first.test.js` 27개(대상 가리기 · 실시간 채택/시각표/방향/호선/4분/접근 도보/20분/지금 아닌 탐색/던지는 호출 · `ntAttachPath` 교체·버스 첫 구간·30분 초과·옛 값 지움·운행 종료 보정) · `posfusion_engine` 에서 motion 제거. 전체 시험 파일 통과. 워크플로 matrix 에 새 시험 추가.
+- **엔진 버전** `route-v2-2026-10-25s197`. 배포: route-v2 에 `engine/route-v2-worker.ascii.js` 를 붙여넣는다(gentle-lab 은 그대로).
+- **기기 미검증**: 서울 중계가 비어 있으면(첫 요청은 늘 빈손) 이 교체는 일어나지 않고 시각표가 간다 — 폰의 빠른 응답(live=0) 뒤 전체 응답(live)이 중계가 채워진 뒤에 오면 교체된다. `liveStat.subLiveN` 으로 확인할 수 있다.
