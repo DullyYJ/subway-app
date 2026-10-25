@@ -608,6 +608,15 @@ t('실시간 도착(웹 규칙): 방향(dk → 상행/하행, 모르면 하행)�
   assert.strictEqual(rsPickLive([LV({ barvlDt: String(30 * 60) })], q, N, '하'), N + 1800000, '시간 한도를 두지 않는다(웹과 같다)');
   assert.strictEqual(rsPickLive(null, q, N, '하'), null); assert.strictEqual(rsPickLive([], q, N, '하'), null);
 });
+t('실시간 도착: 호선 → subwayId 는 웹의 실기기 확인값(경의중앙선 1063 · 경춘선 1067 · 서해선 1093 · 경강선 1081 · 신림선 1094)', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), N = at(12, 55, 20);
+  const mk = (line) => { const s = JSON.parse(JSON.stringify(x0.state)); s.eta.nodes[4].lineName = line; return rsPressQuery(pressReq(s, N)); };
+  [['경의중앙선', '1063'], ['경춘선', '1067'], ['서해선', '1093'], ['경강선', '1081'], ['신림선', '1094'], ['수인분당선', '1075'], ['신분당선', '1077'], ['공항철도', '1065'], ['우이신설선', '1092'], ['9호선', '1009']].forEach(([ln, id]) => {
+    assert.strictEqual(rsPickLive([LV({ subwayId: id, barvlDt: '60' })], mk(ln), N, '하'), N + 60000, ln);
+    assert.strictEqual(rsPickLive([LV({ subwayId: '1004', barvlDt: '60' })], mk(ln), N, '하'), null, ln + ' — 다른 호선은 거른다');
+  });
+  assert.strictEqual(rsPickLive([LV({ barvlDt: '60' })], mk('인천1호선'), N, '하'), null, '도착정보가 없는 노선은 시각표');
+});
 t('실시간 도착(웹 약점 보완): 다른 호선 열차 거르기 · 내선/외선은 다음 역 방면으로 · 이미 출발한 열차는 건너뛰기', () => {
   const x0 = stepX(xferState(), at(12, 55, 0)), q = rsPressQuery(pressReq(x0.state, at(12, 55, 20))), N = at(12, 55, 20);
   assert.strictEqual(rsPickLive([LV({ subwayId: '1004', barvlDt: '20' }), LV({ barvlDt: '150' })], q, N, '하'), N + 150000, '환승역에서 다른 호선(4호선) 열차를 집지 않는다');
