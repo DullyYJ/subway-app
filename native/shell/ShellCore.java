@@ -422,6 +422,13 @@ public final class ShellCore {
     public static String mapKey(String screen, String mode, Store st) { return mapKey(screen, mode, st, st.get(K_BUSCELL, "")); }
     /** 버스 '주변' 화면은 위치 칸(약 110m)마다 따로 둔다 — 다른 동네의 정류장이 캐시에서 먼저 뜨지 않게(s179). cell 을 직접 줘서 지금 위치가 아닌 칸의 것도 미리 받아 둘 수 있다. */
     public static String mapKey(String screen, String mode, Store st, String cell) { return screen + "|" + mode + "|" + st.get(MapCore.K_REG, "seoul") + "|" + st.get(MapCore.K_FLT, "ALL") + busViewSuffix(screen, mode, st, cell); }
+    /** 맛집 화면의 장소 표시(캐시 열쇠 꼬리): 도착지가 있으면 도착지(약 55m 칸), 없으면 기기 위치(약 550m 칸). 둘 다 없으면 "". */
+    public static final String K_FOODSIG = "food_sig";
+    public static String foodSig(boolean destOk, double dLa, double dLo, double[] ll) {
+        if (destOk && !Double.isNaN(dLa) && !Double.isNaN(dLo) && (dLa != 0d || dLo != 0d)) return "d" + Math.round(dLa * 2000d) + "_" + Math.round(dLo * 2000d);
+        if (ll != null && ll.length >= 2 && !Double.isNaN(ll[0]) && !Double.isNaN(ll[1])) return "g" + Math.round(ll[0] * 200d) + "_" + Math.round(ll[1] * 200d);
+        return "";
+    }
     /** 지금 버스 탭의 위치 칸(MapCore 가 위치를 바꿀 때마다 적는다). */
     public static final String K_BUSCELL = "bus_cell";
     /** 버스 본문은 주변/즐겨찾기가 다른 화면이라 캐시도 따로(머리와 지하철은 해당 없음). */
@@ -743,6 +750,7 @@ public final class ShellCore {
         if (S_SETTINGS.equals(screen)) return settingsKey(st);
         if (S_CCHIPS.equals(screen)) return screen + "|" + mode(st);
         if (S_CHAT.equals(screen)) return screen + "|" + st.get(ChatCore.K_SEL, "all");                       // 방마다 따로
+        if (S_FOOD.equals(screen)) return screen + "|" + st.get(K_FOODSIG, "");                               // 맛집은 도착지(또는 지금 동네)마다 따로 — 다른 곳의 가게가 먼저 뜨지 않고, 미리 받아 둔 화면이 바로 뜬다
         if (S_MAPH.equals(screen) || S_MAPB.equals(screen)) return mapKey(screen, st.get(MapCore.K_MODE, "bus"), st);
         return screen;
     }

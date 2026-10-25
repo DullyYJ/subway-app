@@ -59,13 +59,13 @@ public class ShellActivity extends Activity {
     // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
     private final java.util.Set<String> scrKeys = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());      // 메모리 캐시에 든 열쇠(다른 스레드에서 "캐시가 있나" 볼 때)
     private final java.util.LinkedHashMap<String, String> scrCache = new java.util.LinkedHashMap<String, String>(32, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { boolean over = size() > 40; if (over) scrKeys.remove(e.getKey()); return over; }       // 오래 안 본 화면부터 버린다(메모리 한도)
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { boolean over = size() > 120; if (over) scrKeys.remove(e.getKey()); return over; }       // 오래 안 본 화면부터 버린다(메모리 한도 — 미리 받는 화면(탭 · 분류 · 호선 방 · 지역)이 40을 넘어 앞의 것이 밀려나 스와이프가 느려지던 것을 막으려 120)
     };
     private final java.util.HashMap<ScreenView, String> viewKey = new java.util.HashMap<ScreenView, String>();
     private final java.util.HashMap<ScreenView, String> shownJson = new java.util.HashMap<ScreenView, String>();       // 칸이 지금 보여 주는 글(같은 글이면 다시 그리지 않는다)
     // 검증을 마친 화면 객체: 받는 스레드에서 미리 읽어 두면(warm) 올릴 때 주 스레드가 글을 다시 읽지 않는다
     private final java.util.LinkedHashMap<String, ScreenCore.Screen> parsedScr = new java.util.LinkedHashMap<String, ScreenCore.Screen>(16, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ScreenCore.Screen> e) { return size() > 20; }
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ScreenCore.Screen> e) { return size() > 48; }
     };
     private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
         synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(json); if (c != null) return c; }
@@ -313,7 +313,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -675,6 +675,7 @@ public class ShellActivity extends Activity {
         final ScreenView v = viewOfSlot(i);
         boolean keepX = keep0;
         if (ShellCore.S_PENDING.equals(screen)) { viewKey.remove(v); present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
+        if (ShellCore.S_FOOD.equals(screen)) foodSyncSig();                // 맛집 캐시 열쇠에 도착지(없으면 지금 동네)를 넣는다 — 미리 받아 둔 그 장소의 화면이 바로 뜬다
         final String ck = ShellCore.cacheKey(screen, store);
         viewKey.put(v, ck);
         if (!keep0) retryN.remove(v);                                 // 사람이 연 로드(탭 · 분류 · 다시 시도)는 자동 재시도를 처음부터
@@ -695,7 +696,7 @@ public class ShellActivity extends Activity {
             if (my != seq[si]) return;                               // 그 사이 다른 탭 · 더 새 요청이 시작됐다 — 이 받기는 보내지 않는다
             if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
             if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
-            if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); return; }
+            if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); chatWarmSoon(); return; }
             if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
             if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
             if (ShellCore.S_MAPB.equals(screen)) { if (keep && !keep0 && busReturnQuiet()) return; loadMapBodyFast(v, keep); return; }
@@ -894,10 +895,18 @@ public class ShellActivity extends Activity {
         return l != null ? l : ShellCore.lastLocFresh(store, 6L * 3600000L, System.currentTimeMillis());
     }
     /** (뒤 스레드) 맛집 미리 받기: 도착지가 있으면 도착지로, 없으면(도착지 설정 전) 현위치로. 위치가 아직 없으면 건너뛴다(위치가 잡히면 warmLocTabs 가 다시 한다). */
+    private static final long FOOD_PF_FRESH_MS = 30L * 60000L, FOOD_PF_GPS_GAP_MS = 10L * 60000L;     // 같은 장소 화면은 30분 안이면 다시 안 받는다 · 도착지가 없을 때 동네가 바뀌어 받는 건 10분에 한 번(공공데이터 호출 한도)
+    private volatile long foodGpsPfAt;
     private boolean pfFoodRun(double[] ll, String dName, double dLa, double dLo) throws Exception {
-        if (!pfNeeds(ShellCore.S_FOOD)) return false;
+        final boolean destOk = dName != null && dName.length() > 0;
+        final String sig = ShellCore.foodSig(destOk, dLa, dLo, ll);
+        if (sig.length() == 0) return false;                                  // 도착지도 위치도 아직 없다(위치가 잡히면 warmLocTabs 가 다시 한다)
+        final String key = ShellCore.S_FOOD + "|" + sig;
         synchronized (pfFood) {
-            pfFood.setDest(dName, dLa, dLo);
+            if (cacheAge(key) < FOOD_PF_FRESH_MS) return false;               // 이 장소의 맛집은 이미 받아 뒀다
+            long nowMs = System.currentTimeMillis();
+            if (!destOk) { if (foodGpsPfAt != 0L && nowMs - foodGpsPfAt < FOOD_PF_GPS_GAP_MS) return false; foodGpsPfAt = nowMs; }
+            pfFood.setDest(destOk ? dName : "", destOk ? dLa : 0, destOk ? dLo : 0);
             if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
             NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
             if (r.status != 200 || r.body == null) return true;
@@ -908,10 +917,35 @@ public class ShellActivity extends Activity {
                 for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
                 pfFood.setData(foodDataNow(su, pu));
                 NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
-                if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(ShellCore.S_FOOD, r2.body, false); }
-            } else prefetchPut(ShellCore.S_FOOD, r.body, false);
+                if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(key, r2.body, false); }
+            } else prefetchPut(key, r.body, false);
         }
         return true;
+    }
+    /** (주 스레드) 지금 맛집 탭이 쓸 장소 표시를 저장값에 맞춘다: 도착지가 있으면 도착지, 없으면 기기 위치. */
+    private void foodSyncSig() {
+        HomeCore.Loc d = home.loc[HomeCore.DEST];
+        boolean ok = d != null && d.ok();
+        String sig = ShellCore.foodSig(ok, ok ? d.lat : 0, ok ? d.lng : 0, pfLL());
+        if (!sig.equals(store.get(ShellCore.K_FOODSIG, ""))) store.put(ShellCore.K_FOODSIG, sig);
+    }
+    /** 도착지가 확정되면(어느 길로 정해졌든) 맛집을 뒤에서 미리 받아 둔다. 1.5초마다 도착지 표시만 비교하고, 바뀐 뒤 1.2초 가만히 있으면 받는다(고르는 중엔 안 받는다). */
+    private String foodWatchSig = "";
+    private final Runnable foodWatchTick = new Runnable() { @Override public void run() { if (!resumed) return; foodWatch(); main.postDelayed(this, 1500L); } };       // 앱이 뒤로 가면 멈추고 onResume 이 다시 건다
+    private void foodWatchStart() { main.removeCallbacks(foodWatchTick); main.postDelayed(foodWatchTick, 800L); }
+    private void foodWatch() {
+        HomeCore.Loc d = home.loc[HomeCore.DEST];
+        if (d == null || !d.ok()) { foodWatchSig = ""; return; }
+        final String sig = ShellCore.foodSig(true, d.lat, d.lng, null);
+        if (sig.equals(foodWatchSig)) return;
+        foodWatchSig = sig;
+        deb.trailing("foodwarm", 1200L, new Runnable() { @Override public void run() {
+            HomeCore.Loc d2 = home.loc[HomeCore.DEST];
+            if (d2 == null || !d2.ok() || !sig.equals(ShellCore.foodSig(true, d2.lat, d2.lng, null))) return;      // 그 사이 또 바뀌었다
+            if ("food".equals(ShellCore.currentTab(store))) return;                                            // 맛집 탭을 보는 중이면 그쪽 로더가 받는다
+            final String dn = d2.name; final double la = d2.lat, lo = d2.lng; final double[] ll = pfLL();
+            pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dn, la, lo); } });
+        } });
     }
     /** 위치가 새로 잡혔다: 켤 때 위치가 없어 건너뛴 위치 기반 화면(맛집 · 버스 노선도)을 지금 위치로 뒤에서 받아 둔다. 같은 곳에서는 3분에 한 번만. */
     private double[] warmLocLL; private long warmLocAt;
@@ -1399,10 +1433,59 @@ public class ShellActivity extends Activity {
         }
         return chat.request(ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());
     }
+    /**
+     * 호선 방 좌우 밀기를 부드럽게: 지금 방 둘레(앞뒤 2칸)의 방 화면을 뒤에서 미리 받아 둔다(이미 45초 안에 받은 방은 건너뜀 · 마지막 방 바뀐 뒤 0.7초 가만히 있을 때만 · 고스트 상태기라 지금 화면을 건드리지 않는다).
+     * 받은 화면은 검증까지 미리 마쳐(parsedGet) 밀 때 주 스레드가 글을 읽지 않는다. 앱을 켤 때 받아 둔 방도 메모리에서 밀려나 있으면 여기서 다시 채운다.
+     */
+    private static final long CHAT_NEAR_FRESH_MS = 45000L;
+    private ChatCore pfChatN;
+    private void chatWarmSoon() {
+        deb.trailing("chatwarm", 700L, new Runnable() { @Override public void run() {
+            if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
+            int[] oi = new int[1];
+            ScreenCore.Act[] inner = body.chipActs(oi);
+            if (oi[0] < 0 || inner == null) return;
+            final String theme = ShellCore.theme(store);
+            if (pfChatN == null) pfChatN = new ChatCore(store);
+            final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
+            for (int dk : new int[] { 1, -1, 2, -2 }) {
+                int i = oi[0] + dk;
+                if (i < 0 || i >= inner.length || inner[i] == null || !"cat".equals(inner[i].a)) continue;
+                final String sel = inner[i].v, key = ShellCore.S_CHAT + "|" + sel;
+                final String c = cacheGet(key, false);
+                if (c != null) ioExec.execute(new Runnable() { @Override public void run() { warm(c); } });          // 글 읽기를 미리(밀 때 주 스레드가 안 읽도록)
+                if (cacheAge(key) < CHAT_NEAR_FRESH_MS) continue;
+                pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfChatRoom(sel, theme, sec); } });
+            }
+        } });
+    }
+    /** (뒤 스레드) 방 하나를 고스트 상태기로 받아 캐시에 둔다. 받았으면 true. */
+    private boolean pfChatRoom(String sel, String theme, ArrayList<String> sec) {
+        synchronized (pfChatN) {
+            String me = ShellCore.commId(store);
+            int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+            pfChatN.routeSec = new ArrayList<String>(sec);
+            if (System.currentTimeMillis() - pfChatN.noticesAt > 60000) {
+                NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                if (nr.status == 200) pfChatN.setNotices(nr.body, System.currentTimeMillis());
+            }
+            if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChatN.talksUrlNow(), 7000); if (tr.status == 200) pfChatN.addTalks(tr.body, me); }
+            else { NetPost.Res rr = NetPost.get(pfChatN.roomUrl(sel), 12000); if (rr.status == 200) pfChatN.addRoom(sel, rr.body); }
+            String body = pfChatN.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
+            screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
+        }
+        return true;
+    }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
     private void chatAct(ScreenCore.Act a, final ScreenView src) {
-        if ("cat".equals(a.a)) { chat.select(a.v); boolean shown = keyedShow(body, ShellCore.S_CHAT); loadChat(body, shown, true); return; }
+        if ("cat".equals(a.a)) {
+            chat.select(a.v);
+            final boolean shown = keyedShow(body, ShellCore.S_CHAT);
+            if (!shown) showSkeleton(body, ShellCore.S_CHAT);                    // 아직 못 받은 방: 받는 동안 옛 방이 그대로 멈춰 보이지 않게 바로 뼈대로 넘긴다(밀기 모션도 곧장 시작)
+            deb.trailing("chatsel", 220L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); } });      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
+            return;
+        }
         if (!"call".equals(a.a)) return;
         final String me = ShellCore.commId(store);
         int r = chat.act(a.v, a.id, src.fields(), me);
