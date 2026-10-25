@@ -96,6 +96,12 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
   ok(E.homeStnFind('').u.length === 0 && E.homeStnFind('   ').u.length === 0 && E.homeStnFind(null).u.length === 0 && E.homeStnFind(5).u.length === 0, '빈 글자·이상한 값은 후보 없음');
   ok(E.homeStnFind('  강남  ').u.length === E.homeStnFind('강남').u.length, '앞뒤 공백은 무시');
   ok(E.homeStnFind('역').u.length === 8, '8개까지');
+  // s208: 같은 이름이라도 권역이 다르면 후보를 따로(수도권 중동 ↔ 부산 중동), 같은 권역 환승역은 호선을 합친다
+  { const f = E.homeStnFind('중동'), ix = f.u.map((x, k) => k).filter(k => f.u[k].n === '중동'), jd = ix.map(k => f.u[k].l + '@' + f.pk[k].lat);
+    ok(ix.length === 2 && f.u[ix[0]].l === '1호선' && f.u[ix[1]].l === '부산2호선' && f.pk[ix[0]].line === '1호선' && f.pk[ix[1]].line === '부산2호선' && f.pk[ix[0]].lat > 37 && f.pk[ix[1]].lat < 36, 's208: 중동 — 수도권 · 부산 후보를 따로, 각자 자기 좌표 ' + jd.join(' ; '));
+    const g = E.homeStnFind('교대'), gl = g.u.filter(x => x.n === '교대').map(x => x.l);
+    ok(gl.join('/') === '2호선 · 3호선/부산1호선/대구1호선' && g.u.length === g.pk.length, 's208: 수도권 교대는 호선만 합치고 부산·대구 교대는 따로 ' + gl.join('/'));
+    ok(E.homeStnFind('강남').u.every(x => !/부산|대구|광주|대전/.test(x.l)), 's208: 지방 이름이 없는 역은 예전 그대로'); }
   // 화면: data.u 가 없으면 엔진이 거른다 + info.pk + info.sx
   let s = E.homeScreen({ cap: 7 }, { start: '강남', active: 'start' }, { b: B(1), p: [] });
   ok(s.info.sx === 1 && s.info.pk && s.info.pk.u.length === E.homeStnFind('강남').u.length, 'info.sx · info.pk.u');

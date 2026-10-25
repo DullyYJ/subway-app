@@ -32,6 +32,11 @@ t('퇴근 장소를 따로 정했으면 그대로, 한쪽만 채우면 나머지
 });
 t('역 이름 찾기: 같은 이름 → 앞이 같은 → 들어 있는 순서, 공백·"역" 무시', () => {
   assert.strictEqual(M.cbFindStn('강남역').name, '강남');
+  // s208: 같은 이름 역이 수도권·부산에 모두 있으면(중동) 저장된 좌표에 가까운 쪽, 좌표가 없으면 예전처럼 처음 만난 역
+  assert.strictEqual(M.cbFindStn('중동').line, '1호선');
+  assert.strictEqual(M.cbFindStn('중동', 35.1667, 129.1686).line, '부산2호선');
+  assert.strictEqual(M.cbFindStn('중동', 37.4866, 126.7644).line, '1호선');
+  assert.strictEqual(M.cbResolve({ nm: '중동', lat: 35.1667, lng: 129.1686, bus: false }).line, '부산2호선');
   assert.strictEqual(M.cbFindStn('  강 남 ').name, '강남');
   assert.ok(M.cbFindStn('인하').name.indexOf('인하') === 0);
   assert.strictEqual(M.cbFindStn('없는역이름zzz'), null);

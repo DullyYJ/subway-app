@@ -407,6 +407,8 @@ const FoodRowsOk = j => !!(j && j.response && j.response.body && Array.isArray(j
       globalThis.fetch = real;
     }
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
+  { const rs = E.foodResolve({ stn: '중동', dl: [35.1667, 129.1686], gps: null }), r0 = E.foodResolve({ stn: '중동', dl: null, gps: null }), r1 = E.foodResolve({ stn: '중동', dl: [37.4866, 126.7644], gps: null });
+    ok(rs.ctr[0] < 36 && r0.ctr[0] > 37 && r1.ctr[0] > 37, 's208: 같은 이름 역(중동)은 도착지 좌표에 가까운 쪽 · 좌표가 없으면 처음 만난 역 ' + JSON.stringify([rs.ctr, r0.ctr])); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`food_engine: ${pass} pass, ${fail} fail`);
   process.exit(fail ? 1 : 0);
