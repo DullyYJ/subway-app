@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s190";
+var ENGINE_VERSION = "route-v2-2026-10-25s191";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3372,8 +3372,10 @@ function rateLimited(request) {
 }
 __name(rateLimited, "rateLimited");
 __name2(rateLimited, "rateLimited");
-var LIVE_TIMEOUT_MS = 1500;
-var LIVE_BUDGET_MS = 3500;
+// 2026-10-25 s191: measured on 10 cities, live arrival phase took 0.6-3.2s but applied only 0-1 stops.
+// Budget cut 3.5->2.0s total and 1.5->1.0s per call to keep cold routes fast (timeout falls back to timetable).
+var LIVE_TIMEOUT_MS = 1000;
+var LIVE_BUDGET_MS = 2000;
 function budgetLeft(dl) {
   return dl ? dl - Date.now() : LIVE_TIMEOUT_MS;
 }
