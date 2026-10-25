@@ -4,7 +4,10 @@ const W = fs.readFileSync(path.join(__dirname, '..', 'engine/route-v2-worker.asc
 const a = W.indexOf('async function bandedRest'), b = W.indexOf('__name(bandedRest');
 assert(a > 0 && b > a, 'bandedRest 소스를 찾지 못함');
 const MAX_STOPS = +W.match(/var MAX_STOPS = ([0-9e]+);/)[1], BD_K = +W.match(/var BD_K = (\d+);/)[1];
-assert.strictEqual(/var BD_DEFAULT = false;/.test(W), true, '기본값은 꺼짐이어야 함');
+assert.strictEqual(/var BD_DEFAULT = "off";/.test(W), true, '기본값은 꺼짐이어야 함');
+// 자동 모드(bd=auto)는 3만에 닿았을 때만 띠 조회를 한다 → 다른 지역(상한 미달)은 기존 한 번 조회 그대로
+assert.ok(/_bdMode === "auto" && !_rr\.e && !_nr\.e && rows\.length >= MAX_STOPS/.test(W), '자동 모드 조건');
+assert.ok(/const _restP = _bdMode === "force" \? bandedRest/.test(W), '강제 모드만 나머지 조회를 대체');
 const bandedRest = new Function('MAX_STOPS', 'BD_K', 'return (' + W.slice(a, b).replace(/^async function bandedRest/, 'async function') + ')')(MAX_STOPS, BD_K);
 
 function fakeDb(rows) {
