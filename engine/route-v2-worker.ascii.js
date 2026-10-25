@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s204";
+var ENGINE_VERSION = "route-v2-2026-10-25s206";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13533,6 +13533,93 @@ async function handleScreenFood(request) {
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
 }
+
+// \u2500\u2500 \ub9db\uc9d1 \uacf5\uacf5\ub370\uc774\ud130 \uacf5\uc720 \uc800\uc7a5\uc18c \u2014 GET /food-pub?lat=&lng= (s206) \u2500\u2500
+// \ub3c4\ucc29\uc9c0(\ub610\ub294 \ub0b4 \uc704\uce58) \uadfc\ucc98 \uc74c\uc2dd\uc810(\uc18c\uc0c1\uacf5\uc778 \uc0c1\uac00 \uc815\ubcf4)\uc744 \uce78(\uc57d 200m)\uc73c\ub85c \ubb36\uc5b4 ROWS_KV \uc5d0 \uacc4\uc18d \uc800\uc7a5\ud574 \ub450\uace0, \ub2e4\uc74c\uc5d0 \uac19\uc740 \uce78\uc744 \ub204\ub974\ub294 \ub2e4\ub978 \uc0ac\ub78c\uc5d0\uac8c \uadf8\ub300\ub85c \ub098\ub220 \uc900\ub2e4.
+// \uc800\uc7a5\ud55c \uc9c0 30\uc77c\uc774 \uc9c0\ub09c \uce78\uc740 \uc694\uccad\uc774 \uc62c \ub54c \ub2e4\uc2dc \ubc1b\uc544 \ub36e\uc5b4\uc4f4\ub2e4(\uc694\uccad\uc774 \uc5c6\uc73c\uba74 \uc544\ubb34\uac83\ub3c4 \uc548 \ud55c\ub2e4). \uc0c8\ub85c \ubc1b\ub2e4\uac00 \uc2e4\ud328\ud558\uba74 \ubb35\uc740 \uac83\uc774\ub77c\ub3c4 \uc900\ub2e4. \ub458 \ub2e4 \uc5c6\uc73c\uba74 502 \u2014 \uc571\uc774 \uc608\uc804 \ubc29\uc2dd(\uc9c1\uc811 3\ucabd)\uc73c\ub85c \ubc1b\ub294\ub2e4.
+// \uc751\ub2f5\uc740 \uacf5\uacf5\ub370\uc774\ud130 \uc6d0\ub798 \ubaa8\uc591({response:{body:{items:[\u2026]}}}) \uadf8\ub300\ub85c\ub77c \uc571\uc758 FoodCore.rows \uac00 \uadf8\ub300\ub85c \uc77d\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4(\uce78 \ubc88\ud638\ub9cc \uc800\uc7a5).
+var FOODPUB_CELL = 0.002, FOODPUB_FRESH_MS = 30 * 86400000, FOODPUB_KEEP_S = 400 * 86400, FOODPUB_PAGE = 200, FOODPUB_PAGES = 3, FOODPUB_RADIUS = 1500;
+var FOODPUB_URL = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius";
+var FOODPUB_NEWS = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
+var FOODPUB_INFLIGHT = new Map();
+function foodPubParse(txt) {
+  var j;
+  try { j = JSON.parse(txt); } catch (e) { return { ok: false, why: "not json: " + String(txt).slice(0, 60) }; }
+  var cm = j && j.OpenAPI_ServiceResponse && j.OpenAPI_ServiceResponse.cmmMsgHeader;
+  if (cm) return { ok: false, why: (cm.errMsg || "") + " / " + (cm.returnAuthMsg || "") };
+  var body = j && (j.response && j.response.body || j.body);
+  if (!body) return { ok: false, why: "no body" };
+  var it = body.items, list = [];
+  if (Array.isArray(it)) list = it;
+  else if (it && Array.isArray(it.item)) list = it.item;
+  else if (it && it.item) list = [it.item];
+  else if (it && typeof it === "object") list = [it];
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i] || {};
+    out.push({ bizesNm: r.bizesNm || "", indsMclsNm: r.indsMclsNm || "", indsSclsNm: r.indsSclsNm || "", rdnmAdr: r.rdnmAdr || "", lnoAdr: r.lnoAdr || "", lat: r.lat, lon: r.lon });
+  }
+  return { ok: true, items: out };
+}
+async function foodPubPage(env, la, lo, page) {
+  var qs = "radius=" + FOODPUB_RADIUS + "&cx=" + lo + "&cy=" + la + "&indsLclsCd=I2&type=json&numOfRows=" + FOODPUB_PAGE + "&pageNo=" + page;
+  try {
+    var r = await tagoFetch(env, qs, FOODPUB_URL, foodPubParse, 2500);
+    return r.items;
+  } catch (e1) {
+    var c = new AbortController(), t = setTimeout(function () { c.abort(); }, 9000);
+    try {
+      var res = await fetch(FOODPUB_NEWS + "/tago?url=" + encodeURIComponent(FOODPUB_URL + "?serviceKey=&" + qs), { signal: c.signal });
+      var p = foodPubParse(await res.text());
+      if (p.ok) return p.items;
+    } catch (e2) { /* \uc544\ub798\uc5d0\uc11c \ub358\uc9c4\ub2e4 */ } finally { clearTimeout(t); }
+    throw new Error("food-pub upstream");
+  }
+}
+async function foodPubFetch(env, la, lo) {
+  var all = await foodPubPage(env, la, lo, 1);
+  if (all.length >= FOODPUB_PAGE) {
+    var rest = [];
+    for (var p = 2; p <= FOODPUB_PAGES; p++) rest.push(foodPubPage(env, la, lo, p).catch(function () { return []; }));
+    var got = await Promise.all(rest);
+    for (var g = 0; g < got.length; g++) all = all.concat(got[g]);
+  }
+  return all;
+}
+async function handleFoodPub(request, env, ctx) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "public, max-age=600" };
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
+  if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "get-only" }), { status: 405, headers: H });
+  var u = new URL(request.url), la = parseFloat(u.searchParams.get("lat")), lo = parseFloat(u.searchParams.get("lng"));
+  if (!(la > 32.5 && la < 39.5 && lo > 123.5 && lo < 132.5)) return new Response(JSON.stringify({ ok: false, error: "bad-latlng" }), { status: 400, headers: H });
+  if (!env || !env.ROWS_KV) return new Response(JSON.stringify({ ok: false, error: "no-kv" }), { status: 503, headers: { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } });
+  var li = Math.round(la / FOODPUB_CELL), gi = Math.round(lo / FOODPUB_CELL), key = "fpub:v1:" + li + ":" + gi;
+  var cla = Number((li * FOODPUB_CELL).toFixed(6)), clo = Number((gi * FOODPUB_CELL).toFixed(6));
+  var rec = null;
+  try { rec = await env.ROWS_KV.get(key, "json"); } catch (e) { rec = null; }
+  var now = Date.now(), fresh = rec && Array.isArray(rec.items) && typeof rec.at === "number" && now - rec.at < FOODPUB_FRESH_MS;
+  var src = "hit";
+  if (!fresh) {
+    var job = FOODPUB_INFLIGHT.get(key);
+    if (!job) {
+      job = foodPubFetch(env, cla, clo).then(async function (items) {
+        var nr = { at: Date.now(), n: items.length, items: items };
+        try { await env.ROWS_KV.put(key, JSON.stringify(nr), { expirationTtl: FOODPUB_KEEP_S }); } catch (ew) { /* \uc800\uc7a5 \uc2e4\ud328\ud574\ub3c4 \uc774\ubc88 \uc751\ub2f5\uc740 \uc900\ub2e4 */ }
+        return nr;
+      });
+      FOODPUB_INFLIGHT.set(key, job);
+      var clear = function () { FOODPUB_INFLIGHT.delete(key); };
+      job.then(clear, clear);
+    }
+    try { rec = await job; src = "fresh"; }
+    catch (ef) {
+      if (rec && Array.isArray(rec.items)) src = "stale";
+      else return new Response(JSON.stringify({ ok: false, error: "upstream" }), { status: 502, headers: { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } });
+    }
+  }
+  var hh = src === "stale" ? { "Content-Type": H["Content-Type"], "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" } : H;
+  return new Response(JSON.stringify({ response: { body: { items: rec.items } }, ok: true, src: src, at: rec.at, cell: [cla, clo], ver: ENGINE_VERSION }), { headers: hh });
+}
 // ===== FOOD ENGINE END =====
 
 // ===== NEWS ENGINE BEGIN =====
@@ -22539,6 +22626,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/shop") return handleScreenShop(request);
   if (url.pathname === "/screen/settings") return handleScreenSettings(request);
   if (url.pathname === "/screen/food") return handleScreenFood(request);
+  if (url.pathname === "/food-pub") return handleFoodPub(request, env, ctx);
   if (url.pathname === "/screen/news") return handleScreenNews(request);
   if (url.pathname === "/screen/board") return handleScreenBoard(request);
   if (url.pathname === "/screen/chat") return handleScreenChat(request);
