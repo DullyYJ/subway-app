@@ -161,7 +161,7 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         hostBody = new Host(1);
         body.setListener(hostBody);
-        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { return "community".equals(ShellCore.currentTab(store)); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
@@ -861,12 +861,12 @@ public class ShellActivity extends Activity {
             try {
                 String bk = ShellCore.mapKey(ShellCore.S_MAPB, "bus", store, MapCore.cellOf(ll[0], ll[1]));          // 그 위치 칸의 화면 열쇠로 둔다(지금 보는 칸이 아니어도)
                 pfMap.setBusLoc(ll[0], ll[1]);
-                for (int round = 0; round < 4; round++) {
+                for (int round = 0; round < MapCore.BUS_ROUNDS; round++) {
                     NetPost.Res br = NetPost.post(ShellCore.BASE + "/screen/map", pfMap.bodyRequest(ShellCore.CAP, theme), 8000);
                     if (br.status != 200 || br.body == null) break;
                     pfMap.onScreen(br.body);
                     if (pfMap.busNeed.isEmpty()) { prefetchPut(bk, br.body, false); done = true; break; }
-                    if (round == 3) break;
+                    if (round == MapCore.BUS_ROUNDS - 1) break;
                     final List<String[]> need = new ArrayList<String[]>(pfMap.busNeed);
                     final String[] got = new String[need.size()];
                     Thread[] ts = new Thread[need.size()];
@@ -1819,7 +1819,7 @@ public class ShellActivity extends Activity {
             new Thread(new Runnable() { @Override public void run() {
                 final List<String[]> arrNeed = new ArrayList<String[]>(); boolean bad = false;
                 try {
-                    for (int round = 0; round < 4; round++) {
+                    for (int round = 0; round < MapCore.BUS_ROUNDS; round++) {
                         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme), 12000);
                         if (r.status != 200 || r.body == null || r.body.length() == 0) { bad = true; break; }
                         w.onScreen(r.body);
@@ -2104,12 +2104,12 @@ public class ShellActivity extends Activity {
         if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
         if (txt.length() > 0) map.onScreen(txt);
         if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
-        final boolean shownNow = !(keep && txt.length() > 0 && !map.busNeed.isEmpty());
+        final boolean shownNow = round >= MapCore.BUS_ROUNDS || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다)
         if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
         syncMapView();
         if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
         if (deferNeed) return;
-        if (txt.length() > 0 && !map.busNeed.isEmpty() && round < 3) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
+        if (txt.length() > 0 && !map.busNeed.isEmpty() && round < MapCore.BUS_ROUNDS) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
         else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { brPrefetch(); saveBusSkeleton(); }
             if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
                 busRetryN++; final long wait = 1500L * busRetryN;
@@ -2290,7 +2290,7 @@ public class ShellActivity extends Activity {
                 String fin = ""; String sig = ""; final List<String[]> arrNeed = new ArrayList<String[]>(); final java.util.Map<String, String> res = new java.util.LinkedHashMap<String, String>();
                 try {
                     MapCore w = new MapCore(store); w.modeOverride = "bus"; w.svb = 2500; w.setBusLoc(la, lo);
-                    for (int round = 0; round < 4 && fin.length() == 0; round++) {
+                    for (int round = 0; round < MapCore.BUS_ROUNDS && fin.length() == 0; round++) {
                         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", w.bodyRequest(ShellCore.CAP, theme), 12000);
                         if (r.status != 200 || r.body == null || r.body.length() == 0) break;
                         w.onScreen(r.body);
@@ -3525,6 +3525,7 @@ public class ShellActivity extends Activity {
     private android.app.Dialog dlgD;
     private ScreenView dlgV;
     private Runnable dlgOk, dlgNo, dlgAuto;
+    private int dlgPick = -1;                                  // 탈 버스 고르기 카드에서 누른 버스 번호(dl.bp.N) — 없으면 -1
     private boolean dlgFetch(String kind) {
         if (dlgJson.containsKey(kind)) return false;
         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":" + ShellCore.q(kind) + "}}", 8000);
@@ -3602,6 +3603,10 @@ public class ShellActivity extends Activity {
     /** 카드의 단추: dl.ok → 확인 쪽 · 그 밖(dl.no · dl.close · 바깥 · 뒤로)은 취소 쪽. 한 번만 처리한다. */
     private void dlgAct(String v, android.app.Dialog d) {
         if (d != dlgD) return;
+        if (v != null && v.startsWith("dl.bp.")) {                                 // 탈 버스 고르기: N 번째 버스 → 확인 쪽으로 처리하고 번호는 따로 남긴다
+            try { dlgPick = Integer.parseInt(v.substring(6)); } catch (NumberFormatException e) { dlgPick = -1; }
+            v = "dl.ok";
+        }
         Runnable ok = "dl.ok".equals(v) ? dlgOk : null, no = "dl.ok".equals(v) ? null : dlgNo;
         if (dlgAuto != null) { main.removeCallbacks(dlgAuto); dlgAuto = null; }
         dlgD = null; dlgV = null; dlgOk = null; dlgNo = null;
@@ -3813,42 +3818,94 @@ public class ShellActivity extends Activity {
             return;
         }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) requestPermissions(new String[] { android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE + 1);
-        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)), RideCore.offKinds(store), "1".equals(store.get(ShellCore.K_PFL, "0")));
+        final String facts = home.resultFacts(homeEnv(), ShellCore.theme(store));
+        final List<String> off = RideCore.offKinds(store);
+        final boolean pfl = "1".equals(store.get(ShellCore.K_PFL, "0"));
+        final String body = RideCore.startBody(ShellCore.CAP, facts, off, pfl);
         final int rid = home.routeId;
         toast("탑승 안내를 준비하고 있어요");
         new Thread(new Runnable() {
             @Override public void run() {
+                // 첫 구간이 버스면 정류장에서 10분 안에 오는 버스를 골라 탈 수 있게(엔진 /ride/buspick — 고를 것이 없으면 ask:false) — 시작 요청과 동시에 보내 기다림을 늘리지 않는다
+                final String[] pk = new String[1];
+                Thread tp = new Thread(new Runnable() { @Override public void run() {
+                    NetPost.Res b = NetPost.post(ShellCore.BASE + "/ride/buspick", body, 6000);
+                    if (b.status == 200 && b.body != null && b.body.length() > 2) pk[0] = b.body;
+                } }, "shell-buspick");
+                tp.start();
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride/start", body, 12000);
-                final String txt = r.body == null ? "" : r.body;
+                try { tp.join(5000); } catch (InterruptedException e) { /* 무시 */ }
+                final String txt = r.body == null ? "" : r.body, pick = pk[0] == null ? "" : pk[0];
+                final boolean startOk = r.status == 200 && txt.length() > 0;
                 main.post(new Runnable() { @Override public void run() {
                     if (rid != home.routeId || !home.hasRoute()) return;                  // 그 사이 다른 경로를 찾았다
-                    String err = txt.length() == 0 ? "탑승 안내를 시작하지 못했어요" : ride.onStart(txt);
-                    if (err.length() > 0) { toast(err); return; }
-                    RideService.save(ShellActivity.this, ride);
-                    store.put(ShellCore.K_RIDESNAP, home.rideSnapshot());
-                    try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
-                    home.rideRouteId = rid; rideSeq = seqRoute;
-                    rideGraceUntil = System.currentTimeMillis() + 8000L;
-                    home.setRide(ride.rideJson(), ride.lvJson());
-                    final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
-                    toast(HomeCore.optName(home.resTab) + " 경로로 확정했어요");                    // 웹 confirmSelectedRoute 토스트
-                    ovlHintOnce();
-                    rsOpenSoon();
-                    if (inDetail) {                                                              // 웹: 단추가 초록 '확정됨' 으로 바뀌고 0.6초 뒤 시트가 닫힌다
-                        loadDetail();
-                        main.postDelayed(new Runnable() { @Override public void run() { if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); } }, 600L);
-                    } else closeSheet();
-                    reloadHome();
-                    final List<String> secs = new ArrayList<String>(home.resSec);
-                    new Thread(new Runnable() {
-                        @Override public void run() {
-                            RulesCore.applyMyLines(store, rulesCall(RulesCore.mylinesBody(store.get(ChatCore.K_MY, "[]"), secs, System.currentTimeMillis())));
-                            toastMain(rulesAward("ride", true));
-                        }
-                    }, "shell-rules-ride").start();
+                    if (startOk && pick.length() > 0) { busPickAsk(pick, facts, off, pfl, txt, rid); return; }
+                    rideCommit(txt, rid);
                 } });
             }
         }, "shell-ride").start();
+    }
+    /** 첫 구간이 버스: 엔진이 만든 '탈 버스 고르기' 카드를 띄운다. 고른 번호의 도착 시각(ms)은 카드와 함께 온 info.items 에서 읽어 시작 엔진에 그대로 돌려준다(앱은 계산하지 않는다). */
+    @SuppressWarnings("unchecked")
+    private void busPickAsk(final String pickJson, final String facts, final List<String> off, final boolean pfl, final String txt0, final int rid) {
+        final List<Long> ms = new ArrayList<Long>();
+        boolean ask = false;
+        try {
+            Object o = ScreenCore.parse(pickJson);
+            if (o instanceof Map) {
+                Map<String, Object> m = (Map<String, Object>) o;
+                ask = Boolean.TRUE.equals(m.get("ask"));
+                Object inf = m.get("info");
+                if (inf instanceof Map && ((Map<String, Object>) inf).get("items") instanceof List)
+                    for (Object x : (List<Object>) ((Map<String, Object>) inf).get("items")) if (x instanceof Map && ((Map<String, Object>) x).get("ms") instanceof Number) ms.add(((Number) ((Map<String, Object>) x).get("ms")).longValue());
+            }
+        } catch (Throwable ignored) { ask = false; }
+        if (!ask || ms.isEmpty()) { rideCommit(txt0, rid); return; }
+        dlgPick = -1;
+        boolean shown = dlgOpen(pickJson, new Runnable() { @Override public void run() {
+            int ix = dlgPick; dlgPick = -1;
+            if (ix >= 0 && ix < ms.size()) rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, ms.get(ix)), rid);       // 고른 버스로 다시 시작(엔진이 그 차를 따라간다)
+            else rideCommit(txt0, rid);                                                      // 고르지 않고 시작 = 경로 시각대로
+        } }, new Runnable() { @Override public void run() { dlgPick = -1; toast("탑승 안내를 시작하지 않았어요"); } }, 0L);
+        if (!shown) rideCommit(txt0, rid);                                                  // 카드를 못 띄우면 예전처럼 바로 시작
+    }
+    private void rideStartPicked(final String body, final int rid) {
+        toast("고른 버스로 탑승 안내를 준비하고 있어요");
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride/start", body, 12000);
+                final String txt = r.body == null ? "" : r.body;
+                main.post(new Runnable() { @Override public void run() { rideCommit(txt, rid); } });
+            }
+        }, "shell-ride-pick").start();
+    }
+    /** 엔진이 만든 탑승 state(/ride/start 응답)를 받아 서비스에 넘기고 화면을 맞춘다. */
+    private void rideCommit(final String txt, final int rid) {
+            if (rid != home.routeId || !home.hasRoute() || home.riding()) return;                  // 그 사이 다른 경로를 찾았다
+            String err = txt.length() == 0 ? "탑승 안내를 시작하지 못했어요" : ride.onStart(txt);
+            if (err.length() > 0) { toast(err); return; }
+            RideService.save(ShellActivity.this, ride);
+            store.put(ShellCore.K_RIDESNAP, home.rideSnapshot());
+            try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
+            home.rideRouteId = rid; rideSeq = seqRoute;
+            rideGraceUntil = System.currentTimeMillis() + 8000L;
+            home.setRide(ride.rideJson(), ride.lvJson());
+            final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
+            toast(HomeCore.optName(home.resTab) + " 경로로 확정했어요");                    // 웹 confirmSelectedRoute 토스트
+            ovlHintOnce();
+            rsOpenSoon();
+            if (inDetail) {                                                              // 웹: 단추가 초록 '확정됨' 으로 바뀌고 0.6초 뒤 시트가 닫힌다
+                loadDetail();
+                main.postDelayed(new Runnable() { @Override public void run() { if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); } }, 600L);
+            } else closeSheet();
+            reloadHome();
+            final List<String> secs = new ArrayList<String>(home.resSec);
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    RulesCore.applyMyLines(store, rulesCall(RulesCore.mylinesBody(store.get(ChatCore.K_MY, "[]"), secs, System.currentTimeMillis())));
+                    toastMain(rulesAward("ride", true));
+                }
+            }, "shell-rules-ride").start();
     }
     private boolean ovlAskedRun;
     /** 웹 _pipArmNow: 경로를 확정했는데 '다른 앱 위에 표시' 허용이 없으면 안내 창을 이번 실행에 한 번 띄운다(다른 앱을 보면서도 내 위치·탑승 줄을 보려면 필요). 끈 적이 있으면 묻지 않는다. */

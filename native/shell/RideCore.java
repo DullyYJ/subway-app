@@ -105,7 +105,10 @@ public final class RideCore {
     public static String startBody(int cap, String facts, java.util.List<String> allowedOff) { return startBody(cap, facts, allowedOff, false); }
 
     /** pfLive: 설정에서 '새 위치 판단기 보정'(실험)을 켰으면 true — 엔진이 위치 판단기(PosFusion)를 안내에 함께 쓴다. */
-    public static String startBody(int cap, String facts, java.util.List<String> allowedOff, boolean pfLive) {
+    public static String startBody(int cap, String facts, java.util.List<String> allowedOff, boolean pfLive) { return startBody(cap, facts, allowedOff, pfLive, 0L); }
+
+    /** pickMs: 첫 구간이 버스일 때 사용자가 팝업에서 고른 버스의 도착 시각(ms, 0 이면 안 골랐다) — 엔진이 그 차를 따라가게 r.pick.ms 로 실어 보낸다. */
+    public static String startBody(int cap, String facts, java.util.List<String> allowedOff, boolean pfLive, long pickMs) {
         String f = facts == null || facts.length() < 2 ? "null" : facts;
         if (!"null".equals(f) && allowedOff != null && !allowedOff.isEmpty() && f.endsWith("}")) {
             StringBuilder a = new StringBuilder(",\"allowed\":{");
@@ -113,6 +116,7 @@ public final class RideCore {
             f = f.substring(0, f.length() - 1) + a.append("}}");
         }
         if (!"null".equals(f) && pfLive && f.endsWith("}")) f = f.substring(0, f.length() - 1) + ",\"pf\":true}";
+        if (!"null".equals(f) && pickMs > 0L && f.endsWith("}")) f = f.substring(0, f.length() - 1) + ",\"pick\":{\"ms\":" + pickMs + "}}";
         return "{\"cap\":" + cap + ",\"r\":" + f + "}";
     }
 
