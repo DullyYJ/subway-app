@@ -375,6 +375,33 @@ function resSlotNode(row) {
   return { btn: btn, an: an };
 }
 
+// ★ 2026-10-25 (웹 대조): 경로가 0건일 때 웹은 이유를 알려 줬다(_svcShowNoRoute 운행 종료 안내 · '이 출발지·도착지 사이의 경로를 찾지 못했어요').
+//   네이티브는 '경로 정보가 없어요' 한 줄이었다. 이유는 엔진 응답이 이미 갖고 있다 — liveStat.subOff/svcOff(+svcOffList[].state · subFirstTrain) · warnings.
+//   웹 _svcHeadSuffix 와 같은 규칙: 지하철이 끝났으면 '운행이 끝났어요', 버스만이고 전부 '아직 시작 전'(before)이면 '아직 운행 시작 전이에요'.
+function resNoRouteNodes(data) {
+  var ls = (data && data.liveStat && typeof data.liveStat === 'object') ? data.liveStat : {};
+  var warns = resArr(data && data.warnings).map(function (x) { return String(x); });
+  var subOff = resNum(ls.subOff, 0) > 0, busOff = resNum(ls.svcOff, 0) > 0;
+  var title = '경로 정보가 없어요', lines = [];
+  if (subOff || busOff) {
+    var modes = [];
+    if (subOff) modes.push('지하철');
+    if (busOff) modes.push('버스');
+    var sts = resArr(ls.svcOffList).map(function (x) { return x && typeof x === 'object' ? x.state : null; }).filter(function (x) { return x; });
+    var before = !subOff && sts.length > 0 && sts.every(function (x) { return x === 'before'; });
+    title = modes.join('·') + ' 지금은 ' + (before ? '아직 운행 시작 전이에요' : '운행이 끝났어요');
+    var fs = /^[0-9]{1,2}:[0-9]{2}$/.test(String(ls.subFirstTrain || '')) ? String(ls.subFirstTrain) : '';
+    if (subOff && fs) lines.push('지하철 첫차 ' + fs + ' 이후에 다시 찾아 보세요.');
+    if (busOff) lines.push('버스는 노선마다 첫차가 달라요. 노선도 > 버스 탭에서 정류장별 도착정보를 확인해 주세요.');
+  } else if (warns.some(function (w) { return /버스 노선이 없습니다|탈 것이 없습니다/.test(w); })) {
+    title = '이 지역은 아직 길 안내 정보가 없어요';
+    lines.push('출발·도착 근처를 지나는 버스·지하철 노선 자료가 없어요. 가까운 역이나 큰 정류장으로 바꿔 보세요.');
+  } else lines.push('이 출발지·도착지 사이의 경로를 찾지 못했어요. 출발·도착을 확인하거나 잠시 뒤 다시 시도해 주세요.');
+  var out = [{ t: 'text', s: title, size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }];
+  lines.forEach(function (l) { out.push({ t: 'text', s: l, size: 12, color: 'sub', lh: 1.5, pad: [0, 4, 0, 0] }); });
+  return out;
+}
+
 function resultScreen(opt, r) {
   var cap = Math.floor(resNum(opt && opt.cap, 0));
   if (cap < 12) return { ok: false, error: 'cap' };
@@ -397,7 +424,7 @@ function resultScreen(opt, r) {
   var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
   if (anyRoute && !h) return { ok: false, error: 'head' };
   if (h) nodes = nodes.concat(h.body);
-  else nodes.push({ t: 'text', s: '경로 정보가 없어요', size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });   // 응답에 쓸 수 있는 경로가 하나도 없을 때
+  else nodes = nodes.concat(resNoRouteNodes(data));   // 응답에 쓸 수 있는 경로가 하나도 없을 때 — 왜 없는지(운행 종료 · 노선 데이터 없음 · 그 밖)를 말해 준다
   if (anyRoute) { var t = resPart(cap, 't', { m: 0, tab: tab, ld: has.longdist ? 1 : 0 }); if (t) nodes = nodes.concat(t.body); }
   if (route) {
     total = Math.round(resNum(route.summary.duration, 0) / 60);
@@ -432,4 +459,4 @@ function resultScreen(opt, r) {
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop };
+if (typeof module !== 'undefined' && module.exports) module.exports = { resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop };

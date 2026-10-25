@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-25s189";
+var ENGINE_VERSION = "route-v2-2026-10-25s190";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19428,6 +19428,33 @@ function resSlotNode(row) {
   return { btn: btn, an: an };
 }
 
+// \u2605 2026-10-25 (\uc6f9 \ub300\uc870): \uacbd\ub85c\uac00 0\uac74\uc77c \ub54c \uc6f9\uc740 \uc774\uc720\ub97c \uc54c\ub824 \uc92c\ub2e4(_svcShowNoRoute \uc6b4\ud589 \uc885\ub8cc \uc548\ub0b4 \u00b7 '\uc774 \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \uc0ac\uc774\uc758 \uacbd\ub85c\ub97c \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694').
+//   \ub124\uc774\ud2f0\ube0c\ub294 '\uacbd\ub85c \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694' \ud55c \uc904\uc774\uc5c8\ub2e4. \uc774\uc720\ub294 \uc5d4\uc9c4 \uc751\ub2f5\uc774 \uc774\ubbf8 \uac16\uace0 \uc788\ub2e4 \u2014 liveStat.subOff/svcOff(+svcOffList[].state \u00b7 subFirstTrain) \u00b7 warnings.
+//   \uc6f9 _svcHeadSuffix \uc640 \uac19\uc740 \uaddc\uce59: \uc9c0\ud558\ucca0\uc774 \ub05d\ub0ac\uc73c\uba74 '\uc6b4\ud589\uc774 \ub05d\ub0ac\uc5b4\uc694', \ubc84\uc2a4\ub9cc\uc774\uace0 \uc804\ubd80 '\uc544\uc9c1 \uc2dc\uc791 \uc804'(before)\uc774\uba74 '\uc544\uc9c1 \uc6b4\ud589 \uc2dc\uc791 \uc804\uc774\uc5d0\uc694'.
+function resNoRouteNodes(data) {
+  var ls = (data && data.liveStat && typeof data.liveStat === 'object') ? data.liveStat : {};
+  var warns = resArr(data && data.warnings).map(function (x) { return String(x); });
+  var subOff = resNum(ls.subOff, 0) > 0, busOff = resNum(ls.svcOff, 0) > 0;
+  var title = '\uacbd\ub85c \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694', lines = [];
+  if (subOff || busOff) {
+    var modes = [];
+    if (subOff) modes.push('\uc9c0\ud558\ucca0');
+    if (busOff) modes.push('\ubc84\uc2a4');
+    var sts = resArr(ls.svcOffList).map(function (x) { return x && typeof x === 'object' ? x.state : null; }).filter(function (x) { return x; });
+    var before = !subOff && sts.length > 0 && sts.every(function (x) { return x === 'before'; });
+    title = modes.join('\u00b7') + ' \uc9c0\uae08\uc740 ' + (before ? '\uc544\uc9c1 \uc6b4\ud589 \uc2dc\uc791 \uc804\uc774\uc5d0\uc694' : '\uc6b4\ud589\uc774 \ub05d\ub0ac\uc5b4\uc694');
+    var fs = /^[0-9]{1,2}:[0-9]{2}$/.test(String(ls.subFirstTrain || '')) ? String(ls.subFirstTrain) : '';
+    if (subOff && fs) lines.push('\uc9c0\ud558\ucca0 \uccab\ucc28 ' + fs + ' \uc774\ud6c4\uc5d0 \ub2e4\uc2dc \ucc3e\uc544 \ubcf4\uc138\uc694.');
+    if (busOff) lines.push('\ubc84\uc2a4\ub294 \ub178\uc120\ub9c8\ub2e4 \uccab\ucc28\uac00 \ub2ec\ub77c\uc694. \ub178\uc120\ub3c4 > \ubc84\uc2a4 \ud0ed\uc5d0\uc11c \uc815\ub958\uc7a5\ubcc4 \ub3c4\ucc29\uc815\ubcf4\ub97c \ud655\uc778\ud574 \uc8fc\uc138\uc694.');
+  } else if (warns.some(function (w) { return /\ubc84\uc2a4 \ub178\uc120\uc774 \uc5c6\uc2b5\ub2c8\ub2e4|\ud0c8 \uac83\uc774 \uc5c6\uc2b5\ub2c8\ub2e4/.test(w); })) {
+    title = '\uc774 \uc9c0\uc5ed\uc740 \uc544\uc9c1 \uae38 \uc548\ub0b4 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694';
+    lines.push('\ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uadfc\ucc98\ub97c \uc9c0\ub098\ub294 \ubc84\uc2a4\u00b7\uc9c0\ud558\ucca0 \ub178\uc120 \uc790\ub8cc\uac00 \uc5c6\uc5b4\uc694. \uac00\uae4c\uc6b4 \uc5ed\uc774\ub098 \ud070 \uc815\ub958\uc7a5\uc73c\ub85c \ubc14\uafd4 \ubcf4\uc138\uc694.');
+  } else lines.push('\uc774 \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \uc0ac\uc774\uc758 \uacbd\ub85c\ub97c \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694. \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \ud655\uc778\ud558\uac70\ub098 \uc7a0\uc2dc \ub4a4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574 \uc8fc\uc138\uc694.');
+  var out = [{ t: 'text', s: title, size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }];
+  lines.forEach(function (l) { out.push({ t: 'text', s: l, size: 12, color: 'sub', lh: 1.5, pad: [0, 4, 0, 0] }); });
+  return out;
+}
+
 function resultScreen(opt, r) {
   var cap = Math.floor(resNum(opt && opt.cap, 0));
   if (cap < 12) return { ok: false, error: 'cap' };
@@ -19450,7 +19477,7 @@ function resultScreen(opt, r) {
   var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
   if (anyRoute && !h) return { ok: false, error: 'head' };
   if (h) nodes = nodes.concat(h.body);
-  else nodes.push({ t: 'text', s: '\uacbd\ub85c \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694', size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });   // \uc751\ub2f5\uc5d0 \uc4f8 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c
+  else nodes = nodes.concat(resNoRouteNodes(data));   // \uc751\ub2f5\uc5d0 \uc4f8 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c \u2014 \uc65c \uc5c6\ub294\uc9c0(\uc6b4\ud589 \uc885\ub8cc \u00b7 \ub178\uc120 \ub370\uc774\ud130 \uc5c6\uc74c \u00b7 \uadf8 \ubc16)\ub97c \ub9d0\ud574 \uc900\ub2e4
   if (anyRoute) { var t = resPart(cap, 't', { m: 0, tab: tab, ld: has.longdist ? 1 : 0 }); if (t) nodes = nodes.concat(t.body); }
   if (route) {
     total = Math.round(resNum(route.summary.duration, 0) / 60);
