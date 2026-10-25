@@ -230,7 +230,7 @@ public final class HomeCore {
     /** 결과 화면의 눌림(rh.*). */
     public int actResult(String v) {
         if (v == null || !v.startsWith("rh.")) return R_NONE;
-        if ("rh.close".equals(v)) { clearRoute(); return R_RENDER; }
+        if ("rh.close".equals(v)) { if (riding()) return R_LOCK; clearRoute(); return R_RENDER; }       // 확정한 경로는 닫아서 풀 수 없다 — [안내 종료]나 도착으로만
         if ("rh.fav".equals(v)) return R_FAV;
         if ("rh.stop".equals(v)) return riding() ? R_STOP : R_NONE;
         if ("rh.slot".equals(v)) return riding() ? R_SLOT : R_NONE;
@@ -342,7 +342,7 @@ public final class HomeCore {
     }
 
     // ═════════════ 눌림 ═════════════
-    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12, R_SLOT = 13, R_CONFIRM = 14;
+    public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12, R_SLOT = 13, R_CONFIRM = 14, R_LOCK = 15;
     public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4, D_CONFIRM = 5, D_STOP = 6;
 
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
@@ -359,8 +359,9 @@ public final class HomeCore {
             return choose(kind, idx) ? R_FIELDS : R_NONE;
         }
         if ("rt.gps".equals(v)) return gps ? R_NONE : R_GPS;
-        if ("rt.swap".equals(v)) { swap(); return R_FIELDS; }
+        if ("rt.swap".equals(v)) { if (riding()) return R_LOCK; swap(); return R_FIELDS; }
         if ("rt.go".equals(v) || "rt.enter".equals(v)) {
+            if (riding()) { active = -1; return "rt.go".equals(v) ? R_LOCK : R_RENDER; }                    // 확정한 경로가 있는 동안엔 새로 찾지 않는다
             if (text[START].trim().length() > 0 && text[DEST].trim().length() > 0) { active = -1; return R_GO; }
             return "rt.go".equals(v) ? R_NEED_BOTH : R_RENDER;
         }
