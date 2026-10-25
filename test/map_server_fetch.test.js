@@ -109,10 +109,11 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       if (/getCrdntPrxmtSttnList/.test(inner)) { await new Promise(r => setTimeout(r, 4500)); return new Response('', { status: 200 }); }
       if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
       if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) return new Response(AR, { status: 200 });
+      if (/getSttnThrghRouteList/.test(inner)) return new Response('{"response":{"body":{"items":""}}}', { status: 200 });          // s199: 경유노선(덤)
       return new Response('', { status: 200 }); } };
     const c = load(), t0 = Date.now(), r = await post(c.H, { BUSAPI: bnd }, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 35.1796, lng: 129.0756, res: {}, sv: 1, svb: 2000 } } });
     const cards = r.j.body.filter(n => n.t === 'bcard'), dt = Date.now() - t0;
-    ok(r.status === 200 && dt < 2500 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1) && r.j.info.bus.st === 'ok', 'TAGO 가 4.5초 걸려도 D1 로 정류장 2곳 + 도착정보를 바로 ' + dt + 'ms');
+    ok(r.status === 200 && dt < 2500 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1) && (r.j.info.bus.st === 'ok' || r.j.info.bus.need.every(n => /^r/.test(n.k))), 'TAGO 가 4.5초 걸려도 D1 로 정류장 2곳 + 도착정보를 바로 ' + dt + 'ms');
     ok(r.j.info.bres && r.j.info.bres.d1 && r.j.info.bres.tn === '', '기다리지 않은 출처는 빈 값으로 돌려준다(기기가 보관)');
   }
   {

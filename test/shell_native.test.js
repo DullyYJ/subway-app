@@ -154,7 +154,7 @@ function findAndroidJar() {
     assert.ok(/txt\.length\(\) == 0 && busRefreshing\) \{ busFail\(\); return; \}/.test(v) && /if \(bad\) \{ busFail\(\); return; \}/.test(v) && /private void busFail\(\) \{ map\.restoreArrivals\(\); busEnd\(\); \}/.test(v), '갱신 실패는 조용히 버리고 보던 도착정보를 되돌려 놓는다(비어서 "도착정보 없음"이 되지 않는다)');
     assert.ok(/if \(busRefreshing && System\.currentTimeMillis\(\) - busRefAt < 20000L\) \{ startBusTick\(\); return; \}/.test(bt), '갱신이 오가는 중이면 겹쳐 시작하지 않는다');
     assert.ok(/BUS_STALE_MS/.test(v) && /BUS_FRESH_MS = 600000L/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /BUS_STALE_MS = BUS_FRESH_MS/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')), '버스 캐시 화면: 10분 안이면 흐른 초만큼 줄여 바로 · 그보다 오래면 옛 숫자 없이 정류장 뼈대(s176)');
-    assert.ok(/\[af\]\[0-9\]/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
+    assert.ok(/ARR_KEY = "\[afgh\]\[0-9\]\{1,3\}"/.test(mc) && /matches\(ARR_KEY\)/.test(mc.slice(mc.indexOf('dropArrivals'))), '정류장 목록(tp·gg·tn·d1)은 남기고 도착정보(a·f)만 지운다');
     assert.ok(/mp\.pm\./.test(v) || /mp\.pm/.test(mc), '핀·카드 선택 행동');
     const svw = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/cdFresh = true;/.test(svw) && /if \(fresh \|\| !cdState\.containsKey\(it\.ck\[k\]\)\)/.test(svw), '지도를 만져 다시 배치해도 흐르던 초는 그대로(새 화면일 때만 시작점을 새로 잡는다)');
@@ -425,7 +425,7 @@ function findAndroidJar() {
     assert.ok(/BUS_BASE = "https:\/\/gildongmu-bus\.phg0643\.workers\.dev"/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /ShellCore\.BUS_BASE \+ "\/tago\?url="/.test(mc), 's164: 버스 도착정보·정류장은 웹과 같은 버스 프록시(gildongmu-bus) — gentle-lab /tago 는 522');
     assert.ok(/HomeSearchCore\.busUrl\(HomeSearchCore\.BUS_BASE,/.test(a), 's164: 정류장 검색도 버스 프록시');
     assert.ok(/KEEP_OLD_MS = 45000L/.test(mc), '받아 둔 도착정보는 45초까지 둔다(앱은 판단하지 않는다 — 서버가 정한다)');
-    assert.ok(/arrWave/.test(w) && /else failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
+    assert.ok(/arrWave/.test(w) && /else if \(\/\^\[af\]\/\.test\(k\)\) failA\+\+;/.test(w) && /if \(arrWave\) break;/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다');
   });
   await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
@@ -575,6 +575,28 @@ function findAndroidJar() {
     assert.ok(/"busan", "daegu", "gwangju", "daejeon"/.test(a) && /gm\.bodyRequest\(ShellCore\.CAP, theme\)/.test(a), '지방 노선도(부산 · 대구 · 광주 · 대전)도 미리');
     const mw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
     assert.ok(/function mapSvAttempts\(/.test(mw) && /ks\.slice\(1\)\.concat\(ks\.slice\(0, 1\)\)/.test(mw) && /handleBusSplitTest/.test(mw), '서버: 두 키 반반 · 실측 주소');
+  });
+  await t('s199: 버스 이웃 정류장 · 바꾼 ID · 경유노선(덤) — 못 받아도 갱신을 버리지 않는다 · 번호 순서 바꿈에 같이 옮긴다 · 정류장 목록이 달라지면 경유노선을 비운다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/THRU_KEY = "\[tu\]\[0-9\]\{1,3\}"/.test(mc) && /public static boolean coreKey\(String k\)/.test(mc), '도착정보 열쇠 a·f·g·h · 경유노선 t·u · 꼭 받을 본문 a·f');
+    assert.ok((a.match(/MapCore\.coreKey\(/g) || []).length >= 5, '못 받은 덤(g·h·t·u)은 갱신 실패로 세지 않는다');
+    assert.ok(/permuteKeys\(m, perm, "g", 4\)/.test(mc) && /permuteKeys\(m, perm, "t", 1\)/.test(mc), '끌어서 순서를 바꾸면 이웃(4칸)·경유노선도 같이 옮긴다');
+    assert.ok(/k\.matches\("tp\|gg\|tn\|d1"\)[^\n]*THRU_KEY/.test(mc) && /k\.matches\(THRU_KEY\) && \(body == null \|\| body\.length\(\) == 0\)/.test(mc), '정류장 목록이 바뀌면 경유노선을 비우고, 못 받은 경유노선은 저장하지 않는다');
+  });
+  await t('s199: 커뮤니티 좌우 밀기(웹 _commSwipeStep) — 판정값은 웹 그대로 · 순서는 엔진 칩에서 읽는다 · 넘어갈 때 24dp 슬라이드+페이드 0.34초', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /SW_MAX_MS = 1200L/.test(sv) && /Math\.abs\(sdx\) >= Math\.abs\(sdy\)/.test(sv), '웹 판정값: 32px · 세로 80px 넘게 벗어나면 스크롤 · 1.2초 · 가로 ≥ 세로');
+    assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '웹 _swipeBlocked: 칩 줄 · 가로 영역 · 단추 · 입력칸에서 시작한 몸짓은 무시');
+    assert.ok(/SLIDE_DP = 24f/.test(sv) && /SLIDE_MS = 340L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
+    assert.ok(/private boolean commSwipe\(int dir\)/.test(a) && /body\.chipActs\(oi\)/.test(a) && /head\.chipActs\(ti\)/.test(a) && /news && dir == -1\) return true/.test(a) && /ShellCore\.NEWS_FIRST : ShellCore\.NEWS_LAST/.test(a), '실시간소통·뉴스는 안쪽 칩 먼저 · 뉴스 끝에서 왼쪽은 멈춤 · 뉴스로 들어올 때 첫/마지막 카테고리');
+    const nw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nw)[1].split(',').map(x => x.replace(/['\s]/g, ''));
+    assert.ok(sc.indexOf('NEWS_FIRST = "' + cats[0] + '", NEWS_LAST = "' + cats[cats.length - 1] + '"') > 0, '뉴스 처음·마지막 카테고리 이름이 엔진 목록과 같다');
+  });
+  await t('s199: TAGO 줄 방면("→ ○○방향") — 큰 노선 목록은 기기에 두지 않고 이름만(info.nx) 저장해 요청에 실어 보낸다 · 서버는 기다리지 않는다', () => {
+    const mc = fs.readFileSync(N('MapCore.java'), 'utf8'), w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
+    assert.ok(/K_BNX = "bnx"/.test(mc) && /private void nxTake\(/.test(mc) && /append\(",\\"nx\\":"\)\.append\(nxJson\(\)\)/.test(mc) && /im\.get\("nx"\) instanceof Map\) nxTake/.test(mc), '엔진이 준 info.nx 를 저장하고 다음 요청 bus.nx 로 보낸다');
+    assert.ok(/matches\("r\[0-9\]\{1,3\}"\)\) ri\.remove\(\)/.test(mc), '노선 경유 정류장 목록(r)은 엔진이 쓴 뒤 바로 버린다');
+    assert.ok(/\^r\[0-9\]/.test(w) && /break;\s*\/\/ s199/.test(w), '서버(mapSvResolve)는 r 열쇠를 기다리지 않는다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

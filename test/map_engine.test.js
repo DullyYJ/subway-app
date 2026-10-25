@@ -135,18 +135,18 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   // TOPIS 가 비면 TAGO 로
   const TAGO = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'ICB1', nodenm: '부평역', gpslati: 37.489, gpslong: 126.724, citycode: '23', nodeno: '12345' }] } } } });
   b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO } });
-  ok(b.info.bus.need.length === 1 && /cityCode=23&nodeId=ICB1/.test(b.info.bus.need[0].url), 'TOPIS 실패 → TAGO 정류장');
+  ok(b.info.bus.need.filter(n => /^a/.test(n.k)).length === 1 && /cityCode=23&nodeId=ICB1/.test(b.info.bus.need[0].url), 'TOPIS 실패 → TAGO 정류장');
   const TA = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }, { routeno: '8', arrtime: 700, arrprevstationcnt: 9 }] } } } });
-  b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: TA } });
+  b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: TA, t0: '{}' } });
   ok(b.info.bus.st === 'ok' && /"no":"8"/.test(JSON.stringify(b.body)) && /4분 00초/.test(JSON.stringify(b.body)) && /11분 40초/.test(JSON.stringify(b.body)) && /3번째전/.test(JSON.stringify(b.body)), 'TAGO 도착 두 대');
   // s170: 공공 API 오류 봉투(HTTP 200)는 도착정보가 아니다 — '도착정보 없음'으로 굳히지 않고 '불러오는 중' + 다시 받기
   { const ENV = '{\n  "OpenAPI_ServiceResponse": {\n    "cmmMsgHeader": {\n      "errMsg": "HTTP_ERROR",\n      "returnReasonCode": "04"\n    }\n  }\n}\n';
     b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: ENV } });
     const c0 = b.body.filter(n => n.t === 'bcard')[0];
-    ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'a0' && c0.ld === '도착 정보 불러오는 중...' && !c0.em, '오류 봉투는 받지 못한 것: 불러오는 중 + 다시 받기(need)');
-    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}' } });
+    ok(b.info.bus.st === 'need' && b.info.bus.need.filter(n => /^a/.test(n.k)).length === 1 && b.info.bus.need[0].k === 'a0' && c0.ld === '도착 정보 불러오는 중...' && !c0.em, '오류 봉투는 받지 못한 것: 불러오는 중 + 다시 받기(need)');
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}', g0: '', t0: '{}' } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', '정상 응답인데 버스가 없으면 그대로 "도착정보 없음"');
-    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '' } });
+    b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '', g0: '', t0: '{}' } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '도착정보 없음', "빈 본문('')은 예전처럼 없음(기기는 못 받으면 아예 보내지 않는다)"); }
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: '' } });
   ok(b.info.bus.st === 'need' && b.info.bus.need.length === 1 && b.info.bus.need[0].k === 'd1' && /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev\/bus-stops\?lat=37\.5&lng=127&radius=450$/.test(b.info.bus.need[0].url), '공공 API 가 모두 비면 서버 정류장 표(D1)를 요청');
@@ -184,14 +184,81 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   // D1 보조
   const D1 = JSON.stringify({ ok: true, stops: [{ node_id: 'DJB1', node_nm: '대전역', city_code: '25', lat: 36.332, lng: 127.434 }, { node_id: 'XX9', node_nm: '시청', city_code: '0', lat: 36.3345, lng: 127.434 }] });
   b = mk({ lat: 36.333, lng: 127.434, res: { tn: '', d1: D1 } });
-  ok(b.info.bus.st === 'need' && b.info.bus.need.length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
+  ok(b.info.bus.st === 'need' && b.info.bus.need.filter(n => /^a/.test(n.k)).length === 2 && /cityCode=25&nodeId=DJB1/.test(b.info.bus.need[0].url) && /cityCode=25&nodeId=XX9/.test(b.info.bus.need[1].url), 'D1 보조 정류장: 시 코드가 0 이면 좌표 상자로 추정(대전 25)');
   {
     const D1IC = JSON.stringify({ ok: true, stops: [{ node_id: 'ICB168001466', node_nm: '검단모아미래도엘리트', city_code: '23', lat: 37.582808, lng: 126.707849 }, { node_id: 'ICB368001467', node_nm: '검단대성베르힐', city_code: '23', lat: 37.582405, lng: 126.708497 }] });
     const q = mk({ lat: 37.5826, lng: 126.7078, res: { tn: '', d1: D1IC } });
-    ok(q.info.bus.need.length === 2 && /cityCode=23&nodeId=ICB368001466/.test(q.info.bus.need[0].url) && /nodeId=ICB368001467/.test(q.info.bus.need[1].url) && q.info.stops[0].id === 'ICB368001466', 's178: 인천 D1 정류장 번호 ICB1… 는 TAGO 도착정보가 쓰는 ICB3… 로 바꿔 받는다(안 그러면 도착정보 전부 없음)');
+    ok(q.info.bus.need.filter(n => /^a/.test(n.k)).length === 2 && /cityCode=23&nodeId=ICB368001466/.test(q.info.bus.need[0].url) && /nodeId=ICB368001467/.test(q.info.bus.need[1].url) && q.info.stops[0].id === 'ICB368001466', 's178: 인천 D1 정류장 번호 ICB1… 는 TAGO 도착정보가 쓰는 ICB3… 로 바꿔 받는다(안 그러면 도착정보 전부 없음)');
     const D1GG = JSON.stringify({ ok: true, stops: [{ node_id: 'GGB166000209', node_nm: '부평역', city_code: '23', lat: 37.489, lng: 126.724 }, { node_id: 'GGB218000940', node_nm: '고양', city_code: '31100', lat: 37.489, lng: 126.7245 }] });
     const q2 = mk({ lat: 37.489, lng: 126.724, res: { tn: '', d1: D1GG } });
-    ok(q2.info.bus.need.length === 2 && /cityCode=23&nodeId=ICB366000209/.test(q2.info.bus.need[0].url) && /nodeId=GGB218000940/.test(q2.info.bus.need[1].url), 's180: 인천 GGB1… 도 ICB3… 로, 경기 GGB2… 는 그대로')
+    ok(q2.info.bus.need.filter(n => /^a/.test(n.k)).length === 2 && /cityCode=23&nodeId=ICB366000209/.test(q2.info.bus.need[0].url) && /nodeId=GGB218000940/.test(q2.info.bus.need[1].url), 's180: 인천 GGB1… 도 ICB3… 로, 경기 GGB2… 는 그대로')
+  }
+  // s199: 웹 _busArrFetchMerged 의 세 보강 — 이웃 정류장 합치기 · 인천 ID 바꿔 다시 · 경유노선 뼈대
+  {
+    const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+    const TNP = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497), it('ICB368001468', '검단대성베르힐', 37.582430, 126.708500), it('ICB368009999', '다른이름', 37.582410, 126.708490)] } } } });
+    const arr = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+    const THRU = JSON.stringify({ response: { body: { items: { item: [{ routeno: '991', routeid: 'R991', routetp: '광역버스' }, { routeno: '77', routeid: 'R77', routetp: '일반버스' }, { routeno: '583', routeid: 'R583', routetp: '일반버스' }] } } } });
+    const base = { lat: 37.5824, lng: 126.7085, res: { tp: '', gg: '', tn: TNP } };
+    const cd = (b, i) => b.body.filter(n => n.t === 'bcard')[i || 0];
+    const ks = b => b.info.bus.need.map(n => n.k).join();
+    // ① 이웃: 같은 이름 60m 안만(다른 이름은 제외) — 본문 + 이웃 + 경유노선을 한 바퀴에 요청
+    let b = mk(base);
+    ok(/^a0,a1(,a2)?,g1,t0/.test(ks(b)) && /nodeId=ICB368001468/.test(b.info.bus.need.find(n => n.k === 'g1').url) && !/ICB368009999/.test(JSON.stringify(b.info.bus.need.filter(n => /^g/.test(n.k)))), 's199: 이웃 정류장(같은 이름·60m 안)과 경유노선도 함께 요청 ' + ks(b));
+    ok(/getSttnThrghRouteList\?serviceKey=&cityCode=23&nodeid=ICB368001467&numOfRows=100/.test(b.info.bus.need.find(n => n.k === 't0').url), 's199: 경유노선 주소');
+    // 본문이 오면 이웃이 오기 전에도 줄을 먼저 그린다(웹 onPartial) · 이웃이 오면 같은 노선은 합쳐 더 빠른 차가 위
+    b = mk(Object.assign({}, base, { res: { tp: '', gg: '', tn: TNP, a0: arr(['991', 300]), a1: '', a2: '', g1: arr(['77', 120], ['991', 240]), t0: THRU } }));
+    { const rows = cd(b).rows; ok(rows.map(r => r.no).join() === '77,991,583' && rows[0].a[0].s === '2분 00초' && rows[1].a[0].s === '4분 00초' && rows[2].a[0].s === '도착정보 없음' && rows[2].a[0].sec === 0 && !rows[2].a[0].soon, 's199: 이웃 도착정보 합침 + 오는 차 없는 경유노선은 맨 뒤 "도착정보 없음" 줄 ' + JSON.stringify(rows.map(r => r.no))); }
+    b = mk(Object.assign({}, base, { res: { tp: '', gg: '', tn: TNP, a0: arr(['991', 300]), a1: '', a2: '' } }));
+    ok(cd(b).rows.length === 1 && cd(b).rows[0].no === '991' && /g1/.test(ks(b)) && /t0/.test(ks(b)), 's199: 본문만 와도 줄을 먼저 그리고 이웃·경유노선은 계속 요청');
+    // ② 비면 ID 바꿔 다시 — 이웃도 비었을 때만(ICB3 → ICB1)
+    const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)] } } } });
+    const solo = { lat: 37.5824, lng: 126.7085, res: { tp: '', gg: '', tn: only } };
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}';
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, t0: '{}' } }));
+    ok(cd(b).ld === '도착 정보 불러오는 중...' && b.info.bus.need.some(n => n.k === 'g0' && /nodeId=ICB168001467/.test(n.url)), 's199: 본문이 비면 ICB3→ICB1 로 바꿔 다시 받기(그동안은 불러오는 중)');
+    const NX = { 'ICB368001467|R9701': '검단사거리' };
+    b = mk(Object.assign({}, solo, { nx: NX, res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: arr(['9701', 200]), t0: '{}' } }));
+    ok(cd(b).rows.length === 1 && cd(b).rows[0].no === '9701' && b.info.bus.st === 'ok', 's199: 바꾼 ID 로 받으면 그 줄을 그린다');
+    b = mk(Object.assign({}, solo, { nx: NX, res: { tp: '', gg: '', tn: only, a0: arr(['9701', 200]), t0: '{}' } }));
+    ok(!(b.info.bus.need || []).some(n => n.k === 'g0') && b.info.bus.st === 'ok', 's199: 본문에 줄이 있으면 바꾼 ID 는 묻지 않는다');
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: '{}' } }));
+    ok(cd(b).em === '도착정보 없음' && b.info.bus.st === 'ok', 's199: 바꿔 봐도 비면 그제서야 "도착정보 없음"');
+    // ③ 경유노선: 오는 차가 하나도 없어도 노선을 줄로 보인다(웹 _thruFill)
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: THRU } }));
+    ok(cd(b).rows.map(r => r.no).join() === '991,77,583' && cd(b).rows.every(r => r.a.length === 1 && r.a[0].s === '도착정보 없음') && !cd(b).em && b.info.rts[0][0][0] === 'R991', 's199: 경유노선만 알아도 줄로 보인다(누르면 노선 상세)');
+    b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: EMPTY, g0: EMPTY, t0: '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR"}}}' } }));
+    ok(b.info.bus.need.some(n => n.k === 't0') && cd(b).em === '도착정보 없음', 's199: 경유노선 오류 봉투는 받지 못한 것 — 다시 받는다');
+    // 서울·경기 정류장은 이웃·바꾼 ID·경유노선을 묻지 않는다(웹과 같다)
+    b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
+    ok(b.info.bus.need.every(n => /^a\d$/.test(n.k)), 's199: 서울(TOPIS) 정류장은 본문만');
+    // 즐겨찾기: 바꾼 ID(h)·경유노선(u)
+    const favS = [{ nm: '검단대성베르힐', id: 'ICB368001467', src: 'tago', la: 37.582405, lo: 126.708497, city: '23' }];
+    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, res: { f0: EMPTY } } });
+    ok(b.info.bus.need.map(n => n.k).join() === 'f0,h0,u0' && /nodeId=ICB168001467/.test(b.info.bus.need[1].url), 's199: 즐겨찾기도 바꾼 ID·경유노선 ' + b.info.bus.need.map(n => n.k).join());
+    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, nx: { 'ICB368001467|R991': 'A', 'ICB368001467|R77': 'B', 'ICB368001467|R583': 'C' }, res: { f0: EMPTY, h0: EMPTY, u0: THRU } } });
+    ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].rows.length === 3, 's199: 즐겨찾기 경유노선 줄');
+    // ④ TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop) — 경유 정류장 목록에서 이 정류장 다음 정류장 이름, 없으면 종점
+    {
+      const stnList = (rid, names, ids) => JSON.stringify({ response: { body: { items: { item: names.map((n, k) => ({ routeid: rid, nodeord: k + 1, nodeid: ids[k], nodenm: n, gpslati: 37.5, gpslong: 126.7, updowncd: 0 })) } } } });
+      const RT = stnList('R9701', ['가', '검단대성베르힐', '다음역', '종점'], ['X1', 'ICB368001467', 'X3', 'X4']);
+      const res0 = { tp: '', gg: '', tn: only, a0: arr(['9701', 200]), t0: '{}' };
+      b = mk(Object.assign({}, solo, { res: res0 }));
+      ok(b.info.bus.need.map(n => n.k).join() === 'r0' && /getRouteAcctoThrghSttnList\?serviceKey=&cityCode=23&routeId=R9701&numOfRows=300/.test(b.info.bus.need[0].url) && !cd(b).rows[0].dir, 's199: 줄에 방면이 없으면 노선 경유 정류장 목록을 부탁(그림은 먼저)');
+      b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: RT }) }));
+      ok(b.info.nx['ICB368001467|R9701'] === '다음역' && cd(b).rows[0].dir === '→ 다음역방향' && b.info.bus.st === 'ok', 's199: 받은 목록에서 다음 정류장 이름을 뽑아 info.nx 로 돌려준다 · 줄에 "→ 다음역방향"');
+      const RT2 = stnList('R9701', ['가', '나', '종점'], ['X1', 'X2', 'X4']);
+      b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: RT2 }) }));
+      ok(b.info.nx['ICB368001467|R9701'] === '종점', 's199: 목록에 이 정류장이 없으면 종점(웹과 같다)');
+      b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: stnList('R-OTHER', ['가', '나'], ['X1', 'X2']) }) }));
+      ok(!b.info.nx && b.info.bus.need.some(n => n.k === 'r0'), 's199: 다른 노선의 본문이 섞이면 쓰지 않고 다시 부탁');
+      b = mk(Object.assign({}, solo, { nx: { 'ICB368001467|R9701': '검단사거리' }, res: res0 }));
+      ok(b.info.bus.st === 'ok' && cd(b).rows[0].dir === '→ 검단사거리방향' && !b.info.nx, 's199: 기기가 저장해 둔 이름이 있으면 다시 안 묻는다');
+      b = mk(Object.assign({}, solo, { res: { tp: '', gg: '', tn: only, a0: arr(['9701', 200]) } }));
+      ok(!b.info.bus.need.some(n => /^r/.test(n.k)), 's199: 다른 받기(경유노선 등)가 남아 있는 동안은 방면을 부탁하지 않는다');
+      b = mk(Object.assign({}, solo, { res: Object.assign({}, res0, { r0: '' }) }));
+      ok(b.info.nx && b.info.nx['ICB368001467|R9701'] === '' && b.info.bus.st === 'ok' && !cd(b).rows[0].dir, 's199: 목록이 비어 오면 이번엔 포기(빈 이름) — 계속 다시 묻지 않는다');
+    }
   }
   // s177: 정류장 목록 준비 판정(서버가 '충분하면 느린 출처는 안 기다린다')
   {
