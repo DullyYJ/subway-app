@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s214";
+var ENGINE_VERSION = "route-v2-2026-10-26s216";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -2164,8 +2164,8 @@ function rideChain(G, a, b, line) {
   return out;
 }
 function isRideEscape(G, pkA, plA, prevA, u, vn, line) {
-  // 급행으로 지나친 구간(C)을 일반열차로 되돌아오는 것은 허용한다(목적지가 급행 미정차역일 때).
-  // 단 되돌아오다가 급행이 출발한 역(px) 이전으로 더 가거나 C 밖으로 나가면 되돌림 루프라 막는다.
+  // \uae09\ud589\uc73c\ub85c \uc9c0\ub098\uce5c \uad6c\uac04(C)\uc744 \uc77c\ubc18\uc5f4\ucc28\ub85c \ub418\ub3cc\uc544\uc624\ub294 \uac83\uc740 \ud5c8\uc6a9\ud55c\ub2e4(\ubaa9\uc801\uc9c0\uac00 \uae09\ud589 \ubbf8\uc815\ucc28\uc5ed\uc77c \ub54c).
+  // \ub2e8 \ub418\ub3cc\uc544\uc624\ub2e4\uac00 \uae09\ud589\uc774 \ucd9c\ubc1c\ud55c \uc5ed(px) \uc774\uc804\uc73c\ub85c \ub354 \uac00\uac70\ub098 C \ubc16\uc73c\ub85c \ub098\uac00\uba74 \ub418\ub3cc\ub9bc \ub8e8\ud504\ub77c \ub9c9\ub294\ub2e4.
   let k = u, n = 0;
   while (pkA[k] === "ride" && plA[k] === line && prevA[k] >= 0 && n++ < 80) k = prevA[k];
   if (pkA[k] !== "xpress" || plA[k] !== line || prevA[k] < 0) return false;
@@ -2178,7 +2178,7 @@ function isRideEscape(G, pkA, plA, prevA, u, vn, line) {
   const iu = C.indexOf(un);
   if (iu <= 0 || iu >= C.length - 1) return false;
   if (iv <= 0 || iv >= C.length - 1) return true;
-  return n >= 4;   // 되돌아오는 일반열차 구간이 5정거장을 넘으면 막는다
+  return n >= 4;   // \ub418\ub3cc\uc544\uc624\ub294 \uc77c\ubc18\uc5f4\ucc28 \uad6c\uac04\uc774 5\uc815\uac70\uc7a5\uc744 \ub118\uc73c\uba74 \ub9c9\ub294\ub2e4
 }
 function isTrainBacktrack(G, pn, un, vn, line) {
   const p = pn.slice(2), u = un.slice(2), v = vn.slice(2);
@@ -12747,7 +12747,6 @@ async function handleScreenShop(request) {
 //        facts = \uc571\uc774 \ubaa8\uc740 \uae30\uae30 \uc0ac\uc2e4(\uc804\ubd80 \uc120\ud0dd \u2014 \uc5c6\uc73c\uba74 \uae30\ubcf8\uac12):
 //          id: \ud604\uc7ac \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514('' \uc774\uba74 \uc5c6\uc74c) \u00b7 np:{arrive,transfer,arrive_reco: 1|0} \u00b7 npd: \uc54c\ub9bc \uad8c\ud55c \uac70\ubd80(1|0) \u00b7 rl: \ub3c4\ucc29 \uc624\ucc28 \uae30\ub85d(1|0)
 //          th: 'dark'|'pastel' \u00b7 sam: \uac24\ub7ed\uc2dc(1|0) \u00b7 samw: \uc571 \ubc30\ud130\ub9ac '\uc81c\ud55c\ub428'(1|0) \u00b7 errn: \uc624\ub958 \ub85c\uadf8 \uac1c\uc218 \u00b7 cm: \ucd9c\ud1f4\uadfc \uc54c\ub9bc(1|0|\uc5c6\uc74c) \u00b7 ovl: \uc624\ubc84\ub808\uc774(1|0|\uc5c6\uc74c) \u00b7 pgs: \uc571\uc774 \uc5f4 \uc218 \uc788\ub294 \ud558\uc704 \ud654\uba74 \uc774\ub984\ub4e4(['sam','ovl','arr'] \u2014 \uc5c6\uc73c\uba74 \ubaa8\ub450 \ubcf4\uc778\ub2e4)
-//          pt: { total, today, todayStr, rc, rcStr }(\uaddc\uce59 \uc5d4\uc9c4\uc774 \ub9cc\ub4e0 \ud3ec\uc778\ud2b8 \uc800\uc7a5\uac12 \uadf8\ub300\ub85c \u2014 \uc5c6\uc73c\uba74 \ud3ec\uc778\ud2b8 \uce78 \uc5c6\uc74c) \u00b7 day: \uc624\ub298 \ub0a0\uc9dc \uae00\uc790('2026-10-20')
 // \ucd9c\ub825  { ok, v:1, screen:'settings', rev, cover:'tab', head:[], body:[\ub178\ub4dc\u2026] }  \u2190 \ub178\ub4dc \uc885\ub958\ub294 native/shell/ScreenCore.java \uc640 \uac19\ub2e4
 //        panel{kids} \u00b7 text \u00b7 box \u00b7 toggle{key} \u00b7 navrow{act} \u00b7 select{act:{a:'sel'}} \u00b7 field{key} \u00b7 button \u00b7 spacer
 //        act = {a:'set',key} (\uc2a4\uc704\uce58 \u2014 \uc571\uc774 \uba3c\uc800 \ub4a4\uc9d1\uace0 \uc54c\ub9b0\ub2e4) | {a:'call',v} (\uc571 \uc548 \ud568\uc218 \ud638\ucd9c: saveId\u00b7clearId\u00b7pol.*\u00b7errlog) | {a:'web',v} (\uc6f9 \uce74\ub4dc \uc5f4\uae30) | {a:'sel',v} (\uace0\ub974\uae30)
@@ -12771,7 +12770,6 @@ var SETTINGS_NOTIF = [
   { key: 'arrive_reco', title: '\ud558\ucc28 \uc804 \ucd94\ucc9c', desc: '\ub3c4\ucc29 5\ubd84 \uc804 \uce74\ud398\u00b7\uc57c\uc2dd \ucd94\ucc9c (\uc624\ubc84\ub808\uc774 \ud558\ub2e8\u00b7\uc571 \uc548 \ud31d\uc5c5)' }
 ];
 // \uaddc\uce59 \uc5d4\uc9c4(rules.js): Worker \uc5d0\uc11c\ub294 \uac19\uc740 \ubc94\uc704\uc758 \ud568\uc218, Node \uc2dc\ud5d8\uc5d0\uc11c\ub294 \ubd88\ub7ec\uc628\ub2e4
-function settingsRulesFn() { return (typeof rulesRun === 'function') ? rulesRun : require('./rules').rulesRun; }
 function settingsFlag(v, def) { return v == null ? def : (v === 1 || v === true || v === '1'); }
 function settingsStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
 function settingsFacts(f) {
@@ -12781,7 +12779,6 @@ function settingsFacts(f) {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
     sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
-    pt: (f.pt && typeof f.pt === 'object') ? f.pt : null, day: settingsStr(f.day, 20),
     pgs: Array.isArray(f.pgs) ? f.pgs.filter(function (x) { return typeof x === 'string'; }).slice(0, 8) : null          // \uc571\uc774 \uc2e4\uc81c\ub85c \uc5f4 \uc218 \uc788\ub294 \ud558\uc704 \ud654\uba74 \uc774\ub984\ub4e4(\uc5c6\uc73c\uba74 \ubaa8\ub450 \ubcf4\uc778\ub2e4)
   };
   SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // \uc54c\ub9bc\uc740 \uae30\ubcf8 \ucf1c\uc9d0(\uc800\uc7a5\uac12\uc774 0 \uc77c \ub54c\ub9cc \uaebc\uc9d0)
@@ -12845,17 +12842,7 @@ function settingsScreen(inp, factsIn) {
     body.push(settingsPanelN(sk));
   }
 
-  // 4) \ub0b4 \ud3ec\uc778\ud2b8(\uaddc\uce59 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uc694\uc57d \u2014 \uc571\uc740 \uc800\uc7a5\uac12\uacfc \uc624\ub298 \ub0a0\uc9dc\ub9cc \uc900\ub2e4)
-  if (f.pt) {
-    var pv = settingsRulesFn()({ op: 'view', pt: f.pt, day: f.day });
-    if (pv && pv.ok) {
-      var pl = settingsBoldN([['\ub0b4 \ud3ec\uc778\ud2b8  ', 0], [pv.total + ' P', 1], ['  \u00b7 \uc624\ub298 ' + pv.today + ' P\n\ub4f1\uae09  ', 0], [pv.level, 1], [pv.next ? '  (' + pv.next + '\uae4c\uc9c0 ' + pv.need + ' P)' : '', 0]]);
-      body.push(settingsPanelN([settingsTitleN('\ud3ec\uc778\ud2b8', 4), { t: 'box', s: pl.s, hl: pl.hl, size: 13, lh: 1.6, color: 'text', fill: 'bg', line: 'border', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 0] },
-        settingsSmallN('\uae00\uc4f0\uae30 +10 P \u00b7 \ud0d1\uc2b9 \uc548\ub0b4 \uc2dc\uc791 +10 P \u00b7 \ud604\uc7a5\uc81c\ubcf4 3~8 P (\ud558\ub8e8 ' + pv.rcMax + '\ud68c, \uc624\ub298 ' + pv.rc + '/' + pv.rcMax + ')', 8, 0)]));
-    }
-  }
-
-  // 5) \uc548\ub0b4 \uc815\ud655\ub3c4
+  // 4) \uc548\ub0b4 \uc815\ud655\ub3c4
   body.push(settingsPanelN([
     settingsTitleN('\uc548\ub0b4 \uc815\ud655\ub3c4 \ud5a5\uc0c1', 2),
     { t: 'toggle', key: 'rl', title: '\ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d', sub: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud558\uba74 \uc608\uc0c1 \uc2dc\uac04\uacfc \uc2e4\uc81c \uc2dc\uac04\uc758 \ucc28\uc774\ub9cc \uc775\uba85\uc73c\ub85c \ubcf4\ub0b4\uc694. \uc5ed \uc774\ub984\u00b7\uc704\uce58\u00b7\uae30\uae30 \uc815\ubcf4\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
@@ -17871,7 +17858,7 @@ async function handleScreenCchips(request) {
 //   \uc608\uc804\uc5d4 www/index.html \uc758 #wsheet \uc548\uc5d0 \uc81c\ubaa9\u00b7\uc548\ub0b4\u00b7\uc785\ub825\uce78\u00b7\ub2e8\ucd94 \uae00\uc774 \ubc15\ud600 \uc788\uc5c8\ub2e4.
 //   \uc774\uc81c \uc571\uc740 '\uae30\uae30 \uc0ac\uc2e4'(\uc624\ub298 \ud604\uc7a5\uc81c\ubcf4 \ud69f\uc218 \u00b7 \uc9c0\uae08 \ubcf4\uc774\ub294 \uc548\ub0b4 \uae00 \u00b7 \ub4f1\ub85d \uc911\uc778\uc9c0 \u00b7 \uc785\ub825\uce78\uc5d0 \ucc98\uc74c \ub193\uc744 \uae00)\ub9cc \ubcf4\ub0b4\uace0,
 //   \uc5d4\uc9c4\uc774 \uc2dc\ud2b8\uc758 \uae00\u00b7\uc21c\uc11c\u00b7\uc785\ub825\uce78\u00b7\ub2e8\ucd94\ub97c \uc815\ud574 \ud654\uba74 JSON \uc73c\ub85c \ub0b4\ub824 \uc900\ub2e4. \uc571(\ub124\uc774\ud2f0\ube0c ScreenCore/ScreenView)\uc740 \uadf8\ub9ac\uae30\ub9cc \ud558\uace0,
-//   \ub2e8\ucd94\ub97c \ub204\ub974\uba74 {a:'call', v:'wr.close'|'wr.submit'} \uacfc \uc785\ub825\uce78 \uae00\uc790(fields)\ub9cc \uc54c\ub9b0\ub2e4. \uc695\uc124 \uac70\ub974\uae30\u00b7\uc11c\ubc84 \ub4f1\ub85d\u00b7\ud3ec\uc778\ud2b8\ub294 \uc608\uc804 \uc6f9 \ud568\uc218(submitPost)\uac00 \uadf8\ub300\ub85c \ud55c\ub2e4.
+//   \ub2e8\ucd94\ub97c \ub204\ub974\uba74 {a:'call', v:'wr.close'|'wr.submit'} \uacfc \uc785\ub825\uce78 \uae00\uc790(fields)\ub9cc \uc54c\ub9b0\ub2e4. \uc695\uc124 \uac70\ub974\uae30\u00b7\uc11c\ubc84 \ub4f1\ub85d\uc740 \uc608\uc804 \uc6f9 \ud568\uc218(submitPost)\uac00 \uadf8\ub300\ub85c \ud55c\ub2e4.
 //   \uc6f9 \uc2dc\ud2b8\ub294 \ud3f4\ubc31(\uc5d4\uc9c4\u00b7\ub124\uc774\ud2f0\ube0c\uac00 \uc548 \ub420 \ub54c)\uc73c\ub85c\ub9cc \ub0a8\ub294\ub2e4.
 //
 // \uc785\ub825  writeScreen({ cap }, facts)
@@ -21947,9 +21934,9 @@ function hcardsScreen(inp, f) {
     af.wF = hcWx(wxs.wF); af.wT = hcWx(wxs.wT);
     var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];
     if (sub1 && sub1.nextTrain.found !== undefined) af.nt = sub1.nextTrain;
-  } else if (near) {
+  } else if (gps) {                                              // \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \ud604\uc704\uce58 \uae30\uc900 \ube0c\ub9ac\ud551: \uc571\uc774 \uc54c\uc544\ub0b8 \ub3d9 \uc774\ub984(f.dong) > \uac00\uae4c\uc6b4 \uc5ed \uc774\ub984 > '\ub0b4 \uc704\uce58' (s216 \u2014 \ub3d9 \uc774\ub984\uc744 \ubaa8\ub974\uac70\ub098 \uac00\uae4c\uc6b4 \uc5ed\uc774 \uc5c6\uc5b4\ub3c4 \ube48 \uce74\ub4dc\ub85c \ub450\uc9c0 \uc54a\ub294\ub2e4)
     af.wF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null);
-    af.tk = 'brief'; af.mode = 'brief'; af.from = near[0]; af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
+    af.tk = 'brief'; af.mode = 'brief'; af.from = hcStr(f.dong, 20) || (near ? near[0] : '\ub0b4 \uc704\uce58'); af.to = ''; af.base = now; af.mins = 0; af.dist = 0; af.segs = null; af.rem = 0;
   }
   var aiS = hcAi({ cap: 14 }, af);
   var congS = hcCong.screen({ cap: 13 }, cs);
@@ -22184,15 +22171,12 @@ async function handleRideBusPick(request, env) {
 // \uae38\ub3d9\ubb34 \u2014 \uc571 \uaddc\uce59 \uc5d4\uc9c4 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
 //
 // \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."  (2026-10-20 s95 \u2014 \uc6f9 \ub370\uc774\ud130 \uacc4\uce35\uc5d0 \ub0a8\uc544 \uc788\ub358 \uaddc\uce59)
-//   \uc608\uc804\uc5d4 \uc6f9(www/index.html)\uc774 \uc695\uc124 \uac70\ub974\uae30(_containsBadWord) \u00b7 \ud3ec\uc778\ud2b8(addPoints \u00b7 \ud604\uc7a5\uc81c\ubcf4 \ud558\ub8e8 3\ud68c \u00b7 \ucc28\ub4f1 \ud3ec\uc778\ud2b8 \ucd94\ucca8) \u00b7
-//   \ub0b4\uac00 \ud0c4 \ub178\uc120 \uae30\ub85d(_myLinesRecord) \uc744 \uc2a4\uc2a4\ub85c \uc815\ud588\ub2e4. \uc774\uc81c \uc571\uc740 \uc0ac\uc2e4(\uae00\u00b7\uc800\uc7a5\uac12\u00b7\uc624\ub298 \ub0a0\uc9dc\u00b7\ubb34\uc791\uc704 \uc218)\ub9cc \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ud310\uc815\u00b7\uacc4\uc0b0\ud55c\ub2e4.
+//   \uc608\uc804\uc5d4 \uc6f9(www/index.html)\uc774 \uc695\uc124 \uac70\ub974\uae30(_containsBadWord) \u00b7 \ub0b4\uac00 \ud0c4 \ub178\uc120 \uae30\ub85d(_myLinesRecord) \uc744 \uc2a4\uc2a4\ub85c \uc815\ud588\ub2e4. \uc774\uc81c \uc571\uc740 \uc0ac\uc2e4(\uae00\u00b7\uc800\uc7a5\uac12\u00b7\uc624\ub298 \ub0a0\uc9dc\u00b7\ubb34\uc791\uc704 \uc218)\ub9cc \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ud310\uc815\u00b7\uacc4\uc0b0\ud55c\ub2e4.
 //
 // \uc785\ub825  POST /rules  { op, \u2026 }   (\ubaa8\ub450 \uc0c1\ud0dc \uc5c6\uc74c: \uc800\uc7a5\uac12\uc740 \uc571\uc774 \ub4e4\uace0 \uc788\ub2e4\uac00 \uadf8\ub300\ub85c \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4)
-//   op:'check'  { texts:[\uc81c\ubaa9, \ubcf8\ubb38 \u2026], cat?, pt?, day, kind?:'post'|'chat' } \u2192 { ok, msg? }       \uae00\uc744 \uc62c\ub824\ub3c4 \ub418\ub294\uac00(\ube44\uc5c8\ub098 \u00b7 \uc695\uc124 \u00b7 \ud604\uc7a5\uc81c\ubcf4 \ud558\ub8e8 3\ud68c)
-//   op:'award'  { ev:'write'|'report'|'ride', pt?, day, rnd(0~1 \ubb34\uc791\uc704), sent?:bool(\uc11c\ubc84\uc5d0 \uc62c\ub77c\uac14\ub098) } \u2192 { ok, pt(\uc0c8 \uc800\uc7a5\uac12), add, msg }   \ud3ec\uc778\ud2b8 \uc801\ub9bd\uacfc \ubb38\uad6c
-//   op:'view'   { pt?, day } \u2192 { ok, total, today, level, next }                                    \ud3ec\uc778\ud2b8 \uc694\uc57d(\uc124\uc815 \ud654\uba74\uc6a9)
+//   op:'check'  { texts:[\uc81c\ubaa9, \ubcf8\ubb38 \u2026], kind?:'post'|'chat' } \u2192 { ok, msg? }                         \uae00\uc744 \uc62c\ub824\ub3c4 \ub418\ub294\uac00(\ube44\uc5c8\ub098 \u00b7 \uc695\uc124)
 //   op:'mylines'{ my:[{l,n,t}\u2026], sec:[\ub178\uc120 \uc774\ub984\u2026], now } \u2192 { ok, my, lines }                         \ud0c4 \ub178\uc120 \uae30\ub85d \uc313\uae30(\uacbd\ub85c\ub97c \ud655\uc815\ud560 \ub54c)
-//   pt = { total, today, todayStr, rc(\ud604\uc7a5\uc81c\ubcf4 \ud69f\uc218), rcStr } \u2014 \uc5d4\uc9c4\uc774 \ub9cc\ub4e0 \uac12\uc744 \uc571\uc740 \uadf8\ub300\ub85c \uc800\uc7a5\ud55c\ub2e4. day = \uc571 \uc2dc\uacc4\uc758 \uc624\ub298 \ub0a0\uc9dc \uae00\uc790(\uc608: '2026-10-20').
+//   \u203b \ud3ec\uc778\ud2b8(\uc801\ub9bd \u00b7 \ub4f1\uae09 \u00b7 \ud604\uc7a5\uc81c\ubcf4 \ud558\ub8e8 \ud55c\ub3c4)\ub294 s216 \uc5d0\uc11c \ud1b5\uc9f8\ub85c \uc5c6\uc574\ub2e4 \u2014 \uc571\uc5d0 \ud3ec\uc778\ud2b8 \uae30\ub2a5\uc774 \uc5c6\ub2e4.
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var RULES_V = 1;
@@ -22203,9 +22187,6 @@ var RULES_BAD = [
   '\ub290\uae08', '\ub2c8\uc560\ubbf8', '\ub2c8\ubbf8', '\uc560\ubbf8', '\uc560\ube44', '\ubcf4\uc9c0', '\uc790\uc9c0', '\uc139\uc2a4', '\uac15\uac04', 'fuck', 'shit', 'bitch', 'asshole',
   '\ud55c\ub0a8', '\ud55c\ub140', '\uae40\uce58\ub140', '\ub41c\uc7a5\ub140', '\ub9d8\ucda9', '\ud2c0\ub531', '\uae09\uc2dd\ucda9', '\ub178\uce5c\ub124', '\uc815\uc2e0\ubcd1\uc790', '\uc7a5\uc560\uc778\uac19'
 ];
-var RULES_LEVELS = [['\uc785\ubb38\uc790', 0], ['\ud0d1\uc2b9\uac1d', 50], ['\uc9c0\ud558\ucca0\ub7ec', 150], ['\ud658\uc2b9\uc655', 300], ['\ub178\uc120\uc7a5\uc778', 600], ['\ucca0\ub3c4\ub9c8\uc2a4\ud130', 1000]];
-var RULES_REPORT_MAX = 3;
-var RULES_REPORT_TABLE = [[3, 35], [4, 25], [5, 18], [6, 12], [7, 7], [8, 3]];       // \ud604\uc7a5\uc81c\ubcf4 \ucc28\ub4f1 \ud3ec\uc778\ud2b8(\ub192\uc744\uc218\ub85d \ub4dc\ubb3c\ub2e4)
 var RULES_BAD_MSG = '\uc695\uc124\u00b7\ube44\ubc29\uc740 \ub4f1\ub85d\ud560 \uc218 \uc5c6\uc5b4\uc694. \ubc14\ub978 \uc5b8\uc5b4\ub97c \uc0ac\uc6a9\ud574\uc8fc\uc138\uc694';
 
 function rulesStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
@@ -22219,58 +22200,14 @@ function rulesBad(text) {
   return false;
 }
 
-function rulesPt(p, day) {
-  p = (p && typeof p === 'object') ? p : {};
-  var o = { total: rulesInt(p.total, 0, 1e9), today: rulesInt(p.today, 0, 1e9), todayStr: rulesStr(p.todayStr, 20), rc: rulesInt(p.rc, 0, 999), rcStr: rulesStr(p.rcStr, 20) };
-  if (o.todayStr !== day) { o.today = 0; o.todayStr = day; }          // \ub0a0\uc9dc\uac00 \ubc14\ub00c\uba74 \uc624\ub298 \uac12\uc740 0 \ubd80\ud130
-  if (o.rcStr !== day) { o.rc = 0; o.rcStr = day; }
-  return o;
-}
-function rulesDay(v) { return rulesStr(v, 20) || 'unknown'; }
-
-function rulesLevel(total) {
-  var lv = RULES_LEVELS[0], nx = RULES_LEVELS[1], i;
-  for (i = 0; i < RULES_LEVELS.length; i++) if (total >= RULES_LEVELS[i][1]) { lv = RULES_LEVELS[i]; nx = RULES_LEVELS[i + 1] || null; }
-  return { name: lv[0], next: nx ? nx[0] : '', need: nx ? nx[1] - total : 0 };
-}
-
 function rulesCheck(r) {
   var texts = Array.isArray(r.texts) ? r.texts.slice(0, 6).map(function (t) { return rulesStr(t, 5000); }) : [];
-  var day = rulesDay(r.day);
   if (r.kind === 'post') {
     if (!texts[0] || !texts[0].trim()) return { ok: false, msg: '\uc81c\ubaa9\uc744 \uc785\ub825\ud574\uc8fc\uc138\uc694' };
     if (!texts[1] || !texts[1].trim()) return { ok: false, msg: '\ub0b4\uc6a9\uc744 \uc785\ub825\ud574\uc8fc\uc138\uc694' };
   }
   for (var i = 0; i < texts.length; i++) if (rulesBad(texts[i])) return { ok: false, msg: RULES_BAD_MSG };
-  if (r.cat === '\ud604\uc7a5\uc81c\ubcf4') {
-    var pt = rulesPt(r.pt, day);
-    if (pt.rc >= RULES_REPORT_MAX) return { ok: false, msg: '\ud604\uc7a5\uc81c\ubcf4\ub294 \ud558\ub8e8 ' + RULES_REPORT_MAX + '\ud68c\uae4c\uc9c0\ub9cc \uac00\ub2a5\ud574\uc694! (\uc624\ub298 ' + pt.rc + '/' + RULES_REPORT_MAX + ')' };
-  }
   return { ok: true };
-}
-
-function rulesDraw(rnd) {
-  var tot = 0, i; for (i = 0; i < RULES_REPORT_TABLE.length; i++) tot += RULES_REPORT_TABLE[i][1];
-  var x = (isFinite(Number(rnd)) ? Math.max(0, Math.min(0.999999, Number(rnd))) : 0.5) * tot, acc = 0;
-  for (i = 0; i < RULES_REPORT_TABLE.length; i++) { acc += RULES_REPORT_TABLE[i][1]; if (x < acc) return RULES_REPORT_TABLE[i][0]; }
-  return 3;
-}
-
-function rulesAward(r) {
-  var day = rulesDay(r.day), pt = rulesPt(r.pt, day), add = 0, msg = '';
-  if (r.ev === 'report') {
-    add = rulesDraw(r.rnd); pt.rc++;
-    msg = '\ud604\uc7a5\uc81c\ubcf4 \ub4f1\ub85d! +' + add + 'P (\uc624\ub298 ' + pt.rc + '/' + RULES_REPORT_MAX + ')' + (r.sent === false ? ' \u00b7 \uc5f0\uacb0\ub418\uba74 \uc62c\ub77c\uac00\uc694' : '');
-  } else if (r.ev === 'ride') { add = 10; msg = '\ud0d1\uc2b9 \uc548\ub0b4 \uc2dc\uc791 +10P'; }
-  else if (r.ev === 'write') { add = 10; msg = r.sent === false ? '\uae00\uc744 \uc800\uc7a5\ud588\uc5b4\uc694! +10P (\uc5f0\uacb0\ub418\uba74 \ubaa8\ub450\uc5d0\uac8c \ubcf4\uc5ec\uc694)' : '\uae00\uc774 \ub4f1\ub85d\ub418\uc5c8\uc5b4\uc694! +10P'; }
-  else return { ok: false, error: 'ev' };
-  pt.total += add; pt.today += add;
-  return { ok: true, pt: pt, add: add, msg: msg };
-}
-
-function rulesView(r) {
-  var day = rulesDay(r.day), pt = rulesPt(r.pt, day), lv = rulesLevel(pt.total);
-  return { ok: true, total: pt.total, today: pt.today, level: lv.name, next: lv.next, need: lv.need, rc: pt.rc, rcMax: RULES_REPORT_MAX };
 }
 
 // \ud0c4 \ub178\uc120 \uae30\ub85d: \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc218\ub3c4\uad8c1\ud638\uc120 \u2192 1\ud638\uc120)\uc744 \uc54c\ub824\uc9c4 \ub178\uc120\uc73c\ub85c \ub9de\ucd94\uace0, \ub178\uc120\ub9c8\ub2e4 \ud0c4 \ud69f\uc218\uc640 \ub9c8\uc9c0\ub9c9 \uc2dc\uac01\uc744 \uc313\ub294\ub2e4
@@ -22297,8 +22234,6 @@ function rulesMyLines(r) {
 function rulesRun(b) {
   b = (b && typeof b === 'object') ? b : {};
   if (b.op === 'check') return rulesCheck(b);
-  if (b.op === 'award') return rulesAward(b);
-  if (b.op === 'view') return rulesView(b);
   if (b.op === 'mylines') return rulesMyLines(b);
   return { ok: false, error: 'op' };
 }
