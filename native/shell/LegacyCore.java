@@ -23,9 +23,9 @@ public final class LegacyCore {
     /** 앱 폴더 안의 예전 localStorage 위치(검사기가 옛 웹 흔적으로 오해하지 않게 이름을 쪼개 둔다). */
     public static final String[] DIRS = { "app_" + "web" + "view/Default/Local Storage/leveldb", "app_" + "web" + "view/Local Storage/leveldb" };
 
-    /** 값 종류: 즐겨찾기 목록 · 커뮤니티 아이디 · 포인트 · 출퇴근 브리핑 설정. */
-    static final int M_FAV = 0, M_ID = 1, M_PT = 2, M_CM = 3;
-    static final String KEY_FAV = "mk_favorites", KEY_ID = "mk_comm_id", KEY_PT = "mk_pt", KEY_PTS = "mk_pts", KEY_CM = "commuteAlarm", KEY_KV = "kv";
+    /** 값 종류: 즐겨찾기 목록 · 커뮤니티 아이디 · 출퇴근 브리핑 설정. */
+    static final int M_FAV = 0, M_ID = 1, M_CM = 3;
+    static final String KEY_FAV = "mk_favorites", KEY_ID = "mk_comm_id", KEY_CM = "commuteAlarm", KEY_KV = "kv";
 
     /** 파일 내용들(오래된 것 먼저)에서 가장 나중에 찾은 즐겨찾기 목록을 새 앱 저장 모양(JSON 글)으로. 없으면 null. */
     public static String findFavorites(List<byte[]> files) { return scan(files, KEY_FAV, M_FAV); }
@@ -65,7 +65,6 @@ public final class LegacyCore {
         switch (mode) {
             case M_FAV: return shape(raw);
             case M_ID: return idOf(raw);
-            case M_PT: return ptOf(raw);
             case M_CM: return cmOf(raw);
             default: return null;
         }
@@ -134,7 +133,7 @@ public final class LegacyCore {
         }
         return out.isEmpty() ? null : HomeSearchCore.toJson(out);
     }
-    // ═════════════ 즐겨찾기 밖의 값들(커뮤니티 아이디 · 포인트 · 출퇴근 브리핑) ═════════════
+    // ═════════════ 즐겨찾기 밖의 값들(커뮤니티 아이디 · 출퇴근 브리핑) ═════════════
     /** 예전 웹은 값을 JSON.stringify 해서 저장했다 → 아이디는 따옴표로 싼 글자. 아이디 규칙(2~12자 한글/영문/숫자/밑줄)에 맞을 때만. */
     static String idOf(String raw) {
         if (raw == null) return null;
@@ -143,23 +142,6 @@ public final class LegacyCore {
         else if (v.length() > 0 && (v.charAt(0) == '{' || v.charAt(0) == '[')) return null;
         v = v.trim();
         return ShellCore.idError(v).length() == 0 ? v : null;
-    }
-    /** 포인트: 예전 {total,today,…} 에서 total 만 가져온다(오늘 값은 날짜 모양이 달라 0 부터). 새 앱 저장 모양의 JSON 글. total 이 0 이하면 null. */
-    @SuppressWarnings("unchecked")
-    static String ptOf(String raw) {
-        long t = totalOf(raw);
-        return t > 0 ? "{\"total\":" + t + ",\"today\":0,\"todayStr\":\"\",\"rc\":0,\"rcStr\":\"\"}" : null;
-    }
-    @SuppressWarnings("unchecked")
-    static long totalOf(String raw) {
-        if (raw == null || raw.length() < 2 || raw.charAt(0) != '{') return 0;
-        try {
-            Object o = ScreenCore.parse(raw);
-            if (!(o instanceof Map)) return 0;
-            Object t = ((Map<String, Object>) o).get("total");
-            double d = t instanceof Number ? ((Number) t).doubleValue() : (t instanceof String ? HomeSearchCore.pf(t) : 0);
-            return (d > 0 && d < 1e9) ? (long) d : 0;
-        } catch (ScreenCore.ParseError e) { return 0; }
     }
     /** 출퇴근 브리핑 설정: 객체이고 시각이 'HH:MM' 이거나 켜짐 값이 있을 때만(그대로 돌려준다 — 적용은 applyCommute). */
     @SuppressWarnings("unchecked")
@@ -218,8 +200,8 @@ public final class LegacyCore {
 
     /** 찾은 예전 값 묶음(모양을 검사한 새 앱 저장 모양). 없는 것은 null. */
     public static final class Found {
-        public String fav, id, pt, commute;
-        public boolean any() { return fav != null || id != null || pt != null || commute != null; }
+        public String fav, id, commute;
+        public boolean any() { return fav != null || id != null || commute != null; }
     }
     /** kvJson(앱 본체 저장소 · 없으면 null)을 먼저 보고, 없는 것만 localStorage 파일들에서 찾는다. */
     public static Found find(List<byte[]> files, String kvJson) {
@@ -227,17 +209,10 @@ public final class LegacyCore {
         f.fav = shape(fromKv(kvJson, KEY_FAV));
         f.id = idOf(fromKv(kvJson, KEY_ID));
         f.commute = cmOf(fromKv(kvJson, KEY_CM));
-        long a = totalOf(fromKv(kvJson, KEY_PT)), b = totalOf(fromKv(kvJson, KEY_PTS));
-        f.pt = ptOf("{\"total\":" + Math.max(a, b) + "}");
         if (files != null) {
             if (f.fav == null) f.fav = scan(files, KEY_FAV, M_FAV);
             if (f.id == null) f.id = scan(files, KEY_ID, M_ID);
             if (f.commute == null) f.commute = scan(files, KEY_CM, M_CM);
-            if (f.pt == null) {
-                String p1 = scan(files, KEY_PT, M_PT), p2 = scan(files, KEY_PTS, M_PT);
-                f.pt = totalOf(p1) >= totalOf(p2) ? p1 : p2;
-                if (f.pt == null) f.pt = p2 != null ? p2 : p1;
-            }
         }
         return f;
     }
