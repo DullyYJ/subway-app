@@ -3942,7 +3942,7 @@ public class ShellActivity extends Activity {
             RideService.save(ShellActivity.this, ride);
             store.put(ShellCore.K_RIDESNAP, home.rideSnapshot());
             try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
-            home.rideRouteId = rid; rideSeq = seqRoute;
+            home.rideRouteId = rid; rideSeq = seqRoute; lostN = 0;
             rideGraceUntil = System.currentTimeMillis() + 8000L;
             home.setRide(ride.rideJson(), ride.lvJson());
             final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
@@ -4013,7 +4013,7 @@ public class ShellActivity extends Activity {
     private long reviveAt; private int reviveN;
     /** 탑승 서비스가 꺼져 있는데 저장된 안내(30분 안)가 있으면 다시 켠다(앱이 죽었다 살아났거나 시스템이 서비스를 내렸을 때). 다시 켰으면 true — 그동안은 확정을 지우지 않는다. 4초에 한 번 · 최대 6번. */
     private boolean reviveRide() {
-        if (RideService.running) { reviveN = 0; return false; }
+        if (RideService.running) { if (reviveN > 0 && System.currentTimeMillis() - reviveAt > 60000L) reviveN = 0; return false; }       // 켠 뒤 1분 넘게 살아 있어야 횟수를 지운다(켜자마자 끝나는 일이 되풀이돼도 30초 간격)
         try {
             long now = System.currentTimeMillis();
             if (RideCore.restore(getSharedPreferences(RideService.PREFS, MODE_PRIVATE).getString(RideService.KEY_SAVED, ""), now) == null) return false;     // 저장본이 없다 = 도착했거나 사용자가 끝냈다(서비스가 지운다)
@@ -4027,10 +4027,29 @@ public class ShellActivity extends Activity {
     /** 서비스가 엔진에게서 받은 상태(상주 글 · 내 위치)를 결과 카드에 옮긴다. */
     private void pollRide() {
         if (!home.riding()) return;
+        if (RideService.running) lostN = 0;
         if (!RideService.running && (System.currentTimeMillis() < rideGraceUntil || reviveRide())) return;       // 서비스가 막 켜지는 중 · 시스템이 서비스를 내렸으면(저장본이 살아 있는 동안) 다시 켜고 기다린다 — 확정이 풀린 것처럼 지우지 않는다
+        if (!RideService.running && !("arrive".equals(RideService.endReason) || "user".equals(RideService.endReason)) && resumeLostRide()) return;       // 사용자가 끝내지도 도착하지도 않았는데 서비스가 없다 — 확정을 풀지 않고 다시 켠다
         if (RideService.running && RideService.liveRide.length() < 3) return;                                   // 서비스는 돌지만 첫 값이 아직 안 올라왔다 — 비어 있다고 확정을 지우지 않는다(끝났으면 running 이 먼저 꺼진다)
         if (home.setRide(RideService.liveRide, RideService.liveLv)) reloadHome();
         rerouteAsk();
+    }
+    private int lostN = 0; private long lostAt = 0L;
+    /**
+     * 탑승 서비스가 사용자가 끝내지도 도착하지도 않았는데 없다(켜지지 않았거나 · 시스템이 내렸거나 · 엔진이 뜻밖에 끝냈다).
+     * 앱이 들고 있는 탑승 상태(ride)를 저장본으로 다시 써서 서비스를 다시 켠다 — 30초에 한 번, 스무 번까지. 다시 켜는 동안은 true(확정 유지), 포기하면 false.
+     * 처음 한 번은 까닭을 오류 기록에 남겨 기기에서 원인을 볼 수 있게 한다.
+     */
+    private boolean resumeLostRide() {
+        long now = System.currentTimeMillis();
+        if (lostN >= 20 || !ride.hasState()) return false;
+        if (lostN == 0) { try { ErrLog.record(this, new IllegalStateException("RIDE_LOST reason=" + RideService.endReason), false); } catch (Throwable ignored) { } }
+        if (lostN == 0 || now - lostAt >= 30000L) {
+            lostAt = now; lostN++;
+            RideService.save(this, ride);
+            try { RideService.start(this); } catch (Throwable t) { /* 시스템이 지금은 못 켜게 한다 — 다음 번에 다시 */ }
+        }
+        return true;
     }
     private long offAskedAt = 0L;
     private android.app.Dialog offDlg;
