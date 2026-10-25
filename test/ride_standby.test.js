@@ -200,7 +200,7 @@ t('오버레이: 남은시간 줄(목적지 기준)과 하차 임박 단계(2→
     if (!l2) l2 = o.line2; if (o.pre) pre = true; if (o.banner && banners[banners.length - 1] !== o.banner) banners.push(o.banner);
     if (lv[lv.length - 1] !== o.alert) { lv.push(o.alert); if (o.alert === 2) atFirst = o.alertAt; }
     if (o.rs.st === 'board') rsSeen = o.rs;
-    assert.strictEqual(o.alertVibe, false);   // 진동은 알림이 한다(중복 방지)
+    assert.strictEqual(o.alertVibe, o.alert > 0);   // s198: 웹 _ovlLines 와 같다 — 단계가 켜져 있고 설정(cfg.allowed)이 허용하면 오버레이가 진동한다(엔진이 정하고 오버레이는 울리기만)
   }
   assert.ok(/^남은시간: \d\d시간 \d\d분 · 13:00도착$/.test(l2), l2);
   assert.deepStrictEqual(lv.filter((x, i) => i === 0 || x !== lv[i - 1]).filter(x => x > 0), [2, 1]);
