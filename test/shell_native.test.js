@@ -521,6 +521,17 @@ function findAndroidJar() {
         assert.ok(/R_LOCK = 15/.test(hc2) && /"rh\.close"\.equals\(v\)\) \{ if \(riding\(\)\) return R_LOCK;/.test(hc2), '확정한 경로는 닫기로 풀리지 않는다');
         const rs = fs.readFileSync(path.join(ROOT, 'engine', 'ride-standby.js'), 'utf8');
         assert.ok(!/offGiveUpSec\s*:/.test(rs) && !/O\.offGiveUpSec/.test(rs), '탑승 엔진은 경로를 벗어났다고 스스로 안내를 끝내지 않는다');
+        // 서비스가 뜻밖에 사라져도(켜지지 않음 · 시스템이 내림 · 엔진이 뜻밖에 끝냄) 확정을 풀지 않는다 — 사용자 종료 · 도착만 푼다
+        {
+            const rsv0 = fs.readFileSync(N('RideService.java'), 'utf8');
+            assert.ok(/static volatile String endReason/.test(rsv0) && /ACT_STOP\.equals\(act\)\) \{ finishRide\("user"\)/.test(rsv0) && /finishRide\(q \? "arrive" : "engine-done"\)/.test(rsv0) && /static void stop\(Context c\) \{\s*endReason = "user";/.test(rsv0) && /static void start\(Context c\) \{\s*endReason = "";/.test(rsv0), '서비스가 끝난 까닭(user · arrive · 그 밖)을 남긴다');
+            const fr = rsv0.slice(rsv0.indexOf('private void finishRide(String reason)'), rsv0.indexOf('// ── 알림 ──'));
+            assert.ok(/if \(legit\) clearSaved\(this\);/.test(fr) && /RIDE_END/.test(fr) && !/clearSaved\(this\);\s*liveOff/.test(fr), '뜻밖의 끝은 저장본을 남겨 다시 켤 수 있게 한다');
+            const pr = a.slice(a.indexOf('private void pollRide()'), a.indexOf('private int lostN'));
+            assert.ok(/"arrive"\.equals\(RideService\.endReason\) \|\| "user"\.equals\(RideService\.endReason\)\)\) && resumeLostRide\(\)\) return;/.test(pr.replace(/\s+/g, ' ').replace('!(' , '!(') ) || /resumeLostRide\(\)\) return;/.test(pr), '뜻밖에 서비스가 없으면 확정을 풀지 않고 다시 켠다');
+            const rl = a.slice(a.indexOf('private boolean resumeLostRide()'), a.indexOf('private long offAskedAt'));
+            assert.ok(/lostN >= 20/.test(rl) && /now - lostAt >= 30000L/.test(rl) && /RideService\.save\(this, ride\)/.test(rl) && /RIDE_LOST/.test(rl), '30초에 한 번 · 스무 번까지 다시 켜고 까닭을 오류 기록에 남긴다');
+        }
         // 경로 이탈 팝업: 엔진이 알린 이탈(off.at) → 서비스(liveOff) → 앱이 한 번 묻고, 고르면 지금 위치에서 다시 찾는다
         const rcj = fs.readFileSync(N('RideCore.java'), 'utf8'), rsv = fs.readFileSync(N('RideService.java'), 'utf8');
         assert.ok(/public long offAt;/.test(rcj) && /m\.get\("off"\)/.test(rcj) && /offAt = 0L; cur = -1;/.test(rcj), 'RideCore 가 엔진의 off.at 을 읽는다');
