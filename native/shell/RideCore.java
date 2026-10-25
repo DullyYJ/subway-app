@@ -35,6 +35,8 @@ public final class RideCore {
         public long[] vib = new long[0];
         /** 하차 7분 전 추천을 지금 보내야 하면 /reco-text 본문(JSON), 아니면 "". */
         public String recoBody = "";
+        /** 승차 대기 중 '실시간 다음 차를 물어라'(엔진 ask) — POST /board-live 본문(JSON), 아니면 "". */
+        public String askBody = "";
     }
 
     /** 엔진이 정한 떠 있는 안내 값(overlay) — 서비스가 창에 그리기만 한다. active 가 아니면 창을 치운다. */
@@ -56,6 +58,9 @@ public final class RideCore {
     private volatile long rcDis;                       // [확인]/[보기]로 닫은 추천의 at
     public volatile double[] recoLoc;                  // 도착지 좌표(엔진 reco.loc)
     private RecoAd adInFlight; private String actInFlight = "";
+    private volatile String pendingBl = "";            // /board-live 가 준 답(다음 걸음 요청의 bl 로 한 번만 실어 보낸다) — 승차 대기 중 실시간 재보정(s196)
+    private String blInFlight = "";
+    public void setBl(String resp) { if (resp != null && resp.length() > 2 && resp.length() < 4000) pendingBl = resp; }
     public void setRecoAd(RecoAd ad) { if (ad != null) { pendingAd = ad; lastAd = ad; } }
     public RecoAd lastRecoAd() { return lastAd; }
     public void queueAct(String a) { if ("press".equals(a) || "undo".equals(a) || "open".equals(a) || "close".equals(a) || "pill".equals(a)) pendingAct = a; }
@@ -177,6 +182,8 @@ public final class RideCore {
         if (rcDis > 0) b.append(",\"rcDis\":").append(rcDis);
         String act = pendingAct; actInFlight = act;
         if (act.length() > 0) b.append(",\"act\":").append(ShellCore.q(act));
+        String bl = pendingBl; blInFlight = bl;
+        if (bl.length() > 0) b.append(",\"bl\":").append(bl);
         return b.append('}').toString();
     }
 
@@ -240,6 +247,10 @@ public final class RideCore {
             }
             if (pendingAd == adInFlight) pendingAd = null;
             if (pendingAct.equals(actInFlight)) pendingAct = "";
+            if (pendingBl.equals(blInFlight)) pendingBl = "";
+            Object ask = m.get("ask");
+            if (ask instanceof Map && "boardlive".equals(((Map<String, Object>) ask).get("kind")) && ((Map<String, Object>) ask).get("body") instanceof Map)
+                s.askBody = HomeSearchCore.toJson(((Map<String, Object>) ask).get("body"));
             s.done = done; s.ok = true; rev++;
         } catch (ScreenCore.ParseError e) {
             return new Step();

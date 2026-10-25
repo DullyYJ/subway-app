@@ -169,6 +169,7 @@ public class RideService extends Service {
                         save(RideService.this, core);
                         if (s.alert) fireAlert(s);
                         if (s.recoBody.length() > 0) fireReco(s.recoBody);
+                        if (s.askBody.length() > 0) fetchBoardLive(s.askBody);
                         publish();
                         updateOngoing();
                         updateOverlay();
@@ -263,6 +264,21 @@ public class RideService extends Service {
     }
     private void updateOngoing() {
         try { ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(NOTI_ID, ongoing()); } catch (Throwable ignored) { }
+    }
+    // ── 승차 대기 중 실시간 다음 차(웹 _htlResyncBoard): 엔진이 묻자고 할 때만(15초 간격) — 승차가 확정되면 엔진이 더는 묻지 않는다(탑승 뒤 서버 요청 0) ──
+    private volatile boolean blFetching = false;
+    private void fetchBoardLive(final String body) {
+        if (blFetching) return;
+        blFetching = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/board-live", body, 4500);
+                    if (r.status == 200 && core != null) core.setBl(r.body);
+                } catch (Throwable ignored) { }
+                blFetching = false;
+            }
+        }, "ride-bl").start();
     }
     // ── 하차 추천 문구: 탑승 전에 한 번 받아 두고, 탑승 뒤에는 받아 둔 글만 쓴다(서버 요청 0) ──
     private volatile String recoCacheBody = "", recoCacheResp = "";

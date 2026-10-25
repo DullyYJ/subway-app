@@ -242,7 +242,7 @@ final class RideStandbyJ {
             double pk = pickMs(tw != null && !(!Double.isNaN(dW) && dW > RS_NEAR_M && tw.get("late") != null) ? tw : null, num(w.get("i")), now);
             Map<String, Object> np = obj("idx", w.get("i"), "ms", pk, "src", "gps");
             if (hit >= 0) passes.set(hit, np); else passes.add(np);
-            eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); st.put("rsOpen", 0.0);
+            eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); blClear(st); st.put("rsOpen", 0.0);
             notes.add("승차 수동 확정(오버레이 탑승 버튼)" + (pk != now ? " · 시각표 " + ns(round((pk - now) / 1000)) + "초" : ""));
             pressVerify(st, num(w.get("i")), now, notes);
         } else if ("undo".equals(a) && st.get("rsUndo") != null && now < num(mm(st.get("rsUndo")).get("until")) && !truthy(mm(st.get("rsUndo")).get("x"))) doUndo(st, now, notes);
@@ -644,8 +644,72 @@ final class RideStandbyJ {
         for (k = 0; k < passes.size(); k++) if (gn(passes.get(k), "idx") == num(w.get("i"))) { hit = k; break; }
         Map<String, Object> np = obj("idx", w.get("i"), "ms", ms, "src", "gps");
         if (hit >= 0) passes.set(hit, np); else passes.add(np);
-        eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait");
+        eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); blClear(st);
         notes.add("승차 확정(" + why + ")");
+    }
+
+
+    // ═════════════ 승차 대기 중 실시간 재보정(s196) — engine/ride-standby.js 의 rsBlTarget · rsBlAsk · rsBlApply 그대로 ═════════════
+    // 폰은 묻기만 한다: 엔진이 ask 를 내면 RideService 가 POST /board-live 로 보내고, 받은 답을 다음 걸음 요청의 bl 에 실어 준다.
+    static final double BL_STEP_MS = 15000, BL_NEAR_M = 250, BL_FIX_MS = 60000, BL_WALK_MPS = 1.2, BL_DETOUR = 1.25, BL_HOLD_MIN = 2, BL_MAXWAIT = 30, BL_MAXWAIT_ARR = 90, BL_ANS_MS = 90000;
+
+    static Map<String, Object> blTarget(Map<String, Object> st) {
+        Map<String, Object> w = mm(st.get("wait")), eta = mm(st.get("eta")); if (w == null || eta == null) return null;
+        List<Object> nodes = l(eta.get("nodes")); if (nodes == null) nodes = new ArrayList<Object>();
+        int wi = (int) num(w.get("i"));
+        Object n = wi >= 0 && wi < nodes.size() ? nodes.get(wi) : null, nx = wi + 1 >= 0 && wi + 1 < nodes.size() ? nodes.get(wi + 1) : null;
+        if (!truthy(n)) return null;
+        if (truthy(g(n, "isSub")) && !truthy(g(n, "isBus")) && truthy(g(n, "lineName")) && truthy(g(n, "name")))
+            return obj("kind", "sub", "line", str(g(n, "lineName")), "from", str(g(n, "name")), "to", truthy(nx) && truthy(g(nx, "name")) ? str(g(nx, "name")) : "");
+        Map<String, Object> cfg = mm(st.get("cfg")), b = cfg == null ? null : mm(cfg.get("bl"));
+        if (truthy(g(n, "isBus")) && !truthy(g(n, "isSub")) && b != null && "bus".equals(b.get("kind")) && b.get("i") != null && num(b.get("i")) == wi && truthy(b.get("cc")) && truthy(b.get("sid")) && truthy(g(n, "lineName")))
+            return obj("kind", "bus", "cc", str(b.get("cc")), "sid", str(b.get("sid")), "no", str(g(n, "lineName")));
+        return null;
+    }
+
+    static Map<String, Object> blAsk(Map<String, Object> st, List<Object> tr, double now) {
+        try {
+            Map<String, Object> w = mm(st.get("wait")), tg = blTarget(st); if (w == null || tg == null || tr.isEmpty()) return null;
+            Object q = tr.get(tr.size() - 1);
+            if (!truthy(q) || now - num(at(q, 0)) > BL_FIX_MS || !fin(at(q, 1)) || !fin(at(q, 2))) return null;
+            Map<String, Object> bl = mm(st.get("bl")); if (bl == null) { bl = obj(); st.put("bl", bl); }
+            double dist = rsHav(num(at(q, 1)), num(at(q, 2)), num(w.get("lat")), num(w.get("lng")));
+            boolean near = truthy(w.get("seen")) || dist <= BL_NEAR_M;
+            boolean arrivedNow = truthy(w.get("seen")) && !truthy(bl.get("arr"));
+            if (!arrivedNow) {
+                if (now - (truthy(bl.get("askAt")) ? num(bl.get("askAt")) : 0) < BL_STEP_MS) return null;
+                Object em = st.get("etaMs"), dep = em == null ? null : at(em, (int) num(w.get("i")));
+                if (truthy(w.get("seen")) && dep != null && fin(dep)) { double past = (now - num(dep)) / 60000; if (past >= -0.5 && past <= BL_HOLD_MIN) return null; }
+            }
+            bl.put("askAt", now); if (arrivedNow) bl.put("arr", 1.0);
+            Map<String, Object> eta = mm(st.get("eta"));
+            double tz = eta.get("tzOffsetMin") != null && fin(eta.get("tzOffsetMin")) ? num(eta.get("tzOffsetMin")) : 540;
+            double fromMs = near ? now : now + (dist * BL_DETOUR / BL_WALK_MPS) * 1000;
+            Map<String, Object> o = obj("kind", tg.get("kind"), "i", w.get("i"), "nowMs", now, "fromMs", round(fromMs), "allowEarlier", near || arrivedNow, "maxWait", arrivedNow ? BL_MAXWAIT_ARR : BL_MAXWAIT, "tz", tz);
+            if ("sub".equals(tg.get("kind"))) { o.put("line", tg.get("line")); o.put("from", tg.get("from")); o.put("to", tg.get("to")); }
+            else { o.put("cc", tg.get("cc")); o.put("sid", tg.get("sid")); o.put("no", tg.get("no")); }
+            return o;
+        } catch (RuntimeException e) { return null; }
+    }
+
+    static void blApply(Map<String, Object> st, Map<String, Object> req, double now, List<Object> notes) {
+        Map<String, Object> b = mm(req.get("bl")), w = mm(st.get("wait")), eta = mm(st.get("eta"));
+        if (b == null || w == null || eta == null || b.get("i") == null || num(b.get("i")) != num(w.get("i"))) return;
+        double at0 = b.get("at") == null ? Double.NaN : num(b.get("at"));
+        if (!fin(at0) || now - at0 > BL_ANS_MS || at0 > now + 5000) return;
+        if (b.get("ms") == null || !fin(b.get("ms"))) return;
+        double mw = b.get("maxWait") != null && fin(b.get("maxWait")) ? num(b.get("maxWait")) : BL_MAXWAIT;
+        eta.put("boardNext", obj("ms", num(b.get("ms")), "src", "realboard", "allowEarlier", truthy(b.get("allowEarlier")) || "realtime".equals(b.get("src")), "maxWaitMin", mw));
+        if (b.get("fromMs") != null && fin(b.get("fromMs"))) eta.put("boardArriveMs", num(b.get("fromMs")));
+        Map<String, Object> bl = mm(st.get("bl")); if (bl == null) { bl = obj(); st.put("bl", bl); }
+        bl.put("src", truthy(b.get("src")) ? str(b.get("src")) : ""); bl.put("ms", num(b.get("ms"))); bl.put("okAt", now);
+        notes.add("실시간 재보정(" + (truthy(b.get("src")) ? str(b.get("src")) : "?") + ") 다음 차 " + ns(round((num(b.get("ms")) - now) / 1000)) + "초 뒤");
+    }
+
+    static void blClear(Map<String, Object> st) {
+        Map<String, Object> eta = mm(st.get("eta"));
+        if (eta != null) { eta.remove("boardNext"); eta.remove("boardArriveMs"); }
+        st.remove("bl");
     }
 
 
@@ -709,8 +773,10 @@ final class RideStandbyJ {
         if (!truthy(st.get("firstAt"))) st.put("firstAt", now);
         while (!tr.isEmpty() && now - num(at(tr.get(0), 0)) > trailMaxAgeSec * 1000) tr.remove(0);
         if (tr.size() > trailMax) { int cut = tr.size() - (int) trailMax; for (int c = 0; c < cut; c++) tr.remove(0); }
+        blApply(st, req, now, notes);
         wait(st, tr, now, notes);
         xwait(st, tr, now, notes);
+        Map<String, Object> askBl = blAsk(st, tr, now);
         acts(st, req, now, notes);
         // 2) 영점
         Map<String, Object> eta = mm(st.get("eta"));
@@ -774,6 +840,7 @@ final class RideStandbyJ {
         Map<String, Object> r = RideEtaJ.rideEta(ein);
         if (r == null || r.get("etaMs") == null) return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", ""), "alert", null, "done", Boolean.FALSE, "nextMs", stepMs, "notes", list("도착 시각 계산 실패"));
         st.put("etaMs", r.get("etaMs"));
+        { Map<String, Object> wq = mm(st.get("wait")); if (wq != null && eta.get("boardNext") != null) { Object bv = at(r.get("etaMs"), (int) num(wq.get("i"))); if (bv != null && fin(bv)) wq.put("arrMs", num(bv)); } }
         if (r.get("delayMin") != null) { eta.put("prevLevelMin", r.get("delayMin")); eta.put("prevAnchorIdx", r.get("anchorIdx")); }
         // 4) 지금 어느 역까지 왔나
         List<Object> nodes = enodes; Map<String, Object> cfg = mm(st.get("cfg")); if (cfg == null) cfg = obj();
@@ -853,6 +920,6 @@ final class RideStandbyJ {
         Map<String, Object> row = done ? null : rowOut(st, now);
         return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
             "pos", rpos != null ? obj("from", rpos.get("from"), "to", rpos.get("to"), "ratio", rpos.get("ratio"), "moving", truthy(rpos.get("moving"))) : null,
-            "arr", r.get("arr"), "zero", zero, "nextMs", done ? stepMs : nextMsV, "motion", motion, "notes", notes);
+            "arr", r.get("arr"), "zero", zero, "nextMs", done ? stepMs : nextMsV, "motion", motion, "ask", askBl == null ? null : obj("kind", "boardlive", "body", askBl), "notes", notes);
     }
 }
