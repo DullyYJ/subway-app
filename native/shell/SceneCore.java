@@ -73,7 +73,7 @@ public final class SceneCore {
         String id, kind; SceneModel.Spec D; double k, w, x, z; int dir = 1; String st = "walk";
         double tx, tz, t0, until, fr, y, ang, sq, hop; boolean vis = true, intro; int ii;
         double alt, life, born; boolean leaving, hero, nograb, chase, held, pinned, dead, hidden, umb, lastBounce;
-        double ph, bubUntil, sx = 1, sy = 1, ox, pvx, pvy, cut = Double.NaN, spd;
+        double ph, bubUntil, sx = 1, sy = 1, ox, pvx, pvy, cut = Double.NaN, spd; int pose = -1;     // pose: 자세 시트(<id>_pose) 칸 0 앉기·1 잠·2 웃음·3 덜덜·4 헥헥·5 찡그림, -1 이면 걷기 시트
         String bub = ""; List<Prop> pr; Stk stk; int ai; AS act; Arrive onArrive;
         Integer lastCyc; double dirT; String afterEmerge, prevSt, landK = "";
         double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil;
@@ -95,7 +95,7 @@ public final class SceneCore {
     final Map<String, Act> ACT = new HashMap<>();
     String error;
 
-    static final class P { List<double[]> rain = new ArrayList<>(), snow = new ArrayList<>(), clouds = new ArrayList<>(), stars = new ArrayList<>(), birds = new ArrayList<>(); }
+    static final class P { List<double[]> rain = new ArrayList<>(), snow = new ArrayList<>(), clouds = new ArrayList<>(), stars = new ArrayList<>(), birds = new ArrayList<>(), wind = new ArrayList<>(); }
 
     public SceneCore(Host host, SceneCv layerFactory, SceneUtil.Rng rng) {
         this.host = host; this.factory = layerFactory; this.R = rng;
@@ -234,7 +234,7 @@ public final class SceneCore {
         SceneModel.Spec D = a.D; double u = a.until > a.t0 ? (t - a.t0) / (a.until - a.t0) : 0; String st = a.st;
         if (!a.bub.isEmpty() && t > a.bubUntil && !st.equals("rest")) a.bub = "";
         if (st.equals("fall")) { fallStep(a, dt); return; }
-        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false;
+        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1;
         if (a.kind.equals("eagle") && !a.hero) a.alt = 16 + Math.sin(t * 1.7 + a.x * .03) * 5;
         if (st.equals("emerge")) {
             a.intro = true; a.ii = (int) Math.min(D.intro - 1, Math.floor(u * D.intro));
@@ -260,12 +260,14 @@ public final class SceneCore {
         } else if (st.equals("spin")) {
             a.fr += dt * D.fps * .4; if (t - a.dirT > .4) { a.dir = -a.dir; a.dirT = t; } if (t >= a.until) endAct(a);
         } else if (st.equals("rest")) {
-            a.fr = SceneModel.stand(a.id); a.y = -Math.abs(Math.sin((t - a.t0) * 2.2)) * .8; if (t >= a.until) { a.bub = ""; endAct(a); }
+            a.fr = SceneModel.stand(a.id); a.y = -Math.abs(Math.sin((t - a.t0) * 2.2)) * .8; a.pose = L.night ? 1 : 0; if (a.kind.equals("eagle")) a.alt = 0;   // 밤엔 눈 감고 자고, 낮엔 앉아 쉰다
+            if (a.pose == 1) a.y = Math.sin((t - a.t0) * 1.6) * .5; if (t >= a.until) { a.bub = ""; endAct(a); }
         } else if (st.equals("act")) {
             actStep(a, dt);
         } else if (st.equals("stand")) {                // 서 있기(대기·하차 장면의 대표 캐릭터)
             a.fr = SceneModel.stand(a.id); a.y = -Math.abs(Math.sin(t * 2.0 + a.ph)) * .9;
         }
+        if (a.pose >= 0 && a.kind.equals("eagle") && a.pose != 2 && a.pose != 4) a.alt = 0;        // 독수리는 앉기·잠·덜덜·찡그림 자세에선 땅(횃대)에 내려앉는다
         a.z = clamp(a.z, -.2, 1.05); a.x = clamp(a.x, -a.w * 1.2, W + a.w * 1.2);
         if (a.kind.equals("tad")) a.y -= 2 + Math.sin(t * 2.4 + a.x) * 1.6;
     }
@@ -280,8 +282,10 @@ public final class SceneCore {
         v.v = lane == 1 ? rnd(46, 66) : rnd(28, 44); v.color = css(bus ? pickOf(BUS_COLORS) : pickOf(CAR_COLORS)); v.no = pickOf(BUS_NOS);
         traffic.add(v); return v;
     }
+    /** 찻길이 있는 장소인가(거리만 — 공원·강변·바닷가 등엔 차가 지나가지 않는다). 장소는 엔진이 정한다(look.place). */
+    boolean streetPlace() { return L == null || L.place == null || "street".equals(L.place); }
     void stepTraffic(double dt) {
-        if (!"ride".equals(mode) && t >= nextCar && traffic.size() < 3) {
+        if (!"ride".equals(mode) && streetPlace() && t >= nextCar && traffic.size() < 3) {
             Traffic v = spawnTraffic(); nextCar = t + rnd(4.5, 9);
             if ("wait".equals(mode) && venue.equals("bus") && v.bus && v.lane == 1 && hero != null) { hero.bub = "!"; hero.bubUntil = t + 1.3; hero.dir = -1; hero.lookUntil = t + 1.6; }
         }
@@ -499,6 +503,9 @@ public final class SceneCore {
         else if (kk.equals("bub")) { c.strokeStyle("rgba(255,255,255,.95)"); c.fillStyle("rgba(190,225,255,.35)"); c.lineWidth(.9); c.beginPath(); c.arc(p.x, p.y, 2.2 * r, 0, PI2); c.fill(); c.stroke(); }
         else if (kk.equals("feather")) { c.fillStyle("#f2ece0"); c.strokeStyle("#8a6a46"); c.lineWidth(.6); c.save(); c.translate(p.x, p.y); c.rotate(Math.sin(p.age * 6 + p.rot) * .9); c.beginPath(); c.ellipse(0, 0, 4.2, 1.5, 0, 0, PI2); c.fill(); c.stroke(); c.restore(); }
         else if (kk.equals("note") || kk.equals("zzz")) { c.fillStyle(kk.equals("note") ? "#ff7aa5" : "#8aa0c8"); c.font(Math.round(7 + 3 * r)); c.fillTextC(!p.txt.isEmpty() ? p.txt : (kk.equals("note") ? "♪" : "z"), p.x, p.y); }
+        else if (kk.equals("sweat")) { double sr = p.r != 0 ? p.r : 1; c.fillStyle("rgba(150,210,255,.95)"); c.beginPath(); c.moveTo(p.x, p.y - 3 * sr); c.quadTo(p.x + 2.4 * sr, p.y + .6 * sr, p.x, p.y + 2.2 * sr); c.quadTo(p.x - 2.4 * sr, p.y + .6 * sr, p.x, p.y - 3 * sr); c.fill(); }
+        else if (kk.equals("flake")) { c.fillStyle("#ffffff"); c.beginPath(); c.arc(p.x, p.y, 1.5, 0, PI2); c.fill(); c.strokeStyle("rgba(190,215,245,.8)"); c.lineWidth(.5); c.stroke(); }
+        else if (kk.equals("breath")) { double bu = clamp(p.age / p.life, 0, 1), br = (2.2 + bu * 4.2) * (p.r != 0 ? p.r : 1); c.globalAlpha(clamp(.7 * (1 - bu), 0, 1)); c.fillStyle(L.night ? "#e6f0ff" : "#ffffff"); c.beginPath(); c.arc(p.x, p.y, br, 0, PI2); c.fill(); c.beginPath(); c.arc(p.x + br * .8 * (p.vx >= 0 ? 1 : -1), p.y - br * .3, br * .7, 0, PI2); c.fill(); }
         else if (kk.equals("ring")) { double ru = clamp(p.age / p.life, 0, 1); c.strokeStyle("rgba(235,248,255,.9)"); c.lineWidth(1); c.beginPath(); c.ellipse(p.x, p.y, 3 + ru * 13, (3 + ru * 13) * .34, 0, 0, PI2); c.stroke(); }
         c.globalAlpha(1);
     }
@@ -540,6 +547,10 @@ public final class SceneCore {
             } else if (k.equals("dew")) {
                 double dr = p.r != 0 ? p.r : 4 * zz; c.fillStyle("rgba(150,215,255,.9)"); c.strokeStyle("rgba(255,255,255,.9)"); c.lineWidth(.9); c.beginPath(); c.arc(X, Y, dr, 0, PI2); c.fill(); c.stroke();
                 c.fillStyle("rgba(255,255,255,.9)"); c.beginPath(); c.arc(X - dr * .35, Y - dr * .35, dr * .32, 0, PI2); c.fill();
+            } else if (k.equals("fan")) {
+                double fr = 5.2 * zz; c.translate(X, Y); c.rotate(p.r - .6 * a.dir); c.fillStyle("#f2c94c"); c.strokeStyle("#9c6b17"); c.lineWidth(.8);
+                c.beginPath(); c.arc(0, -fr * 1.1, fr, 0, PI2); c.fill(); c.stroke(); c.strokeStyle("#9c6b17"); c.beginPath(); c.moveTo(0, -fr * .1); c.lineTo(0, fr * .9); c.stroke();
+                c.strokeStyle("rgba(156,107,23,.55)"); c.lineWidth(.6); c.beginPath(); c.moveTo(-fr * .6, -fr * 1.1); c.lineTo(fr * .6, -fr * 1.1); c.moveTo(0, -fr * 1.9); c.lineTo(0, -fr * .3); c.stroke();
             } else if (k.equals("moundhat")) {
                 double mr = p.r != 0 ? p.r : h * .2; c.fillStyle("#8a6a45"); c.beginPath(); c.moveTo(X - mr, Y); c.quadTo(X - mr * .7, Y - mr * 1.1, X, Y - mr * 1.05); c.quadTo(X + mr * .7, Y - mr * 1.1, X + mr, Y); c.closePath(); c.fill();
                 c.fillStyle("rgba(0,0,0,.18)"); c.beginPath(); c.arc(X - mr * .3, Y - mr * .5, mr * .2, 0, PI2); c.arc(X + mr * .35, Y - mr * .35, mr * .15, 0, PI2); c.fill();
@@ -622,8 +633,10 @@ public final class SceneCore {
     void drawActor(SceneCv c, Actor a) {
         if (!a.vis) return;
         SceneModel.Spec D = a.D; SceneCv.Img sheet = a.intro ? host.intro() : host.sheet(a.id); if (sheet == null) return;
+        SceneCv.Img psh = !a.intro && a.pose >= 0 ? host.sheet(a.id + "_pose") : null;          // 자세 시트가 없으면(옛 설치·읽기 실패) 걷기 시트로 그린다
         double zz = zs(a.z), s = a.k * zz * (a.held ? 1.12 : 1), sc = D.cell / 256 * s, y = zy(a.z);
         int idx = a.intro ? a.ii : (int) Math.floorMod((long) Math.floor(a.fr), 16L);
+        if (psh != null) { sheet = psh; idx = Math.max(0, Math.min(7, a.pose)); }
         double lift = (D.lift + a.alt) * zz * (a.kind.equals("eagle") ? 1 : s / a.k);
         double shA = (L.night ? .22 : .34) * (a.kind.equals("eagle") ? .7 : 1) * (L.wk.equals("rain") || L.wk.equals("overcast") ? .7 : 1);
         boolean sunk = !Double.isNaN(a.cut) && a.y > TH * zz * .9;
@@ -658,7 +671,7 @@ public final class SceneCore {
         int cc = wk.equals("overcast") || wk.equals("rain") ? mix("#aeb6c2", "#2a3140", clamp(dk + .1, 0, .9)) : wk.equals("snow") ? mix("#e3e9f2", "#3a4256", dk) : wk.equals("fog") ? mix("#dfe4ea", "#444c5e", dk)
                 : mix(css("#ffffff"), css(Lk.slot.equals("evening") ? "#ff9f80" : Lk.slot.equals("dawn") ? "#c9a0c0" : "#1c2440"), Lk.night ? .85 : Lk.lit ? .35 : 0);
         for (i = 0; i < wxP.clouds.size(); i++) {
-            q = wxP.clouds.get(i); double x = ((q[0] * (W + 90) + tt * 4 * q[3]) % (W + 90)) - 45, y = 8 + q[1] * g.hy;
+            q = wxP.clouds.get(i); double x = ((q[0] * (W + 90) + tt * 4 * q[3] * SceneFx.cloudSpeed(Lk)) % (W + 90)) - 45, y = 8 + q[1] * g.hy;
             SceneArt.cloud(c, x, y, 8 * q[2] * (wk.equals("overcast") || wk.equals("rain") ? 1.3 : 1), cc);
         }
         if (wk.equals("clear") && (Lk.slot.equals("morning") || Lk.slot.equals("noon") || Lk.slot.equals("afternoon"))) {
@@ -674,8 +687,8 @@ public final class SceneCore {
         if (Lk.wk.equals("rain")) {
             c.strokeStyle(Lk.night ? "rgba(170,200,255,.5)" : "rgba(110,140,190,.6)"); c.lineWidth(1); c.beginPath();
             for (i = 0; i < wxP.rain.size(); i++) {
-                q = wxP.rain.get(i); double y = ((q[1] * (H + 20) + tt * 210 * q[2]) % (H + 20)) - 10, x = (q[0] * (W + 30) - y * .22 + W + 30) % (W + 30) - 5;
-                c.moveTo(x, y); c.lineTo(x - 1.6, y - q[3]);
+                q = wxP.rain.get(i); double y = ((q[1] * (H + 20) + tt * 210 * q[2]) % (H + 20)) - 10, x = (q[0] * (W + 30) - y * (.22 + .12 * Lk.wind) + W + 30) % (W + 30) - 5;
+                c.moveTo(x, y); c.lineTo(x - 1.6 - 1.4 * Lk.wind, y - q[3]);
             }
             c.stroke();
             for (i = 0; i < ripples.size(); i++) {
@@ -721,7 +734,8 @@ public final class SceneCore {
     void drawStreet(SceneCv c, double dt) {
         int tw = bg.tw;
         c.drawImage(bg.sky, 0, 0, W, H); drawSkyFx(c, t);
-        c.drawImage(bg.far, 0, 0, tw, H); c.drawImage(bg.mid, 0, 0, tw, H); c.drawImage(bg.gnd, 0, 0, W, H);
+        c.drawImage(bg.far, 0, 0, tw, H); SceneFx.drawMid(this, c, bg.mid, tw); c.drawImage(bg.gnd, 0, 0, W, H);
+        SceneFx.ambient(this, c, t);
         drawTraffic(c, 0);
         Seq q = seq;
         if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busNo; o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
@@ -739,6 +753,7 @@ public final class SceneCore {
         for (Actor a : arr) if (!a.bub.isEmpty()) { double y = zy(a.z) - TH * zs(a.z) - 6 + a.y, x = a.x + a.dir * a.w * .2; SceneArt.drawBubble(c, x, y, a.bub); }
         drawParts(c, dt);
         drawWxFront(c, t);
+        SceneFx.cold(this, c); SceneFx.sun(this, c, t); SceneFx.heat(this, c, t); SceneFx.wind(this, c, t);
     }
     void drawRide(SceneCv c) {
         Ride Rd = ride; Actor h = hero; SceneModel.Spec D = h.D; SceneArt.Pal Lk = L; int i, col = busColor;
@@ -821,11 +836,12 @@ public final class SceneCore {
         if (wk.equals("snow")) for (i = 0; i < 64; i++) p.snow.add(new double[]{R.next(), R.next(), rnd(.45, 1), rnd(.9, 2.2), R.next() * 6.28});
         for (i = 0; i < 40; i++) p.stars.add(new double[]{R.next(), R.next() * .45, R.next() * 6.28, rnd(.5, 1.3)});
         for (i = 0; i < 3; i++) p.birds.add(new double[]{R.next(), rnd(.1, .3), rnd(.6, 1.1), R.next() * 6.28});
+        if (L.wind > 0) for (i = 0; i < 30; i++) p.wind.add(new double[]{R.next(), R.next(), rnd(.6, 1.2), R.next(), R.next() * 6.28});          // 바람이 있을 때만(난수열 그대로 유지)
         return p;
     }
     void resetBG() {
         bg = SceneArt.buildBG(factory, L, g, dpr, L.season, dark);
-        bgKey = L.slot + "|" + L.wk + "|" + L.season + "|" + dark + "|" + W + "|" + H; wxP = mkWxParts(L.wk);
+        bgKey = L.slot + "|" + L.wk + "|" + L.season + "|" + L.place + "|w" + L.wind + "|" + dark + "|" + W + "|" + H; wxP = mkWxParts(L.wk);
     }
     void boot(boolean keepBus) {
         int bc = css(pickOf(BUS_COLORS)); String bn = pickOf(BUS_NOS); if (!keepBus || busNo == null) { busColor = bc; busNo = bn; }
@@ -852,7 +868,7 @@ public final class SceneCore {
         else {
             boolean modeChanged = !mode.equals(r.mode); res = r;
             SceneArt.Pal L2 = SceneArt.paint(r.look); L = L2;
-            if (!(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + dark + "|" + W + "|" + H).equals(bgKey)) resetBG();
+            if (!(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + L2.place + "|w" + L2.wind + "|" + dark + "|" + W + "|" + H).equals(bgKey)) resetBG();
             if (modeChanged) { snapshot(); setup(r.mode); }
             if ("wait".equals(mode) || "alight".equals(mode)) { boolean um = L.wk.equals("rain") || L.wk.equals("snow"); if (hero != null) hero.umb = um; }
         }
@@ -894,6 +910,10 @@ public final class SceneCore {
                     if (a.held) { heldStep(a, dt); continue; }
                     if (a.st.equals("hidden")) continue;
                     stepActor(a, dt);
+                    if (L.cold && a.vis && !a.st.equals("fall") && R.next() < dt * .3) {                    // 추운 날: 걷는 중에도 가끔 입김이 난다(그림만 — 추운지는 엔진 look.cold)
+                        double hh = HH(a); double[] hd = SceneActs.headOf(a, hh);
+                        ptx("breath", a.x + a.dir * (hd[0] + hh * .1), feetY(a) - liftOf(a) + hd[1] + hh * .1, 1, po().a(a.dir > 0 ? -.5 : PI + .5, a.dir > 0 ? -.2 : PI + .2).s(8, 14).g(-6).l(.9, 1.3).r(1));
+                    }
                 }
                 if (DRAG != null && !actors.contains(DRAG.a)) dragReset();
             } else rideStep(dt);

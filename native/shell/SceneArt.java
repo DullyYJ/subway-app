@@ -27,7 +27,7 @@ public final class SceneArt {
     }
     /** 그릴 때 쓰는 값 */
     public static final class Pal {
-        public String slot, wk, season; public int[] c = new int[3]; public double lum, sunX, sunY; public boolean moon, night, lit, hidesSun;
+        public String slot, wk, season, place = "street"; public int[] c = new int[3]; public double lum, sunX, sunY; public boolean moon, night, lit, hidesSun, hot, cold, sun, bright; public int wind;
     }
     public static Pal paint(SceneModel.Look lk) {
         Sky S = sky(lk.slot); String wk = lk.wk == null || lk.wk.isEmpty() ? "clear" : lk.wk;
@@ -37,6 +37,7 @@ public final class SceneArt {
         p.slot = lk.slot; p.wk = wk; p.season = lk.season == null || lk.season.isEmpty() ? "autumn" : lk.season;
         for (int i = 0; i < 3; i++) p.c[i] = mix(S.c[i], gray, m);
         p.lum = S.lum; p.sunX = S.sx; p.sunY = S.sy; p.moon = S.moon; p.night = lk.night; p.lit = lk.lit; p.hidesSun = lk.hidesSun;
+        p.place = lk.place == null || lk.place.isEmpty() ? "street" : lk.place; p.hot = lk.hot; p.cold = lk.cold; p.sun = lk.sun; p.bright = lk.bright; p.wind = lk.wind;
         return p;
     }
 
@@ -49,14 +50,9 @@ public final class SceneArt {
 
     public static final class Bg { public SceneCv.Layer sky, far, mid, gnd; public int tw; }
 
-    public static Bg buildBG(SceneCv root, Pal L, Geom g, double dpr, String season, boolean dark) {
-        double W = g.W, H = g.H, hy = g.hy; int tw = (int) Math.ceil(W * 1.7);
-        Seeded rng = new Seeded(L.slot.length() * 977 + L.wk.length() * 131 + 7);
-        Bg bg = new Bg(); bg.tw = tw;
-        bg.sky = root.newLayer(W, H, dpr); bg.far = root.newLayer(tw, H, dpr); bg.mid = root.newLayer(tw, H, dpr); bg.gnd = root.newLayer(W, H, dpr);
-        SceneCv c; SceneCv.Grad gr; double x; int i;
-        // 하늘
-        c = bg.sky.cv();
+    /** 하늘(그라데이션 + 해/달). 거리와 다른 장소가 같이 쓴다. */
+    public static void drawSky(SceneCv c, Pal L, double W, double H, double hy) {
+        SceneCv.Grad gr;
         gr = c.linear(0, 0, 0, hy + 6).stop(0, L.c[0]).stop(.62, L.c[1]).stop(1, L.c[2]); c.fillGrad(gr); c.fillRect(0, 0, W, H);
         double sx = L.sunX * W, sy = L.sunY * H, glow = L.hidesSun ? .12 : (L.wk.equals("cloudy") ? .5 : 1);
         if (!L.moon) {
@@ -74,6 +70,17 @@ public final class SceneArt {
                 c.fillStyle("rgba(200,205,185,.55)"); c.beginPath(); c.arc(sx - 2.5, sy + 1.5, 2, 0, PI2); c.arc(sx + 2.5, sy - 2.5, 1.4, 0, PI2); c.fill();
             }
         }
+    }
+
+    public static Bg buildBG(SceneCv root, Pal L, Geom g, double dpr, String season, boolean dark) {
+        double W = g.W, H = g.H, hy = g.hy; int tw = (int) Math.ceil(W * 1.7);
+        if (L.place != null && !"street".equals(L.place)) return ScenePlaces.build(root, L, g, dpr, season, dark);
+        Seeded rng = new Seeded(L.slot.length() * 977 + L.wk.length() * 131 + 7);
+        Bg bg = new Bg(); bg.tw = tw;
+        bg.sky = root.newLayer(W, H, dpr); bg.far = root.newLayer(tw, H, dpr); bg.mid = root.newLayer(tw, H, dpr); bg.gnd = root.newLayer(W, H, dpr);
+        SceneCv c; SceneCv.Grad gr; double x; int i;
+        // 하늘
+        c = bg.sky.cv(); drawSky(c, L, W, H, hy);
         // 먼 도시: 건물 실루엣(+켜진 창)
         c = bg.far.cv();
         int fcol = mix(L.c[2], css(L.night ? "#0b1030" : "#39435f"), L.night ? .6 : .3);

@@ -45,10 +45,11 @@ public final class SceneModel {
     }
 
     public static final class Look {
-        public String slot = "noon", slotKo = "", wk = "clear", wxKo = "", season = "autumn", emo = "";
-        public boolean wxKnown, night, lit, hidesSun; public double temp;
+        public String slot = "noon", slotKo = "", wk = "clear", wxKo = "", season = "autumn", emo = "", place = "street", placeKo = "";
+        public boolean wxKnown, night, lit, hidesSun, hot, cold, sun, bright; public double temp; public int wind;
     }
-    public static final class Traits { public String land = ""; public List<String> acts = new ArrayList<>(); }
+    /** say: 날씨 반응 동작 이름 → 말풍선 글(엔진이 정한 글. 없으면 말풍선 없이 몸짓만) */
+    public static final class Traits { public String land = ""; public List<String> acts = new ArrayList<>(); public Map<String, String> say = new HashMap<>(); }
     public static final class Res {
         public boolean ok; public String mode, venue = "", hero, hint = "", tag = "", line = "";
         public boolean nearEnd; public Look look = new Look(); public List<String> cast = new ArrayList<>();
@@ -73,6 +74,9 @@ public final class SceneModel {
             k.wxKo = Json.strOr(l.get("wxKo"), ""); k.season = Json.strOr(l.get("season"), "autumn"); k.emo = Json.strOr(l.get("emo"), "");
             k.wxKnown = Json.bool(l.get("wxKnown")); k.night = Json.bool(l.get("night")); k.lit = Json.bool(l.get("lit")); k.hidesSun = Json.bool(l.get("hidesSun"));
             Object tp = l.get("temp"); k.temp = tp instanceof Number ? ((Number) tp).doubleValue() : 0;
+            k.place = Json.strOr(l.get("place"), "street"); k.placeKo = Json.strOr(l.get("placeKo"), "");
+            k.hot = Json.bool(l.get("hot")); k.cold = Json.bool(l.get("cold")); k.sun = Json.bool(l.get("sun")); k.bright = Json.bool(l.get("bright"));
+            Object wd = l.get("wind"); k.wind = wd instanceof Number ? Math.max(0, Math.min(2, ((Number) wd).intValue())) : 0;
         }
         Object co = m.get("cast");
         if (co instanceof List) for (Object x : (List<Object>) co) if (x instanceof String) r.cast.add((String) x);
@@ -83,6 +87,8 @@ public final class SceneModel {
             tr.land = Json.strOr(t.get("land"), "");
             Object ao = t.get("acts");
             if (ao instanceof List) for (Object x : (List<Object>) ao) if (x instanceof String) tr.acts.add((String) x);
+            Object so = t.get("say");
+            if (so instanceof Map) for (Map.Entry<String, Object> se : ((Map<String, Object>) so).entrySet()) if (se.getValue() instanceof String) tr.say.put(se.getKey(), (String) se.getValue());
             r.traits.put(e.getKey(), tr);
         }
         return r;

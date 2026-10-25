@@ -44,7 +44,7 @@ final class SceneActs {
             } else { a.ang = Math.sin(T * 4.2) * .22; a.ox = Math.sin(T * 2.1) * 3; S.pr(a, S.prop("stars", 0, -h * 1.06)); }
         }, null);
         A_(S, "loaf", 4.6, null, (a, u, dt, A) -> {
-            double T = S.t; S.standF(a); a.sy = .74; a.sx = 1.12; a.ox = u < .55 ? Math.sin(T * 14) * 1.5 : 0;
+            double T = S.t; S.standF(a); a.sy = .74; a.sx = 1.12; a.ox = u < .55 ? Math.sin(T * 14) * 1.5 : 0; if (u > .5) { a.pose = 1; a.sx = a.sy = 1; }    // 졸다가 엎드려 잔다
             if (u > .5 && S.every(A, "zz", .6)) S.ptx("zzz", a.x + a.dir * S.HH(a) * .3, S.feetY(a) - S.HH(a) * .8, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.4).r(1));
         }, null);
         A_(S, "ball", 3.8, (a, t, A) -> { A.b = null; }, (a, u, dt, A) -> {
@@ -145,7 +145,8 @@ final class SceneActs {
         }, null);
         A_(S, "melt", 3.8, null, (a, u, dt, A) -> {
             double d = u < .12 ? 0 : u < .42 ? ease((u - .12) / .3) : u < .78 ? 1 : 1 - ease((u - .78) / .12); S.standF(a);
-            a.sy = 1 - .7 * d + (u > .9 ? Math.sin((u - .9) * 40) * .05 * (1 - (u - .9) * 10) : 0); a.sx = 1 + .5 * d;
+            double mk = clamp((d - .45) / .3, 0, 1), sq = .7 * (1 - mk) + .1 * mk; if (mk > .5) a.pose = 1;       // 녹아내리다 엎드려 잔다
+            a.sy = 1 - sq * d + (u > .9 ? Math.sin((u - .9) * 40) * .05 * (1 - (u - .9) * 10) : 0); a.sx = 1 + (.5 * (1 - mk) + .05 * mk) * d;
             if (u > .5 && u < .76 && S.every(A, "zz", .7)) S.ptx("zzz", a.x + a.dir * S.HH(a) * .3, S.feetY(a) - S.HH(a) * .35, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.3).r(1));
         }, null);
         A_(S, "pounce", 2.8, null, (a, u, dt, A) -> {
@@ -287,7 +288,7 @@ final class SceneActs {
         A_(S, "L_cotton", 1.8, (a, t, A) -> {
             S.ptx("heart", a.x, S.feetY(a) - S.HH(a) * .6, 11, po().a(-PI * .98, -PI * .02).s(36, 80).g(55).l(1.0, 1.6).r(1.5).jx(5)); S.haptic("hearts");
         }, (a, u, dt, A) -> {
-            double p = ease(clamp((u - .08) / .5, 0, 1)); S.standF(a); a.sx = a.sy = 1.34 - .34 * p; a.sy *= 1 - .08 * Math.sin(PI * clamp(u / .2, 0, 1));
+            double p = ease(clamp((u - .08) / .5, 0, 1)); S.standF(a); if (u < .7) a.pose = 2; a.sx = a.sy = 1.34 - .34 * p; a.sy *= 1 - .08 * Math.sin(PI * clamp(u / .2, 0, 1));
             if (u > .35 && S.once(A, "h2")) S.ptx("heart", a.x, S.feetY(a) - S.HH(a) * .7, 8, po().a(-PI * .98, -PI * .02).s(30, 66).g(55).l(.9, 1.5).r(1.2).jx(6));
         }, null);
         A_(S, "L_pose", 2.6, null, (a, u, dt, A) -> {
@@ -349,5 +350,91 @@ final class SceneActs {
                 if (d > .8 && S.once(A, "td")) { S.ptx("dust", a.x, S.feetY(a) - 1, 5, po().a(-PI * .9, -PI * .1).s(10, 22)); S.haptic("land_fly"); }
             } else { a.alt = 0; S.standF(a); }
         }, (a, A) -> { a.alt = a.altSave != 0 ? a.altSave : 18; });
+        registerWx(S);
+    }
+
+    /** 엔진이 정한 날씨 반응 말(traits[id].say[동작])을 말풍선에 띄운다. 엔진이 말을 주지 않았으면 말하지 않는다(앱이 지어내지 않는다). */
+    static void wsay(SceneCore S, Actor a, String act, double sec) {
+        if (S.res == null) return;
+        SceneModel.Traits T = S.res.traits.get(a.id); if (T == null) return;
+        String v = T.say.get(act); if (v != null && !v.isEmpty()) S.say(a, v, sec);
+    }
+    /** 머리 위치(소품·입김 기준). 독수리는 부리, 그 밖은 머리 위쪽. */
+    static double[] headOf(Actor a, double h) { return a.kind.equals("eagle") ? eagleHead(h) : new double[]{h * .2, -h * .64}; }
+
+    /**
+     * ★ 날씨 반응 동작(YJ 2026-10-25 "날씨에 맞춰 … 길동무 친구들 리액션도 달라져야해").
+     *   어느 날씨에 무슨 동작을 끼울지·무슨 말을 할지는 엔진(traits)이 정한다. 여기는 이름대로 몸을 떨고·헐떡이고·찡그리고·기울고·첨벙이는 그림뿐이다.
+     *   이름을 모르는 옛 앱은 walk 로 대신하므로 새 엔진 값이 와도 깨지지 않는다.
+     */
+    static void registerWx(final SceneCore S) {
+        // 추위: 덜덜 떨고 입김이 난다
+        A_(S, "shiver", 3.0, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double k = Math.min(1, u / .1) * (u > .9 ? (1 - u) / .1 : 1);
+            a.pose = 3; double s = Math.sin(T * 44); a.ox = s * 1.5 * k; a.sy = 1 - .05 * k + Math.abs(s) * .012 * k; a.sx = 1 + .04 * k; a.ang = Math.sin(T * 31) * .025 * k;
+            double[] hd = headOf(a, h);
+            if (S.every(A, "br", .55)) S.ptx("breath", a.x + a.dir * (hd[0] + h * .1), S.feetY(a) - S.liftOf(a) + hd[1] + h * .1, 1, po().a(a.dir > 0 ? -.5 : PI + .5, a.dir > 0 ? -.2 : PI + .2).s(8, 14).g(-6).l(.9, 1.3).r(1 + S.rnd() * .5));
+            if (u > .08 && S.once(A, "sy")) wsay(S, a, "shiver", 2.0);
+        }, null);
+        // 더위: 헥헥대고 땀이 나고 부채질
+        A_(S, "pant", 3.4, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double k = Math.min(1, u / .12) * (u > .9 ? (1 - u) / .1 : 1);
+            a.pose = u > .1 && u < .9 ? 4 : -1; double b = Math.sin(T * 13); a.sy = 1 + .05 * b * k; a.sx = 1 - .035 * b * k; a.ang = -.05 * k;
+            double[] hd = headOf(a, h);
+            if (S.every(A, "sw", .42)) S.ptx("sweat", a.x + a.dir * (hd[0] - h * .08), S.feetY(a) - S.liftOf(a) + hd[1] - h * .05, 1, po().a(-PI * .8, -PI * .2).s(10, 20).g(120).l(.5, .8).jx(3));
+            if (u > .3 && u < .88 && !a.kind.equals("eagle")) { Prop f = S.prop("fan", h * .55, -h * .4 + Math.sin(T * 18) * 1.6); f.r = Math.sin(T * 18) * .55; S.pr(a, f); }
+            if (u > .08 && S.once(A, "sy")) wsay(S, a, "pant", 2.2);
+        }, null);
+        // 햇빛: 눈이 부셔 고개를 살짝 들고 선글라스
+        A_(S, "squint", 3.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double b = ease(Math.min(1, u / .22)) * (u > .86 ? 1 - ease((u - .86) / .14) : 1);
+            a.ang = -.09 * b; a.sy = 1 + .03 * b; a.pvy = -h * .3;
+            double[] hd = headOf(a, h);
+            if (u < .42) a.pose = 5; else { Prop gl = S.prop("glasses", hd[0], hd[1]); gl.s = 1.1 * b; S.pr(a, gl); }      // 처음엔 눈을 찡그리다 선글라스를 낀다
+            if (u > .3 && u < .85 && S.every(A, "sp", .35)) S.ptx("spark", a.x + a.dir * (hd[0] + h * .2), S.feetY(a) - S.liftOf(a) + hd[1] - h * .12, 1, po().a(-PI * .7, -PI * .3).s(6, 12).g(0).l(.3, .55).jx(5).r(.9));
+            if (u > .2 && S.once(A, "sy")) wsay(S, a, "squint", 2.0);
+        }, null);
+        // 바람: 바람을 마주 보고 몸을 기울여 버틴다 · 바람에 떠밀려 조금 밀리고 낙엽이 날아간다
+        A_(S, "gust", 3.0, (a, t, A) -> { A.d0 = a.dir; }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; double[] r = S.inRange(a); S.standF(a); a.dir = -1;
+            double k = Math.min(1, u / .15) * (u > .85 ? (1 - u) / .15 : 1), sw = Math.sin(T * 7); a.pose = k > .3 ? 5 : -1;
+            a.ang = (.2 + .03 * sw) * k; a.pvy = -h * .05; a.ox = Math.sin(T * 23) * .8 * k; a.sx = 1 + .03 * sw * k;
+            a.x = clamp(a.x + (10 + 6 * S.L.wind) * dt * k, r[0], r[1]);
+            if (S.every(A, "lf", .16)) S.ptx(S.rnd() < .5 ? "leaf" : "dust", Math.max(2, a.x - h * 1.2), S.feetY(a) - h * (.2 + S.rnd() * .9), 1, po().a(-.15, .15).s(70, 130).g(-4).l(.7, 1.1).jy(4));
+            if (u > .08 && S.once(A, "sy")) wsay(S, a, "gust", 2.0);
+        }, (a, A) -> { a.dir = A.d0 != 0 ? A.d0 : 1; });
+        // 비: 물웅덩이에서 첨벙첨벙
+        A_(S, "splash", 3.0, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t, fy = S.feetY(a); S.standF(a); double ph = T * 7, hop = Math.abs(Math.sin(ph));
+            if (hop > .35) a.pose = 2; a.y = -hop * h * .2; a.sy = 1 + (hop < .12 ? -.1 : .02); a.sx = 1 + (hop < .12 ? .08 : 0);
+            if (hop < .1 && S.every(A, "lnd", .38)) {
+                S.ptx("drop", a.x - a.dir * 2, fy - 1, 6, po().a(-PI * .95, -PI * .05).s(26, 56).g(190).l(.4, .75).jx(h * .22));
+                S.ptx("ring", a.x, fy, 1, po().a(0, 0).s(0, 0).g(0).l(.7, .7)); S.haptic("splash");
+            }
+            if (u > .08 && S.once(A, "sy")) wsay(S, a, "splash", 2.0);
+        }, null);
+        // 비: 젖은 몸을 부르르 털어 물방울이 사방으로 튄다
+        A_(S, "shakeoff", 2.6, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double k = u < .2 ? ease(u / .2) : u < .75 ? 1 : 1 - ease((u - .75) / .25);
+            if (k > .3) a.pose = 3; a.ox = Math.sin(T * 36) * 2.4 * k; a.ang = Math.sin(T * 28) * .09 * k; a.sx = a.sy = 1 + .1 * k;
+            if (k > .3 && S.every(A, "wd", .07)) S.ptx("drop", a.x, S.feetY(a) - S.liftOf(a) - h * .5, 2, po().a(-PI * .98, -PI * .02).s(40, 85).g(150).l(.35, .6).jx(h * .12).jy(h * .2));
+            if (u > .1 && S.once(A, "sy")) wsay(S, a, "shakeoff", 1.9);
+        }, null);
+        // 눈: 고개를 들고 눈송이를 받아 먹는다
+        A_(S, "snowcatch", 3.4, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double b = ease(Math.min(1, u / .2)) * (u > .88 ? 1 - ease((u - .88) / .12) : 1);
+            if (u > .4 && u < .85) a.pose = 4; a.ang = -.2 * b + Math.sin(T * 5) * .02 * b; a.pvy = -h * .2; a.y = -Math.abs(Math.sin(T * 6.5)) * h * .06 * b;
+            double[] hd = headOf(a, h);
+            if (S.every(A, "fl", .12)) S.ptx("flake", a.x + a.dir * (hd[0] + h * .05) + S.rnd(-h * .25, h * .25), S.feetY(a) - S.liftOf(a) + hd[1] - h * .8, 1, po().a(PI * .45, PI * .55).s(26, 40).g(10).l(.35, .5));
+            if (u > .45 && u < .85 && S.every(A, "cg", .6)) S.ptx("spark", a.x + a.dir * (hd[0] + h * .12), S.feetY(a) - S.liftOf(a) + hd[1] - h * .1, 2, po().a(-PI, 0).s(8, 16).g(0).l(.25, .45).jx(4).r(.8));
+            if (u > .15 && S.once(A, "sy")) wsay(S, a, "snowcatch", 2.2);
+        }, null);
+        // 안개: 두리번거리며 앞을 살핀다
+        A_(S, "peer", 3.6, (a, t, A) -> { A.d0 = a.dir; }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.dir = ((int) Math.floor(u * 4.5) % 2 != 0 ? -1 : 1) * (A.d0 != 0 ? A.d0 : 1);
+            double lk = Math.sin(u * PI * 4.5 * .5 * 2); a.ang = .06 * lk; a.sy = 1 + .02 * Math.sin(T * 3); a.y = -Math.abs(Math.sin(T * 5)) * 1.2;
+            if (S.every(A, "q", .9)) S.ptx("note", a.x + a.dir * h * .35, S.feetY(a) - S.liftOf(a) - h * 1.05, 1, po().a(-PI * .6, -PI * .4).s(6, 10).g(-4).l(.9, 1.2).r(1));
+            if (u > .1 && S.once(A, "sy")) wsay(S, a, "peer", 2.2);
+        }, (a, A) -> { a.dir = A.d0 != 0 ? A.d0 : 1; });
     }
 }

@@ -81,6 +81,7 @@ public final class SceneDriver implements SceneCore.Host {
                 try {
                     for (String id : IDS) got.put(id, decode(DIR + id + ".webp"));
                     in2 = decode(DIR + "dudung_intro.webp");
+                    for (String id : IDS) { try { got.put(id + "_pose", decode(DIR + id + "_pose.webp")); } catch (Throwable t2) { /* 자세 시트는 없어도 된다 — 걷기 시트로 대신 그린다 */ } }
                 } catch (Throwable t) { why = String.valueOf(t); }
                 final Bitmap introBmp = in2; final String err = why;
                 ui.post(new Runnable() {
