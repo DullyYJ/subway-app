@@ -88,7 +88,8 @@ async function mapSvResolve(env, cap, body, out) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
-    var arrWave = need.every(function (n) { return /^[af][0-9]{1,3}$/.test(String(n.k || '')); });
+    if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;                       // s199: 노선 경유 정류장 목록(방면 이름용 · 큰 본문)은 기기가 천천히 받는다 — 서버가 기다리지 않는다
+    var arrWave = need.every(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });
     var slot = new Array(need.length);
     var done = new Array(need.length);
     var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
@@ -111,7 +112,7 @@ async function mapSvResolve(env, cap, body, out) {
     need.forEach(function (n, i) {
       var k = String(n.k || ''), t = slot[i] || '';
       if (arrWave) {                                          // 도착정보: 받은 것만 넣고, 못 받았거나 늦은 곳은 아예 두지 않는다 → 엔진이 다시 need 로 알려 기기가 받는다('도착정보 없음'으로 굳지 않는다)
-        if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else failA++;
+        if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else if (/^[af]/.test(k)) failA++;       // 이웃·바꾼 ID·경유노선(g·h·t·u)은 덤 — 못 받아도 실패로 세지 않는다
         return;
       }
       if (t) any = true;

@@ -454,10 +454,80 @@ function mapArrErr(t) {                                    // 공공 API 가 HTT
   return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
 }
 function mapArrMissing(res, k) { return res[k] === undefined || mapArrErr(res[k]); }     // 아직 못 받았거나 오류 봉투만 받았다 → '도착정보 없음'이 아니라 '불러오는 중'으로 그리고 다시 받는다
-function mapBusArrUrl(s) {
+function mapBusArrUrl(s, id, city) {                               // id·city: 이웃 정류장·바꿔 보는 ID 로 같은 주소를 만들 때만 준다
   if (s.src === 'topis') return 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + encodeURIComponent(s.ars);
   if (s.src === 'gbis') return MAP_GBIS_BASE + 'busarrivalservice/v2/getBusArrivalListv2?stationId=' + encodeURIComponent(s.sid) + '&format=json';
-  return MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=' + encodeURIComponent(s.city) + '&nodeId=' + encodeURIComponent(s.id) + '&_type=json';
+  var cc = city !== undefined ? city : (s.city || mapCityOf(s.la, s.lo));                  // 시 코드를 모르면 웹 _tagoCityCode 처럼 좌표 상자로
+  return MAP_TAGO_BASE + 'ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=' + encodeURIComponent(cc) + '&nodeId=' + encodeURIComponent(id !== undefined ? id : s.id) + '&_type=json';
+}
+// ── s199: 웹 _busArrFetchMerged 의 세 보강 — ① 같은 자리 이웃 정류장(60m·같은 이름) 도착정보 합치기 ② 비면 인천 ID(ICB1↔ICB3) 바꿔 다시 ③ 경유노선 뼈대(지금 오는 차가 없는 노선도 '도착정보 없음' 줄로)
+//   받을 주소의 열쇠: 이웃·바꾼 ID = g(4i+j) (j 0=바꾼 ID · 1..3=이웃) / 즐겨찾기는 h · 경유노선 = t(i) / 즐겨찾기는 u. 도착정보(a·f·g·h)는 8초마다 비우고, 경유노선(t·u)은 한 번 받으면 둔다.
+var MAP_PEER_M = 60, MAP_PEER_MAX = 3, MAP_NONE_SEC = 1000000000;
+function mapNmKey(x) { return String(x || '').replace(/\(.*?\)/g, '').replace(/[\s.·,]/g, '').replace(/(정류장|정류소)$/, '').trim(); }    // 웹 _nmKeyStop
+function mapTagoLike(s) { return s.src === 'tago' || s.src === 'd1'; }
+function mapAltId(id) {                                              // 웹 _tagoAltNodeIds: 인천 우리 표는 ICB1…, TAGO 도착정보는 ICB3… (둘 다 있다)
+  id = String(id || '');
+  if (/^ICB1/.test(id)) return 'ICB3' + id.slice(4);
+  if (/^ICB3/.test(id)) return 'ICB1' + id.slice(4);
+  return '';
+}
+function mapPeersOf(s, pool) {                                       // 웹 _busFindPeers: 같은 지점(60m 안)에 같은 이름으로 따로 등록된 정류장 — 최대 3
+  var out = [], my = mapNmKey(s.nm), alt = mapAltId(s.id);
+  if (!mapTagoLike(s) || !pool) return out;
+  for (var i = 0; i < pool.length && out.length < MAP_PEER_MAX; i++) {
+    var p = pool[i];
+    if (!p || !p.id || p.id === s.id || p.id === alt || mapHav(s.la, s.lo, p.la, p.lo) > MAP_PEER_M) continue;
+    var pn = mapNmKey(p.nm);
+    if (my && pn && pn !== my) continue;
+    if (out.some(function (q) { return q.id === p.id; })) continue;
+    out.push(p);
+  }
+  return out;
+}
+function mapThruUrl(s) {
+  return MAP_TAGO_BASE + 'BusSttnInfoInqireService/getSttnThrghRouteList?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&nodeid=' + encodeURIComponent(s.id) + '&numOfRows=100&pageNo=1&_type=json';
+}
+function mapThruRows(text) {                                         // 웹 _busThruRoutes: 번호가 있는 경유노선만
+  var out = [];
+  mapJsonItems(text).forEach(function (x) {
+    var no = x && (x.routeno || x.routeNo);
+    if (no) out.push({ no: String(no), sec: MAP_NONE_SEC, prev: 0, cong: 0, low: false, dir: '', rid: String(x.routeid || x.routeId || ''), tp: String(x.routetp || x.routeTp || ''), none: true });
+  });
+  return out;
+}
+function mapThruFill(rows, thru) {                                   // 웹 _thruFill: 도착정보에 없는 노선만 '도착정보 없음' 자리로
+  var have = {};
+  rows.forEach(function (r) { have[r.no] = 1; });
+  var out = rows.slice();
+  thru.forEach(function (t) { if (have[t.no]) return; have[t.no] = 1; out.push(t); });
+  return out;
+}
+/**
+ * 한 정류장의 줄들과 더 받아야 할 주소. kp = 열쇠 글자 {m 본문, x 이웃·바꾼 ID, t 경유노선}.
+ * rows === null 이면 아직 그릴 수 없다('불러오는 중') — 본문을 못 받았거나, 비었는데 이웃·바꾼 ID 가 아직 안 왔다. 본문에 줄이 있으면 이웃·경유노선은 오는 대로 얹는다.
+ */
+function mapBusStopRows(s, i, res, kp, pool) {
+  var ask = [], mk = kp.m + i, rows = null;
+  if (mapArrMissing(res, mk)) { ask.push({ k: mk, url: mapBusArrUrl(s) }); }
+  else rows = s.src === 'topis' ? mapSeoulArr(String(res[mk] || '')) : s.src === 'gbis' ? mapGbisArr(String(res[mk] || '')) : mapTagoArr(String(res[mk] || ''));
+  if (!mapTagoLike(s)) return { rows: rows, ask: ask };
+  var peers = mapPeersOf(s, pool), peerWait = false, pi;
+  for (pi = 0; pi < peers.length; pi++) {
+    var xk = kp.x + (i * 4 + 1 + pi);
+    if (mapArrMissing(res, xk)) { peerWait = true; ask.push({ k: xk, url: mapBusArrUrl(peers[pi], peers[pi].id, peers[pi].city || mapCityOf(peers[pi].la, peers[pi].lo)) }); }
+    else if (rows) rows = rows.concat(mapTagoArr(String(res[xk] || '')));
+  }
+  var alt = mapAltId(s.id), altWait = false;
+  if (rows && !rows.length && !peerWait && alt) {
+    var ak = kp.x + (i * 4);
+    if (mapArrMissing(res, ak)) { altWait = true; ask.push({ k: ak, url: mapBusArrUrl(s, alt, s.city || mapCityOf(s.la, s.lo)) }); }
+    else rows = rows.concat(mapTagoArr(String(res[ak] || '')));
+  }
+  var arrEmpty = !!rows && !rows.length, tk = kp.t + i;
+  if (res[tk] === undefined || mapArrErr(res[tk])) ask.push({ k: tk, url: mapThruUrl(s) });
+  else if (rows) rows = mapThruFill(rows, mapThruRows(String(res[tk] || '')));
+  if (arrEmpty && (peerWait || altWait)) rows = null;                // 이웃·바꾼 ID 가 오기 전에 '도착정보 없음' 줄만 먼저 깔지 않는다
+  return { rows: rows, ask: ask };
 }
 function mapSecOfMsg(msg) {
   var t = String(msg || '');
@@ -536,11 +606,15 @@ function mapBusRows(rows, info, si) {                              // 노선+방
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
   order.forEach(function (k) { by[k].sort(function (a, b) { return a.sec - b.sec; }); });
-  order.sort(function (a, b) { return by[a][0].sec - by[b][0].sec; });
+  var pos = {}; order.forEach(function (k, ix) { pos[k] = ix; });
+  var tpo = function (tp) { tp = String(tp || ''); return /간선/.test(tp) ? 1 : /지선/.test(tp) ? 2 : /광역|급행/.test(tp) ? 3 : /마을/.test(tp) ? 4 : /순환/.test(tp) ? 5 : 6; };      // 웹 _paintArr 의 _tpOrder
+  order.sort(function (a, b) { return (tpo(by[a][0].tp) - tpo(by[b][0].tp)) || (by[a][0].sec - by[b][0].sec) || (pos[a] - pos[b]); });                // 종류(간선→지선→광역→마을→순환→그 밖) 먼저 · 같은 종류는 빠른 도착 · 같으면(지금 오는 차가 없는 노선들) 받은 순서
   var meta = [];
   var out = order.slice(0, 20).map(function (k, ri) {
     var g = by[k], r = g[0];
-    var arr = g.slice(0, 2).map(function (x) { var o = { s: x.sec <= 1 ? '곧 도착' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (x.sec <= 60) o.soon = 1; return o; });
+    var arr = g.slice(0, 2).map(function (x) {
+      if (x.none) return { s: '도착정보 없음', sec: 0 };                                                    // 경유노선만 알고 지금 오는 차는 모를 때(웹 _noArr)
+      var o = { s: x.sec <= 1 ? '곧 도착' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (x.sec <= 60) o.soon = 1; return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
     if (r.dir) row.dir = '→ ' + r.dir + '방향';
     var rid = mapStr(r.rid, 40);
@@ -571,6 +645,59 @@ function mapApplyNearOrder(stops, ord) {
     return ia - ib;
   }).map(function (x) { return x.s; });
 }
+// ── s199: TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop): TAGO 도착정보는 방면을 안 줘서, 그 노선의 경유 정류장 목록에서 이 정류장 다음 정류장 이름을 쓴다(목록에 없으면 종점).
+//   노선 목록은 크다 → 기기에 오래 두지 않는다: 이 함수가 이름만 뽑아 info.nx({'정류장id|노선id': 이름})로 돌려주면 기기가 저장했다가 다음 요청에 b.nx 로 실어 보낸다.
+//   한 번에 MAP_NX_ASK 개 노선만, 도착정보 등 다른 받기가 다 끝난 뒤에만 부탁한다(8초 갱신을 붙들지 않게). 열쇠 r(번호)는 이번 요청 안에서만 뜻이 있다.
+var MAP_NX_ASK = 4, MAP_NX_MAX = 800;
+function mapNxIn(b) {
+  var o = (b && b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) ? b.nx : {}, out = {}, n = 0;
+  Object.keys(o).forEach(function (k) { if (n < MAP_NX_MAX && k.length <= 80 && typeof o[k] === 'string' && o[k].length <= 40) { out[k] = o[k]; n++; } });
+  return out;
+}
+function mapRouteStnUrl(s, rid) {
+  return MAP_TAGO_RT_STN + '?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&routeId=' + encodeURIComponent(rid) + '&numOfRows=300&pageNo=1&_type=json';
+}
+function mapNxPass(stops, rowsOf, res, nx, pool, canAsk) {
+  var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
+  stops.forEach(function (s, i) {
+    var rows = rowsOf[i];
+    if (!rows || !mapTagoLike(s)) return;
+    rows.forEach(function (r) {
+      if (r.dir || !r.rid) return;
+      var key = s.id + '|' + r.rid;
+      if (nx[key] !== undefined || seen[key]) return;
+      seen[key] = 1;
+      var url = mapRouteStnUrl(s, r.rid);
+      if (uidx[url] === undefined) { uidx[url] = urls.length; urls.push(url); }
+      jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url] });
+    });
+  });
+  var peerIds = function (j) { var ids = {}; ids[j.s.id] = 1; var a = mapAltId(j.s.id); if (a) ids[a] = 1; mapPeersOf(j.s, pool).forEach(function (p) { ids[p.id] = 1; }); return ids; };
+  jobs.forEach(function (j) {
+    var rk = 'r' + j.u, txt = res[rk];
+    if (j.u >= MAP_NX_ASK || txt === undefined || mapArrErr(txt)) return;
+    var items = mapJsonItems(String(txt));
+    if (items.length && String(items[0].routeid || items[0].routeId || '') !== j.rid) return;       // 다른 노선의 본문이 섞였다 — 쓰지 않는다
+    var stn = mapBrStnTago(String(txt)), ids = peerIds(j), at = -1, k;
+    for (k = 0; k < stn.length; k++) if (ids[stn[k][1]]) { at = k; break; }
+    var name = '';
+    if (stn.length) name = at >= 0 ? stn[(at + 1) % stn.length][2] : stn[stn.length - 1][2];
+    upd[j.key] = String(name || '').slice(0, 40); changed = true;
+  });
+  var out = nx;
+  if (changed) { out = {}; Object.keys(nx).forEach(function (k) { out[k] = nx[k]; }); Object.keys(upd).forEach(function (k) { out[k] = upd[k]; }); }
+  rowsOf.forEach(function (rows, i) {
+    if (!rows || !mapTagoLike(stops[i])) return;
+    rows.forEach(function (r) { if (!r.dir && r.rid) { var nm = out[stops[i].id + '|' + r.rid]; if (nm) r.dir = nm; } });
+  });
+  var ask = [];
+  if (canAsk) {
+    var want = {};
+    jobs.forEach(function (j) { if (upd[j.key] === undefined && j.u < MAP_NX_ASK) want[j.u] = 1; });
+    Object.keys(want).forEach(function (u) { ask.push({ k: 'r' + u, url: urls[u] }); });
+  }
+  return { ask: ask, nx: changed ? out : null };
+}
 function mapBusCard(s, o) {
   var c = { t: 'bcard', k: s.id, nm: s.nm, mode: o.mode, on: !!o.on, pad: [12, 12, 0, 12], act: { a: 'call', v: 'mp.pc.' + o.i, id: s.id }, edit: { a: 'call', v: 'mp.al.' + o.i } };
   if (o.n) c.n = String(o.n);
@@ -587,11 +714,6 @@ function mapBusCard(s, o) {
   else c.rows = o.rows;
   return c;
 }
-function mapBusArrView(s, res, key, info, si) {
-  var txt = String(res[key] || '');
-  var rows = s.src === 'topis' ? mapSeoulArr(txt) : s.src === 'gbis' ? mapGbisArr(txt) : mapTagoArr(txt);
-  return mapBusRows(rows, info, si);
-}
 function mapBusTmap(pts, foc) {                                    // 고정 지도: 끌기·두 손가락 확대·± 단추·핀 누름은 앱, 핀·선택은 엔진
   return { t: 'tmap', h: 213, hv: 24, hmin: 137, hmax: 231, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '숫자를 누르면 아래 정류장으로 이동해요' };
 }
@@ -606,10 +728,16 @@ function mapBusBody(f, info) {
       { t: 'text', s: '즐겨찾기한 정류장이 없습니다', size: 14, bold: true, color: 'text', align: 'center', pad: [0, 20, 6, 20] },
       { t: 'text', s: '주변 정류장에서 별(☆)을 눌러\n원하는 정류장을 추가하세요', size: 12, color: 'sub', lh: 1.7, align: 'center', pad: [0, 20, 14, 20] },
       { t: 'button', s: '주변 정류장 보기', size: 13, h: 42, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 80, 8, 80], act: { a: 'call', v: 'mp.vw.near' } }] };
-    var pend = favs.some(function (s, i) { return mapArrMissing(fres, 'f' + i); });
-    if (pend) info.bus = { st: 'need', vw: 'fav', need: favs.map(function (s, i) { return { k: 'f' + i, url: mapBusArrUrl(s) }; }) };
+    var fkp = { m: 'f', x: 'h', t: 'u' }, fr = favs.map(function (s, i) { return mapBusStopRows(s, i, fres, fkp, null); });
+    var pend = fr.some(function (r) { return r.rows === null; }), fask = [], fseen = {};
+    if (pend) favs.forEach(function (s, i) { fask.push({ k: 'f' + i, url: mapBusArrUrl(s) }); fseen['f' + i] = 1; });           // 즐겨찾기는 하나라도 못 받았으면 전부 다시(예전 그대로)
+    fr.forEach(function (r) { r.ask.forEach(function (n) { if (!fseen[n.k]) { fseen[n.k] = 1; fask.push(n); } }); });          // 이웃·바꾼 ID·경유노선은 못 받은 것만
+    var fnx = mapNxPass(favs, fr.map(function (r) { return pend ? null : r.rows; }), fres, mapNxIn(b), [], fask.length === 0);
+    if (fnx.nx) info.nx = fnx.nx;
+    fask = fask.concat(fnx.ask);
+    if (fask.length) info.bus = { st: 'need', vw: 'fav', need: fask };
     var fb = [{ t: 'text', s: '⭐ 즐겨찾기 ' + favs.length + '개 · 30초마다 자동 갱신', size: 12, color: 'sub', pad: [10, 12, 0, 12] }];
-    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusArrView(s, fres, 'f' + i, info, i) })); });
+    favs.forEach(function (s, i) { fb.push(mapBusCard(s, { mode: 'fav', i: i, alias: al[s.id], rows: pend ? null : mapBusRows(fr[i].rows, info, i) })); });
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
@@ -645,13 +773,18 @@ function mapBusBody(f, info) {
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
   head.push(mapBusTmap(pts, foc));
   // 정류장마다 따로 본다: 아직 못 받은 정류장은 '도착정보 없음'이 아니라 '불러오는 중'으로 두고, 못 받은 것만 다시 받으라고 한다(받은 것까지 다시 받지 않는다)
-  var miss = [];
-  stops.forEach(function (s, i) { if (mapArrMissing(res, 'a' + i)) miss.push({ k: 'a' + i, url: mapBusArrUrl(s) }); });
+  var miss = [], nkp = { m: 'a', x: 'g', t: 't' }, pool = res.tn ? mapTagoStops(res.tn, la, lo) : [];                   // 이웃 정류장 후보 = TAGO 주변 목록 전체(300m 밖도)
+  var sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool); }), extra = [];
+  sr.forEach(function (r) { r.ask.forEach(function (n) { (/^a/.test(n.k) ? miss : extra).push(n); }); });
+  miss = miss.concat(extra);                                                                       // 본문(a)이 먼저 · 이웃·바꾼 ID·경유노선은 뒤
+  var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, mapNxIn(b), pool, miss.length === 0);
+  if (nxr.nx) info.nx = nxr.nx;
+  miss = miss.concat(nxr.ask);
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
   stops.forEach(function (s, i) {
-    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: mapArrMissing(res, 'a' + i) ? null : mapBusArrView(s, res, 'a' + i, info, i) }));
+    body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
   });
   body.push({ t: 'text', s: '도착 시간은 실시간 정보라 조금씩 달라질 수 있어요.', size: 11, color: 'sub', align: 'center', pad: [10, 16, 18, 16] });
   return { head: head, body: body };
