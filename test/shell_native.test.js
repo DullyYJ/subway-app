@@ -701,6 +701,19 @@ function findAndroidJar() {
     assert.ok(/boolean plainOn = it\.on && it\.plain;/.test(sv) && /int fg = plainOn \? onFill/.test(sv) && /if \(plainOn\) \{ p\.setStyle\(Paint\.Style\.FILL\); p\.setColor\(onFill\)/.test(sv), '바탕 없는 켜진 칩(전체)은 칩 색 글자 + 밑줄 — 흰 글자가 배경에 묻히지 않는다');
     assert.ok(/\\"reg\\":" \+ ShellCore\.q\(reg\(\)\)/.test(mc) && /append\(",\\"sl\\":"\)\.append\(ShellCore\.q\(stnLine\)\)\.append\(",\\"reg\\":"\)\.append\(ShellCore\.q\(reg\(\)\)\)/.test(mc), '역 팝업·시간표 요청에 권역(reg)과 고른 노선(sl)을 싣는다 — 같은 이름의 지방 역 노선이 섞이지 않게(판단은 엔진)');
   });
+  await t('s216: 하단 토스트 없음 · 포인트 코드 없음 · 현위치 동 이름 브리핑 · 쇼핑 그림 미리 받기', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    const all = fs.readdirSync(path.join(__dirname, '..', 'native', 'shell')).filter(f => f.endsWith('.java')).map(f => fs.readFileSync(N(f), 'utf8')).join('\n');
+    assert.ok(/private void toast\(String m\) \{ \}/.test(a) && !/Toast\.makeText/.test(all) && !/import android\.widget\.Toast;/.test(a), '하단 토스트는 어디에서도 띄우지 않는다');
+    assert.ok(!/rulesAward|applyAward|awardBody|K_PT\b|mk_pt|mk_today|K_DAY\b|totalOf\(/.test(all), '포인트(적립 · 저장값 · 날짜) 코드가 앱에 없다');
+    assert.ok(!/포인트/.test(all.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')), '화면에 보이는 포인트 문구가 없다');
+    assert.ok(/private void hcEnsureDong\(\)/.test(a) && /HcardsCore\.dongUrl\(HomeSearchCore\.DEFAULT_BASE, la, lo\)/.test(a) && /HcardsCore\.parseDong\(r\.body\)/.test(a), '위치를 알면 동 이름을 서버에 묻는다');
+    assert.ok(/hc\.dongLoad\(store\.get\(HcardsCore\.K_DONG, ""\)\)/.test(a) && /store\.put\(HcardsCore\.K_DONG, hc\.dongSaved\(\)\)/.test(a), '동 이름을 저장해 다음 실행에서 바로 쓴다');
+    assert.ok(/pollRide\(\);\s*hcEnsureDong\(\);/.test(a) && /hcFixFrom[\s\S]{0,600}hcEnsureDong\(\)/.test(a), '홈이 보이는 동안 5초마다 · 위치가 잡힐 때마다 확인(30초에 한 번만 묻는다)');
+    assert.ok(/lastLocFresh\(store, 24L \* 3600000L, now\)/.test(a), '마지막 위치(하루 안)로 먼저 브리핑을 채운다');
+    assert.ok(/private String shopCall\(String ck, String cat\) \{\s*String t = shopCall0\(ck, cat\);\s*shopWarm\(t\);/.test(a) && /ScreenView\.ImageBank\.warm\(this, ScreenCore\.imageUrls\(txt, 240\)\)/.test(a) && /shopWarm\(src\);/.test(a), '쇼핑 화면을 받을 때마다 상품 그림도 뒤에서 받아 둔다');
+    assert.ok(/static void warm\(Context c, java\.util\.List<String> urls\)/.test(sv) && /private static File fetch\(String url\)/.test(sv) && /newFixedThreadPool\(2,/.test(sv) && /MIN_PRIORITY \+ 1/.test(sv), '그림 미리 받기: 파일만 · 동시 2개 · 낮은 우선순위');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
