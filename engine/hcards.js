@@ -69,7 +69,9 @@ function hcWxPoints(f) {
 function hcWx(w) {
   if (!w || typeof w !== 'object') return null;
   var t = Number(w.temp); if (!isFinite(t)) return null;
-  return { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+  var o = { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+  ['feel', 'wind', 'uv', 'hum'].forEach(function (k) { if (w[k] != null && isFinite(Number(w[k]))) o[k] = Number(w[k]); });      // 장면 효과(더위·추위·바람·햇빛)용 — 없으면 그 효과는 안 낸다
+  return o;
 }
 function hcClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
 // 보던 경로 → 브리핑 사실. 웹 _briefFromTransitData 와 같은 구간 뽑기.

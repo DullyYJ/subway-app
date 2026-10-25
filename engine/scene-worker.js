@@ -9,7 +9,7 @@ async function sceneWeather(lat, lng) {
     var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
     clearTimeout(t);
     var j = r.ok ? await r.json() : null;
-    if (j && j.ok !== false && typeof j.temp === "number") { var wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12) }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
+    if (j && j.ok !== false && typeof j.temp === "number") { var wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12), feel: typeof j.feel === "number" ? j.feel : null, wind: typeof j.wind === "number" ? j.wind : null, uv: typeof j.uv === "number" ? j.uv : null, hum: typeof j.hum === "number" ? j.hum : null }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
   } catch (e) {}
   return c ? c.wx : null;
 }

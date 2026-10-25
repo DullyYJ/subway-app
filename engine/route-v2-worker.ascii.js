@@ -12061,6 +12061,21 @@ var SCENE_ACTS = {
   chaeng: ["dash", "flop", "hide", "bubbles", "dew"]
 };
 var SCENE_BASE = ["walk", "hop", "spin", "rest"];
+// \u2605 \uc7a5\uc18c(YJ 2026-10-25 "\ud648 \ud654\uba74 \uc8fc\ubcc0 \ubc30\uacbd\ub3c4 \ub2e4\uc591\ud55c \uc7a5\uc18c\ub97c \ub79c\ub364\uc73c\ub85c"): \uacbd\ub85c\uac00 \uc5c6\uc744 \ub54c(idle)\ub9cc \ubc14\ub010\ub2e4. \uc815\ub958\uc7a5\u00b7\uc5ed \uc785\uad6c\uac00 \uc788\ub294 \uc7a5\uba74(wait\u00b7alight)\uc740 \ub298 street.
+var SCENE_PLACES = ["street", "park", "river", "school", "market", "beach", "trail"];
+var SCENE_PLACE_KO = { street: "\uac70\ub9ac", park: "\uacf5\uc6d0", river: "\uac15\ubcc0", school: "\ud559\uad50 \uc55e", market: "\uc2dc\uc7a5 \uace8\ubaa9", beach: "\ubc14\ub2f7\uac00", trail: "\uc0b0\uae38" };
+// \u2605 \ub0a0\uc528 \ubc18\uc751(YJ 2026-10-25 "\ub0a0\uc528\uc5d0 \ub9de\ucdb0 \ube44\u00b7\ub208\u00b7\ud587\ube5b\u00b7\ubc14\ub78c \uc5f0\ucd9c, \uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4 \ub9ac\uc561\uc158\ub3c4 \ub2ec\ub77c\uc838\uc57c"): \uc5b4\ub5a4 \ub0a0\uc528\uc5d0 \uc5b4\ub5a4 \ub3d9\uc791\uc744 \ub07c\uc6b8\uc9c0 \u00b7 \ubb34\uc2a8 \ub9d0\uc744 \ud560\uc9c0\ub294 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
+//   shiver \ucd94\uc704 \u00b7 pant \ub354\uc704 \u00b7 squint \ud587\ube5b \u00b7 gust \ubc14\ub78c \u00b7 splash/shakeoff \ube44 \u00b7 snowcatch \ub208 \u00b7 peer \uc548\uac1c. \uc571\uc740 \uc774 \uc774\ub984\ub300\ub85c \uadf8\ub9ac\uace0 say[\ub3d9\uc791] \uae00\uc744 \ub9d0\ud48d\uc120\uc5d0 \ub744\uc6b4\ub2e4.
+var SCENE_SAY = {
+  shiver: { dolsom: ["\ub35c\ub35c\u2026 \ub108\ubb34 \ucd94\uc6cc\uc694", "\uc73c\uc73c \ucd94\uc6cc!"], lovel: ["\u2026\ucda5\ub2e4\ub0e5", "\ubc1c\uc774 \uc2dc\ub824\uc6cc\ub0e5"], ppopu: ["\uc73c\uc73c \uaf41\uaf41!", "\ucd94\uc6cc\uc694!"], chaeng: ["\ubd80\ub974\ub974\u2026", "\ucc28\uac00\uc6cc\u2026"], sul: ["\ubc14\ub78c\uc774 \ucc28\uad70\u2026", "\uc73c\uc2ac\uc73c\uc2ac\u2026"], dudung: ["\uad74\ub85c \ub3cc\uc544\uac08\uae4c\u2026", "\ubc1c\uc774 \uc5bc\uaca0\ub2e4"] },
+  pant: { dolsom: ["\ud5e5\ud5e5\u2026 \ub354\uc6cc\uc694", "\ubb3c \ub9c8\uc2dc\uace0 \uc2f6\uc5b4\uc694"], lovel: ["\ub179\ub294\ub2e4\u2026", "\ub354\uc6cc\ub0e5\u2026"], ppopu: ["\ud5e5\ud5e5\ud5e5!", "\ub354\uc6cc\uc694!"], chaeng: ["\ubb3c\u2026 \ubb3c \uc8fc\uc138\uc694", "\ub9c8\ub978\ub2e4\u2026"], sul: ["\ud0dc\uc591\uc774 \ub728\uac81\uad70", "\uadf8\ub298\uc774 \ud544\uc694\ud558\uad70"], dudung: ["\ub540\uc774 \uc904\uc904\u2026", "\ud5ec\uba67\uc774 \ub728\uac70\uc6cc"] },
+  squint: { dolsom: ["\ub208\ubd80\uc154\uc694!", "\ud587\ube5b \uc88b\ub2e4!"], lovel: ["\ub208\uc774 \ubd80\uc2dc\ub2e4\ub0e5", "\ub530\ub73b\ud558\ub2e4\ub0e5"], ppopu: ["\ud587\ube5b \ucd5c\uace0!", "\ub208\ubd80\uc2e0 \ub0a0!"], chaeng: ["\ubc18\uc9dd\ubc18\uc9dd!", "\ub208\ubd80\uc2e0\ub370\uc694"], sul: ["\ub208\ubd80\uc2e0 \ub0a0\uc774\uad70", "\uc88b\uc740 \ud558\ub298\uc774\uad70"], dudung: ["\uc120\uae00\ub77c\uc2a4 \uc5b4\ub514 \uac14\uc9c0", "\ub208\ubd80\uc2dc\ub124"] },
+  gust: { dolsom: ["\uc73c\uc557 \ubc14\ub78c!", "\ub0a0\uc544\uac00\uaca0\uc5b4\uc694!"], lovel: ["\ud138\uc774 \ub2e4 \ub0a0\ub824\ub0e5!", "\ubc14\ub78c \uc2eb\ub2e4\ub0e5"], ppopu: ["\ub0a0\uc544\uac00\uaca0\uc5b4\uc694!", "\ud718\uc774\uc774\uc789!"], chaeng: ["\ud718\uc789~", "\ub0a0\uc544\uac04\ub2e4\uc544!"], sul: ["\uc21c\ud48d\uc774\ub2e4!", "\ubc14\ub78c\uc744 \ud0c0\uc790"], dudung: ["\ubaa8\uc790 \ub0a0\uc544\uac04\ub2e4!", "\ub2e8\ub2e8\ud788 \uc7a1\uc544!"] },
+  splash: { dolsom: ["\ucca8\ubc99\ucca8\ubc99!", "\ubb3c\uc6c5\ub369\uc774\ub2e4!"], lovel: ["\ubc1c \uc816\ub294\ub2e4\u2026", "\ud53c\ud574 \uac04\ub2e4\ub0e5"], ppopu: ["\ubb3c\uc6c5\ub369\uc774\ub2e4!", "\ucca8\ubc99!"], chaeng: ["\ubb3c\uc774\ub2e4 \uc57c\ud638!", "\ucca8\ubc99\ucca8\ubc99~"], sul: ["\ube44 \ub9de\uae30 \uc2eb\uad70", "\ud478\ub4dc\ub355"], dudung: ["\uc7a5\ud654\uac00 \ud544\uc694\ud574", "\uc9c8\ucc99\uc9c8\ucc99\ud558\ub124"] },
+  shakeoff: { dolsom: ["\ubd80\ub974\ub974\ub974!", "\ud138\uc5b4\uc57c\uc9c0!"], lovel: ["\ud138 \ub9d0\ub824\uc57c\uc9c0", "\ud138\uc774 \uc816\uc5c8\ub0e5"], ppopu: ["\ubd80\ub974\ub974!", "\ubb3c \ud138\uae30!"], chaeng: ["\ud0c8\ud0c8!", "\ubb3c\ubc29\uc6b8 \ud0c8\ud0c8"], sul: ["\ud478\ub4dc\ub355!", "\ub0a0\uac1c\ub97c \ub9d0\ub824\uc57c\uc9c0"], dudung: ["\ud138\uc5b4\uc57c\uc9c0\u2026", "\ud6c4\ub450\ub450\ub450"] },
+  snowcatch: { dolsom: ["\ub208\uc774\ub2e4 \ub208!", "\ub208 \ub0b4\ub824\uc694!"], lovel: ["\ucc28\uac00\uc6cc\u2026", "\ub208\uc774 \ub0b4\ub9b0\ub2e4\ub0e5"], ppopu: ["\ub208 \uba39\uc5b4\ubcfc\uae4c?", "\ub208\uc774\ub2e4!"], chaeng: ["\ub208\uc1a1\uc774\ub2e4!", "\ucc28\uac11\ub2e4!"], sul: ["\ub208\uc774 \ub0b4\ub9ac\ub294\uad70", "\ud558\uc597\uac8c \ub36e\uc600\uad70"], dudung: ["\ub208\uc0ac\ub78c \ub9cc\ub4e4\uc790", "\ub208 \uc2dc\uc6d0\ud558\ub124"] },
+  peer: { dolsom: ["\uc55e\uc774 \uc548 \ubcf4\uc5ec\uc694", "\uc5b4\ub514 \uc788\uc5b4\uc694~?"], lovel: ["\uc548\uac1c \uc18d\uc774\ub2e4\ub0e5", "\ubfcc\uc607\ub2e4\ub0e5"], ppopu: ["\uc5b4\ub514 \uc788\uc5b4\uc694~?", "\ubcf4\uc774\uc9c0 \uc54a\uc544\uc694"], chaeng: ["\ubfcc\uc61c\ub2e4\u2026", "\uc548\uac1c\ub2e4\u2026"], sul: ["\uc2dc\uc57c\uac00 \ud750\ub9ac\uad70", "\uc870\uc2ec\ud788 \ub0a0\uc544\uc57c\uc9c0"], dudung: ["\ub79c\ud134 \ucf1c\uc57c\uaca0\ub2e4", "\uc548\uac1c\uac00 \uc9d9\ub124"] }
+};
 var SCENE_HINT_BUS = "\uc9c0\ud558\ucca0\uc744 \ud0c0\uba74 \ud63c\uc7a1\ub3c4\uac00 \ud45c\uc2dc\ub3fc\uc694";
 var SCENE_SLOT_KO = { dawn: "\uc0c8\ubcbd", morning: "\uc544\uce68", noon: "\uc810\uc2ec", afternoon: "\uc624\ud6c4", evening: "\uc800\ub141", night: "\ubc24" };
 var SCENE_WX_KO = { clear: "\ub9d1\uc74c", cloudy: "\uad6c\ub984", overcast: "\ud750\ub9bc", rain: "\ube44", snow: "\ub208", fog: "\uc548\uac1c" };
@@ -12087,19 +12102,54 @@ function sceneLook(nowMs, tz, wx) {
   var season = mo >= 2 && mo <= 4 ? "spring" : mo >= 5 && mo <= 7 ? "summer" : mo >= 8 && mo <= 10 ? "autumn" : "winter";
   var emo = wk === "snow" ? "\u2744\ufe0f" : wk === "rain" ? "\ud83c\udf27\ufe0f" : wk === "overcast" ? "\u2601\ufe0f" : wk === "cloudy" ? "\u26c5" : wk === "fog" ? "\ud83c\udf2b\ufe0f" : slot === "night" ? "\ud83c\udf19" : slot === "dawn" ? "\ud83c\udf05" : slot === "evening" ? "\ud83c\udf07" : "\u2600\ufe0f";
   var known = !!wx;
-  return { slot: slot, slotKo: SCENE_SLOT_KO[slot], wk: wk, wxKo: known ? SCENE_WX_KO[wk] : "", wxKnown: known, temp: wx && typeof wx.temp === "number" ? Math.round(wx.temp) : null, season: season, night: slot === "night", lit: slot === "night" || slot === "evening" || slot === "dawn", hidesSun: wk === "overcast" || wk === "rain" || wk === "snow" || wk === "fog", emo: emo };
+  var temp = wx && typeof wx.temp === "number" ? wx.temp : null, feel = wx && typeof wx.feel === "number" ? wx.feel : temp;
+  var wsp = wx && typeof wx.wind === "number" ? wx.wind : -1, txt = String((wx && wx.txt) || "");
+  var wind = /\uac15\ud48d|\ud0dc\ud48d/.test(txt) || wsp >= 28 ? 2 : wsp >= 14 ? 1 : 0;                  // \ubc14\ub78c: 0 \uc5c6\uc74c \u00b7 1 \uc0b0\ub4e4 \u00b7 2 \uc13c \ubc14\ub78c(km/h, \uc6f9 '\ubc14\ub78c \uac15\ud574\uc694' \uae30\uc900 30 \uacfc \uac19\uc740 \ub208\uae08)
+  var day = slot === "morning" || slot === "noon" || slot === "afternoon";
+  return { slot: slot, slotKo: SCENE_SLOT_KO[slot], wk: wk, wxKo: known ? SCENE_WX_KO[wk] : "", wxKnown: known, temp: temp != null ? Math.round(temp) : null, season: season, night: slot === "night", lit: slot === "night" || slot === "evening" || slot === "dawn", hidesSun: wk === "overcast" || wk === "rain" || wk === "snow" || wk === "fog", emo: emo,
+    place: "street", placeKo: SCENE_PLACE_KO.street, wind: wind,
+    hot: known && feel != null && feel >= 28, cold: known && feel != null && feel <= 2,                  // \uccb4\uac10\uc628\ub3c4 \uae30\uc900(\uc5c6\uc73c\uba74 \uae30\uc628)
+    sun: known && wk === "clear" && day, bright: known && wk === "clear" && day && wx && typeof wx.uv === "number" && wx.uv >= 6 };
 }
 // \uce90\ub9ad\ud130\ubcc4 \ub3d9\uc791 \ub300\ubcf8: \uc804\uc6a9 \ub3d9\uc791\uc744 \uc2dc\ub4dc\ub85c \uc11e\uace0 \uc0ac\uc774\uc0ac\uc774 \uae30\ubcf8 \ub3d9\uc791(\uac77\uae30\u00b7\ucf69\ucf69\u00b7\ub3cc\uae30\u00b7\uc26c\uae30)\uc744 \ub07c\uc6b4\ub2e4. \ub099\uc5fd \ub354\ubbf8 \ub2e4\uc774\ube59(dive)\uc740 \uac00\uc744\u00b7\ub208 \uc62c \ub54c\ub9cc.
 function sceneTraits(look, seed, nowMs) {
-  var out = {}, bucket = Math.floor(nowMs / 6e5);
+  var out = {}, bucket = Math.floor(nowMs / 6e5), wa = sceneWxActs(look, seed + "/W/" + bucket);
   SCENE_CHARS.forEach(function (id) {
     var sp = SCENE_ACTS[id].filter(function (x) { return x !== "dive" || look.season === "autumn" || look.wk === "snow"; });
     sp = sceneShuffle(sp, sceneHash(seed + "/A" + id + "/" + bucket));
     var h = sceneHash(seed + "/B" + id), seq = [];
     sp.forEach(function (x, i) { seq.push(x); seq.push(i % 2 === 0 ? "walk" : SCENE_BASE[(h + i) % SCENE_BASE.length]); });
-    out[id] = { land: SCENE_LAND[id], acts: seq };
+    var say = {};
+    if (wa.length) {                                                                          // \ub0a0\uc528 \ubc18\uc751: \uc804\uc6a9 \ub3d9\uc791 \uc0ac\uc774\uc0ac\uc774\uc5d0 \ub450 \ubc88\uc529 \ub07c\uc6b4\ub2e4(\ubc18\uc751\uc774 \uc790\uc8fc \ubcf4\uc774\uac8c)
+      var half = Math.floor(seq.length / 2);
+      wa.forEach(function (w, j) {
+        var lines = SCENE_SAY[w] && SCENE_SAY[w][id];
+        if (lines && lines.length) say[w] = lines[sceneHash(seed + "/S" + id + w + "/" + bucket) % lines.length];
+        seq.splice(Math.min(seq.length, 2 * j + 1), 0, w);
+        seq.splice(Math.min(seq.length, half + 2 * j + 2), 0, w);
+      });
+    }
+    out[id] = { land: SCENE_LAND[id], acts: seq, say: say };
   });
   return out;
+}
+// \uc9c0\uae08 \ub0a0\uc528\uc5d0 \uc5b4\uc6b8\ub9ac\ub294 \ubc18\uc751 \ub3d9\uc791(\ucd5c\ub300 3\uac1c, \uc2dc\ub4dc\ub85c \uc21c\uc11c). \ub0a0\uc528\ub97c \ubabb \ubc1b\uc558\uc73c\uba74(wxKnown false) \uc5c6\ub2e4 \u2014 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4.
+function sceneWxActs(look, seed) {
+  var a = [];
+  if (!look.wxKnown) return a;
+  if (look.cold) a.push("shiver");
+  if (look.hot) a.push("pant");
+  if (look.sun) a.push("squint");
+  if (look.wind >= 1) a.push("gust");
+  if (look.wk === "rain") { a.push("splash"); a.push("shakeoff"); }
+  if (look.wk === "snow") { a.push("snowcatch"); if (look.cold && a.indexOf("shiver") < 0) a.push("shiver"); }
+  if (look.wk === "fog") a.push("peer");
+  return sceneShuffle(a, sceneHash(seed)).slice(0, 3);
+}
+// \uc7a5\uc18c \uace0\ub974\uae30: 20\ubd84\ub9c8\ub2e4 \ubc14\ub010\ub2e4(\uac19\uc740 \ud0a4\u00b7\uac19\uc740 \uc2dc\uac04\ub300\uba74 \uac19\ub2e4). \uaca8\uc6b8\u00b7\ucd94\uc6b8 \ub550 \ubc14\ub2f7\uac00\ub97c \ube7c\uace0, \uc815\ub958\uc7a5\u00b7\uc5ed\uc774 \uc788\ub294 \uc7a5\uba74\uc740 \ub298 \uac70\ub9ac.
+function scenePlace(look, seedStr, nowMs) {
+  var pool = SCENE_PLACES.filter(function (p) { return !(p === "beach" && (look.season === "winter" || look.cold)); });
+  return pool[sceneHash(seedStr + "/P/" + Math.floor(nowMs / 12e5)) % pool.length];
 }
 function sceneIsTr(n) { return !!(n && (n.isSub || n.isBus) && n.name); }
 // \uc9c0\uae08 \uc704\uce58(here)\uc5d0\uc11c '\ud0c0\uace0 \uc788\uac70\ub098 \uace7 \ud0c8' \uad6c\uac04\uc758 \ub178\ub4dc: here \uac00 \ud0c8\uac83\uc774\uba74 \uadf8\uac83, \ub3c4\ubcf4\u00b7\ucd9c\ubc1c\uc774\uba74 \ub2e4\uc74c \ud0c8\uac83, \uc5c6\uc73c\uba74 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc9c0\ub09c \ud0c8\uac83
@@ -12137,7 +12187,7 @@ function sceneDecide(inp, wx) {
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
   var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
   // fill: \uacbd\ub85c\uac00 \uc5c6\uace0(\uacbd\ub85c \uacb0\uacfc\ub3c4 \uc548 \ub098\uc628 \ub54c) \ud648 \ud654\uba74\uc744 \ud55c \ud654\uba74\uc5d0 \uaf49 \ucc44\uc6cc \ubcf4\uc77c \ub54c\ub9cc true. \uacbd\ub85c \uacb0\uacfc\uac00 \ub098\uc624\uae30 \uc2dc\uc791\ud558\uba74(\ud655\uc815 \uc804\uc774\ub77c\ub3c4) false \u2192 \uc571\uc740 \ud3c9\uc18c \ud06c\uae30\ub85c \ub3cc\ub9b0\ub2e4
-  if (!locked) { out.mode = "idle"; out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;
@@ -12170,7 +12220,7 @@ async function sceneWeather(lat, lng) {
     var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
     clearTimeout(t);
     var j = r.ok ? await r.json() : null;
-    if (j && j.ok !== false && typeof j.temp === "number") { var wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12) }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
+    if (j && j.ok !== false && typeof j.temp === "number") { var wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12), feel: typeof j.feel === "number" ? j.feel : null, wind: typeof j.wind === "number" ? j.wind : null, uv: typeof j.uv === "number" ? j.uv : null, hum: typeof j.hum === "number" ? j.hum : null }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
   } catch (e) {}
   return c ? c.wx : null;
 }
@@ -21639,7 +21689,9 @@ function hcWxPoints(f) {
 function hcWx(w) {
   if (!w || typeof w !== 'object') return null;
   var t = Number(w.temp); if (!isFinite(t)) return null;
-  return { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+  var o = { temp: t, txt: hcStr(w.txt, 12), rain: isFinite(Number(w.rain)) ? Number(w.rain) : 0 };
+  ['feel', 'wind', 'uv', 'hum'].forEach(function (k) { if (w[k] != null && isFinite(Number(w[k]))) o[k] = Number(w[k]); });      // \uc7a5\uba74 \ud6a8\uacfc(\ub354\uc704\u00b7\ucd94\uc704\u00b7\ubc14\ub78c\u00b7\ud587\ube5b)\uc6a9 \u2014 \uc5c6\uc73c\uba74 \uadf8 \ud6a8\uacfc\ub294 \uc548 \ub0b8\ub2e4
+  return o;
 }
 function hcClock(ms, tz) { var d = new Date(Number(ms) + Number(tz) * 60000), p = function (n) { return (n < 10 ? '0' : '') + n; }; return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
 // \ubcf4\ub358 \uacbd\ub85c \u2192 \ube0c\ub9ac\ud551 \uc0ac\uc2e4. \uc6f9 _briefFromTransitData \uc640 \uac19\uc740 \uad6c\uac04 \ubf51\uae30.
