@@ -142,6 +142,7 @@ public final class MapCore {
     }
     /** 주변 정류장 / 즐겨찾기 (웹 _busViewMode). 저장소에 두어 캐시 열쇠가 알아본다. */
     public String busView() { return VW_FAV.equals(st.get(K_BUSVW, VW_NEAR)) ? VW_FAV : VW_NEAR; }
+    public boolean busFailShow;                                  // 자동 다시 받기를 다 썼는데도 못 받은 정류장은 '정보 불러오기 실패 · 다시 시도 ›' 로 그리라고 엔진에 알린다(웹 .kbus-err-row)
     public int busSel = -1;                                      // 지도·카드에서 고른 정류장 번호(엔진이 핀·카드 강조를 정한다)
     final java.util.Map<Integer, List<String[]>> rts = new java.util.HashMap<Integer, List<String[]>>();       // 정류장 번호 → 줄마다 [노선 id, 번호, 종류] (엔진이 알려 준다)
     final List<String> stopJson = new ArrayList<String>();       // 엔진이 알려 준 현재 목록(info.stops)의 정류장 값 — 즐겨찾기로 저장할 때 그대로 쓴다
@@ -320,7 +321,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme, boolean skel) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
@@ -471,6 +472,12 @@ public final class MapCore {
         if ("mp.find".equals(v)) { String q = fields == null ? null : fields.get("mq"); return q == null || q.replaceAll("\\s+", "").length() < 2 ? R_NONE : R_FIND; }
         if ("mp.loc".equals(v)) return "bus".equals(mode()) ? R_BUS_LOC : R_LOC;
         if ("mp.vw.near".equals(v) || "mp.vw.fav".equals(v)) { String nv = v.substring(6); if (nv.equals(busView())) return R_NONE; st.put(K_BUSVW, nv); busSel = -1; return R_BUS_VIEW; }
+        if ("mp.rt".equals(v)) {                                                                    // 카드의 '다시 시도 ›'(웹 .kbus-retry): 도착정보·경유노선·좌표 보정만 비우고(정류장 목록은 둔다) 다시 받는다
+            busFailShow = false; busNeed.clear();
+            java.util.Iterator<String> ri = busRes.keySet().iterator();
+            while (ri.hasNext()) { String rk = ri.next(); if (rk.matches(ARR_KEY) || rk.matches(THRU_KEY)) ri.remove(); }
+            return R_BUS_REF;
+        }
         if ("mp.rf".equals(v)) { busSel = -1; if (VW_FAV.equals(busView())) { busRes.clear(); busNeed.clear(); return R_BUS_REF; } return R_BUS_LOC; }
         if (v.startsWith("mp.pc.") || v.startsWith("mp.pm.")) { int i = idx(v, 6); if (i < 0) return R_NONE; busSel = i; return R_BUS_SEL; }
         if (v.startsWith("mp.fv.")) { int i = idx(v, 6); return i >= 0 && toggleFav(i) ? R_BUS_SEL : R_NONE; }

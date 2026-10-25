@@ -2056,6 +2056,7 @@ public class ShellActivity extends Activity {
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
         final int my = ++seqMapB;
         map.svb = busRefreshing ? 2500 : 300;                                                    // 처음 그리기는 서버가 도착정보를 오래 기다리지 않는다(정류장부터 먼저 · 도착정보는 이어서) · 조용한 갱신은 넉넉히
+        map.busFailShow = busRetryN >= 3;                                                         // 자동으로 세 번 다시 받았는데도 비었으면 이번 그림은 '정보 불러오기 실패 · 다시 시도 ›'
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store));
         final String modeNow = map.mode();
         final String wtxt = round == 0 && "bus".equals(modeNow) && json.equals(warmBusJson) && System.currentTimeMillis() - warmBusAt < 45000L ? warmBusTxt : "";          // 위치를 잡을 때 뒤에서 미리 받아 둔 정류장 화면이 있으면 기다리지 않고 바로
@@ -2462,7 +2463,7 @@ public class ShellActivity extends Activity {
                 break;
             case MapCore.R_STN: openMapSheet(S_STN_H); break;
             case MapCore.R_BUS_VIEW: reloadMap(false); break;                                  // 주변 ↔ 즐겨찾기: 본 적 있으면 그 화면을 먼저 올리고 새로 받는다
-            case MapCore.R_BUS_REF: loadMapBody(body, true); break;                            // 즐겨찾기 새로고침: 도착정보를 다시 받는다
+            case MapCore.R_BUS_REF: busRetryN = 0; loadMapBody(body, true); break;                            // 즐겨찾기 새로고침: 도착정보를 다시 받는다
             case MapCore.R_BUS_SEL: {
                 loadMapBody(body, true);
                 if (map.toast.length() > 0) { toast(map.toast); map.toast = ""; }

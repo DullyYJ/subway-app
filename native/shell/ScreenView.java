@@ -1001,7 +1001,7 @@ public class ScreenView extends View {
         for (String s : q.lines) b.append('\n').append(s);
         for (String s : q.lines2) b.append('\u0001').append(s);
         for (String s : q.sa) b.append('\u0002').append(s);
-        b.append('\u0003').append(q.t2);
+        b.append('\u0003').append(q.lmt);
         return b.toString();
     }
     private static void fpAdd(java.util.HashMap<String, Integer> m, ScreenCore.Item[] arr) {
@@ -1280,7 +1280,7 @@ public class ScreenView extends View {
         setText(it.size, true, pal[R_TEXT]);
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, 0), tp);
         if (it.t1.length() > 0) { setText(ScreenCore.BC_ORIG, true, pal[R_SUB]); cv.drawText(it.t1, it.f1, base(it.f2, it.lineH, 0), tp); }
-        if (it.t2.length() > 0) { setText(ScreenCore.BC_LM, true, pal[R_GOLD]); cv.drawText(it.t2, it.lx, base(it.ly, it.lh, 0), tp); }
+        if (it.lmt.length() > 0) { setText(ScreenCore.BC_LM, true, pal[R_GOLD]); cv.drawText(it.lmt, it.lx, base(it.ly, it.lh, 0), tp); }
         // 머리 오른쪽: 거리 알약 · ★/× · 🗺️ · ✏️
         if (it.go.length() > 0) {
             rf.set(it.sx, it.sy, it.sx + it.sw, it.sy + ScreenCore.BC_DIST_H);
@@ -1351,6 +1351,10 @@ public class ScreenView extends View {
             p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(x + 1f, top + 0.5f, x + w - 1f, top + 0.5f, p); p.setStyle(Paint.Style.FILL);
             setText(ScreenCore.BC_MSG, false, pal[R_SUB]); tp.setTextAlign(Paint.Align.LEFT);
             cv.drawText(it.t2, x + 1f + ScreenCore.BC_PADX, base(top + 1f + ScreenCore.BC_MSG_PY, ScreenCore.BC_MSG * 1.35f, 0), tp);
+            if (it.za.length > 3 && it.za[3] != null && it.zs.length >= 16) {                                  // '다시 시도 ›'
+                setText(ScreenCore.BC_MSG, true, 0xFF2F7CF6); tp.setTextAlign(Paint.Align.RIGHT);
+                cv.drawText(ScreenCore.BC_RETRY, x + w - 1f - ScreenCore.BC_PADX, base(it.zs[13], it.zs[15], 0), tp); tp.setTextAlign(Paint.Align.LEFT);
+            }
         }
         cv.restore();
         if (layer) cv.restore();
