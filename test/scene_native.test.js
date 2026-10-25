@@ -1,6 +1,6 @@
 // 네이티브 캐릭터 장면(혼잡도 카드) 검증 — 2026-10-21 (s100)
 //   ① 엔진(sceneDecide)이 만든 장면 JSON 여러 개를 SceneCore(순수 자바)에 먹여 JVM 에서 점검(SceneJvmTest check): 동작·착지·꾹 눌러 옮기기·화면 안 유지·결정성
-//   ② 스프라이트 시트 7장이 앱 assets/chars3d 에 있고 ios-reference 원본과 같다
+//   ② 스프라이트 시트 7장이 앱 assets/chars3d 에 있고 칸 배치(1024 폭, 256 배수 높이)가 맞다
 //   ③ 화면 그리개(ScreenView)가 장면 노드를 그리고 손가락을 잇는다 · SceneCore 는 android.* 를 쓰지 않는다
 // 실행: node test/scene_native.test.js   (javac · java 필요)
 const assert = require('assert'), fs = require('fs'), os = require('os'), path = require('path'), { spawnSync } = require('child_process');
@@ -30,11 +30,16 @@ const { sceneDecide } = require('../engine/scene.js');
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', cls, 'com.dullyyj.subway.SceneJvmTest', 'check', dir], { env: ENV, encoding: 'utf8', timeout: 240000 });
     assert.ok(/ALL OK/.test(r.stdout) && r.status === 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') + (r.stderr || ''));
   });
-  await t('스프라이트 시트 7장이 앱 assets 에 있고 원본과 같다', async () => {
+  await t('스프라이트 시트 7장이 앱 assets 에 있고 칸 배치가 맞다', async () => {
     const ids = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'dudung_intro'];
     for (const id of ids) {
-      const a = path.join(ROOT, 'shell-android/app/src/main/assets/chars3d', id + '.webp'), b = path.join(ROOT, 'ios-reference/chars3d', id + '.webp');
-      assert.ok(fs.existsSync(a), id + ' 없음'); assert.ok(Buffer.compare(fs.readFileSync(a), fs.readFileSync(b)) === 0, id + ' 원본과 다름');
+      // s211: 몸체를 다시 만든 시트라 웹 기준본(ios-reference, 고정)과 바이트가 다르다 — 의도된 차이. 칸 배치(4열×256)와 형식만 확인한다.
+      const a = path.join(ROOT, 'shell-android/app/src/main/assets/chars3d', id + '.webp');
+      assert.ok(fs.existsSync(a), id + ' 없음'); const w = fs.readFileSync(a);
+      assert.ok(w.toString('latin1', 0, 4) === 'RIFF' && w.toString('latin1', 8, 12) === 'WEBP' && w.length > 20000 && w.length < 400000, id + ' 형식·크기');
+      const k = w.toString('latin1', 12, 16); let W, H;
+      if (k === 'VP8X') { W = 1 + w.readUIntLE(24, 3); H = 1 + w.readUIntLE(27, 3); } else if (k === 'VP8L') { const v = w.readUInt32LE(21); W = 1 + (v & 0x3fff); H = 1 + ((v >> 14) & 0x3fff); } else { W = w.readUInt16LE(26) & 0x3fff; H = w.readUInt16LE(28) & 0x3fff; }
+      assert.ok(W === 1024 && H % 256 === 0, id + ' 칸 배치 ' + W + 'x' + H);
     }
     const drv = fs.readFileSync(N('SceneDriver.java'), 'utf8');
     assert.ok(/DIR = "chars3d\/"/.test(drv), '읽는 폴더가 assets/chars3d 가 아님');
