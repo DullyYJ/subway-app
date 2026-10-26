@@ -2485,11 +2485,12 @@ YJ(11:16, 기기 스크린샷 4장 + "모든 탭 화면을 웹과 동일하게")
 - 확인은 오프라인 렌더 이미지와 CI 컴파일/JVM 시험까지. 실기기에서 보는 것은 아직 안 함.
 - 남은 약점: 러블 귀 밑동 미세한 각, 챙챙 얼굴의 머리 위 번짐(원본 그림의 하이라이트), 술 날개가 얇은 판 모양.
 
-## s222 (2026-10-26) 탑승 안내 값이 안 올라오는 원인 진단용 오류 기록 (앱만, 엔진 변경 없음)
+## s222 (2026-10-26) 긴 경로에서 탑승 안내가 시작하자마자 끝나던 것 고침 — 저장본 문자열 8천 자 한도 (앱만, 엔진 변경 없음)
 
 증상(YJ): 경로 확정 → [안내 종료] 로 바뀐 채 유지되는데 하단 탭 [탑승]·알약 대기·오버레이가 전혀 안 나온다(= `home.riding()` 은 참인데 `RideService.liveRide` 가 안 올라옴, s215 의 '확정 유지'가 가린 상태). 운영 워커(s218)에 같은 경로로 `/ride/start` · `/ride/buspick` · `/ride-standby` 를 직접 보내 본 결과 모두 정상(done=false, state 정상) → 서버 문제 아님, 폰 안 `RideService` 5초 걸음(`RideLocal.step` → `RideCore.onStep`)이 값을 못 내거나 서비스가 안 뜨는 쪽. 하단 토스트를 없앤(s216) 뒤라 실패가 화면에 안 보인다.
 - 진단 추가: `RideService.stepRunnable` 이 `resp==null`·`onStep ok=false`·예외를 오류 기록에 `RIDE_STEP …` 으로 남긴다(같은 까닭은 한 번만, `diagOnce`). `ShellActivity.rideCommit` 이 `RIDE_START <까닭>` 과 서비스 켜기 예외를 기록. 설정 > 오류 기록에서 `RIDE_LOST` · `RIDE_END` · `RIDE_STEP` · `RIDE_START` 줄을 본다.
-- 다음: 실제 원인은 YJ 의 오류 기록 줄을 받아 고친다.
+- **원인 확정(YJ 오류 기록 `RIDE_END no-saved` @ `RideService.onStartCommand`)**: 저장본 복원이 null. `RideCore.save` 는 탑승 상태 JSON 을 **문자열 값으로** 저장본에 넣는데, `ScreenCore.parse` 의 문자열 한도가 `MAX_STR*4 = 8000자`라 긴 경로(역 40개 이상 → 상태 1만 자↑)의 저장본이 '문자열이 너무 길다'로 읽히지 않아 `restore` 가 null → 서비스가 시작하자마자 `no-saved` 로 끝났다(확정 잠금은 s215 로 유지되지만 값이 없어 탑승 버튼·알약·오버레이가 안 나옴). 짧은 경로(예: 두정 짧은 구간)는 8천 자 아래라 멀쩡했다 — 인천→수원→두정, 인천→도봉산처럼 긴 경로에서만 터진다.
+- **고침**: `ScreenCore.parseSaved`(앱이 스스로 저장한 글 전용, 문자열 한도 = 전체 크기 한도 3MB) 추가 → `RideCore.restore` · `HomeCore.restoreRide`(결과 카드 저장본, 17KB 경로 원본이 문자열로 들어 있어 같은 문제) 가 사용. 화면 JSON 파서는 그대로. 시험: `ShellJvmTest` 120역(1만 자↑) 저장·복원.
 
 ## s221 (2026-10-26) 구간 문장 형식 변경 (엔진 `route-v2-2026-10-26s221`, 앱 변경 없음)
 
