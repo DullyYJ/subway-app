@@ -306,6 +306,6 @@ function hdrScreen(inp) {
   var msgs = [];
   for (var k = 0; k < arr.length && msgs.length < 60; k++) { var s = hdrStripEmoji(arr[k]); if (s) msgs.push(s.length > 80 ? s.slice(0, 80) : s); }
   return { ok: true, v: 1, screen: 'hdr', rev: cat + ':' + day + ':' + h, cover: 'tab', head: [],
-    body: [{ t: 'marq', h: 26, pad: [8, 14, 8, 14], msgs: msgs, pass: 16000, grad: 6000, line: true }], info: { cat: cat, hour: h, n: msgs.length } };
+    body: [{ t: 'marq', h: 26, pad: [8, 8, 8, 9], msgs: msgs, pass: 16000, grad: 6000, line: true }], info: { cat: cat, hour: h, n: msgs.length } };
 }
 if (typeof module !== 'undefined' && module.exports) module.exports = { hdrScreen: hdrScreen, hdrCat: hdrCat, hdrStripEmoji: hdrStripEmoji, HDR_MSGS: HDR_MSGS };
