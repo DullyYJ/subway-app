@@ -47,6 +47,7 @@ public class SceneJvmTest {
         System.setProperty("java.awt.headless", "true");
         if (a.length > 0 && a[0].equals("render")) { render(a); return; }
         if (a.length > 0 && a[0].equals("tvframes")) { tvFrames(a); return; }
+        if (a.length > 0 && a[0].equals("trainframes")) { trainFrames(a); return; }
         check(new File(a.length > 1 ? a[1] : "."));
         System.out.println(fails == 0 ? "ALL OK" : ("FAILED " + fails));
         System.exit(fails == 0 ? 0 : 1);
@@ -67,6 +68,39 @@ public class SceneJvmTest {
             BufferedImage im = canvasImg((int) (W * dens), (int) (H * dens)); draw(c, im);
             ImageIO.write(im, "png", new File(a[2] + String.format("%03d", Math.round(tt * 100)) + ".png"));
             System.out.println("tv=" + String.format("%.3f", c.tv()) + " at " + tt);
+        }
+    }
+
+
+    // ═══ 지하철 객실(두 번째 쪽) 눈으로 보기: java SceneJvmTest trainframes <시트폴더> <출력접두> <train.json> <W> <H> <dark|light> <초…> ═══
+    //   시각표: 첫 역에서 25초 서 있다가 출발(120초 달림) → 둘째 역 25초 정차 → … (탑승 엔진 pos.segs 와 같은 모양)
+    static String trainPos(int first, int n) {
+        StringBuilder b = new StringBuilder("{\"segs\":[");
+        long t = 0;
+        for (int i = 0; i < n; i++) {
+            long a = t, t0 = a + 25000, t1 = t0 + 120000;
+            if (i > 0) b.append(',');
+            b.append("{\"from\":").append(first + i).append(",\"to\":").append(first + i + 1).append(",\"a\":").append(a).append(",\"t0\":").append(t0).append(",\"t1\":").append(t1).append('}');
+            t = t1;
+        }
+        return b.append("]}").toString();
+    }
+    static void trainFrames(String[] a) throws Exception {
+        File sheets = new File(a[1]); SceneModel.Res res = SceneModel.parse(read(new File(a[3]))); int W = Integer.parseInt(a[4]), H = Integer.parseInt(a[5]); boolean dark = a[6].equals("dark"); double dens = 2.0;
+        TestHost h = new TestHost();
+        for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        for (String id : SceneModel.ORDER) { File fp = new File(sheets, id + "_pose.png"); if (fp.exists()) h.sheets.put(id + "_pose", new AwtCv.Img(ImageIO.read(fp))); }
+        File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
+        SceneCore c = core(h, 7); c.layout(W, H, dens, dark); c.apply(res);
+        c.trainPos(trainPos(res.train.first, res.train.names.size() - 1));
+        double at = -1;
+        for (int i = 7; i < a.length; i++) {
+            double tt = Double.parseDouble(a[i]);
+            if (at < 0) { c.trainClock((long) (tt * 1000)); c.update(1.0 / 30); at = tt; }
+            while (at < tt - 1e-9) { at = Math.min(tt, at + 1.0 / 30); c.trainClock((long) (at * 1000)); c.update(1.0 / 30); }
+            BufferedImage im = canvasImg((int) (W * dens), (int) (H * dens)); draw(c, im);
+            ImageIO.write(im, "png", new File(a[2] + String.format("%04d", Math.round(tt)) + ".png"));
+            System.out.println("t=" + tt + " " + c.debugInfo() + (c.error != null ? " ERR " + c.error : ""));
         }
     }
 
@@ -258,6 +292,46 @@ public class SceneJvmTest {
             adv(c, .5); ok(c.isHeld() && c.interactive(), "잡고 있는 동안 interactive");
             c.up(); ok(c.interactive(), "놓은 직후(떨어짐·착륙 연출)도 interactive");
             adv(c, 8); ok(!c.interactive(), "착륙 연출이 끝나면 다시 평소(60Hz)");
+        }
+        // 11) 지하철 객실(혼잡도 카드 두 번째 쪽): 시각표(pos.segs)와 지금 시각만으로 달림/섬이 정해지고, 정차에서 친구들이 내리고 탄다
+        {
+            File tf = new File(dir, "train_ride.json");
+            ok(tf.exists(), "엔진이 만든 객실 장면 JSON(train_ride.json) 이 있다");
+            if (tf.exists()) {
+                SceneModel.Res tr = SceneModel.parse(read(tf));
+                ok("train".equals(tr.mode) && tr.train != null && tr.train.names.size() >= 3 && tr.train.stops.size() == tr.train.names.size(), "객실 장면 재료: mode=train · 역 " + (tr.train == null ? 0 : tr.train.names.size()) + "개 · 정차표 " + (tr.train == null ? 0 : tr.train.stops.size()) + "개");
+                double[][] tsz = {{340, 190}, {300, 150}, {336, 130}, {412, 260}};
+                for (double[] sz : tsz) {
+                    TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(sz[0], sz[1], 2.75, true);
+                    ok(c.apply(tr) && c.mode().equals("train"), "객실 장면이 켜진다 " + (int) sz[0] + "x" + (int) sz[1]);
+                    c.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
+                    BufferedImage im = canvasImg((int) (sz[0] * 2.75), (int) (sz[1] * 2.75));
+                    boolean fine = true; String why = ""; double maxScroll0 = 0;
+                    for (int i = 0; i < 30 * 200; i++) {
+                        c.trainClock(i * 1000L / 30); c.update(1.0 / 30);
+                        if (i % 15 == 0) { try { draw(c, im); } catch (RuntimeException e) { fine = false; why = String.valueOf(e); break; } }
+                        if (c.error != null) { fine = false; why = c.error; break; }
+                    }
+                    ok(fine, "객실 장면 200초(정차·출발·달림·도착)가 오류 없이 돈다 " + (int) sz[0] + "x" + (int) sz[1] + " " + why);
+                }
+                // 시각표 해석: 정차(0~25초)엔 서 있고(v=0), 달리는 중엔 v>0 이고 배경이 흐른다, 도착하면 다시 선다
+                TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(tr); c.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
+                c.trainClock(10000); c.update(1.0 / 30); ok(c.tr.stop && c.tr.v == 0 && c.tr.k == 0, "정차 중(10초)에는 서 있다 stop=" + c.tr.stop + " k=" + c.tr.k);
+                double s0 = c.tr.scroll; c.trainClock(10100); c.update(1.0 / 30); ok(c.tr.scroll == s0, "서 있으면 배경이 흐르지 않는다");
+                c.trainClock(80000); c.update(1.0 / 30); ok(!c.tr.stop && c.tr.v > .99 && c.tr.k == 0 && c.tr.toK == 1, "달리는 중(80초)에는 빠르게 간다 v=" + c.tr.v + " k=" + c.tr.k + "→" + c.tr.toK);
+                s0 = c.tr.scroll; c.trainClock(80033); c.update(1.0 / 30); ok(c.tr.scroll > s0, "달리면 배경이 흐른다");
+                c.trainClock(148000); c.update(1.0 / 30); ok(c.tr.stop && c.tr.k == 1 && c.tr.v == 0, "다음 역에 닿으면(148초) 다시 선다 k=" + c.tr.k);
+                // 중간에 열어도 그 시각의 장면이 바로 나온다(처음부터 돌려 온 것과 같은 구간·정차 상태)
+                TestHost h2 = fakeHost(); SceneCore c2 = core(h2, 9); c2.layout(340, 190, 2.75, true); c2.apply(tr); c2.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
+                c2.trainClock(150000); c2.update(1.0 / 30); ok(c2.tr.stop && c2.tr.k == 1 && Math.abs(c2.tr.e - 5) < .2, "145초에 선 열차를 150초에 처음 열어도 정차 2초 지난 장면 e=" + c2.tr.e);
+                // 시각표가 없으면(위치를 모르면) 멈춰 서지 않고 계속 달리는 그림
+                TestHost h3 = fakeHost(); SceneCore c3 = core(h3, 9); c3.layout(340, 190, 2.75, true); c3.apply(tr); c3.trainPos(""); c3.update(1.0 / 30);
+                ok(!c3.tr.stop && c3.tr.v == 1, "시각표가 없으면 계속 달리는 그림");
+                // 같은 여정의 새 값은 자리를 바꾸지 않고, 시각표·시계는 크기가 바뀌어도 이어진다
+                int[] before = c.tr.spotOf.clone(); c.apply(tr); ok(java.util.Arrays.equals(before, c.tr.spotOf), "같은 여정 재적용은 자리 그대로");
+                c.layout(300, 150, 2.75, true); c.trainClock(150000); c.update(1.0 / 30); ok(c.tr.posOk && c.tr.stop && c.tr.k == 1, "크기가 바뀌어도 시각표는 이어진다");
+                ok(!c.down(100, 100), "객실 장면은 캐릭터를 집지 않는다(손가락은 쪽 넘기기)");
+            }
         }
         // 10) 호스트 칸 바탕: 웹에서 CSS 가 하던 연파랑 바탕·둥근 모서리를 코어가 직접 그린다 — 장면이 안 그리는 모서리는 투명
         {
