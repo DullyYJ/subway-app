@@ -37,7 +37,10 @@ final class SceneTrain {
         double ceilB, winT, winB, floorLine, benchBack, seatY, laneY, platFeet, doorW, sillY;
         double[] doorX = new double[2];
         int nTrip;
+        // 안무: 달리는 동안 열두 초(EP)마다 친구 몇 명이 자리를 바꾼다(일어서서 걸어가 다른 자리에 앉는다). cur=지금 자리 · prv=바로 전 자리. 서 있는 동안엔 새 자리 바꿈을 시작하지 않는다.
+        double chor, tA; int epoch; int[] cur = new int[6], prv = new int[6], emo = new int[6];
     }
+    static final double EP = 12, SL = 9;
 
     // ═══ 준비 ═══
     static void setup(SceneCore s) {
@@ -61,6 +64,8 @@ final class SceneTrain {
         if (hi >= 0) { spotOf[hi] = 1; order.remove(Integer.valueOf(1)); }
         for (int c = 0; c < 6; c++) if (spotOf[c] < 0) spotOf[c] = order.remove(0);
         z.spotOf = spotOf;
+        if (old != null) { z.chor = old.chor; z.tA = old.tA; z.epoch = old.epoch; z.cur = old.cur.clone(); z.prv = old.prv.clone(); z.emo = old.emo.clone(); }
+        else { z.cur = spotOf.clone(); z.prv = spotOf.clone(); java.util.Arrays.fill(z.emo, -1); z.chor = EP - 2; }
         if (old == null) z.nowMs = System.currentTimeMillis();
     }
     /** 같은 여정의 새 엔진 값이 왔다: 친구·역이 같으면 값만 바꾸고(자리·움직임은 그대로), 다른 여정이면 처음부터 다시 만든다. */
@@ -119,6 +124,10 @@ final class SceneTrain {
         if (!z.clocked) z.nowMs += dt * 1000;      // 시계를 받지 못하면 스스로 센다
         z.clocked = false;
         phase(s, z);
+        z.tA += dt;
+        double nc = z.chor + dt; if (z.stop) nc = Math.min(nc, (z.epoch + 1) * EP - 1e-6);          // 서 있는 동안엔 자리 바꿈을 새로 시작하지 않는다(문 앞에서 길을 막지 않게)
+        z.chor = nc;
+        while (z.chor >= (z.epoch + 1) * EP) { z.epoch++; nextEpoch(z); }
         double K = s.W * K_SPEED;
         z.scroll += z.v * dt * K;
         double tgt = clamp((z.v - z.vPrev) / Math.max(dt, .001), -1.2, 1.2);
@@ -136,12 +145,12 @@ final class SceneTrain {
         int[] sp = (k >= 0 && k < T.stops.size()) ? T.stops.get(k) : new int[] { T.init, 0, 0 };
         int before = sp[0], out = sp[1], in = sp[2], b = 1 << ci;
         boolean isIn = (before & b) != 0, isOut = (out & b) != 0, isBoard = (in & b) != 0;
-        Pax p = new Pax(); p.ci = ci; int spot = z.spotOf[ci];
+        Pax p = new Pax(); p.ci = ci; int spot = z.cur[ci];
         double sx = z.spotX[spot], sy = z.spotY[spot]; boolean sitSpot = z.spotSit[spot];
         double sc = clamp(H / 190.0, .8, 1.2);
         if (!isOut && !isBoard) {
             if (!isIn) return null;
-            fillIdle(s, z, p, sx, sy, sitSpot, sc); return p;
+            idleAt(s, z, p, ci); return p;
         }
         // 문 열림 시간표
         double tOpen = Math.min(1.1, dwell * .1), tClose = dwell >= 1e8 ? 1e9 : dwell - Math.min(3.2, dwell * .2);
@@ -163,7 +172,7 @@ final class SceneTrain {
         double ty = sy;
         if (isOut) {
             double u = e - d0;
-            if (u < 0) { fillIdle(s, z, p, sx, sy, sitSpot, sc); return p; }
+            if (u < 0) { idleAt(s, z, p, ci); return p; }
             if (u < tStand) { p.x = sx; p.y = sy; p.z = scLane; p.dir = sx < dxd ? 1 : -1; p.sit = false; p.walking = false; p.say = ""; return p; }
             u -= tStand;
             double ly = Math.max(sy, z.laneY - 4);
@@ -188,18 +197,85 @@ final class SceneTrain {
         if (u < tCross) { double q = ease(u / tCross); p.x = lerp(dxd, dxd + laneJ, q); p.y = lerp(z.platFeet, ly, q); p.z = lerp(scPlat, scLane, q); p.dir = 1; p.walking = true; p.walkT = u + tIn; p.behind = p.y < doorFoot - 2; p.say = hs % 3 == 0 ? pick(T.sayIn, hs) : ""; return p; }
         u -= tCross;
         if (u < tW) { double q = ease(u / tW); p.x = lerp(dxd + laneJ, sx, q); p.y = lerp(ly, sy, Math.max(0, (q - .4) / .6)); p.z = scLane; p.dir = sx >= dxd + laneJ ? 1 : -1; p.walking = true; p.walkT = u + tIn + tCross; return p; }
-        fillIdle(s, z, p, sx, sy, sitSpot, sc);
+        idleAt(s, z, p, ci);
         return p;
     }
     static String pick(List<String> l, int hs) { return l == null || l.isEmpty() ? "" : l.get((hs >> 3) % l.size()); }
     static double lerp(double a, double b, double u) { return a + (b - a) * u; }
-    static void fillIdle(SceneCore s, St z, Pax p, double sx, double sy, boolean sit, double sc) {
-        p.x = sx; p.y = sy; p.z = sc; p.sit = sit; p.dir = sx < s.W / 2 ? 1 : -1; p.walking = false;
-        int ci = p.ci;
-        // 앉은 친구는 가끔 꾸벅 존다(40초 단위로 정한 시드)
-        long bucket = (long) (z.nowMs / 40000.0);
-        p.nap = sit && h((int) bucket, ci + 11) % 100 < 22;
-        p.alpha = 1;
+    // ═══ 객실 안에서 하는 일들 (앉았다 일어서서 다른 자리로 · 졸기 · 기지개 · 두리번 · 서성이기 · 콧노래/하트) ═══
+    /** 열두 초가 지날 때마다: 타고 있는 친구 한두 명이 다른 자리로 옮긴다(그 자리에 앉은 친구와 맞바꾸거나 빈 자리로). */
+    static void nextEpoch(St z) {
+        System.arraycopy(z.cur, 0, z.prv, 0, 6);
+        int k = z.toK; int[] sp = (k >= 0 && k < z.T.stops.size()) ? z.T.stops.get(k) : new int[] { z.T.init, 0, 0 };
+        int mask = sp[0], nm = 1 + h(z.seed + z.epoch, 99) % 2; boolean[] moved = new boolean[6];
+        for (int m = 0; m < nm; m++) {
+            int hs = h(z.seed + z.epoch * 31 + m, 17), n = 0; int[] cand = new int[6];
+            for (int c = 0; c < 6; c++) if ((mask & (1 << c)) != 0 && !moved[c]) cand[n++] = c;
+            if (n == 0) break;
+            int a = cand[hs % n], old = z.cur[a], to = (old + 1 + (hs >> 6) % 5) % 6, b = -1;
+            for (int c = 0; c < 6; c++) if (z.cur[c] == to) b = c;
+            z.cur[a] = to; moved[a] = true;
+            if (b >= 0) { z.cur[b] = old; moved[b] = true; }
+        }
+    }
+    /** 자리 from → to 로 걷는 길: [전체 시간, 일어서는 시간, 걷는 시간, ly] */
+    static double[] movePath(SceneCore s, St z, int from, int to) {
+        double y0 = z.spotY[from], y1 = z.spotY[to], x0 = z.spotX[from], x1 = z.spotX[to];
+        double ly = Math.max(Math.max(y0, y1), z.laneY - 4), sp = 34 * s.W / 208.0;
+        double len = Math.abs(ly - y0) + Math.abs(x1 - x0) + Math.abs(y1 - ly);
+        double ts = z.spotSit[from] ? .45 : 0, tw = len / sp, tt = z.spotSit[to] ? .45 : 0;
+        return new double[] { ts + tw + tt, ts, tw, ly };
+    }
+    static void idleAt(SceneCore s, St z, Pax p, int ci) {
+        double sc = clamp(s.H / 190.0, .8, 1.2), u = z.chor - z.epoch * EP;
+        int from = z.prv[ci], to = z.cur[ci];
+        if (from != to) {
+            double[] md = movePath(s, z, from, to);
+            if (u < md[0]) { moveAt(s, z, p, from, to, u, sc, md); return; }
+        }
+        restAt(s, z, p, ci, to, sc);
+    }
+    static double sgn(double v) { return v > 0 ? 1 : v < 0 ? -1 : 0; }
+    static void moveAt(SceneCore s, St z, Pax p, int from, int to, double u, double sc, double[] md) {
+        double x0 = z.spotX[from], y0 = z.spotY[from], x1 = z.spotX[to], y1 = z.spotY[to], ly = md[3], w = u - md[1];
+        p.z = sc; p.alpha = 1; p.sit = false; p.nap = false; p.dir = x1 >= x0 ? 1 : -1;
+        if (w < 0) { p.x = x0; p.y = y0; return; }                                         // 일어서는 중
+        if (w < md[2]) {
+            double sp = 34 * s.W / 208.0, d = w * sp, l1 = Math.abs(ly - y0), l2 = Math.abs(x1 - x0);
+            if (d < l1) { p.x = x0; p.y = y0 + sgn(ly - y0) * d; }
+            else if (d < l1 + l2) { p.x = x0 + sgn(x1 - x0) * (d - l1); p.y = ly; }
+            else { p.x = x1; p.y = ly + sgn(y1 - ly) * (d - l1 - l2); }
+            p.walking = true; p.walkT = w; return;
+        }
+        p.x = x1; p.y = y1;                                                                 // 새 자리 앞에 섰다(곧 앉는다)
+    }
+    static void restAt(SceneCore s, St z, Pax p, int ci, int spot, double sc) {
+        double sx = z.spotX[spot], sy = z.spotY[spot]; boolean sitSpot = z.spotSit[spot];
+        p.x = sx; p.y = sy; p.z = sc; p.sit = sitSpot; p.dir = sx < s.W / 2 ? 1 : -1; p.walking = false; p.alpha = 1; p.nap = false;
+        double t = z.tA + ci * 3.1; long slot = (long) Math.floor(t / SL); double ph = t - slot * SL;
+        int hs = h((int) slot + z.seed, ci * 7 + 3), r = hs % 100;
+        boolean emote = false;
+        if (sitSpot) {
+            if (r < 18) p.nap = true;
+            else if (r < 34) { if (ph >= 1 && ph < 6.5) p.sit = false; }                   // 일어나 기지개 켰다 다시 앉는다
+            else if (r < 44) { if (ph > 4.5) p.dir = -p.dir; }                              // 두리번
+            else if (r < 54) emote = ph > 1.5;
+        } else {
+            if (r < 28) {                                                                    // 서성이기: 몇 걸음 갔다가 돌아온다
+                double dist = s.W * .18, sp = 34 * s.W / 208.0, t1 = dist / sp, g = (hs >> 9) % 2 == 0 ? 1 : -1;
+                double q = ph - 1;
+                if (q >= 0 && q < t1) { p.x = sx + g * dist * (q / t1); p.dir = (int) g; p.walking = true; p.walkT = q; }
+                else if (q >= t1 && q < t1 + 2.2) { p.x = sx + g * dist; p.dir = (int) g; }
+                else if (q >= t1 + 2.2 && q < 2 * t1 + 2.2) { double q2 = q - t1 - 2.2; p.x = sx + g * dist * (1 - q2 / t1); p.dir = (int) -g; p.walking = true; p.walkT = q2; }
+                p.x = clamp(p.x, 10, s.W - 10);
+            } else if (r < 40) { if (ph > 4.5) p.dir = -p.dir; }
+            else if (r < 50) emote = ph > 1.5;
+        }
+        if (emote && z.emo[ci] != (int) slot) {
+            z.emo[ci] = (int) slot;
+            String[] ty = { "note", "heart", "star" };
+            s.ptx(ty[(hs >> 12) % 3], p.x + 6, p.y - 40 * p.z, 1, SceneCore.po().a(-1.35, -1.05).s(7, 11).g(-4).l(1.1, 1.7).jx(2));
+        }
     }
 
     // ═══ 그리기 ═══
@@ -307,7 +383,7 @@ final class SceneTrain {
             else {      // 달림: 다음 역에 닿기 직전의 명단 그대로 앉아 있다
                 int[] sp = (k >= 0 && k < z.T.stops.size()) ? z.T.stops.get(k) : new int[] { z.T.init, 0, 0 };
                 if ((sp[0] & (1 << ci)) == 0) continue;
-                p = new Pax(); p.ci = ci; fillIdle(s, z, p, z.spotX[z.spotOf[ci]], z.spotY[z.spotOf[ci]], z.spotSit[z.spotOf[ci]], clamp(s.H / 190.0, .8, 1.2));
+                p = new Pax(); p.ci = ci; idleAt(s, z, p, ci);
             }
             if (p != null) l.add(p);
         }
