@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s218";
+var ENGINE_VERSION = "route-v2-2026-10-26s219";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12153,10 +12153,9 @@ async function handleWidgetSay(request, env, ctx) {
     tasks.push((async function () {
       try {
         var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 2500);
-        var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
+        var j = await wxMeteo(lat, lng, ac.signal);
         clearTimeout(t);
-        var j = r.ok ? await r.json() : null;
-        if (j && j.ok !== false && typeof j.temp === "number") wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12) };
+        if (j && typeof j.temp === "number") wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12) };
       } catch (e) { wx = null; }
     })());
   }
@@ -12344,16 +12343,26 @@ function sceneDecide(inp, wx) {
   return out;
 }
 
+var WX_CODES = { 0: "\ub9d1\uc74c", 1: "\ub300\uccb4\ub85c \ub9d1\uc74c", 2: "\uad6c\ub984 \uc870\uae08", 3: "\ud750\ub9bc", 45: "\uc548\uac1c", 48: "\uc548\uac1c", 51: "\uc774\uc2ac\ube44", 53: "\uc774\uc2ac\ube44", 55: "\uc774\uc2ac\ube44", 56: "\uc5b4\ub294 \ube44", 57: "\uc5b4\ub294 \ube44", 61: "\ube44", 63: "\ube44", 65: "\uac15\ud55c \ube44", 66: "\uc5b4\ub294 \ube44", 67: "\uc5b4\ub294 \ube44", 71: "\ub208", 73: "\ub208", 75: "\uac15\ud55c \ub208", 77: "\ub208", 80: "\uc18c\ub098\uae30", 81: "\uc18c\ub098\uae30", 82: "\uac15\ud55c \uc18c\ub098\uae30", 85: "\ub208", 86: "\ub208", 95: "\ucc9c\ub465\ubc88\uac1c", 96: "\ucc9c\ub465\ubc88\uac1c", 99: "\ucc9c\ub465\ubc88\uac1c" };
+async function wxMeteo(lat, lng, signal) {
+  var r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=" + Number(lat).toFixed(3) + "&longitude=" + Number(lng).toFixed(3) + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&hourly=precipitation_probability&daily=uv_index_max,temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=Asia%2FSeoul&wind_speed_unit=ms", { signal: signal });
+  var j = r.ok ? await r.json() : null, c = j && j.current;
+  if (!c || typeof c.temperature_2m !== "number") return null;
+  var n = function (v) { return typeof v === "number" && isFinite(v) ? v : null; }, rd = function (v) { v = n(v); return v == null ? null : Math.round(v); };
+  var rain = null, hr = j.hourly && Array.isArray(j.hourly.time) && Array.isArray(j.hourly.precipitation_probability) ? j.hourly : null;
+  if (hr) { var ix = hr.time.indexOf(String(c.time || "").slice(0, 13) + ":00"); if (ix < 0) ix = 0; for (var q = ix; q < Math.min(hr.time.length, ix + 3); q++) { var pv = n(hr.precipitation_probability[q]); if (pv != null) rain = rain == null ? pv : Math.max(rain, pv); } }
+  var d = j.daily || {}, first = function (a) { return Array.isArray(a) ? n(a[0]) : null; };
+  return { temp: Math.round(c.temperature_2m), feel: rd(c.apparent_temperature), hum: rd(c.relative_humidity_2m), wind: n(c.wind_speed_10m) == null ? null : Math.round(c.wind_speed_10m * 10) / 10, uv: first(d.uv_index_max) == null ? null : Math.round(first(d.uv_index_max) * 10) / 10, rain: rain == null ? null : Math.round(rain), tmin: rd(first(d.temperature_2m_min)), tmax: rd(first(d.temperature_2m_max)), txt: WX_CODES[c.weather_code] || "\uad6c\ub984 \uc870\uae08" };
+}
 async function sceneWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = SCENE_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
-    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 2500);
-    var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
+    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 3500);
+    var w = await wxMeteo(lat, lng, ac.signal);
     clearTimeout(t);
-    var j = r.ok ? await r.json() : null;
-    if (j && j.ok !== false && typeof j.temp === "number") { var wx = { temp: j.temp, rain: typeof j.rain === "number" ? j.rain : null, txt: String(j.txt || "").slice(0, 12), feel: typeof j.feel === "number" ? j.feel : null, wind: typeof j.wind === "number" ? j.wind : null, uv: typeof j.uv === "number" ? j.uv : null, hum: typeof j.hum === "number" ? j.hum : null }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
+    if (w) { var wx = { temp: w.temp, rain: w.rain, txt: String(w.txt || "").slice(0, 12), feel: w.feel, wind: w.wind, uv: w.uv, hum: w.hum }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
   } catch (e) {}
   return c ? c.wx : null;
 }
@@ -17166,35 +17175,35 @@ function homeBrief(o) {
     var line1 = [{ id: 'homeAiArr', t: p1 }];
     if (o.dm) { line1.push(' '); line1.push({ id: 'homeAiDep', raw: String(o.dm) }); }
     P(line1);
-    if (cs.length) {
-      var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '\uc5d0\uc11c '];
-      if (cx === 0) { tp.push({ ln: c0.type === 2 ? c0.line + '\ubc88' : (c0.line || '\uc5f4\ucc28') }); tp.push(c0.type === 2 ? ' \ubc84\uc2a4\ub85c \ud55c \ubc88\uc5d0 \uac00\uc2dc\uba74 \ub3fc\uc694.' : hbJosRo(c0.line) + ' \ud55c \ubc88\uc5d0 \uac00\uc2dc\uba74 \ub3fc\uc694.'); }
-      else {
-        tp.push({ ln: c0.type === 2 ? c0.line + '\ubc88' : (c0.line || '\uc5f4\ucc28') }); tp.push(c0.type === 2 ? ' \ubc84\uc2a4\ub97c \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694. \uac00\ub294 \uae38\uc5d0 ' : hbJosEul(c0.line || '\uc5f4\ucc28') + ' \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694. \uac00\ub294 \uae38\uc5d0 ');
-        for (var i2 = 1; i2 < cs.length; i2++) { var nl3 = cs[i2].line || '\ub2e4\uc74c \ub178\uc120'; if (i2 > 1) tp.push(', '); tp.push({ stn: [cs[i2].from, cs[i2].line] }); tp.push('\uc5d0\uc11c '); tp.push({ ln: cs[i2].type === 2 ? nl3 + '\ubc88' : nl3 }); tp.push(cs[i2].type === 2 ? '\ub85c' : hbJosRo(nl3)); }
-        tp.push(' \uac08\uc544\ud0c0\uc2dc\uba74 \ub3fc\uc694.');
-      }
-      if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) { tp.push(' '); tp.push({ ln: cs[cld].line }); tp.push('\ub294 '); tp.push({ b: cs[cld].depClock }); tp.push(' \ucd9c\ubc1c, '); tp.push({ b: cs[cld].arrClock }); tp.push(' \ub3c4\ucc29\uc774\uc5d0\uc694. \uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.'); }
-      P(tp);
+    if (cs.length) {                                             // s219: \uad6c\uac04\ub9c8\ub2e4 \ud55c \ubb38\uc7a5\uc529, \ud55c \uc904\uc5d0 \ud558\ub098('\uc5b4\ub514\uc11c \uba87 \ubc88 \ubc84\uc2a4\ub97c \ud0c0\uace0 \uc5b4\ub514\uc11c \ub0b4\ub824\uc694')
+      cs.slice(0, 10).forEach(function (sg) {
+        if (!sg) return;
+        var ln = sg.line || (sg.type === 2 ? '' : '\uc5f4\ucc28'), tl2 = [{ stn: [sg.from, sg.line] }, '\uc5d0\uc11c '];
+        if (sg.type === 2) { tl2.push({ ln: ln ? ln + '\ubc88' : '\ubc84\uc2a4' }); tl2.push(ln ? ' \ubc84\uc2a4\ub97c \ud0c0\uace0 ' : '\ub97c \ud0c0\uace0 '); }
+        else { tl2.push({ ln: ln }); tl2.push(hbJosEul(ln) + ' \ud0c0\uace0 '); }
+        tl2.push({ stn: [sg.to, sg.line] }); tl2.push('\uc5d0\uc11c \ub0b4\ub824\uc694.');
+        if (sg.type === 4 && sg.depClock && sg.arrClock) { tl2.push(' ('); tl2.push({ b: sg.depClock }); tl2.push(' \ucd9c\ubc1c, '); tl2.push({ b: sg.arrClock }); tl2.push(' \ub3c4\ucc29)'); }
+        P(tl2);
+      });
+      if (cld >= 0) P(['\uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.']);
     }
     P([cgLine()]);
-    if (wF || wT) {                                              // \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \ub0a0\uc528 + \ucd94\ucc9c \uc637\ucc28\ub9bc(\ub354 \uc300\uc300\ud55c \ucabd \uae30\uc900) + \uc6b0\uc0b0
-      var wl = ['\ub0a0\uc528\ub294 '];
+    if (wF || wT) {                                              // \ub9c8\uc9c0\ub9c9 \ud55c \uc904: \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \ub0a0\uc528 + \ucd94\ucc9c \uc637\ucc28\ub9bc(\ub354 \uc300\uc300\ud55c \ucabd \uae30\uc900) + \uc6b0\uc0b0
+      var wl = [];
       if (wF) { wl.push({ b: '\ucd9c\ubc1c\uc9c0' }); wl.push(' '); wl.push({ b: wF.temp + '\ub3c4' }); wl.push(' ' + wF.txt); }
-      if (wF && wT) wl.push(', ');
+      if (wF && wT) wl.push(' \u00b7 ');
       if (wT) { wl.push({ b: '\ub3c4\ucc29\uc9c0' }); wl.push(' '); wl.push({ b: wT.temp + '\ub3c4' }); wl.push(' ' + wT.txt); }
-      wl.push('\uc774\uc5d0\uc694.');
       var cold = Math.min(wF ? wF.temp : 99, wT ? wT.temp : 99), wear;
-      if (cold <= 4) wear = '\ub450\uaebc\uc6b4 \ud328\ub529\uc774\ub098 \ucf54\ud2b8\uc5d0 \ubaa9\ub3c4\ub9ac\uae4c\uc9c0';
+      if (cold <= 4) wear = '\ub450\uaebc\uc6b4 \ud328\ub529\uc774\ub098 \ucf54\ud2b8\uc5d0 \ubaa9\ub3c4\ub9ac';
       else if (cold <= 8) wear = '\ucf54\ud2b8\ub098 \ub450\ud23c\ud55c \uc678\ud22c';
       else if (cold <= 11) wear = '\uc790\ucf13\uc774\ub098 \uac00\ubcbc\uc6b4 \ucf54\ud2b8\uc5d0 \ub2c8\ud2b8';
       else if (cold <= 16) wear = '\uac00\ub514\uac74\uc774\ub098 \uc587\uc740 \uc790\ucf13';
-      else if (cold <= 22) wear = '\uc587\uc740 \uae34\ud314 \uc815\ub3c4';
-      else if (cold <= 27) wear = '\ubc18\ud314\uc5d0 \uc587\uc740 \uac89\uc637 \ud558\ub098';
+      else if (cold <= 22) wear = '\uc587\uc740 \uae34\ud314';
+      else if (cold <= 27) wear = '\ubc18\ud314\uc5d0 \uc587\uc740 \uac89\uc637';
       else wear = '\uc2dc\uc6d0\ud55c \ubc18\ud314 \ucc28\ub9bc';
-      wl.push(' \ucd94\ucc9c \uc637\ucc28\ub9bc\uc740 '); wl.push({ b: wear }); wl.push('\uc774\uc5d0\uc694.');
+      wl.push(', '); wl.push({ b: wear }); wl.push(' \ucd94\ucc9c\ud574\uc694.');
       var rn = Math.max((wF && wF.rain) || 0, (wT && wT.rain) || 0);
-      if (rn >= 60) wl.push(' \ube44 \uc18c\uc2dd\uc774 \uc788\uc73c\ub2c8 \uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694.'); else if (rn >= 40) wl.push(' \ube44\uac00 \uc62c \uc218\ub3c4 \uc788\uc73c\ub2c8 \uc6b0\uc0b0 \ud558\ub098 \ucc59\uae30\uc138\uc694.');
+      if (rn >= 60) wl.push(' \uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694.'); else if (rn >= 40) wl.push(' \uc6b0\uc0b0 \ud558\ub098 \ucc59\uae30\uc138\uc694.');
       P(wl);
     }
     return { v: HB_V, paras: ps };
@@ -18260,8 +18269,8 @@ function rheadHeadNodes(f) {
     nodes.push({ t: 'text', s: '\uc804\uccb4 ' + (sp.ride + sp.wait + sp.walk) + '\ubd84 \u00b7 ' + t, size: 12, bold: true, color: 'text', lh: 1.5, pad: [0, 0, 0, 0] });
   }
   if (f.why) nodes.push({ t: 'text', s: f.why, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });
-  rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
-  if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];
+  if (!f.cp) rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
+  if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];       // (\ud1b5\ud569 \uce74\ub4dc cp \uc5d0\uc11c\ub294 \ud638\ucc28\u00b7\ubb38 \uc904\uc774 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8\ub85c \uac14\ub2e4 \u2014 s219)
   if (f.xs.length && !f.cp) {                            // \ud1b5\ud569 \uce74\ub4dc(cp)\uc5d0\uc11c\ub294 \uae34 \ud658\uc2b9 \ubaa9\ub85d \ub300\uc2e0 \uce69 \uc904(part g)\uc774 \ub9e1\uace0, \uc790\uc138\ud55c \uc21c\uc11c\ub294 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8\uac00 \ubcf4\uc5ec \uc900\ub2e4
     var h1 = '\ud658\uc2b9 ' + f.xs.length + '\ubc88', parts = [h1];
     f.xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
@@ -19876,6 +19885,8 @@ if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = requi
 var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
 if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
 
+var resDoorLines = (typeof rheadDoorLines === 'function') ? rheadDoorLines : null;
+if (!resDoorLines) { try { if (typeof require === 'function') resDoorLines = require('./rhead').rheadDoorLines; } catch (eRq5) {} }
 var resXferBox = (typeof rheadXferBox === 'function') ? rheadXferBox : null;
 if (!resXferBox) { try { if (typeof require === 'function') resXferBox = require('./rhead').rheadXferBox; } catch (eRq4) {} }
 // \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217)
@@ -20107,6 +20118,10 @@ function resDetailScreen(route, r, tab, cap) {
   if (cap >= RES_TAGS_CAP && resXferBox) {                          // s217: \ud648 \uce74\ub4dc\uc5d0\uc11c \ube80 '\ud658\uc2b9 1~N\ubc88' \uc21c\uc11c\uac00 \uc5ec\uae30 \ub9e8 \uc704\ub85c \uc628\ub2e4
     var xb = resXferBox(resArr(route.transfers).slice(0, 8).filter(function (t) { return t; }).map(function (t) { return { kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service }; }), [14, 6, 14, 10]);
     if (xb) kids.push(xb);
+    if (resDoorLines) {                                              // s219: \ud648 \uce74\ub4dc \uba38\ub9ac\uc5d0\uc11c \uc62e\uaca8 \uc628 \ud638\ucc28\u00b7\ubb38 / \ube60\ub978 \ud558\ucc28 \uc548\ub0b4
+      var hf2 = resHeadFacts(route, r, tab), dl2 = resDoorLines(hf2.dx, hf2.ex);
+      if (dl2.length) kids.push({ t: 'box', s: '\ud638\ucc28\u00b7\ubb38 \uc548\ub0b4\n' + dl2.join('\n'), hl: [[0, 7]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(10,132,255,0.10)', line: 'rgba(10,132,255,0.35)', r: 10, ip: [10, 7, 10, 7], pad: [14, 0, 14, 10] });
+    }
   }
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // \uc6f9 \uc138\ubd80\uacbd\ub85c \uc904(.tdsec-row)\uacfc \uac19\uc740 \uac12: \uc0c9 \u00b7 \uc544\uc774\ucf58 \u00b7 \ubc43\uc9c0 \u00b7 \uacbd\uc720 \u00b7 \uc2dc\uac04\ub300
@@ -22577,18 +22592,17 @@ function cbBrief(inp, wF, wT) {
 }
 // \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-brief (engine/commute-brief.js \uc758 cbPlan \u00b7 cbCompose \ub97c \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/commute-brief") return handleCommuteBrief(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38: { kind:'morn'|'eve', nowMs, from, to, eFrom, eTo (\uac01 {nm,lat?,lng?,bus?}), gps?:{lat,lng} }  \u2192 { ok, v, title, body, route }
-//   \ub0a0\uc528(\uc628\ub3c4\u00b7\uccb4\uac10\u00b7\uc2b5\ub3c4\u00b7\ucd5c\uc800\ucd5c\uace0\u00b7\uac15\uc218\u00b7\uc790\uc678\uc120\u00b7\ubc14\ub78c)\ub294 subway-api /weather(WSAY_WX_URL)\uc5d0\uc11c \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \uc88c\ud45c\ub85c \ubc1b\ub294\ub2e4(2.5\ucd08 \u00b7 10\ubd84 \uce90\uc2dc). \ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc904\ub9cc \ube60\uc9c4\ub2e4.
+//   \ub0a0\uc528(\uc628\ub3c4\u00b7\uccb4\uac10\u00b7\uc2b5\ub3c4\u00b7\ucd5c\uc800\ucd5c\uace0\u00b7\uac15\uc218\u00b7\uc790\uc678\uc120\u00b7\ubc14\ub78c)\ub294 Open-Meteo(wxMeteo, scene-worker.js)\uc5d0\uc11c \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \uc88c\ud45c\ub85c \ubc1b\ub294\ub2e4(2.5\ucd08 \u00b7 10\ubd84 \uce90\uc2dc). \ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc904\ub9cc \ube60\uc9c4\ub2e4.
 var CB_WX_CACHE = {};
 async function cbWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = CB_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
-    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 2500);
-    var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
+    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 3500);
+    var j = typeof wxMeteo === "function" ? await wxMeteo(lat, lng, ac.signal) : null;      // s218: Open-Meteo \uc9c1\uc811(\uc608\uc804 subway-api /weather \ub294 \ubc30\ud3ec\ubcf8\uc5d0 \uc5c6\uc5c8\ub2e4)
     clearTimeout(t);
-    var j = r.ok ? await r.json() : null;
-    if (j && j.ok !== false && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
+    if (j && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
   } catch (e) {}
   return c ? c.wx : null;
 }
