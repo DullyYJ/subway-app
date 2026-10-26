@@ -272,7 +272,7 @@ function findAndroidJar() {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
-    assert.ok(/if \(tdAct \|\| tdAnim\) postInvalidateOnAnimation\(\); else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '지금 가는 구간이 보이면 화면 박자 · 아니면 2초마다');
+    assert.ok(/if \(tdAnim\) postInvalidateOnAnimation\(\);\s*else if \(tdAct && isShown\(\)\)/.test(sv) && /else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '펼침 움직임은 화면 박자 · 지금 가는 구간 점은 33ms(s239: 점 자리만) · 아니면 2초마다');
     assert.ok(/CAP = 2[45]/.test(fs.readFileSync(N("ShellCore.java"), "utf8")) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
   });
   await t('세부경로 시트 웹 맞춤(s153): 머리(shd)·손잡이·× · 구간은 서버 없이 바로 펼침(▾ 0.2초) · 배경 0.82·탭바 위·끌어 닫기 120dp/.25초 · 확정 토스트·0.6초 뒤 닫힘·오버레이 안내 한 번', () => {
@@ -759,6 +759,12 @@ function findAndroidJar() {
     assert.ok(/SW_DRAG_DP = 88f/.test(sv) && /Math\.exp\(-Math\.abs\(dd9\) \/ SW_DRAG_DP\)/.test(sv) && /springF\(el <= 0L \? 0f : el \/ 1000f, 0\.62f, 13f\)/.test(sv), '손가락을 1:1 로 따라가다 고무줄 · 놓으면 스프링으로 제자리');
     assert.ok(/public interface PullHost/.test(sv) && /pullAllowed && \(pullY > 0f \|\| \(scrollY <= 0f && ddp > 0f\)\)/.test(sv) && /pullFrom \* springF\(pt, 0\.42f, 11f\)/.test(sv) && /pullY >= PULL_TRIG && pullHost != null/.test(sv) && /cv\.translate\(0f, lay\.headH - scrollY \+ pullNow\)/.test(sv), '맨 위에서 아래로 당기면 고무줄 → 놓으면 스프링 + 충분히 당겼으면 새로고침');
     assert.ok(/setPullHost\(new ScreenView\.PullHost\(\)/.test(a) && /"map"\.equals\(ct\) && "bus"\.equals\(map\.mode\(\)\)/.test(a) && /a\.v = "mp\.rf"; hostBody\.handle\(a, false\)/.test(a), '버스 탭(🔄 와 같은 mp.rf) · 맛집 탭에서 당겨 새로고침');
+  });
+  await t('s239: 세부경로 현재위치 점 맥박은 화면 전체를 매 프레임 다시 그리지 않는다(점 자리만 초당 30번 · 전체는 1초에 한 번)', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(!/if \(tdAct \|\| tdAnim\) postInvalidateOnAnimation\(\)/.test(sv), '예전 매 프레임 전체 그리기가 없다');
+    assert.ok(/if \(tdAnim\) postInvalidateOnAnimation\(\);\s*else if \(tdAct && isShown\(\)\)/.test(sv) && /now - tdFullT >= 1000L/.test(sv) && /postInvalidateDelayed\(33L, Math\.max\(0, Math\.round\(tdX0 \* dpr\)\)/.test(sv), '점 자리만 33ms · 전체는 1초에 한 번');
+    assert.ok(/tdFirst/.test(sv) && /tdX0 = Math\.min\(tdX0, ax\)/.test(sv), '맥박 자리를 그릴 때 모은다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
