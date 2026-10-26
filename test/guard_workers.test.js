@@ -25,8 +25,8 @@ const count = (a, f) => a.filter(f).length;
     const i = cur.indexOf('// ===== GUARD BEGIN'), j = cur.indexOf('// ===== GUARD END =====\n') + '// ===== GUARD END =====\n'.length;
     const rest = cur.slice(0, i) + cur.slice(j);
     const exp = /export \{\s*([\w$]+) as default\s*\};?/.test(src) ? src.replace(/export \{\s*([\w$]+) as default\s*\};?/, 'export default gdWrap($1);') : src.replace(/^export default \{/m, 'var __gd_inner = {').replace(/\s*$/, '\n') + 'export default gdWrap(__gd_inner);\n';
-    ok(rest === exp, name + ': 원래 코드는 그대로(방어 블록 · export 한 줄만 달라진다)');
-    ok(!/[^\x00-\x7f]/.test(cur.slice(i, j)) && cur.indexOf('\r') < 0, name + ': 방어 블록은 ASCII · 줄바꿈 LF');
+    ok(rest === W.esc(exp), name + ': 원래 코드는 그대로(방어 블록 · export 한 줄만 달라진다)');
+    ok(!/[^\x00-\x7f]/.test(cur) && cur.indexOf('\r') < 0, name + ': 파일 전체가 ASCII · 줄바꿈 LF');
   }
   // ② 모양: fetch 가 있고 scheduled 는 그대로 통과
   const bus = await load('bus'), food = await load('food'), shop = await load('shop'), board = await load('board-writer'), gl = await load('gentle-lab');
