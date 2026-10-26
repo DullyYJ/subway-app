@@ -61,6 +61,7 @@ final class RideOverlay {
     private boolean shown, userPill, blinkOn = true, blinking, userScrolling, curPill, movedForAlert, popReady;
     private int restoreX, restoreY, pillX;
     private long dismissedRecoAt = -1L, dismissedAlertAt = -1L, lastVibeAt = 0L;
+    private String dismissedRsKey = "";
     private ValueAnimator flingAnim, recenterAnim;
     private static final String PREF = "overlay_pos";       // 웹 때와 같은 이름 — 저장된 위치 · 접힘(pill) · 알약 가로 위치(px)를 이어 쓴다
     private OvCore.Ov cur = new OvCore.Ov();
@@ -106,7 +107,10 @@ final class RideOverlay {
 
     /** 접힌 알약으로 보일지. 접어 둬도 1정거장 전(alert 1, 이미 접어 끈 경고는 제외)이거나 새 추천(row)이 오면 저절로 펼친다 — 2정거장 전(alert 2)은 펼치지 않고 알약 둘레 무지개만 돈다(웹 OverlayPlugin.applyMode 와 같다). */
     private boolean pillMode() { return userPill && !wantOpen(); }
-    private boolean wantOpen() { return (cur.alert == 1 && cur.alertAt != dismissedAlertAt) || (cur.row.kind > 0 && cur.row.at != dismissedRecoAt); }
+    private boolean wantOpen() { return (cur.alert == 1 && cur.alertAt != dismissedAlertAt) || (cur.row.kind > 0 && cur.row.at != dismissedRecoAt) || boardOpen(); }
+    /** s229 (YJ: 알약으로 접어 뒀어도 탑승·환승 때가 되면 알약이 펼쳐지고 [탑승]·[환승완료] 버튼이 보여야 한다): 엔진이 board(탑승·환승 시각)로 알리면 저절로 펼친다 — 사용자가 그 차례를 접었으면 그 차례만 다시 펼치지 않는다. */
+    private boolean boardOpen() { return "board".equals(cur.rsSt) && !cur.rsEnd && cur.rsBt.length() > 0 && !rsKey().equals(dismissedRsKey); }
+    private String rsKey() { return cur.rsMode + "|" + cur.rsNm + "|" + cur.rsChip; }
 
     private void apply() {
         OvCore.Ov v = cur;
@@ -253,8 +257,8 @@ final class RideOverlay {
     /** 사용자가 알약으로 접거나(true) 펼친다(false). 접은 상태는 저장된다. 경고·추천으로 펼쳐진 중에 접으면 그 경고·추천으로는 다시 펼치지 않는다(웹 setUserPill). */
     private void setUserPill(boolean v) {
         userPill = v;
-        if (v) { if (cur.alert > 0) dismissedAlertAt = cur.alertAt; if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; }
-        else { dismissedAlertAt = -1L; dismissedRecoAt = -1L; }
+        if (v) { if (cur.alert > 0) dismissedAlertAt = cur.alertAt; if (cur.row.kind > 0) dismissedRecoAt = cur.row.at; if ("board".equals(cur.rsSt)) dismissedRsKey = rsKey(); }
+        else { dismissedAlertAt = -1L; dismissedRecoAt = -1L; dismissedRsKey = ""; }
         try { ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putBoolean("pill", v).apply(); } catch (Throwable ignored) { }
         if (shown) apply();
     }
