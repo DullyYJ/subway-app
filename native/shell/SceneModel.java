@@ -50,13 +50,20 @@ public final class SceneModel {
     }
     /** say: 날씨 반응 동작 이름 → 말풍선 글(엔진이 정한 글. 없으면 말풍선 없이 몸짓만) */
     public static final class Traits { public String land = ""; public List<String> acts = new ArrayList<>(); public Map<String, String> say = new HashMap<>(); }
+    /** 지하철 객실 장면 재료(엔진 sceneTrain): 누가 어느 역에서 내리고 타는지는 엔진이 정했다. stops[k] = {역에 닿기 직전 타고 있던 친구들, 내리는 친구들, 타는 친구들}(비트 = ORDER 순서). */
+    public static final class Train {
+        public int first, init; public String line = ""; public List<String> names = new ArrayList<>(); public List<int[]> stops = new ArrayList<>();
+        public List<String> sayOut = new ArrayList<>(), sayIn = new ArrayList<>(); public String lbNext = "", lbHere = "";
+    }
     public static final class Res {
+        public Train train;
         public boolean ok; public String mode, venue = "", hero, hint = "", tag = "", line = "";
         public boolean nearEnd; public Look look = new Look(); public List<String> cast = new ArrayList<>();
         public Map<String, Traits> traits = new HashMap<>();
         public String raw;
     }
 
+    static int num(Object o) { return o instanceof Number ? (int) Math.round(((Number) o).doubleValue()) : 0; }
     @SuppressWarnings("unchecked")
     public static Res parse(String json) {
         Object o = Json.parse(json);
@@ -77,6 +84,24 @@ public final class SceneModel {
             k.place = Json.strOr(l.get("place"), "street"); k.placeKo = Json.strOr(l.get("placeKo"), "");
             k.hot = Json.bool(l.get("hot")); k.cold = Json.bool(l.get("cold")); k.sun = Json.bool(l.get("sun")); k.bright = Json.bool(l.get("bright"));
             Object wd = l.get("wind"); k.wind = wd instanceof Number ? Math.max(0, Math.min(2, ((Number) wd).intValue())) : 0;
+        }
+        Object tro = m.get("train");
+        if (tro instanceof Map) {
+            Map<String, Object> tm = (Map<String, Object>) tro; Train tr = new Train();
+            tr.first = num(tm.get("first")); tr.init = num(tm.get("init")); tr.line = Json.strOr(tm.get("line"), "");
+            Object no = tm.get("names"); if (no instanceof List) for (Object x : (List<Object>) no) tr.names.add(x instanceof String ? (String) x : "");
+            Object so = tm.get("stops");
+            if (so instanceof List) for (Object x : (List<Object>) so) { int[] v = new int[3]; if (x instanceof List) { List<Object> l = (List<Object>) x; for (int i = 0; i < 3 && i < l.size(); i++) v[i] = num(l.get(i)); } tr.stops.add(v); }
+            Object sy = tm.get("say");
+            if (sy instanceof Map) {
+                Map<String, Object> sm = (Map<String, Object>) sy;
+                Object a = sm.get("out"), b = sm.get("in");
+                if (a instanceof List) for (Object x : (List<Object>) a) if (x instanceof String) tr.sayOut.add((String) x);
+                if (b instanceof List) for (Object x : (List<Object>) b) if (x instanceof String) tr.sayIn.add((String) x);
+            }
+            Object lb = tm.get("lb");
+            if (lb instanceof List && ((List<Object>) lb).size() >= 2) { tr.lbNext = Json.strOr(((List<Object>) lb).get(0), ""); tr.lbHere = Json.strOr(((List<Object>) lb).get(1), ""); }
+            r.train = tr;
         }
         Object co = m.get("cast");
         if (co instanceof List) for (Object x : (List<Object>) co) if (x instanceof String) r.cast.add((String) x);
