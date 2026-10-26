@@ -182,7 +182,7 @@ final class RideStandbyJ {
             return;
         }
         Map<String, Object> old = mm(st.get("xw")), keep = (old != null && gn(old, "i") == L.bi) ? old : null;
-        st.put("xw", obj("i", L.bi, "k", L.k, "mode", L.mode, "line", L.line, "name", L.name, "arrMs", dep, "seen", keep != null && truthy(keep.get("seen")), "shr", keep != null && truthy(keep.get("shr"))));
+        st.put("xw", obj("i", L.bi, "k", L.k, "mode", L.mode, "line", L.line, "name", L.name, "arrMs", dep, "seen", keep != null ? truthy(keep.get("seen")) : (st.get("xSeen") != null && num(st.get("xSeen")) == L.bi), "shr", keep != null && truthy(keep.get("shr"))));
         if (st.get("xPend") != null && gn(st.get("xPend"), "i") == L.bi && dep - now <= RS_EARLY_MS) {
             Object lvO = mm(st.get("xPend")).get("lv"); Map<String, Object> pv = xCommit(st, L.bi, now, fin(lvO) ? num(lvO) : Double.NaN); notes.add("환승 예약 확정(" + L.bi + "번)");
             if (st.get("rsUndo") != null && truthy(mm(st.get("rsUndo")).get("x"))) mm(st.get("rsUndo")).put("prev", pv);
@@ -194,6 +194,125 @@ final class RideStandbyJ {
         if (h.length() != 6 || !h.matches("[0-9a-fA-F]{6}")) return "#ffffff";
         int n = Integer.parseInt(h, 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
         return (0.299 * r + 0.587 * g + 0.114 * b) > 170 ? "#121214" : "#ffffff";
+    }
+
+    // ═════════════ s229 역까지 이동 (engine/ride-standby.js rsDt* 의 포팅) ═════════════
+    static final double RS_DT_ARRIVE_M = 150, RS_DT_PLATFORM_SEC = 120, RS_DT_TT_WAIT_MS = 10000, RS_DT_FALLBACK_MS = 300000;
+    static final class DtInfo { String name; double distM = Double.NaN, etaSec = Double.NaN; boolean arrived; }
+    /** 경로의 첫 지하철 구간 승차 노드(앞에 버스 구간이 있을 때만) — { i, k, name, line, lat, lng } 또는 null */
+    static Map<String, Object> dtTarget(Map<String, Object> st) {
+        Map<String, Object> eta = st == null ? null : mm(st.get("eta")); if (eta == null) return null;
+        List<Leg> legs = legsOf(eta); List<Object> nodes = l(eta.get("nodes")); if (nodes == null) nodes = new ArrayList<Object>();
+        double pm = maxPass(eta);
+        for (int k = 0; k < legs.size(); k++) {
+            if (!"sub".equals(legs.get(k).mode)) continue;
+            if (k == 0) return null;
+            int bi = legs.get(k).bi; Map<String, Object> s = stopOf(st, bi);
+            for (int q0 = bi - 1; s == null && q0 >= bi - 3 && q0 >= 1; q0--) s = stopOf(st, q0);
+            if (s == null || !fin(s.get("lat")) || !fin(s.get("lng"))) return null;
+            if (pm >= bi - 1 || doneAt(st, bi)) return null;
+            Object nb = at(nodes, bi); String nm = nb != null ? or(g(nb, "name"), "") : "";
+            return obj("i", bi, "k", legs.get(k).k, "name", nm + (nm.length() > 0 && !nm.endsWith("역") ? "역" : ""), "line", legs.get(k).line, "lat", s.get("lat"), "lng", s.get("lng"));
+        }
+        return null;
+    }
+    /** 역에 닿았고 아직 이어 붙이기 전이면 시각표 질문 { i, line, from, to, atMin, baseMs } — 아니면 null */
+    static Map<String, Object> detourQuery(Map<String, Object> req) {
+        Map<String, Object> st = req == null ? null : mm(req.get("state"));
+        if (st == null || mm(st.get("eta")) == null || mm(st.get("dt")) == null || !truthy(mm(st.get("dt")).get("arr")) || !fin(req.get("nowMs"))) return null;
+        int i = (int) num(mm(st.get("dt")).get("i")); List<Object> nodes = l(mm(st.get("eta")).get("nodes")); if (nodes == null) nodes = new ArrayList<Object>();
+        Object n = i >= 0 && i < nodes.size() ? nodes.get(i) : null, nx = i + 1 >= 0 && i + 1 < nodes.size() ? nodes.get(i + 1) : null;
+        if (!truthy(n) || !truthy(g(n, "isSub")) || truthy(g(n, "isBus")) || !truthy(g(n, "lineName")) || !truthy(g(n, "name"))) return null;
+        Object tzo = mm(st.get("eta")).get("tzOffsetMin");
+        double tz = tzo != null && fin(tzo) ? num(tzo) : 540, at0 = num(req.get("nowMs")) + RS_DT_PLATFORM_SEC * 1000;
+        return obj("i", i, "line", g(n, "lineName"), "from", g(n, "name"), "to", truthy(nx) && truthy(g(nx, "name")) ? g(nx, "name") : "", "atMin", Math.floor((((at0 / 60000 + tz) % 1440) + 1440) % 1440), "baseMs", at0);
+    }
+    static void dtActStart(Map<String, Object> st, double now, List<Object> notes) {
+        if (st.get("dt") != null || st.get("wait") != null) return;
+        Map<String, Object> tg = dtTarget(st); if (tg == null) return;
+        st.put("dt", obj("i", tg.get("i"), "name", tg.get("name"), "at", now)); st.put("offOn", 0.0); st.put("offAlertAt", 0.0); st.put("rsOpen", 0.0);
+        notes.add("역까지 이동 시작(" + str(tg.get("name")) + ")");
+    }
+    static double dtPlanMin(double ms, double tz, double ref) {
+        double m = Math.floor((((ms / 60000 + tz) % 1440) + 1440) % 1440), best = m;
+        for (int k = -1; k <= 1; k++) { double c = m + 1440 * k; if (Math.abs(c - ref) < Math.abs(best - ref)) best = c; }
+        return round(best);
+    }
+    static void dtRebase(Map<String, Object> st, Map<String, Object> tg, double now, Map<String, Object> tt, List<Object> notes) {
+        Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = l(eta.get("nodes")); if (nodes == null) nodes = new ArrayList<Object>();
+        int bi = (int) num(tg.get("i")), j, k; Object tzo = eta.get("tzOffsetMin");
+        double tz = tzo != null && fin(tzo) ? num(tzo) : 540;
+        List<Object> passes = l(eta.get("passes")); if (passes == null) { passes = new ArrayList<Object>(); eta.put("passes", passes); }
+        double plat = now + RS_DT_PLATFORM_SEC * 1000, dep = Double.NaN; Object etaMs = st.get("etaMs");
+        double planDep = etaMs != null && hasEta(etaMs, bi) ? etaAt(etaMs, bi) : Double.NaN; String src = "";
+        if (tt != null && num(tt.get("i")) == bi && has(tt.get("depMin")) && tt.get("nowM") != null) {
+            double d = num(tt.get("depMin")) - num(tt.get("nowM")); if (d < -720) d += 1440; if (d > 720) d -= 1440;
+            if (d >= 0 && d <= 45) { dep = (plat - (plat % 60000)) + d * 60000 + 30000; if (dep < plat) dep = plat; src = "tt"; }
+        }
+        if (Double.isNaN(dep)) { if (!Double.isNaN(planDep) && planDep >= plat) { dep = planDep; src = "plan"; } else { dep = plat + RS_DT_FALLBACK_MS; src = "wait"; } }
+        double ref = Double.NaN; Object nb = at(nodes, bi);
+        if (nb != null && has(g(nb, "planMin"))) ref = gn(nb, "planMin");
+        if (Double.isNaN(ref)) { for (j = bi; j < nodes.size(); j++) { Object nj = nodes.get(j); if (nj != null && has(g(nj, "planMin"))) { ref = gn(nj, "planMin"); break; } } }
+        int m = 0; double lastMs = now;
+        for (k = 0; k < passes.size(); k++) { Object pk = passes.get(k); if (pk != null && gn(pk, "idx") < bi && gn(pk, "idx") > m) { m = (int) gn(pk, "idx"); lastMs = has(g(pk, "ms")) ? Math.min(gn(pk, "ms"), now) : now; } }
+        int cnt = bi - 1 - m; double[] ms2 = new double[bi + 1]; java.util.Arrays.fill(ms2, Double.NaN);
+        for (j = m + 1; j <= bi - 1; j++) ms2[j] = cnt > 0 ? round(lastMs + (now - lastMs) * (j - m) / cnt) : now;
+        if (!Double.isNaN(ref)) {
+            double depPm = dtPlanMin(dep, tz, ref), delta = depPm - (nb != null && has(g(nb, "planMin")) ? gn(nb, "planMin") : ref);
+            for (j = 0; j < nodes.size(); j++) {
+                Map<String, Object> nd = mm(nodes.get(j)); if (nd == null || !has(nd.get("planMin"))) continue;
+                if (j >= bi) nd.put("planMin", num(nd.get("planMin")) + delta);
+                else if (j < ms2.length && !Double.isNaN(ms2[j])) nd.put("planMin", dtPlanMin(ms2[j], tz, ref));
+            }
+        }
+        for (j = m + 1; j <= bi - 1; j++) {
+            if (j != bi - 1 && j < nodes.size() && truthy(g(nodes.get(j), "isWalk"))) continue;
+            int h2 = -1; for (k = 0; k < passes.size(); k++) if (gn(passes.get(k), "idx") == j) { h2 = k; break; }
+            Map<String, Object> np2 = obj("idx", j, "ms", ms2[j], "src", "gps");
+            if (h2 >= 0) passes.set(h2, np2); else passes.add(np2);
+        }
+        eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); st.put("dr", Boolean.FALSE);
+        Map<String, Object> ny = mm(st.get("notYet")); if (ny != null) for (j = 1; j < bi; j++) ny.remove(ik(j));
+        Map<String, Object> fd = mm(st.get("fired")); if (fd == null) { fd = obj(); st.put("fired", fd); }
+        Map<String, Object> cfg = mm(st.get("cfg")); List<Object> tgs = cfg == null ? null : l(cfg.get("targets"));
+        if (tgs != null) for (k = 0; k < tgs.size(); k++) if (tgs.get(k) != null && gn(tgs.get(k), "nodeIdx") < bi) for (int r2 = 0; r2 <= 2; r2++) fd.put(ns(gn(tgs.get(k), "nodeIdx")) + "_" + r2, 1.0);
+        st.put("xSeen", (double) bi); st.put("rsOpen", now + 20000); st.put("offOn", 0.0); st.put("offAlertAt", 0.0);
+        st.put("dtDone", obj("at", now, "i", bi, "dep", dep, "src", src));
+        st.remove("dt");
+        notes.add("역까지 이동 끝 — " + str(tg.get("name")) + " " + ("tt".equals(src) ? "시각표 가장 빠른 열차" : "plan".equals(src) ? "계획 시각표" : "승강장 도착 뒤 5분") + "으로 이어 붙임");
+    }
+    static DtInfo dtTick(Map<String, Object> st, List<Object> tr, double now, Map<String, Object> req, List<Object> notes) {
+        Map<String, Object> dt = mm(st.get("dt")); if (dt == null) return null;
+        Map<String, Object> tg = dtTarget(st);
+        if (tg == null || num(tg.get("i")) != num(dt.get("i"))) { st.remove("dt"); notes.add("역까지 이동 해제(경로가 바뀌었거나 이미 지남)"); return null; }
+        Object q = tr.isEmpty() ? null : tr.get(tr.size() - 1);
+        DtInfo info = new DtInfo(); info.name = str(tg.get("name")); info.arrived = truthy(dt.get("arr"));
+        if (q != null) {
+            double d = rsHav(num(at(q, 1)), num(at(q, 2)), num(tg.get("lat")), num(tg.get("lng")));
+            double acc = at(q, 3) != null && fin(at(q, 3)) ? Math.min(num(at(q, 3)), 50) : 0, eff = Math.max(0, d - acc), mps = 0; Object o = null;
+            for (int i = tr.size() - 2; i >= 0; i--) if (num(at(q, 0)) - num(at(tr.get(i), 0)) >= 20000) { o = tr.get(i); break; }
+            if (o != null && num(at(q, 0)) - num(at(o, 0)) <= 120000) mps = rsHav(num(at(o, 1)), num(at(o, 2)), num(at(q, 1)), num(at(q, 2))) / ((num(at(q, 0)) - num(at(o, 0))) / 1000);
+            info.distM = round(eff);
+            info.etaSec = round(eff / (mps >= 2 ? mps : 6));
+            if (!truthy(dt.get("arr")) && eff <= RS_DT_ARRIVE_M && now - num(at(q, 0)) <= 30000) { dt.put("arr", now); info.arrived = true; notes.add("역 도착(" + info.name + " " + ns(round(eff)) + "m)"); }
+        }
+        if (truthy(dt.get("arr"))) {
+            Map<String, Object> tq = req == null ? null : mm(req.get("dtTT")), tt = tq != null && num(tq.get("i")) == num(dt.get("i")) ? tq : null;
+            if (tt != null || now - num(dt.get("arr")) >= RS_DT_TT_WAIT_MS) { dtRebase(st, tg, now, tt, notes); return null; }
+        }
+        return info;
+    }
+    static Map<String, Object> offOut(Map<String, Object> st, double now) {
+        Map<String, Object> o = obj("at", truthy(st.get("offOn")) ? st.get("offOn") : (Object) Double.valueOf(now)), tg = dtTarget(st);
+        if (tg != null && st.get("wait") == null) o.put("stn", tg.get("name"));
+        return o;
+    }
+    static String dtKm(double m) { return m >= 950 ? ns(round(m / 100) / 10) + "km" : ns(round(m / 10) * 10) + "m"; }
+    static String dtText(DtInfo info) {
+        if (info == null) return "";
+        if (Double.isNaN(info.distM)) return info.name + "까지 이동 중";
+        double mins = Math.max(1, round(info.etaSec / 60));
+        return info.arrived ? info.name + " 도착 · 가장 빠른 열차로 바꾸는 중" : info.name + "까지 " + dtKm(info.distM) + " · 약 " + ns(mins) + "분";
     }
 
     // ═════════════ 앱이 알려 준 추천 줄 · 닫기 · 탑승 줄 손짓 ═════════════
@@ -210,7 +329,8 @@ final class RideStandbyJ {
         if (fin(req.get("rcDis")) && num(req.get("rcDis")) > 0) st.put("rcDis", num(req.get("rcDis")));
         Object a = req.get("act");
         Map<String, Object> xw = mm(st.get("xw"));
-        if ("open".equals(a) || "pill".equals(a)) { st.put("rsOpen", now + 20000); if (xw != null) xw.put("shr", Boolean.FALSE); }
+        if ("detour".equals(a)) dtActStart(st, now, notes);
+        else if ("open".equals(a) || "pill".equals(a)) { st.put("rsOpen", now + 20000); if (xw != null) xw.put("shr", Boolean.FALSE); }
         else if ("close".equals(a)) {
             st.put("rsOpen", 0.0);
             if (xw != null && xw.get("arrMs") != null && num(xw.get("arrMs")) - now <= RS_LEAD_MS) xw.put("shr", Boolean.TRUE);
@@ -361,7 +481,7 @@ final class RideStandbyJ {
             if (st.get("xPend") != null) stt = "wait";
             else if (forced) { stt = "board"; x.put("seen", Boolean.TRUE); }
             else if (dt > RS_LEAD_MS || late) stt = truthy(x.get("seen")) ? "wait" : "hidden";
-            else if (truthy(x.get("shr"))) stt = "wait";
+            else if (truthy(x.get("shr")) && dt > 0) stt = "wait";      // s229: 닫아 둔 알약도 차가 오는 시각이 되면 다시 펼쳐 버튼을 보여 준다
             else { stt = "board"; x.put("seen", Boolean.TRUE); }
             if (stt.equals("hidden")) return obj("st", "hidden");
             int xi = (int) num(x.get("i")); Object xno = xi >= 0 && xi < nodes.size() ? nodes.get(xi) : null;
@@ -411,7 +531,9 @@ final class RideStandbyJ {
     /** 접힌 알약에 보일 한 줄(JS rsPillTxt) */
     static String pillTxt(Map<String, Object> rs, String line1, String line2, String pill, List<Object> cells, int cur) {
         if (rs != null && !truthy(rs.get("end")) && ("wait".equals(rs.get("st")) || "board".equals(rs.get("st")))) {
-            String lab = truthy(rs.get("ch")) ? str(rs.get("ch")) : (truthy(rs.get("chip")) ? str(rs.get("chip")) : (truthy(rs.get("nm")) ? str(rs.get("nm")) : ""));
+            String nm0 = truthy(rs.get("ch")) ? "" : (rs.get("nm") == null ? "" : str(rs.get("nm"))), cp0 = truthy(rs.get("ch")) ? str(rs.get("ch")) : (truthy(rs.get("chip")) ? str(rs.get("chip")) : "");
+            String lab = nm0.length() > 0 && cp0.length() > 0 ? nm0 + " · " + cp0 : (nm0.length() > 0 ? nm0 : cp0);
+            if (nm0.length() > 0 && lab.length() > 18) lab = nm0;      // s229: 대기 · 이름 · 노선 (너무 길면 이름만)
             return lab.length() > 0 ? "대기 · " + lab : "대기";
         }
         String c = line1 == null ? "" : line1; int k = c.indexOf(" ▸ ");
@@ -858,6 +980,10 @@ final class RideStandbyJ {
         xwait(st, tr, now, notes);
         Map<String, Object> askBl = blAsk(st, tr, now);
         acts(st, req, now, notes);
+        // 1.7) s229 역까지 이동
+        DtInfo dtInfo = null;
+        if (st.get("dt") != null) { dtInfo = dtTick(st, tr, now, req, notes); if (st.get("dt") == null && st.get("dtDone") != null && num(mm(st.get("dtDone")).get("at")) == now) xwait(st, tr, now, notes); }
+        boolean dtHold = st.get("dt") != null || (st.get("dtDone") != null && st.get("xw") != null && num(mm(st.get("xw")).get("i")) == num(mm(st.get("dtDone")).get("i")));
         // 2) 영점
         Map<String, Object> eta = mm(st.get("eta"));
         List<Object> passes = l(eta.get("passes")); if (passes == null) { passes = new ArrayList<Object>(); eta.put("passes", passes); }
@@ -868,7 +994,7 @@ final class RideStandbyJ {
         for (i = 0; i < passes.size(); i++) if (truthy(passes.get(i)) && gn(passes.get(i), "idx") > progMax) progMax = (int) gn(passes.get(i), "idx");
         if (progMax >= 0 && progMax < enodes.size() && truthy(enodes.get(progMax)) && truthy(g(enodes.get(progMax), "isBus")) && !truthy(g(enodes.get(progMax), "isWalk"))) progBus = true;
         List<Object> stSt = l(st.get("stops"));
-        if (stSt != null && !stSt.isEmpty() && !tr.isEmpty()) {
+        if (stSt != null && !stSt.isEmpty() && !tr.isEmpty() && !dtHold) {
             List<Object> stops = new ArrayList<Object>();
             for (Object so : stSt) { Map<String, Object> o = copyM(so); if (o != null && st.get("etaMs") != null && at(st.get("etaMs"), (int) gn(so, "i")) != null) o.put("arrMs", at(st.get("etaMs"), (int) gn(so, "i"))); stops.add(o); }
             tk = RideTrackJ.rideTrack(obj("nowMs", now, "trail", tr, "plan", obj("pts", new ArrayList<Object>(), "boarded", !Boolean.FALSE.equals(eta.get("boarded")) && !Boolean.TRUE.equals(eta.get("notDeparted")),
@@ -902,8 +1028,8 @@ final class RideStandbyJ {
                 notes.add("버스위치 " + pi + "번 통과 반영");
             }
         }
-        if (resync(st, now, notes)) newPass = true;
-        if (cfg0pf(st) && fuse(st, fx, now, notes)) newPass = true;      // 새 위치 판단기 보정(실험 · 설정에서 켠 때만)
+        if (!dtHold && resync(st, now, notes)) newPass = true;
+        if (!dtHold && cfg0pf(st) && fuse(st, fx, now, notes)) newPass = true;      // 새 위치 판단기 보정(실험 · 설정에서 켠 때만)
         // 3) 도착 시각 계산
         List<Object> nyList = new ArrayList<Object>();
         for (String nk : keys(notYet)) { if (now - num(notYet.get(nk)) <= notYetKeepSec * 1000) nyList.add(Double.valueOf(Double.parseDouble(nk))); else notYet.remove(nk); }
@@ -937,7 +1063,7 @@ final class RideStandbyJ {
             // ★ 2026-10-25 (YJ: 경로확정이 계속 풀려): 아직 안 탄 대기 중(wait · boarded:false · notDeparted)에는 이탈을 보지 않는다 — 역으로 걸어가는 동안 '이탈'로 읽혀 15분 뒤 안내가 끝나 확정이 풀렸다(엔진 ride-standby.js 와 같은 규칙).
             boolean preBoard = st.get("wait") != null || Boolean.FALSE.equals(eta.get("boarded")) || Boolean.TRUE.equals(eta.get("notDeparted"));
             if (preBoard) { st.put("offOn", 0.0); st.put("offAlertAt", 0.0); }
-            if (!preBoard && !tr.isEmpty() && ptsO.size() >= 2 && !truthy(st.get("arrivedAt"))) {
+            if (!preBoard && !tr.isEmpty() && ptsO.size() >= 2 && !truthy(st.get("arrivedAt")) && st.get("dt") == null) {
                 boolean tfO = Boolean.TRUE.equals(eta.get("timetableFirst"));
                 Map<String, Object> ot = RideTrackJ.rideTrack(obj("nowMs", now, "trail", tr, "plan", obj("pts", ptsO, "progIsSub", tfO, "subConfirmed", tfO, "boarded", Boolean.TRUE, "notDeparted", Boolean.FALSE, "suppress", new ArrayList<Object>()),
                     "want", obj("off", Boolean.TRUE, "ridden", Boolean.FALSE, "miss", Boolean.FALSE, "bus", Boolean.FALSE, "board", Boolean.FALSE)));
@@ -947,6 +1073,8 @@ final class RideStandbyJ {
         if (offRes != null && truthy(offRes.get("confirmed"))) { if (!truthy(st.get("offOn"))) st.put("offOn", now); offActive = true; }
         else if (offRes != null && "on_path".equals(offRes.get("why"))) { st.put("offOn", 0.0); st.put("offAlertAt", 0.0); }
         else if (truthy(st.get("offOn"))) offActive = true;
+        if (st.get("dt") != null) { offActive = false; st.put("offOn", 0.0); st.put("offAlertAt", 0.0); }
+        if (st.get("dt") != null && al.alert != null) { al.alert = null; al.extra = new ArrayList<String>(); }
         if (offActive) {
             if (al.alert != null) { al.alert = null; al.extra = new ArrayList<String>(); }
             Object offCfg = mm(cfg.get("allowed")) == null ? null : mm(cfg.get("allowed")).get("offroute");
@@ -979,6 +1107,7 @@ final class RideStandbyJ {
             text = "승차 대기 · " + (truthy(wn) ? or(g(wn, "name"), "") : "") + (truthy(wa) ? " " + str(wa) : "") + " · " + or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : "목적지") + "까지";
         }
         if (offActive) text = "경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요";
+        if (dtInfo != null) text = dtText(dtInfo);
         boolean done = false, quit = false;
         if (truthy(st.get("arrivedAt")) && now - num(st.get("arrivedAt")) >= doneAfterSec * 1000) { done = true; quit = true; notes.add("목적지 도착 " + ns(doneAfterSec) + "초 뒤 종료"); }
         double lastAt = truthy(st.get("lastAt")) ? num(st.get("lastAt")) : now;
@@ -992,13 +1121,16 @@ final class RideStandbyJ {
         try { overlay = overlay(st, r, curIdx, al.curPos, now, dest, or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : ""), moving, done); }
         catch (RuntimeException eOv) { notes.add("오버레이 계산 실패: " + eOv.getMessage()); }
         if (offActive && overlay != null && Boolean.TRUE.equals(overlay.get("active"))) { overlay.put("alert", 0.0); overlay.put("pre", Boolean.FALSE); overlay.put("banner", "경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요"); }
+        if (dtInfo != null && overlay != null && Boolean.TRUE.equals(overlay.get("active"))) { overlay.put("line2", dtText(dtInfo)); overlay.put("pillTxt", dtText(dtInfo)); overlay.put("alert", 0.0); overlay.put("pre", Boolean.FALSE); overlay.put("moving", Boolean.TRUE); }
         Map<String, Object> reco = obj("fire", Boolean.FALSE);
         try { if (!done) reco = reco(st, r, dest, or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : ""), now, offActive); }
         catch (RuntimeException eRc) { notes.add("추천 판단 실패: " + eRc.getMessage()); }
         Map<String, Object> view = obj("text", text, "line1", overlay != null && truthy(overlay.get("line1")) ? overlay.get("line1") : "", "line2", overlay != null && truthy(overlay.get("line2")) ? overlay.get("line2") : "", "curIdx", curIdx, "at", now);
         Map<String, Object> row = done ? null : rowOut(st, now);
-        return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "off", offActive && !done ? obj("at", truthy(st.get("offOn")) ? st.get("offOn") : (Object) Double.valueOf(now)) : null, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
+        Map<String, Object> result = obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "off", offActive && !done ? offOut(st, now) : null, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
             "pos", rpos != null ? obj("from", rpos.get("from"), "to", rpos.get("to"), "ratio", rpos.get("ratio"), "moving", truthy(rpos.get("moving"))) : null,
             "arr", r.get("arr"), "zero", zero, "nextMs", done ? stepMs : nextMsV, "motion", motion, "ask", askBl == null ? null : obj("kind", "boardlive", "body", askBl), "notes", notes);
+        if (dtInfo != null && !done) result.put("dt", obj("n", dtInfo.name, "d", dtInfo.distM, "s", dtInfo.etaSec, "a", dtInfo.arrived ? 1 : 0));
+        return result;
     }
 }
