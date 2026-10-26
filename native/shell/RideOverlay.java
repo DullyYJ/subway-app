@@ -120,7 +120,7 @@ final class RideOverlay {
         boolean changed = pill != curPill;
         if (changed) {
             if (pill) { if (movedForAlert) { lp.x = restoreX; lp.y = restoreY; movedForAlert = false; } else lp.x = pillX; }
-            else if (userPill) { restoreX = lp.x; restoreY = lp.y; movedForAlert = true; lp.x = 0; lp.y = dp(36); }
+            else if (userPill) { restoreX = lp.x; restoreY = lp.y; movedForAlert = true; lp.x = 0; lp.y = 0; }
             else { pillX = lp.x; lp.x = 0; movedForAlert = false; }
             curPill = pill;
         }
@@ -246,7 +246,7 @@ final class RideOverlay {
         try {
             SharedPreferences.Editor ed = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit();
             if (curPill) { pillX = lp.x; ed.putInt("px", lp.x); }
-            ed.putInt("y", lp.y).apply();
+            ed.putInt("y3", lp.y).apply();
         } catch (Throwable ignored) { }
     }
 
@@ -314,10 +314,10 @@ final class RideOverlay {
         try {   // 저장된 위치 · 접힘(웹과 같은 overlay_pos). 화면 밖이면 안쪽으로
             SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
             android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-            lp.y = Math.max(0, Math.min(sp.getInt("y", dp(36)), Math.max(0, dm.heightPixels - dp(120))));
+            lp.y = Math.max(0, Math.min(sp.getInt("y3", 0), Math.max(0, dm.heightPixels - dp(120))));
             userPill = sp.getBoolean("pill", userPill);
             pillX = Math.max(-dm.widthPixels / 2, Math.min(dm.widthPixels / 2, sp.getInt("px", 0)));
-        } catch (Throwable t) { lp.y = dp(36); }
+        } catch (Throwable t) { lp.y = 0; }
         curPill = false; movedForAlert = false; popReady = false;
         box.setOnTouchListener(touch());
         try { wm.addView(box, lp); shown = true; } catch (Throwable t) { shown = false; }
