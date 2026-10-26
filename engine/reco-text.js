@@ -423,6 +423,45 @@ var RTX_FOOD_PITCH = [
 ];
 var RTX_FOOD_PITCH_DEFAULT = ['내리는 길에 가볍게 들러 봐요', '근처에서 해결하면 편해요'];
 
+// ── s237 (YJ: "각 맛집·카페·쿠팡은 아이템에 맞게 클릭을 유도하는 문구 · 시간 날씨에 따라 매번 다르게") ────────────────────
+//   오버레이 추천 줄의 [버튼 이름](go, 7자 안)과 셋째 줄(m, 16자 안)을 아이템 종류(점심·저녁·야식·카페·쿠팡) · 도착 시각 · 날씨에 맞춰 고른다.
+//   날씨가 있으면 그 날씨 문구를 앞세우고, 고르는 건 호출마다 다른 씨앗(RTX_RND)이라 여정마다 다르다.
+var RTX_GO = {
+  lunch: { base: ['메뉴 보러가기', '점심 둘러보기', '가게 둘러보기', '후기 보러가기', '오늘 점심은?'], rainy: ['비 피할 맛집', '따뜻한 한 끼', '비 오는 점심'], cold: ['뜨끈한 국물', '따뜻한 한 끼'], hot: ['시원한 한 끼', '더위 피할 곳'] },
+  dinner: { base: ['저녁 둘러보기', '메뉴 보러가기', '저녁 고르기', '가게 둘러보기', '오늘 저녁은?'], rainy: ['비 피할 맛집', '비 오는 저녁', '따뜻한 한 끼'], cold: ['뜨끈한 국물', '따뜻한 한 끼'], hot: ['시원한 한 끼', '더위 피할 곳'] },
+  night: { base: ['야식 보러가기', '야식 고르기', '오늘 야식은?', '야식 둘러보기'], rainy: ['빗소리 야식', '비 오는 야식'], cold: ['뜨끈한 야식', '따뜻한 한 입'], hot: ['시원한 야식', '시원한 한 입'] },
+  morning: { base: ['카페 둘러보기', '커피 한 잔?', '커피 보러가기', '아침 커피는?'], rainy: ['창가 카페', '빗소리 카페'], cold: ['따뜻한 한 잔', '따뜻한 라떼'], hot: ['시원한 한 잔', '아이스 한 잔'] },
+  shop: { base: ['특가 보러가기', '지금 담아보기', '구경하러 가기', '오늘 딱 이거', '오늘 밤 쇼핑'], weekend: ['주말 쇼핑'], rainy: ['집콕템 보기', '집콕 쇼핑'], cold: ['따뜻템 보기', '겨울 준비'], hot: ['시원템 보기', '더위 탈출템'] }
+};
+var RTX_TEASE = {
+  lunch: { base: ['눌러서 위치 확인', '줄 서기 전에 확인', '미리 보고 정해요', '지도로 바로 확인'], rainy: ['비 피해 가까운 곳', '우산 없이 갈 곳'], cold: ['추운 날 뜨끈하게', '따뜻한 곳 먼저'], hot: ['더운 날 시원하게', '시원한 곳 먼저'], late: ['점심시간 끝나기 전에'] },
+  dinner: { base: ['눌러서 위치 확인', '웨이팅 전에 확인', '미리 보고 정해요', '지도로 바로 확인'], rainy: ['비 피해 가까운 곳', '우산 없이 갈 곳'], cold: ['추운 날 뜨끈하게', '따뜻한 곳 먼저'], hot: ['더운 날 시원하게', '시원한 곳 먼저'] },
+  night: { base: ['눌러서 위치 확인', '문 닫기 전에 확인', '미리 보고 정해요', '지도로 바로 확인'], rainy: ['비 오는 밤엔 딱이에요'], cold: ['추운 밤 뜨끈하게'], hot: ['더운 밤 시원하게'], late: ['자기 전에 확인하세요'] },
+  morning: { base: ['눌러서 위치 확인', '내리자마자 한 잔', '줄 서기 전에 확인', '지도로 바로 확인'], rainy: ['비 소리 듣기 좋은 곳'], cold: ['추운 아침 따뜻하게'], hot: ['더운 아침 시원하게'], early: ['출근길에 한 잔 어때요'] },
+  shop: { base: ['눌러서 가격 확인', '재고 있을 때 확인', '놓치면 아쉬워요', '지금 바로 둘러봐요'], weekend: ['주말에 딱이에요'], rainy: ['비 오는 날 딱이에요'], cold: ['추운 날 딱 필요해요'], hot: ['더운 날 딱 필요해요'], late: ['자기 전에 확인하세요'] }
+};
+function rtxPickRnd(list) { return list[Math.floor(RTX_RND() * list.length)]; }
+// kind: 'lunch'|'dinner'|'night'|'morning'|'shop' · cx: 도착 시각·날씨 맥락(rtxCx). 날씨(비·추위·더위)가 있으면 그 문구들을 앞세우고 기본 문구를 두 개만 섞는다.
+function rtxPickWx(tbl, kind, cx, extraKeys) {
+  var t = tbl[kind] || tbl.lunch, pool = [], base = t.base;
+  cx = cx || {};
+  if (cx.rainy && t.rainy) pool = pool.concat(t.rainy);
+  else if ((cx.cold || cx.freezing) && t.cold) pool = pool.concat(t.cold);
+  else if (cx.hot && t.hot) pool = pool.concat(t.hot);
+  if (extraKeys) for (var i = 0; i < extraKeys.length; i++) if (t[extraKeys[i]]) pool = pool.concat(t[extraKeys[i]]);
+  if (!pool.length) return rtxPickRnd(base);
+  return rtxPickRnd(pool.concat(base.slice(0, 2)));
+}
+function rtxGoLabel(kind, cx) { return rtxPickWx(RTX_GO, kind, cx, (kind === 'shop' && cx && cx.weekend) ? ['weekend'] : null); }
+function rtxTeaser(kind, cx) {
+  var ex = [], h = cx && cx.h != null ? cx.h : -1;
+  if (kind === 'shop' || kind === 'night') { if (h >= 23 || (h >= 0 && h < 4)) ex.push('late'); }
+  if (kind === 'lunch' && h >= 13) ex.push('late');
+  if (kind === 'morning' && h >= 0 && h <= 8) ex.push('early');
+  if (kind === 'shop' && cx && cx.weekend) ex.push('weekend');
+  return rtxPickWx(RTX_TEASE, kind, cx, ex);
+}
+
 function rtxAd(a, slot, destStn){
   try{
     if(!a) return null;
@@ -438,7 +477,7 @@ function rtxAd(a, slot, destStn){
         if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
       var shopB = line || say;
-      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: '' };
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel('shop', a.cx) };
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;
@@ -471,7 +510,7 @@ function rtxAd(a, slot, destStn){
     } else {
       d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: '', pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(sl, a.cx), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
   }catch(e){ return null; }
 }
 
@@ -800,8 +839,8 @@ function recoPip(b) {
 // ── 바깥 자원(쇼핑 상품 목록 · 맛집 서버) — Worker 안에서만 부른다. 시험은 rtxSetLoaders 로 가짜를 끼운다 ──
 var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
 var RTX_FOOD_MEM = {};
-var RTX_LOADERS = { shop: null, food: null, ai: null };
-function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null }; RTX_FOOD_MEM = {}; }
+var RTX_LOADERS = { shop: null, food: null, ai: null, wx: null };
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null, wx: (o && o.wx) || null }; RTX_FOOD_MEM = {}; }
 // ── ⑦ AI 위로 문구(저녁·야식·쇼핑) — 예전 웹 _arrAiCopy 와 같은 요청·같은 검사(서버가 '저녁/야식 × 메뉴'별로 미리 만들어 둔 문구를 하나 골라 준다) ──
 var RTX_AI_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 var RTX_BAN_RE = /(정치|대통령|대선|총선|보궐|선거|후보\s*등록|국회|국정|의원|여당|야당|정당|민주당|국민의힘|개혁신당|진보당|장관|내각|청와대|탄핵|특검|검찰\s*수사|공수처|국정감사|시국|집회|시위|규탄|파업\s*투쟁|좌파|우파|보수\s*진영|진보\s*진영|친일|반일|반중|혐오|젠더\s*갈등|성별\s*갈등|페미|한남|한녀|종북|극우|극좌|이념)/;
@@ -859,6 +898,14 @@ function rtxLoadFood(loc) {
     .catch(function () { if (tm) clearTimeout(tm); return null; });
 }
 
+// s237: 앱은 날씨를 안 보낸다 — 도착역(없으면 앱이 보낸 loc) 좌표의 날씨(Open-Meteo, 장면 엔진과 같은 sceneWeather · 10분 캐시)를 엔진이 받아 문구(문구 고르기 · 버튼 글)에 쓴다. 2.5초 안에 못 받으면 날씨 없이 만든다.
+function rtxLoadWx(loc) {
+  if (RTX_LOADERS.wx) return Promise.resolve().then(function () { return RTX_LOADERS.wx(loc); }).catch(function () { return null; });
+  if (typeof sceneWeather !== 'function') return Promise.resolve(null);
+  var guard = new Promise(function (res) { setTimeout(function () { res(null); }, 2500); });
+  return Promise.race([Promise.resolve().then(function () { return sceneWeather(loc.lat, loc.lng); }).catch(function () { return null; }), guard]);
+}
+
 // ── Worker 연결부 — POST /reco-text {…} (handleFetch 에 길을 둔다) ──
 function handleRecoText(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
@@ -869,15 +916,17 @@ function handleRecoText(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var isPip = !!(body && body.op === 'pip');
-    var needShop = false, loc = null;
+    var needShop = false, loc = null, wxLoc = null;
     if (!isPip && body && typeof body === 'object') {
       try {
         var sl = rtxArrFn('slot')(Number(body.arrMs));
         needShop = sl === 'shop' && (body.pickShop === 1 || body.pickShop === true) && !(body.shop && body.shop.n);
         if (sl !== 'shop' && sl !== 'none' && body.foodPref === 'server') loc = rtxLoc(body.loc);
+        if (sl !== 'none' && !(body.weather && typeof body.weather === 'object')) wxLoc = rtxLoc(body.loc);
       } catch (e1) { /* 시간대를 못 읽으면 아무것도 안 받는다 */ }
     }
-    return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null]).then(function (res) {
+    return Promise.all([needShop ? rtxLoadShop() : null, loc ? rtxLoadFood(loc) : null, wxLoc ? rtxLoadWx(wxLoc) : null]).then(function (res) {
+      if (res[2] && typeof res[2] === 'object') body.weather = { temp: res[2].temp, feel: res[2].feel, tmin: res[2].tmin, tmax: res[2].tmax, rain: res[2].rain, txt: res[2].txt };
       var out, ext = { shop: res[0], foods: res[1] };
       try { out = isPip ? recoPip(body) : recoAlert(body, ext); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
       // ⑦ AI 위로 문구: 앱이 aiCopy:1 을 보냈고 받을 만한 결과면 AI 서버에서 한 줄 받아 같은 입력으로 다시 만든다(씨앗이 같아 나머지는 그대로)
@@ -895,4 +944,4 @@ function handleRecoText(request) {
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, rtxGoLabel: rtxGoLabel, rtxTeaser: rtxTeaser, RTX_GO: RTX_GO, RTX_TEASE: RTX_TEASE, RTX_V: RTX_V };
