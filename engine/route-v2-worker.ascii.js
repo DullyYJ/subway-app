@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s217";
+var ENGINE_VERSION = "route-v2-2026-10-26s218";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17087,6 +17087,11 @@ function hbJosRo(w) {
   var j = (c - 0xAC00) % 28;
   return (j === 0 || j === 8) ? '\ub85c' : '\uc73c\ub85c';
 }
+function hbJosEul(w) {                                   // \ubc1b\uce68 \uc788\uc73c\uba74 '\uc744', \uc5c6\uc73c\uba74 '\ub97c'(s218)
+  var c = String(w || '').charCodeAt(String(w || '').length - 1);
+  if (c < 0xAC00 || c > 0xD7A3) return '\ub97c';
+  return ((c - 0xAC00) % 28) === 0 ? '\ub97c' : '\uc744';
+}
 function hbNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 // \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217)
 function hbNmFix(s) {
@@ -17148,34 +17153,50 @@ function homeBrief(o) {
   }
 
   if (hasRoute && o.compact === true && o.metro !== true) {
-    // \ud1b5\ud569 \uce74\ub4dc\uc6a9 \uc9e7\uc740 \ube0c\ub9ac\ud551(s217): \uc704 \uacbd\ub85c \uce74\ub4dc\uac00 \uc774\ubbf8 \ubcf4\uc5ec \uc8fc\ub294 '\uc5b4\ub514\uc11c \uc5b4\ub514\ub85c' \uae34 \ubb38\uc7a5\uc740 \ub418\ud480\uc774\ud558\uc9c0 \uc54a\uace0
-    //   \ud575\uc2ec \uc2dc\uac01(\ucd9c\ubc1c\u00b7\ub3c4\ucc29) \u2192 \uccab \ud0d1\uc2b9\u00b7\ud658\uc2b9 \ud55c \uc904 \u2192 \ud63c\uc7a1 \u2192 \ub0a0\uc528\u00b7\uc900\ube44\ubb3c \u2192 \ub9c8\ubb34\ub9ac \uc21c\uc73c\ub85c \ub9d0\ud55c\ub2e4. \ub2e8\uacc4\ubcc4 \ud658\uc2b9\u00b7\uc815\uac70\uc7a5\uc740 [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30] \ub85c \ubbf8\ub8ec\ub2e4.
+    // \ud1b5\ud569 \uce74\ub4dc\uc6a9 \uc9e7\uc740 \ube0c\ub9ac\ud551(s217 \u2192 s218 \uc190\ubd04): \uc81c\ubaa9\uc904\u00b7\ub9fa\uc74c\ub9d0 \uc5c6\uc774
+    //   \u2460 '\ud658\uc2b9\uc740 N\ud68c, \ub3c4\ucc29\uc740 HH:MM\uacbd \uc608\uc815\uc774\uc5d0\uc694. \ucd1d H\uc2dc\uac04 M\ubd84 \uac78\ub824\uc694.' \u2461 \uacbd\ub85c\ub97c \ub9d0\ub85c(\uc608\uc804 \ubb38\uc7a5, \ud575\uc2ec\ub9cc) \u2462 \ud63c\uc7a1 \u2463 \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \ub0a0\uc528\uc640 \ucd94\ucc9c \uc637\ucc28\ub9bc.
     var cs = segs || [], cld = -1;
     for (var ci = 0; ci < cs.length; ci++) { if (cs[ci] && cs[ci].type === 4) { cld = ci; break; } }
-    var cx = Math.max(0, cs.length - 1), tot = mins > 0 ? [' \ucd1d ', { b: mins + '\ubd84' }, ' \uac78\ub824\uc694.'] : [];
-    if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) {
-      var cl = cs[cld], pk = [{ ln: cl.line }, ' ', { b: cl.depClock }, ' \ucd9c\ubc1c, ', { b: cl.arrClock }, ' \ub3c4\ucc29\uc774\uc5d0\uc694.'];
-      if (cl.rideMin) pk.push(' \ud0c0\ub294 \uc2dc\uac04\uc740 \uc57d ' + cl.rideMin + '\ubd84\uc774\uc5d0\uc694.');
-      P(pk.concat(tot));
-    } else if (mins > 0) {
-      var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
-      var cline = [{ id: 'homeAiArr', t: ['\ub3c4\ucc29\uc740 ', { b: hbKstClock(carr) }, '\uacbd \uc608\uc815\uc774\uc5d0\uc694.'].concat(tot) }];
-      if (o.dm) { cline.push(' '); cline.push({ id: 'homeAiDep', raw: String(o.dm) }); }
-      P(cline);
-    } else P(['\uc18c\uc694\uc2dc\uac04\uc740 \uacbd\ub85c\uac00 \uc815\ud574\uc9c0\uba74 \uc54c\ub824\ub4dc\ub9b4\uac8c\uc694.']);
+    var cx = Math.max(0, cs.length - 1);
+    var durTxt = function (m) { m = Math.round(m); var h = Math.floor(m / 60), r = m % 60; return h > 0 ? h + '\uc2dc\uac04' + (r ? ' ' + r + '\ubd84' : '') : r + '\ubd84'; };
+    var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
+    var p1 = ['\ud658\uc2b9\uc740 ', { b: (cx > 0 ? cx + '\ud68c' : '\uc5c6\uace0') }, cx > 0 ? ', ' : ' '];
+    if (mins > 0) { p1.push('\ub3c4\ucc29\uc740 '); p1.push({ b: hbKstClock(carr) }); p1.push('\uacbd \uc608\uc815\uc774\uc5d0\uc694. \ucd1d '); p1.push({ b: durTxt(mins) }); p1.push(' \uac78\ub824\uc694.'); }
+    else p1 = ['\uc18c\uc694\uc2dc\uac04\uc740 \uacbd\ub85c\uac00 \uc815\ud574\uc9c0\uba74 \uc54c\ub824\ub4dc\ub9b4\uac8c\uc694.'];
+    var line1 = [{ id: 'homeAiArr', t: p1 }];
+    if (o.dm) { line1.push(' '); line1.push({ id: 'homeAiDep', raw: String(o.dm) }); }
+    P(line1);
     if (cs.length) {
       var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '\uc5d0\uc11c '];
-      if (c0.type === 2) { tp.push({ ln: c0.line + '\ubc88' }); tp.push(' \ubc84\uc2a4\ub97c \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694.'); } else { tp.push({ ln: c0.line || '\uc5f4\ucc28' }); tp.push(' \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694.'); }
-      if (cx >= 2) tp.push(' \ud658\uc2b9\uc774 ' + cx + '\ubc88\uc774\ub77c \uc548\ub0b4 \ubc29\uc1a1\uc744 \ub193\uce58\uc9c0 \ub9c8\uc138\uc694.');
-      else if (cx === 1) tp.push(' \ud658\uc2b9\uc740 \ud55c \ubc88\uc774\uc5d0\uc694.');
-      if (cld >= 0) tp.push(' \uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.');
-      if (cx >= 1) tp.push(' \ud658\uc2b9 \uc21c\uc11c\uc640 \uc815\uac70\uc7a5\uc740 [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30]\uc5d0\uc11c \ubcfc \uc218 \uc788\uc5b4\uc694.');
+      if (cx === 0) { tp.push({ ln: c0.type === 2 ? c0.line + '\ubc88' : (c0.line || '\uc5f4\ucc28') }); tp.push(c0.type === 2 ? ' \ubc84\uc2a4\ub85c \ud55c \ubc88\uc5d0 \uac00\uc2dc\uba74 \ub3fc\uc694.' : hbJosRo(c0.line) + ' \ud55c \ubc88\uc5d0 \uac00\uc2dc\uba74 \ub3fc\uc694.'); }
+      else {
+        tp.push({ ln: c0.type === 2 ? c0.line + '\ubc88' : (c0.line || '\uc5f4\ucc28') }); tp.push(c0.type === 2 ? ' \ubc84\uc2a4\ub97c \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694. \uac00\ub294 \uae38\uc5d0 ' : hbJosEul(c0.line || '\uc5f4\ucc28') + ' \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694. \uac00\ub294 \uae38\uc5d0 ');
+        for (var i2 = 1; i2 < cs.length; i2++) { var nl3 = cs[i2].line || '\ub2e4\uc74c \ub178\uc120'; if (i2 > 1) tp.push(', '); tp.push({ stn: [cs[i2].from, cs[i2].line] }); tp.push('\uc5d0\uc11c '); tp.push({ ln: cs[i2].type === 2 ? nl3 + '\ubc88' : nl3 }); tp.push(cs[i2].type === 2 ? '\ub85c' : hbJosRo(nl3)); }
+        tp.push(' \uac08\uc544\ud0c0\uc2dc\uba74 \ub3fc\uc694.');
+      }
+      if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) { tp.push(' '); tp.push({ ln: cs[cld].line }); tp.push('\ub294 '); tp.push({ b: cs[cld].depClock }); tp.push(' \ucd9c\ubc1c, '); tp.push({ b: cs[cld].arrClock }); tp.push(' \ub3c4\ucc29\uc774\uc5d0\uc694. \uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.'); }
       P(tp);
     }
     P([cgLine()]);
-    wxParas().forEach(function (x) { P(x); });
-    var cr = Number(o.rnd); if (!isFinite(cr) || cr < 0 || cr >= 1) cr = 0;
-    ps.push({ sub: [HB_CLOSINGS[Math.floor(cr * HB_CLOSINGS.length)]] });
+    if (wF || wT) {                                              // \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \ub0a0\uc528 + \ucd94\ucc9c \uc637\ucc28\ub9bc(\ub354 \uc300\uc300\ud55c \ucabd \uae30\uc900) + \uc6b0\uc0b0
+      var wl = ['\ub0a0\uc528\ub294 '];
+      if (wF) { wl.push({ b: '\ucd9c\ubc1c\uc9c0' }); wl.push(' '); wl.push({ b: wF.temp + '\ub3c4' }); wl.push(' ' + wF.txt); }
+      if (wF && wT) wl.push(', ');
+      if (wT) { wl.push({ b: '\ub3c4\ucc29\uc9c0' }); wl.push(' '); wl.push({ b: wT.temp + '\ub3c4' }); wl.push(' ' + wT.txt); }
+      wl.push('\uc774\uc5d0\uc694.');
+      var cold = Math.min(wF ? wF.temp : 99, wT ? wT.temp : 99), wear;
+      if (cold <= 4) wear = '\ub450\uaebc\uc6b4 \ud328\ub529\uc774\ub098 \ucf54\ud2b8\uc5d0 \ubaa9\ub3c4\ub9ac\uae4c\uc9c0';
+      else if (cold <= 8) wear = '\ucf54\ud2b8\ub098 \ub450\ud23c\ud55c \uc678\ud22c';
+      else if (cold <= 11) wear = '\uc790\ucf13\uc774\ub098 \uac00\ubcbc\uc6b4 \ucf54\ud2b8\uc5d0 \ub2c8\ud2b8';
+      else if (cold <= 16) wear = '\uac00\ub514\uac74\uc774\ub098 \uc587\uc740 \uc790\ucf13';
+      else if (cold <= 22) wear = '\uc587\uc740 \uae34\ud314 \uc815\ub3c4';
+      else if (cold <= 27) wear = '\ubc18\ud314\uc5d0 \uc587\uc740 \uac89\uc637 \ud558\ub098';
+      else wear = '\uc2dc\uc6d0\ud55c \ubc18\ud314 \ucc28\ub9bc';
+      wl.push(' \ucd94\ucc9c \uc637\ucc28\ub9bc\uc740 '); wl.push({ b: wear }); wl.push('\uc774\uc5d0\uc694.');
+      var rn = Math.max((wF && wF.rain) || 0, (wT && wT.rain) || 0);
+      if (rn >= 60) wl.push(' \ube44 \uc18c\uc2dd\uc774 \uc788\uc73c\ub2c8 \uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694.'); else if (rn >= 40) wl.push(' \ube44\uac00 \uc62c \uc218\ub3c4 \uc788\uc73c\ub2c8 \uc6b0\uc0b0 \ud558\ub098 \ucc59\uae30\uc138\uc694.');
+      P(wl);
+    }
     return { v: HB_V, paras: ps };
   }
   if (hasRoute) {
@@ -20297,7 +20318,7 @@ function resultScreen(opt, r) {
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
-    if (fuse) { var tg = resPart(cap, 'g', resTagFacts(route, hfacts)); if (tg && tg.body.length) nodes = nodes.concat(tg.body); }      // \uce69 \uc904\uc740 \ub178\uc120 \ud0c0\uc784\ub77c\uc778 \ubc14\ub85c \uc704
+    // s218: \uce69 \uc904(part g)\uc740 YJ \uc694\uccad\uc73c\ub85c \ube90\ub2e4 \u2014 \ud658\uc2b9 \ud69f\uc218\u00b7\uc2dc\uac04\uc740 \uc544\ub798 AI \ube0c\ub9ac\ud551 \uccab \ubb38\uc7a5\uc774 \ub9d0\ub85c \uc54c\ub824 \uc900\ub2e4(\uc5d4\uc9c4 part g \u00b7 tags \ub178\ub4dc\ub294 \uadf8\ub300\ub85c \ub454\ub2e4)
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
@@ -22075,7 +22096,7 @@ function hcardsScreen(inp, f) {
     else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
   if (aiS && aiS.ok) {
-    if (fuse) { var fp = hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // \ud1b5\ud569 \uce74\ub4dc: \uc81c\ubaa9\uc904 \uc5c6\uc774 \uc571\uc774 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 'slot:ai' \uc790\ub9ac\ub85c \uc62e\uae34\ub2e4(\ubabb \uc62e\uae30\uba74 \uadf8 \uc790\ub9ac\uc5d0 \uadf8\ub300\ub85c \ub0a8\ub294\ub2e4)
+    if (fuse) { var fp = hcPanel(hcKids(aiS).filter(function (n) { return n.t !== 'aih'; }), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // s218: \uc81c\ubaa9\uc904(AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551 \u00b7 \uce74\uc6b4\ud2b8\ub2e4\uc6b4 \u00b7 \uc0c8\ub85c\uace0\uce68)\ub3c4 \ube80\ub2e4 \u2014 \uc571\uc774 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 'slot:ai' \uc790\ub9ac\ub85c \uc62e\uae34\ub2e4
     else { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
