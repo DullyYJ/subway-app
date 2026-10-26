@@ -266,8 +266,8 @@ function rheadHeadNodes(f) {
     nodes.push({ t: 'text', s: '전체 ' + (sp.ride + sp.wait + sp.walk) + '분 · ' + t, size: 12, bold: true, color: 'text', lh: 1.5, pad: [0, 0, 0, 0] });
   }
   if (f.why) nodes.push({ t: 'text', s: f.why, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });
-  rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
-  if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];
+  if (!f.cp) rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
+  if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];       // (통합 카드 cp 에서는 호차·문 줄이 세부경로 시트로 갔다 — s219)
   if (f.xs.length && !f.cp) {                            // 통합 카드(cp)에서는 긴 환승 목록 대신 칩 줄(part g)이 맡고, 자세한 순서는 세부경로 시트가 보여 준다
     var h1 = '환승 ' + f.xs.length + '번', parts = [h1];
     f.xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
