@@ -330,6 +330,24 @@ public class SceneJvmTest {
                 // 같은 여정의 새 값은 자리를 바꾸지 않고, 시각표·시계는 크기가 바뀌어도 이어진다
                 int[] before = c.tr.spotOf.clone(); c.apply(tr); ok(java.util.Arrays.equals(before, c.tr.spotOf), "같은 여정 재적용은 자리 그대로");
                 c.layout(300, 150, 2.75, true); c.trainClock(150000); c.update(1.0 / 30); ok(c.tr.posOk && c.tr.stop && c.tr.k == 1, "크기가 바뀌어도 시각표는 이어진다");
+                // s233 안무: 달리는 동안 친구들이 자리를 바꾸고(일어서서 걸어가 다른 자리에 앉는다) · 졸고 · 기지개를 켠다 — 자리는 늘 겹치지 않는다
+                {
+                    TestHost hc = fakeHost(); SceneCore cc = core(hc, 5); cc.layout(340, 190, 2.75, true); cc.apply(tr); cc.trainPos("");
+                    int[] first = cc.tr.cur.clone(); boolean perm = true, walk = false, stand = false, nap = false, sat = false; int moves = 0; int[] last = first.clone();
+                    for (int i = 0; i < 30 * 150; i++) {
+                        cc.trainClock(i * 1000L / 30); cc.update(1.0 / 30);
+                        boolean[] seen = new boolean[6]; for (int v : cc.tr.cur) { if (v < 0 || v > 5 || seen[v]) perm = false; else seen[v] = true; }
+                        if (!java.util.Arrays.equals(last, cc.tr.cur)) { moves++; last = cc.tr.cur.clone(); }
+                        if (i % 6 == 0) for (SceneTrain.Pax px : SceneTrain.allPax(cc, cc.tr)) { if (px.walking) walk = true; if (px.nap) nap = true; if (px.sit) sat = true; else if (!px.walking) stand = true; }
+                    }
+                    ok(perm, "달리는 150초 내내 친구들의 자리는 서로 겹치지 않는다(순열)");
+                    ok(moves >= 6, "자리 바꿈이 이어진다(150초에 " + moves + "번)");
+                    ok(walk && nap && sat && stand, "걷고 · 졸고 · 앉고 · 서 있는 모습이 모두 나온다 walk=" + walk + " nap=" + nap + " sat=" + sat + " stand=" + stand);
+                    // 서 있는 동안엔 새 자리 바꿈을 시작하지 않는다(문 앞이 막히지 않게)
+                    TestHost hs = fakeHost(); SceneCore cs = core(hs, 5); cs.layout(340, 190, 2.75, true); cs.apply(tr); cs.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
+                    for (int i = 0; i < 30 * 24; i++) { cs.trainClock(i * 1000L / 30 + 100); cs.update(1.0 / 30); }
+                    ok(cs.tr.stop && cs.tr.epoch == 0, "정차 중(24초)엔 자리 바꿈이 시작되지 않는다 epoch=" + cs.tr.epoch);
+                }
                 ok(!c.down(100, 100), "객실 장면은 캐릭터를 집지 않는다(손가락은 쪽 넘기기)");
             }
         }
