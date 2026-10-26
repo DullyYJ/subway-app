@@ -2776,3 +2776,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **정차 20→30초**: `RIDE_ETA_DEFAULTS.stopDwellSec`/`markerDwellSec` (JS · `RideEtaJ.java`). 시험 `ride_eta` 갱신. 영점 GPS 창은 그대로(도착 25초 전 ~ 30초 뒤, `ride-track zeroLeadSec 25 / zeroWinSec 55`; `rsNextMs` 가 도착 −30~+40초 동안 2.5초 걸음). 지하(GPS 없음)는 시각표대로 가다가 다음 역 창에서 다시 맞춘다. 버스는 `progBus`(마지막 통과 노드가 버스)일 때 `busPos`·`motion` 으로 GPS 기준, GPS 가 3분 넘게 끊겨야 시각표로 이어간다 — 탄 수단에 따라 저절로 바뀐다.
 - **시험**: 새 `test/ride_detour.test.js` 7건(워크플로 목록에 추가) · `ride_local` 말뭉치 `ride_corpus.jsonl` 재녹화(+ 역까지 이동·알약 30건 → 227건 엔진=자바 일치) · `shell_native` s229 항목. ENGINE_VERSION `route-v2-2026-10-26s229`(`ride-standby` · `ride-eta` sync-module + `embed-shop` RESULT).
 - **알려 둔 한계**: 역까지 이동 중 마커·타임라인은 계획(시각표)대로 흐르고 글(거리·시간)이 진짜 진행이다. 열차 시각은 정적 시각표(서울 실시간 도착 아님). 기기 미검증. **배포**: 워커 `engine/route-v2-worker.ascii.js` 를 route-v2 에 붙여넣고, CI APK 를 새로 설치.
+
+## s230 (2026-10-26) — 지하에서 영점이 안 잡혀 마커가 열차보다 뒤처짐
+- **증상(YJ, 인천1호선)**: 실제로는 18:14 에 인천시청 · 18:16 에 간석오거리로 가는데 마커는 시각표대로 인천터미널 → 예술회관(열차가 시각표보다 약 3분 앞섬). GPS 영점조절이 안 하는 것 같다.
+- **원인(추정 · 모의로 재현)**: `ride-track` 통과 시각(`rtPassTime`)이 정확도 60m 넘는 좌표를 전부 버렸다(`passAccM: 60`). 터널·역사 안 좌표는 정확도가 60~100m 로 나오는 일이 흔해 증거가 하나도 안 남아 마커가 시각표에 갇힌다. 정확도 35m 좌표가 역 근처에서만 들어오면 엔진은 3분 앞선 열차도 따라잡는다(모의 확인).
+- **고침**: `passAccM` 60→100(JS `ride-track.js` · `RideTrackJ.java` · 워커 sync). 100m 넘는 좌표는 그대로 버린다. 시험: `ride_track`(90m 사용 · 150m 버림) · `ride_detour` 의 s230(3분 앞선 열차 + 정확도 90m → 18:15:30 마커가 인천시청 이후). ENGINE_VERSION `route-v2-2026-10-26s230`.
+- **한계**: 지하에서 좌표가 아예 없거나 정확도 100m 넘게만 나오면(기지국 위치 등) 영점 증거가 없어 시각표를 따른다 — 그 뒤 GPS 가 다시 잡히는 역에서 따라잡는다. 기기 미검증. 배포: 워커 붙여넣기 + CI APK.
