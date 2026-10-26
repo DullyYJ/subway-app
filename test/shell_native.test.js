@@ -261,6 +261,13 @@ function findAndroidJar() {
     { const rsvc = fs.readFileSync(N('RideService.java'), 'utf8');
     assert.ok(/static void buzz\(Context c\)/.test(rsvc) && /createOneShot\(45L, 180\)/.test(rsvc) && /if \("press"\.equals\(a\)\) buzz\(RideService\.this\);\s*\/\/[^\n]*\n\s*core\.queueAct\(a\)/.test(rsvc) && /private void startRide\(\) \{\s*\n\s*if \(!home\.hasRoute\(\) \|\| home\.riding\(\)\) return;\s*\n\s*RideService\.buzz\(this\)/.test(v) && !/performHapticFeedback/.test(v.slice(v.indexOf('private void rideSlot('), v.indexOf('private void rideSlot(') + 600)), '진동(s228): [경로 확정] 은 startRide 에서 · [탑승] 은 시트·알약·경로 카드·오버레이가 모두 지나는 ovHost.act(press) 에서 한 번만'); }
   });
+  await t('역까지 이동 · 대기 알약 펼침(s229): 자바 쌍둥이 · 이탈 알림 버튼 · 이탈 대화상자 · 알약 자동 펼침', () => {
+    const rsj = fs.readFileSync(N('RideStandbyJ.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8'), rsv = fs.readFileSync(N('RideService.java'), 'utf8'), sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), ov = fs.readFileSync(N('RideOverlay.java'), 'utf8'), rl = fs.readFileSync(N('RideLocal.java'), 'utf8');
+    assert.ok(/static Map<String, Object> dtTarget\(/.test(rsj) && /static Map<String, Object> detourQuery\(/.test(rsj) && /static void dtRebase\(/.test(rsj) && /static DtInfo dtTick\(/.test(rsj) && /"detour"\.equals\(a\)\) dtActStart/.test(rsj) && /static Map<String, Object> offOut\(/.test(rsj), '자바 쌍둥이에 역까지 이동이 있다');
+    assert.ok(/RideStandbyJ\.detourQuery\(/.test(rl), '역에 닿은 걸음도 시각표를 한 번 읽는다(needsTable)');
+    assert.ok(/"detour"\.equals\(a\)/.test(rc) && /offStn/.test(rc) && /ACT_DETOUR/.test(rsv) && /"역까지 이동"/.test(rsv) && /setNeutralButton\("역까지 이동"/.test(sa) && /RideService\.rsAct\("detour"\)/.test(sa), '이탈 알림 · 대화상자에 [역까지 이동]');
+    assert.ok(/private boolean boardOpen\(\)/.test(ov) && /\|\| boardOpen\(\); \}/.test(ov) && /dismissedRsKey/.test(ov), '알약으로 접어 둬도 탑승·환승 때가 되면 저절로 펼친다');
+  });
   await t('세부경로 줄(s135): 레일 · 현재위치 점 · 뱃지 · 펼침을 ScreenView 가 그리고 · 보이는 동안에만 다시 그린다 · 그릴 때 새 객체 없음', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
