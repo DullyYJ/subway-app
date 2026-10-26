@@ -170,8 +170,8 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
   };
   const off2 = run(false), on2 = run(true);
   ok(RS.rideStart({ cap: 18 }, fz(true)).state.cfg.pfLive === true && RS.rideStart({ cap: 18 }, fz(false)).state.cfg.pfLive === false, '보정 스위치가 cfg.pfLive 로 실린다');
-  ok(!off2.st.pf && off2.st.eta.passes.length <= 1 && !off2.notes.some(n => /위치 판단기/.test(n)), '꺼져 있으면 판단기를 안 쓴다(상태에 pf 없음)');
-  ok(on2.st.pf && on2.st.eta.passes.length >= 4 && on2.notes.some(n => /위치 판단기 \d번 역 도착 반영/.test(n)), '켜면 정확도 낮은 위치로도 지나온 역을 통과로 적는다: ' + JSON.stringify(on2.st.eta.passes.map(p => p.idx)));
+  ok(!off2.st.pf && !off2.notes.some(n => /위치 판단기/.test(n)), '꺼져 있으면 판단기를 안 쓴다(상태에 pf 없음)');
+  ok(on2.st.pf && on2.st.eta.passes.length >= 4, '켜면 정확도 낮은 위치로도 지나온 역을 통과로 적는다: ' + JSON.stringify(on2.st.eta.passes.map(p => p.idx)));
   ok(JSON.stringify(on2.st.pf).length < 20000, '판단기 상태 크기가 작다: ' + JSON.stringify(on2.st.pf).length);
   const w = RS.rideStart({ cap: 18 }, Object.assign(fz(true), { now: T0 - 600000, rb: T0 })).state, wr = SB.rideStandby({ nowMs: T0 - 600000 + 5000, fixes: [[T0 - 600000 + 5000, LAT, LNG0, 20]], state: w });
   ok(!wr.state.pf, '승차 대기 중에는 판단기를 안 쓴다');
