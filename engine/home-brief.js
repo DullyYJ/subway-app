@@ -27,6 +27,13 @@ function hbJosRo(w) {
   return (j === 0 || j === 8) ? '로' : '으로';
 }
 function hbNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+// 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217)
+function hbNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/역$/, '') === b.replace(/역$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
 
 var HB_CLOSINGS = [
   '이동 중에도 5분마다 현황을 새로 알려드릴게요.',
@@ -37,12 +44,12 @@ var HB_CLOSINGS = [
 
 function homeBrief(o) {
   o = o || {};
-  var from = String(o.from == null ? '' : o.from), to = String(o.to == null ? '' : o.to);
+  var from = hbNmFix(o.from), to = hbNmFix(o.to);
   var hasRoute = !!to && to !== from;
   var hour = hbNum(o.hour, 12), cong = hbNum(o.cong, 0), hol = o.hol === true;
   var mins = hbNum(o.mins, 0);
   var wF = hbWx(o.wF), wT = hbWx(o.wT);
-  var segs = Array.isArray(o.segs) ? o.segs.filter(function (x) { return x && typeof x === 'object'; }) : null;
+  var segs = Array.isArray(o.segs) ? o.segs.filter(function (x) { return x && typeof x === 'object'; }).map(function (x) { return (x.from != null || x.to != null) ? Object.assign({}, x, { from: hbNmFix(x.from), to: hbNmFix(x.to) }) : x; }) : null;
   var peak = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
   var late = (hour >= 22 || hour < 5);
   var ps = [];
@@ -79,6 +86,37 @@ function homeBrief(o) {
     return out;
   }
 
+  if (hasRoute && o.compact === true && o.metro !== true) {
+    // 통합 카드용 짧은 브리핑(s217): 위 경로 카드가 이미 보여 주는 '어디서 어디로' 긴 문장은 되풀이하지 않고
+    //   핵심 시각(출발·도착) → 첫 탑승·환승 한 줄 → 혼잡 → 날씨·준비물 → 마무리 순으로 말한다. 단계별 환승·정거장은 [세부경로 보기] 로 미룬다.
+    var cs = segs || [], cld = -1;
+    for (var ci = 0; ci < cs.length; ci++) { if (cs[ci] && cs[ci].type === 4) { cld = ci; break; } }
+    var cx = Math.max(0, cs.length - 1), tot = mins > 0 ? [' 총 ', { b: mins + '분' }, ' 걸려요.'] : [];
+    if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) {
+      var cl = cs[cld], pk = [{ ln: cl.line }, ' ', { b: cl.depClock }, ' 출발, ', { b: cl.arrClock }, ' 도착이에요.'];
+      if (cl.rideMin) pk.push(' 타는 시간은 약 ' + cl.rideMin + '분이에요.');
+      P(pk.concat(tot));
+    } else if (mins > 0) {
+      var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
+      var cline = [{ id: 'homeAiArr', t: ['도착은 ', { b: hbKstClock(carr) }, '경 예정이에요.'].concat(tot) }];
+      if (o.dm) { cline.push(' '); cline.push({ id: 'homeAiDep', raw: String(o.dm) }); }
+      P(cline);
+    } else P(['소요시간은 경로가 정해지면 알려드릴게요.']);
+    if (cs.length) {
+      var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '에서 '];
+      if (c0.type === 2) { tp.push({ ln: c0.line + '번' }); tp.push(' 버스를 타고 출발하세요.'); } else { tp.push({ ln: c0.line || '열차' }); tp.push(' 타고 출발하세요.'); }
+      if (cx >= 2) tp.push(' 환승이 ' + cx + '번이라 안내 방송을 놓치지 마세요.');
+      else if (cx === 1) tp.push(' 환승은 한 번이에요.');
+      if (cld >= 0) tp.push(' 승차권과 출발 시각은 한 번 더 확인해 주세요.');
+      if (cx >= 1) tp.push(' 환승 순서와 정거장은 [세부경로 보기]에서 볼 수 있어요.');
+      P(tp);
+    }
+    P([cgLine()]);
+    wxParas().forEach(function (x) { P(x); });
+    var cr = Number(o.rnd); if (!isFinite(cr) || cr < 0 || cr >= 1) cr = 0;
+    ps.push({ sub: [HB_CLOSINGS[Math.floor(cr * HB_CLOSINGS.length)]] });
+    return { v: HB_V, paras: ps };
+  }
   if (hasRoute) {
     // 1) 핵심: 소요시간 + 환승 안내
     var head = [{ b: from }, '에서 ', { b: to }, '까지는 '];
