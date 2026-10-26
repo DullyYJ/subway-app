@@ -738,6 +738,7 @@ public class ScreenView extends View {
         new int[] { 0xFFFF9500, 0xFFFF3B30, 0xFFFF2D95, 0xFFA24BFF, 0xFF0A84FF, 0xFF30D158, 0xFFFFD60A, 0xFFFF9500 }, null);
     private final android.graphics.Matrix glowMx = new android.graphics.Matrix();
     private float glX0, glY0, glX1, glY1; private boolean glowDrawn;
+    private float tdX0, tdY0, tdX1, tdY1; private long tdFullT;      // 세부경로 현재위치 점의 맥박 자리(본문 dp) · 마지막으로 화면 전체를 다시 그린 때 — 점 자리만 초당 30번, 전체는 1초에 한 번
     private boolean hrDrawn;                       // 구간 타임라인에 '지금 칸' 점이 보이는 중(고리가 숨 쉰다)
     private boolean tdDrawn, tdAct;                    // 세부경로 줄이 보이는 중 · 그중 지금 가는 구간이 있는 중
     private final Path tdTri = new Path();             // 펼침 동그라미 안 ▾
@@ -1977,7 +1978,11 @@ public class ScreenView extends View {
             }
         }
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
-        if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
+        if (tdAnim) postInvalidateOnAnimation();
+        else if (tdAct && isShown()) {                                                                // 점 맥박: 화면 전체를 매 프레임 다시 그리지 않는다 — 점 자리만 초당 30번, 전체는 1초에 한 번(줄 바탕·시간이 바뀌는 것을 따라가게)
+            if (now - tdFullT >= 1000L) { tdFullT = now; postInvalidateDelayed(33L); }
+            else { float toy = lay.headH - scrollY; postInvalidateDelayed(33L, Math.max(0, Math.round(tdX0 * dpr)), Math.max(0, Math.round((tdY0 + toy) * dpr)), Math.round(tdX1 * dpr), Math.round((tdY1 + toy) * dpr)); }
+        } else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
         if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 9 || mode == 10 || pgAnim || mode == 5 || bcAnim || arAnim || spAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
@@ -2268,7 +2273,7 @@ public class ScreenView extends View {
         final boolean act = it.ln2 > it.ln && now >= it.ln && now < it.ln2;
         final float ratio = it.ln2 <= it.ln ? 0f : now >= it.ln2 ? 1f : now <= it.ln ? 0f : (float) (now - it.ln) / (float) (it.ln2 - it.ln);
         final int col = cc(it.ac, pal[R_SUB]);
-        tdDrawn = true; if (act) tdAct = true;
+        tdDrawn = true; final boolean tdFirst = act && !tdAct; if (act) tdAct = true;
         p.setStyle(Paint.Style.FILL);
         if (act) { p.setColor(pal[R_CARD2]); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
         else if (it == pressed && it.act != null) { p.setColor(pal[R_CARD2]); rf.set(x, y, x + it.w, y + hh); cv.drawRect(rf, p); }
@@ -2336,6 +2341,7 @@ public class ScreenView extends View {
         // 현재위치 점: 빨간 점 + 흰 테두리 + 옅은 고리 + 퍼지는 맥박(1.4초, ease-out)
         if (act) {
             final float my = t0 + (t1 - t0) * ratio;
+            { final float pr = 6.5f * 2.5f + 1f, ax = it.sx - pr, ay = my - pr, bx = it.sx + pr, by = my + pr; if (!tdFirst) { tdX0 = Math.min(tdX0, ax); tdY0 = Math.min(tdY0, ay); tdX1 = Math.max(tdX1, bx); tdY1 = Math.max(tdY1, by); } else { tdX0 = ax; tdY0 = ay; tdX1 = bx; tdY1 = by; } }
             final float ph = (SystemClock.uptimeMillis() % 1400L) / 1400f, e = 1f - (1f - ph) * (1f - ph);
             p.setStyle(Paint.Style.FILL);
             p.setColor(0xFFFF3B30); p.setAlpha(Math.round(255f * 0.65f * (1f - e))); cv.drawCircle(it.sx, my, 6.5f * (1f + 1.5f * e), p);
