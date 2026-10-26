@@ -95,13 +95,26 @@ t('작은 화면 문구(pip)와 오버레이 추천 줄(ad)이 함께 온다: �
   for (const h of [8, 12, 18, 20]) {
     const a = ask(h); assert.ok(a.pip && a.pip.title === '하차 5분 전 · 강남', JSON.stringify(a.pip)); assert.strictEqual(a.pip.lines[0], a.hook);
     assert.ok(a.pip.lines.length >= 3 && a.pip.lines.length <= 5);
-    assert.ok(a.ad && (a.ad.k === 'cafe' || a.ad.k === 'food') && a.ad.m === '' && a.ad.pn, JSON.stringify(a.ad));
+    assert.ok(a.ad && (a.ad.k === 'cafe' || a.ad.k === 'food') && a.ad.m.length > 0 && a.ad.m.length <= 16 && a.ad.go.length > 0 && a.ad.go.length <= 7 && a.ad.pn, JSON.stringify(a.ad));
     assert.ok(a.ad.piIdx >= 0 && FOOD[a.ad.piIdx].n === a.ad.pn, '가게 목록 항목과 이름이 맞아야 한다');
     assert.ok(a.ad.a.indexOf(a.ad.pn) === 0 && a.ad.b.length > 3);
   }
-  const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.strictEqual(s.ad.m, ''); assert.ok(!('pn' in s.ad));
+  const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.ok(s.ad.m.length > 0 && s.ad.m.length <= 16 && s.ad.go.length > 0 && s.ad.go.length <= 7, JSON.stringify(s.ad)); assert.ok(!('pn' in s.ad));
   assert.strictEqual(s.pip.lines[1], '우산');
   const none = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 }); assert.strictEqual(none.ad, null);
+});
+t('s237 오버레이 추천 줄: 버튼 글(go ≤7자) · 셋째 줄(m ≤16자)은 아이템 종류와 날씨·시간에 맞고, 호출(씨앗)마다 달라진다', () => {
+  for (const tb of [R.RTX_GO, R.RTX_TEASE]) for (const k of Object.keys(tb)) for (const g of Object.keys(tb[k])) tb[k][g].forEach(x => assert.ok(x.length > 0 && x.length <= (tb === R.RTX_GO ? 7 : 16) && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x), k + '.' + g + ': ' + x));
+  const wxs = { rainy: { temp: 12, feel: 10, rain: 90, txt: '비' }, cold: { temp: 2, feel: -3, rain: 0, txt: '맑음' }, hot: { temp: 30, feel: 32, rain: 0, txt: '맑음' } };
+  const kinds = [[8, 'morning'], [12, 'lunch'], [18, 'dinner'], [20, 'night'], [22, 'shop']];
+  for (const [h, kd] of kinds) for (const w of Object.keys(wxs)) {
+    const T = R.RTX_GO[kd], pool = (w === 'rainy' ? T.rainy : (w === 'cold' ? T.cold : T.hot)).concat(T.base.slice(0, 2)).concat(kd === 'shop' ? T.weekend || [] : []);
+    for (let sd = 1; sd < 25; sd++) { const a = ask(h, { weather: wxs[w], seed: sd }).ad; assert.ok(a && pool.indexOf(a.go) >= 0, kd + ' ' + w + ' ' + (a && a.go)); }
+  }
+  for (const [h, kd] of kinds) { const set = new Set(); for (let sd = 1; sd < 60; sd++) { const a = ask(h, { seed: sd }).ad; set.add(a.go + '|' + a.m); } assert.ok(set.size >= 3, kd + ' 여러 모양: ' + set.size); }
+  assert.deepStrictEqual(ask(12, { seed: 5 }).ad, ask(12, { seed: 5 }).ad, '같은 씨앗은 같은 글');
+  const nw = ask(12, { weather: null, seed: 3 }).ad; assert.ok(R.RTX_GO.lunch.base.indexOf(nw.go) >= 0, '날씨 없으면 기본 글');
+  const late = new Set(); for (let sd = 1; sd < 80; sd++) late.add(R.recoAlert({ arrMs: kst(23, 30), nowMs: kst(23, 25), dest: '강남', weather: null, shop: { n: '우산', _t: '우천대비' }, seed: sd }).ad.m); assert.ok(late.has('자기 전에 확인하세요'), '밤늦게엔 밤 문구도 섞인다');
 });
 t('작은 화면 문구 줄 길이: 한 줄 46자 안, 길면 …로 자르고 전체 7줄 안쪽', () => {
   const a = R.recoPip({ slot: 'night', dest: '강남', nowMs: kst(20, 0), seed: 3, body: 'a\nb\nc\n' + '가'.repeat(120), a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['가게1', '가게2'], dinner: false } });
@@ -215,10 +228,11 @@ async function call(method, body) {
   });
 
   // 연결부(handleRecoText): 필요한 때만 바깥 자원을 부른다
-  const L = { shop: 0, food: [] };
+  const L = { shop: 0, food: [], wx: [] };
+  let WXRET = null;
   let SHOPRET = { data: SD, cfg: null }, FOODRET = SRV;
-  R.rtxSetLoaders({ shop: () => { L.shop++; if (SHOPRET === 'throw') throw new Error('x'); return SHOPRET; }, food: loc => { L.food.push(loc); if (FOODRET === 'throw') throw new Error('y'); return FOODRET; } });
-  const rst = () => { L.shop = 0; L.food = []; };
+  R.rtxSetLoaders({ shop: () => { L.shop++; if (SHOPRET === 'throw') throw new Error('x'); return SHOPRET; }, food: loc => { L.food.push(loc); if (FOODRET === 'throw') throw new Error('y'); return FOODRET; }, wx: loc => { L.wx.push(loc); if (WXRET === 'throw') throw new Error('w'); return WXRET; } });
+  const rst = () => { L.shop = 0; L.food = []; L.wx = []; };
   const base = { arrMs: kst(22, 5), nowMs: kst(22, 0), dest: '강남', weather: WX, food: null, recent: [], seed: 7 };
   rst(); r = await call('POST', Object.assign({}, base, { pickShop: 1, shopRecent: [] }));
   t('POST: 쇼핑 시간대 pickShop → 상품 목록을 한 번 불러와 shopItem 을 돌려준다 · 맛집 서버는 안 부른다', () => { assert.strictEqual(r.json.ok, true); assert.ok(r.json.shopItem && r.json.shopItem.u); assert.strictEqual(L.shop, 1); assert.strictEqual(L.food.length, 0); });
@@ -228,6 +242,21 @@ async function call(method, body) {
   t('POST: 점심 foodPref=server + 좌표 → 맛집 서버 목록을 쓰고 foods 로 돌려준다 · 좌표는 5자리로 다듬는다', () => { assert.deepStrictEqual(r.json.foods, SRV); assert.strictEqual(L.food.length, 1); assert.deepStrictEqual(L.food[0], { lat: 37.4979, lng: 127.0276 }); assert.strictEqual(L.shop, 0); });
   rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: { lat: 37.123456789, lng: 127.987654321 }, foodPref: 'server', food: FOOD }));
   t('POST: 좌표는 소수 5자리로 다듬어 쓴다', () => { assert.deepStrictEqual(L.food[0], { lat: 37.12346, lng: 127.98765 }); });
+  // s237: 앱은 날씨를 안 보낸다 — 좌표가 있으면 엔진이 날씨를 받아 문구(버튼 글 · 셋째 줄 · 상황 문구)에 쓴다
+  WXRET = { temp: 11, feel: 8, tmin: 6, tmax: 14, rain: 80, txt: '비' };
+  rst(); r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', loc: { lat: 37.4979, lng: 127.0276 }, foodPref: 'server', recent: [], seed: 7 });
+  t('POST: 날씨를 안 보내고 좌표만 보내면 엔진이 그 좌표의 날씨를 한 번 받아 쓴다(비 → rainy 문구)', () => {
+    assert.strictEqual(L.wx.length, 1); assert.deepStrictEqual(L.wx[0], { lat: 37.4979, lng: 127.0276 });
+    assert.ok(r.json.cx && r.json.cx.rainy === true && r.json.cx.rain === 80, JSON.stringify(r.json.cx));
+    assert.ok(R.RTX_GO.lunch.rainy.concat(R.RTX_GO.lunch.base.slice(0, 2)).indexOf(r.json.ad.go) >= 0, r.json.ad && r.json.ad.go);
+  });
+  rst(); r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', loc: { lat: 37.4979, lng: 127.0276 }, weather: WX, foodPref: 'server', recent: [], seed: 7 });
+  t('POST: 날씨를 보냈으면 날씨 서버를 부르지 않는다 · 좌표가 없으면 안 부른다', async () => { assert.strictEqual(L.wx.length, 0); });
+  rst(); r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', recent: [], seed: 7 });
+  t('POST: 좌표가 없으면 날씨를 부르지 않는다', () => { assert.strictEqual(L.wx.length, 0); assert.strictEqual(r.json.ok, true); });
+  rst(); WXRET = 'throw'; r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', loc: { lat: 37.4979, lng: 127.0276 }, recent: [], seed: 7 });
+  t('POST: 날씨를 못 받아도(예외) 날씨 없이 문구를 만든다', () => { assert.strictEqual(r.json.ok, true); assert.strictEqual(L.wx.length, 1); });
+  WXRET = null;
   for (const badLoc of [null, {}, { lat: 'a', lng: 1 }, { lat: 10, lng: 127 }, { lat: 37, lng: 10 }, { lat: 91, lng: 127 }, [1, 2]]) {
     rst(); r = await call('POST', Object.assign({}, base, { arrMs: kst(12, 5), nowMs: kst(12, 0), loc: badLoc, foodPref: 'server', food: FOOD }));
     t('POST: 이상한 좌표(' + JSON.stringify(badLoc) + ')면 맛집 서버를 부르지 않고 앱 목록을 쓴다', () => { assert.strictEqual(L.food.length, 0); assert.ok(!('foods' in r.json)); assert.ok(FOOD.some(x => r.json.body.includes(x.n))); });
