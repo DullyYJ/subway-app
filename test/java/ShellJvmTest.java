@@ -29,7 +29,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":24,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":25,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -312,11 +312,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=24") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=25") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":24,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":25,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -376,7 +376,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":24,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":25,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -407,7 +407,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":24,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":25,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -556,6 +556,17 @@ public class ShellJvmTest {
         String mm = ShellCore.mergeBodies(m1, m2);
         ok(mm.contains("\"spacer\"") && mm.contains("\"s\":\"가\"") && mm.indexOf("spacer") < mm.indexOf("\"가\"") && mm.contains("\"pad\":[0,0,0,8]") && mm.contains("\"cover\":\"chips\""), "본문 이어 붙이기: " + mm);
         ok(ShellCore.mergeBodies(m1, "zzz").equals(m1), "못 읽으면 첫 화면 그대로");
+        {   // s217 경로 통합 카드: into:ai 카드가 slot:ai 자리로 합쳐진다(위에 선 하나) · 한쪽이 없으면 그대로
+            String fzRs = "{\"ok\":true,\"body\":[{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"머리\"},{\"t\":\"trk\"},{\"t\":\"spacer\",\"h\":0,\"slot\":\"ai\"},{\"t\":\"row\",\"kids\":[]}]}]}";
+            String fzHc = "{\"ok\":true,\"body\":[{\"t\":\"panel\",\"into\":\"ai\",\"kids\":[{\"t\":\"aih\",\"s\":\"AI 승무원 브리핑\"},{\"t\":\"text\",\"s\":\"본문\"}]},{\"t\":\"sec\",\"s\":\"혼잡도\"}]}";
+            String fz = ShellCore.mergeBodies(fzRs, fzHc);
+            ok(fz.indexOf("\"머리\"") < fz.indexOf("\"divider\"") && fz.indexOf("\"divider\"") < fz.indexOf("AI 승무원 브리핑") && fz.indexOf("본문") < fz.indexOf("\"row\"") && fz.indexOf("\"trk\"") < fz.indexOf("\"divider\""), "통합: 타임라인 아래 · 버튼 줄 위에 AI 내용이 들어간다");
+            ok(!fz.contains("\"into\"") && fz.contains("혼잡도") && fz.indexOf("AI 승무원 브리핑") < fz.indexOf("혼잡도"), "통합: 따로 있던 AI 카드는 사라지고 나머지 카드는 아래에");
+            String fz2 = ShellCore.mergeBodies(m1, fzHc);
+            ok(fz2.contains("\"into\"") && fz2.contains("AI 승무원 브리핑"), "자리가 없으면 AI 카드를 그대로 둔다(내용이 사라지지 않는다)");
+            String fz3 = ShellCore.mergeBodies(fzRs, m2);
+            ok(fz3.contains("\"slot\"") && !fz3.contains("\"divider\""), "AI 카드가 없으면 자리는 0 높이로 그대로");
+        }
 
         // ── 게시판 ──
         ShellCore.MemStore bs = new ShellCore.MemStore();
