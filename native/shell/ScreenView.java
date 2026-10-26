@@ -124,11 +124,23 @@ public class ScreenView extends View {
     private String editKey;
     private int eL = -1, eT = -1, eW = -1, eH = -1;            // 마지막으로 놓은 글자 입력칸 자리
     private final Map<String, String> fieldVals = new HashMap<String, String>(), fieldBase = new HashMap<String, String>();
+    private final java.util.HashMap<String, Float> widthMemo = new java.util.HashMap<String, Float>();         // 글자 폭 기억: 8초마다 오는 새 화면은 대부분 같은 글이라 다시 재지 않는다(배치가 주 스레드에서 도는 시간을 줄인다)
+    private float memoDpr = -1f;
     private final ScreenCore.Measurer measurer = new ScreenCore.Measurer() {
         @Override public float width(String s, float size, boolean bold) {
+            if (memoDpr != dpr) { widthMemo.clear(); memoDpr = dpr; }
+            final boolean memo = s.length() >= 2 && s.length() <= 80;
+            String k = null;
+            if (memo) {
+                k = (bold ? "b" : "n") + size + "|" + s;
+                Float c = widthMemo.get(k);
+                if (c != null) return c.floatValue();
+            }
             tp.setTypeface(face(bold));
             tp.setTextSize(size * dpr);
-            return tp.measureText(s) / dpr;
+            float w = tp.measureText(s) / dpr;
+            if (memo) { if (widthMemo.size() > 6000) widthMemo.clear(); widthMemo.put(k, Float.valueOf(w)); }
+            return w;
         }
     };
 
@@ -326,7 +338,9 @@ public class ScreenView extends View {
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
+        final long plt0 = PerfLog.now();
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
+        PerfLog.layout(plt0);
         if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; }
         if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
         else if (!lay.bandSig.equals(bandSig)) { bandSig = lay.bandSig; bandX = lay.mkBody && lay.mk != null ? ScreenCore.clamp(lay.mk.x(lay.mk.r) - lay.bandL - lay.bandView / 2f, lay.bandMax()) : 0f; }      // 새 경로면 내 위치(없으면 처음)가 보이게
@@ -1857,8 +1871,10 @@ public class ScreenView extends View {
     private int cc(ScreenCore.Col c, int def) { if (c == null) return def; return c.role != null ? roleColor(c.role) : c.argb; }
 
     @Override protected void onDraw(Canvas cv) {
+        final long pt0 = PerfLog.now();
         vecPlaced = false;
         drawAll(cv);
+        PerfLog.draw(pt0);
         if (vecHost != null && !vecPlaced) vecHost.place(0, 0, 0, 0);                  // 벡터 지도가 놓일 자리가 이번 그림에 없다 — 숨긴다
     }
     private void drawAll(Canvas cv) {

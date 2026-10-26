@@ -39,4 +39,9 @@ public final class DevCore {
         if (stopped) b.append(",\"stopped\":true");
         return b.append("}}").toString();
     }
+    /** 개발자 도구 사실에 반응 속도 기록(PerfLog.snapshot)을 덧붙인다. 닫는 }} 앞에 "perf" 를 끼운다. */
+    public static String withPerf(String facts, String perfJson) {
+        if (facts == null || perfJson == null || !facts.endsWith("}}")) return facts;
+        return facts.substring(0, facts.length() - 2) + ",\"perf\":" + perfJson + "}}";
+    }
 }

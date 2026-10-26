@@ -176,6 +176,34 @@ function settingsFmtTime(hm) {                                      // 예전 _c
   return (h < 12 ? '오전' : '오후') + ' ' + ((h % 12) || 12) + ':' + mi;
 }
 function settingsInt(v, lo, hi, def) { v = Math.floor(Number(v)); return (isFinite(v) && v >= lo && v <= hi) ? v : def; }
+// 반응 속도 기록(앱 PerfLog): d = 그리기 [횟수, 평균ms, 최대ms, 느린 수] · l = 화면 구성 [같은 모양] · n = 서버 요청 [[경로, 횟수, 평균ms, 최대ms, 실패], …]. 없으면 null(옛 앱).
+function settingsPerfFacts(p) {
+  if (!p || typeof p !== 'object') return null;
+  var four = function (a) { a = Array.isArray(a) ? a : []; return [0, 1, 2, 3].map(function (i) { return settingsInt(a[i], 0, 99999999, 0); }); };
+  var net = (Array.isArray(p.n) ? p.n : []).slice(0, 12).map(function (r) {
+    r = Array.isArray(r) ? r : [];
+    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0) };
+  });
+  return { d: four(p.d), l: four(p.l), n: net };
+}
+// 반응 속도 글: 기준(느림) = 그리기 17ms · 화면 구성 16ms 이상, 서버 평균 800ms 이상. 느린 비율이 5% 를 넘거나 최대가 100ms 를 넘으면 짚어 준다.
+function settingsPerfLines(pf) {
+  var d = pf.d, l = pf.l, out = [];
+  var pct = function (a) { return a[0] ? Math.round(a[3] * 1000 / a[0]) / 10 : 0; };
+  out.push('그리기  ' + d[0] + '회 · 평균 ' + d[1] + 'ms · 최대 ' + d[2] + 'ms · 느린 것 ' + d[3] + '회(' + pct(d) + '%)');
+  out.push('화면 구성  ' + l[0] + '회 · 평균 ' + l[1] + 'ms · 최대 ' + l[2] + 'ms · 느린 것 ' + l[3] + '회(' + pct(l) + '%)');
+  var slowNet = [];
+  pf.n.forEach(function (r) {
+    out.push('서버 ' + r.p + '  ' + r.n + '회 · 평균 ' + r.a + 'ms · 최대 ' + r.m + 'ms' + (r.x ? ' · 실패 ' + r.x + '회' : ''));
+    if (r.n >= 2 && r.a >= 800) slowNet.push(r.p);
+  });
+  var notes = [];
+  if (d[0] >= 30 && (pct(d) > 5 || d[2] > 100)) notes.push('그리기가 자주 느려요(17ms 넘는 비율 ' + pct(d) + '%, 최대 ' + d[2] + 'ms) — 한 화면에 그릴 것이 많거나 계속 다시 그리는 곳이 있다는 뜻이에요.');
+  if (l[0] >= 5 && (pct(l) > 5 || l[2] > 100)) notes.push('화면 구성이 느려요(최대 ' + l[2] + 'ms) — 목록이 길거나 글이 많은 화면이에요.');
+  if (slowNet.length) notes.push('서버 응답이 느려요: ' + slowNet.join(', ') + ' (평균 800ms 이상).');
+  if (!notes.length) notes.push(d[0] + l[0] < 20 ? '아직 기록이 적어요. 앱을 쓰다가 다시 열어 보세요.' : '큰 문제 없음.');
+  return out.concat(['', '판정: ' + notes.join(' ')]);
+}
 function settingsPageFacts(pf) {
   pf = (pf && typeof pf === 'object') ? pf : {};
   var tri = function (v) { return v == null ? null : settingsFlag(v, false); };
@@ -187,6 +215,7 @@ function settingsPageFacts(pf) {
   return {
     sm: settingsFlag(pf.sm, false), w: settingsFlag(pf.w, false), ig: tri(pf.ig), bk: pf.bk == null ? null : settingsInt(pf.bk, 0, 5, 0), er: settingsFlag(pf.er, false), sok: tri(pf.sok),
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
+    perf: settingsPerfFacts(pf.perf),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
     errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
@@ -301,6 +330,11 @@ function settingsPageDev(f) {
     settingsBtnN('앱 자동종료 (15초 뒤 진짜 종료)', 'dev.start.quit', { mb: 8 }),
     settingsBtnN('■ 테스트 중지', 'dev.stop')];
   if (stat) k.push(settingsSmallN(stat, 8, 0));
+  if (f.perf) {                                                            // 앱이 모은 반응 속도 기록(PerfLog) — 폰에서 어디가 느린지 숫자로 읽는다
+    k.push(settingsLabelN('반응 속도 기록', 5));
+    k.push(settingsStatN(settingsPerfLines(f.perf).join('\n')));
+    k.push(settingsBtnN('기록 지우기', 'perf.reset', { size: 12, h: 38, mb: 0 }));
+  }
   k.push(settingsSmallN(f.nv ? '※ 자동종료는 진짜 앱 종료예요(이때 시계 위젯 동물이 계속 움직이는지 확인). 추천 단계는 테스트용 가짜 도착지(강남)로 실제 알림을 한 번 보내요.' : '※ [앱 종료]·자동종료는 진짜 앱 종료예요(이때 시계 위젯 동물이 계속 움직이는지 확인). 추천의 [맛집 보기]는 앱을 앞으로 가져와 가게 화면을, [확인]은 추천만 닫아요(테스트 가짜 추천이라 가게는 실제로 없어요).', 6, 0));
   return [settingsPanelN(k, 8)];
 }

@@ -4400,7 +4400,7 @@ public class ShellActivity extends Activity {
             : ShellCore.isAskPage(setPage) ? ShellCore.pageUrlAsk(setPage, PowerInfo.isSamsung())
             : "erl".equals(setPage) ? ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(store))
             : ShellCore.isPolPage(setPage) ? ShellCore.pageUrlPlain(setPage, null)
-            : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.pageFacts(devPh, devLeft(), devStopped))
+            : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.withPerf(DevCore.pageFacts(devPh, devLeft(), devStopped), PerfLog.snapshot()))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         new Thread(new Runnable() {

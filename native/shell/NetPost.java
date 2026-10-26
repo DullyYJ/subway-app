@@ -190,12 +190,15 @@ public final class NetPost {
 
     private static Res send(String method, String url, String body, double timeoutMs) { return send(method, url, body, timeoutMs, ""); }
     private static Res send(String method, String url, String body, double timeoutMs, String etag) {
+        final long t0 = PerfLog.now();                           // 반응 속도 기록: 한 번 보내고 받기까지(다시 보내기 포함)
         Res r = sendOnce(method, url, body, timeoutMs, etag);
         if (retryable(r.status, r.retryS)) {
-            try { Thread.sleep(Math.max(300L, r.retryS * 1000L) + (long) JIT.nextInt(400)); } catch (InterruptedException ie) { return r; }
+            try { Thread.sleep(Math.max(300L, r.retryS * 1000L) + (long) JIT.nextInt(400)); } catch (InterruptedException ie) { PerfLog.net(url, t0, false); return r; }
             Res r2 = sendOnce(method, url, body, timeoutMs, etag);
+            PerfLog.net(url, t0, r2.status >= 200 && r2.status < 400);
             return r2;
         }
+        PerfLog.net(url, t0, r.status >= 200 && r.status < 400);
         return r;
     }
     private static Res sendOnce(String method, String url, String body, double timeoutMs, String etag) {

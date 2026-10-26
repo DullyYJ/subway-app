@@ -188,6 +188,7 @@ public final class ShellCore {
             if ("pg.back".equals(v)) return PG_CLOSE;
             if (DevCore.mode(v) != null) return PG_DEVSTART;
             if ("dev.stop".equals(v)) return PG_DEVSTOP;
+            if ("perf.reset".equals(v)) { PerfLog.reset(); return PG_RENDER; }                    // 반응 속도 기록 지우기 → 화면만 다시 받는다
             return PG_NONE;
         }
         if ("gw".equals(page)) {

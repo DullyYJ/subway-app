@@ -107,6 +107,13 @@ public class ShellJvmTest {
                 ok(DevCore.pageFacts(null, 0, false).equals("{\"pf\":{\"nat\":true,\"nv\":true}}") && DevCore.pageFacts("alert2", 31, false).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"ph\":\"alert2\",\"left\":31}}") && DevCore.pageFacts(null, 0, true).contains("\"stopped\":true"), "개발자 도구 화면 기기 사실");
                 ok(ShellCore.routePage(ds, "dev", "call", "dev.start.all", null, false, true) == ShellCore.PG_DEVSTART && ShellCore.routePage(ds, "dev", "call", "dev.stop", null, false, true) == ShellCore.PG_DEVSTOP && ShellCore.routePage(ds, "dev", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ds, "dev", "call", "dev.start.zz", null, false, true) == ShellCore.PG_NONE, "dev 화면 행동 라우팅");
                 ok(ShellCore.pageUrlDev(DevCore.pageFacts(null, 0, false)).contains("p=dev&f="), "dev 화면 주소");
+                PerfLog.reset();
+                ok(PerfLog.snapshot().equals("{\"d\":[0,0,0,0],\"l\":[0,0,0,0],\"n\":[]}"), "반응 속도 기록: 처음은 모두 0");
+                { long t0 = PerfLog.now(); PerfLog.draw(t0); PerfLog.layout(t0); PerfLog.net("https://route-v2.phg0643.workers.dev/screen/map?cap=18&q=secret", t0, true); PerfLog.net("https://route-v2.phg0643.workers.dev/screen/map?x=1", t0, false); }
+                String pfs = PerfLog.snapshot();
+                ok(pfs.startsWith("{\"d\":[1,") && pfs.contains("[\"/screen/map\",2,") && !pfs.contains("secret") && !pfs.contains("cap="), "반응 속도 기록: 경로별로 모으고 질문 내용은 남기지 않는다 " + pfs);
+                ok(DevCore.withPerf("{\"pf\":{\"nv\":true}}", "{\"d\":[1]}").equals("{\"pf\":{\"nv\":true,\"perf\":{\"d\":[1]}}}") && DevCore.withPerf("zz", "{}").equals("zz"), "개발자 도구 사실에 기록을 덧붙인다");
+                PerfLog.reset();
             }
             {
                 ShellCore.MemStore gs = new ShellCore.MemStore();

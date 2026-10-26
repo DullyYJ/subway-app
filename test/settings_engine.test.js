@@ -110,6 +110,21 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(has('id="samSetCard"') && has('id="gwCard"') && has('id="ovlTestCard"') && has('id="cmAlarmOn"'), '웹: 웹 카드로 열 수 있는 요소가 있다');
 }
 
+// ⑧ 반응 속도 기록(s241): 개발자 도구에 앱이 모은 숫자를 글로 보인다
+{
+  const dev = pf => E.settingsScreen({ cap: 8, p: 'dev' }, { pf });
+  const texts = sc => JSON.stringify(sc.body);
+  ok(!/반응 속도 기록/.test(texts(dev({ nv: 1 }))), '기록이 안 오면(옛 앱) 칸이 없다');
+  const P = { d: [120, 6, 60, 14], l: [30, 9, 48, 3], n: [['/screen/map', 12, 420, 1300, 1], ['/screen/home', 5, 900, 1500, 0]] };
+  const sc = dev({ nv: 1, perf: P }), tx = texts(sc);
+  ok(/반응 속도 기록/.test(tx) && /그리기  120회 · 평균 6ms · 최대 60ms · 느린 것 14회\(11\.7%\)/.test(tx) && /서버 \/screen\/map  12회 · 평균 420ms · 최대 1300ms · 실패 1회/.test(tx), '그리기 · 화면 구성 · 서버 줄');
+  ok(/그리기가 자주 느려요/.test(tx) && /화면 구성이 느려요/.test(tx) && /서버 응답이 느려요: \/screen\/home/.test(tx), '판정: 느린 곳을 짚는다(그리기 5%↑ · 구성 최대 100ms · 서버 평균 800ms)');
+  ok(/기록 지우기/.test(tx) && JSON.stringify(sc.body).indexOf('"perf.reset"') > 0, '지우기 단추');
+  ok(/큰 문제 없음/.test(texts(dev({ nv: 1, perf: { d: [300, 3, 20, 4], l: [40, 5, 25, 0], n: [['/screen/map', 9, 300, 700, 0]] } }))), '문제 없으면 큰 문제 없음');
+  ok(/기록이 적어요/.test(texts(dev({ nv: 1, perf: { d: [3, 3, 5, 0], l: [1, 2, 2, 0], n: [] } }))), '기록이 적으면 적다고');
+  ok(dev({ nv: 1, perf: 'zz' }).ok && !/반응 속도 기록/.test(texts(dev({ nv: 1, perf: 'zz' }))), '이상한 기록은 무시');
+}
+
 // ⑦ 하위 화면(cap 8) — 예전에 웹 카드 시트로 열던 6개 + 시각 고르기 + 장소 고르기
 {
   const PG = (p, pf, cap) => E.settingsScreen({ cap: cap == null ? 8 : cap, p }, { pf: pf || {} });
