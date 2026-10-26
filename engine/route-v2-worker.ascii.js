@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s237";
+var ENGINE_VERSION = "route-v2-2026-10-26s238";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -16907,13 +16907,6 @@ var RTX_FOOD_PITCH_DEFAULT = ['\ub0b4\ub9ac\ub294 \uae38\uc5d0 \uac00\ubccd\uac8
 // \u2500\u2500 s237 (YJ: "\uac01 \ub9db\uc9d1\u00b7\uce74\ud398\u00b7\ucfe0\ud321\uc740 \uc544\uc774\ud15c\uc5d0 \ub9de\uac8c \ud074\ub9ad\uc744 \uc720\ub3c4\ud558\ub294 \ubb38\uad6c \u00b7 \uc2dc\uac04 \ub0a0\uc528\uc5d0 \ub530\ub77c \ub9e4\ubc88 \ub2e4\ub974\uac8c") \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 //   \uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904\uc758 [\ubc84\ud2bc \uc774\ub984](go, 7\uc790 \uc548)\uacfc \uc14b\uc9f8 \uc904(m, 16\uc790 \uc548)\uc744 \uc544\uc774\ud15c \uc885\ub958(\uc810\uc2ec\u00b7\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uce74\ud398\u00b7\ucfe0\ud321) \u00b7 \ub3c4\ucc29 \uc2dc\uac01 \u00b7 \ub0a0\uc528\uc5d0 \ub9de\ucdb0 \uace0\ub978\ub2e4.
 //   \ub0a0\uc528\uac00 \uc788\uc73c\uba74 \uadf8 \ub0a0\uc528 \ubb38\uad6c\ub97c \uc55e\uc138\uc6b0\uace0, \uace0\ub974\ub294 \uac74 \ud638\ucd9c\ub9c8\ub2e4 \ub2e4\ub978 \uc528\uc557(RTX_RND)\uc774\ub77c \uc5ec\uc815\ub9c8\ub2e4 \ub2e4\ub974\ub2e4.
-var RTX_GO = {
-  lunch: { base: ['\uba54\ub274 \ubcf4\ub7ec\uac00\uae30', '\uc810\uc2ec \ub458\ub7ec\ubcf4\uae30', '\uac00\uac8c \ub458\ub7ec\ubcf4\uae30', '\ud6c4\uae30 \ubcf4\ub7ec\uac00\uae30', '\uc624\ub298 \uc810\uc2ec\uc740?'], rainy: ['\ube44 \ud53c\ud560 \ub9db\uc9d1', '\ub530\ub73b\ud55c \ud55c \ub07c', '\ube44 \uc624\ub294 \uc810\uc2ec'], cold: ['\ub728\ub048\ud55c \uad6d\ubb3c', '\ub530\ub73b\ud55c \ud55c \ub07c'], hot: ['\uc2dc\uc6d0\ud55c \ud55c \ub07c', '\ub354\uc704 \ud53c\ud560 \uacf3'] },
-  dinner: { base: ['\uc800\ub141 \ub458\ub7ec\ubcf4\uae30', '\uba54\ub274 \ubcf4\ub7ec\uac00\uae30', '\uc800\ub141 \uace0\ub974\uae30', '\uac00\uac8c \ub458\ub7ec\ubcf4\uae30', '\uc624\ub298 \uc800\ub141\uc740?'], rainy: ['\ube44 \ud53c\ud560 \ub9db\uc9d1', '\ube44 \uc624\ub294 \uc800\ub141', '\ub530\ub73b\ud55c \ud55c \ub07c'], cold: ['\ub728\ub048\ud55c \uad6d\ubb3c', '\ub530\ub73b\ud55c \ud55c \ub07c'], hot: ['\uc2dc\uc6d0\ud55c \ud55c \ub07c', '\ub354\uc704 \ud53c\ud560 \uacf3'] },
-  night: { base: ['\uc57c\uc2dd \ubcf4\ub7ec\uac00\uae30', '\uc57c\uc2dd \uace0\ub974\uae30', '\uc624\ub298 \uc57c\uc2dd\uc740?', '\uc57c\uc2dd \ub458\ub7ec\ubcf4\uae30'], rainy: ['\ube57\uc18c\ub9ac \uc57c\uc2dd', '\ube44 \uc624\ub294 \uc57c\uc2dd'], cold: ['\ub728\ub048\ud55c \uc57c\uc2dd', '\ub530\ub73b\ud55c \ud55c \uc785'], hot: ['\uc2dc\uc6d0\ud55c \uc57c\uc2dd', '\uc2dc\uc6d0\ud55c \ud55c \uc785'] },
-  morning: { base: ['\uce74\ud398 \ub458\ub7ec\ubcf4\uae30', '\ucee4\ud53c \ud55c \uc794?', '\ucee4\ud53c \ubcf4\ub7ec\uac00\uae30', '\uc544\uce68 \ucee4\ud53c\ub294?'], rainy: ['\ucc3d\uac00 \uce74\ud398', '\ube57\uc18c\ub9ac \uce74\ud398'], cold: ['\ub530\ub73b\ud55c \ud55c \uc794', '\ub530\ub73b\ud55c \ub77c\ub5bc'], hot: ['\uc2dc\uc6d0\ud55c \ud55c \uc794', '\uc544\uc774\uc2a4 \ud55c \uc794'] },
-  shop: { base: ['\ud2b9\uac00 \ubcf4\ub7ec\uac00\uae30', '\uc9c0\uae08 \ub2f4\uc544\ubcf4\uae30', '\uad6c\uacbd\ud558\ub7ec \uac00\uae30', '\uc624\ub298 \ub531 \uc774\uac70', '\uc624\ub298 \ubc24 \uc1fc\ud551'], weekend: ['\uc8fc\ub9d0 \uc1fc\ud551'], rainy: ['\uc9d1\ucf55\ud15c \ubcf4\uae30', '\uc9d1\ucf55 \uc1fc\ud551'], cold: ['\ub530\ub73b\ud15c \ubcf4\uae30', '\uaca8\uc6b8 \uc900\ube44'], hot: ['\uc2dc\uc6d0\ud15c \ubcf4\uae30', '\ub354\uc704 \ud0c8\ucd9c\ud15c'] }
-};
 var RTX_TEASE = {
   lunch: { base: ['\ub20c\ub7ec\uc11c \uc704\uce58 \ud655\uc778', '\uc904 \uc11c\uae30 \uc804\uc5d0 \ud655\uc778', '\ubbf8\ub9ac \ubcf4\uace0 \uc815\ud574\uc694', '\uc9c0\ub3c4\ub85c \ubc14\ub85c \ud655\uc778'], rainy: ['\ube44 \ud53c\ud574 \uac00\uae4c\uc6b4 \uacf3', '\uc6b0\uc0b0 \uc5c6\uc774 \uac08 \uacf3'], cold: ['\ucd94\uc6b4 \ub0a0 \ub728\ub048\ud558\uac8c', '\ub530\ub73b\ud55c \uacf3 \uba3c\uc800'], hot: ['\ub354\uc6b4 \ub0a0 \uc2dc\uc6d0\ud558\uac8c', '\uc2dc\uc6d0\ud55c \uacf3 \uba3c\uc800'], late: ['\uc810\uc2ec\uc2dc\uac04 \ub05d\ub098\uae30 \uc804\uc5d0'] },
   dinner: { base: ['\ub20c\ub7ec\uc11c \uc704\uce58 \ud655\uc778', '\uc6e8\uc774\ud305 \uc804\uc5d0 \ud655\uc778', '\ubbf8\ub9ac \ubcf4\uace0 \uc815\ud574\uc694', '\uc9c0\ub3c4\ub85c \ubc14\ub85c \ud655\uc778'], rainy: ['\ube44 \ud53c\ud574 \uac00\uae4c\uc6b4 \uacf3', '\uc6b0\uc0b0 \uc5c6\uc774 \uac08 \uacf3'], cold: ['\ucd94\uc6b4 \ub0a0 \ub728\ub048\ud558\uac8c', '\ub530\ub73b\ud55c \uacf3 \uba3c\uc800'], hot: ['\ub354\uc6b4 \ub0a0 \uc2dc\uc6d0\ud558\uac8c', '\uc2dc\uc6d0\ud55c \uacf3 \uba3c\uc800'] },
@@ -16922,7 +16915,7 @@ var RTX_TEASE = {
   shop: { base: ['\ub20c\ub7ec\uc11c \uac00\uaca9 \ud655\uc778', '\uc7ac\uace0 \uc788\uc744 \ub54c \ud655\uc778', '\ub193\uce58\uba74 \uc544\uc26c\uc6cc\uc694', '\uc9c0\uae08 \ubc14\ub85c \ub458\ub7ec\ubd10\uc694'], weekend: ['\uc8fc\ub9d0\uc5d0 \ub531\uc774\uc5d0\uc694'], rainy: ['\ube44 \uc624\ub294 \ub0a0 \ub531\uc774\uc5d0\uc694'], cold: ['\ucd94\uc6b4 \ub0a0 \ub531 \ud544\uc694\ud574\uc694'], hot: ['\ub354\uc6b4 \ub0a0 \ub531 \ud544\uc694\ud574\uc694'], late: ['\uc790\uae30 \uc804\uc5d0 \ud655\uc778\ud558\uc138\uc694'] }
 };
 function rtxPickRnd(list) { return list[Math.floor(RTX_RND() * list.length)]; }
-// kind: 'lunch'|'dinner'|'night'|'morning'|'shop' \u00b7 cx: \ub3c4\ucc29 \uc2dc\uac01\u00b7\ub0a0\uc528 \ub9e5\ub77d(rtxCx). \ub0a0\uc528(\ube44\u00b7\ucd94\uc704\u00b7\ub354\uc704)\uac00 \uc788\uc73c\uba74 \uadf8 \ubb38\uad6c\ub4e4\uc744 \uc55e\uc138\uc6b0\uace0 \uae30\ubcf8 \ubb38\uad6c\ub97c \ub450 \uac1c\ub9cc \uc11e\ub294\ub2e4.
+// kind: 'lunch'|'dinner'|'night'|'morning'|'shop' \u00b7 cx: \ub3c4\ucc29 \uc2dc\uac01\u00b7\ub0a0\uc528 \ub9e5\ub77d(rtxCx). \ub0a0\uc528(\ube44\u00b7\ucd94\uc704\u00b7\ub354\uc704)\uac00 \uc788\uc73c\uba74 \uadf8 \ubb38\uad6c\ub4e4\uc744 \uc55e\uc138\uc6b0\uace0 \uae30\ubcf8 \ubb38\uad6c\ub97c \ub450 \uac1c\ub9cc \uc11e\ub294\ub2e4(\uc14b\uc9f8 \uc904 \ud074\ub9ad \uc720\ub3c4 \ubb38\uad6c).
 function rtxPickWx(tbl, kind, cx, extraKeys) {
   var t = tbl[kind] || tbl.lunch, pool = [], base = t.base;
   cx = cx || {};
@@ -16933,7 +16926,12 @@ function rtxPickWx(tbl, kind, cx, extraKeys) {
   if (!pool.length) return rtxPickRnd(base);
   return rtxPickRnd(pool.concat(base.slice(0, 2)));
 }
-function rtxGoLabel(kind, cx) { return rtxPickWx(RTX_GO, kind, cx, (kind === 'shop' && cx && cx.weekend) ? ['weekend'] : null); }
+// s237(YJ: \ubc84\ud2bc \uc774\ub984\uc774 \uc544\ub2c8\ub77c \ud2b9\uc815 \uc2dd\ub2f9\u00b7\uce74\ud398\u00b7\ucfe0\ud321 \uc0c1\ud488\uc744 \ucd94\ucc9c\ud558\ub77c): \ubc84\ud2bc\uc740 \ucd94\ucc9c\ud55c \uadf8 \uac00\uac8c\u00b7\uc0c1\ud488 \uc774\ub984\uc73c\ub85c \u2014 '<\uc774\ub984> \ubcf4\uae30'(\uc774\ub984 5\uc790\uae4c\uc9c0, \ub118\uc73c\uba74 \u2026). \uc77c\ubc18 \ubb38\uad6c \ub300\uc2e0 \uad6c\uccb4\uc801\uc778 \ub300\uc0c1\uc774 \ubcf4\uc778\ub2e4.
+function rtxGoLabel(name) {
+  var n = String(name == null ? '' : name).replace(/\s*[\(\[\uff08].*$/, '').replace(/\s+/g, ' ').trim();
+  if (!n) return '';
+  return (n.length > 5 ? n.slice(0, 4) + '\u2026' : n) + ' \ubcf4\uae30';
+}
 function rtxTeaser(kind, cx) {
   var ex = [], h = cx && cx.h != null ? cx.h : -1;
   if (kind === 'shop' || kind === 'night') { if (h >= 23 || (h >= 0 && h < 4)) ex.push('late'); }
@@ -16958,7 +16956,7 @@ function rtxAd(a, slot, destStn){
         if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
       var shopB = line || say;
-      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel('shop', a.cx) };
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel(it.n) };
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;
@@ -16991,7 +16989,7 @@ function rtxAd(a, slot, destStn){
     } else {
       d += (/[\uc694\uc8e0\ub2e4]$/.test(d) ? '. ' : ', ') + word + ' \uc5b4\ub54c\uc694?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' \u00b7 ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(sl, a.cx), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn\u00b7pi: [\ub9db\uc9d1 \ubcf4\uae30]\uac00 \uc571\uc5d0\uc11c \uadf8 \uac00\uac8c\ub97c \uc5f4 \ub54c \uc4f4\ub2e4
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' \u00b7 ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn\u00b7pi: [\ub9db\uc9d1 \ubcf4\uae30]\uac00 \uc571\uc5d0\uc11c \uadf8 \uac00\uac8c\ub97c \uc5f4 \ub54c \uc4f4\ub2e4
   }catch(e){ return null; }
 }
 
