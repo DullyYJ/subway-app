@@ -363,6 +363,71 @@ function rsDtRebase(st, tg, now, tt, notes) {
   delete st.dt;
   notes.push('역까지 이동 끝 — ' + tg.name + ' ' + (src === 'tt' ? '시각표 가장 빠른 열차' : src === 'plan' ? '계획 시각표' : '승강장 도착 뒤 5분') + '으로 이어 붙임');
 }
+// ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 지하철은 도착 확정 연쇄 2회 실패하면 5분동안 GPS 를 탐색해서 다음 역의 영점을 무조건 맞춰):
+//   확정 실패 = 마커가 통과 증거가 없는 역 앞에서 기다린 일(ride-eta pos.hold). 서로 다른 역에서 연달아 2번 실패하면(그 사이 제때 확정된 역이 없으면) 그 역을 5분 동안 '찾는다':
+//   최근 2분~5분 사이 좌표 중 그 역에 가장 가까웠던 순간(정확도 400m 이하 · 350m 안)을 통과 시각으로 강제로 적는다(평소 영점은 150m·정확도 100m — 여기서는 터널·역사 안에서도 잡히게 넓힌다).
+//   가장 가까운 순간이 지난 뒤(더 멀어졌거나 8초 경과)에만 적는다. 5분 안에 못 잡으면 탐색만 끝내고 마커는 계속 그 역 앞에서 기다린다.
+var RS_SRCH_MS = 300000, RS_SRCH_BACK_MS = 120000, RS_SRCH_NEAR_M = 350, RS_SRCH_ACC_M = 400, RS_SRCH_SETTLE_MS = 8000, RS_SRCH_AWAY_M = 60;
+function rsSearch(st, tr, now, passes, notYet, notes) {
+  var sr = st.srch; if (!sr) return false;
+  if (now > sr.until) { delete st.srch; notes.push('GPS 탐색 종료(5분) — ' + sr.i + '번 영점 못 잡음'); return false; }
+  var s = null, i, j; for (i = 0; i < (st.stops || []).length; i++) if (st.stops[i] && st.stops[i].i === sr.i) { s = st.stops[i]; break; }
+  if (!s || !isFinite(s.lat) || !isFinite(s.lng) || !tr.length) return false;
+  var best = null, bi = -1;
+  for (i = 0; i < tr.length; i++) {
+    var q = tr[i]; if (q[0] < sr.from) continue;
+    if (q[3] != null && isFinite(q[3]) && q[3] > RS_SRCH_ACC_M) continue;
+    var d = rsHav(q[1], q[2], s.lat, s.lng) - (q[3] != null && isFinite(q[3]) ? Math.min(+q[3] * 0.5, 100) : 0);
+    if (d <= RS_SRCH_NEAR_M && (best === null || d < best)) { best = d; bi = i; }
+  }
+  if (bi < 0) return false;
+  var conf = now - tr[bi][0] >= RS_SRCH_SETTLE_MS;
+  for (j = bi + 1; !conf && j < tr.length; j++) if (rsHav(tr[j][1], tr[j][2], s.lat, s.lng) >= best + RS_SRCH_AWAY_M) conf = true;
+  if (!conf) return false;
+  var hit = -1; for (j = 0; j < passes.length; j++) if (passes[j].idx === sr.i) { hit = j; break; }
+  var np = { idx: sr.i, ms: tr[bi][0], src: 'gps' };
+  if (hit >= 0) passes[hit] = np; else passes.push(np);
+  delete notYet[sr.i]; delete st.srch; st.xf = 0;
+  notes.push('GPS 탐색: ' + sr.i + '번 영점 강제(' + Math.round(best) + 'm)');
+  rsRtArm(st, sr.i, now, notes);
+  return true;
+}
+// ★ s231 (YJ: 실시간 위치 API 가 붙은 노선은 2회 연속 실패 → GPS 5분 탐색으로 영점이 맞으면, 거기서 내가 탄 열차의 실시간 도착정보를 불러 정확하게 맞추고 다시 GPS 영점으로 — API 호출은 아껴야 한다):
+//   · GPS 가 시각표와 오차 안에서 맞는 동안은 부르지 않는다. 연쇄 2회 실패 → 탐색으로 영점이 잡힌 바로 그 순간에만, 다음 역(i+1) 한 곳의 도착정보를 최대 RS_RT_MAXTRY(2)번 묻는다(15초 간격 · 3분 안).
+//   · 실시간 위치를 모르는 노선(rsSubwayId 가 비는 노선: 인천1호선 등)은 부르지 않는다 — GPS 탐색만.
+//   · 폰은 묻기만 한다: ask(kind boardlive, body.kind 'subrt') → POST /board-live → 답을 다음 걸음 요청의 bl 에 실어 주면 eta.live 로 적는다. 이 노드를 GPS 로 지나면 live 는 자연히 쓸모가 없어진다(ride-eta 가 anchor 이하는 무시).
+var RS_RT_STEP_MS = 15000, RS_RT_WINDOW_MS = 180000, RS_RT_MAXTRY = 2, RS_RT_ANS_MS = 90000, RS_RT_MAXAHEAD_MS = 600000;
+function rsRtArm(st, i, now, notes) {
+  try {
+    var nodes = (st.eta && st.eta.nodes) || [], n = nodes[i], n1 = nodes[i + 1];
+    if (!n || !n1 || !n.isSub || n.isBus || !n1.isSub || n1.isBus || !n1.name || !n.name || !n1.lineName || String(n.lineName) !== String(n1.lineName)) return false;
+    if (!rsSubwayId(n1.lineName)) return false;                                  // 실시간 위치를 모르는 노선은 GPS 만
+    st.rt = { i0: i, i1: i + 1, line: String(n1.lineName), stn: String(n1.name), prev: String(n.name), at: now, n: 0 };
+    notes.push('실시간 보정 준비(' + n1.name + ')');
+    return true;
+  } catch (e) { return false; }
+}
+// 이번 걸음에 서버에 물을 것 — { kind:'subrt', i, nowMs, fromMs, line, from, prev } | null
+function rsRtAsk(st, now) {
+  var rt = st.rt; if (!rt || rt.done) return null;
+  var passes = (st.eta && st.eta.passes) || [], k;
+  for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx >= rt.i1) { rt.done = 4; return null; }       // 이미 그 역을 GPS 로 지났다
+  if (now - rt.at > RS_RT_WINDOW_MS) { rt.done = 3; return null; }
+  if (rt.n >= RS_RT_MAXTRY) return null;                                                    // 최대 2번 — 마지막 답은 아직 기다린다(창 3분)
+  if (rt.askAt && now - rt.askAt < RS_RT_STEP_MS) return null;
+  rt.askAt = now; rt.n++;
+  return { kind: 'subrt', i: rt.i1, nowMs: now, fromMs: now, line: rt.line, from: rt.stn, prev: rt.prev };
+}
+function rsRtApply(st, req, now, notes) {
+  var b = req && req.bl, rt = st && st.rt, eta = st && st.eta;
+  if (!b || b.kind !== 'subrt' || !rt || !eta || rt.done || +b.i !== rt.i1 || (rt.lastAt != null && +b.at === rt.lastAt)) return;
+  var at = +b.at; if (!isFinite(at) || now - at > RS_RT_ANS_MS || at > now + 5000) return;
+  rt.lastAt = at;
+  if (b.ms == null || !isFinite(+b.ms) || +b.ms < now - 10000 || +b.ms > now + RS_RT_MAXAHEAD_MS) { notes.push('실시간 보정: 내 열차를 못 찾음(' + rt.n + '회)'); return; }
+  var lv = (eta.live || []).filter(function (x) { return x && +x.idx !== rt.i1; });
+  lv.push({ idx: rt.i1, ms: Math.round(+b.ms) }); eta.live = lv; rt.done = 1; rt.ms = Math.round(+b.ms);
+  notes.push('실시간 보정: ' + rt.stn + ' 도착 ' + Math.round((+b.ms - now) / 1000) + '초 뒤로 맞춤');
+}
 // 한 걸음: 남은 거리·시간을 계산하고, 닿았으면 이어 붙인다. 돌려주는 값 = { name, distM, etaSec, arrived } 또는 null(해제됨)
 function rsDtTick(st, tr, now, req, notes) {
   var dt = st.dt; if (!dt) return null;
@@ -893,7 +958,7 @@ function rsBlAsk(st, tr, now) {
 // 받아 온 답(req.bl)을 다음 차 시각(eta.boardNext)으로 반영한다 — 승차역 이후 시각을 옮기는 일은 ride-eta 가 한다.
 function rsBlApply(st, req, now, notes) {
   var b = req && req.bl, w = st && st.wait, eta = st && st.eta;
-  if (!b || !w || !eta || b.i !== w.i) return;
+  if (!b || !w || !eta || b.i !== w.i || b.kind === 'subrt') return;
   var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000) return;       // 오래됐거나 미래의 답은 버린다
   if (b.ms == null || !isFinite(+b.ms)) return;                                                     // 못 받음 → 직전 값 유지(웹 applyDelay(null))
   var mw = (b.maxWait != null && isFinite(+b.maxWait)) ? +b.maxWait : RS_BL_MAXWAIT;
@@ -920,6 +985,24 @@ function rsBlLivePick(list, q, nt) {
       if (q.to && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.from, q.to, term); if (fw === false) continue; }       // 반대 방향 열차는 뺀다(판단 불가 = 거르지 않음)
       var arr = q.nowMs + sec * 1000;
       if (arr < q.fromMs + RS_BL_BUF_MS) continue;                                                     // 내가 닿기 전에 떠나는 차는 제외
+      if (best == null || arr < best) best = arr;
+    }
+    return best;
+  } catch (e) { return null; }
+}
+// ★ s231: 영점이 강제로 잡힌 직후 '내가 탄 열차' — 방금 지난 역의 다음 역(q.from) 도착정보에서, 내 진행 방향(q.prev → q.from)으로 오는 열차 중 가장 먼저 닿는 것.
+//   이미 그 역에 들어와 있거나(arvlCd 1 도착·2 출발) 내 앞을 가는 열차는 뺀다. 호선(subwayId)이 다른 열차도 뺀다. 못 고르면 null.
+function rsRtPick(list, q, nt) {
+  try {
+    var sid = rsSubwayId(q.line); if (!sid || !list || !list.length) return null;
+    var best = null, k, it, sec, cd, term;
+    for (k = 0; k < list.length; k++) {
+      it = list[k]; if (!it || String(it.subwayId || '') !== sid) continue;
+      cd = parseInt(it.arvlCd, 10); if (cd === 1 || cd === 2) continue;
+      sec = parseInt(it.barvlDt, 10); if (!isFinite(sec) || sec <= 0) continue;
+      term = String(it.bstatnNm || '');
+      if (q.prev && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.prev, q.from, term); if (fw === false) continue; }
+      var arr = q.nowMs + sec * 1000;
       if (best == null || arr < best) best = arr;
     }
     return best;
@@ -985,6 +1068,13 @@ function rsBoardLive(env, q) {
     return Promise.resolve().then(function () { return typeof ntEnsure === 'function' ? ntEnsure(env) : null; }).then(function (nt) { return rsBlSub(env, q, nt); }, function () { return rsBlSub(env, q, null); }).then(fin, function () { return base; });
   }
   if (q.kind === 'bus') return rsBlBus(env, q).then(fin, function () { return base; });
+  if (q.kind === 'subrt') {                                           // s231: 내 열차의 실시간 도착 — 실시간 노선만
+    if (!rsSubwayId(q.line) || !q.from) return Promise.resolve(Object.assign(base, { ok: false }));
+    var path = 'realtimeStationArrival/1/20/' + encodeURIComponent(String(q.from).replace(/역$/, '').trim());
+    return Promise.all([rsFetchSeoulPath(env, path, RS_LIVE_MS), Promise.resolve().then(function () { return typeof ntEnsure === 'function' ? ntEnsure(env) : null; }).then(function (nt) { return nt; }, function () { return null; })]).then(function (rr) {
+      var ms = rsRtPick(rr[0], q, rr[1]); return fin(ms == null ? null : { ms: Math.round(ms), src: 'realtime' });
+    }, function () { return base; });
+  }
   return Promise.resolve(Object.assign(base, { ok: false }));
 }
 function handleBoardLive(request, env) {
@@ -1043,6 +1133,7 @@ function rideStandby(req) {
   while (tr.length && now - tr[0][0] > O.trailMaxAgeSec * 1000) tr.shift();
   if (tr.length > O.trailMax) tr.splice(0, tr.length - O.trailMax);
   rsBlApply(st, req, now, notes);                 // 1.45) 받아 온 실시간 다음 차(s196)
+  rsRtApply(st, req, now, notes);                 // 1.46) s231 받아 온 '내 열차' 실시간 도착
   rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
   rsXwait(st, tr, now, notes);                    // 1.55) 환승 구간 승차 대기
   var askBl = rsBlAsk(st, tr, now);               // 1.56) 승차 대기 중 실시간 다음 차를 물을 때인가(s196)
@@ -1070,10 +1161,17 @@ function rideStandby(req) {
           if (hit >= 0) passes[hit] = np; else passes.push(np);
           newPass = true;
           delete notYet[z.i];
+          if (st.hdLast !== z.i) st.xf = 0;                                      // s231: 제때 확정된 역이 있으면 '연달아 실패'는 처음부터
+          if (st.srch && z.i >= st.srch.i) { delete st.srch; st.xf = 0; rsRtArm(st, z.i, now, notes); }
           notes.push('영점 ' + z.i + '번 통과 반영');
         } else if (z.notYet) { notYet[z.i] = now; }
       });
     }
+  }
+  if (st.srch && rsSearch(st, tr, now, passes, notYet, notes)) newPass = true;      // 2.2) s231 연쇄 2회 실패 뒤 5분 GPS 탐색
+  if (st.hd != null) {                                                              // s231: 기다리는 역에 통과 증거가 생기면 풀고, 아직이면 연착으로 밀도록(notYet) 계속 알린다
+    var cfd = false; for (i = 0; i < passes.length; i++) if (passes[i] && passes[i].idx >= st.hd && (passes[i].src === 'gps' || passes[i].src === 'move' || passes[i].src === 'pf')) cfd = true;
+    if (cfd) { notes.push('도착 확정(' + st.hd + '번) — 대기 해제'); delete st.hd; }
   }
   // ★ 2026-10-19: 버스 위치 — 정류장을 이은 선 위에서 이미 지난 정류장(시각을 알면 통과 시각)을 통과 증거로 적는다. 이미 GPS 로 확인한 통과는 건드리지 않는다.
   if (tk && tk.busPos && tk.busPos.passed) {
@@ -1109,8 +1207,14 @@ function rideStandby(req) {
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }
   // 4) 지금 어느 역까지 왔나 → 알림 판정 · 상주 알림 문구
   var nodes = eta.nodes || [], cfg = st.cfg || {}, curIdx = -1;
-  if (r.pos && r.pos.from != null) curIdx = r.pos.from;
+  if (r.pos && r.pos.from != null) curIdx = r.pos.ttFrom != null ? r.pos.ttFrom : r.pos.from;      // s231: 마커가 도착 확정을 기다려 멈춰 있어도 알림은 시각표 위치로(지하에서 GPS 가 없어도 하차 알림은 나가야 한다)
   else { for (i = 0; i < nodes.length; i++) if (r.etaMs[i] != null && r.etaMs[i] <= now) curIdx = i; }
+  if (r.pos && r.pos.hold != null && st.hd !== r.pos.hold) {                        // s231: 새 역에서 도착 확정 실패 — 연달아 2번이면 5분 GPS 탐색
+    st.hd = r.pos.hold; st.hdLast = r.pos.hold; st.xf = (st.xf || 0) + 1;
+    notes.push('도착 확정 실패 ' + st.xf + '회(' + r.pos.hold + '번 역) — 마커는 그 역 앞에서 기다림');
+    if (st.xf >= 2 && !st.srch) { st.srch = { i: r.pos.hold, from: now - RS_SRCH_BACK_MS, until: now + RS_SRCH_MS }; notes.push('GPS 탐색 5분 시작(' + r.pos.hold + '번 역)'); }
+  }
+  var askRt = rsRtAsk(st, now);                     // s231 실시간 노선의 영점 강제 직후 한 번(최대 2회) 내 열차를 묻는다
   var al = rsAlerts(cfg, fired, curIdx, r.etaMs, now);
   // ★ 2026-10-14 (YJ: "고치지 못한 것 전부 진행 — 카카오지하철처럼 네이티브 활용"): 앱을 닫은 뒤에도 경로를 벗어나면(중간에 내려 걷거나 택시) 알림으로 알린다.
   //   판정은 ride-track rtOff(지하철 탑승 확정 중에는 '신선하고 정확한 좌표가 2분 가까이 전부 경로선 600m 밖'일 때만). 벗어난 동안에는 하차 알림을 울리지 않는다(내린 사람에게 '곧 하차'는 거짓).
@@ -1174,7 +1278,7 @@ function rideStandby(req) {
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
   var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
   var row = done ? null : rsRowOut(st, now);
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? rsOffOut(st, now) : undefined, dt: dtInfo && !done ? { n: dtInfo.name, d: dtInfo.distM, s: dtInfo.etaSec, a: dtInfo.arrived ? 1 : 0 } : undefined, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : null, notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? rsOffOut(st, now) : undefined, dt: dtInfo && !done ? { n: dtInfo.name, d: dtInfo.distM, s: dtInfo.etaSec, a: dtInfo.arrived ? 1 : 0 } : undefined, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving, t0: r.pos.t0 == null ? null : r.pos.t0, t1: r.pos.t1 == null ? null : r.pos.t1, hold: r.pos.hold == null ? undefined : r.pos.hold, segs: (r.pos.segs || []).slice(0, 14) } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : (askRt ? { kind: 'boardlive', body: askRt } : null), notes: notes };
 }
 
 function handleRideStandby(request, env) {
@@ -1207,4 +1311,4 @@ function handleRideStandby(request, env) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
