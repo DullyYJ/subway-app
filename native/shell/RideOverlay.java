@@ -580,7 +580,7 @@ final class RideOverlay {
         @Override protected void onMeasure(int w, int h) { setMeasuredDimension(MeasureSpec.getSize(w), dp(64)); }
         private void layoutBtns() {
             float w = getWidth(), top = dp(17), bot = dp(47);
-            if (row.kind == 1) { b2.set(w - dp(8) - dp(42), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(92), top, b2.left - dp(6), bot); }
+            if (row.kind == 1) { b2.set(w - dp(8) - dp(42), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(100), top, b2.left - dp(6), bot); }
             else { b1.set(w - dp(8) - dp(84), top, w - dp(8), bot); b2.setEmpty(); }
         }
         /** 화면 좌표(rx, ry)가 어느 버튼인가: 1 첫 버튼 · 2 둘째 버튼 · 0 글 부분 · -1 줄 밖. */
