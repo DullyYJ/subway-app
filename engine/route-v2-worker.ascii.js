@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s239";
+var ENGINE_VERSION = "route-v2-2026-10-26s240";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13212,8 +13212,8 @@ function settingsScreen(inp, factsIn) {
   var d1 = settingsBoldN([['\uc544\uc774\ub514\ub97c \ub4f1\ub85d\ud558\uba74 \uac8c\uc2dc\uae00 \uc791\uc131\uacfc \uc2e4\uc2dc\uac04 \ucc44\ud305\uc5d0 \ucc38\uc5ec\ud560 \uc218 \uc788\uc5b4\uc694.\n\uc544\uc774\ub514 \uc5c6\uc774\ub3c4 \uae00\uacfc \ucc44\ud305\uc744 ', 0], ['\uad6c\uacbd', 1], ['\ud558\ub294 \uac74 \uc790\uc720\ub86d\uac8c \uac00\ub2a5\ud569\ub2c8\ub2e4.', 0]]);
   idKids.push(settingsDescN(d1.s, 14, d1.hl));
   if (f.id) {
-    var cur = settingsBoldN([['\ud604\uc7ac \uc544\uc774\ub514  ', 0], [f.id, 1]]);
-    idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
+    var curS = '\ud604\uc7ac \uc544\uc774\ub514\n' + f.id;                                                 // \uc6f9 #curIdBox: \uc791\uc740 \uae00 '\ud604\uc7ac \uc544\uc774\ub514' \uc544\ub798 \uae08\uc0c9 \uad75\uc740 \uc544\uc774\ub514(\ub450 \uc904)
+    idKids.push({ t: 'box', s: curS, hl: [[7, curS.length]], hc: 'gold', size: 13, lh: 1.45, color: 'sub', fill: '#1c1c1e', line: '', tc: 'sub', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
   }
   idKids.push({ t: 'field', key: 'cid', hint: '\uc544\uc774\ub514 \uc785\ub825 (2~12\uc790, \ud55c\uae00/\uc601\ubb38/\uc22b\uc790)', value: f.id, maxlen: 12, h: 40, size: 14, r: 9, pad: [0, 0, 0, 10] });
   idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc800\uc7a5', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
@@ -13235,7 +13235,7 @@ function settingsScreen(inp, factsIn) {
     var sd = settingsBoldN([['\uac24\ub7ed\uc2dc\ub294 \uba70\uce60 \uc548 \uc4f4 \uc571\uc744 \uc790\ub3d9 \uc808\uc804\uc2dc\ucf1c \ud654\uba74\uc774 \uaebc\uc9c4 \ub3d9\uc548\uc758 \ud558\ucc28 \uc54c\ub9bc\uc774 \uba48\ucd9c \uc218 \uc788\uc5b4\uc694. \uae38\ub3d9\ubb34\ub97c ', 0], ['\uc790\ub3d9\uc73c\ub85c \uc808\uc804\ud558\uc9c0 \uc54a\ub294 \uc571', 1], ['\uc5d0 \ub123\uc5b4 \ub450\uba74 \uc548\uc804\ud574\uc694.', 0]]);
     sk.push(settingsDescN(sd.s, 8, sd.hl));
     if (f.samw) sk.push({ t: 'box', s: '\uc774 \uc571\uc758 \ubc30\ud130\ub9ac \uc0ac\uc6a9\uc774 \uc81c\ud55c\ub428\uc73c\ub85c \ub418\uc5b4 \uc788\uc5b4\uc694. \uc571 \uc815\ubcf4 > \ubc30\ud130\ub9ac\uc5d0\uc11c \uc81c\ud55c \uc5c6\uc74c\uc73c\ub85c \ubc14\uafd4 \uc8fc\uc138\uc694.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-    if (pgHas('sam')) sk.push(settingsNavN('\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', f.samw ? '\uc81c\ud55c\ub428' : '', pgAct('sam'), true));
+    if (pgHas('sam')) sk.push({ t: 'button', s: '\uc790\ub3d9 \uc808\uc804 \uc81c\uc678 \uc124\uc815 \uc5f4\uae30', size: 13, h: 40, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: pgAct('sam') });      // \uc6f9 samSetCard \uc758 \uae08\uc0c9 \uc804\uccb4 \ud3ed \ub2e8\ucd94
     body.push(settingsPanelN(sk));
   }
 
@@ -13245,14 +13245,24 @@ function settingsScreen(inp, factsIn) {
     { t: 'toggle', key: 'rl', title: '\ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d', sub: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud558\uba74 \uc608\uc0c1 \uc2dc\uac04\uacfc \uc2e4\uc81c \uc2dc\uac04\uc758 \ucc28\uc774\ub9cc \uc775\uba85\uc73c\ub85c \ubcf4\ub0b4\uc694. \uc5ed \uc774\ub984\u00b7\uc704\uce58\u00b7\uae30\uae30 \uc815\ubcf4\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
   ]));
 
-  // 6) \uc6f9 \uce74\ub4dc\ub85c \uc774\uc5b4\uc9c0\ub294 \uae30\ub2a5\ub4e4(\ubcf5\uc7a1\ud55c \uc785\ub825\u00b7\uc2dc\ud5d8 \ub3c4\uad6c\ub294 \uae30\uc874 \uc6f9 \uce74\ub4dc\ub97c \uadf8\ub300\ub85c \uc5f0\ub2e4)
-  var wk = [settingsTitleN('\uae30\ub2a5 \uc124\uc815', 2), settingsDescN('\uc2dc\uac04\u00b7\uc7a5\uc18c\u00b7\uc2dc\ud5d8\ucc98\ub7fc \uc785\ub825\uc774 \ub9ce\uc740 \uc124\uc815\uc740 \ub20c\ub7ec\uc11c \uc5f4\uc5b4\uc694.', 4)];
-  if (pgHas('cm')) wk.push(settingsNavN('\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', f.cm == null ? '' : (f.cm ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), pgAct('cm'), true));
-  if (pgHas('gw')) wk.push(settingsNavN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', '', pgAct('gw'), true));
-  if (pgHas('arr')) wk.push(settingsNavN(f.pgs ? '\ud558\ucc28 7\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8' : '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c \uc2dc\ud5d8', '', pgAct('arr'), true));
-  if (pgHas('ovl')) wk.push(settingsNavN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', f.ovl == null ? '' : (f.ovl ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'), pgAct('ovl'), true));
-  if (pgHas('dev')) wk.push(settingsNavN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', '', pgAct('dev'), true));
-  if (wk.length > 2) body.push(settingsPanelN(wk));
+  // 6) \uc6f9 \uc124\uc815 \ud0ed\uacfc \uac19\uc740 \uc21c\uc11c\uc758 \uae30\ub2a5 \uce74\ub4dc: \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \u2192 \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f \u2192 \ud558\ucc28 \ucd94\ucc9c \u2192 \ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc \u2192 \uac1c\ubc1c\uc790 \ub3c4\uad6c (\uc6f9\uc740 \uce74\ub4dc \uc548\uc5d0 \uc785\ub825\uce78\uc744 \ud3bc\uce58\uace0, \uc571\uc740 \uce74\ub4dc \uc544\ub798 \uc904\uc744 \ub20c\ub7ec \uac19\uc740 \ub0b4\uc6a9\uc758 \ud558\uc704 \ud654\uba74\uc744 \uc5f0\ub2e4)
+  var onTxt = function (v) { return v == null ? '' : (v ? '\ucf1c\uc9d0' : '\uaebc\uc9d0'); };
+  if (pgHas('cm')) {
+    var cmd = settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], [f.pgs ? '\ub0a0\uc528 + \ud63c\uc7a1\ub3c4 + \uc900\ube44\ubb3c \ud55c\ub9c8\ub514' : '\ub0a0\uc528 + AI \uc5ed\ubb34\uc6d0 \uc694\uc57d', 1], ['\ub97c \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]);
+    body.push(settingsPanelN([settingsTitleN('\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', 4), settingsDescN(cmd.s, 6, cmd.hl), settingsNavN('\uc2dc\uac04 \u00b7 \uc7a5\uc18c \u00b7 \uc694\uc77c \uc124\uc815', onTxt(f.cm), pgAct('cm'), true)]));
+  }
+  if (pgHas('gw')) body.push(settingsPanelN([settingsTitleN('\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', 4),
+    settingsDescN('\ud3c9\uc18c\uc5d4 \uce90\ub9ad\ud130\ub4e4\uc774 \uac01\uc790 \uc9d1\uc5d0\uc11c \uc790\uace0 \uc788\ub2e4\uac00, \ud654\uba74\uc744 \ucf1c\uba74 \uc77c\uc5b4\ub098 \uc2dc\uacc4 \uc8fc\ubcc0\uc744 \ub3cc\uc544\ub2e4\ub2c8\uba70 \uc2dc\uacc4\uc5d0 \ub9e4\ub2ec\ub9ac\uace0 \uc751\uac00\ub3c4 \ud574\uc694. \ucd9c\u00b7\ud1f4\uadfc \uc2dc\uac01\uc774 \ub418\uba74 \uce90\ub9ad\ud130\uac00 \ubaa8\uc5ec \uc751\uc6d0\ud558\uace0 [\ucd9c\uadfc\ud558\uae30]\u00b7[\ud1f4\uadfc\ud558\uae30] \ubc84\ud2bc\uc774 \ub098\uc640\uc694.', 6),
+    settingsNavN('\uc704\uc82f \ucd94\uac00 \u00b7 \ub3cc\uc544\ub2e4\ub2c8\ub294 \uc2dc\uac04', '', pgAct('gw'), true)]));
+  if (pgHas('arr')) body.push(settingsPanelN([settingsTitleN(f.pgs ? '\ud558\ucc28 7\ubd84 \uc804 \ucd94\ucc9c' : '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', 4),
+    settingsDescN(f.pgs ? '\ub3c4\ucc29 7\ubd84 \uc804\uc5d0 \uc2dc\uac04\ub300\ubcc4\ub85c \ubcf4\ub0b4\ub294 \ucd94\ucc9c\uc774\uc5d0\uc694. \uc2dc\ud5d8 \ubc84\ud2bc\uc73c\ub85c \uc2e4\uc81c \uc54c\ub9bc\uacfc \uac19\uc740 \ub0b4\uc6a9\uc744 \ubbf8\ub9ac \ubc1b\uc544 \ubcfc \uc218 \uc788\uc5b4\uc694.' : '\ub3c4\ucc29 5\ubd84 \uc804\uc5d0 \uc2dc\uac04\ub300\ubcc4\ub85c \ubcf4\ub0b4\ub294 \ucd94\ucc9c\uc774\uc5d0\uc694. \uc2dc\ud5d8 \ubc84\ud2bc\uc73c\ub85c \uc2e4\uc81c \uc54c\ub9bc\uacfc \uac19\uc740 \ub0b4\uc6a9\uc744 \ubbf8\ub9ac \ubc1b\uc544 \ubcfc \uc218 \uc788\uc5b4\uc694.', 6),
+    settingsNavN('\uc2dc\ud5d8 \uc54c\ub9bc \u00b7 \uc0c1\ud0dc \ud655\uc778', '', pgAct('arr'), true)]));
+  if (pgHas('ovl')) body.push(settingsPanelN([settingsTitleN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', 4),
+    settingsDescN('\ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \ud604\uc7ac\uc5ed \u00b7 \ub0a8\uc740\uc2dc\uac04\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc\uc694. \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694.', 6),
+    settingsNavN('\ud45c\uc2dc \uc124\uc815', onTxt(f.ovl), pgAct('ovl'), true)]));
+  if (pgHas('dev')) body.push(settingsPanelN([settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4),
+    settingsDescN('\uc624\ubc84\ub808\uc774 \uc2dc\ub098\ub9ac\uc624 \uc2dc\ud5d8 \uac19\uc740 \uc9c4\ub2e8 \ub3c4\uad6c\uc608\uc694.', 6),
+    settingsNavN('\ub3c4\uad6c \uc5f4\uae30', '', pgAct('dev'), true)]));
 
   // 7) \ud14c\ub9c8
   var dk = f.th === 'dark';
