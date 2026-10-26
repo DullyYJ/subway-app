@@ -2383,6 +2383,8 @@ public class ShellActivity extends Activity {
     private boolean busQuiet; private long busQuietAt;
     private void busMove(final double la, final double lo) {
         final boolean quiet = busShowing() && map.stopCount() > 0 && MapCore.VW_NEAR.equals(map.busView());
+        // s231 (YJ: 정류장을 열어서 보고 있으면 위치가 조금 바뀌어도 재탐색하지 마 — 헷갈린다, 버스 도착시간만 갱신): 고른 정류장이 있으면 165m 넘게 옮기기 전에는 동네를 다시 찾지 않는다.
+        if (quiet && map.busSel >= 0 && !farLL(map.busLL, la, lo, BUS_FAR_DEG)) return;
         if (!quiet) { map.setBusLoc(la, lo); loadMapBody(body, true); return; }
         long now = System.currentTimeMillis();
         if (busQuiet && now - busQuietAt < 25000L) return;
