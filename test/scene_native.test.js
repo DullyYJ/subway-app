@@ -24,10 +24,18 @@ const { sceneDecide } = require('../engine/scene.js');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 1, boarded: false, key: 'k', nodes: bus }, { temp: 12, rain: 80, txt: '비' }), 'scn_wait_bus_rain');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k', nodes: bus }, { temp: 12, rain: 0, txt: '맑음' }), 'scn_ride_bus');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 0, boarded: false, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }, { name: '도착' }] }, null), 'scn_wait_sub');
-    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
+    {   // s232: 지하철을 타고 가는 동안 혼잡도 카드 옆 쪽에 붙는 객실 장면(엔진 sceneTrain → hcTrainJs)
+      const sub = [{ name: '출발', isOrigin: true }].concat(['임학', '박촌', '귤현', '계양', '아시아드', '검단', '검암', '마곡나루'].map(n => ({ name: n, isSub: true, lineName: '인천1호선' }))).concat([{ name: '도착' }]);
+      const sc = sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k1', nodes: sub }, { temp: 15, rain: 0, txt: '맑음' });
+      const js = require('../engine/hcards.js').hcTrainJs(sc);
+      assert.ok(js.length > 100 && js.length < 6000, '객실 장면 글');
+      fs.writeFileSync(path.join(dir, 'train_ride.json'), js);
+    }
+    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls].concat(files), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr || r.stdout);
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', cls, 'com.dullyyj.subway.SceneJvmTest', 'check', dir], { env: ENV, encoding: 'utf8', timeout: 240000 });
+    if (process.env.VERBOSE) console.log((r.stdout || '').split('\n').filter(l => /객실|시각표|정차|달리|서 있|FAIL/.test(l)).join('\n'));
     assert.ok(/ALL OK/.test(r.stdout) && r.status === 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') + (r.stderr || ''));
   });
   await t('스프라이트 시트 7장이 앱 assets 에 있고 칸 배치가 맞다', async () => {
@@ -56,7 +64,7 @@ const { sceneDecide } = require('../engine/scene.js');
     assert.ok(/wsay\(S, a, "shiver"/.test(acts) && /traits\.get\(a\.id\)/.test(acts), '말은 엔진(traits.say)이 정한 글만 띄운다');
   });
   await t('SceneCore·SceneArt·SceneActs 는 android.* 를 쓰지 않는다(순수 자바)', async () => {
-    for (const n of ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
+    for (const n of ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
   });
   await t('ScreenView 가 장면 노드를 그리고 · 손가락으로 잡을 수 있고 · 떼면 놓고 · 안 보이면 저절로 멈춘다', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
@@ -64,6 +72,16 @@ const { sceneDecide } = require('../engine/scene.js');
     assert.ok(/scene\.touchDown\(/.test(v) && /scene\.touchMove\(/.test(v) && /scene\.touchUp\(\)/.test(v) && /scene\.isHeld\(\)/.test(v), '손가락 연결');
     assert.ok(/sceneDrawn = false;/.test(v) && /if \(sceneDrawn && scene != null && scene\.isRunning\(\)/.test(v), '보일 때만 프레임을 잇는다');
     assert.ok(/scene\.destroy\(\)/.test(v), '창에서 떨어지면 비트맵을 돌려준다');
+  });
+  await t('두 쪽 카드(s232): ScreenView 가 가로로 밀어 넘기고 · 객실 장면에 시각표(RideService.livePos)와 지금 시각만 건넨다 · 계산은 엔진·SceneTrain', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8'), tr = fs.readFileSync(N('SceneTrain.java'), 'utf8'), sc = fs.readFileSync(N('SceneCore.java'), 'utf8');
+    assert.ok(/isPager\(bit\)\) \{ i \+= drawPager\(/.test(v) && /mode = 10; pgDragOn = true/.test(v) && /if \(mode == 10\)/.test(v), '쪽 넘기기 그리기·손가락');
+    assert.ok(/pgPage == 0\)[^;]*pgPage == 1/.test(v), '끝 쪽에서 바깥으로 미는 몸짓은 화면 넘기기(탭 이동)에 양보');
+    assert.ok(/"train"\.equals\(scene\.mode\(\)\)/.test(v) && /RideService\.livePos/.test(v) && /trainClock\(System\.currentTimeMillis\(\)\)/.test(v), '객실 장면에 시각표·지금 시각');
+    assert.ok(/livePos = core\.posJson/.test(rs) && (rs.match(/livePos = ""/g) || []).length >= 2, '탑승 서비스가 시각표를 올리고 끝나면 지운다');
+    assert.ok(/sc2/.test(c) && /pgN/.test(c), '코어가 두 쪽 카드를 안다');
+    assert.ok(sc.includes('"train".equals(mode)') && /SceneTrain\.(step|draw|setup)/.test(sc), 'SceneCore 가 train 장면을 그린다');
+    assert.ok(!/Math\.random|new java\.util\.Random\(\)|new Random\(\)/.test(tr.replace(/new java\.util\.Random\(z\.seed[^)]*\)/, '')), '객실 장면의 자리·승하차 무작위는 엔진이 준 시드로만(앱이 따로 뽑지 않는다)');
   });
   console.log(pass + ' 통과 / ' + fail + ' 실패'); if (fail) process.exit(1);
 })();
