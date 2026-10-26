@@ -2,7 +2,7 @@
 //   node tools/guard-wrap.js            → workers/src/<이름>.js 를 읽어 workers/guarded/<이름>.js 를 만든다(다시 돌려도 같은 결과)
 //   node tools/guard-wrap.js --check    → 만들어 둔 것이 최신인지만 확인
 // 원칙: 원래 코드는 한 글자도 바꾸지 않는다. 마지막의 export 만 gdWrap(...) 으로 감싼다(scheduled 등 다른 진입점은 그대로 통과).
-// 블록은 ASCII 만 쓴다(붙여넣기 문제 방지). 종류별 한도는 각 워커의 실제 호출 모양에 맞춘다(아래 PROFILES).
+// 결과 파일 전체가 ASCII 다(비 ASCII 는 \uXXXX 로 — 문자열 · 정규식 · 주석 모두 같은 뜻). 종류별 한도는 각 워커의 실제 호출 모양에 맞춘다(아래 PROFILES).
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const esc = s => s.replace(/[\u0080-￿]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
@@ -73,7 +73,7 @@ function wrapSource(name, src) {
     if (n !== 1) throw new Error(name + ': export default 모양을 찾지 못했다(' + n + ')');
     out = src.replace(/^export default \{/m, 'var __gd_inner = {').replace(/\s*$/, '\n') + blk + 'export default gdWrap(__gd_inner);\n';
   }
-  return out;
+  return esc(out);
 }
 
 function build() {
@@ -81,7 +81,7 @@ function build() {
   for (const name of Object.keys(PROFILES)) res[name] = wrapSource(name, fs.readFileSync(path.join(root, 'workers/src', name + '.js'), 'utf8'));
   return res;
 }
-module.exports = { PROFILES, wrapSource, build, block };
+module.exports = { PROFILES, wrapSource, build, block, esc };
 
 if (require.main === module) {
   const check = process.argv.includes('--check');
