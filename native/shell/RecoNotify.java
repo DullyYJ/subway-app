@@ -35,9 +35,11 @@ final class RecoNotify {
     }
 
     /** 탑승 전에 받아 둔 /reco-text 응답으로 알림을 띄운다 — 네트워크를 쓰지 않는다. 보낼 글이 없으면 false. */
-    static boolean sendCached(Context c, String resp, RideCore core) {
+    static boolean sendCached(Context c, String resp, RideCore core) { return sendCached(c, resp, core, 0L, 0L); }
+    /** arrMs·nowMs(지금 터진 추천의 도착 예정 · 현재)가 오면 받아 둔 글의 남은 분 · 도착 시각을 지금 값으로 고쳐 띄운다. */
+    static boolean sendCached(Context c, String resp, RideCore core, long arrMs, long nowMs) {
         try {
-            String[] t = RideCore.recoText(resp);
+            String[] t = RideCore.freshenReco(RideCore.recoText(resp), arrMs, nowMs);
             if (t == null) return false;
             if (core != null) core.setRecoAd(RideCore.recoAd(resp));
             show(c, t[0], t[1]);
