@@ -737,6 +737,12 @@ function findAndroidJar() {
     const hc = fs.readFileSync(path.join(ROOT, 'engine', 'hcards.js'), 'utf8'), rs = fs.readFileSync(path.join(ROOT, 'engine', 'result.js'), 'utf8'), rh = fs.readFileSync(path.join(ROOT, 'engine', 'rhead.js'), 'utf8');
     assert.ok(/HC_FUSE_CAP = 25/.test(hc) && /RES_TAGS_CAP = 25/.test(rs) && /Number\(inp\.cap\) < 25/.test(rh), '엔진은 규격 25부터만 합친다(옛 앱은 예전 모양)');
   });
+  await t('s235: 모든 호선 방을 뒤에서 계속 받아 둔다(chatBg) · 맛집 탭 좌우 밀기는 카테고리를 끝없이 돈다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/CHAT_BG_MS = 20000L/.test(a) && /private void chatBgSweep\(\)/.test(a) && /chatSels = new ArrayList<String>\(sels\)/.test(a) && /chatBgStart\(\); setupResume/.test(a) && /removeCallbacks\(chatBg\)/.test(a), '모든 방 20초 주기 갱신(켤 때 방 목록 · onResume 시작 · 끝낼 때 정리)');
+    assert.ok(/if \(chatShown && sel\.equals\(liveSel\)\) continue;/.test(a) && /cacheAge\(key\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(pfChatB\)/.test(a) && /warm\(txt\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 미리 읽기');
+    assert.ok(/"food"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /\(si\[0\] - dir\) % n \+ n\) % n/.test(a) && /"food"\.equals\(ct\)/.test(a), '맛집 탭: 좌우 밀기 = 카테고리 칩 끝없이(끝에서 반대쪽 끝으로)');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
