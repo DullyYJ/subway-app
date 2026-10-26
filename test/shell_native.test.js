@@ -629,6 +629,7 @@ function findAndroidJar() {
     assert.ok(/private boolean commSwipe\(int dir\)/.test(a) && /body\.chipActs\(oi\)/.test(a) && /head\.chipActs\(ti\)/.test(a) && /news && dir == -1\) return true/.test(a) && /ShellCore\.NEWS_FIRST : ShellCore\.NEWS_LAST/.test(a), '실시간소통·뉴스는 안쪽 칩 먼저 · 뉴스 끝에서 왼쪽은 멈춤 · 뉴스로 들어올 때 첫/마지막 카테고리');
     assert.ok(/"shop"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /si\[0\] - dir/.test(a) && /sx < cats\.length\) \{ body\.slideNext\(dir\); hostBody\.handle\(cats\[sx\], false\)/.test(a), 's224: 쇼핑 탭도 좌우 밀기 — 카테고리 칩을 한 칸씩 · 양 끝에서 멈춤');
     assert.ok(/followChip = true;/.test(sv) && /private void followOnChip\(\)/.test(sv) && /if \(followChip\) followOnChip\(\);/.test(sv) && /if \(!followChip\) scrollX = 0f/.test(sv) && /flingX\.startScroll\(Math\.round\(scrollX \* dpr\)/.test(sv), 's224: 밀어서 카테고리가 바뀌면 위 칩 줄이 켜진 칩을 가운데로 따라간다(부드럽게 0.26초 · 처음으로 튀지 않음)');
+    assert.ok(/mkBack/.test(sv) && /back > 0\.01f && back <= Math\.max\(24f, Math\.abs\(k\.x1 - k\.x0\)\) \* 0\.5f && \+\+mkBack < 3\) return;/.test(sv) && /mkBack = 0;/.test(sv), 's225: 마커 역주행 가드 — 역에 서 있을 때 GPS 흔들림으로 되돌아가는 작은 값(반 구간 이하)은 두 번까지 무시, 세 번 이어지면 받아들인다');
     const nw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nw)[1].split(',').map(x => x.replace(/['\s]/g, ''));
     assert.ok(sc.indexOf('NEWS_FIRST = "' + cats[0] + '", NEWS_LAST = "' + cats[cats.length - 1] + '"') > 0, '뉴스 처음·마지막 카테고리 이름이 엔진 목록과 같다');
   });
