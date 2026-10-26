@@ -226,7 +226,7 @@ function hcardsScreen(inp, f) {
     else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
   if (aiS && aiS.ok) {
-    if (fuse) { var fp = hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // 통합 카드: 제목줄 없이 앱이 경로 결과 카드의 'slot:ai' 자리로 옮긴다(못 옮기면 그 자리에 그대로 남는다)
+    if (fuse) { var fp = hcPanel(hcKids(aiS).filter(function (n) { return n.t !== 'aih'; }), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // s218: 제목줄(AI 승무원 브리핑 · 카운트다운 · 새로고침)도 뺀다 — 앱이 경로 결과 카드의 'slot:ai' 자리로 옮긴다
     else { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
