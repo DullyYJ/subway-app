@@ -124,16 +124,17 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
 
 (async () => {
   // 워커 연결부: 날씨는 가짜 fetch 로 받는다
-  const glue = fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8');
+  const scn = fs.readFileSync(path.join(root, 'engine/scene-worker.js'), 'utf8');
+  const glue = scn.slice(scn.indexOf('var WX_CODES'), scn.indexOf('async function sceneWeather')) + '\n' + fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8');   // s219: 날씨는 장면 엔진의 wxMeteo(Open-Meteo)를 같이 쓴다
   const calls = [];
   const fn = new Function('cbPlan', 'cbCompose', 'WSAY_WX_URL', 'fetch', 'AbortController', 'Response', glue + '\nreturn handleCommuteBrief;');
-  const fakeFetch = async (u) => { calls.push(u); return { ok: true, json: async () => ({ ok: true, temp: 14, feel: 11, hum: 60, tmin: 9, tmax: 21, rain: 30, txt: '구름' }) }; };
+  const fakeFetch = async (u) => { calls.push(u); return { ok: true, json: async () => ({ current: { time: '2026-10-21T07:00', temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 60, weather_code: 2, wind_speed_10m: 2 }, hourly: { time: ['2026-10-21T07:00', '2026-10-21T08:00', '2026-10-21T09:00'], precipitation_probability: [30, 10, 5] }, daily: { uv_index_max: [3], temperature_2m_max: [21], temperature_2m_min: [9] } }) }; };
   const h = fn(M.cbPlan, M.cbCompose, 'https://wx.test/weather', fakeFetch, AbortController, Response);
   const post = (b) => h(new Request('https://x.test/commute-brief', { method: 'POST', body: typeof b === 'string' ? b : JSON.stringify(b) })).then(r => r.json().then(j => [r.status, j]));
   const [s1, j1] = await post({ kind: 'morn', nowMs: AT('2026-10-21T07:40:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } });
   try {
     assert.strictEqual(s1, 200); assert.strictEqual(j1.ok, true); assert.strictEqual(j1.title, '출근길 브리핑 · 인하대→강남');
-    assert.ok(/인하대 14° 구름/.test(j1.body)); assert.ok(calls.length >= 2 && /lat=37\.44/.test(calls[0]), calls.join(' '));
+    assert.ok(/인하대 14° 구름/.test(j1.body)); assert.ok(calls.length >= 2 && /latitude=37\.44/.test(calls[0]), calls.join(' '));
     const [s2] = await post('JSON 아님'); assert.strictEqual(s2, 400);
     const [s3] = await post({ pad: 'x'.repeat(7000) }); assert.strictEqual(s3, 413);
     const bad = fn(M.cbPlan, M.cbCompose, 'https://wx.test/weather', async () => { throw new Error('down'); }, AbortController, Response);
