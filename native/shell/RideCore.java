@@ -25,6 +25,8 @@ public final class RideCore {
     public boolean done;
     /** 엔진이 알린 '경로 이탈 중' — 벗어나기 시작한 시각(ms), 아니면 0. 앱이 '지금 위치에서 다시 찾을까요?'를 한 번 묻는 데 쓴다(이탈 판정과 오차 범위는 엔진이 정한다). */
     public long offAt;
+    public boolean dtOn;                      // s229: 역까지 이동 중(엔진 dt) — 결과 카드에 남은 거리 · 시간 글을 보인다
+    public String offStn = "";                // s229: 이탈 때 경로 첫 지하철역 이름(엔진 off.stn) — 있으면 [역까지 이동]을 고를 수 있다
     public int cur = -1, rev = 0;
     public String posJson = "null", arrJson = "null";
     private int waitI = -1;                                   // 승차 대기 중인 노드 번호(없으면 -1) — 엔진 state.wait
@@ -67,7 +69,7 @@ public final class RideCore {
     public void setBl(String resp) { if (resp != null && resp.length() > 2 && resp.length() < 4000) pendingBl = resp; }
     public void setRecoAd(RecoAd ad) { if (ad != null) { pendingAd = ad; lastAd = ad; } }
     public RecoAd lastRecoAd() { return lastAd; }
-    public void queueAct(String a) { if ("press".equals(a) || "undo".equals(a) || "open".equals(a) || "close".equals(a) || "pill".equals(a)) pendingAct = a; }
+    public void queueAct(String a) { if ("press".equals(a) || "undo".equals(a) || "open".equals(a) || "close".equals(a) || "pill".equals(a) || "detour".equals(a)) pendingAct = a; }
     public void dismissReco(long at) { if (at > 0) rcDis = at; }
 
     /** /reco-text 응답의 ad 줄 → RecoAd. 줄이 없으면 null. */
@@ -244,6 +246,8 @@ public final class RideCore {
             done = Boolean.TRUE.equals(m.get("done"));
             Object offO = m.get("off");
             offAt = offO instanceof Map && ((Map<String, Object>) offO).get("at") instanceof Number ? ((Number) ((Map<String, Object>) offO).get("at")).longValue() : 0L;
+            offStn = offO instanceof Map && ((Map<String, Object>) offO).get("stn") instanceof String ? BoardCore.s(((Map<String, Object>) offO).get("stn"), 24) : "";
+            dtOn = m.get("dt") instanceof Map;
             quit = done && Boolean.TRUE.equals(m.get("quit"));
             Object al = m.get("alert");
             if (al instanceof Map) {
@@ -345,7 +349,7 @@ public final class RideCore {
 
     // ═════════════ 앱 화면용 ═════════════
     /** 결과 카드의 탑승 상태 { on:1, text } (HomeCore → 엔진 r.ride). */
-    public String rideJson() { return "{\"on\":1,\"text\":" + ShellCore.q(text) + (rowJson.length() > 2 ? ",\"row\":" + rowJson : "") + "}"; }
+    public String rideJson() { return "{\"on\":1,\"text\":" + ShellCore.q(text) + (dtOn ? ",\"dt\":" + ShellCore.q(text) : "") + (rowJson.length() > 2 ? ",\"row\":" + rowJson : "") + "}"; }
     /** 버튼 줄 오른쪽 칸: 지금 칸 이름("board"|"transfer"|"arrive"|"") · 지금 누르면 먹히나. */
     public String rowJson = "", rowSlot = ""; public boolean rowCan;
     /**
