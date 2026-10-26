@@ -161,7 +161,7 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         hostBody = new Host(1);
         body.setListener(hostBody);
-        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
@@ -313,8 +313,8 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); setupResume(); }
+    @Override protected void onDestroy() { if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -1070,6 +1070,7 @@ public class ShellActivity extends Activity {
                     String src = txt.length() > 0 && !isNotMod(txt) ? txt : null;
                     if (src == null) { NetPost.Res r0 = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000); src = r0.status == 200 ? r0.body : ""; }
                     for (String c : ShellCore.catValues(src)) if (!sels.contains(c)) sels.add(c);
+                    chatSels = new ArrayList<String>(sels);                      // 모든 방 목록(엔진이 칩으로 준 순서) — 아래 chatBg 가 이 목록을 계속 돈다
                 }
                 pfGap();
             }
@@ -1307,6 +1308,13 @@ public class ShellActivity extends Activity {
             if (si[0] >= 0 && sx >= 0 && sx < cats.length) { body.slideNext(dir); hostBody.handle(cats[sx], false); }
             return true;
         }
+        if ("food".equals(ShellCore.currentTab(store)) && (dir == -1 || dir == 1)) {             // 맛집: 카테고리 칩을 끝없이 돈다(YJ: 좌우 무한) — 끝에서 더 밀면 반대쪽 끝으로. 칩 화면은 칩별로 미리 받아 둔 것이라 바로 뜬다
+            int[] si = new int[1];
+            ScreenCore.Act[] cats = body.chipActs(si);
+            int n = 0; for (ScreenCore.Act c : cats) if (c != null && "cat".equals(c.a)) n++;
+            if (si[0] >= 0 && n > 1 && n == cats.length) { int sx = ((si[0] - dir) % n + n) % n; body.slideNext(dir); hostBody.handle(cats[sx], false); }
+            return true;
+        }
         if (!"community".equals(ShellCore.currentTab(store)) || (dir != -1 && dir != 1)) return false;
         String mode = ShellCore.mode(store);
         boolean chat = "chat".equals(mode), news = "news".equals(mode);
@@ -1458,7 +1466,7 @@ public class ShellActivity extends Activity {
      * 받은 화면은 검증까지 미리 마쳐(parsedGet) 밀 때 주 스레드가 글을 읽지 않는다. 앱을 켤 때 받아 둔 방도 메모리에서 밀려나 있으면 여기서 다시 채운다.
      */
     private static final long CHAT_NEAR_FRESH_MS = 45000L;
-    private ChatCore pfChatN;
+    private ChatCore pfChatN, pfChatB;
     private void chatWarmSoon() {
         deb.trailing("chatwarm", 700L, new Runnable() { @Override public void run() {
             if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
@@ -1495,6 +1503,55 @@ public class ShellActivity extends Activity {
             screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
         }
         return true;
+    }
+    /**
+     * 모든 호선 방을 뒤에서 계속 받아 둔다(YJ: 모든 호선이 백그라운드에서 계속 작동 · 눌렀을 때 빈 화면 없이 바로). 앱이 앞에 있는 동안 20초마다
+     * 지금 보는 방(6초 주기로 따로 받는다)을 뺀 모든 방을 차례로 새로 받아 화면 캐시에 둔다 — 호선 칩을 누르면 늘 최근 화면이 즉시 뜬다.
+     * 방 목록은 켤 때 미리 받기가 엔진의 칩으로 알아 둔 chatSels. 받기는 뒤 스레드 큐라 화면을 막지 않는다.
+     */
+    private static final long CHAT_BG_MS = 20000L, CHAT_BG_FRESH_MS = 15000L;
+    private volatile ArrayList<String> chatSels = new ArrayList<String>();
+    private boolean chatBgOn;
+    private final Runnable chatBg = new Runnable() { @Override public void run() {
+        chatBgOn = false;
+        if (isFinishing()) return;
+        if (resumed) chatBgSweep();
+        chatBgOn = true; main.postDelayed(this, CHAT_BG_MS);
+    } };
+    private void chatBgStart() { if (!chatBgOn) { chatBgOn = true; main.postDelayed(chatBg, 4000L); } }
+    private void chatBgSweep() {
+        final ArrayList<String> sels = chatSels;
+        if (sels == null || sels.size() < 2 || pfPending.get() > 4) return;
+        final boolean chatShown = ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "");
+        final String liveSel = chat.sel(), theme = ShellCore.theme(store);
+        final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
+        if (pfChatB == null) pfChatB = new ChatCore(store);          // 이 일만 쓰는 따로의 고스트 상태기(다른 미리 받기와 상태를 섞지 않는다)
+        pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {
+            boolean net = false;
+            for (String sel : sels) {
+                if (chatShown && sel.equals(liveSel)) continue;                              // 지금 보는 방은 6초 주기가 받는다
+                String key = ShellCore.S_CHAT + "|" + sel;
+                if (cacheAge(key) < CHAT_BG_FRESH_MS) continue;
+                String me = ShellCore.commId(store);
+                int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+                String txt;
+                synchronized (pfChatB) {
+                    pfChatB.routeSec = new ArrayList<String>(sec);
+                    if (System.currentTimeMillis() - pfChatB.noticesAt > 60000) {
+                        NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                        if (nr.status == 200) pfChatB.setNotices(nr.body, System.currentTimeMillis());
+                    }
+                    if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChatB.talksUrlNow(), 7000); if (tr.status == 200) pfChatB.addTalks(tr.body, me); }
+                    else { NetPost.Res rr = NetPost.get(pfChatB.roomUrl(sel), 12000); if (rr.status == 200) pfChatB.addRoom(sel, rr.body); }
+                    String body = pfChatB.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
+                    txt = screenCall(key, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
+                }
+                warm(txt);                                                                    // 눌렀을 때 주 스레드가 글을 읽지 않도록 미리 읽어 둔다
+                net = true;
+                pfGap();
+            }
+            return net;
+        } });
     }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
