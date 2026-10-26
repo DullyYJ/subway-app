@@ -370,7 +370,7 @@ public final class RideCore {
     public static RideCore restore(String saved, long nowMs) {
         if (saved == null || saved.length() < 10) return null;
         try {
-            Object o = ScreenCore.parse(saved);
+            Object o = ScreenCore.parseSaved(saved);
             if (!(o instanceof Map)) return null;
             Map<String, Object> m = (Map<String, Object>) o;
             Object at = m.get("at"), st = m.get("state");
