@@ -23,13 +23,24 @@ if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = requi
 var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
 if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
 
+var resXferBox = (typeof rheadXferBox === 'function') ? rheadXferBox : null;
+if (!resXferBox) { try { if (typeof require === 'function') resXferBox = require('./rhead').rheadXferBox; } catch (eRq4) {} }
+// 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217)
+function resNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/역$/, '') === b.replace(/역$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
+var RES_TAGS_CAP = 25;                                                          // 알약 줄(tags) · 경로 통합 카드 자리(slot)를 아는 앱
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
 // 예전 웹 _normStop 과 같다: 정류장 한 곳의 이름·좌표·누적 초·시각을 한 모양으로.
 function resNormStop(sv) {
   if (!sv) return { stationName: '', lat: null, lon: null };
-  var o = { stationName: (sv.stationName || sv.name || ''),
+  var o = { stationName: resNmFix(sv.stationName || sv.name || ''),
             lat: (sv.y != null ? sv.y : (sv.lat != null ? sv.lat : null)),
             lon: (sv.x != null ? sv.x : (sv.lon != null ? sv.lon : (sv.lng != null ? sv.lng : null))) };
   var sec = null;
@@ -123,14 +134,14 @@ function resR5(v) { return (v == null || !isFinite(v)) ? null : Math.round(Numbe
 
 // 머리줄 사실 (rhead part 'h')
 function resHeadFacts(route, r, tab) {
-  var f = { m: 0, a: String(r.a || ''), b: String(r.b || ''), fav: r.fav === 0 ? 0 : 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
+  var f = { m: 0, a: resNmFix(r.a), b: resNmFix(r.b), fav: r.fav === 0 ? 0 : 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
   if (!route) { f.nr = tab; return f; }
   f.m = Math.round(resNum(route.summary.duration, 0) / 60);
   var rs = route.rvSplit;
   if (route.why !== undefined && rs && rs.tot === f.m) f.sp = { ride: rs.ride, wait: rs.wait, walk: rs.walk };
   f.why = route.why ? String(route.why) : '';
   resArr(route.transfers).slice(0, 8).forEach(function (t) {
-    if (t) f.xs.push({ kind: t.kind, at: t.at, walkMin: t.walkMin, boardAt: t.boardAt, toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
+    if (t) f.xs.push({ kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
   });
   var secs = route.sections || [], i;
   secs.forEach(function (sc) {
@@ -155,6 +166,21 @@ function resLiveFacts(r) {
   if (pos && isFinite(Number(pos.from))) { f = Math.floor(Number(pos.from)); t = isFinite(Number(pos.to)) ? Math.floor(Number(pos.to)) : f; ratio = resNum(pos.ratio, 0); }
   else { var cur = Math.floor(resNum(L.cur, -1)); if (cur >= 1) { f = cur; t = f; } }
   return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: null, na: na.length ? na : null };
+}
+// 요약 칩 줄(rhead part 'g') 사실: 총 분 · 환승 횟수 · 이동 수단 묶음(장거리 이름 → 지하철 → 버스) · 환승·거점 이름(겹치는 이름은 한 번만)
+function resTagFacts(route, hf) {
+  var kinds = { ld: [], sub: 0, bus: 0 }, hubs = [];
+  route.sections.forEach(function (sc) {
+    var tr = (sc && sc.transportation) || {};
+    if (tr.type === 4) { var nm = String(tr.name || '').replace(/\s+/g, ' ').trim().slice(0, 10) || '장거리'; if (kinds.ld.indexOf(nm) < 0) kinds.ld.push(nm); }
+    else if (tr.type === 1) kinds.sub = 1;
+    else if (tr.type === 2) kinds.bus = 1;
+  });
+  var mix = kinds.ld.slice(0, 2);
+  if (kinds.sub) mix.push('지하철');
+  if (kinds.bus) mix.push('버스');
+  hf.xs.forEach(function (t) { var a = String(t.at || '').replace(/역$/, '').trim(); if (a && hubs.indexOf(a) < 0) hubs.push(a); });
+  return { m: hf.m, n: hf.xs.length, mix: mix.slice(0, 4), hubs: hubs.slice(0, 4) };
 }
 function resTrkFacts(route, r, noGeo) {
   var secs = route.sections.slice(0, 12).map(function (sec) {
@@ -225,6 +251,10 @@ function resDetailScreen(route, r, tab, cap) {
   var web = cap >= RES_SHD_CAP, ttl = total + '분 · ' + String(r.a || '') + ' → ' + String(r.b || ''), optName = RES_OPT_NAMES[tab] || '선택한';
   var kids = web ? [] : [{ t: 'bar', pad: [16, 0, 0, 8], title: ttl, btn: '닫기', act: { a: 'call', v: 'rd.close' } }];
   var cum = base, busN = 0, busIdx = {}, exp = [], rows = [];
+  if (cap >= RES_TAGS_CAP && resXferBox) {                          // s217: 홈 카드에서 뺀 '환승 1~N번' 순서가 여기 맨 위로 온다
+    var xb = resXferBox(resArr(route.transfers).slice(0, 8).filter(function (t) { return t; }).map(function (t) { return { kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service }; }), [14, 6, 14, 10]);
+    if (xb) kids.push(xb);
+  }
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // 웹 세부경로 줄(.tdsec-row)과 같은 값: 색 · 아이콘 · 뱃지 · 경유 · 시간대
     sec = sec || {};
@@ -421,7 +451,9 @@ function resultScreen(opt, r) {
   if (r.view === 'detail') return route ? resDetailScreen(route, r, tab, cap) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
-  var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
+  var fuse = cap >= RES_TAGS_CAP && !!route, hfacts = anyRoute ? resHeadFacts(route, r, tab) : null;
+  if (hfacts && fuse) hfacts.cp = 1;                              // 통합 카드: 긴 환승 목록 상자는 빼고 아래 칩 줄 · 세부경로 시트가 맡는다
+  var h = anyRoute ? resPart(cap, 'h', hfacts) : null;
   if (anyRoute && !h) return { ok: false, error: 'head' };
   if (h) nodes = nodes.concat(h.body);
   else nodes = nodes.concat(resNoRouteNodes(data));   // 응답에 쓸 수 있는 경로가 하나도 없을 때 — 왜 없는지(운행 종료 · 노선 데이터 없음 · 그 밖)를 말해 준다
@@ -433,9 +465,11 @@ function resultScreen(opt, r) {
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
+    if (fuse) { var tg = resPart(cap, 'g', resTagFacts(route, hfacts)); if (tg && tg.body.length) nodes = nodes.concat(tg.body); }      // 칩 줄은 노선 타임라인 바로 위
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
+    if (fuse) nodes.push({ t: 'spacer', h: 0, slot: 'ai' });          // 홈 카드의 AI 승무원 브리핑이 합쳐져 들어올 자리(앱이 into:'ai' 카드를 여기로 옮긴다; 못 옮기면 그대로 0 높이)
     if (r.ride && r.ride.on) {
       var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // 웹 routeActRow: 오른쪽에 탑승 → 환승 → 도착 칸(칸의 뜻·전환은 대기 모드 엔진이 정한다)
       var rowKids = [
@@ -459,4 +493,4 @@ function resultScreen(opt, r) {
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop };
+if (typeof module !== 'undefined' && module.exports) module.exports = { resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop, resNmFix: resNmFix };
