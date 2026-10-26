@@ -162,6 +162,15 @@ public class ShellActivity extends Activity {
         hostBody = new Host(1);
         body.setListener(hostBody);
         body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
+        body.setPullHost(new ScreenView.PullHost() {                  // 아래로 당겨 새로고침(YJ: 버스가 계속 안 나올 때 · 스프링처럼 튀어오르며) — 노선도 버스 · 맛집
+            @Override public boolean canPull() { String ct = ShellCore.currentTab(store); return ("map".equals(ct) && "bus".equals(map.mode())) || "food".equals(ct); }
+            @Override public void onPull() {
+                String ct = ShellCore.currentTab(store);
+                ScreenCore.Act a = new ScreenCore.Act();
+                if ("food".equals(ct)) { a.a = "refresh"; foodAct(a); return; }
+                a.a = "call"; a.v = "mp.rf"; hostBody.handle(a, false);              // 위 🔄 단추와 같은 행동
+            }
+        });
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
