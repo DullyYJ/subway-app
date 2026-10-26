@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s232";
+var ENGINE_VERSION = "route-v2-2026-10-26s233";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13753,7 +13753,8 @@ function foodFacts(f) {
   var st = FOOD_STATES.indexOf(f.st) >= 0 ? f.st : (stn ? 'ready' : 'idle');
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '\uc804\uccb4';
   var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
-  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
+  var dst = f.dst === undefined || f.dst === null ? !!stn : (f.dst === 1 || f.dst === true || f.dst === '1');   // \ub3c4\ucc29\uc9c0\uac00 \uc815\ud574\uc84c\ub098 \u2014 \uc571\uc774 \uc548 \uc54c\ub824 \uc8fc\uba74 \ub3c4\ucc29\uc5ed \uc774\ub984\uc774 \uc654\ub294\uc9c0\ub85c \ubcf8\ub2e4
+  return { stn: stn, dst: dst, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
            gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), ctr: foodLL(f.ctr), sel: sel,
            pn: f.pn === 1 || f.pn === true || f.pn === '1', res: (f.res && typeof f.res === 'object' && !Array.isArray(f.res)) ? f.res : {} };
 }
@@ -13786,7 +13787,7 @@ function foodResolve(f) {
   if (f.gps) {
     var best = 1e12, near = null;
     for (i = 0; i < T.length; i++) { s = T[i]; var d = foodHav(f.gps[0], f.gps[1], s[2], s[3]); if (d < best) { best = d; near = s; } }
-    if (near) return { stn: String(near[0]).replace(/\uc5ed$/, ''), ctr: [near[2], near[3]] };
+    if (near) return { stn: String(near[0]).replace(/\uc5ed$/, ''), ctr: f.gps };      // \ub3c4\ucc29\uc9c0\uac00 \uc5c6\uc73c\uba74 '\uc8fc\ubcc0' \u2014 \uc911\uc2ec\uc740 \uac00\uae4c\uc6b4 \uc5ed\uc774 \uc544\ub2c8\ub77c \ub0b4 \uc704\uce58
     return { stn: '', ctr: f.gps };
   }
   return { stn: '', ctr: null };
@@ -13863,20 +13864,23 @@ function foodScreenOf(f, all, allP) {
   cur.forEach(function (p) { seen[foodKey(p.n)] = 1; });
   pub = pub.filter(function (p) { return !seen[foodKey(p.n)]; });
 
-  var label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '\uc5ed \uc778\uadfc' : (f.st === 'locating' ? '\uc704\uce58 \ud655\uc778 \uc911...' : '\ub3c4\ucc29\uc5ed\uc744 \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694');
+  var label;
+  if (f.dst) label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '\uc5ed \uc778\uadfc' : (f.st === 'locating' ? '\uc704\uce58 \ud655\uc778 \uc911...' : '\ub3c4\ucc29\uc5ed\uc744 \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694');
+  else label = f.st === 'locating' ? '\uc704\uce58 \ud655\uc778 \uc911...' : (f.st === 'noperm' ? '\uc704\uce58 \uad8c\ud55c\uc774 \ud544\uc694\ud574\uc694' : '\ub0b4 \uc704\uce58 \uc8fc\ubcc0');
+  var title = f.dst ? '\ud83c\udf7d\ufe0f \ub3c4\ucc29\uc5ed \ub9db\uc9d1' : '\ud83c\udf7d\ufe0f \uc8fc\ubcc0 \ub9db\uc9d1';
   var head = [
-    { t: 'bar', pad: [16, 16, 16, 8], title: '\ud83c\udf7d\ufe0f \ub3c4\ucc29\uc5ed \ub9db\uc9d1', sub: label, btn: '\ud83d\udd04 \uc0c8\ub85c\uace0\uce68', act: { a: 'refresh' } },
+    { t: 'bar', pad: [16, 16, 16, 8], title: title, sub: label, btn: '\ud83d\udd04 \uc0c8\ub85c\uace0\uce68', act: { a: 'refresh' } },
     { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 31, fs: 12, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',      // \uc6f9 .food-chip: 31px \u00b7 12px \u00b7 \ubc14\ud0d5 card2
       items: FOOD_CHIPS.map(function (c) { return { label: (FOOD_CHIP_EMOJI[c] ? FOOD_CHIP_EMOJI[c] + ' ' : '') + c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
   var body = [], go = {};
-  if (f.st === 'idle') body.push(foodMsgN('\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74\n\ub3c4\ucc29\uc5ed \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
+  if (f.st === 'idle') body.push(foodMsgN(f.dst ? '\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74\n\ub3c4\ucc29\uc5ed \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!' : '\ub3c4\ucc29\uc9c0\ub97c \uc124\uc815\ud558\uba74 \ub3c4\ucc29\uc5ed \ub9db\uc9d1\uc744,\n\uc5c6\uc73c\uba74 \ub0b4 \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694!'));
   else if (f.st === 'locating') body.push(foodMsgN('\ub0b4 \uc704\uce58 \ud655\uc778 \uc911...'));
-  else if (f.st === 'noperm') body.push(foodMsgN('\uc704\uce58 \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud558\uac70\ub098\n\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
+  else if (f.st === 'noperm') body.push(foodMsgN(f.dst ? '\uc704\uce58 \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud558\uac70\ub098\n\uacbd\ub85c\ub97c \uc124\uc815\ud558\uba74 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!' : '\uc704\uce58 \uad8c\ud55c\uc744 \ud5c8\uc6a9\ud558\uba74\n\ub0b4 \uc8fc\ubcc0 \ub9db\uc9d1\uc744 \ucd94\ucc9c\ud574\ub4dc\ub824\uc694!'));
   else if (!cur.length && !pub.length) {
-    if (f.st === 'loading') body.push(foodMsgN((f.stn || '\uc774\uacf3') + ' \uc8fc\ubcc0 \uc74c\uc2dd\uc810 \ubd88\ub7ec\uc624\ub294 \uc911...'));
-    else if (f.st === 'none' && !all.length && !allP.length) body.push(foodMsgN((f.stn || '\uc774\uacf3') + '\uc5ed \uc778\uadfc \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694'));
+    if (f.st === 'loading') body.push(foodMsgN((f.dst ? (f.stn || '\uc774\uacf3') : '\ub0b4') + ' \uc8fc\ubcc0 \uc74c\uc2dd\uc810 \ubd88\ub7ec\uc624\ub294 \uc911...'));
+    else if (f.st === 'none' && !all.length && !allP.length) body.push(foodMsgN(f.dst ? (f.stn || '\uc774\uacf3') + '\uc5ed \uc778\uadfc \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694' : '\ub0b4 \uc8fc\ubcc0 \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694'));
     else if (f.fail) body.push(foodMsgN('\ub9db\uc9d1 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.\n\uc7a0\uc2dc \ub4a4 \uc0c8\ub85c\uace0\uce68\uc744 \ub20c\ub7ec\uc8fc\uc138\uc694.'));
     else body.push(foodMsgN('\ud574\ub2f9 \uce74\ud14c\uace0\ub9ac \uc74c\uc2dd\uc810\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.'));
   } else {
@@ -13903,7 +13907,7 @@ function foodPrep(factsIn, itemsIn) {
   return { f: f, stn: rs.stn, ctr: rs.ctr, all: foodList(c, FOOD_MAX_IN_C), allP: foodList(p, FOOD_MAX_IN_P) };
 }
 function foodFactsFor(f, base) {                   // \ud654\uba74 \ud558\ub098\uc5d0 \uc4f8 \uc0ac\uc2e4: \ub3c4\ucc29\uc5ed \uc774\ub984\u00b7\uc88c\ud45c\ub97c \ucc44\uc6b0\uace0 'done' \uc744 ready/none \uc73c\ub85c \uc815\ud55c\ub2e4
-  var o = { stn: base.stn || f.stn, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
+  var o = { stn: base.stn || f.stn, dst: !!f.dst, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
   if (o.st === 'loading' && !base.ctr && o.stn) o.st = 'none';             // \uc88c\ud45c\ub97c \ubabb \uc815\ud558\ub294 \ub3c4\ucc29\uc9c0 \u2014 \uc601\uc601 '\ubd88\ub7ec\uc624\ub294 \uc911'\uc5d0 \uba38\ubb3c\uc9c0 \uc54a\uac8c
   if (o.st === 'done') o.st = (base.all.length || base.allP.length) ? 'ready' : (f.fail ? 'ready' : 'none');
   return o;
@@ -14064,13 +14068,13 @@ function foodPanel(f) {
   var distTxt = s ? foodDist(Math.round(foodHav(s[0], s[1], la, lo))) : '';
   var pts = [{ la: la, lo: lo, k: 'b', n: '\ub3c4\ucc29', l: name }], need = [], line = null, meters = 0;
   if (hasStn) {
-    pts.push({ la: s[0], lo: s[1], k: 'a', n: '\ucd9c\ubc1c', l: (stn || '\ucd9c\ubc1c') + '\uc5ed' });
+    pts.push({ la: s[0], lo: s[1], k: 'a', n: '\ucd9c\ubc1c', l: f.dst ? (stn || '\ucd9c\ubc1c') + '\uc5ed' : '\ub0b4 \uc704\uce58' });
     var rr = foodRouteOf(f.res || {}, s, d);
     if (rr.need) { need.push(rr.need); line = [[s[0], s[1]], d]; }
     else if (rr.pts) { line = foodThin(rr.pts); meters = rr.m || 0; }
     else line = [[s[0], s[1]], d];
   }
-  var foot = '\ud83d\udeb6 ' + (stn ? stn + '\uc5ed \u2192 ' : '') + name + ' \ub3c4\ubcf4 \uacbd\ub85c' + (meters ? ' \u00b7 \uc57d ' + Math.round(meters) + 'm' : '');
+  var foot = '\ud83d\udeb6 ' + (f.dst ? (stn ? stn + '\uc5ed \u2192 ' : '') : (hasStn ? '\ub0b4 \uc704\uce58 \u2192 ' : '')) + name + ' \ub3c4\ubcf4 \uacbd\ub85c' + (meters ? ' \u00b7 \uc57d ' + Math.round(meters) + 'm' : '');
   var map = { t: 'tmap', pad: [0, 0, 0, 0], h: 260, r: 0, pts: pts, fp: 46, fz: 18 };
   if (line) map.line = line;
   var navs = { t: 'row', pad: [8, 12, 12, 12], gap: 8, kids: [
