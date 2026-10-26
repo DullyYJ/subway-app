@@ -334,6 +334,11 @@ public class ShellActivity extends Activity {
         if (rs != null) { rs.setPalette(pal); rsF.setPalette(pal); }
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
+        try {                                                                      // 상태 표시줄은 늘 검정 + 흰 아이콘
+            getWindow().setStatusBarColor(0xFF000000);
+            View dv = getWindow().getDecorView();
+            dv.setSystemUiVisibility(dv.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        } catch (Throwable ignored) { }
     }
 
     // ───────────── 예전(웹뷰) 앱 즐겨찾기 가져오기: 한 번만, 새 앱 즐겨찾기가 비어 있을 때만 ─────────────
