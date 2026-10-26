@@ -219,11 +219,11 @@ public class ScreenView extends View {
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
         mqT0 = SystemClock.uptimeMillis();
-        if (pendSlide != 0) { if (mqT0 - pendSlideAt < 3000L) { slDir = pendSlide; slT0 = mqT0; } pendSlide = 0; }
+        if (pendSlide != 0) { if (mqT0 - pendSlideAt < 3000L) { slDir = pendSlide; slT0 = mqT0; followChip = true; } pendSlide = 0; }      // 밀어서 넘어온 화면이면 위 칩 줄도 켜진 칩을 따라간다
         hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
         cdFresh = true; pendAgeMs = srcAgeMs; srcAgeMs = 0L;
         iconPaths.clear();
-        if (!keepScroll) { scrollY = 0f; scrollX = 0f; openKey = null; ctrDone = null; bandX = 0f; bandSig = ""; }
+        if (!keepScroll) { scrollY = 0f; if (!followChip) scrollX = 0f; openKey = null; ctrDone = null; bandX = 0f; bandSig = ""; }
         boolean touching = mode == 1 || mode == 2 || mode == 8 || mode == 9;
         if (!touching) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }      // 손가락이 닿은 채 오는 8초 갱신이 스크롤을 끊지 않는다(노선 상세만; 그 밖은 예전과 같다)
         else if (before == null || !before.part) { flingY.forceFinished(true); flingX.forceFinished(true); pressed = null; mode = 0; }
@@ -290,6 +290,21 @@ public class ScreenView extends View {
         setText(ScreenCore.FAB_TXT, true, pal[R_ONGOLD]);
         cv.drawText(lay.fabLabel, tx, base(fy, fh, 0), tp);
     }
+    private boolean followChip;
+    /** 밀기로 카테고리가 바뀐 직후: 켜진 칩이 칩 줄 가운데 오게 줄을 부드럽게 옮긴다(웹 scrollIntoView). */
+    private void followOnChip() {
+        followChip = false;
+        if (lay == null || lay.headMaxScroll() <= 0f) return;
+        for (ScreenCore.Item it : lay.head) {
+            if (it.kind != ScreenCore.K_CHIP || !it.on || it.fixed) continue;
+            float target = ScreenCore.clamp(it.x + it.w / 2f - lay.width / 2f, lay.headMaxScroll());
+            if (Math.abs(target - scrollX) < 1f) return;
+            flingX.forceFinished(true); flingBand = false;
+            flingX.startScroll(Math.round(scrollX * dpr), 0, Math.round((target - scrollX) * dpr), 0, 260);
+            invalidate();
+            return;
+        }
+    }
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
@@ -299,6 +314,7 @@ public class ScreenView extends View {
         if (lay.ctrSig.length() == 0) ctrDone = null;
         else if (!lay.ctrSig.equals(ctrDone)) { ctrDone = lay.ctrSig; scrollX = lay.initScrollX; }      // 24시간 차트 내용이 새로 오면 지금 시각 막대를 가운데로
         clampScroll();
+        if (followChip) followOnChip();
         applyFocus();
         markBcards();
         roSync();                                                                         // 주변 정류장 카드 목록을 다시 모은다(새 배치 = 끌던 상태는 끝)
