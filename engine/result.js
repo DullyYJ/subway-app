@@ -465,7 +465,7 @@ function resultScreen(opt, r) {
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
-    if (fuse) { var tg = resPart(cap, 'g', resTagFacts(route, hfacts)); if (tg && tg.body.length) nodes = nodes.concat(tg.body); }      // 칩 줄은 노선 타임라인 바로 위
+    // s218: 칩 줄(part g)은 YJ 요청으로 뺐다 — 환승 횟수·시간은 아래 AI 브리핑 첫 문장이 말로 알려 준다(엔진 part g · tags 노드는 그대로 둔다)
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
