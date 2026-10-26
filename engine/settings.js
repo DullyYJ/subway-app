@@ -78,8 +78,8 @@ function settingsScreen(inp, factsIn) {
   var d1 = settingsBoldN([['아이디를 등록하면 게시글 작성과 실시간 채팅에 참여할 수 있어요.\n아이디 없이도 글과 채팅을 ', 0], ['구경', 1], ['하는 건 자유롭게 가능합니다.', 0]]);
   idKids.push(settingsDescN(d1.s, 14, d1.hl));
   if (f.id) {
-    var cur = settingsBoldN([['현재 아이디  ', 0], [f.id, 1]]);
-    idKids.push({ t: 'box', s: cur.s, hl: cur.hl, size: 14, lh: 1.4, color: 'gold', fill: '#1c1c1e', line: '', tc: 'gold', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
+    var curS = '현재 아이디\n' + f.id;                                                 // 웹 #curIdBox: 작은 글 '현재 아이디' 아래 금색 굵은 아이디(두 줄)
+    idKids.push({ t: 'box', s: curS, hl: [[7, curS.length]], hc: 'gold', size: 13, lh: 1.45, color: 'sub', fill: '#1c1c1e', line: '', tc: 'sub', r: 10, ip: [13, 11, 13, 11], pad: [0, 0, 0, 12] });
   }
   idKids.push({ t: 'field', key: 'cid', hint: '아이디 입력 (2~12자, 한글/영문/숫자)', value: f.id, maxlen: 12, h: 40, size: 14, r: 9, pad: [0, 0, 0, 10] });
   idKids.push({ t: 'button', s: '아이디 저장', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
@@ -101,7 +101,7 @@ function settingsScreen(inp, factsIn) {
     var sd = settingsBoldN([['갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 두면 안전해요.', 0]]);
     sk.push(settingsDescN(sd.s, 8, sd.hl));
     if (f.samw) sk.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-    if (pgHas('sam')) sk.push(settingsNavN('자동 절전 제외 설정 열기', f.samw ? '제한됨' : '', pgAct('sam'), true));
+    if (pgHas('sam')) sk.push({ t: 'button', s: '자동 절전 제외 설정 열기', size: 13, h: 40, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: pgAct('sam') });      // 웹 samSetCard 의 금색 전체 폭 단추
     body.push(settingsPanelN(sk));
   }
 
@@ -111,14 +111,24 @@ function settingsScreen(inp, factsIn) {
     { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
   ]));
 
-  // 6) 웹 카드로 이어지는 기능들(복잡한 입력·시험 도구는 기존 웹 카드를 그대로 연다)
-  var wk = [settingsTitleN('기능 설정', 2), settingsDescN('시간·장소·시험처럼 입력이 많은 설정은 눌러서 열어요.', 4)];
-  if (pgHas('cm')) wk.push(settingsNavN('출퇴근 브리핑 알림', f.cm == null ? '' : (f.cm ? '켜짐' : '꺼짐'), pgAct('cm'), true));
-  if (pgHas('gw')) wk.push(settingsNavN('캐릭터 시계 위젯', '', pgAct('gw'), true));
-  if (pgHas('arr')) wk.push(settingsNavN(f.pgs ? '하차 7분 전 추천 시험' : '하차 5분 전 추천 시험', '', pgAct('arr'), true));
-  if (pgHas('ovl')) wk.push(settingsNavN('다른 앱 위에 표시', f.ovl == null ? '' : (f.ovl ? '켜짐' : '꺼짐'), pgAct('ovl'), true));
-  if (pgHas('dev')) wk.push(settingsNavN('개발자 도구', '', pgAct('dev'), true));
-  if (wk.length > 2) body.push(settingsPanelN(wk));
+  // 6) 웹 설정 탭과 같은 순서의 기능 카드: 출퇴근 브리핑 → 캐릭터 시계 위젯 → 하차 추천 → 다른 앱 위에 표시 → 개발자 도구 (웹은 카드 안에 입력칸을 펼치고, 앱은 카드 아래 줄을 눌러 같은 내용의 하위 화면을 연다)
+  var onTxt = function (v) { return v == null ? '' : (v ? '켜짐' : '꺼짐'); };
+  if (pgHas('cm')) {
+    var cmd = settingsBoldN([['설정한 시각에 ', 0], [f.pgs ? '날씨 + 혼잡도 + 준비물 한마디' : '날씨 + AI 역무원 요약', 1], ['를 알림으로 보내드려요.', 0]]);
+    body.push(settingsPanelN([settingsTitleN('출퇴근 브리핑 알림', 4), settingsDescN(cmd.s, 6, cmd.hl), settingsNavN('시간 · 장소 · 요일 설정', onTxt(f.cm), pgAct('cm'), true)]));
+  }
+  if (pgHas('gw')) body.push(settingsPanelN([settingsTitleN('캐릭터 시계 위젯', 4),
+    settingsDescN('평소엔 캐릭터들이 각자 집에서 자고 있다가, 화면을 켜면 일어나 시계 주변을 돌아다니며 시계에 매달리고 응가도 해요. 출·퇴근 시각이 되면 캐릭터가 모여 응원하고 [출근하기]·[퇴근하기] 버튼이 나와요.', 6),
+    settingsNavN('위젯 추가 · 돌아다니는 시간', '', pgAct('gw'), true)]));
+  if (pgHas('arr')) body.push(settingsPanelN([settingsTitleN(f.pgs ? '하차 7분 전 추천' : '하차 5분 전 추천', 4),
+    settingsDescN(f.pgs ? '도착 7분 전에 시간대별로 보내는 추천이에요. 시험 버튼으로 실제 알림과 같은 내용을 미리 받아 볼 수 있어요.' : '도착 5분 전에 시간대별로 보내는 추천이에요. 시험 버튼으로 실제 알림과 같은 내용을 미리 받아 볼 수 있어요.', 6),
+    settingsNavN('시험 알림 · 상태 확인', '', pgAct('arr'), true)]));
+  if (pgHas('ovl')) body.push(settingsPanelN([settingsTitleN('다른 앱 위에 표시', 4),
+    settingsDescN('다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 안내 정보만 보여주고 광고는 넣지 않아요.', 6),
+    settingsNavN('표시 설정', onTxt(f.ovl), pgAct('ovl'), true)]));
+  if (pgHas('dev')) body.push(settingsPanelN([settingsTitleN('개발자 도구', 4),
+    settingsDescN('오버레이 시나리오 시험 같은 진단 도구예요.', 6),
+    settingsNavN('도구 열기', '', pgAct('dev'), true)]));
 
   // 7) 테마
   var dk = f.th === 'dark';
