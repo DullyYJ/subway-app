@@ -966,6 +966,17 @@ public final class ScreenCore {
             n.act = act(m.get("act"), false);
             n.fill = roleOrCss(m, "fill", n.mine ? "gold" : "card2"); if (n.fill.length() == 0) n.fill = n.mine ? "gold" : "card2";
             n.tc = roleOrCss(m, "tc", n.mine ? "#121214" : "text"); if (n.tc.length() == 0) n.tc = n.mine ? "#121214" : "text";
+        } else if ("tags".equals(t)) {                                                                      // 눌리지 않는 알약 줄(s217 — 환승 횟수 · 이동 수단 · 주요 거점): 칸 폭이 모자라면 다음 줄로 흘러 쓴다
+            pad(m, n); n.gap = optNum(m, "gap", 6f, 0f, 30f); n.h = optNum(m, "h", 24f, 14f, 48f); n.size = optNum(m, "size", 11f, 7f, 20f); n.cpx = optNum(m, "px", 10f, 2f, 30f);
+            for (Object io : asArr(m.get("items"), "tags.items")) {
+                if (n.items.size() >= 12) break;
+                Map<String, Object> im = asObj(io, "tag");
+                Node c = new Node(); c.t = "tag";
+                c.label = optStr(im, "s", "", 40); if (c.label.length() == 0) { sc.skipped++; continue; }
+                c.bold = optBool(im, "b", false); c.fill = roleOrCss(im, "c", ""); c.line = roleOrCss(im, "oc", ""); c.tc = roleOrCss(im, "tc", "");
+                n.items.add(c); sc.nodes++;
+                if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
+            }
         } else if ("divider".equals(t)) {
             pad(m, n); n.line = roleOrCss(m, "c", "");
         } else if ("spacer".equals(t)) {
@@ -1030,7 +1041,7 @@ public final class ScreenCore {
     public static final int SCENE_MAX = 6000;
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47, K_SHD = 48;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47, K_SHD = 48, K_TAGS = 49;
     /** 노선 알약(웹 _linePillHtml): 글자 13 · 좌우 14(숫자 동그라미가 있으면 왼쪽 6) · 동그라미 22 · 동그라미와 글 사이 6 · 높이 27/34. */
     public static final float LP_FS = 13f, LP_NUM_FS = 12f, LP_PADL = 14f, LP_PADR = 14f, LP_PADL_N = 6f, LP_NUM = 22f, LP_NUM_GAP = 6f, LP_H = 27f, LP_H_NUM = 34f;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
@@ -2039,6 +2050,18 @@ public final class ScreenCore {
             it.textX = ox + 13f;
             out.add(it);
             return y + n.h + n.padB;
+        }
+        if ("tags".equals(n.t)) {                                                    // 알약 줄바꿈 배치: 글 폭 + 좌우 여백, 줄이 차면 다음 줄
+            float tx = ox, ty = y, hh = n.h; boolean any = false;
+            for (Node c : n.items) {
+                String lb = c.label; float tw = m.width(lb, n.size, c.bold), w = tw + n.cpx * 2f;
+                if (w > innerW) { lb = ellipsize(lb, Math.max(10f, innerW - n.cpx * 2f), n.size, c.bold, m); w = innerW; }
+                if (tx > ox && tx + w > ox + innerW + 0.5f) { tx = ox; ty += hh + n.gap; }
+                Item it = new Item(); it.kind = K_TAGS; it.x = tx; it.y = ty; it.w = w; it.h = hh; it.label = lb; it.size = n.size; it.bold = c.bold; it.radius = hh / 2f;
+                it.fill = col(c.fill, null); it.line = col(c.line, null); it.tc = col(c.tc, new Col("text", 0));
+                out.add(it); tx += w + n.gap; any = true;
+            }
+            return any ? ty + hh + n.padB : y + n.padB;
         }
         if ("divider".equals(n.t)) {
             Item it = new Item(); it.kind = K_DIV; it.x = ox; it.y = y; it.w = innerW; it.h = 1f; it.line = col(n.line, null);
