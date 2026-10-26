@@ -27,6 +27,8 @@ public final class RideCore {
     public long offAt;
     public int cur = -1, rev = 0;
     public String posJson = "null", arrJson = "null";
+    private int waitI = -1;                                   // 승차 대기 중인 노드 번호(없으면 -1) — 엔진 state.wait
+    private double waitLat, waitLng, lastLat = Double.NaN, lastLng = Double.NaN;      // 대기 중 탑승 지점 · 마지막으로 받은 내 위치(거리 배지용)
     private final List<double[]> fixes = new ArrayList<double[]>();
     private long lastSentTs = 0L, lastFixTs = 0L;
 
@@ -160,7 +162,7 @@ public final class RideCore {
         if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) || (lat == 0 && lng == 0)) return;
         synchronized (fixes) {
             if (ts <= lastFixTs) return;
-            lastFixTs = ts;
+            lastFixTs = ts; lastLat = lat; lastLng = lng;
             fixes.add(new double[] { ts, lat, lng, acc });
             while (fixes.size() > MAX_FIX) fixes.remove(0);
         }
@@ -203,6 +205,13 @@ public final class RideCore {
             Map<String, Object> m = (Map<String, Object>) o;
             if (m.get("error") != null || !(m.get("state") instanceof Map)) return s;
             stateJson = HomeSearchCore.toJson(m.get("state"));
+            Object wo = ((Map<String, Object>) m.get("state")).get("wait");           // 승차 대기: 타임라인 마커를 탑승 지점에 주황 맥박 + '대기 중 · 120m' 로
+            if (wo instanceof Map && ((Map<String, Object>) wo).get("i") instanceof Number) {
+                Map<String, Object> wm = (Map<String, Object>) wo;
+                waitI = ((Number) wm.get("i")).intValue();
+                waitLat = wm.get("lat") instanceof Number ? ((Number) wm.get("lat")).doubleValue() : Double.NaN;
+                waitLng = wm.get("lng") instanceof Number ? ((Number) wm.get("lng")).doubleValue() : Double.NaN;
+            } else waitI = -1;
             synchronized (fixes) {                                   // 보낸 위치는 지운다(그 뒤 들어온 것은 남긴다)
                 for (int i = fixes.size() - 1; i >= 0; i--) if (fixes.get(i)[0] <= lastSentTs) fixes.remove(i);
             }
@@ -306,6 +315,22 @@ public final class RideCore {
         } catch (ScreenCore.ParseError e) { return null; }
     }
 
+    /**
+     * 탑승 전에 받아 둔 추천 글의 '하차 N분 전' · '도착 예정 HH:MM' 을 지금 터진 시점의 값으로 고친다.
+     * 받아 둘 때는 하차까지 한참 남아 있어(N=7 로 박힘) 그대로 띄우면 2분 남았는데도 '7분 전'이라 나오고 도착 시각도 그때의 추정이라 어긋난다.
+     * 가게·메뉴·문구는 그대로. arrMs·nowMs 가 이상하면 글을 그대로 돌려준다.
+     */
+    public static String[] freshenReco(String[] t, long arrMs, long nowMs) {
+        if (t == null || arrMs <= 0L || nowMs <= 0L) return t;
+        long m = Math.round((arrMs - nowMs) / 60000.0);
+        m = Math.max(1L, Math.min(7L, m));
+        long km = ((arrMs / 60000L) + 540L) % 1440L; if (km < 0) km += 1440L;
+        String hm = (km / 60 < 10 ? "0" : "") + (km / 60) + ":" + (km % 60 < 10 ? "0" : "") + (km % 60);
+        String[] o = new String[t.length];
+        for (int i = 0; i < t.length; i++) o[i] = t[i] == null ? null : t[i].replaceAll("하차 \\d+분 전", "하차 " + m + "분 전").replaceAll("도착 예정 \\d{2}:\\d{2}", "도착 예정 " + hm);
+        return o;
+    }
+
     /** 엔진의 진동 무늬 [켜짐, 꺼짐, 켜짐 …](웹 방식) → 안드로이드 무늬 [대기, 켜짐, 꺼짐 …]. 최대 8칸, 한 칸 최대 1초. */
     @SuppressWarnings("unchecked")
     public static long[] vibPattern(Object v) {
@@ -356,7 +381,19 @@ public final class RideCore {
         } catch (ScreenCore.ParseError e) { return ""; }
     }
     /** 결과 카드의 내 위치 { cur, pos, arr } (엔진 r.lv). */
-    public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + "}"; }
+    public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + waitJson() + "}"; }
+    /** 승차 대기 중이면 ,"wait":{"i":노드,"d":탑승 지점까지 m(위치를 모르면 d 없음)} — 아니면 "". */
+    private String waitJson() {
+        if (waitI < 1) return "";
+        String d = "";
+        if (!Double.isNaN(waitLat) && !Double.isNaN(waitLng) && !Double.isNaN(lastLat) && !Double.isNaN(lastLng)) d = ",\"d\":" + Math.round(meters(lastLat, lastLng, waitLat, waitLng));
+        return ",\"wait\":{\"i\":" + waitI + d + "}";
+    }
+    static double meters(double la1, double lo1, double la2, double lo2) {
+        double r = Math.PI / 180.0, dla = (la2 - la1) * r, dlo = (lo2 - lo1) * r;
+        double h = Math.sin(dla / 2) * Math.sin(dla / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dlo / 2) * Math.sin(dlo / 2);
+        return 6371000.0 * 2.0 * Math.atan2(Math.sqrt(h), Math.sqrt(1.0 - h));
+    }
 
     // ═════════════ 저장 · 복원 (서비스가 되살아날 때) ═════════════
     public String save(long nowMs) {
