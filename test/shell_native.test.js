@@ -487,7 +487,7 @@ function findAndroidJar() {
   });
   await t('s184: 오버레이 카드가 화면 높이만큼 늘어나던 문제 — 테두리 뷰는 처음엔 숨기고 재는 동안 크기를 갖지 않는다', () => {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8');
-    assert.ok(/Border\(Context c\) \{ super\(c\);[^\n]*setVisibility\(View\.GONE\)/.test(o) && /MeasureSpec\.getMode\(ws\) == MeasureSpec\.EXACTLY \? MeasureSpec\.getSize\(ws\) : 0/.test(o), '테두리 뷰: 처음 숨김 + 재는 동안 0');
+    assert.ok(/Border\(Context c\) \{\s*super\(c\);[^\n]*setVisibility\(View\.GONE\)/.test(o) && /MeasureSpec\.getMode\(ws\) == MeasureSpec\.EXACTLY \? MeasureSpec\.getSize\(ws\) : 0/.test(o), '테두리 뷰: 처음 숨김 + 재는 동안 0');
   });
   await t('s185: 탑승 시트 웹 숫자 맞춤 — 시트(탭 아래·탭이 같이 올라감) / 떠 있는 알약·되돌리기(탭 위) 두 뷰 · 0.46초 곡선 · 줄어들며 사라짐 · 끌어내리기', () => {
     const v = fs.readFileSync(N('RsSheetView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), c = fs.readFileSync(N('RsCore.java'), 'utf8');
@@ -742,6 +742,16 @@ function findAndroidJar() {
     assert.ok(/CHAT_BG_MS = 20000L/.test(a) && /private void chatBgSweep\(\)/.test(a) && /chatSels = new ArrayList<String>\(sels\)/.test(a) && /chatBgStart\(\); setupResume/.test(a) && /removeCallbacks\(chatBg\)/.test(a), '모든 방 20초 주기 갱신(켤 때 방 목록 · onResume 시작 · 끝낼 때 정리)');
     assert.ok(/if \(chatShown && sel\.equals\(liveSel\)\) continue;/.test(a) && /cacheAge\(key\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(pfChatB\)/.test(a) && /warm\(txt\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 미리 읽기');
     assert.ok(/"food"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /\(si\[0\] - dir\) % n \+ n\) % n/.test(a) && /"food"\.equals\(ct\)/.test(a), '맛집 탭: 좌우 밀기 = 카테고리 칩 끝없이(끝에서 반대쪽 끝으로)');
+  });
+  await t('s237: 경고 테두리는 카드 모양을 그대로 두고 빛만 둘레를 따라 달린다 · 추천 버튼 글은 엔진 값 · 앱 종료 줄 3분/자동 종료 5분은 엔진 · 추천은 받아 둔 글이 없으면 바로 받는다', () => {
+    const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), ov = fs.readFileSync(N('OvCore.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
+    const b = o.slice(o.indexOf('private final class Border'), o.indexOf('private static boolean hit('));
+    assert.ok(!/cv\.rotate|SweepGradient|setShader/.test(b), '카드(테두리)를 돌리지 않는다');
+    assert.ok(/PathMeasure/.test(b) && /OvCore\.ringAlpha\(pos, head\)/.test(b) && /ValueAnimator\.ofFloat\(0f, 1f\)/.test(b) && /OvCore\.spinMs\(m\)/.test(b), '둘레 조각 길 + 빛 위치(head)만 움직인다');
+    assert.ok(!/new (Path|RectF|Paint|android\.graphics\.Path)/.test(b.slice(b.indexOf('protected void onDraw'))), '그릴 때 새 객체 없음');
+    assert.ok(/public static double glow\(/.test(ov) && /public static double ringAlpha\(/.test(ov));
+    assert.ok(/BoardCore\.s\(ad\.get\("go"\), 8\)/.test(rc) && /length\(\) == 0\) r\.go = shop/.test(rc), '버튼 글은 엔진이 준 값(없으면 예전 이름)');
+    assert.ok(/recoLive/.test(rs) && /RecoNotify\.send\(app, body, core\)/.test(rs), '추천: 받아 둔 글이 없으면 바로 받는다');
   });
   await t('s236: 좌우 밀기가 막히지 않고 부드럽게(손가락 1:1 · 빠른 쓸기 · 비스듬히 시작해도 가로로 전환 · 스프링 복귀) · 아래로 당겨 새로고침(스프링)', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
