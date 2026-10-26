@@ -35,7 +35,7 @@ ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t 
   ok(f25.ok && f25.body.map(n => n.t).join() === 'panel,sec,panel,panel' && f25.body[0].into === 'ai' && !f25.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '통합: AI 카드가 맨 앞 · into:ai · 제목줄 없음');
   ok(!flat(f25.body[0].kids).some(n => n.t === 'aih'), 's218: 통합 카드의 AI 부분에는 제목줄(브리핑 · 카운트다운 · 새로고침)이 없다');
   const t25 = txt(f25.body[0].kids);
-  ok(/^환승은 없고 도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && /부평에서 .*1호선.*한 번에 가시면 돼요/.test(t25) && !/5분마다/.test(t25), '통합: 환승 · 도착 · 총 시간 한 문장 + 경로를 말로(맺음말 없음) — ' + t25.replace(/\n/g, ' / '));
+  ok(/^환승은 없고 도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && /부평에서 .*1호선을 타고 강남에서 내려요\./.test(t25) && !/5분마다/.test(t25), '통합: 환승 · 도착 · 총 시간 한 문장 + 경로를 말로(맺음말 없음) — ' + t25.replace(/\n/g, ' / '));
   ok(f24.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && !f24.body.some(n => n.into) && /부평 → 강남 · 남은시간: 24분/.test(flat(f24.body).find(n => n.t === 'aih').s), '규격 24 이하는 예전 모양 그대로');
   const noRoute = E.hcardsScreen({ cap: 25 }, base({ r: null, gps: [37.5, 127.0] }));
   ok(noRoute.ok && !noRoute.body.some(n => n.into) && noRoute.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '경로가 없으면 합칠 곳이 없어 예전 모양');
@@ -155,11 +155,11 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
     ok(r2.status === 400, '워커: cap 부족은 400');
     // 날씨: Worker 가 /weather 를 받아 f.wx 로 넣어 준다(받은 주소 · 값 확인)
     const realFetch = globalThis.fetch, asked = [];
-    globalThis.fetch = async (u) => { asked.push(String(u)); return /\/weather\?/.test(String(u)) ? new Response(JSON.stringify({ ok: true, temp: -3, txt: '눈', rain: 80 }), { headers: { 'content-type': 'application/json' } }) : realFetch(u); };
+    globalThis.fetch = async (u) => { asked.push(String(u)); return /api\.open-meteo\.com/.test(String(u)) ? new Response(JSON.stringify({ current: { time: '2026-10-26T09:00', temperature_2m: -3, weather_code: 71 }, hourly: { time: ['2026-10-26T09:00'], precipitation_probability: [80] }, daily: {} }), { headers: { 'content-type': 'application/json' } }) : realFetch(u); };
     try {
       const r3 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base({ gps: [37.5, 127.0] }) }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } });
       const j3 = await r3.json();
-      ok(r3.status === 200 && /-3도/.test(JSON.stringify(j3.body)) && asked.filter(u => /\/weather\?/.test(u)).length === 2, '워커: 두 지점 날씨를 받아 AI 글에 넣는다: ' + asked.filter(u => /weather/.test(u)).join(' '));
+      ok(r3.status === 200 && /-3도/.test(JSON.stringify(j3.body)) && asked.filter(u => /api\.open-meteo\.com/.test(u)).length === 2, '워커: 두 지점 날씨를 Open-Meteo 에서 직접 받아 AI 글에 넣는다: ' + asked.filter(u => /meteo/.test(u)).join(' '));
     } finally { globalThis.fetch = realFetch; }
   } catch (e) { fail++; console.log('  FAIL 워커 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
