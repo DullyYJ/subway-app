@@ -43,7 +43,7 @@ public class RideService extends Service {
     static volatile String endReason = "";
     static volatile String liveOffStn = "";                  // s229: 이탈 때 첫 지하철역 이름(없으면 "")
     static volatile long liveOff = 0L;                       // 엔진이 알린 이탈 시작 시각(없으면 0)
-    static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
+    static volatile String liveRide = "", liveLv = "", liveScene = "", livePos = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
     static volatile OvCore.Ov liveOv;                        // 앱 탑승 시트(RsSheetView)가 그릴 엔진 값(overlay.rs 포함)
     /** 앱 화면이 보이는 동안(ShellActivity onResume~onStop)은 오버레이 창을 숨긴다 — 오버레이는 앱을 내렸을 때만 뜬다(웹 OverlayPlugin 과 같다). 앱 안에서는 탑승 시트·경로 카드가 같은 줄을 그린다. */
@@ -99,7 +99,7 @@ public class RideService extends Service {
     static void stop(Context c) {
         endReason = "user";
         clearSaved(c);
-        running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -239,7 +239,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveOff = core.offAt; liveOffStn = core.offStn; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
+        liveOff = core.offAt; liveOffStn = core.offStn; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); livePos = core.posJson; liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -249,7 +249,7 @@ public class RideService extends Service {
         if (ov != null) ov.hide();
         if (legit) clearSaved(this);                                                          // 사용자가 끝냈거나 도착했다 — 저장본을 지운다. 뜻밖의 끝은 남겨 두어 앱이 다시 켠다
         else { try { ErrLog.record(this, new IllegalStateException("RIDE_END " + reason), false); } catch (Throwable ignored) { } }
-        liveOff = 0L; liveOffStn = ""; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        liveOff = 0L; liveOffStn = ""; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();
