@@ -128,6 +128,9 @@ const web = new Function(
   const base = { m: 293, a: '서울', b: '부산_부산', xs };
   const hOld = E.rheadScreen({ cap: 25, part: 'h' }, base), hCp = E.rheadScreen({ cap: 25, part: 'h' }, Object.assign({ cp: 1 }, base));
   ok(hOld.body.some(n => n.t === 'box' && /^환승 2번/.test(n.s)) && !hCp.body.some(n => n.t === 'box'), 'cp 가 있으면 환승 1~N번 상자를 뺀다(없으면 예전 그대로)');
+  const dxo = { dx: [{ s: '대림', dc: '1', dd: '1', bc: '7', bd: '4', to: '2', secs: 300 }], ex: { s: '구로디지털단지', l: [{ fac: '엘리베이터', door: '3-4' }] } };
+  const dOld = E.rheadScreen({ cap: 25, part: 'h' }, Object.assign({}, base, dxo)), dCp = E.rheadScreen({ cap: 25, part: 'h' }, Object.assign({ cp: 1 }, base, dxo));
+  ok(dOld.body.some(n => /호차/.test(n.s || '')) && !dCp.body.some(n => /호차|문이 가까워요/.test(n.s || '')), 's219: 통합 카드(cp) 머리에는 호차·문 줄이 없다(세부경로 시트로 이동) · 예전 모양은 그대로');
   ok(hCp.body[0].s === '서울 → 부산', "머리줄 이름의 '부산_부산' 정리");
   const g = E.rheadScreen({ cap: 25, part: 'g' }, { m: 293, n: 5, mix: ['KTX', '지하철'], hubs: ['부평', '구로_구로', '광명', '부산', '부평', '서울'] });
   const tg = g.body[0];
