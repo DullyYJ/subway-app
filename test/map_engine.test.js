@@ -53,6 +53,25 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(q.info.find.name === '부평' && q.info.near.name === '강남', '머리줄 응답에 찾을 역·가까운 역');
 }
 
+// ③-2 수도권 / 지방 자료 분리(s239: 죽전 등 12개 역이 지방 좌표를 달고 있어 지도에서 눌러도 지방이 나왔다)
+{
+  const T = require('../engine/home-stations').HOME_STNS, bad = [], byXY = {};
+  T.forEach(r => {
+    const rg = E.mapRegionOfLine(r[1]), k = r[2] + ',' + r[3];
+    if (rg === 'seoul' && !(r[2] > 36.7 && r[2] < 38.2 && r[3] > 126.3 && r[3] < 127.9)) bad.push(r[0] + '/' + r[1]);
+    (byXY[k] = byXY[k] || {})[rg] = 1;
+  });
+  ok(bad.length === 0, '수도권 역은 수도권 좌표 안에 있다 ' + bad.join());
+  const mix = Object.keys(byXY).filter(k => Object.keys(byXY[k]).length > 1);
+  ok(mix.length === 0, '같은 좌표를 수도권과 지방이 함께 쓰지 않는다 ' + mix.join(' '));
+  const jj = call({ part: 'stn', stn: '죽전', reg: 'seoul' });
+  ok(jj.info.lines.join() === '수인분당선' && jj.info.pick.line === '수인분당선' && Math.abs(jj.info.pick.la - 37.32) < 0.1 && Math.abs(jj.info.pick.lo - 127.1) < 0.1, '수도권 죽전 = 수인분당선 · 용인 좌표 ' + jj.info.pick.la);
+  const jd = call({ part: 'stn', stn: '죽전', reg: 'daegu' });
+  ok(jd.info.lines.join() === '대구2호선' && jd.info.pick.la < 36, '대구 죽전 = 대구2호선 · 대구 좌표');
+  const jn = call({ part: 'stn', stn: '죽전', sl: '수인분당선' });
+  ok(jn.info.pick.la > 37, '노선 힌트가 오면 그 노선 좌표');
+}
+
 // ④ 역 팝업
 {
   const s = call({ part: 'stn', stn: ' 강 남 ', th: 'dark' });
