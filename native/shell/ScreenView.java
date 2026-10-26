@@ -1907,6 +1907,7 @@ public class ScreenView extends View {
     private void drawItem0(Canvas cv, ScreenCore.Item it) {
         switch (it.kind) {
             case ScreenCore.K_CHIP: drawChip(cv, it); break;
+            case ScreenCore.K_TAGS: drawTags(cv, it); break;
             case ScreenCore.K_CARD: drawCard(cv, it); break;
             case ScreenCore.K_TEXT: drawTextBlock(cv, it); break;
             case ScreenCore.K_BUTTON: drawButton(cv, it); break;
@@ -1956,6 +1957,22 @@ public class ScreenView extends View {
             case ScreenCore.K_BCARD: drawBcardRo(cv, it); break;
             default: break;
         }
+    }
+
+    private void drawTags(Canvas cv, ScreenCore.Item it) {                          // 눌리지 않는 알약(바탕 · 테두리 · 글자 모두 엔진이 정한다)
+        float rad = it.radius;
+        rf.set(it.x, it.y, it.x + it.w, it.y + it.h);
+        if (it.fill != null) { p.setStyle(Paint.Style.FILL); p.setColor(cc(it.fill, 0)); cv.drawRoundRect(rf, rad, rad, p); }
+        if (it.line != null) {
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(cc(it.line, 0));
+            rf2.set(it.x + 0.5f, it.y + 0.5f, it.x + it.w - 0.5f, it.y + it.h - 0.5f);
+            cv.drawRoundRect(rf2, rad - 0.5f, rad - 0.5f, p);
+            p.setStyle(Paint.Style.FILL);
+        }
+        setText(it.size, it.bold, it.tc != null ? cc(it.tc, 0) : pal[R_TEXT]);
+        tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
+        tp.setTextAlign(Paint.Align.LEFT);
     }
 
     private void drawChip(Canvas cv, ScreenCore.Item it) {
