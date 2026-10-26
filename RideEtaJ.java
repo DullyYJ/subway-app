@@ -34,7 +34,7 @@ final class RideEtaJ {
         stopDwellSec = 30, markerDwellSec = 30, arriveEarlySec = 5, posSegCount = 80,
         overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
-        boardMaxWaitMin = 30, planSecOffset = 50;
+        boardMaxWaitMin = 30, planSecOffset = 50, holdAfterStops = 3;
     static final boolean burstRamp = true, arriveEarlyAfterZero = true;
     static final String rounding = "floor", overdueMode = "clamp";
 
@@ -161,11 +161,32 @@ final class RideEtaJ {
             if (pos < 0) pos = idxs.size() - 1;
             f = idxs.get(pos);
         }
+        // s231: 도착 확정 없이 건너뛰지 않는다 — 승차 구간 3정거장 뒤부터는 통과 증거(gps·move·pf)가 없는 정류장에서 멈춰 기다린다
+        int holdK = -1, cf = -1, ttF = f;
+        if (holdAfterStops > 0) {
+            for (i = 0; i < ps.size(); i++) {
+                Object P0 = ps.get(i); String sr0 = truthy(g(P0, "src")) ? str(g(P0, "src")) : ""; double pi0 = gn(P0, "idx");
+                if (("gps".equals(sr0) || "move".equals(sr0) || "pf".equals(sr0)) && fin(pi0) && pi0 > cf) cf = (int) pi0;
+            }
+            for (k = 1; k < idxs.size(); k++) {
+                int nI = idxs.get(k); if (nI <= cf || legPos(nodes, nI) < holdAfterStops) continue;
+                if (eff.at(k) <= nowMs || pos >= k) holdK = k;
+                break;
+            }
+            if (holdK >= 1) { if (pos >= holdK) { pos = holdK - 1; f = idxs.get(pos); } else if (pos < holdK - 1) holdK = -1; }
+        }
         if (pos >= idxs.size() - 1) return obj("from", f, "to", f, "t0", null, "t1", null, "ratio", 0, "moving", Boolean.FALSE, "floor", fl, "segs", new ArrayList<Object>());
         int t = idxs.get(pos + 1);
         double t0 = eff.at(pos) + dwMs(nodes, idxs.get(pos)), t1 = eff.at(pos + 1);
         if (!(t1 - t0 >= 5000)) t0 = eff.at(pos);
         double ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
+        if (holdK >= 1 && pos == holdK - 1) {       // 기다리는 동안: 닿을 시각을 '지금 + 여유'로 두어 정류장 가까이까지만 간다
+            t1 = Math.max(t1, nowMs + Math.max(20000, 0.1 * Math.max(0, nowMs - t0)));
+            ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
+            List<Object> hs = new ArrayList<Object>();
+            hs.add(obj("from", f, "to", t, "a", d(eff.at(pos)), "t0", d(t0), "t1", d(t1)));
+            return obj("from", f, "to", t, "t0", d(t0), "t1", d(t1), "ratio", d(round(ratio * 1000) / 1000), "moving", ratio > 0 && ratio < 1, "floor", fl, "hold", t, "ttFrom", ttF, "segs", hs);
+        }
         List<Object> segs = new ArrayList<Object>();
         int lim = (int) Math.min(idxs.size() - 1, pos + posSegCount);
         for (int q = pos; q < lim; q++) {
@@ -174,6 +195,15 @@ final class RideEtaJ {
             segs.add(obj("from", fa, "to", fb, "a", d(eff.at(q)), "t0", d(s0), "t1", d(s1)));
         }
         return obj("from", f, "to", t, "t0", d(t0), "t1", d(t1), "ratio", d(round(ratio * 1000) / 1000), "moving", ratio > 0 && ratio < 1, "floor", fl, "segs", segs);
+    }
+    /** 같은 노선·같은 종류의 이어진 정차 노드에서 이 노드가 승차역 뒤 몇 번째인가(승차역 = 0) — ride-eta _reLegPos */
+    static int legPos(List<Object> nodes, int n) {
+        int c = 0, j = n; Object nd = n < nodes.size() ? nodes.get(n) : null;
+        while (j > 0) {
+            Object pv = nodes.get(j - 1);
+            if (isTransit(pv) && isTransit(nd) && truthy(g(pv, "isBus")) == truthy(g(nd, "isBus")) && lineOf(pv).equals(lineOf(nd))) { c++; j--; } else break;
+        }
+        return c;
     }
     private static final class Eff {
         final double[] out; final List<Integer> ix; final int last, zeroF; final double earlyF;
