@@ -10,6 +10,7 @@ public final class NetPost {
     /** 결과: status(-1 이면 보내지 못함) · body · err. */
     public static final class Res {
         public final int status; public final String body, err;
+        public int retryS = 0;                                       // 서버가 Retry-After 로 알려 준 초(429 · 503 일 때만 · 없으면 0)
         public final String etag; public final int maxAge;          // 엔진이 준 ETag · Cache-Control max-age(초) — 앱은 그대로 따른다(없으면 "" · 0)
         Res(int s, String b, String e) { this(s, b, e, "", 0); }
         Res(int s, String b, String e, String tag, int ma) { status = s; body = b; err = e; etag = tag == null ? "" : tag; maxAge = ma; }
@@ -147,8 +148,36 @@ public final class NetPost {
         return r;
     }
 
+    // ── API 남용 방어(s226) ──
+    // ① 설치할 때 한 번 만든 무작위 번호를 모든 요청에 실어 보낸다(X-Gdm-Id) — 서버가 '기기 하나'씩 따로 세어, 이동통신 공유 IP 뒤의 다른 사용자가 서로의 한도를 갉아먹지 않는다(개인 정보 아님 · 무작위 글자).
+    // ② 서버가 429(너무 잦음) · 503(잠깐 붐빔)을 주면 사용자는 모르게 한 번만 다시 보낸다(Retry-After 가 3초 이하일 때만 · 약간 흩뜨려서). 오래 차단 중이면(수십 초) 기다리지 않고 그대로 돌려준다.
+    public static volatile String iid = "";
+    private static final java.util.Random JIT = new java.util.Random();
+    /** 서버 Retry-After 글자(초)를 읽는다. 없거나 엉터리면 0. */
+    public static int parseRetryAfter(String v) {
+        if (v == null) return 0;
+        v = v.trim();
+        if (v.length() == 0 || v.length() > 4) return 0;
+        int n = 0;
+        for (int i = 0; i < v.length(); i++) { char ch = v.charAt(i); if (ch < '0' || ch > '9') return 0; n = n * 10 + (ch - '0'); }
+        return n;
+    }
+    /** 다시 보낼 만한 응답인가(429 · 503 이고 서버가 3초 이하로 기다리라 한 것). */
+    public static boolean retryable(int status, int retryS) { return (status == 429 || status == 503) && retryS >= 0 && retryS <= 3; }
+    /** 무작위 번호가 쓸 수 있는 모양인가(영문·숫자·_- 8~48자 — 서버 gdIid 와 같다). */
+    public static boolean iidOk(String s) { return s != null && s.matches("[A-Za-z0-9_-]{8,48}"); }
+
     private static Res send(String method, String url, String body, double timeoutMs) { return send(method, url, body, timeoutMs, ""); }
     private static Res send(String method, String url, String body, double timeoutMs, String etag) {
+        Res r = sendOnce(method, url, body, timeoutMs, etag);
+        if (retryable(r.status, r.retryS)) {
+            try { Thread.sleep(Math.max(300L, r.retryS * 1000L) + (long) JIT.nextInt(400)); } catch (InterruptedException ie) { return r; }
+            Res r2 = sendOnce(method, url, body, timeoutMs, etag);
+            return r2;
+        }
+        return r;
+    }
+    private static Res sendOnce(String method, String url, String body, double timeoutMs, String etag) {
         if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
         int to = ScreenCore.netTimeout(timeoutMs);
         java.net.HttpURLConnection c = null;
@@ -159,6 +188,7 @@ public final class NetPost {
             c.setInstanceFollowRedirects(false);
             c.setRequestMethod(method);
             if (etag != null && etag.length() > 0 && etag.length() < 100) c.setRequestProperty("If-None-Match", etag);
+            String id = iid; if (id != null && id.length() > 0) c.setRequestProperty("X-Gdm-Id", id);
             if (body != null) {
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "text/plain;charset=UTF-8");
@@ -175,7 +205,9 @@ public final class NetPost {
                 is.close();
             }
             reuse = true;
-            return new Res(code, bo.toString("UTF-8"), "", tag, ma);
+            Res out = new Res(code, bo.toString("UTF-8"), "", tag, ma);
+            if (code == 429 || code == 503) out.retryS = parseRetryAfter(c.getHeaderField("Retry-After"));
+            return out;
         } catch (Throwable t) {
             return new Res(-1, "", "net: " + String.valueOf(t.getMessage()));
         } finally { if (c != null && !reuse) c.disconnect(); }
