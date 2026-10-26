@@ -848,6 +848,24 @@ public class ScreenJvmTest {
             boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"chips\",\"offf\":\"not-a-color\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"); } catch (Exception ex) { threw = true; } ok(threw, "chips: 읽을 수 없는 offf 는 거부");
         }
 
+        // ── tags(s217): 눌리지 않는 알약 줄 — 가로로 나란히, 폭이 모자라면 다음 줄로, 누름 자리 없음 ──
+        {
+            String tgJ = "{\"t\":\"tags\",\"pad\":[0,2,0,10],\"gap\":6,\"h\":24,\"size\":11,\"px\":10,\"items\":["
+                + "{\"s\":\"환승 5회\",\"b\":true,\"c\":\"rgba(255,159,10,0.14)\",\"oc\":\"rgba(255,159,10,0.45)\",\"tc\":\"gold\"},{\"s\":\"KTX + 지하철\",\"b\":true,\"c\":\"card2\",\"oc\":\"border\",\"tc\":\"text\"},"
+                + "{\"s\":\"부평\",\"c\":\"card2\",\"oc\":\"border\",\"tc\":\"sub\"},{\"s\":\"구로\"},{\"s\":\"광명\"},{\"s\":\"\"}]}";
+            ScreenCore.Screen tgS = ScreenCore.load(wrapBody(tgJ));
+            ScreenCore.Layout tgL = ScreenCore.layout(tgS, 360f, M);
+            java.util.List<ScreenCore.Item> tgI = new java.util.ArrayList<ScreenCore.Item>();
+            for (ScreenCore.Item it : tgL.body) if (it.kind == ScreenCore.K_TAGS) tgI.add(it);
+            ok(tgI.size() == 5 && tgS.skipped == 1, "tags: 알약 다섯 개(빈 글은 건너뜀)");
+            ok(tgI.get(0).fill != null && tgI.get(0).line != null && tgI.get(0).bold && !tgI.get(3).bold && near(tgI.get(0).h, 24f) && near(tgI.get(0).radius, 12f), "tags: 바탕 · 테두리 · 굵기 · 둥근 끝");
+            ok(near(tgI.get(0).w, M.width("환승 5회", 11f, true) + 20f) && near(tgI.get(1).x, tgI.get(0).x + tgI.get(0).w + 6f) && near(tgI.get(0).y, tgI.get(1).y), "tags: 글 폭 + 좌우 10, 사이 6, 같은 줄");
+            ScreenCore.Layout tgLN = ScreenCore.layout(tgS, 120f, M);
+            float y0 = -1f, y1 = -1f; for (ScreenCore.Item it : tgLN.body) if (it.kind == ScreenCore.K_TAGS) { if (y0 < 0f) y0 = it.y; y1 = it.y; }
+            ok(y1 >= y0 + 24f + 6f - 0.02f, "tags: 폭이 모자라면 다음 줄로 흐른다");
+            ok(tgI.get(0).act == null, "tags: 눌러도 아무 행동 없음");
+        }
+
         // ── 홈 웹 치수 노드(sec · trow · panel lb · inbar bpx/ifill/inh · divider c · scene fit · ltr fo) ──
         {
             String H = "{\"ok\":true,\"v\":1,\"screen\":\"hw\",\"head\":[],\"body\":[";
