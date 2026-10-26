@@ -147,14 +147,25 @@ public class ScreenView extends View {
     //    무엇으로 넘길지는 엔진이 준 칩(탭 · 카테고리 · 호선)의 순서와 켜진 칸으로 앱 쪽 SwipeHost 가 정한다. 여기서는 몸짓을 알아보고 넘어갈 때 본문이 옆에서 미끄러져 들어오는 그림만 그린다.
     public interface SwipeHost { boolean onSwipe(ScreenView v, int dir); /** 지금 이 화면이 좌우 밀기를 쓰는 화면인가(아니면 세로 스크롤을 가로채지 않는다). */ boolean canSwipe(); }
     private SwipeHost swipeHost;
-    private float swX0, swY0; private long swT0; private boolean swBlock, swOff;
+    private float swX0, swY0, swScroll0; private long swT0; private boolean swBlock, swOff, swCan;
     private float swShift, swRelFrom; private long swRelT, swHold;                      // 가로로 밀 때 본문이 손가락을 따라 움직인 거리(dp) · 뗀 뒤 되돌아오는 그림
     private int pendSlide; private long pendSlideAt, slT0; private int slDir;
-    private static final float SW_MIN_DP = 32f, SW_OFF_DP = 80f; private static final long SW_MAX_MS = 1200L, SLIDE_MS = 340L;
-    private static final float SW_DRAG_DP = 36f, SW_LOCK = 1.25f; private static final long SW_BACK_MS = 180L;          // 따라 움직이는 최대 36dp · 가로가 세로의 1.25배 넘으면 가로로 잠근다(그 뒤로는 위아래로 안 흔들린다)
-    private static final float SLIDE_DP = 24f;                                         // 웹 ltSlideInLeft/Right: 24px 옆에서 + 투명→불투명 0.34초 cubic-bezier(.22,.8,.3,1)
+    private static final float SW_MIN_DP = 32f, SW_OFF_DP = 80f, SW_FLING_DP = 520f, SW_FLING_MIN_DP = 10f, SW_LOCK_SW = 1.0f, SW_RECOVER_DP = 36f; private static final long SW_MAX_MS = 1200L, SLIDE_MS = 380L;
+    private static final float SW_DRAG_DP = 88f, SW_LOCK = 1.25f; private static final long SW_BACK_MS = 420L;          // 손가락을 거의 그대로 따라가다(고무줄처럼 88dp 까지) 놓으면 스프링으로 제자리 · 가로가 세로 이상이면 바로 가로로 잠근다(s236)          // 따라 움직이는 최대 36dp · 가로가 세로의 1.25배 넘으면 가로로 잠근다(그 뒤로는 위아래로 안 흔들린다)
+    private static final float SLIDE_DP = 56f;                                         // 웹 ltSlideInLeft/Right: 24px 옆에서 + 투명→불투명 0.34초 cubic-bezier(.22,.8,.3,1)
     private static android.view.animation.PathInterpolator slideEase;
     public void setSwipeHost(SwipeHost h) { swipeHost = h; }
+    // ── 아래로 당겨 새로고침(s236): 맨 위에서 아래로 당기면 목록이 고무줄처럼 늘어나고, 놓으면 스프링으로 튀어 오르며 새로고침한다 ──
+    public interface PullHost { boolean canPull(); void onPull(); }
+    private PullHost pullHost;
+    public void setPullHost(PullHost h) { pullHost = h; }
+    private float pullY, pullFrom; private long pullRelT; private boolean pullAllowed;
+    private static final float PULL_TRIG = 64f, PULL_MAX = 150f;
+    /** 감쇠 스프링 응답: 1(처음) → 0(제자리)을 넘나들다 가라앉는다. t 초, zeta 감쇠비, w0 각진동수. */
+    static float springF(float t, float zeta, float w0) {
+        float wd = w0 * (float) Math.sqrt(1f - zeta * zeta), a = zeta * w0;
+        return (float) (Math.exp(-a * t) * (Math.cos(wd * t) + (a / wd) * Math.sin(wd * t)));
+    }
     /** 다음에 오는 새 화면은 dir 쪽으로 밀어서 넘어온 것이다(dir -1 = 왼쪽으로 밀어 다음 칸 → 새 내용은 오른쪽에서 들어온다). 3초 안에 안 오면 잊는다. */
     public void slideNext(int dir) { pendSlide = dir; pendSlideAt = SystemClock.uptimeMillis(); }
     /** 머리 줄(chips)의 칩 행동들과 켜진 칸 번호(onOut[0], 없으면 -1). */
@@ -419,8 +430,9 @@ public class ScreenView extends View {
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
                 pgHit = pagerAt(x, y);
-                swX0 = x; swY0 = y; swT0 = downT; swOff = false;
-                swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || (pressed != null && (pressed.kind == ScreenCore.K_BUTTON || pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
+                swX0 = x; swY0 = y; swT0 = downT; swOff = false; swScroll0 = scrollY; swCan = swipeHost != null && swipeHost.canSwipe();
+                pullAllowed = pullHost != null && lay != null && lay.footH <= 0f && !inHead && !inBand && pullHost.canPull(); if (pullRelT > 0L && mode != 1) { pullRelT = 0L; pullY = 0f; }
+                swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || (pressed != null && (pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
                 invalidate();
                 return true;
             }
@@ -440,7 +452,7 @@ public class ScreenView extends View {
                         pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         float adx = Math.abs(x - downX), ady = Math.abs(y - downY);
                         if (pgHit != null && adx > ady * SW_LOCK) { mode = 10; pgDragOn = true; pgDownPos = pgPos; pgLast = SystemClock.uptimeMillis(); lastX = x; blurInput(); invalidate(); return true; }          // 두 쪽 카드를 가로로 밀기 시작
-                        if (swipeHost != null && !swBlock && !swOff && !inHead && !inFoot && !inBand && adx > ady * SW_LOCK && swipeHost.canSwipe()) { mode = 9; swShift = 0f; swRelT = 0L; lastX = x; blurInput(); invalidate(); return true; }          // 가로로 밀기 시작 — 가로로 잠가 세로 스크롤을 멈춘다(비스듬히 밀어도 목록이 흔들리지 않게)
+                        if (swipeHost != null && !swBlock && !swOff && !inHead && !inFoot && !inBand && adx > ady * SW_LOCK_SW && swCan) { mode = 9; swShift = 0f; swRelT = 0L; lastX = x; blurInput(); invalidate(); return true; }          // 가로로 밀기 시작 — 가로로 잠가 세로 스크롤을 멈춘다(비스듬히 밀어도 목록이 흔들리지 않게)
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
                         if (mode == 1 && inBand && Math.abs(x - downX) > Math.abs(y - downY)) mode = 8;          // 타임라인 줄은 가로로 밀면 그 줄만 민다(세로로 쓸면 목록)
@@ -454,10 +466,21 @@ public class ScreenView extends View {
                 if (mode == 9) {                                                                  // 가로로 잠긴 몸짓: 본문은 손가락을 반쯤 따라 움직이기만 한다(세로 스크롤 없음)
                     float ax9 = Math.abs(x - swX0), ay9 = Math.abs(y - swY0);
                     if (ay9 > SW_OFF_DP * dpr && ay9 > ax9) { mode = 1; swOff = true; swShift = 0f; lastY = y; lastX = x; invalidate(); return true; }          // 웹: 세로로 80px 넘게 벗어나면 스크롤로 본다
-                    swShift = Math.max(-SW_DRAG_DP, Math.min(SW_DRAG_DP, (x - swX0) / dpr * 0.5f));
+                    float dd9 = (x - swX0) / dpr; swShift = Math.signum(dd9) * SW_DRAG_DP * (1f - (float) Math.exp(-Math.abs(dd9) / SW_DRAG_DP));          // 처음엔 손가락과 1:1, 갈수록 고무줄처럼 느려진다
                     lastX = x; invalidate(); return true;
                 }
-                if (mode == 1) { scrollY = ScreenCore.clamp(scrollY - dy / dpr, lay.bodyMaxScroll(bodyViewH())); lastY = y; invalidate(); }
+                if (mode == 1 && swipeHost != null && swCan && !swBlock && !swOff && !inHead && !inFoot && !inBand && Math.abs(x - swX0) > SW_RECOVER_DP * dpr && Math.abs(x - swX0) > 2.2f * Math.abs(y - swY0) && Math.abs(scrollY - swScroll0) < 20f && pullY <= 0f) {
+                    scrollY = swScroll0; flingY.forceFinished(true); mode = 9; swShift = 0f; swRelT = 0L; lastX = x; invalidate(); return true;          // 처음에 비스듬해서 세로로 잡혔어도 곧 확실히 가로로 밀면 가로로 바꾼다(막힘 방지)
+                }
+                if (mode == 1) {
+                    float ddp = dy / dpr;
+                    if (pullAllowed && (pullY > 0f || (scrollY <= 0f && ddp > 0f))) {                       // 맨 위에서 아래로 당긴다 — 고무줄처럼 점점 무겁게
+                        float res = 0.6f / (1f + pullY / 90f);
+                        pullY = Math.max(0f, Math.min(PULL_MAX, pullY + (ddp > 0f ? ddp * res : ddp)));
+                        scrollY = 0f; pullRelT = 0L; flingY.forceFinished(true);
+                    } else scrollY = ScreenCore.clamp(scrollY - ddp, lay.bodyMaxScroll(bodyViewH()));
+                    lastY = y; invalidate();
+                }
                 else if (mode == 2) { scrollX = ScreenCore.clamp(scrollX - dx / dpr, lay.headMaxScroll()); lastX = x; invalidate(); }
                 else if (mode == 8) { bandX = ScreenCore.clamp(bandX - dx / dpr, lay.bandMax()); lastX = x; invalidate(); }
                 return true;
@@ -473,7 +496,9 @@ public class ScreenView extends View {
                 }
                 if (mode == 9) {                                                                  // 가로로 민 몸짓을 놓았다: 32dp 넘게 밀었으면 칸을 넘기고(손가락 오른쪽 = 왼쪽 칸 · 왼쪽 = 오른쪽 칸) 아니면 제자리로
                     float sdx = x - swX0;
-                    boolean fire = Math.abs(sdx) >= SW_MIN_DP * dpr;
+                    vt.computeCurrentVelocity(1000, maxFling);
+                    float vx9 = vt.getXVelocity() / dpr;
+                    boolean fire = Math.abs(sdx) >= SW_MIN_DP * dpr || (Math.abs(vx9) >= SW_FLING_DP && Math.abs(sdx) >= SW_FLING_MIN_DP * dpr && vx9 * sdx > 0f);          // 빠르게 쓸기만 해도 넘긴다
                     swRelFrom = swShift; swRelT = SystemClock.uptimeMillis(); swHold = 0L;
                     if (fire && swipeHost != null) { swHold = 450L; swipeHost.onSwipe(this, sdx < 0f ? -1 : 1); }          // 새 화면이 오면 그 자리에서 미끄러져 들어온다(안 오면 450ms 뒤 되돌아온다)
                     pressed = null; ui.removeCallbacks(lpRun); finishTouch(); invalidate(); return true;
@@ -497,7 +522,10 @@ public class ScreenView extends View {
                     }
                 } else if (mode == 1 || mode == 2 || mode == 8) {
                     vt.computeCurrentVelocity(1000, maxFling);
-                    if (mode == 1) {
+                    if (mode == 1 && pullY > 0f) {                                                 // 당겼다 놓았다: 스프링으로 튀어 오르며, 충분히 당겼으면 새로고침
+                        pullFrom = pullY; pullRelT = SystemClock.uptimeMillis();
+                        if (pullY >= PULL_TRIG && pullHost != null) { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); pullHost.onPull(); }
+                    } else if (mode == 1) {
                         float v = vt.getYVelocity();
                         if (Math.abs(v) > minFling) { flingY.fling(0, Math.round(scrollY * dpr), 0, Math.round(-v), 0, 0, 0, Math.round(lay.bodyMaxScroll(bodyViewH()) * dpr)); }
                     } else if (mode == 8) {
@@ -513,7 +541,7 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } if (mode == 1 && pullY > 0f) { pullFrom = pullY; pullRelT = SystemClock.uptimeMillis(); } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
@@ -1862,17 +1890,33 @@ public class ScreenView extends View {
         }
         float swOx = 0f, swAl = 1f;
         if (slF >= 0f) { swOx = -slDir * SLIDE_DP * (1f - slF); swAl = slF; swShift = 0f; swRelT = 0L; }
-        else if (mode == 9) { swOx = swShift; swAl = 1f - 0.3f * Math.abs(swShift) / SW_DRAG_DP; }
+        else if (mode == 9) { swOx = swShift; swAl = 1f - 0.3f * Math.min(1f, Math.abs(swShift) / SW_DRAG_DP); }
         else if (swShift != 0f && swRelT > 0L) {                                              // 놓은 뒤: 새 화면을 기다리다가(hold) 부드럽게 제자리로
             long el = now - swRelT - swHold;
             if (el >= SW_BACK_MS) { swShift = 0f; swRelT = 0L; }
-            else { float f = el <= 0L ? 0f : el / (float) SW_BACK_MS; swShift = swRelFrom * (1f - f * (2f - f)); swOx = swShift; swAl = 1f - 0.3f * Math.abs(swShift) / SW_DRAG_DP; moving = true; }
+            else { swShift = swRelFrom * springF(el <= 0L ? 0f : el / 1000f, 0.62f, 13f); swOx = swShift; swAl = 1f - 0.3f * Math.min(1f, Math.abs(swShift) / SW_DRAG_DP); moving = true; }
+        }
+        float pullNow = pullY;
+        if (pullRelT > 0L && mode != 1) {                                                   // 놓은 뒤: 감쇠 스프링으로 튀어 오른다(처음 아래 → 살짝 위로 넘어갔다 → 제자리)
+            float pt = (now - pullRelT) / 1000f;
+            if (pt >= 0.95f) { pullY = 0f; pullRelT = 0L; pullNow = 0f; }
+            else { pullY = pullNow = Math.max(-26f, pullFrom * springF(pt, 0.42f, 11f)); moving = true; }
         }
         final boolean swLayer = swOx != 0f || swAl < 1f;
         if (swLayer) { cv.saveLayerAlpha(0f, lay.headH, w, h - lay.footH, Math.round(255f * swAl), Canvas.ALL_SAVE_FLAG); cv.translate(swOx, 0f); }
+        if (pullNow > 8f) {                                                                 // 당겨서 드러난 자리: 둥근 화살표 고리(당길수록 차오르고, 새로고침 중엔 돈다)
+            float pr = Math.min(1f, pullNow / PULL_TRIG), cy = lay.headH + Math.min(pullNow, 100f) * 0.5f, rad = 9f;
+            boolean spinning = pullRelT > 0L && pullFrom >= PULL_TRIG;
+            float st = spinning ? (now % 900L) / 900f * 360f : pullNow * 3f;
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2.4f); p.setStrokeCap(Paint.Cap.ROUND);
+            p.setColor(alpha(pal[R_SUB], Math.min(1f, 0.25f + pr)));
+            rf.set(w / 2f - rad, cy - rad, w / 2f + rad, cy + rad);
+            cv.drawArc(rf, st - 90f, spinning ? 280f : 40f + 290f * pr, false, p);
+            p.setStrokeCap(Paint.Cap.BUTT); p.setStyle(Paint.Style.FILL);
+        }
         cv.save();
         cv.clipRect(0f, lay.headH, w, h - lay.footH);
-        cv.translate(0f, lay.headH - scrollY);
+        cv.translate(0f, lay.headH - scrollY + pullNow);
         int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
         for (int i = r[0]; i < r[1]; i++) {
             ScreenCore.Item bit = lay.body[i];
