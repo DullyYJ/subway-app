@@ -318,8 +318,15 @@ public class RideService extends Service {
     /** 하차 7분 전 추천: 탑승 전에 받아 둔 글(맛집·커피·쇼핑 문구)을 띄운다(RecoNotify.sendCached) — 네트워크를 쓰지 않는다. */
     private void fireReco(final String body) {
         final Context app = getApplicationContext();
-        boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core);
+        boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core, jnum(body, "arrMs"), jnum(body, "nowMs"));
         recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름"; recoStageAt = System.currentTimeMillis();
+    }
+    /** 추천 본문(JSON 글)에서 정수 값 하나 — 없으면 0. */
+    private static long jnum(String body, String key) {
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"" + key + "\":(\\d+)").matcher(body == null ? "" : body);
+            return m.find() ? Long.parseLong(m.group(1)) : 0L;
+        } catch (RuntimeException e) { return 0L; }
     }
     private void fireAlert(RideCore.Step s) {
         try {
