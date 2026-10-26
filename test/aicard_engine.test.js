@@ -134,6 +134,16 @@ ok(G(base({ mode: 'zzz' })).error === 'mode', '모르는 모드는 거절');
   } catch (e) { ok(false, '워커 블록 실행 오류 ' + e.message); done(); }
 }
 
+// ⑧ 경로 통합 카드(s217): fz 면 제목이 'AI 승무원 브리핑'(예상은 시각만 덧붙임), cp 면 짧은 브리핑
+{
+  const fz = { now: Date.UTC(2026, 9, 20, 3, 0, 0), tz: 540, mode: 'brief', tk: 'brief', from: '부평', to: '강남', mins: 24, rem: 24, base: Date.UTC(2026, 9, 20, 3, 0, 0), hour: 12, cong: 30, segs: [{ type: 1, line: '1호선', from: '부평', to: '강남', min: 24 }], fz: true, cp: true };
+  const a = G(fz), h = a.head.find(n => n.t === 'aih'), tx = a.head.filter(n => n.t === 'text').map(n => n.s).join('\n');
+  ok(h.s === 'AI 승무원 브리핑' && /도착은 \d\d:\d\d경 예정이에요/.test(tx) && !/에서 .*까지는 약/.test(tx), 'fz · cp: 제목은 짧게, 본문은 핵심 시각 위주');
+  const b = G(Object.assign({}, fz, { fz: false, cp: false })), hb = b.head.find(n => n.t === 'aih');
+  ok(/부평 → 강남 · 남은시간: 24분/.test(hb.s), 'fz 가 없으면 예전 제목');
+  const pv = G(Object.assign({}, fz, { tk: 'preview', mode: 'preview' })).head.find(n => n.t === 'aih');
+  ok(/^AI 승무원 브리핑 · 예상 /.test(pv.s), '예상 모드 제목');
+}
 function done() {
   // ⑦ 웹 연결 글
   ok(/id="homeAiInner"/.test(html) && /window\._haiSet = _haiSet/.test(html) && /id: 'ai', kp: 'gdm_scra', ep: '\/screen\/ai'/.test(html) && /id="scraSetCard"/.test(html) && /key === 'f\.scra'/.test(html), '웹: 감싸개 · 사실 알림 · 틀 · 설정 카드가 있다');
