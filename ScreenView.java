@@ -196,6 +196,13 @@ public class ScreenView extends View {
             if (!q.key.equals(fcDone)) { fcDone = q.key; scrollY = ScreenCore.clamp(q.y - 56f, lay.bodyMaxScroll(bodyViewH())); invalidate(); }
             return;
         }
+        // s231 (YJ: 버스 세부위치(노선 상세)를 열면 내 위치를 중심으로 스크롤): 엔진이 '내 정류장'(mine)으로 표시한 줄이 새로 나타나면 한 번 화면 가운데로. 같은 줄은 다시 안 끌어서 보던 자리를 지킨다.
+        for (ScreenCore.Item q : lay.body) {
+            if (q.kind != ScreenCore.K_BRX || !"s".equals(q.dk) || !q.top) continue;
+            String mk = "me|" + q.ti;
+            if (!mk.equals(fcDone)) { fcDone = mk; scrollY = ScreenCore.clamp(q.y + q.h / 2f - bodyViewH() / 2f, lay.bodyMaxScroll(bodyViewH())); invalidate(); }
+            return;
+        }
         fcDone = "";
     }
     public void setDpr(float d) { if (d > 0f && d != dpr) { dpr = d; relayout(); } }
