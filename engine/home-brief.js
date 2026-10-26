@@ -26,6 +26,11 @@ function hbJosRo(w) {
   var j = (c - 0xAC00) % 28;
   return (j === 0 || j === 8) ? '로' : '으로';
 }
+function hbJosEul(w) {                                   // 받침 있으면 '을', 없으면 '를'(s218)
+  var c = String(w || '').charCodeAt(String(w || '').length - 1);
+  if (c < 0xAC00 || c > 0xD7A3) return '를';
+  return ((c - 0xAC00) % 28) === 0 ? '를' : '을';
+}
 function hbNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 // 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217)
 function hbNmFix(s) {
@@ -87,34 +92,50 @@ function homeBrief(o) {
   }
 
   if (hasRoute && o.compact === true && o.metro !== true) {
-    // 통합 카드용 짧은 브리핑(s217): 위 경로 카드가 이미 보여 주는 '어디서 어디로' 긴 문장은 되풀이하지 않고
-    //   핵심 시각(출발·도착) → 첫 탑승·환승 한 줄 → 혼잡 → 날씨·준비물 → 마무리 순으로 말한다. 단계별 환승·정거장은 [세부경로 보기] 로 미룬다.
+    // 통합 카드용 짧은 브리핑(s217 → s218 손봄): 제목줄·맺음말 없이
+    //   ① '환승은 N회, 도착은 HH:MM경 예정이에요. 총 H시간 M분 걸려요.' ② 경로를 말로(예전 문장, 핵심만) ③ 혼잡 ④ 출발지·도착지 날씨와 추천 옷차림.
     var cs = segs || [], cld = -1;
     for (var ci = 0; ci < cs.length; ci++) { if (cs[ci] && cs[ci].type === 4) { cld = ci; break; } }
-    var cx = Math.max(0, cs.length - 1), tot = mins > 0 ? [' 총 ', { b: mins + '분' }, ' 걸려요.'] : [];
-    if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) {
-      var cl = cs[cld], pk = [{ ln: cl.line }, ' ', { b: cl.depClock }, ' 출발, ', { b: cl.arrClock }, ' 도착이에요.'];
-      if (cl.rideMin) pk.push(' 타는 시간은 약 ' + cl.rideMin + '분이에요.');
-      P(pk.concat(tot));
-    } else if (mins > 0) {
-      var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
-      var cline = [{ id: 'homeAiArr', t: ['도착은 ', { b: hbKstClock(carr) }, '경 예정이에요.'].concat(tot) }];
-      if (o.dm) { cline.push(' '); cline.push({ id: 'homeAiDep', raw: String(o.dm) }); }
-      P(cline);
-    } else P(['소요시간은 경로가 정해지면 알려드릴게요.']);
+    var cx = Math.max(0, cs.length - 1);
+    var durTxt = function (m) { m = Math.round(m); var h = Math.floor(m / 60), r = m % 60; return h > 0 ? h + '시간' + (r ? ' ' + r + '분' : '') : r + '분'; };
+    var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
+    var p1 = ['환승은 ', { b: (cx > 0 ? cx + '회' : '없고') }, cx > 0 ? ', ' : ' '];
+    if (mins > 0) { p1.push('도착은 '); p1.push({ b: hbKstClock(carr) }); p1.push('경 예정이에요. 총 '); p1.push({ b: durTxt(mins) }); p1.push(' 걸려요.'); }
+    else p1 = ['소요시간은 경로가 정해지면 알려드릴게요.'];
+    var line1 = [{ id: 'homeAiArr', t: p1 }];
+    if (o.dm) { line1.push(' '); line1.push({ id: 'homeAiDep', raw: String(o.dm) }); }
+    P(line1);
     if (cs.length) {
       var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '에서 '];
-      if (c0.type === 2) { tp.push({ ln: c0.line + '번' }); tp.push(' 버스를 타고 출발하세요.'); } else { tp.push({ ln: c0.line || '열차' }); tp.push(' 타고 출발하세요.'); }
-      if (cx >= 2) tp.push(' 환승이 ' + cx + '번이라 안내 방송을 놓치지 마세요.');
-      else if (cx === 1) tp.push(' 환승은 한 번이에요.');
-      if (cld >= 0) tp.push(' 승차권과 출발 시각은 한 번 더 확인해 주세요.');
-      if (cx >= 1) tp.push(' 환승 순서와 정거장은 [세부경로 보기]에서 볼 수 있어요.');
+      if (cx === 0) { tp.push({ ln: c0.type === 2 ? c0.line + '번' : (c0.line || '열차') }); tp.push(c0.type === 2 ? ' 버스로 한 번에 가시면 돼요.' : hbJosRo(c0.line) + ' 한 번에 가시면 돼요.'); }
+      else {
+        tp.push({ ln: c0.type === 2 ? c0.line + '번' : (c0.line || '열차') }); tp.push(c0.type === 2 ? ' 버스를 타고 출발하세요. 가는 길에 ' : hbJosEul(c0.line || '열차') + ' 타고 출발하세요. 가는 길에 ');
+        for (var i2 = 1; i2 < cs.length; i2++) { var nl3 = cs[i2].line || '다음 노선'; if (i2 > 1) tp.push(', '); tp.push({ stn: [cs[i2].from, cs[i2].line] }); tp.push('에서 '); tp.push({ ln: cs[i2].type === 2 ? nl3 + '번' : nl3 }); tp.push(cs[i2].type === 2 ? '로' : hbJosRo(nl3)); }
+        tp.push(' 갈아타시면 돼요.');
+      }
+      if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) { tp.push(' '); tp.push({ ln: cs[cld].line }); tp.push('는 '); tp.push({ b: cs[cld].depClock }); tp.push(' 출발, '); tp.push({ b: cs[cld].arrClock }); tp.push(' 도착이에요. 승차권과 출발 시각은 한 번 더 확인해 주세요.'); }
       P(tp);
     }
     P([cgLine()]);
-    wxParas().forEach(function (x) { P(x); });
-    var cr = Number(o.rnd); if (!isFinite(cr) || cr < 0 || cr >= 1) cr = 0;
-    ps.push({ sub: [HB_CLOSINGS[Math.floor(cr * HB_CLOSINGS.length)]] });
+    if (wF || wT) {                                              // 출발지·도착지 날씨 + 추천 옷차림(더 쌀쌀한 쪽 기준) + 우산
+      var wl = ['날씨는 '];
+      if (wF) { wl.push({ b: '출발지' }); wl.push(' '); wl.push({ b: wF.temp + '도' }); wl.push(' ' + wF.txt); }
+      if (wF && wT) wl.push(', ');
+      if (wT) { wl.push({ b: '도착지' }); wl.push(' '); wl.push({ b: wT.temp + '도' }); wl.push(' ' + wT.txt); }
+      wl.push('이에요.');
+      var cold = Math.min(wF ? wF.temp : 99, wT ? wT.temp : 99), wear;
+      if (cold <= 4) wear = '두꺼운 패딩이나 코트에 목도리까지';
+      else if (cold <= 8) wear = '코트나 두툼한 외투';
+      else if (cold <= 11) wear = '자켓이나 가벼운 코트에 니트';
+      else if (cold <= 16) wear = '가디건이나 얇은 자켓';
+      else if (cold <= 22) wear = '얇은 긴팔 정도';
+      else if (cold <= 27) wear = '반팔에 얇은 겉옷 하나';
+      else wear = '시원한 반팔 차림';
+      wl.push(' 추천 옷차림은 '); wl.push({ b: wear }); wl.push('이에요.');
+      var rn = Math.max((wF && wF.rain) || 0, (wT && wT.rain) || 0);
+      if (rn >= 60) wl.push(' 비 소식이 있으니 우산 꼭 챙기세요.'); else if (rn >= 40) wl.push(' 비가 올 수도 있으니 우산 하나 챙기세요.');
+      P(wl);
+    }
     return { v: HB_V, paras: ps };
   }
   if (hasRoute) {
