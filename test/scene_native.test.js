@@ -76,7 +76,8 @@ const { sceneDecide } = require('../engine/scene.js');
   await t('두 쪽 카드(s232): ScreenView 가 가로로 밀어 넘기고 · 객실 장면에 시각표(RideService.livePos)와 지금 시각만 건넨다 · 계산은 엔진·SceneTrain', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8'), tr = fs.readFileSync(N('SceneTrain.java'), 'utf8'), sc = fs.readFileSync(N('SceneCore.java'), 'utf8');
     assert.ok(/isPager\(bit\)\) \{ i \+= drawPager\(/.test(v) && /mode = 10; pgDragOn = true/.test(v) && /if \(mode == 10\)/.test(v), '쪽 넘기기 그리기·손가락');
-    assert.ok(/pgPage == 0\)[^;]*pgPage == 1/.test(v), '끝 쪽에서 바깥으로 미는 몸짓은 화면 넘기기(탭 이동)에 양보');
+    assert.ok(!/pgPage == 0\)[^;]*pgPage == 1/.test(v) && /pgPage -= k/.test(v) && /Math\.floor\(o\)/.test(v) && !/clamp\(pgDownPos/.test(v), '두 쪽이 끝없이 돈다(s233): 왼쪽·오른쪽 어느 쪽으로 밀어도 다음 쪽 · 쪽 번호는 짝수 칸씩 되돌려 커지지 않는다');
+    assert.ok(/static void nextEpoch/.test(tr) && /static void restAt/.test(tr) && /moveAt\(/.test(tr), '객실 안 안무(s233): 자리 바꿈 · 기지개 · 졸기 · 서성이기');
     assert.ok(/"train"\.equals\(scene\.mode\(\)\)/.test(v) && /trainFeed/.test(v) && /RideService\.livePos/.test(fs.readFileSync(N('ShellActivity.java'), 'utf8')) && /trainClock\(System\.currentTimeMillis\(\)\)/.test(v), '객실 장면에 시각표·지금 시각');
     assert.ok(/livePos = core\.posJson/.test(rs) && (rs.match(/livePos = ""/g) || []).length >= 2, '탑승 서비스가 시각표를 올리고 끝나면 지운다');
     assert.ok(/sc2/.test(c) && /pgN/.test(c), '코어가 두 쪽 카드를 안다');
