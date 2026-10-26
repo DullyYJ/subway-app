@@ -123,7 +123,7 @@ function run(sc) {
       if (dl < 30) probsL.push('이탈 알림 너무 이름 ' + dl + '초');
       const after = res.alerts.filter(a => a.ms > off[0].ms && /near_arrive|arrive/.test(a.type));
       if (after.length) probsL.push('이탈 뒤 하차 알림 ' + after.length + '번');
-      if (res.doneMs == null) probsL.push('done 없음');
+      if (res.doneMs != null) probsL.push('이탈했는데 안내가 끝남(2026-10-26 YJ: 확정은 사용자가 끝내거나 도착할 때까지 풀리면 안 된다)');
     }
     res.probsLeave = probsL;
   }
