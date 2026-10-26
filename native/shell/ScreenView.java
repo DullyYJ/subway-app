@@ -589,6 +589,9 @@ public class ScreenView extends View {
 
     // ───────────── 캐릭터 장면(혼잡도 카드) — 엔진이 정한 값을 SceneCore 가 그린다. 여기는 크기·시계·손가락만 이어 준다 ─────────────
     // ───────────── 두 쪽 카드(혼잡도 ↔ 지하철 객실 장면): 앱은 두 쪽을 가로로 밀어 넘기기만 한다. 두 번째 쪽 글·열차 위치(시각표)는 엔진이 준다 ─────────────
+    /** 객실 장면이 받을 탑승 엔진의 시각표(pos 글). 탑승 서비스를 아는 쪽(ShellActivity)이 꽂아 준다 — 이 뷰는 서비스를 모른다. 없으면 빈 글. */
+    public interface TrainFeed { String pos(); }
+    public static volatile TrainFeed trainFeed;
     private int pgPage; private float pgPos, pgDownPos; private long pgLast; private boolean pgDragOn, pgAnim;
     private ScreenCore.Item pgHit; private String trainPosCache = "";
     private final ScreenCore.Item pgSc = new ScreenCore.Item();
@@ -666,7 +669,7 @@ public class ScreenView extends View {
         scene.layout(it.w, it.h, dpr, darkNow());
         if (!it.value.equals(sceneJson)) { sceneJson = it.value; scene.apply(sceneJson); trainPosCache = null; }
         if ("train".equals(scene.mode())) {                                                  // 객실 장면: 탑승 엔진의 시각표(pos.segs)와 지금 시각만 건네 준다 — 달림/섬은 그 시각의 함수
-            String pj = RideService.running ? RideService.livePos : "";
+            TrainFeed tf = trainFeed; String pj = tf != null ? tf.pos() : "";
             if (!pj.equals(trainPosCache)) { trainPosCache = pj; scene.core().trainPos(pj); }
             scene.core().trainClock(System.currentTimeMillis());
         }
