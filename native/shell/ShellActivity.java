@@ -4104,11 +4104,15 @@ public class ShellActivity extends Activity {
         if (at <= 0L || at == offAskedAt || (offDlg != null && offDlg.isShowing())) return;
         offAskedAt = at;
         try {
-            offDlg = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
+            final String stn = RideService.liveOffStn;
+            AlertDialog.Builder ob = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
                 .setTitle("경로를 벗어났어요")
                 .setMessage("지금 있는 곳에서 도착지까지 경로를 다시 찾을까요?\n다시 찾으면 지금 안내는 끝나고, 새 경로를 확정할 수 있어요.")
                 .setPositiveButton("다시 찾기", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface d, int w) { rerouteFromHere(); } })
-                .setNegativeButton("계속 안내", null).show();
+                .setNegativeButton("계속 안내", null);
+            if (stn != null && stn.length() > 0)                                       // s229: 자차 등으로 이동 중 — 경로 첫 지하철역까지 GPS 로 안내받고, 닿으면 그 시각 가장 빠른 열차로 조용히 이어 붙인다
+                ob.setNeutralButton("역까지 이동", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface d, int w) { RideService.rsAct("detour"); toast(stn + "까지 안내할게요"); } });
+            offDlg = ob.show();
         } catch (Throwable t) { offAskedAt = 0L; }
     }
     /** 사용자가 '다시 찾기'를 골랐다: 지금 위치를 출발지로 같은 도착지까지 새로 찾는다(자동 확정은 하지 않는다). 위치를 못 잡으면 안내를 그대로 둔다. */
