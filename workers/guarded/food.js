@@ -12,7 +12,7 @@ function json(o, status) {
   return new Response(JSON.stringify(o), { status: status || 200, headers: CORS });
 }
 __name(json, "json");
-var KEY_DEFAULT = "";   // 2026-10-01: 소스에 키를 두지 않는다 — 시크릿 DATA_GO_KR_KEY(또는 TAGO_KEY)를 쓴다
+var KEY_DEFAULT = "";   // 2026-10-01: \uc18c\uc2a4\uc5d0 \ud0a4\ub97c \ub450\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc2dc\ud06c\ub9bf DATA_GO_KR_KEY(\ub610\ub294 TAGO_KEY)\ub97c \uc4f4\ub2e4
 function apiKey(env) {
   return env && (env.DATA_GO_KR_KEY || env.TAGO_KEY) || KEY_DEFAULT;
 }
@@ -73,19 +73,19 @@ async function ensure(env) {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS food_task (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, k1 TEXT, k2 TEXT, page INTEGER, state TEXT, got INTEGER, note TEXT)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_task_state ON food_task(state)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS food_meta (k TEXT PRIMARY KEY, v TEXT)"),
-    // ★ 2026-09-14: 한 번 받아 온 구역은 서버에 남겨 다음 사람이 그대로 쓴다.
-    //   같은 자리를 여러 사람이 볼 때마다 공공 API 를 다시 부르지 않기 위한 표시다.
+    // \u2605 2026-09-14: \ud55c \ubc88 \ubc1b\uc544 \uc628 \uad6c\uc5ed\uc740 \uc11c\ubc84\uc5d0 \ub0a8\uaca8 \ub2e4\uc74c \uc0ac\ub78c\uc774 \uadf8\ub300\ub85c \uc4f4\ub2e4.
+    //   \uac19\uc740 \uc790\ub9ac\ub97c \uc5ec\ub7ec \uc0ac\ub78c\uc774 \ubcfc \ub54c\ub9c8\ub2e4 \uacf5\uacf5 API \ub97c \ub2e4\uc2dc \ubd80\ub974\uc9c0 \uc54a\uae30 \uc704\ud55c \ud45c\uc2dc\ub2e4.
     env.DB.prepare("CREATE TABLE IF NOT EXISTS food_cell (cell INTEGER PRIMARY KEY, upd INTEGER, n INTEGER)"),
-    // ★ 2026-09-15: 기지국 ↔ 역 대응표 공유.
-    //   앱은 2026-08-30 부터 /cells 를 부르고 있었는데 서버에 만든 적이 없었다(HTTP 404).
-    //   그래서 학습한 매핑이 기기 밖으로 나가지 못했고, 앱을 지우면 사라졌다.
-    //   개인 위치 이력이 아니라 '셀 ID → 역 이름' 대응표라 공유해도 개인이 드러나지 않는다.
+    // \u2605 2026-09-15: \uae30\uc9c0\uad6d \u2194 \uc5ed \ub300\uc751\ud45c \uacf5\uc720.
+    //   \uc571\uc740 2026-08-30 \ubd80\ud130 /cells \ub97c \ubd80\ub974\uace0 \uc788\uc5c8\ub294\ub370 \uc11c\ubc84\uc5d0 \ub9cc\ub4e0 \uc801\uc774 \uc5c6\uc5c8\ub2e4(HTTP 404).
+    //   \uadf8\ub798\uc11c \ud559\uc2b5\ud55c \ub9e4\ud551\uc774 \uae30\uae30 \ubc16\uc73c\ub85c \ub098\uac00\uc9c0 \ubabb\ud588\uace0, \uc571\uc744 \uc9c0\uc6b0\uba74 \uc0ac\ub77c\uc84c\ub2e4.
+    //   \uac1c\uc778 \uc704\uce58 \uc774\ub825\uc774 \uc544\ub2c8\ub77c '\uc140 ID \u2192 \uc5ed \uc774\ub984' \ub300\uc751\ud45c\ub77c \uacf5\uc720\ud574\ub3c4 \uac1c\uc778\uc774 \ub4dc\ub7ec\ub098\uc9c0 \uc54a\ub294\ub2e4.
     env.DB.prepare("CREATE TABLE IF NOT EXISTS cell_map (k TEXT PRIMARY KEY, s TEXT, l TEXT, n INTEGER, lat REAL, lng REAL, upd INTEGER)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cell_n ON cell_map(n)"),
-    // ★ 2026-09-20: 앱 업데이트 없이 서버에서 운영하기 위한 두 테이블.
-    //   app_config = 앱이 켜질 때 받아가는 설정 뭉치(쇼핑 추천 규칙 등). 값은 JSON.
-    //   content_pool = 게시판 글감·실시간 대화 소재. 6개월치를 미리 채워 두고
-    //     날짜로 갈라 쓴다 — 매일 같은 얘기만 도는 걸 막으려는 것이다.
+    // \u2605 2026-09-20: \uc571 \uc5c5\ub370\uc774\ud2b8 \uc5c6\uc774 \uc11c\ubc84\uc5d0\uc11c \uc6b4\uc601\ud558\uae30 \uc704\ud55c \ub450 \ud14c\uc774\ube14.
+    //   app_config = \uc571\uc774 \ucf1c\uc9c8 \ub54c \ubc1b\uc544\uac00\ub294 \uc124\uc815 \ubb49\uce58(\uc1fc\ud551 \ucd94\ucc9c \uaddc\uce59 \ub4f1). \uac12\uc740 JSON.
+    //   content_pool = \uac8c\uc2dc\ud310 \uae00\uac10\u00b7\uc2e4\uc2dc\uac04 \ub300\ud654 \uc18c\uc7ac. 6\uac1c\uc6d4\uce58\ub97c \ubbf8\ub9ac \ucc44\uc6cc \ub450\uace0
+    //     \ub0a0\uc9dc\ub85c \uac08\ub77c \uc4f4\ub2e4 \u2014 \ub9e4\uc77c \uac19\uc740 \uc598\uae30\ub9cc \ub3c4\ub294 \uac78 \ub9c9\uc73c\ub824\ub294 \uac83\uc774\ub2e4.
     env.DB.prepare("CREATE TABLE IF NOT EXISTS app_config (k TEXT PRIMARY KEY, v TEXT, upd INTEGER)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS content_pool (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, bucket INTEGER, body TEXT, upd INTEGER)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_pool_kb ON content_pool(kind, bucket)")
@@ -136,7 +136,7 @@ async function callApi(env, path, qs) {
   if (items.length === 0 && code && code !== "00" && code !== "0") {
     return { ok: false, why: code + ":" + (hdr.resultMsg || "").slice(0, 60), items: [] };
   }
-  if (!items.length && !b) return { ok: false, items: [], why: "body 없음: " + txt.slice(0, 100) };
+  if (!items.length && !b) return { ok: false, items: [], why: "body \uc5c6\uc74c: " + txt.slice(0, 100) };
   return { ok: true, items, total: b && b.totalCount || 0 };
 }
 __name(callApi, "callApi");
@@ -152,7 +152,7 @@ function mapItem(it) {
   return { id, nm, cat, addr, lat, lng, cell: cellOf(lat, lng), src: "sdsc2" };
 }
 __name(mapItem, "mapItem");
-var FOOD_RE = /음식|식당|한식|중식|일식|양식|분식|카페|커피|제과|주점|치킨|피자|패스트푸드|뷔페|기타간이|비알콜/;
+var FOOD_RE = /\uc74c\uc2dd|\uc2dd\ub2f9|\ud55c\uc2dd|\uc911\uc2dd|\uc77c\uc2dd|\uc591\uc2dd|\ubd84\uc2dd|\uce74\ud398|\ucee4\ud53c|\uc81c\uacfc|\uc8fc\uc810|\uce58\ud0a8|\ud53c\uc790|\ud328\uc2a4\ud2b8\ud478\ub4dc|\ubdd4\ud398|\uae30\ud0c0\uac04\uc774|\ube44\uc54c\ucf5c/;
 function isFood(it) {
   const s = [it.indsLclsNm, it.indsMclsNm, it.indsSclsNm].filter(Boolean).join(" ");
   return !s || FOOD_RE.test(s);
@@ -201,7 +201,7 @@ async function planSido(env, mode) {
 }
 __name(planSido, "planSido");
 async function planStops(env, limit) {
-  if (!env.SUBDB) return { added: 0, err: "SUBDB 바인딩이 없다(wrangler.toml 확인)" };
+  if (!env.SUBDB) return { added: 0, err: "SUBDB \ubc14\uc778\ub529\uc774 \uc5c6\ub2e4(wrangler.toml \ud655\uc778)" };
   const q = await env.SUBDB.prepare(
     "SELECT lat, lng FROM bus_stops WHERE lat IS NOT NULL LIMIT 300000"
   ).all();
@@ -423,10 +423,10 @@ async function fetchAround(env, lat, lng, r, stat) {
 }
 __name(fetchAround, "fetchAround");
 var KIND_RE = {
-  cafe: /카페|커피|제과|베이커리|디저트|아이스크림|빙수|도넛|스무디|밀크티|차전문|주스/,
-  bar: /주점|호프|술집|포차|포장마차|맥주|생맥주|와인|칵테일|위스키|사케|이자카야|펍|유흥|요리주점|간이주점/,
-  raw: /회\/초밥|회\s*전문|횟집|물회|생선회|해산물|조개|오징어|장어|해물|수산|스시|초밥|사시미|대게|킹크랩|낙지|문어|전복|굴|참치|연어|광어|우럭|방어|아구|복어/,
-  meat: /고기|육류|구이|삼겹|목살|갈비|곱창|막창|대창|치킨|닭|오리|스테이크|바비큐|숯불|훈제|족발|보쌈|돼지|소고기|한우|양꼬치|육회|햄버거|버거|정육|샤브|불고기|돈가스|부대찌개|감자탕/
+  cafe: /\uce74\ud398|\ucee4\ud53c|\uc81c\uacfc|\ubca0\uc774\ucee4\ub9ac|\ub514\uc800\ud2b8|\uc544\uc774\uc2a4\ud06c\ub9bc|\ube59\uc218|\ub3c4\ub11b|\uc2a4\ubb34\ub514|\ubc00\ud06c\ud2f0|\ucc28\uc804\ubb38|\uc8fc\uc2a4/,
+  bar: /\uc8fc\uc810|\ud638\ud504|\uc220\uc9d1|\ud3ec\ucc28|\ud3ec\uc7a5\ub9c8\ucc28|\ub9e5\uc8fc|\uc0dd\ub9e5\uc8fc|\uc640\uc778|\uce75\ud14c\uc77c|\uc704\uc2a4\ud0a4|\uc0ac\ucf00|\uc774\uc790\uce74\uc57c|\ud38d|\uc720\ud765|\uc694\ub9ac\uc8fc\uc810|\uac04\uc774\uc8fc\uc810/,
+  raw: /\ud68c\/\ucd08\ubc25|\ud68c\s*\uc804\ubb38|\ud69f\uc9d1|\ubb3c\ud68c|\uc0dd\uc120\ud68c|\ud574\uc0b0\ubb3c|\uc870\uac1c|\uc624\uc9d5\uc5b4|\uc7a5\uc5b4|\ud574\ubb3c|\uc218\uc0b0|\uc2a4\uc2dc|\ucd08\ubc25|\uc0ac\uc2dc\ubbf8|\ub300\uac8c|\ud0b9\ud06c\ub7a9|\ub099\uc9c0|\ubb38\uc5b4|\uc804\ubcf5|\uad74|\ucc38\uce58|\uc5f0\uc5b4|\uad11\uc5b4|\uc6b0\ub7ed|\ubc29\uc5b4|\uc544\uad6c|\ubcf5\uc5b4/,
+  meat: /\uace0\uae30|\uc721\ub958|\uad6c\uc774|\uc0bc\uacb9|\ubaa9\uc0b4|\uac08\ube44|\uacf1\ucc3d|\ub9c9\ucc3d|\ub300\ucc3d|\uce58\ud0a8|\ub2ed|\uc624\ub9ac|\uc2a4\ud14c\uc774\ud06c|\ubc14\ube44\ud050|\uc22f\ubd88|\ud6c8\uc81c|\uc871\ubc1c|\ubcf4\uc308|\ub3fc\uc9c0|\uc18c\uace0\uae30|\ud55c\uc6b0|\uc591\uaf2c\uce58|\uc721\ud68c|\ud584\ubc84\uac70|\ubc84\uac70|\uc815\uc721|\uc0e4\ube0c|\ubd88\uace0\uae30|\ub3c8\uac00\uc2a4|\ubd80\ub300\ucc0c\uac1c|\uac10\uc790\ud0d5/
 };
 function kindOf(cat) {
   const s = String(cat || "");
@@ -438,24 +438,24 @@ function kindOf(cat) {
 }
 __name(kindOf, "kindOf");
 var CAT_ALIAS = {
-  "카페": "cafe",
-  "주점": "bar",
-  "술집": "bar",
-  "회집": "raw",
-  "회": "raw",
-  "육식": "meat",
-  "고기": "meat",
-  "밥집": "food"
+  "\uce74\ud398": "cafe",
+  "\uc8fc\uc810": "bar",
+  "\uc220\uc9d1": "bar",
+  "\ud68c\uc9d1": "raw",
+  "\ud68c": "raw",
+  "\uc721\uc2dd": "meat",
+  "\uace0\uae30": "meat",
+  "\ubc25\uc9d1": "food"
 };
 async function queryFood(env, p) {
   const lat = parseFloat(p.get("lat")), lng = parseFloat(p.get("lng"));
-  if (!isFinite(lat) || !isFinite(lng)) return json({ error: "lat,lng 필요" }, 400);
-  if (lat < 32 || lat > 39.6 || lng < 124 || lng > 132.5) return json({ error: "국내 좌표가 아니다" }, 400);
+  if (!isFinite(lat) || !isFinite(lng)) return json({ error: "lat,lng \ud544\uc694" }, 400);
+  if (lat < 32 || lat > 39.6 || lng < 124 || lng > 132.5) return json({ error: "\uad6d\ub0b4 \uc88c\ud45c\uac00 \uc544\ub2c8\ub2e4" }, 400);
   const r = Math.min(3e3, Math.max(100, parseInt(p.get("r") || "1200", 10)));
   const limit = Math.min(500, Math.max(1, parseInt(p.get("limit") || "200", 10)));
   const cat = p.get("cat") || "";
   const cells = cellsAround(lat, lng, r);
-  if (cells.length > 400) return json({ error: "반경이 너무 넓다" }, 400);
+  if (cells.length > 400) return json({ error: "\ubc18\uacbd\uc774 \ub108\ubb34 \ub113\ub2e4" }, 400);
   const src = {};
   const seenCells = await cellsCovered(env, cells);
   const center = cellOf(lat, lng);
@@ -531,9 +531,9 @@ async function configSet(env, req) {
     return json({ ok: false, why: "bad json" }, 400);
   }
   const k = String(b && b.k || "").trim();
-  if (!k) return json({ ok: false, why: "k 필요" }, 400);
+  if (!k) return json({ ok: false, why: "k \ud544\uc694" }, 400);
   const v = JSON.stringify(b.v == null ? null : b.v);
-  if (v.length > 2e5) return json({ ok: false, why: "너무 큼" }, 400);
+  if (v.length > 2e5) return json({ ok: false, why: "\ub108\ubb34 \ud07c" }, 400);
   await env.DB.prepare(
     "INSERT INTO app_config (k,v,upd) VALUES (?1,?2,?3) ON CONFLICT(k) DO UPDATE SET v=?2,upd=?3"
   ).bind(k, v, Math.floor(Date.now() / 1e3)).run();
@@ -542,7 +542,7 @@ async function configSet(env, req) {
 __name(configSet, "configSet");
 async function contentGet(env, p) {
   const kind = String(p.get("kind") || "").trim();
-  if (!kind) return json({ ok: false, why: "kind 필요" }, 400);
+  if (!kind) return json({ ok: false, why: "kind \ud544\uc694" }, 400);
   const n = Math.max(1, Math.min(50, parseInt(p.get("n") || "12", 10)));
   const day = dayIndexKST(p.get("date"));
   const got = [], seen = /* @__PURE__ */ new Set();
@@ -567,12 +567,12 @@ async function contentGen(env, p) {
   const kind = String(p.get("kind") || "").trim();
   const n = Math.max(1, Math.min(POOL_GEN_MAX, parseInt(p.get("n") || "30", 10)));
   const theme = String(p.get("theme") || "").trim();
-  if (!kind) return json({ ok: false, why: "kind 필요" }, 400);
+  if (!kind) return json({ ok: false, why: "kind \ud544\uc694" }, 400);
   const key = env && env.GEMINI_API_KEY;
-  if (!key) return json({ ok: false, why: "GEMINI_API_KEY 시크릿이 없습니다" }, 400);
-  const spec = kind === "chat" ? "한국 수도권 출퇴근 대중교통 이용자들이 단톡방에서 주고받을 법한 짧은 한 줄 대화" : "한국 수도권 대중교통 이용자가 커뮤니티 게시판에 올릴 법한 글";
-  const shape = kind === "chat" ? '[{"t":"한 줄 대화(30자 이내)"}]' : '[{"title":"제목(25자 이내)","body":"본문(3~5줄, 줄바꿈은 \\n)"}]';
-  const prompt = spec + " " + n + "개를 JSON 배열로만 출력하세요. 형식: " + shape + "\n조건:\n- 정치\xB7종교\xB7특정인 비방\xB7차별\xB7혐오\xB7광고 금지\n- 노선명이나 역명은 넣지 마세요(앱이 알아서 채웁니다)\n- 서로 소재가 겹치지 않게 하세요" + (theme ? "\n- 이번 묶음의 소재 방향: " + theme : "") + "\n- 설명 없이 JSON 배열만 출력";
+  if (!key) return json({ ok: false, why: "GEMINI_API_KEY \uc2dc\ud06c\ub9bf\uc774 \uc5c6\uc2b5\ub2c8\ub2e4" }, 400);
+  const spec = kind === "chat" ? "\ud55c\uad6d \uc218\ub3c4\uad8c \ucd9c\ud1f4\uadfc \ub300\uc911\uad50\ud1b5 \uc774\uc6a9\uc790\ub4e4\uc774 \ub2e8\ud1a1\ubc29\uc5d0\uc11c \uc8fc\uace0\ubc1b\uc744 \ubc95\ud55c \uc9e7\uc740 \ud55c \uc904 \ub300\ud654" : "\ud55c\uad6d \uc218\ub3c4\uad8c \ub300\uc911\uad50\ud1b5 \uc774\uc6a9\uc790\uac00 \ucee4\ubba4\ub2c8\ud2f0 \uac8c\uc2dc\ud310\uc5d0 \uc62c\ub9b4 \ubc95\ud55c \uae00";
+  const shape = kind === "chat" ? '[{"t":"\ud55c \uc904 \ub300\ud654(30\uc790 \uc774\ub0b4)"}]' : '[{"title":"\uc81c\ubaa9(25\uc790 \uc774\ub0b4)","body":"\ubcf8\ubb38(3~5\uc904, \uc904\ubc14\uafc8\uc740 \\n)"}]';
+  const prompt = spec + " " + n + "\uac1c\ub97c JSON \ubc30\uc5f4\ub85c\ub9cc \ucd9c\ub825\ud558\uc138\uc694. \ud615\uc2dd: " + shape + "\n\uc870\uac74:\n- \uc815\uce58\xB7\uc885\uad50\xB7\ud2b9\uc815\uc778 \ube44\ubc29\xB7\ucc28\ubcc4\xB7\ud610\uc624\xB7\uad11\uace0 \uae08\uc9c0\n- \ub178\uc120\uba85\uc774\ub098 \uc5ed\uba85\uc740 \ub123\uc9c0 \ub9c8\uc138\uc694(\uc571\uc774 \uc54c\uc544\uc11c \ucc44\uc6c1\ub2c8\ub2e4)\n- \uc11c\ub85c \uc18c\uc7ac\uac00 \uacb9\uce58\uc9c0 \uc54a\uac8c \ud558\uc138\uc694" + (theme ? "\n- \uc774\ubc88 \ubb36\uc74c\uc758 \uc18c\uc7ac \ubc29\ud5a5: " + theme : "") + "\n- \uc124\uba85 \uc5c6\uc774 JSON \ubc30\uc5f4\ub9cc \ucd9c\ub825";
   const MODELS = ["gemini-flash-latest", "gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.0-flash"];
   const want = String(p.get("model") || "").trim();
   let known = null;
@@ -603,7 +603,7 @@ async function contentGen(env, p) {
       }
       const t = (((j.candidates || [])[0] || {}).content || {}).parts?.[0]?.text || "";
       if (!t) {
-        lastErr = m + ": 빈 응답";
+        lastErr = m + ": \ube48 \uc751\ub2f5";
         continue;
       }
       txt = t;
@@ -613,7 +613,7 @@ async function contentGen(env, p) {
       lastErr = m + ": " + String(e && e.message || e).slice(0, 90);
     }
   }
-  if (!txt) return json({ ok: false, why: "생성 실패", tried: order, last: lastErr }, 502);
+  if (!txt) return json({ ok: false, why: "\uc0dd\uc131 \uc2e4\ud328", tried: order, last: lastErr }, 502);
   if (usedModel && usedModel !== known) {
     try {
       await env.DB.prepare(
@@ -626,9 +626,9 @@ async function contentGen(env, p) {
   try {
     arr = JSON.parse(txt.replace(/```json|```/g, "").trim());
   } catch (e) {
-    return json({ ok: false, why: "JSON 아님", raw: txt.slice(0, 200) }, 502);
+    return json({ ok: false, why: "JSON \uc544\ub2d8", raw: txt.slice(0, 200) }, 502);
   }
-  if (!Array.isArray(arr) || !arr.length) return json({ ok: false, why: "배열 아님" }, 502);
+  if (!Array.isArray(arr) || !arr.length) return json({ ok: false, why: "\ubc30\uc5f4 \uc544\ub2d8" }, 502);
   const q = await env.DB.prepare("SELECT body FROM content_pool WHERE kind=?1").bind(kind).all();
   const have = new Set((q.results || []).map((r) => {
     try {
@@ -658,24 +658,24 @@ async function contentGen(env, p) {
 }
 __name(contentGen, "contentGen");
 var POST_NICKS = [
-  "출근전사",
-  "지옥철탈출",
-  "9호선급행",
-  "2호선시민",
-  "환승의달인",
-  "칼퇴志望",
-  "막차사수",
-  "판교러",
-  "강남직장인",
-  "수도권러",
-  "지각방지위원",
-  "첫차족",
-  "광역버스대기자",
-  "신도시통근자",
-  "용산주민",
-  "정시퇴근파",
-  "편의점도시락",
-  "환승지옥탈출러"
+  "\ucd9c\uadfc\uc804\uc0ac",
+  "\uc9c0\uc625\ucca0\ud0c8\ucd9c",
+  "9\ud638\uc120\uae09\ud589",
+  "2\ud638\uc120\uc2dc\ubbfc",
+  "\ud658\uc2b9\uc758\ub2ec\uc778",
+  "\uce7c\ud1f4\u5fd7\u671b",
+  "\ub9c9\ucc28\uc0ac\uc218",
+  "\ud310\uad50\ub7ec",
+  "\uac15\ub0a8\uc9c1\uc7a5\uc778",
+  "\uc218\ub3c4\uad8c\ub7ec",
+  "\uc9c0\uac01\ubc29\uc9c0\uc704\uc6d0",
+  "\uccab\ucc28\uc871",
+  "\uad11\uc5ed\ubc84\uc2a4\ub300\uae30\uc790",
+  "\uc2e0\ub3c4\uc2dc\ud1b5\uadfc\uc790",
+  "\uc6a9\uc0b0\uc8fc\ubbfc",
+  "\uc815\uc2dc\ud1f4\uadfc\ud30c",
+  "\ud3b8\uc758\uc810\ub3c4\uc2dc\ub77d",
+  "\ud658\uc2b9\uc9c0\uc625\ud0c8\ucd9c\ub7ec"
 ];
 function hash32(str) {
   let h = 2166136261;
@@ -707,7 +707,7 @@ async function postsFeed(env, p) {
       }
       if (!o || !o.title) continue;
       const h = hash32(String(o.title));
-      const c = o.cat || "잡담";
+      const c = o.cat || "\uc7a1\ub2f4";
       if (cat && cat !== "all" && c !== cat) continue;
       const nowMs = Date.now();
       const spread = Math.min(14 * 36e5, 20 * 6e4 * got.length + h % (37 * 6e4));
@@ -827,8 +827,8 @@ async function health(env) {
 }
 __name(health, "health");
 function authed(req, env) {
-  // 2026-10-01: 시크릿이 없으면 예전엔 관리 API 전체가 열려 있었다(app-config 쓰기·데이터 삭제 포함).
-  //   이제 FOOD_ADMIN_TOKEN 이 설정돼 있지 않으면 거절한다(fail closed).
+  // 2026-10-01: \uc2dc\ud06c\ub9bf\uc774 \uc5c6\uc73c\uba74 \uc608\uc804\uc5d4 \uad00\ub9ac API \uc804\uccb4\uac00 \uc5f4\ub824 \uc788\uc5c8\ub2e4(app-config \uc4f0\uae30\u00b7\ub370\uc774\ud130 \uc0ad\uc81c \ud3ec\ud568).
+  //   \uc774\uc81c FOOD_ADMIN_TOKEN \uc774 \uc124\uc815\ub3fc \uc788\uc9c0 \uc54a\uc73c\uba74 \uac70\uc808\ud55c\ub2e4(fail closed).
   const want = env && env.FOOD_ADMIN_TOKEN;
   if (!want) return false;
   const got = req.headers.get("X-Admin-Token") || new URL(req.url).searchParams.get("token");
@@ -880,7 +880,7 @@ var food_worker_default = {
         if (path === "/admin/content-gen") return await contentGen(env, p);
         if (path === "/admin/gemini-probe") {
           const key2 = env && env.GEMINI_API_KEY;
-          if (!key2) return json({ ok: false, why: "GEMINI_API_KEY 시크릿이 없습니다" }, 400);
+          if (!key2) return json({ ok: false, why: "GEMINI_API_KEY \uc2dc\ud06c\ub9bf\uc774 \uc5c6\uc2b5\ub2c8\ub2e4" }, 400);
           const cand = [
             "gemini-flash-latest",
             "gemini-3.5-flash",
@@ -896,7 +896,7 @@ var food_worker_default = {
                 {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ contents: [{ parts: [{ text: "안녕" }] }] })
+                  body: JSON.stringify({ contents: [{ parts: [{ text: "\uc548\ub155" }] }] })
                 }
               );
               const j = await res.json();
@@ -919,7 +919,7 @@ var food_worker_default = {
         }
         if (path === "/admin/content-clear") {
           const k = p.get("kind");
-          if (!k) return json({ ok: false, why: "kind 필요" }, 400);
+          if (!k) return json({ ok: false, why: "kind \ud544\uc694" }, 400);
           await env.DB.prepare("DELETE FROM content_pool WHERE kind=?1").bind(k).run();
           return json({ ok: true, cleared: k });
         }
