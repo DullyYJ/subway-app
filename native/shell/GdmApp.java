@@ -16,6 +16,7 @@ public final class GdmApp extends Application {
         Thread t = new Thread(new Runnable() {
             @Override public void run() {
                 try { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND); } catch (Throwable ignored) { }
+                try { NetPost.iid = loadIid(app); } catch (Throwable ignored) { }
                 try { app.getSharedPreferences(ShellActivity.PREFS, Context.MODE_PRIVATE).getAll(); } catch (Throwable ignored) { }
                 try { ScreenView.preloadFaces(app); } catch (Throwable ignored) { }
                 try { app.getSharedPreferences(RideService.PREFS, Context.MODE_PRIVATE).getAll(); } catch (Throwable ignored) { }
@@ -23,5 +24,15 @@ public final class GdmApp extends Application {
         }, "gdm-warm");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** 설치 때 한 번 만든 무작위 번호(API 남용 방어용 · s226). 따로 작은 파일(gdm_guard)에 둔다. 못 만들면 빈 글자(서버는 IP 로만 센다). */
+    static String loadIid(Context app) {
+        android.content.SharedPreferences sp = app.getSharedPreferences("gdm_guard", Context.MODE_PRIVATE);
+        String v = sp.getString("iid", "");
+        if (NetPost.iidOk(v)) return v;
+        v = java.util.UUID.randomUUID().toString().replace("-", "");
+        sp.edit().putString("iid", v).apply();
+        return v;
     }
 }
