@@ -631,10 +631,10 @@ function findAndroidJar() {
   await t('s199: 커뮤니티 좌우 밀기(웹 _commSwipeStep) — 판정값은 웹 그대로 · 순서는 엔진 칩에서 읽는다 · 넘어갈 때 24dp 슬라이드+페이드 0.34초', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /Math\.abs\(sdx\) >= SW_MIN_DP \* dpr/.test(sv) && /ay9 > SW_OFF_DP \* dpr && ay9 > ax9/.test(sv), '웹 판정값: 32px 넘게 밀면 넘김 · 세로로 80px 넘게 벗어나면 스크롤로 되돌린다');
-    assert.ok(/adx > ady \* SW_LOCK && swipeHost\.canSwipe\(\)\) \{ mode = 9;/.test(sv) && /else if \(mode == 9\) \{ swOx = swShift;/.test(sv) && /if \(mode == 9\) \{/.test(sv) && !/\(mode == 3 \|\| mode == 1\) && !fabDown/.test(sv), 's200: 가로로 먼저 움직이면 가로로 잠가(mode 9) 세로 스크롤을 멈춘다 — 비스듬히 밀어도 목록이 위아래로 흔들리지 않는다 · 스크롤 중에는 넘김이 안 된다');
+    assert.ok(/adx > ady \* SW_LOCK_SW && swCan\) \{ mode = 9;/.test(sv) && /else if \(mode == 9\) \{ swOx = swShift;/.test(sv) && /if \(mode == 9\) \{/.test(sv) && !/\(mode == 3 \|\| mode == 1\) && !fabDown/.test(sv), 's200: 가로로 먼저 움직이면 가로로 잠가(mode 9) 세로 스크롤을 멈춘다 — 비스듬히 밀어도 목록이 위아래로 흔들리지 않는다 · 스크롤 중에는 넘김이 안 된다');
     assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /oi\[0\] - dir/.test(a) && /ti\[0\] - dir/.test(a) && /canSwipe\(\) \{ String ct = ShellCore\.currentTab\(store\); return "community"\.equals\(ct\) \|\| "shop"\.equals\(ct\)/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
-    assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '웹 _swipeBlocked: 칩 줄 · 가로 영역 · 단추 · 입력칸에서 시작한 몸짓은 무시');
-    assert.ok(/SLIDE_DP = 24f/.test(sv) && /SLIDE_MS = 340L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
+    assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_FIELD \|\| pressed\.kind == ScreenCore\.K_INBAR/.test(sv) && !/pressed\.kind == ScreenCore\.K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '칩 줄 · 가로 영역 · 입력칸에서 시작한 몸짓은 무시(s236: 단추 위에서 시작해도 밀린다)');
+    assert.ok(/SLIDE_DP = 56f/.test(sv) && /SLIDE_MS = 380L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
     assert.ok(/private boolean commSwipe\(int dir\)/.test(a) && /body\.chipActs\(oi\)/.test(a) && /head\.chipActs\(ti\)/.test(a) && /news && dir == -1\) return true/.test(a) && /ShellCore\.NEWS_FIRST : ShellCore\.NEWS_LAST/.test(a), '실시간소통·뉴스는 안쪽 칩 먼저 · 뉴스 끝에서 왼쪽은 멈춤 · 뉴스로 들어올 때 첫/마지막 카테고리');
     assert.ok(/"shop"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /si\[0\] - dir/.test(a) && /sx < cats\.length\) \{ body\.slideNext\(dir\); hostBody\.handle\(cats\[sx\], false\)/.test(a), 's224: 쇼핑 탭도 좌우 밀기 — 카테고리 칩을 한 칸씩 · 양 끝에서 멈춤');
     assert.ok(/followChip = true;/.test(sv) && /private void followOnChip\(\)/.test(sv) && /if \(followChip\) followOnChip\(\);/.test(sv) && /if \(!followChip\) scrollX = 0f/.test(sv) && /flingX\.startScroll\(Math\.round\(scrollX \* dpr\)/.test(sv), 's224: 밀어서 카테고리가 바뀌면 위 칩 줄이 켜진 칩을 가운데로 따라간다(부드럽게 0.26초 · 처음으로 튀지 않음)');
@@ -742,6 +742,13 @@ function findAndroidJar() {
     assert.ok(/CHAT_BG_MS = 20000L/.test(a) && /private void chatBgSweep\(\)/.test(a) && /chatSels = new ArrayList<String>\(sels\)/.test(a) && /chatBgStart\(\); setupResume/.test(a) && /removeCallbacks\(chatBg\)/.test(a), '모든 방 20초 주기 갱신(켤 때 방 목록 · onResume 시작 · 끝낼 때 정리)');
     assert.ok(/if \(chatShown && sel\.equals\(liveSel\)\) continue;/.test(a) && /cacheAge\(key\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(pfChatB\)/.test(a) && /warm\(txt\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 미리 읽기');
     assert.ok(/"food"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /\(si\[0\] - dir\) % n \+ n\) % n/.test(a) && /"food"\.equals\(ct\)/.test(a), '맛집 탭: 좌우 밀기 = 카테고리 칩 끝없이(끝에서 반대쪽 끝으로)');
+  });
+  await t('s236: 좌우 밀기가 막히지 않고 부드럽게(손가락 1:1 · 빠른 쓸기 · 비스듬히 시작해도 가로로 전환 · 스프링 복귀) · 아래로 당겨 새로고침(스프링)', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/SW_FLING_DP = 520f/.test(sv) && /vx9 \* sdx > 0f/.test(sv) && /SW_LOCK_SW = 1\.0f/.test(sv) && /SW_RECOVER_DP = 36f/.test(sv) && /scrollY = swScroll0; flingY\.forceFinished\(true\); mode = 9;/.test(sv), '빠른 쓸기 인식 · 가로 판정 1.0 · 세로로 잡혀도 확실히 가로면 전환');
+    assert.ok(/SW_DRAG_DP = 88f/.test(sv) && /Math\.exp\(-Math\.abs\(dd9\) \/ SW_DRAG_DP\)/.test(sv) && /springF\(el <= 0L \? 0f : el \/ 1000f, 0\.62f, 13f\)/.test(sv), '손가락을 1:1 로 따라가다 고무줄 · 놓으면 스프링으로 제자리');
+    assert.ok(/public interface PullHost/.test(sv) && /pullAllowed && \(pullY > 0f \|\| \(scrollY <= 0f && ddp > 0f\)\)/.test(sv) && /pullFrom \* springF\(pt, 0\.42f, 11f\)/.test(sv) && /pullY >= PULL_TRIG && pullHost != null/.test(sv) && /cv\.translate\(0f, lay\.headH - scrollY \+ pullNow\)/.test(sv), '맨 위에서 아래로 당기면 고무줄 → 놓으면 스프링 + 충분히 당겼으면 새로고침');
+    assert.ok(/setPullHost\(new ScreenView\.PullHost\(\)/.test(a) && /"map"\.equals\(ct\) && "bus"\.equals\(map\.mode\(\)\)/.test(a) && /a\.v = "mp\.rf"; hostBody\.handle\(a, false\)/.test(a), '버스 탭(🔄 와 같은 mp.rf) · 맛집 탭에서 당겨 새로고침');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
