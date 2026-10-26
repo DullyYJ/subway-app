@@ -85,7 +85,8 @@ public final class RideCore {
             r.a = BoardCore.s(ad.get("a"), 40); r.b = BoardCore.s(ad.get("b"), 64); r.m = BoardCore.s(ad.get("m"), 32);
             if (r.a.length() == 0) return null;
             boolean shop = "shop".equals(ad.get("k"));
-            r.go = shop ? "쿠팡 보기" : "맛집 보기";
+            r.go = BoardCore.s(ad.get("go"), 8);                      // s237: 엔진이 아이템(맛집·카페·쿠팡)과 날씨·시간에 맞춰 정한 클릭 유도 글 — 없으면 예전 이름
+            if (r.go.length() == 0) r.go = shop ? "쿠팡 보기" : "맛집 보기";
             if (shop && m.get("shopItem") instanceof Map) {
                 String u = BoardCore.s(((Map<String, Object>) m.get("shopItem")).get("u"), 600);
                 if (u.startsWith("https://")) r.url = u;
