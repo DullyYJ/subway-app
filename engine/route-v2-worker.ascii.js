@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s227";
+var ENGINE_VERSION = "route-v2-2026-10-26s228";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -676,6 +676,61 @@ function busWaitAt(G, rk, stopId) {
   return v;
 }
 __name(busWaitAt, "busWaitAt");
+var NEIGH_STOPS = 4;
+var NEIGH_MAX_SEC = 480;
+var NEIGH_DOWN_K = 1.15;
+var NEIGH_UP_K = 0.85;
+// s228: neighbor-stop live arrivals of the SAME bus (route + direction). A stop whose own live list lacks this route is
+//   filled from stops a few stations upstream/downstream: downstream arrival minus travel, upstream arrival plus travel.
+//   Travel is skewed so the derived time is never later than the real one (never tells the user to arrive too late).
+function neighborLiveList(G, rk, stopId) {
+  try {
+    if (!G || !G.live || !G.routeStops || !stopId) return null;
+    const no = G.routeNoOf ? G.routeNoOf[rk] : null;
+    const a = G.routeStops[rk];
+    if (!no || !a) return null;
+    const ent = buildStopRouteIdx(G)[stopId];
+    if (!ent) return null;
+    let idx = -1, cnt = 0;
+    for (const e of ent) if (e[0] === rk) {
+      idx = e[1];
+      cnt++;
+    }
+    if (idx < 0 || cnt !== 1) return null;
+    const me = stopNorm(stopId);
+    const rt = G.routeTypeOf && G.routeTypeOf[rk] || "";
+    const out = [];
+    for (const d of [-1, 1]) {
+      let acc = 0, prev = a[idx];
+      for (let j = idx + d, n = 0; j >= 0 && j < a.length && n < NEIGH_STOPS; j += d, n++) {
+        const c = a[j];
+        if (!c || c.lat == null || !prev || prev.lat == null) break;
+        if (isFinite(c.seq) && isFinite(prev.seq) && Math.abs(c.seq - prev.seq) > 3) break;
+        acc += busSegSec(hav(prev.lat, prev.lng, c.lat, c.lng), rt);
+        prev = c;
+        if (acc > NEIGH_MAX_SEC) break;
+        const cn = stopNorm(c.node_id);
+        if (cn === me) continue;
+        const L2 = G.live[cn];
+        const l2 = L2 && (L2[no] || L2[noKey(no)]);
+        if (!Array.isArray(l2) || !l2.length) continue;
+        for (const v of l2) {
+          const t = d > 0 ? v - acc * NEIGH_DOWN_K : v + acc * NEIGH_UP_K;
+          if (t > 0) out.push(t);
+        }
+      }
+    }
+    if (!out.length) return null;
+    out.sort((x, y) => x - y);
+    const res = [out[0]];
+    for (let i = 1; i < out.length; i++) if (out[i] - res[res.length - 1] > 45) res.push(out[i]);
+    return res;
+  } catch (e) {
+    return null;
+  }
+}
+__name(neighborLiveList, "neighborLiveList");
+__name2(neighborLiveList, "neighborLiveList");
 function busWaitAtRaw(G, rk, stopId) {
   let unknown = false;
   const assumed = G && G.routeWait && G.routeWait[rk] != null ? G.routeWait[rk] : BUS_WAIT;
@@ -688,22 +743,24 @@ function busWaitAtRaw(G, rk, stopId) {
     return v2;
   }, "_log");
   const L = stopId && G && G.live ? G.live[stopNorm(stopId)] : null;
-  if (L) {
-    const list = no ? L[no] || L[noKey(no)] : null;
+  let list = L && no ? L[no] || L[noKey(no)] : null;
+  if (!(Array.isArray(list) && list.length) && no && G && G.live && stopId) {
+    const _nl = neighborLiveList(G, rk, stopId);
+    if (_nl) list = _nl;
+  }
+  if (Array.isArray(list) && list.length) {
     const acc = G.accessSec && G.accessSec[stopNorm(stopId)] || 0;
-    if (Array.isArray(list) && list.length) {
-      const sec = list.find((v2) => v2 >= acc + CATCH_BUFFER_SEC);
-      if (sec != null) {
-        if (G.liveCost) G.liveCost.hit++;
-        return _log(Math.max(0, sec - acc), "\uC2E4\uCE21");
-      }
-      if (G.liveCost) G.liveCost.missed++;
-      return _log(assumed * 2, "\uB2E4\uB193\uCE68");
+    const sec = list.find((v2) => v2 >= acc + CATCH_BUFFER_SEC);
+    if (sec != null) {
+      if (G.liveCost) G.liveCost.hit++;
+      return _log(Math.max(0, sec - acc), "\uC2E4\uCE21");
     }
-    if ((L.__names || []).length) {
-      if (G.liveCost) G.liveCost.unknown++;
-      unknown = true;
-    }
+    if (G.liveCost) G.liveCost.missed++;
+    return _log(assumed * 2, "\uB2E4\uB193\uCE68");
+  }
+  if (L && (L.__names || []).length) {
+    if (G.liveCost) G.liveCost.unknown++;
+    unknown = true;
   }
   const v = rtwLookup(G, rk, stopId);
   if (v != null) return _log(v, "rtw");
@@ -2981,7 +3038,11 @@ function boardAbsSec(G, rk, stopId, walkSec) {
   const assumed = G && G.routeWait && G.routeWait[rk] != null ? G.routeWait[rk] : BUS_WAIT;
   const no = G && G.routeNoOf ? G.routeNoOf[rk] : null;
   const L = stopId && G && G.live ? G.live[stopNorm(stopId)] : null;
-  const list = L && no ? L[no] || L[noKey(no)] : null;
+  let list = L && no ? L[no] || L[noKey(no)] : null;
+  if (!(Array.isArray(list) && list.length) && no && G && G.live && stopId) {
+    const _nl = neighborLiveList(G, rk, stopId);
+    if (_nl) list = _nl;
+  }
   if (Array.isArray(list) && list.length) {
     const t = list.find((v) => v >= walkSec + CATCH_BUFFER_SEC);
     if (t != null) return { sec: t, src: "\uC2E4\uCE21", real: true };
@@ -3030,6 +3091,10 @@ function shiftBoard(legs, G, SY, SX, accessSec) {
     }
     const w = d / WALK_MPS;
     const b = boardAbsSec(G, bs.line, sid, w);
+    if (!b.real && (b0.src === "\uC2E4\uCE21" || b0.src === "\uB2E4\uB193\uCE68")) {
+      cand.push((bs.stopList && bs.stopList[k] || sid || "?") + ":" + Math.round(d) + "m skip(" + b.src + ")");
+      continue;
+    }
     const gain = oldArrive - (b.sec + (travelFull - secAt(k)));
     cand.push((bs.stopList && bs.stopList[k] || sid || "?") + ":" + Math.round(d) + "m/" + Math.round(b.sec) + "s(" + b.src + ")/" + (gain >= 0 ? "+" : "") + Math.round(gain) + "s");
     if (gain >= bestGain) {
@@ -6591,6 +6656,7 @@ async function applyLiveWaits(out, stat, env, deadline) {
         wantNo + (!list ? "(\uC5C6\uC74C)" : sec == null ? "(\uB2E4 \uB193\uCE68 " + list.join(",") + ")" : "=" + sec)
       );
       if (!list && (m.__names || []).length) {
+        if (L.waitReal && L.waitSrc === "\uC2E4\uCE21") continue;
         if (!L.waitUnknown) {
           const w1 = L.waitSec || 0;
           L.waitSec = w1 * 2;
