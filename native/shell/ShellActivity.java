@@ -160,7 +160,7 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         hostBody = new Host(1);
         body.setListener(hostBody);
-        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { return "community".equals(ShellCore.currentTab(store)); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
@@ -1299,6 +1299,13 @@ public class ShellActivity extends Activity {
      * @return 몸짓을 쓴 경우(끝에서 멈추는 것도 포함) true
      */
     private boolean commSwipe(int dir) {
+        if ("shop".equals(ShellCore.currentTab(store)) && (dir == -1 || dir == 1)) {            // 쇼핑: 카테고리 칩을 한 칸씩(양 끝에서 멈춘다)
+            int[] si = new int[1];
+            ScreenCore.Act[] cats = body.chipActs(si);
+            int sx = si[0] - dir;
+            if (si[0] >= 0 && sx >= 0 && sx < cats.length) { body.slideNext(dir); hostBody.handle(cats[sx], false); }
+            return true;
+        }
         if (!"community".equals(ShellCore.currentTab(store)) || (dir != -1 && dir != 1)) return false;
         String mode = ShellCore.mode(store);
         boolean chat = "chat".equals(mode), news = "news".equals(mode);
