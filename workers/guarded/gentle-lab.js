@@ -1,24 +1,24 @@
 /**
- * 길동무 버스 프록시 워커
- *  - 공공데이터 API의 serviceKey를 서버에서 주입 (앱에 키가 노출되지 않음)
- *  - TAGO / 서울 TOPIS / 경기 GBIS 도메인만 허용
- *  - XML·JSON 응답을 그대로 전달 (앱이 text로 받아 파싱)
+ * \uae38\ub3d9\ubb34 \ubc84\uc2a4 \ud504\ub85d\uc2dc \uc6cc\ucee4
+ *  - \uacf5\uacf5\ub370\uc774\ud130 API\uc758 serviceKey\ub97c \uc11c\ubc84\uc5d0\uc11c \uc8fc\uc785 (\uc571\uc5d0 \ud0a4\uac00 \ub178\ucd9c\ub418\uc9c0 \uc54a\uc74c)
+ *  - TAGO / \uc11c\uc6b8 TOPIS / \uacbd\uae30 GBIS \ub3c4\uba54\uc778\ub9cc \ud5c8\uc6a9
+ *  - XML\u00b7JSON \uc751\ub2f5\uc744 \uadf8\ub300\ub85c \uc804\ub2ec (\uc571\uc774 text\ub85c \ubc1b\uc544 \ud30c\uc2f1)
  *
- * 사용법:  GET /tago?url=<인코딩된 원본 API URL>
- * 예시:    /tago?url=http%3A%2F%2Fws.bus.go.kr%2Fapi%2Frest%2Farrive%2FgetArrInfoByUid%3FarsId%3D02123
+ * \uc0ac\uc6a9\ubc95:  GET /tago?url=<\uc778\ucf54\ub529\ub41c \uc6d0\ubcf8 API URL>
+ * \uc608\uc2dc:    /tago?url=http%3A%2F%2Fws.bus.go.kr%2Fapi%2Frest%2Farrive%2FgetArrInfoByUid%3FarsId%3D02123
  */
 
 const ALLOWED_HOSTS = [
-  'apis.data.go.kr',    // TAGO(국토부), 경기 GBIS, 소상공인 상가정보
-  'api.odcloud.kr',     // 일부 data.go.kr 신규 API
-  'ws.bus.go.kr',       // 서울 TOPIS (버스도착·정류소)
-  'openapi.gbis.go.kr', // 경기 GBIS 예비 엔드포인트
-  'apis.data.go.kr.'    // 끝에 점이 붙는 변형 방어
+  'apis.data.go.kr',    // TAGO(\uad6d\ud1a0\ubd80), \uacbd\uae30 GBIS, \uc18c\uc0c1\uacf5\uc778 \uc0c1\uac00\uc815\ubcf4
+  'api.odcloud.kr',     // \uc77c\ubd80 data.go.kr \uc2e0\uaddc API
+  'ws.bus.go.kr',       // \uc11c\uc6b8 TOPIS (\ubc84\uc2a4\ub3c4\ucc29\u00b7\uc815\ub958\uc18c)
+  'openapi.gbis.go.kr', // \uacbd\uae30 GBIS \uc608\ube44 \uc5d4\ub4dc\ud3ec\uc778\ud2b8
+  'apis.data.go.kr.'    // \ub05d\uc5d0 \uc810\uc774 \ubd99\ub294 \ubcc0\ud615 \ubc29\uc5b4
 ];
 
-// -- 호출량 집계 (2026-10-06) --------------------------------------------------
-// 상위(공공데이터·서울시·카카오) API 를 실제로 부른 횟수를 D1 live_usage(day,k,n) 에 gl.* 키로 모은다.
-// 서버 메모리에 모았다가 약 1분 단위로 기록(근사치). 화면: https://gildongmu-bus.phg0643.workers.dev/usage
+// -- \ud638\ucd9c\ub7c9 \uc9d1\uacc4 (2026-10-06) --------------------------------------------------
+// \uc0c1\uc704(\uacf5\uacf5\ub370\uc774\ud130\u00b7\uc11c\uc6b8\uc2dc\u00b7\uce74\uce74\uc624) API \ub97c \uc2e4\uc81c\ub85c \ubd80\ub978 \ud69f\uc218\ub97c D1 live_usage(day,k,n) \uc5d0 gl.* \ud0a4\ub85c \ubaa8\uc740\ub2e4.
+// \uc11c\ubc84 \uba54\ubaa8\ub9ac\uc5d0 \ubaa8\uc558\ub2e4\uac00 \uc57d 1\ubd84 \ub2e8\uc704\ub85c \uae30\ub85d(\uadfc\uc0ac\uce58). \ud654\uba74: https://gildongmu-bus.phg0643.workers.dev/usage
 var USAGE = { n: {}, last: 0, ready: false };
 var _glCtx = null;
 var _glEnv = null;
@@ -65,7 +65,7 @@ function usageFlush(env, force) {
       }
     })();
     if (_glCtx && _glCtx.waitUntil) _glCtx.waitUntil(run);
-  } catch (e) { /* 집계 실패는 본 기능에 영향 없음 */ }
+  } catch (e) { /* \uc9d1\uacc4 \uc2e4\ud328\ub294 \ubcf8 \uae30\ub2a5\uc5d0 \uc601\ud5a5 \uc5c6\uc74c */ }
 }
 
 const CORS = {
@@ -80,17 +80,17 @@ function hostAllowed(hostname) {
 }
 
 
-/* ══════════════════════════════════════════════════════════════
- * 📰 뉴스 수집·제공
- *   왜 서버에서 하나:
- *     앱이 기기마다 70개 피드를 CORS 프록시로 긁으면 느리고 자주 실패한다.
- *     서버가 정기적으로 한 번 모아 D1에 넣어두면 앱은 한 번만 받아가면 된다.
- *   중복 방지: link 를 PRIMARY KEY 로 두고 INSERT OR IGNORE
- *   자동 삭제: 매일 새벽, 보관 기간이 지난 기사 제거
- * ══════════════════════════════════════════════════════════════ */
+/* \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+ * \ud83d\udcf0 \ub274\uc2a4 \uc218\uc9d1\u00b7\uc81c\uacf5
+ *   \uc65c \uc11c\ubc84\uc5d0\uc11c \ud558\ub098:
+ *     \uc571\uc774 \uae30\uae30\ub9c8\ub2e4 70\uac1c \ud53c\ub4dc\ub97c CORS \ud504\ub85d\uc2dc\ub85c \uae01\uc73c\uba74 \ub290\ub9ac\uace0 \uc790\uc8fc \uc2e4\ud328\ud55c\ub2e4.
+ *     \uc11c\ubc84\uac00 \uc815\uae30\uc801\uc73c\ub85c \ud55c \ubc88 \ubaa8\uc544 D1\uc5d0 \ub123\uc5b4\ub450\uba74 \uc571\uc740 \ud55c \ubc88\ub9cc \ubc1b\uc544\uac00\uba74 \ub41c\ub2e4.
+ *   \uc911\ubcf5 \ubc29\uc9c0: link \ub97c PRIMARY KEY \ub85c \ub450\uace0 INSERT OR IGNORE
+ *   \uc790\ub3d9 \uc0ad\uc81c: \ub9e4\uc77c \uc0c8\ubcbd, \ubcf4\uad00 \uae30\uac04\uc774 \uc9c0\ub09c \uae30\uc0ac \uc81c\uac70
+ * \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 */
 
 const NEWS_FEEDS = {
-  '증시': [
+  '\uc99d\uc2dc': [
     'https://news.google.com/rss/search?q=%EC%BD%94%EC%8A%A4%ED%94%BC%20%EC%BD%94%EC%8A%A4%EB%8B%A5%20%EC%A6%9D%EC%8B%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%A3%BC%EC%8B%9D%EC%8B%9C%EC%9E%A5%20%EC%99%B8%EA%B5%AD%EC%9D%B8%20%EC%88%9C%EB%A7%A4%EC%88%98%20%EA%B3%B5%EB%AA%A8%EC%A3%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%89%B4%EC%9A%95%EC%A6%9D%EC%8B%9C%20%EB%82%98%EC%8A%A4%EB%8B%A5%20%EB%8B%A4%EC%9A%B0%EC%A7%80%EC%88%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -102,7 +102,7 @@ const NEWS_FEEDS = {
     'https://news.google.com/rss/search?q=%EA%B0%9C%EC%9D%B8%20%EA%B8%B0%EA%B4%80%20%EB%A7%A4%EB%A7%A4%EB%8F%99%ED%96%A5+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%B9%84%ED%8A%B8%EC%BD%94%EC%9D%B8%20%EA%B0%80%EC%83%81%EC%9E%90%EC%82%B0%20%EC%8B%9C%EC%84%B8+when:14d&hl=ko&gl=KR&ceid=KR:ko'
   ],
-  '경제': [
+  '\uacbd\uc81c': [
     'https://news.google.com/rss/search?q=%ED%99%98%EC%9C%A8%20%EC%9B%90%EB%8B%AC%EB%9F%AC%20%EA%B8%B0%EC%A4%80%EA%B8%88%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%AC%BC%EA%B0%80%20%EC%86%8C%EB%B9%84%EC%9E%90%EB%AC%BC%EA%B0%80%20%EC%9D%B8%ED%94%8C%EB%A0%88%EC%9D%B4%EC%85%98+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%B6%80%EB%8F%99%EC%82%B0%20%EC%95%84%ED%8C%8C%ED%8A%B8%20%EC%A0%84%EC%84%B8%20%EB%B6%84%EC%96%91+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -114,7 +114,7 @@ const NEWS_FEEDS = {
     'https://news.google.com/rss/search?q=%EC%9B%90%EC%9E%90%EC%9E%AC%20%EC%9C%A0%EA%B0%80%20%EA%B5%AD%EC%A0%9C%EC%9C%A0%EA%B0%80+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EA%B8%B0%EC%97%85%20%EC%8B%A4%EC%A0%81%20%EB%A7%A4%EC%B6%9C%20%EC%98%81%EC%97%85%EC%9D%B4%EC%9D%B5+when:14d&hl=ko&gl=KR&ceid=KR:ko'
   ],
-  '사회': [
+  '\uc0ac\ud68c': [
     'https://news.google.com/rss/search?q=%EC%82%AC%EA%B1%B4%EC%82%AC%EA%B3%A0%20%EA%B2%BD%EC%B0%B0%20%ED%99%94%EC%9E%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EA%B5%90%ED%86%B5%EC%82%AC%EA%B3%A0%20%EC%A7%80%ED%95%98%EC%B2%A0%20%EB%B2%84%EC%8A%A4%20%EC%82%AC%EA%B3%A0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%B2%95%EC%9B%90%20%ED%8C%90%EA%B2%B0%20%EA%B2%80%EC%B0%B0%20%EC%88%98%EC%82%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -126,7 +126,7 @@ const NEWS_FEEDS = {
     'https://news.google.com/rss/search?q=%ED%99%98%EA%B2%BD%20%EB%AF%B8%EC%84%B8%EB%A8%BC%EC%A7%80%20%EC%9E%AC%ED%99%9C%EC%9A%A9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%B3%B5%EC%A7%80%20%EC%97%B0%EA%B8%88%20%EC%A7%80%EC%9B%90%EA%B8%88+when:14d&hl=ko&gl=KR&ceid=KR:ko'
   ],
-  '정치': [
+  '\uc815\uce58': [
     'https://news.google.com/rss/search?q=%EA%B5%AD%ED%9A%8C%20%EB%B3%B8%ED%9A%8C%EC%9D%98%20%EB%B2%95%EC%95%88%20%EC%B2%98%EB%A6%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%8C%80%ED%86%B5%EB%A0%B9%EC%8B%A4%20%EC%A0%95%EB%B6%80%20%EC%A0%95%EC%B1%85%20%EB%B0%9C%ED%91%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%97%AC%EC%95%BC%20%EB%8C%80%ED%91%9C%20%EC%A0%95%EC%B9%98%EA%B6%8C%20%EA%B3%B5%EB%B0%A9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -138,7 +138,7 @@ const NEWS_FEEDS = {
     'https://news.google.com/rss/search?q=%EA%B5%AD%EB%B0%A9%20%EC%95%88%EB%B3%B4%20%EA%B5%B0+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%B2%95%20%EA%B0%9C%EC%A0%95%EC%95%88%20%EC%8B%9C%ED%96%89+when:14d&hl=ko&gl=KR&ceid=KR:ko'
   ],
-  '연예': [
+  '\uc5f0\uc608': [
     'https://news.google.com/rss/search?q=%EC%97%B0%EC%98%88%EA%B3%84%20%EC%86%8C%EC%8B%9D+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%95%84%EC%9D%B4%EB%8F%8C%20%EA%B7%B8%EB%A3%B9+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EB%93%9C%EB%9D%BC%EB%A7%88%20%EB%B0%A9%EC%98%81+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -150,7 +150,7 @@ const NEWS_FEEDS = {
     'https://news.google.com/rss/search?q=K%ED%8C%9D%20%EC%95%84%EC%9D%B4%EB%8F%8C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%97%B0%EC%98%88%EC%9D%B8%20%EA%B7%BC%ED%99%A9+when:14d&hl=ko&gl=KR&ceid=KR:ko'
   ],
-  '스포츠': [
+  '\uc2a4\ud3ec\uce20': [
     'https://news.google.com/rss/search?q=%ED%94%84%EB%A1%9C%EC%95%BC%EA%B5%AC%20KBO%20%EA%B2%BD%EA%B8%B0%20%EA%B2%B0%EA%B3%BC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%B6%95%EA%B5%AC%20K%EB%A6%AC%EA%B7%B8%20%EA%B5%AD%EA%B0%80%EB%8C%80%ED%91%9C+when:14d&hl=ko&gl=KR&ceid=KR:ko',
     'https://news.google.com/rss/search?q=%EC%86%90%ED%9D%A5%EB%AF%BC%20%EC%9D%B4%EA%B0%95%EC%9D%B8%20%ED%95%B4%EC%99%B8%EC%B6%95%EA%B5%AC+when:14d&hl=ko&gl=KR&ceid=KR:ko',
@@ -176,9 +176,9 @@ const NEWS_FEEDS = {
   ]
 };
 
-const NEWS_KEEP_DAYS  = 30;   // 이 기간이 지나면 삭제
-const NEWS_PER_CAT    = 120;  // 카테고리별로 내려주는 최대 건수
-const NEWS_FEED_LIMIT = 60;   // 피드 하나에서 가져올 최대 건수
+const NEWS_KEEP_DAYS  = 30;   // \uc774 \uae30\uac04\uc774 \uc9c0\ub098\uba74 \uc0ad\uc81c
+const NEWS_PER_CAT    = 120;  // \uce74\ud14c\uace0\ub9ac\ubcc4\ub85c \ub0b4\ub824\uc8fc\ub294 \ucd5c\ub300 \uac74\uc218
+const NEWS_FEED_LIMIT = 60;   // \ud53c\ub4dc \ud558\ub098\uc5d0\uc11c \uac00\uc838\uc62c \ucd5c\ub300 \uac74\uc218
 
 async function ensureNewsTable(env) {
   const sqls = [
@@ -193,23 +193,23 @@ async function ensureNewsTable(env) {
     `CREATE INDEX IF NOT EXISTS idx_news_cat_ts ON news(cat, ts DESC)`
   ];
   for (const sql of sqls) {
-    try { await env.DB.prepare(sql).run(); } catch (e) { /* 이미 있으면 무시 */ }
+    try { await env.DB.prepare(sql).run(); } catch (e) { /* \uc774\ubbf8 \uc788\uc73c\uba74 \ubb34\uc2dc */ }
   }
 }
 
-// XML 엔티티 되돌리기 — Workers 에는 DOMParser 가 없어 직접 처리한다
+// XML \uc5d4\ud2f0\ud2f0 \ub418\ub3cc\ub9ac\uae30 \u2014 Workers \uc5d0\ub294 DOMParser \uac00 \uc5c6\uc5b4 \uc9c1\uc811 \ucc98\ub9ac\ud55c\ub2e4
 function xmlDecode(s) {
   return String(s || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'").replace(/&nbsp;/g, ' ')
-    // 뉴스 제목에 자주 나오는 이름 엔티티들 (…, –, ‘’, “”)
+    // \ub274\uc2a4 \uc81c\ubaa9\uc5d0 \uc790\uc8fc \ub098\uc624\ub294 \uc774\ub984 \uc5d4\ud2f0\ud2f0\ub4e4 (\u2026, \u2013, \u2018\u2019, \u201c\u201d)
     .replace(/&hellip;/g, '\u2026').replace(/&mdash;/g, '\u2014').replace(/&ndash;/g, '\u2013')
     .replace(/&lsquo;/g, '\u2018').replace(/&rsquo;/g, '\u2019')
     .replace(/&ldquo;/g, '\u201C').replace(/&rdquo;/g, '\u201D')
     .replace(/&middot;/g, '\u00B7')
-    // 숫자 엔티티 (&#8230; / &#x2026;)
+    // \uc22b\uc790 \uc5d4\ud2f0\ud2f0 (&#8230; / &#x2026;)
     .replace(/&#x([0-9A-Fa-f]+);/g, function(_, h){ return String.fromCodePoint(parseInt(h, 16)); })
     .replace(/&#(\d+);/g, function(_, d){ return String.fromCodePoint(parseInt(d, 10)); })
     .replace(/&amp;/g, '&')
@@ -223,7 +223,7 @@ function pickTag(block, tag) {
   return m ? m[1] : '';
 }
 
-// 구글 뉴스 RSS → [{title, link, source, ts}]
+// \uad6c\uae00 \ub274\uc2a4 RSS \u2192 [{title, link, source, ts}]
 function parseRss(xml) {
   const out = [];
   const chunks = String(xml || '').split(/<item[\s>]/).slice(1);
@@ -233,7 +233,7 @@ function parseRss(xml) {
     const rawTitle = xmlDecode(pickTag(block, 'title'));
     const link = xmlDecode(pickTag(block, 'link'));
     if (!rawTitle || !link) continue;
-    // 구글 뉴스 제목 형식: "기사제목 - 언론사"
+    // \uad6c\uae00 \ub274\uc2a4 \uc81c\ubaa9 \ud615\uc2dd: "\uae30\uc0ac\uc81c\ubaa9 - \uc5b8\ub860\uc0ac"
     const parts = rawTitle.split(' - ');
     const title  = parts.length > 1 ? parts.slice(0, -1).join(' - ') : rawTitle;
     const source = parts.length > 1 ? parts[parts.length - 1] : xmlDecode(pickTag(block, 'source'));
@@ -245,13 +245,13 @@ function parseRss(xml) {
   return out;
 }
 
-const NEWS_GAP_MS   = 700;   // 피드 사이 간격 — 한꺼번에 쏘면 구글이 503으로 막는다
-const NEWS_RETRY     = 2;    // 503/429 일 때 재시도 횟수
-const NEWS_RETRY_MS  = 2500; // 재시도 전 대기
+const NEWS_GAP_MS   = 700;   // \ud53c\ub4dc \uc0ac\uc774 \uac04\uaca9 \u2014 \ud55c\uaebc\ubc88\uc5d0 \uc3d8\uba74 \uad6c\uae00\uc774 503\uc73c\ub85c \ub9c9\ub294\ub2e4
+const NEWS_RETRY     = 2;    // 503/429 \uc77c \ub54c \uc7ac\uc2dc\ub3c4 \ud69f\uc218
+const NEWS_RETRY_MS  = 2500; // \uc7ac\uc2dc\ub3c4 \uc804 \ub300\uae30
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-/* 피드 하나를 받아온다. 막히면(503/429) 잠시 쉬었다 다시 시도한다. */
+/* \ud53c\ub4dc \ud558\ub098\ub97c \ubc1b\uc544\uc628\ub2e4. \ub9c9\ud788\uba74(503/429) \uc7a0\uc2dc \uc26c\uc5c8\ub2e4 \ub2e4\uc2dc \uc2dc\ub3c4\ud55c\ub2e4. */
 async function fetchFeed(u) {
   for (let attempt = 0; attempt <= NEWS_RETRY; attempt++) {
     try {
@@ -277,10 +277,10 @@ async function fetchFeed(u) {
   return [];
 }
 
-// 카테고리 하나를 수집해 D1 에 넣는다
-//   ★ 예전에는 10개 피드를 Promise.all 로 한꺼번에 쐈다. 카테고리 4개쯤 지나면
-//     구글이 503("Sorry...")으로 막아 그 카테고리가 통째로 0건이 됐다.
-//     순차로 돌리고 사이에 간격을 둔다.
+// \uce74\ud14c\uace0\ub9ac \ud558\ub098\ub97c \uc218\uc9d1\ud574 D1 \uc5d0 \ub123\ub294\ub2e4
+//   \u2605 \uc608\uc804\uc5d0\ub294 10\uac1c \ud53c\ub4dc\ub97c Promise.all \ub85c \ud55c\uaebc\ubc88\uc5d0 \uc408\ub2e4. \uce74\ud14c\uace0\ub9ac 4\uac1c\ucbe4 \uc9c0\ub098\uba74
+//     \uad6c\uae00\uc774 503("Sorry...")\uc73c\ub85c \ub9c9\uc544 \uadf8 \uce74\ud14c\uace0\ub9ac\uac00 \ud1b5\uc9f8\ub85c 0\uac74\uc774 \ub410\ub2e4.
+//     \uc21c\ucc28\ub85c \ub3cc\ub9ac\uace0 \uc0ac\uc774\uc5d0 \uac04\uaca9\uc744 \ub454\ub2e4.
 async function collectCat(env, cat) {
   const feeds = NEWS_FEEDS[cat] || [];
   const now = Date.now();
@@ -291,7 +291,7 @@ async function collectCat(env, cat) {
     results.push(await fetchFeed(feeds[i]));
   }
 
-  // 같은 수집 안에서의 중복 먼저 제거
+  // \uac19\uc740 \uc218\uc9d1 \uc548\uc5d0\uc11c\uc758 \uc911\ubcf5 \uba3c\uc800 \uc81c\uac70
   const seen = new Set();
   const rows = [];
   for (const arr of results) {
@@ -302,7 +302,7 @@ async function collectCat(env, cat) {
     }
   }
 
-  // D1 은 한 번에 너무 많은 문장을 묶으면 실패하므로 나눠 넣는다
+  // D1 \uc740 \ud55c \ubc88\uc5d0 \ub108\ubb34 \ub9ce\uc740 \ubb38\uc7a5\uc744 \ubb36\uc73c\uba74 \uc2e4\ud328\ud558\ubbc0\ub85c \ub098\ub220 \ub123\ub294\ub2e4
   let added = 0, failed = 0;
   const CHUNK = 25;
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -314,11 +314,11 @@ async function collectCat(env, cat) {
       added += part.length;
     } catch (e) { failed += part.length; }
   }
-  // 받아온 건 있는데 하나도 안 들어갔다면 원인을 알 수 있어야 한다
+  // \ubc1b\uc544\uc628 \uac74 \uc788\ub294\ub370 \ud558\ub098\ub3c4 \uc548 \ub4e4\uc5b4\uac14\ub2e4\uba74 \uc6d0\uc778\uc744 \uc54c \uc218 \uc788\uc5b4\uc57c \ud55c\ub2e4
   return { fetched: rows.length, added, failed };
 }
 
-// 전체 수집 — 카테고리를 순차로 돈다(동시에 다 돌리면 서브요청 한도에 걸린다)
+// \uc804\uccb4 \uc218\uc9d1 \u2014 \uce74\ud14c\uace0\ub9ac\ub97c \uc21c\ucc28\ub85c \ub3c8\ub2e4(\ub3d9\uc2dc\uc5d0 \ub2e4 \ub3cc\ub9ac\uba74 \uc11c\ube0c\uc694\uccad \ud55c\ub3c4\uc5d0 \uac78\ub9b0\ub2e4)
 async function collectAllNews(env) {
   await ensureNewsTable(env);
   const stat = {};
@@ -328,11 +328,11 @@ async function collectAllNews(env) {
   return stat;
 }
 
-/* ── 정기 수집: 한 번에 한 카테고리씩 ──────────────────────────
- *   3시간마다 도니 하루 8회. 카테고리가 7개라 하루면 한 바퀴를 돈다.
- *   한 번에 10개 피드만 받으므로 구글이 막을 이유가 없고,
- *   D1 에는 30일치가 쌓여 있어 목록이 비지 않는다.
- *   어디까지 돌았는지는 meta 테이블에 저장한다(워커는 상태를 기억하지 못한다).
+/* \u2500\u2500 \uc815\uae30 \uc218\uc9d1: \ud55c \ubc88\uc5d0 \ud55c \uce74\ud14c\uace0\ub9ac\uc529 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+ *   3\uc2dc\uac04\ub9c8\ub2e4 \ub3c4\ub2c8 \ud558\ub8e8 8\ud68c. \uce74\ud14c\uace0\ub9ac\uac00 7\uac1c\ub77c \ud558\ub8e8\uba74 \ud55c \ubc14\ud034\ub97c \ub3c8\ub2e4.
+ *   \ud55c \ubc88\uc5d0 10\uac1c \ud53c\ub4dc\ub9cc \ubc1b\uc73c\ubbc0\ub85c \uad6c\uae00\uc774 \ub9c9\uc744 \uc774\uc720\uac00 \uc5c6\uace0,
+ *   D1 \uc5d0\ub294 30\uc77c\uce58\uac00 \uc313\uc5ec \uc788\uc5b4 \ubaa9\ub85d\uc774 \ube44\uc9c0 \uc54a\ub294\ub2e4.
+ *   \uc5b4\ub514\uae4c\uc9c0 \ub3cc\uc558\ub294\uc9c0\ub294 meta \ud14c\uc774\ube14\uc5d0 \uc800\uc7a5\ud55c\ub2e4(\uc6cc\ucee4\ub294 \uc0c1\ud0dc\ub97c \uae30\uc5b5\ud558\uc9c0 \ubabb\ud55c\ub2e4).
  */
 async function ensureMetaTable(env) {
   try {
@@ -367,7 +367,7 @@ async function collectNextCat(env) {
   return { cat, ...stat };
 }
 
-// 보관 기간이 지난 기사 삭제
+// \ubcf4\uad00 \uae30\uac04\uc774 \uc9c0\ub09c \uae30\uc0ac \uc0ad\uc81c
 async function purgeOldNews(env) {
   await ensureNewsTable(env);
   const cut = Date.now() - NEWS_KEEP_DAYS * 24 * 3600 * 1000;
@@ -387,7 +387,7 @@ async function readNews(env, cat, limit) {
   return (r && r.results) || [];
 }
 
-// 카테고리 전부를 한 번에 — 앱은 이 하나만 부르면 된다
+// \uce74\ud14c\uace0\ub9ac \uc804\ubd80\ub97c \ud55c \ubc88\uc5d0 \u2014 \uc571\uc740 \uc774 \ud558\ub098\ub9cc \ubd80\ub974\uba74 \ub41c\ub2e4
 async function readAllNews(env, per) {
   await ensureNewsTable(env);
   const n = Math.min(Math.max(parseInt(per, 10) || NEWS_PER_CAT, 1), 300);
@@ -410,19 +410,19 @@ function jsonRes(obj, status) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-// /kakao-local 프록시 + D1 캐시
-//   gentle-lab-7e47subway-api 워커(worker/index.js)에 붙여 넣는 조각.
-//   같은 질문은 카카오에 다시 묻지 않는다 → 호출량이 실사용의 5~10% 수준으로 떨어진다.
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// /kakao-local \ud504\ub85d\uc2dc + D1 \uce90\uc2dc
+//   gentle-lab-7e47subway-api \uc6cc\ucee4(worker/index.js)\uc5d0 \ubd99\uc5ec \ub123\ub294 \uc870\uac01.
+//   \uac19\uc740 \uc9c8\ubb38\uc740 \uce74\uce74\uc624\uc5d0 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2192 \ud638\ucd9c\ub7c9\uc774 \uc2e4\uc0ac\uc6a9\uc758 5~10% \uc218\uc900\uc73c\ub85c \ub5a8\uc5b4\uc9c4\ub2e4.
 //
-//   필요한 것: 시크릿 KAKAO_REST_KEY  (npx wrangler secret put KAKAO_REST_KEY)
-//              D1 바인딩 env.DB       (이미 subway-db 로 연결돼 있음)
-// ══════════════════════════════════════════════════════════════
+//   \ud544\uc694\ud55c \uac83: \uc2dc\ud06c\ub9bf KAKAO_REST_KEY  (npx wrangler secret put KAKAO_REST_KEY)
+//              D1 \ubc14\uc778\ub529 env.DB       (\uc774\ubbf8 subway-db \ub85c \uc5f0\uacb0\ub3fc \uc788\uc74c)
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
-const KAKAO_TTL_MS   = 90 * 24 * 3600 * 1000;   // 저장 90일
-const KAKAO_CACHE_MAX = 20000;                  // 정리 기준 행 수
+const KAKAO_TTL_MS   = 90 * 24 * 3600 * 1000;   // \uc800\uc7a5 90\uc77c
+const KAKAO_CACHE_MAX = 20000;                  // \uc815\ub9ac \uae30\uc900 \ud589 \uc218
 
-// 캐시 테이블 (최초 1회만 만들어짐)
+// \uce90\uc2dc \ud14c\uc774\ube14 (\ucd5c\ucd08 1\ud68c\ub9cc \ub9cc\ub4e4\uc5b4\uc9d0)
 let _kakaoTableReady = false;
 async function ensureKakaoCache(env) {
   if (_kakaoTableReady) return;
@@ -435,9 +435,9 @@ async function ensureKakaoCache(env) {
   _kakaoTableReady = true;
 }
 
-// ★ 좌표는 100m 격자(소수 3자리)로 뭉친다.
-//   지오코딩 결과는 몇 십 m 움직인다고 달라지지 않는다.
-//   앱에서도 같은 규칙으로 키를 만들기 때문에 두 겹이 서로 어긋나지 않는다.
+// \u2605 \uc88c\ud45c\ub294 100m \uaca9\uc790(\uc18c\uc218 3\uc790\ub9ac)\ub85c \ubb49\uce5c\ub2e4.
+//   \uc9c0\uc624\ucf54\ub529 \uacb0\uacfc\ub294 \uba87 \uc2ed m \uc6c0\uc9c1\uc778\ub2e4\uace0 \ub2ec\ub77c\uc9c0\uc9c0 \uc54a\ub294\ub2e4.
+//   \uc571\uc5d0\uc11c\ub3c4 \uac19\uc740 \uaddc\uce59\uc73c\ub85c \ud0a4\ub97c \ub9cc\ub4e4\uae30 \ub54c\ubb38\uc5d0 \ub450 \uacb9\uc774 \uc11c\ub85c \uc5b4\uae0b\ub098\uc9c0 \uc54a\ub294\ub2e4.
 function kakaoCacheKey(path, qs) {
   let q = String(qs || '');
   if (/coord2/.test(String(path || ''))) {
@@ -452,7 +452,7 @@ async function handleKakaoLocal(request, env) {
   const path = url.searchParams.get('path') || '';
   const qs   = url.searchParams.get('qs')   || '';
 
-  // 허용 경로만 (임의 경로 프록시 방지)
+  // \ud5c8\uc6a9 \uacbd\ub85c\ub9cc (\uc784\uc758 \uacbd\ub85c \ud504\ub85d\uc2dc \ubc29\uc9c0)
   if (!/^(search\/(keyword|address|category)\.json|geo\/(coord2regioncode|coord2address|transcoord)\.json)$/.test(path)) {
     return new Response(JSON.stringify({ error: 'path not allowed' }), {
       status: 400, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
@@ -462,7 +462,7 @@ async function handleKakaoLocal(request, env) {
   const key = kakaoCacheKey(path, qs);
   const now = Date.now();
 
-  // 1) 캐시 먼저
+  // 1) \uce90\uc2dc \uba3c\uc800
   try {
     await ensureKakaoCache(env);
     const row = await env.DB.prepare('SELECT v, ts FROM kakao_cache WHERE k = ?').bind(key).first();
@@ -477,9 +477,9 @@ async function handleKakaoLocal(request, env) {
         }
       });
     }
-  } catch (e) { /* 캐시가 실패해도 원본 호출로 진행 */ }
+  } catch (e) { /* \uce90\uc2dc\uac00 \uc2e4\ud328\ud574\ub3c4 \uc6d0\ubcf8 \ud638\ucd9c\ub85c \uc9c4\ud589 */ }
 
-  // 2) 카카오 호출
+  // 2) \uce74\uce74\uc624 \ud638\ucd9c
   const key_ = env.KAKAO_REST_KEY;
   if (!key_) {
     return new Response(JSON.stringify({ error: 'KAKAO_REST_KEY not set' }), {
@@ -503,7 +503,7 @@ async function handleKakaoLocal(request, env) {
     });
   }
 
-  // 3) 성공하고 결과가 있을 때만 저장 — 빈 응답·오류를 90일 붙들지 않는다
+  // 3) \uc131\uacf5\ud558\uace0 \uacb0\uacfc\uac00 \uc788\uc744 \ub54c\ub9cc \uc800\uc7a5 \u2014 \ube48 \uc751\ub2f5\u00b7\uc624\ub958\ub97c 90\uc77c \ubd99\ub4e4\uc9c0 \uc54a\ub294\ub2e4
   if (status === 200) {
     try {
       const j = JSON.parse(body);
@@ -513,7 +513,7 @@ async function handleKakaoLocal(request, env) {
           'ON CONFLICT(k) DO UPDATE SET v = excluded.v, ts = excluded.ts'
         ).bind(key, body, now).run();
       }
-    } catch (e) { /* 저장 실패는 무시 */ }
+    } catch (e) { /* \uc800\uc7a5 \uc2e4\ud328\ub294 \ubb34\uc2dc */ }
   }
 
   return new Response(body, {
@@ -526,7 +526,7 @@ async function handleKakaoLocal(request, env) {
   });
 }
 
-// 오래된 캐시 정리 (cron 이나 /admin/kakao-purge 에서 호출)
+// \uc624\ub798\ub41c \uce90\uc2dc \uc815\ub9ac (cron \uc774\ub098 /admin/kakao-purge \uc5d0\uc11c \ud638\ucd9c)
 async function purgeKakaoCache(env) {
   await ensureKakaoCache(env);
   const cut = Date.now() - KAKAO_TTL_MS;
@@ -534,26 +534,26 @@ async function purgeKakaoCache(env) {
   return (r && r.meta && r.meta.changes) || 0;
 }
 
-// ══════════════════════════════════════════════════════════════
-// /seoul — 서울 열린데이터 지하철 실시간 (키 주입 + 키 로테이션)
-//   앱 호출: /seoul?path=realtimeStationArrival/0/10/아라
-//   실제 주소: https://swopenapi.seoul.go.kr/api/subway/{KEY}/json/{path}
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// /seoul \u2014 \uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130 \uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 (\ud0a4 \uc8fc\uc785 + \ud0a4 \ub85c\ud14c\uc774\uc158)
+//   \uc571 \ud638\ucd9c: /seoul?path=realtimeStationArrival/0/10/\uc544\ub77c
+//   \uc2e4\uc81c \uc8fc\uc18c: https://swopenapi.seoul.go.kr/api/subway/{KEY}/json/{path}
 //
-//   키는 시크릿 SEOUL_API_KEY 에 둔다. 쉼표로 여러 개 넣으면
-//   일일 한도(ERROR-337)나 인증 실패(INFO-100)가 뜰 때 다음 키로 넘어간다.
+//   \ud0a4\ub294 \uc2dc\ud06c\ub9bf SEOUL_API_KEY \uc5d0 \ub454\ub2e4. \uc27c\ud45c\ub85c \uc5ec\ub7ec \uac1c \ub123\uc73c\uba74
+//   \uc77c\uc77c \ud55c\ub3c4(ERROR-337)\ub098 \uc778\uc99d \uc2e4\ud328(INFO-100)\uac00 \ub730 \ub54c \ub2e4\uc74c \ud0a4\ub85c \ub118\uc5b4\uac04\ub2e4.
 //     npx wrangler secret put SEOUL_API_KEY
-//     → key1,key2,key3
-// ══════════════════════════════════════════════════════════════
+//     \u2192 key1,key2,key3
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 
 const SEOUL_BASE = 'https://swopenapi.seoul.go.kr/api/subway';
 
-// ★ 호출 아끼기 — 서울 지하철 인증키는 하루 1,000건이라 그냥 쓰면 금방 닳는다.
-//   같은 역을 여러 사람이 봐도 한 번만 나가도록 세 겹으로 막는다.
-//     ① 같은 isolate 메모리   (가장 빠름)
-//     ② Cloudflare 엣지 캐시  (같은 지역 사용자끼리 공유)
-//     ③ 동시요청 합치기       (10명이 동시에 눌러도 upstream 1회)
-//   도착정보는 10초, 열차위치는 15초. 원본이 그 정도 주기로 갱신되므로
-//   신선도 손해는 거의 없고 호출량은 사용자 수에 비례하지 않게 된다.
+// \u2605 \ud638\ucd9c \uc544\ub07c\uae30 \u2014 \uc11c\uc6b8 \uc9c0\ud558\ucca0 \uc778\uc99d\ud0a4\ub294 \ud558\ub8e8 1,000\uac74\uc774\ub77c \uadf8\ub0e5 \uc4f0\uba74 \uae08\ubc29 \ub2f3\ub294\ub2e4.
+//   \uac19\uc740 \uc5ed\uc744 \uc5ec\ub7ec \uc0ac\ub78c\uc774 \ubd10\ub3c4 \ud55c \ubc88\ub9cc \ub098\uac00\ub3c4\ub85d \uc138 \uacb9\uc73c\ub85c \ub9c9\ub294\ub2e4.
+//     \u2460 \uac19\uc740 isolate \uba54\ubaa8\ub9ac   (\uac00\uc7a5 \ube60\ub984)
+//     \u2461 Cloudflare \uc5e3\uc9c0 \uce90\uc2dc  (\uac19\uc740 \uc9c0\uc5ed \uc0ac\uc6a9\uc790\ub07c\ub9ac \uacf5\uc720)
+//     \u2462 \ub3d9\uc2dc\uc694\uccad \ud569\uce58\uae30       (10\uba85\uc774 \ub3d9\uc2dc\uc5d0 \ub20c\ub7ec\ub3c4 upstream 1\ud68c)
+//   \ub3c4\ucc29\uc815\ubcf4\ub294 10\ucd08, \uc5f4\ucc28\uc704\uce58\ub294 15\ucd08. \uc6d0\ubcf8\uc774 \uadf8 \uc815\ub3c4 \uc8fc\uae30\ub85c \uac31\uc2e0\ub418\ubbc0\ub85c
+//   \uc2e0\uc120\ub3c4 \uc190\ud574\ub294 \uac70\uc758 \uc5c6\uace0 \ud638\ucd9c\ub7c9\uc740 \uc0ac\uc6a9\uc790 \uc218\uc5d0 \ube44\ub840\ud558\uc9c0 \uc54a\uac8c \ub41c\ub2e4.
 const SEOUL_TTL = { arrival: 10, position: 15, other: 1800 };
 
 function seoulTtl(path) {
@@ -574,7 +574,7 @@ function seoulMemGet(path) {
 }
 function seoulMemPut(path, status, body, ttlSec) {
   _seoulMem.set(path, { exp: Date.now() + ttlSec * 1000, body, status });
-  if (_seoulMem.size > 500) {                       // 오래된 것부터 정리
+  if (_seoulMem.size > 500) {                       // \uc624\ub798\ub41c \uac83\ubd80\ud130 \uc815\ub9ac
     for (const [k, v] of _seoulMem) { if (Date.now() > v.exp) _seoulMem.delete(k); }
   }
 }
@@ -585,38 +585,38 @@ function seoulRes(body, status, from, ttlSec, usedKey) {
     'Cache-Control': 'public, max-age=' + ttlSec,
     'x-seoul-cache': from
   };
-  if (usedKey != null) h['x-seoul-key'] = String(usedKey);   // 몇 번째 키가 쓰였는지
+  if (usedKey != null) h['x-seoul-key'] = String(usedKey);   // \uba87 \ubc88\uc9f8 \ud0a4\uac00 \uc4f0\uc600\ub294\uc9c0
   return new Response(body, { status, headers: h });
 }
 
-// 이 서비스들만 허용 (임의 경로 프록시 방지)
+// \uc774 \uc11c\ube44\uc2a4\ub4e4\ub9cc \ud5c8\uc6a9 (\uc784\uc758 \uacbd\ub85c \ud504\ub85d\uc2dc \ubc29\uc9c0)
 const SEOUL_SERVICES = /^(realtimeStationArrival|realtimePosition|getShtrmPath|SearchSTNBySubwayLineInfo|SearchInfoBySubwayNameService)\//;
 
 function seoulKeys(env) {
   return String(env.SEOUL_API_KEY || '')
     .split(',')
-    // ★ 2026-10-04: 대시보드에 값을 붙여 넣을 때 따옴표·줄바꿈·공백이 같이 들어가면 URL 경로가 깨져 업스트림이 본문 없는 400 을 줄 수 있다 → 앞뒤의 따옴표/공백/제어문자를 걷어낸다
+    // \u2605 2026-10-04: \ub300\uc2dc\ubcf4\ub4dc\uc5d0 \uac12\uc744 \ubd99\uc5ec \ub123\uc744 \ub54c \ub530\uc634\ud45c\u00b7\uc904\ubc14\uafc8\u00b7\uacf5\ubc31\uc774 \uac19\uc774 \ub4e4\uc5b4\uac00\uba74 URL \uacbd\ub85c\uac00 \uae68\uc838 \uc5c5\uc2a4\ud2b8\ub9bc\uc774 \ubcf8\ubb38 \uc5c6\ub294 400 \uc744 \uc904 \uc218 \uc788\ub2e4 \u2192 \uc55e\ub4a4\uc758 \ub530\uc634\ud45c/\uacf5\ubc31/\uc81c\uc5b4\ubb38\uc790\ub97c \uac77\uc5b4\ub0b8\ub2e4
     .map((s) => s.replace(/[\u0000-\u001f\u007f]/g, '').replace(/^[\s"'`]+|[\s"'`]+$/g, ''))
     .filter(Boolean);
 }
 
-// ══════════════════════════════════════════════════════════════
-// 한국 IP 중계 연동 (2026-10-04)
-//   서울 swopenapi 가 Cloudflare 출구 IP 를 거부해서 /seoul 의 직접 호출은 실패한다.
-//   한국 집 인터넷에 있는 노트북(tools/seoul-relay)이 '앱이 찾는 경로'만 대신 불러 와 D1 에 올려 두고,
-//   /seoul 은 그 값을 돌려준다. 노트북은 사용자 요청을 직접 받지 않는다(밖으로 보내기만 한다).
-//     앱 → /seoul?path=…  → ① 메모리 ② 엣지 캐시 ③ [중계 값(D1)] ④ (중계가 죽었을 때만) 옛 직접 호출
-//     노트북 → GET /relay/wanted (찾는 경로 목록) → 서울 호출 → POST /relay/push (결과 올리기)
-//   인증: 시크릿 RELAY_TOKEN(16자 이상) 과 같은 값을 노트북이 x-relay-token 헤더로 보낸다.
-//   중계가 3분 넘게 소식이 없으면(꺼짐) 옛 동작으로 돌아가고, 앱은 그동안 정적 시각표로 동작한다.
-// ══════════════════════════════════════════════════════════════
-const RELAY_MAX_AGE = { arrival: 75, position: 90, other: 1800 };   // 중계가 올린 값을 이 초 안일 때만 쓴다
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \ud55c\uad6d IP \uc911\uacc4 \uc5f0\ub3d9 (2026-10-04)
+//   \uc11c\uc6b8 swopenapi \uac00 Cloudflare \ucd9c\uad6c IP \ub97c \uac70\ubd80\ud574\uc11c /seoul \uc758 \uc9c1\uc811 \ud638\ucd9c\uc740 \uc2e4\ud328\ud55c\ub2e4.
+//   \ud55c\uad6d \uc9d1 \uc778\ud130\ub137\uc5d0 \uc788\ub294 \ub178\ud2b8\ubd81(tools/seoul-relay)\uc774 '\uc571\uc774 \ucc3e\ub294 \uacbd\ub85c'\ub9cc \ub300\uc2e0 \ubd88\ub7ec \uc640 D1 \uc5d0 \uc62c\ub824 \ub450\uace0,
+//   /seoul \uc740 \uadf8 \uac12\uc744 \ub3cc\ub824\uc900\ub2e4. \ub178\ud2b8\ubd81\uc740 \uc0ac\uc6a9\uc790 \uc694\uccad\uc744 \uc9c1\uc811 \ubc1b\uc9c0 \uc54a\ub294\ub2e4(\ubc16\uc73c\ub85c \ubcf4\ub0b4\uae30\ub9cc \ud55c\ub2e4).
+//     \uc571 \u2192 /seoul?path=\u2026  \u2192 \u2460 \uba54\ubaa8\ub9ac \u2461 \uc5e3\uc9c0 \uce90\uc2dc \u2462 [\uc911\uacc4 \uac12(D1)] \u2463 (\uc911\uacc4\uac00 \uc8fd\uc5c8\uc744 \ub54c\ub9cc) \uc61b \uc9c1\uc811 \ud638\ucd9c
+//     \ub178\ud2b8\ubd81 \u2192 GET /relay/wanted (\ucc3e\ub294 \uacbd\ub85c \ubaa9\ub85d) \u2192 \uc11c\uc6b8 \ud638\ucd9c \u2192 POST /relay/push (\uacb0\uacfc \uc62c\ub9ac\uae30)
+//   \uc778\uc99d: \uc2dc\ud06c\ub9bf RELAY_TOKEN(16\uc790 \uc774\uc0c1) \uacfc \uac19\uc740 \uac12\uc744 \ub178\ud2b8\ubd81\uc774 x-relay-token \ud5e4\ub354\ub85c \ubcf4\ub0b8\ub2e4.
+//   \uc911\uacc4\uac00 3\ubd84 \ub118\uac8c \uc18c\uc2dd\uc774 \uc5c6\uc73c\uba74(\uaebc\uc9d0) \uc61b \ub3d9\uc791\uc73c\ub85c \ub3cc\uc544\uac00\uace0, \uc571\uc740 \uadf8\ub3d9\uc548 \uc815\uc801 \uc2dc\uac01\ud45c\ub85c \ub3d9\uc791\ud55c\ub2e4.
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+const RELAY_MAX_AGE = { arrival: 75, position: 90, other: 1800 };   // \uc911\uacc4\uac00 \uc62c\ub9b0 \uac12\uc744 \uc774 \ucd08 \uc548\uc77c \ub54c\ub9cc \uc4f4\ub2e4
 const RELAY_ALIVE_MS = 180000;
 let _relayReady = false;
 let _relayAliveMem = { at: 0, v: false };
 let _relayHbAt = 0;
 let _relayPruneAt = 0;
-const _relayWantAt = new Map();   // path -> 마지막으로 기록한 시각(isolate 안에서 20초에 한 번만 쓴다)
+const _relayWantAt = new Map();   // path -> \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uae30\ub85d\ud55c \uc2dc\uac01(isolate \uc548\uc5d0\uc11c 20\ucd08\uc5d0 \ud55c \ubc88\ub9cc \uc4f4\ub2e4)
 
 async function relayInit(env) {
   if (_relayReady || !env || !env.DB) return;
@@ -654,7 +654,7 @@ async function relayLookup(path, env) {
   try {
     const row = await env.DB.prepare('SELECT status, body, at FROM relay_cache WHERE path=?').bind(path).first();
     if (row && Date.now() - row.at <= relayMaxAgeSec(path) * 1000) return row;
-  } catch (e) { /* 없는 것으로 */ }
+  } catch (e) { /* \uc5c6\ub294 \uac83\uc73c\ub85c */ }
   return null;
 }
 async function relayWant(path, env) {
@@ -664,7 +664,7 @@ async function relayWant(path, env) {
   if (_relayWantAt.size > 500) { for (const [k, v] of _relayWantAt) { if (now - v > 60000) _relayWantAt.delete(k); } }
   try {
     await env.DB.prepare('INSERT INTO relay_want (path, at, n) VALUES (?, ?, 1) ON CONFLICT(path) DO UPDATE SET at=excluded.at, n=n+1').bind(path, now).run();
-  } catch (e) { /* 기록 실패는 무시 */ }
+  } catch (e) { /* \uae30\ub85d \uc2e4\ud328\ub294 \ubb34\uc2dc */ }
 }
 async function relayHeartbeat(env, info) {
   const now = Date.now();
@@ -673,7 +673,7 @@ async function relayHeartbeat(env, info) {
   try {
     await env.DB.prepare("INSERT INTO relay_state (k, v, at) VALUES ('hb', ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, at=excluded.at").bind(String(info || ''), now).run();
     _relayAliveMem = { at: now, v: true };
-  } catch (e) { /* 무시 */ }
+  } catch (e) { /* \ubb34\uc2dc */ }
 }
 async function relayWanted(request, env) {
   if (!relayAuth(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
@@ -687,7 +687,7 @@ async function relayWanted(request, env) {
     try {
       await env.DB.prepare('DELETE FROM relay_want WHERE at < ?').bind(now - 86400000).run();
       await env.DB.prepare('DELETE FROM relay_cache WHERE at < ?').bind(now - 86400000).run();
-    } catch (e) { /* 무시 */ }
+    } catch (e) { /* \ubb34\uc2dc */ }
   }
   const rows = await env.DB.prepare(
     'SELECT w.path AS path, w.n AS n, w.at AS at, COALESCE(c.at, 0) AS have FROM relay_want w LEFT JOIN relay_cache c ON c.path = w.path WHERE w.at > ? ORDER BY w.n DESC LIMIT 80'
@@ -706,9 +706,9 @@ async function relayPush(request, env) {
   for (const it of items) {
     const path = it && it.path, body = it && it.body;
     if (typeof path !== 'string' || typeof body !== 'string' || !SEOUL_SERVICES.test(path) || body.length > 400000) { skipped++; continue; }
-    let code = '';   // 정상은 errorMessage.code, 오류는 최상위 code
+    let code = '';   // \uc815\uc0c1\uc740 errorMessage.code, \uc624\ub958\ub294 \ucd5c\uc0c1\uc704 code
     try { const b = JSON.parse(body); code = (b && b.errorMessage && b.errorMessage.code) || (b && b.status && b.status.code) || (b && typeof b.code === 'string' && b.code) || ''; } catch (e) { skipped++; continue; }
-    if (/^ERROR-/.test(code) || code === 'INFO-100') { skipped++; continue; }   // 한도·키 오류는 올리지 않는다
+    if (/^ERROR-/.test(code) || code === 'INFO-100') { skipped++; continue; }   // \ud55c\ub3c4\u00b7\ud0a4 \uc624\ub958\ub294 \uc62c\ub9ac\uc9c0 \uc54a\ub294\ub2e4
     stmts.push(env.DB.prepare('INSERT INTO relay_cache (path, status, body, at) VALUES (?, 200, ?, ?) ON CONFLICT(path) DO UPDATE SET status=200, body=excluded.body, at=excluded.at').bind(path, body, now));
   }
   if (stmts.length) await env.DB.batch(stmts);
@@ -728,7 +728,7 @@ async function handleSeoul(request, env) {
 
   const keys = seoulKeys(env);
 
-  // ★ 2026-10-04: 진단용(대시보드에서 변수 SEOUL_DEBUG=1 을 켠 동안만). 업스트림 상태코드·본문 앞부분·키 모양(길이·문자 종류 개수)만 내고 키 값은 절대 내지 않는다.
+  // \u2605 2026-10-04: \uc9c4\ub2e8\uc6a9(\ub300\uc2dc\ubcf4\ub4dc\uc5d0\uc11c \ubcc0\uc218 SEOUL_DEBUG=1 \uc744 \ucf20 \ub3d9\uc548\ub9cc). \uc5c5\uc2a4\ud2b8\ub9bc \uc0c1\ud0dc\ucf54\ub4dc\u00b7\ubcf8\ubb38 \uc55e\ubd80\ubd84\u00b7\ud0a4 \ubaa8\uc591(\uae38\uc774\u00b7\ubb38\uc790 \uc885\ub958 \uac1c\uc218)\ub9cc \ub0b4\uace0 \ud0a4 \uac12\uc740 \uc808\ub300 \ub0b4\uc9c0 \uc54a\ub294\ub2e4.
   if (url.searchParams.get('debug') === '1') {
     if (env.SEOUL_DEBUG !== '1') return jsonRes({ ok: false, error: 'debug off' }, 403);
     if (!keys.length) return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
@@ -737,14 +737,14 @@ async function handleSeoul(request, env) {
 
   const ttl = seoulTtl(path);
 
-  // ① 메모리
+  // \u2460 \uba54\ubaa8\ub9ac
   const hit = seoulMemGet(path);
   if (hit) { seoulStats.mem++; usageAdd('gl.sw.saved'); return seoulRes(hit.body, hit.status, 'MEM', ttl); }
 
-  // ② 엣지 캐시 (같은 지역 사용자끼리 공유)
+  // \u2461 \uc5e3\uc9c0 \uce90\uc2dc (\uac19\uc740 \uc9c0\uc5ed \uc0ac\uc6a9\uc790\ub07c\ub9ac \uacf5\uc720)
   const cacheKey = new Request('https://seoul-cache/' + encodeURIComponent(path));
   let edge = null;
-  try { edge = await caches.default.match(cacheKey); } catch (e) { /* 캐시 없으면 그냥 진행 */ }
+  try { edge = await caches.default.match(cacheKey); } catch (e) { /* \uce90\uc2dc \uc5c6\uc73c\uba74 \uadf8\ub0e5 \uc9c4\ud589 */ }
   if (edge) {
     seoulStats.edge++;
     usageAdd('gl.sw.saved');
@@ -753,7 +753,7 @@ async function handleSeoul(request, env) {
     return seoulRes(body, edge.status, 'EDGE', ttl);
   }
 
-  // ②-b 한국 IP 중계가 살아 있으면 그 값을 쓴다(없으면 찾는 경로로 기록하고 '준비 중'을 돌려준다 → 앱은 시각표로 동작)
+  // \u2461-b \ud55c\uad6d IP \uc911\uacc4\uac00 \uc0b4\uc544 \uc788\uc73c\uba74 \uadf8 \uac12\uc744 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 \ucc3e\ub294 \uacbd\ub85c\ub85c \uae30\ub85d\ud558\uace0 '\uc900\ube44 \uc911'\uc744 \ub3cc\ub824\uc900\ub2e4 \u2192 \uc571\uc740 \uc2dc\uac01\ud45c\ub85c \ub3d9\uc791)
   if (await relayAlive(env)) {
     const row = await relayLookup(path, env);
     if (row) {
@@ -761,7 +761,7 @@ async function handleSeoul(request, env) {
       seoulMemPut(path, 200, row.body, ttl);
       try {
         await caches.default.put(cacheKey, new Response(row.body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=' + ttl } }));
-      } catch (e) { /* 엣지 캐시 실패는 무시 */ }
+      } catch (e) { /* \uc5e3\uc9c0 \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ }
       seoulStats.relay = (seoulStats.relay || 0) + 1;
       usageAdd('gl.sw.relay');
       return seoulRes(row.body, 200, 'RELAY', ttl);
@@ -775,7 +775,7 @@ async function handleSeoul(request, env) {
     return jsonRes({ ok: false, error: 'SEOUL_API_KEY not set' }, 500);
   }
 
-  // ③ 같은 경로를 동시에 여러 명이 요청하면 upstream 은 한 번만
+  // \u2462 \uac19\uc740 \uacbd\ub85c\ub97c \ub3d9\uc2dc\uc5d0 \uc5ec\ub7ec \uba85\uc774 \uc694\uccad\ud558\uba74 upstream \uc740 \ud55c \ubc88\ub9cc
   const flying = _seoulInflight.get(path);
   if (flying) {
     seoulStats.coalesced++;
@@ -794,11 +794,11 @@ async function handleSeoul(request, env) {
   }
 }
 
-// ★ 2026-10-04 (본문 없는 HTTP 400): 서울 업스트림이 본문 없는 4xx 를 주면 예전엔 그대로 '본문 없는 400' 이 앱·엔진까지 갔다.
-//   원인을 코드만으로 단정할 수 없어(가능성: 키 값 모양, 요청 헤더, 스킴) 두 가지를 한다.
-//   ① 본문 없는 4xx 면 방식을 바꿔 다시 시도한다: std(https+Accept/UA) → plain(https, 헤더 없음) → http. 통한 방식은 기억해 다음부터 그것부터 쓴다.
-//   ② 끝내 안 되면 본문 없는 응답 대신 JSON({ok:false, error, upstream}) 을 돌려주고, 같은 경로는 30초 쉰다(재시도 폭주·쿼터 낭비 방지).
-//   진단은 /seoul?path=…&debug=1 (SEOUL_DEBUG=1 일 때만). 키 값은 어디에도 내지 않는다.
+// \u2605 2026-10-04 (\ubcf8\ubb38 \uc5c6\ub294 HTTP 400): \uc11c\uc6b8 \uc5c5\uc2a4\ud2b8\ub9bc\uc774 \ubcf8\ubb38 \uc5c6\ub294 4xx \ub97c \uc8fc\uba74 \uc608\uc804\uc5d4 \uadf8\ub300\ub85c '\ubcf8\ubb38 \uc5c6\ub294 400' \uc774 \uc571\u00b7\uc5d4\uc9c4\uae4c\uc9c0 \uac14\ub2e4.
+//   \uc6d0\uc778\uc744 \ucf54\ub4dc\ub9cc\uc73c\ub85c \ub2e8\uc815\ud560 \uc218 \uc5c6\uc5b4(\uac00\ub2a5\uc131: \ud0a4 \uac12 \ubaa8\uc591, \uc694\uccad \ud5e4\ub354, \uc2a4\ud0b4) \ub450 \uac00\uc9c0\ub97c \ud55c\ub2e4.
+//   \u2460 \ubcf8\ubb38 \uc5c6\ub294 4xx \uba74 \ubc29\uc2dd\uc744 \ubc14\uafd4 \ub2e4\uc2dc \uc2dc\ub3c4\ud55c\ub2e4: std(https+Accept/UA) \u2192 plain(https, \ud5e4\ub354 \uc5c6\uc74c) \u2192 http. \ud1b5\ud55c \ubc29\uc2dd\uc740 \uae30\uc5b5\ud574 \ub2e4\uc74c\ubd80\ud130 \uadf8\uac83\ubd80\ud130 \uc4f4\ub2e4.
+//   \u2461 \ub05d\ub0b4 \uc548 \ub418\uba74 \ubcf8\ubb38 \uc5c6\ub294 \uc751\ub2f5 \ub300\uc2e0 JSON({ok:false, error, upstream}) \uc744 \ub3cc\ub824\uc8fc\uace0, \uac19\uc740 \uacbd\ub85c\ub294 30\ucd08 \uc270\ub2e4(\uc7ac\uc2dc\ub3c4 \ud3ed\uc8fc\u00b7\ucffc\ud130 \ub0ad\ube44 \ubc29\uc9c0).
+//   \uc9c4\ub2e8\uc740 /seoul?path=\u2026&debug=1 (SEOUL_DEBUG=1 \uc77c \ub54c\ub9cc). \ud0a4 \uac12\uc740 \uc5b4\ub514\uc5d0\ub3c4 \ub0b4\uc9c0 \uc54a\ub294\ub2e4.
 const SEOUL_VARIANTS = [
   { id: 'std',   scheme: 'https', headers: true  },
   { id: 'plain', scheme: 'https', headers: false },
@@ -819,7 +819,7 @@ async function seoulFetchVariant(v, key, path, ttl) {
   return { status: r.status, body: await r.text() };
 }
 
-// 실제 호출 (키 로테이션 포함) — 성공하면 두 캐시에 모두 넣는다
+// \uc2e4\uc81c \ud638\ucd9c (\ud0a4 \ub85c\ud14c\uc774\uc158 \ud3ec\ud568) \u2014 \uc131\uacf5\ud558\uba74 \ub450 \uce90\uc2dc\uc5d0 \ubaa8\ub450 \ub123\ub294\ub2e4
 async function seoulUpstream(path, keys, ttl, cacheKey) {
   let lastBody = '', lastStatus = 502;
 
@@ -838,34 +838,34 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
         const r = await seoulFetchVariant(SEOUL_VARIANTS[vi], keys[i], path, ttl);
         seoulStats.upstream++;
         if (r.status >= 400) usageAdd('gl.sw.k' + (i + 1) + '.err');
-        if (seoulEmptyClientErr(r.status, r.body)) { emptyErr = r; continue; }   // 본문 없는 4xx → 다른 방식으로
+        if (seoulEmptyClientErr(r.status, r.body)) { emptyErr = r; continue; }   // \ubcf8\ubb38 \uc5c6\ub294 4xx \u2192 \ub2e4\ub978 \ubc29\uc2dd\uc73c\ub85c
         got = r; _seoulVariant = vi; break;
       } catch (e) {
         lastBody = JSON.stringify({ ok: false, error: String((e && e.message) || e) });
       }
     }
     if (!got && emptyErr) {
-      // 모든 방식이 본문 없는 4xx — 본문 없는 응답 대신 이유가 보이는 JSON 으로
+      // \ubaa8\ub4e0 \ubc29\uc2dd\uc774 \ubcf8\ubb38 \uc5c6\ub294 4xx \u2014 \ubcf8\ubb38 \uc5c6\ub294 \uc751\ub2f5 \ub300\uc2e0 \uc774\uc720\uac00 \ubcf4\uc774\ub294 JSON \uc73c\ub85c
       lastStatus = emptyErr.status;
       lastBody = JSON.stringify({ ok: false, error: 'upstream ' + emptyErr.status + ' (empty body)', upstream: emptyErr.status });
-      continue;                       // 다음 키로
+      continue;                       // \ub2e4\uc74c \ud0a4\ub85c
     }
-    if (!got) continue;               // 네트워크 오류 — 다음 키로
+    if (!got) continue;               // \ub124\ud2b8\uc6cc\ud06c \uc624\ub958 \u2014 \ub2e4\uc74c \ud0a4\ub85c
     status = got.status; body = got.body;
 
     lastBody = body; lastStatus = status;
 
-    // 한도 초과·키 문제면 다음 키로, 그 외에는 그대로 돌려준다
+    // \ud55c\ub3c4 \ucd08\uacfc\u00b7\ud0a4 \ubb38\uc81c\uba74 \ub2e4\uc74c \ud0a4\ub85c, \uadf8 \uc678\uc5d0\ub294 \uadf8\ub300\ub85c \ub3cc\ub824\uc900\ub2e4
     let code = '';
     try {
       const j = JSON.parse(body);
       code = (j && j.errorMessage && j.errorMessage.code)
           || (j && j.status && j.status.code) || '';
-    } catch (e) { /* JSON 이 아니면 그대로 반환 */ }
+    } catch (e) { /* JSON \uc774 \uc544\ub2c8\uba74 \uadf8\ub300\ub85c \ubc18\ud658 */ }
 
     if (code === 'ERROR-337' || code === 'INFO-100' || code === 'ERROR-336') continue;
 
-    // 정상 응답만 캐시에 넣는다(한도 초과 메시지를 10초 붙들면 안 된다)
+    // \uc815\uc0c1 \uc751\ub2f5\ub9cc \uce90\uc2dc\uc5d0 \ub123\ub294\ub2e4(\ud55c\ub3c4 \ucd08\uacfc \uba54\uc2dc\uc9c0\ub97c 10\ucd08 \ubd99\ub4e4\uba74 \uc548 \ub41c\ub2e4)
     if (status === 200) {
       seoulMemPut(path, status, body, ttl);
       try {
@@ -873,7 +873,7 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
           headers: { 'Content-Type': 'application/json; charset=utf-8',
                      'Cache-Control': 'public, max-age=' + ttl }
         }));
-      } catch (e) { /* 엣지 캐시 실패는 무시 */ }
+      } catch (e) { /* \uc5e3\uc9c0 \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ }
     }
     return { body, status, key: i + 1 };
   }
@@ -882,12 +882,12 @@ async function seoulUpstream(path, keys, ttl, cacheKey) {
     _seoulBad.set(path, { until: Date.now() + 30000, status: lastStatus });
     if (_seoulBad.size > 200) { for (const [k, v] of _seoulBad) { if (Date.now() > v.until) _seoulBad.delete(k); } }
   }
-  // 모든 키가 막힘 — 앱은 이 경우 정적 시각표로 폴백한다
+  // \ubaa8\ub4e0 \ud0a4\uac00 \ub9c9\ud798 \u2014 \uc571\uc740 \uc774 \uacbd\uc6b0 \uc815\uc801 \uc2dc\uac01\ud45c\ub85c \ud3f4\ubc31\ud55c\ub2e4
   return { body: lastBody || JSON.stringify({ ok: false, error: 'all keys exhausted' }),
            status: lastStatus, key: 'exhausted' };
 }
 
-// ── 진단 (SEOUL_DEBUG=1 일 때만). 키 값·키가 들어간 URL 은 응답에 절대 싣지 않는다. 20초에 한 번만. ──
+// \u2500\u2500 \uc9c4\ub2e8 (SEOUL_DEBUG=1 \uc77c \ub54c\ub9cc). \ud0a4 \uac12\u00b7\ud0a4\uac00 \ub4e4\uc5b4\uac04 URL \uc740 \uc751\ub2f5\uc5d0 \uc808\ub300 \uc2e3\uc9c0 \uc54a\ub294\ub2e4. 20\ucd08\uc5d0 \ud55c \ubc88\ub9cc. \u2500\u2500
 let _seoulDebugAt = 0;
 function seoulRedact(str, keys) {
   let t = String(str == null ? '' : str);
@@ -915,7 +915,7 @@ async function seoulProbe(label, url, init, keys, group) {
   try {
     const r = await fetch(url, init);
     const txt = await r.text();
-    const names = []; r.headers.forEach((_v, k) => names.push(k));          // 헤더 이름만(값은 내지 않는다)
+    const names = []; r.headers.forEach((_v, k) => names.push(k));          // \ud5e4\ub354 \uc774\ub984\ub9cc(\uac12\uc740 \ub0b4\uc9c0 \uc54a\ub294\ub2e4)
     return {
       label, group: group || 'seoul', status: r.status, statusText: r.statusText || '', ms: Date.now() - t0,
       redirected: !!r.redirected, finalUrl: seoulRedact(r.url || '', keys).slice(0, 120),
@@ -926,7 +926,7 @@ async function seoulProbe(label, url, init, keys, group) {
     return { label, group: group || 'seoul', error: seoulRedact(String((e && e.message) || e).slice(0, 160), keys) };
   }
 }
-// 진단 결과를 사람이 바로 읽을 수 있게 한 줄로 요약한다(어디까지 확인됐는지 단정하지 않는다)
+// \uc9c4\ub2e8 \uacb0\uacfc\ub97c \uc0ac\ub78c\uc774 \ubc14\ub85c \uc77d\uc744 \uc218 \uc788\uac8c \ud55c \uc904\ub85c \uc694\uc57d\ud55c\ub2e4(\uc5b4\ub514\uae4c\uc9c0 \ud655\uc778\ub410\ub294\uc9c0 \ub2e8\uc815\ud558\uc9c0 \uc54a\ub294\ub2e4)
 function seoulHint(probes) {
   const sw = probes.filter((p) => p.group === 'swopenapi');
   const ctl = probes.filter((p) => p.group === 'control');
@@ -934,10 +934,10 @@ function seoulHint(probes) {
   const swOk = sw.filter(okOf);
   const ctlOk = ctl.filter(okOf);
   const allEmpty400 = sw.length > 0 && sw.every((p) => !p.error && p.status === 400 && p.bodyLen === 0);
-  if (swOk.length) return 'swopenapi 일부 방식이 통함: ' + swOk.map((p) => p.label).join(', ') + ' → 그 방식을 기본으로 쓰도록 바꾸면 됨';
-  if (allEmpty400 && ctlOk.length) return 'swopenapi 로 가는 모든 방식(헤더·http·ASCII 경로·sample 키 포함)이 본문 없는 400, 다른 사이트는 정상 → swopenapi 쪽이 이 Worker 의 요청(출구 IP/지역)을 거절하는 것으로 보임. 코드로는 못 고침';
-  if (allEmpty400 && !ctlOk.length) return '모든 외부 요청이 실패 → 이 Worker 의 외부 접속 자체 문제';
-  return '결과가 섞여 있음 — probes 를 직접 확인';
+  if (swOk.length) return 'swopenapi \uc77c\ubd80 \ubc29\uc2dd\uc774 \ud1b5\ud568: ' + swOk.map((p) => p.label).join(', ') + ' \u2192 \uadf8 \ubc29\uc2dd\uc744 \uae30\ubcf8\uc73c\ub85c \uc4f0\ub3c4\ub85d \ubc14\uafb8\uba74 \ub428';
+  if (allEmpty400 && ctlOk.length) return 'swopenapi \ub85c \uac00\ub294 \ubaa8\ub4e0 \ubc29\uc2dd(\ud5e4\ub354\u00b7http\u00b7ASCII \uacbd\ub85c\u00b7sample \ud0a4 \ud3ec\ud568)\uc774 \ubcf8\ubb38 \uc5c6\ub294 400, \ub2e4\ub978 \uc0ac\uc774\ud2b8\ub294 \uc815\uc0c1 \u2192 swopenapi \ucabd\uc774 \uc774 Worker \uc758 \uc694\uccad(\ucd9c\uad6c IP/\uc9c0\uc5ed)\uc744 \uac70\uc808\ud558\ub294 \uac83\uc73c\ub85c \ubcf4\uc784. \ucf54\ub4dc\ub85c\ub294 \ubabb \uace0\uce68';
+  if (allEmpty400 && !ctlOk.length) return '\ubaa8\ub4e0 \uc678\ubd80 \uc694\uccad\uc774 \uc2e4\ud328 \u2192 \uc774 Worker \uc758 \uc678\ubd80 \uc811\uc18d \uc790\uccb4 \ubb38\uc81c';
+  return '\uacb0\uacfc\uac00 \uc11e\uc5ec \uc788\uc74c \u2014 probes \ub97c \uc9c1\uc811 \ud655\uc778';
 }
 async function seoulDebug(path, keys) {
   if (Date.now() - _seoulDebugAt < 20000) return jsonRes({ ok: false, error: 'wait 20s between debug calls' }, 429);
@@ -949,21 +949,21 @@ async function seoulDebug(path, keys) {
     Accept: 'application/json, text/plain, */*', 'Accept-Language': 'ko-KR,ko;q=0.9', Referer: 'https://data.seoul.go.kr/' } };
   const SW = 'swopenapi';
   const probes = [];
-  // ── 이 Worker 가 쓰는 방식 그대로 ──
+  // \u2500\u2500 \uc774 Worker \uac00 \uc4f0\ub294 \ubc29\uc2dd \uadf8\ub300\ub85c \u2500\u2500
   probes.push(await seoulProbe('std-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, std, keys, SW));
   probes.push(await seoulProbe('plain-https', SEOUL_BASE + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys, SW));
   probes.push(await seoulProbe('plain-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/' + encodeURIComponent(k) + '/json/' + path, undefined, keys, SW));
   if (encodeURIComponent(k) !== k) probes.push(await seoulProbe('raw-key-https', SEOUL_BASE + '/' + k + '/json/' + path, undefined, keys, SW));
-  // ── 공개 sample 키(키 문제를 배제) × 요청 모양 ──
-  probes.push(await seoulProbe('sample-https', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys, SW));
-  probes.push(await seoulProbe('sample-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/sample/json/realtimeStationArrival/0/5/' + '서울', undefined, keys, SW));
+  // \u2500\u2500 \uacf5\uac1c sample \ud0a4(\ud0a4 \ubb38\uc81c\ub97c \ubc30\uc81c) \u00d7 \uc694\uccad \ubaa8\uc591 \u2500\u2500
+  probes.push(await seoulProbe('sample-https', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/' + '\uc11c\uc6b8', undefined, keys, SW));
+  probes.push(await seoulProbe('sample-http', SEOUL_BASE.replace(/^https:/, 'http:') + '/sample/json/realtimeStationArrival/0/5/' + '\uc11c\uc6b8', undefined, keys, SW));
   probes.push(await seoulProbe('sample-ascii-path', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/%EC%84%9C%EC%9A%B8', undefined, keys, SW));
   probes.push(await seoulProbe('sample-browser-headers', SEOUL_BASE + '/sample/json/realtimeStationArrival/0/5/%EC%84%9C%EC%9A%B8', browserLike, keys, SW));
-  // ── 다른 서울시 호스트(서울 도메인 전체가 막힌 건지) ──
+  // \u2500\u2500 \ub2e4\ub978 \uc11c\uc6b8\uc2dc \ud638\uc2a4\ud2b8(\uc11c\uc6b8 \ub3c4\uba54\uc778 \uc804\uccb4\uac00 \ub9c9\ud78c \uac74\uc9c0) \u2500\u2500
   probes.push(await seoulProbe('swopenapi-root', SEOUL_BASE.replace(/\/api\/subway$/, '/'), undefined, keys, 'seoul-other'));
   probes.push(await seoulProbe('seoul-8088-http', 'http://openapi.seoul.go.kr:8088/sample/json/CardSubwayStatsNew/1/5/20220301/', undefined, keys, 'seoul-other'));
   probes.push(await seoulProbe('seoul-data-portal', 'https://data.seoul.go.kr/', undefined, keys, 'seoul-other'));
-  // ── 대조군(이 Worker 가 외부로 나가긴 하는지) ──
+  // \u2500\u2500 \ub300\uc870\uad70(\uc774 Worker \uac00 \uc678\ubd80\ub85c \ub098\uac00\uae34 \ud558\ub294\uc9c0) \u2500\u2500
   probes.push(await seoulProbe('control-apis-data-go-kr', 'https://apis.data.go.kr/', undefined, keys, 'control'));
   probes.push(await seoulProbe('control-example', 'https://example.com/', undefined, keys, 'control'));
   return jsonRes({
@@ -974,11 +974,11 @@ async function seoulDebug(path, keys) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-// /bus-stops?lat=..&lng=..&radius=800  →  { ok, count, stops:[{node_id,node_nm,city_code,lat,lng,dist}] }
-//   D1(subway-db) bus_stops 테이블의 좌표 범위 조회. 열 이름이 달라도 동작하도록 SELECT * 후
-//   node_id/node_nm/city_code 의 흔한 별칭을 모두 받아 준다(앱이 기대하는 이름으로 내보낸다).
-// ══════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// /bus-stops?lat=..&lng=..&radius=800  \u2192  { ok, count, stops:[{node_id,node_nm,city_code,lat,lng,dist}] }
+//   D1(subway-db) bus_stops \ud14c\uc774\ube14\uc758 \uc88c\ud45c \ubc94\uc704 \uc870\ud68c. \uc5f4 \uc774\ub984\uc774 \ub2ec\ub77c\ub3c4 \ub3d9\uc791\ud558\ub3c4\ub85d SELECT * \ud6c4
+//   node_id/node_nm/city_code \uc758 \ud754\ud55c \ubcc4\uce6d\uc744 \ubaa8\ub450 \ubc1b\uc544 \uc900\ub2e4(\uc571\uc774 \uae30\ub300\ud558\ub294 \uc774\ub984\uc73c\ub85c \ub0b4\ubcf4\ub0b8\ub2e4).
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 function _hav(y1, x1, y2, x2) {
   const R = 6371e3, t = Math.PI / 180;
   const dy = (y2 - y1) * t, dx = (x2 - x1) * t;
@@ -989,7 +989,7 @@ async function handleBusStops(url, env) {
   const lat = parseFloat(url.searchParams.get('lat'));
   const lng = parseFloat(url.searchParams.get('lng'));
   if (!isFinite(lat) || !isFinite(lng) || lat < 32 || lat > 39.6 || lng < 124 || lng > 132.5) {
-    return jsonRes({ ok: false, error: 'lat,lng 필요(국내 좌표)' }, 400);
+    return jsonRes({ ok: false, error: 'lat,lng \ud544\uc694(\uad6d\ub0b4 \uc88c\ud45c)' }, 400);
   }
   const radius = Math.min(3000, Math.max(100, parseInt(url.searchParams.get('radius') || '800', 10) || 800));
   const dLat = radius / 111000;
@@ -1030,23 +1030,23 @@ var __gd_inner = {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    // 상태 확인용
+    // \uc0c1\ud0dc \ud655\uc778\uc6a9
     if (reqUrl.pathname === '/' || reqUrl.pathname === '/health') {
       return new Response(
         JSON.stringify({
           ok: true,
           service: 'gildongmu-bus-proxy',
-          // 배포된 코드가 어느 버전인지 확인용 — 새 기능이 안 보이면 여기부터 본다
+          // \ubc30\ud3ec\ub41c \ucf54\ub4dc\uac00 \uc5b4\ub290 \ubc84\uc804\uc778\uc9c0 \ud655\uc778\uc6a9 \u2014 \uc0c8 \uae30\ub2a5\uc774 \uc548 \ubcf4\uc774\uba74 \uc5ec\uae30\ubd80\ud130 \ubcf8\ub2e4
           version: 'gentle-2026-10-01a',
           routes: ['/tago', '/seoul', '/kakao-local', '/bus-stops', '/news/all', '/news',
                    '/admin/news-collect', '/admin/news-debug', '/admin/news-purge', '/admin/kakao-purge'],
           keySet: !!env.DATA_GO_KR_KEY,
           kakaoKeySet: !!env.KAKAO_REST_KEY,
           seoulKeyCount: seoulKeys(env).length,
-          seoulStats,   // upstream=실제 호출, mem/edge/coalesced=아낀 횟수
+          seoulStats,   // upstream=\uc2e4\uc81c \ud638\ucd9c, mem/edge/coalesced=\uc544\ub080 \ud69f\uc218
 
           keyType: env.DATA_GO_KR_KEY
-            ? (/%[0-9A-Fa-f]{2}/.test(env.DATA_GO_KR_KEY) ? 'encoding(자동 디코드 적용)' : 'decoding')
+            ? (/%[0-9A-Fa-f]{2}/.test(env.DATA_GO_KR_KEY) ? 'encoding(\uc790\ub3d9 \ub514\ucf54\ub4dc \uc801\uc6a9)' : 'decoding')
             : 'none',
           allowed: ALLOWED_HOSTS
         }),
@@ -1054,9 +1054,9 @@ var __gd_inner = {
       );
     }
 
-    /* ── 🔒 관리 경로 보호 (2026-10-01) ──────────────────────────
-     *   /admin/* 은 예전엔 인증이 없어 누구나 호출할 수 있었다.
-     *   시크릿 ADMIN_TOKEN 이 없으면 닫힌다(fail closed). 호출: ?token=... 또는 X-Admin-Token 헤더.
+    /* \u2500\u2500 \ud83d\udd12 \uad00\ub9ac \uacbd\ub85c \ubcf4\ud638 (2026-10-01) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+     *   /admin/* \uc740 \uc608\uc804\uc5d4 \uc778\uc99d\uc774 \uc5c6\uc5b4 \ub204\uad6c\ub098 \ud638\ucd9c\ud560 \uc218 \uc788\uc5c8\ub2e4.
+     *   \uc2dc\ud06c\ub9bf ADMIN_TOKEN \uc774 \uc5c6\uc73c\uba74 \ub2eb\ud78c\ub2e4(fail closed). \ud638\ucd9c: ?token=... \ub610\ub294 X-Admin-Token \ud5e4\ub354.
      */
     if (reqUrl.pathname.indexOf('/admin/') === 0) {
       const want = String(env.ADMIN_TOKEN || '');
@@ -1064,15 +1064,15 @@ var __gd_inner = {
       if (!want || got !== want) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
     }
 
-    /* ── 🚌 주변 정류장 (D1 보조 조회) ───────────────────────────
-     *   앱은 TAGO 가 0건이거나 실패할 때 이 경로로 D1 의 정류장 목록을 받아 쓴다.
-     *   (그동안 이 워커에 없어 항상 404 → 외곽·TAGO 장애 지역에서 '정류장 없음'이 됐다)
+    /* \u2500\u2500 \ud83d\ude8c \uc8fc\ubcc0 \uc815\ub958\uc7a5 (D1 \ubcf4\uc870 \uc870\ud68c) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+     *   \uc571\uc740 TAGO \uac00 0\uac74\uc774\uac70\ub098 \uc2e4\ud328\ud560 \ub54c \uc774 \uacbd\ub85c\ub85c D1 \uc758 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc744 \ubc1b\uc544 \uc4f4\ub2e4.
+     *   (\uadf8\ub3d9\uc548 \uc774 \uc6cc\ucee4\uc5d0 \uc5c6\uc5b4 \ud56d\uc0c1 404 \u2192 \uc678\uacfd\u00b7TAGO \uc7a5\uc560 \uc9c0\uc5ed\uc5d0\uc11c '\uc815\ub958\uc7a5 \uc5c6\uc74c'\uc774 \ub410\ub2e4)
      */
     if (reqUrl.pathname === '/bus-stops') {
       return handleBusStops(reqUrl, env);
     }
 
-    /* ── 📰 뉴스 ─────────────────────────────────────────────── */
+    /* \u2500\u2500 \ud83d\udcf0 \ub274\uc2a4 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
     if (reqUrl.pathname === '/news/all') {
       try {
         const per = reqUrl.searchParams.get('per');
@@ -1089,11 +1089,11 @@ var __gd_inner = {
         return jsonRes({ ok: false, error: String((e && e.message) || e) }, 500);
       }
     }
-    /* 점검용 수동 실행 — cron 이 도는지 확인할 때 쓴다 */
+    /* \uc810\uac80\uc6a9 \uc218\ub3d9 \uc2e4\ud589 \u2014 cron \uc774 \ub3c4\ub294\uc9c0 \ud655\uc778\ud560 \ub54c \uc4f4\ub2e4 */
     if (reqUrl.pathname === '/admin/news-collect') {
       try {
-        // ?cat=연예 → 한 카테고리만 (구글에 막히지 않는 안전한 방법)
-        // ?next=1  → 순환 순서상 다음 카테고리 하나
+        // ?cat=\uc5f0\uc608 \u2192 \ud55c \uce74\ud14c\uace0\ub9ac\ub9cc (\uad6c\uae00\uc5d0 \ub9c9\ud788\uc9c0 \uc54a\ub294 \uc548\uc804\ud55c \ubc29\ubc95)
+        // ?next=1  \u2192 \uc21c\ud658 \uc21c\uc11c\uc0c1 \ub2e4\uc74c \uce74\ud14c\uace0\ub9ac \ud558\ub098
         const one = reqUrl.searchParams.get('cat');
         if (one) {
           if (!NEWS_FEEDS[one]) return jsonRes({ ok: false, error: 'unknown cat: ' + one }, 400);
@@ -1106,10 +1106,10 @@ var __gd_inner = {
         return jsonRes({ ok: true, added: await collectAllNews(env) });
       } catch (e) { return jsonRes({ ok: false, error: String((e && e.message) || e) }, 500); }
     }
-    /* 피드가 왜 비는지 집어내는 진단 — 카테고리 하나를 피드별로 뜯어본다 */
+    /* \ud53c\ub4dc\uac00 \uc65c \ube44\ub294\uc9c0 \uc9d1\uc5b4\ub0b4\ub294 \uc9c4\ub2e8 \u2014 \uce74\ud14c\uace0\ub9ac \ud558\ub098\ub97c \ud53c\ub4dc\ubcc4\ub85c \ub72f\uc5b4\ubcf8\ub2e4 */
     if (reqUrl.pathname === '/admin/news-debug') {
       try {
-        const cat = reqUrl.searchParams.get('cat') || '연예';
+        const cat = reqUrl.searchParams.get('cat') || '\uc5f0\uc608';
         const feeds = NEWS_FEEDS[cat] || [];
         const out = [];
         for (const u of feeds) {
@@ -1123,7 +1123,7 @@ var __gd_inner = {
             row.bytes = t.length;
             row.itemTags = (t.match(/<item[\s>]/g) || []).length;
             row.parsed = parseRss(t).length;
-            if (!row.parsed) row.head = t.slice(0, 300);   // 무엇이 왔는지 눈으로 본다
+            if (!row.parsed) row.head = t.slice(0, 300);   // \ubb34\uc5c7\uc774 \uc654\ub294\uc9c0 \ub208\uc73c\ub85c \ubcf8\ub2e4
           } catch (e) {
             row.error = String((e && e.message) || e);
           }
@@ -1134,18 +1134,18 @@ var __gd_inner = {
         return jsonRes({ ok: false, error: String((e && e.message) || e) }, 500);
       }
     }
-    /* 어떤 형태의 검색어가 통과하는지 한 번에 비교한다.
-       503 이 검색어 때문인지, 속도 제한인지, 파라미터 때문인지 가른다. */
+    /* \uc5b4\ub5a4 \ud615\ud0dc\uc758 \uac80\uc0c9\uc5b4\uac00 \ud1b5\uacfc\ud558\ub294\uc9c0 \ud55c \ubc88\uc5d0 \ube44\uad50\ud55c\ub2e4.
+       503 \uc774 \uac80\uc0c9\uc5b4 \ub54c\ubb38\uc778\uc9c0, \uc18d\ub3c4 \uc81c\ud55c\uc778\uc9c0, \ud30c\ub77c\ubbf8\ud130 \ub54c\ubb38\uc778\uc9c0 \uac00\ub978\ub2e4. */
     if (reqUrl.pathname === '/admin/news-probe') {
-      const q = reqUrl.searchParams.get('q') || '아이돌';
+      const q = reqUrl.searchParams.get('q') || '\uc544\uc774\ub3cc';
       const eq = encodeURIComponent(q);
       const cases = [
         { name: 'search+when14d', url: 'https://news.google.com/rss/search?q=' + eq + '+when:14d&hl=ko&gl=KR&ceid=KR:ko' },
-        { name: 'search(기간없음)', url: 'https://news.google.com/rss/search?q=' + eq + '&hl=ko&gl=KR&ceid=KR:ko' },
-        { name: 'search(로케일없음)', url: 'https://news.google.com/rss/search?q=' + eq },
-        { name: 'ENTERTAINMENT토픽', url: 'https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ko&gl=KR&ceid=KR:ko' },
-        { name: '전체헤드라인', url: 'https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko' },
-        { name: '비교용(코스피)', url: 'https://news.google.com/rss/search?q=' + encodeURIComponent('코스피') + '+when:14d&hl=ko&gl=KR&ceid=KR:ko' }
+        { name: 'search(\uae30\uac04\uc5c6\uc74c)', url: 'https://news.google.com/rss/search?q=' + eq + '&hl=ko&gl=KR&ceid=KR:ko' },
+        { name: 'search(\ub85c\ucf00\uc77c\uc5c6\uc74c)', url: 'https://news.google.com/rss/search?q=' + eq },
+        { name: 'ENTERTAINMENT\ud1a0\ud53d', url: 'https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ko&gl=KR&ceid=KR:ko' },
+        { name: '\uc804\uccb4\ud5e4\ub4dc\ub77c\uc778', url: 'https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko' },
+        { name: '\ube44\uad50\uc6a9(\ucf54\uc2a4\ud53c)', url: 'https://news.google.com/rss/search?q=' + encodeURIComponent('\ucf54\uc2a4\ud53c') + '+when:14d&hl=ko&gl=KR&ceid=KR:ko' }
       ];
       const out = [];
       for (const c of cases) {
@@ -1166,7 +1166,7 @@ var __gd_inner = {
         } catch (e) {
           out.push({ name: c.name, error: String((e && e.message) || e) });
         }
-        await sleep(1200);   // 사이를 충분히 벌려 속도 제한 영향을 배제한다
+        await sleep(1200);   // \uc0ac\uc774\ub97c \ucda9\ubd84\ud788 \ubc8c\ub824 \uc18d\ub3c4 \uc81c\ud55c \uc601\ud5a5\uc744 \ubc30\uc81c\ud55c\ub2e4
       }
       return jsonRes({ ok: true, q, cases: out });
     }
@@ -1175,8 +1175,8 @@ var __gd_inner = {
       catch (e) { return jsonRes({ ok: false, error: String((e && e.message) || e) }, 500); }
     }
 
-    /* ── 📍 카카오 로컬 (D1 캐시 경유) ────────────────────────
-     *   같은 좌표(100m 격자)·같은 검색어는 카카오에 다시 묻지 않는다.
+    /* \u2500\u2500 \ud83d\udccd \uce74\uce74\uc624 \ub85c\uceec (D1 \uce90\uc2dc \uacbd\uc720) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+     *   \uac19\uc740 \uc88c\ud45c(100m \uaca9\uc790)\u00b7\uac19\uc740 \uac80\uc0c9\uc5b4\ub294 \uce74\uce74\uc624\uc5d0 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4.
      */
     if (reqUrl.pathname === '/kakao-local') {
       return handleKakaoLocal(request, env);
@@ -1186,7 +1186,7 @@ var __gd_inner = {
       catch (e) { return jsonRes({ ok: false, error: String((e && e.message) || e) }, 500); }
     }
 
-    /* ── 🚇 서울 지하철 실시간 ───────────────────────────────── */
+    /* \u2500\u2500 \ud83d\ude87 \uc11c\uc6b8 \uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
     if (reqUrl.pathname === '/seoul') {
       return handleSeoul(request, env);
     }
@@ -1217,23 +1217,23 @@ var __gd_inner = {
       return new Response('Server key not configured', { status: 500, headers: CORS });
     }
 
-    // ★ serviceKey 주입 (앱은 빈 값으로 보냄)
-    //   data.go.kr 키는 Encoding(%2B..) / Decoding(+..) 두 형태가 있다.
-    //   Encoding 키를 그대로 넣으면 searchParams.set이 다시 인코딩해(%252B) 인증 실패한다.
-    //   → 퍼센트 인코딩이 보이면 한 번 디코드해 원본으로 되돌린 뒤 넣는다.
+    // \u2605 serviceKey \uc8fc\uc785 (\uc571\uc740 \ube48 \uac12\uc73c\ub85c \ubcf4\ub0c4)
+    //   data.go.kr \ud0a4\ub294 Encoding(%2B..) / Decoding(+..) \ub450 \ud615\ud0dc\uac00 \uc788\ub2e4.
+    //   Encoding \ud0a4\ub97c \uadf8\ub300\ub85c \ub123\uc73c\uba74 searchParams.set\uc774 \ub2e4\uc2dc \uc778\ucf54\ub529\ud574(%252B) \uc778\uc99d \uc2e4\ud328\ud55c\ub2e4.
+    //   \u2192 \ud37c\uc13c\ud2b8 \uc778\ucf54\ub529\uc774 \ubcf4\uc774\uba74 \ud55c \ubc88 \ub514\ucf54\ub4dc\ud574 \uc6d0\ubcf8\uc73c\ub85c \ub418\ub3cc\ub9b0 \ub4a4 \ub123\ub294\ub2e4.
     let key = String(env.DATA_GO_KR_KEY || '');
     if (/%[0-9A-Fa-f]{2}/.test(key)) {
-      try { key = decodeURIComponent(key); } catch (e) { /* 디코드 실패 시 원본 사용 */ }
+      try { key = decodeURIComponent(key); } catch (e) { /* \ub514\ucf54\ub4dc \uc2e4\ud328 \uc2dc \uc6d0\ubcf8 \uc0ac\uc6a9 */ }
     }
     u.searchParams.set('serviceKey', key);
-    // 서울 TOPIS(ws.bus.go.kr)는 "변수명은 대소문자를 구분"한다고 문서에 명시돼 있어
-    // 대문자 S 형태도 함께 넣어 둔다(무시되면 그만, 필요하면 이쪽이 인식된다).
+    // \uc11c\uc6b8 TOPIS(ws.bus.go.kr)\ub294 "\ubcc0\uc218\uba85\uc740 \ub300\uc18c\ubb38\uc790\ub97c \uad6c\ubd84"\ud55c\ub2e4\uace0 \ubb38\uc11c\uc5d0 \uba85\uc2dc\ub3fc \uc788\uc5b4
+    // \ub300\ubb38\uc790 S \ud615\ud0dc\ub3c4 \ud568\uaed8 \ub123\uc5b4 \ub454\ub2e4(\ubb34\uc2dc\ub418\uba74 \uadf8\ub9cc, \ud544\uc694\ud558\uba74 \uc774\ucabd\uc774 \uc778\uc2dd\ub41c\ub2e4).
     if (/(^|\.)ws\.bus\.go\.kr$/.test(u.hostname)) {
       u.searchParams.set('ServiceKey', key);
       u.searchParams.set('resultType', 'json');
     }
 
-    // 서울 TOPIS는 https를 지원하지 않는 경우가 있어 http로 시도 후 실패 시 https 재시도
+    // \uc11c\uc6b8 TOPIS\ub294 https\ub97c \uc9c0\uc6d0\ud558\uc9c0 \uc54a\ub294 \uacbd\uc6b0\uac00 \uc788\uc5b4 http\ub85c \uc2dc\ub3c4 \ud6c4 \uc2e4\ud328 \uc2dc https \uc7ac\uc2dc\ub3c4
     const gk = usageKeyOfTago(u);
     const tryFetch = async (urlStr) => {
       usageAdd(gk);
@@ -1274,19 +1274,19 @@ var __gd_inner = {
     });
   },
 
-  /* ── ⏰ 정기 실행 ────────────────────────────────────────────
-   *   wrangler.toml 의 crons 와 짝을 맞춘다.
-   *     "20 4 * * *"  → 매일 새벽 4시 20분, 오래된 기사 삭제
-   *     그 외         → 뉴스 수집
+  /* \u2500\u2500 \u23f0 \uc815\uae30 \uc2e4\ud589 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+   *   wrangler.toml \uc758 crons \uc640 \uc9dd\uc744 \ub9de\ucd98\ub2e4.
+   *     "20 4 * * *"  \u2192 \ub9e4\uc77c \uc0c8\ubcbd 4\uc2dc 20\ubd84, \uc624\ub798\ub41c \uae30\uc0ac \uc0ad\uc81c
+   *     \uadf8 \uc678         \u2192 \ub274\uc2a4 \uc218\uc9d1
    */
   async scheduled(event, env, ctx) {
     const cron = String((event && event.cron) || '');
     if (cron.indexOf('20 4 ') === 0) {
-      ctx.waitUntil(purgeOldNews(env).then((n) => console.log('[뉴스] 오래된 기사 ' + n + '건 삭제')));
-      ctx.waitUntil(purgeKakaoCache(env).then((n) => console.log('[카카오] 오래된 캐시 ' + n + '건 삭제')).catch(() => {}));
+      ctx.waitUntil(purgeOldNews(env).then((n) => console.log('[\ub274\uc2a4] \uc624\ub798\ub41c \uae30\uc0ac ' + n + '\uac74 \uc0ad\uc81c')));
+      ctx.waitUntil(purgeKakaoCache(env).then((n) => console.log('[\uce74\uce74\uc624] \uc624\ub798\ub41c \uce90\uc2dc ' + n + '\uac74 \uc0ad\uc81c')).catch(() => {}));
       return;
     }
-    ctx.waitUntil(collectNextCat(env).then((s) => console.log('[뉴스] 수집 ' + JSON.stringify(s))));
+    ctx.waitUntil(collectNextCat(env).then((s) => console.log('[\ub274\uc2a4] \uc218\uc9d1 ' + JSON.stringify(s))));
   }
 };
 // ===== GUARD BEGIN (API abuse protection, tools/guard-wrap.js) =====
