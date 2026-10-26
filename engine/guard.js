@@ -16,6 +16,7 @@ var GD_V = 1;
 var GD_CFG = {
   light: { cap: 60, rate: 4 },          // 화면 · 탭 · 칩 누르기 … (1초에 4번을 계속 눌러도 안 걸린다)
   heavy: { cap: 40, rate: 2 },          // 외부 조회가 드는 것: 길찾기 · 버스/지하철 도착 · AI 문구 · 지도 (분당 120번)
+  write: { cap: 20, rate: 0.5 },        // 글 · 댓글 · 제보 · 채팅 쓰기(도배 방지): 한 번에 20개, 이후 분당 30개 (사람이 치는 속도는 걸리지 않는다)
   admin: { cap: 5, rate: 1 / 12 },      // 관리·진단 주소: 분당 5번
   total: { cap: 600, rate: 30 }         // IP 하나의 전체(공유 IP 도 넉넉): 한 번에 600 · 초당 30
 };
@@ -31,6 +32,7 @@ var GD_HEAVY_PATHS = ['/route-v2', '/route-v2-app', '/route-v2-debug', '/warm', 
 
 var GD_ST = { b: new Map(), ban: new Map(), vio: new Map(), ids: new Map(), gcAt: 0, stat: { ok: 0, limited: 0, banned: 0, admin: 0, spoof: 0 } };
 
+// 다른 워커(게시판 · 버스 · 음식 · 쇼핑 · 중계)는 o.cls(종류 이름 · 'free' 면 검사 없이 통과)와 o.cfg(종류별 통 크기 덮어쓰기)를 넘긴다.
 function gdClass(path) {
   var p = String(path || '');
   if (GD_ADMIN_PATHS.indexOf(p) >= 0) return 'admin';
@@ -59,16 +61,19 @@ function gdGc(now) {
   if (GD_ST.ids.size > 20000) GD_ST.ids.clear();
 }
 
+function gdCfgOf(o, cls) { return (o.cfg && o.cfg[cls]) || GD_CFG[cls] || GD_CFG.light; }
+
 // 한 요청을 통과시킬까. o = { ip, iid, path, method, now, adminSet, adminOk }
 //   → { ok:true, cls } | { ok:false, status, retryS, reason, cls }
 function gdDecide(o) {
   var now = Number(o.now) || 0, ip = String(o.ip || 'unknown'), method = String(o.method || 'GET').toUpperCase();
-  var path = String(o.path || '/'), cls = gdClass(path);
-  if (method === 'OPTIONS') return { ok: true, cls: cls };
+  var path = String(o.path || '/'), cls = o.cls ? String(o.cls) : gdClass(path);
+  if (method === 'OPTIONS' || cls === 'free') return { ok: true, cls: cls };
   gdGc(now);
   if (cls === 'admin') {
     if (o.adminSet && !o.adminOk) { GD_ST.stat.admin++; return { ok: false, status: 403, retryS: 0, reason: 'admin', cls: cls }; }
-    var ta = gdTake('A|' + ip, GD_CFG.admin.cap, GD_CFG.admin.rate, 1, now);
+    var ca = gdCfgOf(o, 'admin');
+    var ta = gdTake('A|' + ip, ca.cap, ca.rate, 1, now);
     if (!ta.ok) { GD_ST.stat.limited++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil(ta.waitMs / 1000)), reason: 'admin-rate', cls: cls }; }
     return { ok: true, cls: cls };
   }
@@ -84,8 +89,8 @@ function gdDecide(o) {
   var ban = GD_ST.ban.get(who);
   if (ban && ban.until > now) { GD_ST.stat.banned++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil((ban.until - now) / 1000)), reason: 'ban', cls: cls }; }
   var cost = path === '/screen/batch' ? GD_BATCH_COST : 1;
-  var c = GD_CFG[cls];
-  var t1 = gdTake('T|' + ip, GD_CFG.total.cap, GD_CFG.total.rate, cost, now);
+  var c = gdCfgOf(o, cls), ct = gdCfgOf(o, 'total');
+  var t1 = gdTake('T|' + ip, ct.cap, ct.rate, cost, now);
   var t2 = t1.ok ? gdTake(cls + '|' + who, spoof ? Math.ceil(c.cap / 2) : c.cap, spoof ? c.rate / 2 : c.rate, cost, now) : t1;
   if (t2.ok) { GD_ST.stat.ok++; return { ok: true, cls: cls }; }
   // 한도 초과 — 연이어 넘으면 잠깐 차단(60초 → 120초 … 최대 10분)
