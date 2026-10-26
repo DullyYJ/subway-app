@@ -439,7 +439,7 @@ public class ScreenView extends View {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         float adx = Math.abs(x - downX), ady = Math.abs(y - downY);
-                        if (pgHit != null && adx > ady * SW_LOCK && ((x - downX < 0f && pgPage == 0) || (x - downX > 0f && pgPage == 1))) { mode = 10; pgDragOn = true; pgDownPos = pgPos; pgLast = SystemClock.uptimeMillis(); lastX = x; blurInput(); invalidate(); return true; }          // 두 쪽 카드를 가로로 밀기 시작
+                        if (pgHit != null && adx > ady * SW_LOCK) { mode = 10; pgDragOn = true; pgDownPos = pgPos; pgLast = SystemClock.uptimeMillis(); lastX = x; blurInput(); invalidate(); return true; }          // 두 쪽 카드를 가로로 밀기 시작
                         if (swipeHost != null && !swBlock && !swOff && !inHead && !inFoot && !inBand && adx > ady * SW_LOCK && swipeHost.canSwipe()) { mode = 9; swShift = 0f; swRelT = 0L; lastX = x; blurInput(); invalidate(); return true; }          // 가로로 밀기 시작 — 가로로 잠가 세로 스크롤을 멈춘다(비스듬히 밀어도 목록이 흔들리지 않게)
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
@@ -448,7 +448,7 @@ public class ScreenView extends View {
                     } else return true;
                 }
                 if (mode == 10) {                                                                 // 두 쪽 카드를 손가락 따라 민다
-                    if (pgHit != null) pgPos = ScreenCore.clamp(pgDownPos - (x - downX) / dpr / Math.max(1f, pgHit.w), 1f);
+                    if (pgHit != null) pgPos = pgDownPos - (x - downX) / dpr / Math.max(1f, pgHit.w);          // 끝이 없다 — 어느 쪽으로든 계속 넘어간다
                     lastX = x; invalidate(); return true;
                 }
                 if (mode == 9) {                                                                  // 가로로 잠긴 몸짓: 본문은 손가락을 반쯤 따라 움직이기만 한다(세로 스크롤 없음)
@@ -468,7 +468,7 @@ public class ScreenView extends View {
                 if (mode == 10) {                                                                 // 놓았다: 빠르게 쓸었거나 절반 넘게 밀렸으면 그 쪽으로
                     vt.computeCurrentVelocity(1000, maxFling);
                     float vx = vt.getXVelocity();
-                    pgPage = vx < -PG_FLING * dpr ? 1 : vx > PG_FLING * dpr ? 0 : (pgPos > 0.5f ? 1 : 0);
+                    int pg0 = Math.round(pgDownPos); pgPage = vx < -PG_FLING * dpr ? pg0 + 1 : vx > PG_FLING * dpr ? pg0 - 1 : Math.max(pg0 - 1, Math.min(pg0 + 1, Math.round(pgPos)));
                     pgDragOn = false; pgHit = null; pgLast = SystemClock.uptimeMillis(); finishTouch(); invalidate(); return true;
                 }
                 if (mode == 9) {                                                                  // 가로로 민 몸짓을 놓았다: 32dp 넘게 밀었으면 칸을 넘기고(손가락 오른쪽 = 왼쪽 칸 · 왼쪽 = 오른쪽 칸) 아니면 제자리로
@@ -513,7 +513,7 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = pgPos > 0.5f ? 1 : 0; } finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
@@ -611,37 +611,41 @@ public class ScreenView extends View {
         long dt = pgLast == 0L ? 16L : Math.min(50L, now - pgLast); pgLast = now;
         if (pgDragOn) return pgPos;
         float tgt = pgPage;
+        if (pgPos == tgt && Math.abs(pgPage) >= 2) { int k = (pgPage / 2) * 2; pgPage -= k; pgPos -= k; tgt = pgPage; }     // 두 쪽이 돌고 도니 수가 커지지 않게 짝수 칸씩 되돌린다
         if (pgPos != tgt) { pgPos += (tgt - pgPos) * Math.min(1f, dt / 70f); if (Math.abs(tgt - pgPos) < 0.004f) pgPos = tgt; pgAnim = pgPos != tgt; }
         return pgPos;
     }
-    /** 두 쪽 카드 그리기: 틀(둥근 카드)은 그대로 두고 안쪽만 가로로 민다. 첫 쪽은 원래 칸들, 두 번째 쪽은 객실 장면. 반환: 건너뛸 칸 수. */
+    /** 두 쪽 카드 그리기: 틀(둥근 카드)은 그대로 두고 안쪽만 가로로 민다. 0쪽=원래 칸들(혼잡도), 1쪽=객실 장면. 두 쪽이 끝없이 돈다(왼쪽·오른쪽 어느 쪽으로 밀어도 다음 쪽). 반환: 건너뛸 칸 수. */
     private int drawPager(Canvas cv, ScreenCore.Item pn, int i, long now) {
         float o = pgStep(now);
         drawItem(cv, pn);
         cv.save();
         cv.clipRect(pn.x + 1f, pn.y + 1f, pn.x + pn.w - 1f, pn.y + pn.h - 1f);
-        if (o < 1f) {
-            cv.save(); cv.translate(-o * pn.w, 0f);
-            for (int k = 1; k <= pn.pgN && i + k < lay.body.length; k++) drawItem(cv, lay.body[i + k]);
-            cv.restore();
-        }
-        if (o > 0f) {
-            float in = 7f;
-            pgSc.kind = ScreenCore.K_SCENE; pgSc.value = pn.sc2; pgSc.x = pn.x + in; pgSc.y = pn.y + in; pgSc.w = pn.w - in * 2f; pgSc.h = pn.h - in * 2f; pgSc.radius = 10f;
-            cv.save(); cv.translate((1f - o) * pn.w, 0f);
-            drawScene(cv, pgSc);
-            cv.restore();
-        }
+        int base = (int) Math.floor(o); float fr = o - base;
+        int pa = ((base % 2) + 2) % 2, pb = 1 - pa;                          // 지금 왼쪽에 걸친 쪽 · 오른쪽에서 들어오는 쪽
+        drawPgPage(cv, pn, i, pa, -fr * pn.w);
+        if (fr > 0f) drawPgPage(cv, pn, i, pb, (1f - fr) * pn.w);
         cv.restore();
-        // 쪽 표시 점 둘(가운데 아래)
+        float sc = pa == 1 ? 1f - fr : fr;                                    // 객실 장면이 보이는 정도(0~1)
         float cx = pn.x + pn.w / 2f, cy = pn.y + pn.h - 6f;
         p.setStyle(Paint.Style.FILL);
         for (int d = 0; d < 2; d++) {
-            float on = d == 0 ? 1f - o : o;
-            p.setColor(alpha(o > 0.5f ? 0xFFFFFFFF : pal[R_SUB], 0.35f + 0.55f * on));
+            float on = d == 0 ? 1f - sc : sc;
+            p.setColor(alpha(sc > 0.5f ? 0xFFFFFFFF : pal[R_SUB], 0.35f + 0.55f * on));
             cv.drawCircle(cx + (d == 0 ? -5f : 5f), cy, 2.2f + 0.8f * on, p);
         }
         return pn.pgN;
+    }
+    private void drawPgPage(Canvas cv, ScreenCore.Item pn, int i, int which, float dx) {
+        cv.save(); cv.translate(dx, 0f);
+        if (which == 0) {
+            for (int k = 1; k <= pn.pgN && i + k < lay.body.length; k++) drawItem(cv, lay.body[i + k]);
+        } else {
+            float in = 7f;
+            pgSc.kind = ScreenCore.K_SCENE; pgSc.value = pn.sc2; pgSc.x = pn.x + in; pgSc.y = pn.y + in; pgSc.w = pn.w - in * 2f; pgSc.h = pn.h - in * 2f; pgSc.radius = 10f;
+            drawScene(cv, pgSc);
+        }
+        cv.restore();
     }
 
     private SceneDriver scene;
