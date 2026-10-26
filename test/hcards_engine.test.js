@@ -33,10 +33,9 @@ ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t 
 {
   const f25 = E.hcardsScreen({ cap: 25 }, base()), f24 = E.hcardsScreen({ cap: 24 }, base());
   ok(f25.ok && f25.body.map(n => n.t).join() === 'panel,sec,panel,panel' && f25.body[0].into === 'ai' && !f25.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '통합: AI 카드가 맨 앞 · into:ai · 제목줄 없음');
-  const a25 = flat(f25.body[0].kids).find(n => n.t === 'aih');
-  ok(a25 && a25.s === 'AI 승무원 브리핑' && a25.act.v === 'ai.refresh', '통합: AI 제목은 짧게(출발·도착 이름은 위 머리줄에 이미 있다) · 새로고침은 그대로');
+  ok(!flat(f25.body[0].kids).some(n => n.t === 'aih'), 's218: 통합 카드의 AI 부분에는 제목줄(브리핑 · 카운트다운 · 새로고침)이 없다');
   const t25 = txt(f25.body[0].kids);
-  ok(/도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && !/에서 .*까지는 약/.test(t25) && /1호선 타고 출발하세요/.test(t25), '통합: 브리핑은 핵심 시각 · 첫 탑승 위주(긴 경로 문장 없음) — ' + t25.replace(/\n/g, ' / '));
+  ok(/^환승은 없고 도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && /부평에서 .*1호선.*한 번에 가시면 돼요/.test(t25) && !/5분마다/.test(t25), '통합: 환승 · 도착 · 총 시간 한 문장 + 경로를 말로(맺음말 없음) — ' + t25.replace(/\n/g, ' / '));
   ok(f24.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && !f24.body.some(n => n.into) && /부평 → 강남 · 남은시간: 24분/.test(flat(f24.body).find(n => n.t === 'aih').s), '규격 24 이하는 예전 모양 그대로');
   const noRoute = E.hcardsScreen({ cap: 25 }, base({ r: null, gps: [37.5, 127.0] }));
   ok(noRoute.ok && !noRoute.body.some(n => n.into) && noRoute.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '경로가 없으면 합칠 곳이 없어 예전 모양');
