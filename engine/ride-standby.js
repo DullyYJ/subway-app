@@ -37,7 +37,7 @@ var RIDE_STANDBY_DEFAULTS = {
   notYetKeepSec: 45,       // notYet 증거를 유지하는 시간
   gpsGapDeadReckonSec: 180, // 시각표 기준이 아닌 여정(버스): GPS 가 이만큼 끊기면 계획 시각표대로 이어간다(멈춰 서 있지 않게)
   // (offGiveUpSec 는 없앴다 — 2026-10-26 YJ: "경로는 확정되면 사용자가 강제로 취소하거나 도착할 때까지 풀리면 안 된다". 경로를 벗어나도 알림만 하고 안내는 끝내지 않는다.)
-  doneAfterSec: 180,       // 목적지 도착 알림 뒤 이 시간이 지나면 done
+  doneAfterSec: 300,       // 목적지 도착 뒤 이 시간(5분)이 지나면 done — 앱 종료 줄은 3분(RS_END_BTN_MS)에 뜬다
   maxStaleSec: 3 * 3600,   // 상태가 이보다 오래 갱신되지 않았으면 done(안전 장치)
   // ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에"): 다음 호출까지의 간격도 엔진이 정한다(네이티브는 nextMs 를 그대로 따른다).
   //   표시 도착 시각 앞 nearBeforeSec ~ 뒤 nearAfterSec 안에는 nearStepMs, 그 밖에는 stepMs. (웹 _trkGapMs 와 같은 창)
@@ -468,7 +468,7 @@ function rsActs(st, req, now, notes) {
   if (st.rsUndo && now >= st.rsUndo.until) delete st.rsUndo;
   if (rc && typeof rc === 'object' && String(rc.a || '').length) {
     var sig = String(rc.a) + '|' + String(rc.b || '');
-    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rc.go === '쿠팡 보기' ? '쿠팡 보기' : '맛집 보기' };
+    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rsClampTxt(rc.go, 8) || '맛집 보기' };
   }
   if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
   var a = req.act;
@@ -607,15 +607,16 @@ function rsRsState0(st, r, now) {
   }
   return { st: 'hidden' };
 }
-// 하단 줄: 우선순위 내릴 준비(2) > 추천(1) > 없음, 한 번 보인 줄은 30초 붙잡는다(입력이 흔들려도 깜박이지 않게).
+// 하단 줄: 도착 전엔 추천(맛집·카페·쿠팡) · 도착 3분 뒤엔 [앱 종료] 줄(2). 한 번 보인 줄은 30초 붙잡는다(입력이 흔들려도 깜박이지 않게).
+//   s237(YJ): 한 정거장 전에 '내릴 준비' 줄이 추천을 덮던 것을 없앴다 — 추천은 도착 전에 보이고, [앱 종료]는 도착 3분 뒤(RS_END_BTN_MS)에 뜨며 안 눌러도 5분 뒤(doneAfterSec) 앱이 스스로 끝난다.
+var RS_END_BTN_MS = 180000;
 function rsRows(st, r, now, dest, finLv, arrived) {
   var cfg = st.cfg || {}, ad = st.rcAd, dn = dest ? dest.nodeIdx : -1, k = 0, reco = null, getoff = null;
   var rem = (dn >= 0 && r.etaMs && r.etaMs[dn] != null && isFinite(r.etaMs[dn])) ? Math.round((r.etaMs[dn] - now) / 1000) : null;
-  if (!arrived && finLv === 1 && !st.wait) {
+  if (arrived && st.arrivedAt && now - st.arrivedAt >= RS_END_BTN_MS) {
     var cf = rsCheerFn(), cheer = '오늘도 수고 많았어요';
     try { if (cf) cheer = cf(now, (st.eta && st.eta.tzOffsetMin) != null ? st.eta.tzOffsetMin : 540, null) || cheer; } catch (e) { }
-    var gat = (st.ovlAlert && st.ovlAlert.at) || 0;
-    getoff = { on: true, ch: rsChar(gat), a: '내릴 준비를 해주세요', b: rsClampTxt(cheer, 40), end: '앱 종료', at: gat }; k = 2;
+    getoff = { on: true, ch: rsChar(st.arrivedAt), a: '도착했어요', b: rsClampTxt(cheer, 40), end: '앱 종료', at: st.arrivedAt }; k = 2;
   } else if (ad && (cfg.allowed || {}).arrive_reco !== false && st.rcDis !== ad.at && now - ad.at < 25 * 60000 && rem != null && rem <= 7 * 60 && rem > -30 && !st.wait) {
     reco = { on: true, ch: rsChar(ad.at), a: ad.a, b: ad.b, m: ad.m, go: ad.go, ok: '확인', at: ad.at }; k = 1;
   }
@@ -623,7 +624,7 @@ function rsRows(st, r, now, dest, finLv, arrived) {
   if (k >= rh.k || now - rh.at >= 30000) {
     if (k > 0) { rh.k = k; rh.at = now; rh.reco = reco; rh.getoff = getoff; } else rh.k = 0;
   } else {
-    var dead = (rh.k === 1 && rh.reco && st.rcDis === rh.reco.at) || (st.arrivedAt && now - st.arrivedAt >= 150000);
+    var dead = (rh.k === 1 && rh.reco && st.rcDis === rh.reco.at);
     if (dead) rh.k = 0; else { reco = rh.reco; getoff = rh.getoff; }
   }
   return { reco: reco || { on: false }, getoff: getoff || { on: false } };
@@ -646,6 +647,7 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
   }
   if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
   var arrived = !!(dest && curPos >= dest.seqPos);
+  if (arrived && !st.arrivedAt) st.arrivedAt = now;       // s237: 도착 알림을 꺼 둬도 도착 3분 뒤 [앱 종료] · 5분 뒤 자동 종료의 기준 시각이 선다
   var rs = arrived ? { st: 'board', end: true, bt: '안내 종료', k: '목적지에 도착했어요', ch: '도착', nm: destName || '', bar: -1, cbg: '', cfg: '#0a84ff' } : rsRsState(st, r, now);
   // ★ 2026-10-19 (YJ: "환승버튼이 나오면 마커가 환승에가서 대기해야해", s198 엔진으로): 환승 탑승 버튼(시트·알약)이 떠 있는 동안 현위치 칸은 환승 걷기 칸(없으면 환승 직전 역)에서 멈춰 기다린다.
   //   줄 문구(line1)는 원래 현위치 기준 그대로 두고, 칸 표시·움직임만 바뀐다.
