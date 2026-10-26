@@ -93,6 +93,10 @@ var RIDE_ETA_DEFAULTS = {
   //   영점이 잡히면 뒤 도착 시각(etaMs)이 초 단위로 맞춰지고(ride-track 영점 보간), 그 맞춰진 시각에서 5초만 당긴다. false 로 두면 예전처럼 항상 당긴다.
   arriveEarlyAfterZero: true,
   // ★ 2026-10-14 (실기기 로그: 부평에서 마커가 멈췄다 — 구간표가 14구간뿐이라 응답이 끊긴 26분 뒤 끝났다): 남은 구간 전부를 준다(상한은 안전장치).
+  // ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 3정거장 이상 탄 뒤에는 도착 확정(영점·움직임·위치 판단 통과 증거)이 없으면 역을 건너뛰지 않는다):
+  //   탑승 구간(같은 노선·같은 종류의 이어진 정차 노드)에서 승차역 뒤 holdAfterStops 번째 정류장부터는, 통과 증거(gps·move·pf)가 그 정류장 이후로 없으면 마커가 그 정류장에 '닿지 않고' 바로 앞에서 기다린다(pos.hold = 그 노드 번호).
+  //   시각표 기준 도착 시각(etaMs·arr)과 알림(하차 N정거장 전)은 그대로다 — 멈추는 건 마커(pos)뿐이고, 알림이 쓰는 시각표 위치는 pos.ttFrom 으로 따로 준다. 0 이면 끔.
+  holdAfterStops: 3,
   posSegCount: 80,        // pos.segs — 앞으로 그릴 구간 수(응답이 끊겨도 시각표대로 끝까지 이어 그리게)
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
@@ -121,6 +125,11 @@ function _reHHMM(ms, tzMin, rounding) {
 }
 function _reMin(ms, tzMin) { var m = ((ms + tzMin * 60000) / 60000) % 1440; return (m + 1440) % 1440; }
 function _reIsTransit(n) { return !!n && !n.isWalk && !n.isOrigin && (!!n.isSub || !!n.isBus); }
+function _reLegPos(nodes, n) {      // 같은 노선·같은 종류의 이어진 정차 노드에서 이 노드가 승차역 뒤 몇 번째인가(승차역 = 0)
+  var c = 0, j = n, nd = nodes[n];
+  while (j > 0) { var pv = nodes[j - 1]; if (_reIsTransit(pv) && _reIsTransit(nd) && !!pv.isBus === !!nd.isBus && (pv.lineName || '') === (nd.lineName || '')) { c++; j--; } else break; }
+  return c;
+}
 function _reMerge(a, b) { var o = {}, k; for (k in a) o[k] = a[k]; if (b) for (k in b) o[k] = b[k]; return o; }
 function _reSrcPri(src) { return src === 'gps' ? 6 : src === 'move' ? 5 : src === 'pf' ? 4 : src === 'drift' ? 3 : src === 'board' ? 2 : 1; }
 
@@ -277,11 +286,27 @@ function _rePos(input, r) {
   var pos = -1;
   for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
+  // s231: 도착 확정 없이 건너뛰지 않는다 — 승차 구간 3정거장 뒤부터는 통과 증거(gps·move·pf)가 없는 정류장에서 멈춰 기다린다
+  var holdK = -1, cf = -1, ttF = f;
+  if (+O.holdAfterStops > 0) {
+    for (i = 0; i < ps.length; i++) { var sr0 = ps[i].src, pi0 = +ps[i].idx; if ((sr0 === 'gps' || sr0 === 'move' || sr0 === 'pf') && isFinite(pi0) && pi0 > cf) cf = pi0; }
+    for (k = 1; k < idxs.length; k++) {
+      var nI = idxs[k]; if (nI <= cf || _reLegPos(nodes, nI) < +O.holdAfterStops) continue;
+      if (eff(k) <= nowMs || pos >= k) holdK = k;
+      break;
+    }
+    if (holdK >= 1) { if (pos >= holdK) { pos = holdK - 1; f = idxs[pos]; } else if (pos < holdK - 1) holdK = -1; }
+  }
   if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl, segs: [] };
   var dwMs = function (nodeIdx) { var nn = nodes[nodeIdx]; return (nn && nn.isBus) ? 0 : O.stopDwellSec * 1000; };      // 정차(문 열림)는 지하철 역만 — 버스는 GPS 기준이라 정차를 두지 않는다
   var t = idxs[pos + 1], t0 = eff(pos) + dwMs(idxs[pos]), t1 = eff(pos + 1);
   if (!(t1 - t0 >= 5000)) t0 = eff(pos);
   var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
+  if (holdK >= 1 && pos === holdK - 1) {      // 기다리는 동안: 닿을 시각을 '지금 + 여유'로 두어 마커가 정류장 가까이까지만 간다(기다릴수록 천천히 다가가지만 닿지는 않는다)
+    t1 = Math.max(t1, nowMs + Math.max(20000, 0.1 * Math.max(0, nowMs - t0)));
+    ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
+    return { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl, hold: t, ttFrom: ttF, segs: [{ from: f, to: t, a: eff(pos), t0: t0, t1: t1 }] };
+  }
   // ★ 2026-10-13 (YJ: 마커가 갑자기 멈추고 노란색 — 백그라운드에서 엔진 응답이 끊기면 마지막 구간이 끝난 채 굳었다): 앞으로의 구간 전부를 함께 준다.
   //   앱은 '지금 시각이 어느 구간(a~t1)에 드는지' 찾아 그리기만 한다 — 응답이 몇 분 끊겨도 시각표대로 이어서 그린다(새 증거가 오면 엔진이 다시 계산한다).
   var segs = [], q, lim = Math.min(idxs.length - 1, pos + O.posSegCount);
