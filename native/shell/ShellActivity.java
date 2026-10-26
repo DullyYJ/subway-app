@@ -136,6 +136,7 @@ public class ShellActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         live = this;
+        ScreenView.trainFeed = new ScreenView.TrainFeed() { @Override public String pos() { return RideService.running ? RideService.livePos : ""; } };      // 객실 장면(혼잡도 카드 둘째 쪽)이 쓰는 탑승 시각표
         store = new PrefStore(getSharedPreferences(PREFS, Context.MODE_PRIVATE));      // 설정 파일 읽기는 시스템이 따로 시작한다 — 아래 일을 하는 동안 저절로 끝난다
         dpr = getResources().getDisplayMetrics().density;
         if (b == null) store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);            // 껐다 켜면 늘 홈부터(웹과 같다) — 화면 회전 같은 다시 만들기(b != null)는 보던 탭 그대로
