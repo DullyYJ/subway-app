@@ -1859,9 +1859,15 @@ public class ScreenView extends View {
         if (k == null) { mkHas = false; return; }
         long now = SystemClock.uptimeMillis();
         float to = k.x(k.r);
-        if (!mkHas || !keep || k.ms <= 0f) { mkHas = true; mkFromX = mkToX = to; mkMs = 0f; mkT0 = now; }
-        else if (Math.abs(to - mkToX) > 0.01f) { mkFromX = mkCurX(now); mkToX = to; mkMs = k.ms; mkT0 = now; }
+        if (!mkHas || !keep || k.ms <= 0f) { mkHas = true; mkFromX = mkToX = to; mkMs = 0f; mkT0 = now; mkBack = 0; }
+        else if (Math.abs(to - mkToX) > 0.01f) {
+            float back = mkToX - to;                                                     // 뒤로 가는 값: GPS 흔들림으로 역에 서 있다 0.05~0.2 구간 되돌아가는 것은 걸러 낸다(웹 역주행 가드 _markerMaxProg).
+            if (back > 0.01f && back <= Math.max(24f, Math.abs(k.x1 - k.x0)) * 0.5f && ++mkBack < 3) return;       // 같은 방향의 뒤로 가는 값이 세 번 이어지면(약 15초) 진짜 되돌림으로 받아들인다
+            mkBack = 0;
+            mkFromX = mkCurX(now); mkToX = to; mkMs = k.ms; mkT0 = now;
+        } else mkBack = 0;
     }
+    private int mkBack;                                    // 연속으로 뒤로 가라고 온 횟수
     private float mkCurX(long now) {
         if (mkMs <= 0f) return mkToX;
         float t = (now - mkT0) / mkMs;
