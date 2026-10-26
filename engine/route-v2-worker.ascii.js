@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s231";
+var ENGINE_VERSION = "route-v2-2026-10-26s232";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12516,10 +12516,16 @@ async function handleWidgetSay(request, env, ctx) {
 }
 // ===== \uc704\uc82f \uc751\uc6d0 \uba58\ud2b8 \ub05d =====
 // ===== \uc7a5\uba74 \uc5d4\uc9c4 (2026-10-15 YJ: \ud63c\uc7a1\ub3c4 \uce74\ub4dc \ucc3d\uc758 3D \uce90\ub9ad\ud130 \uc7a5\uba74 \u2014 "\uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4, \uc571\uc740 \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4") =====
-//   POST /scene  { nowMs?, tzOffsetMin?, lat?, lng?, locked, key?, here, boarded, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,hasLoc}] }
-//   \u00b7 \uc5b4\ub5a4 \uc7a5\uba74\uc744 \ubcf4\uc77c\uc9c0(\uacbd\ub85c \uc5c6\uc74c=idle / \ubc84\uc2a4 \ud0c0\uae30 \uc804=wait / \ud0c0\uace0 \uac00\ub294 \uc911=ride / \ub0b4\ub9bc=alight / \uc9c0\ud558\ucca0 \uad6c\uac04=\uc5c6\uc74c \u2192 \ud63c\uc7a1\ub3c4),
-//     \ud63c\uc7a1\ub3c4 \uce74\ub4dc\uac00 \uc5b4\ub290 \uad6c\uac04(\uc9c0\ud558\ucca0 \uc5ed\u00b7\ubc84\uc2a4 \uc815\ub958\uc7a5 \ubaa9\ub85d)\uc744 \ubcf4\uc5ec\uc904\uc9c0, \uc2dc\uac04\ub300(\uc0c8\ubcbd\u00b7\uc544\uce68\u00b7\uc810\uc2ec\u00b7\uc624\ud6c4\u00b7\uc800\ub141\u00b7\ubc24)\u00b7\uc2e4\uc81c \ub0a0\uc528 \uc885\ub958, \ub300\ud45c \uce90\ub9ad\ud130\u00b7\ub4f1\uc7a5 \uc21c\uc11c, \uc548\ub0b4 \ubb38\uad6c\ub97c \uc804\ubd80 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4.
-//   \u00b7 \uc571(www/index.html)\uc740 \ubc1b\uc740 \uac12\uc744 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4(\uc0c9\u00b7\ubaa8\uc591\u00b7\uc6c0\uc9c1\uc784\uc740 \uc571\uc758 \uadf8\ub9bc \uaddc\uce59). \ub0a0\uc528\ub294 subway-api \uc6cc\ucee4(/weather)\uc758 \uac12\uc744 \uc4f0\uace0, \ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4(wxKnown:false).
+// \uae38\ub3d9\ubb34 \u2014 \uc7a5\uba74 \uc5d4\uc9c4(\ud63c\uc7a1\ub3c4 \uce74\ub4dc \ucc3d\uc758 3D \uce90\ub9ad\ud130 \uc7a5\uba74) \uc21c\uc218 \uacc4\uc0b0 \ubaa8\ub4c8 (route-v2 Worker \uc5d0 \ubd99\uc5ec \ub123\ub294 \uc21c\uc218 \ud568\uc218; \ub2e8\uc77c \ucd9c\ucc98)
+//
+// \u2605 \uc6d0\uce59(YJ): "\ubaa8\ub4e0 \uc5f0\uc0b0\uc740 \uc5d4\uc9c4\uc774 \ud55c\ub2e4. \uc571\uc740 \uc5d4\uc9c4\uc774 \uacc4\uc0b0\ud55c \uadf8\ub9bc\ub9cc \uadf8\ub9b0\ub2e4."
+//   \uc5b4\ub5a4 \uc7a5\uba74(idle\u00b7wait\u00b7ride\u00b7alight\u00b7\uc5c6\uc74c=\uc9c0\ud558\ucca0 \ud63c\uc7a1\ub3c4)\uc744 \ubcf4\uc77c\uc9c0 \u00b7 \ud63c\uc7a1\ub3c4 \uce74\ub4dc\uac00 \uc5b4\ub290 \uad6c\uac04(\uc9c0\ud558\ucca0 \uc5ed\u00b7\ubc84\uc2a4 \uc815\ub958\uc7a5 \ubaa9\ub85d)\uc744 \ubcf4\uc77c\uc9c0 \u00b7 \uc2dc\uac04\ub300\u00b7\ub0a0\uc528 \uc885\ub958\u00b7\uacc4\uc808 \u00b7
+//   \ub300\ud45c \uce90\ub9ad\ud130\u00b7\ub4f1\uc7a5 \uc21c\uc11c \u00b7 \uc548\ub0b4 \ubb38\uad6c\ub294 \uc804\ubd80 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4. \uc571(www/index.html)\uc740 \uc5d4\uc9c4\uc774 \uc900 \uac12\uc744 \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
+// \uc785\ub825  sceneDecide({ nowMs, tzOffsetMin, locked, routeShown, key, here, boarded, nodes:[{name,isSub,isBus,isWalk,isOrigin,lineName,hasLoc}] }, wx|null)
+//        wx = { temp, rain, txt } (Worker \uac00 subway-api /weather \uc5d0\uc11c \ubc1b\ub294\ub2e4. \ubabb \ubc1b\uc73c\uba74 null \u2014 \ub0a0\uc528\ub97c \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4)
+// \ucd9c\ub825  { ok, fill(idle \uc774\uace0 \uacbd\ub85c \uacb0\uacfc\uac00 \uc544\uc9c1 \uc5c6\uc73c\uba74 true), mode:'idle'|'wait'|'ride'|'alight'|null, nearEnd, hint, tag, look:{slot,slotKo,wk,wxKo,wxKnown,temp,season,night,lit,hidesSun,emo}, hero, cast[], traits{id:{land,acts[]}},
+//         venue:'bus'|'sub'|'street', line(\uc9e7\uc740 \ub178\uc120 \uc774\ub984), cong:{ kind:'sub'|null, idx, sig } }   \u2605 \ud63c\uc7a1\ub3c4(cong)\ub294 \uc9c0\ud558\ucca0 \ud0d1\uc2b9 \ud655\uc815 \ub4a4(mode:null)\uc5d0\ub9cc
+// \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng"];
 // \u2605 \uce90\ub9ad\ud130 \ud2b9\uc131(YJ 2026-10-16): \uc5b4\ub5a4 \ub3d9\uc791\uc744 \uc5b4\ub5a4 \uc21c\uc11c\ub85c \ud558\ub294\uc9c0 \u00b7 \uc7a1\uc558\ub2e4 \ub193\uc558\uc744 \ub54c \uc5b4\ub5a4 \uc5f0\ucd9c\uc744 \ud558\ub294\uc9c0\ub294 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4. \uc571\uc740 \uc774 \uc774\ub984\ub300\ub85c \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4.
 //   land: cotton(\uc19c\uc0ac\ud0d5\ucc98\ub7fc \ubd80\ud480\uc5b4 \uc548\uc804 \ucc29\ub959+\ud558\ud2b8) | pose(\ub450 \ubc1c \ucc29\uc9c0 \uba4b\uc9c4 \ud3ec\uc988+\uc528\uc775 \uc6c3\uc74c) | dig(\ub545\uc18d\uc73c\ub85c \uc228\uc5c8\ub2e4 2\ucd08 \ub4a4 \ub098\uc640 \ud654\ub0c4) | flip(\uacf5\uc911 \uc55e \ud55c \ubc14\ud034 \uc548\uc804 \ucc29\uc9c0)
@@ -12634,6 +12640,38 @@ function sceneLegNode(nodes, here) {
   for (k = here - 1; k >= 0; k--) if (sceneIsTr(nodes[k])) return { i: k, n: nodes[k] };
   return null;
 }
+// \u2605 2026-10-26 (YJ: "\ud63c\uc7a1\ub3c4\ub97c \uc88c\uc6b0\ub85c \uc2ac\ub77c\uc774\ub4dc\ud558\uba74 \uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4\uc774 \uc9c0\ud558\ucca0\uc744 \ud0c0\uace0 \uc774\ub3d9\ud558\ub294 \uc7a5\uba74 \u2026 \uc815\uc9c0\ud558\uba74 \uc77c\ubd80\uac00 \ub79c\ub364\uc73c\ub85c \ub0b4\ub9ac\uace0 \ud0c0\ub294 \uc560\ub2c8\uba54\uc774\uc158"):
+//   \uc9c0\ud558\ucca0 \uac1d\uc2e4 \uc7a5\uba74\uc758 \uc7ac\ub8cc. \ub204\uac00 \ud0c0\uace0 \uc788\ub2e4\uac00 \uc5b4\ub290 \uc5ed\uc5d0\uc11c \ub0b4\ub9ac\uace0 \ud0c0\ub294\uc9c0\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4(\uc571\uc740 \ubc1b\uc740 \ub300\ub85c \uadf8\ub9ac\uae30\ub9cc \ud55c\ub2e4).
+//   \uc774\ub3d9 \uc911\uc778\uc9c0 \uc815\ucc28 \uc911\uc778\uc9c0\u00b7\uc5b8\uc81c \ub2ff\ub294\uc9c0\ub294 \ud0d1\uc2b9 \uc5d4\uc9c4(ride-eta \uc758 pos.segs \uc2dc\uac01\ud45c)\uc774 \uc815\ud558\uace0, \uc571\uc740 \uadf8 \uc2dc\uac01\ud45c\ub97c \ubc1b\uc544 \uadf8\ub9b0\ub2e4.
+//   names[k]  = \uc774 \uad6c\uac04 k \ubc88\uc9f8 \uc5ed \uc774\ub984(k=0 \uc774 \uccab \ud0d1\uc2b9\uc5ed, \ub178\ub4dc \ubc88\ud638\ub294 first+k)
+//   stops[k]  = [on, out, in] \u2014 k \ubc88\uc9f8 \uc5ed\uc5d0 \ub2ff\uae30 \uc9c1\uc804 \uac1d\uc2e4\uc5d0 \uc788\ub358 \uce5c\uad6c\ub4e4 \u00b7 \uadf8 \uc5ed\uc5d0\uc11c \ub0b4\ub9ac\ub294 \uce5c\uad6c\ub4e4 \u00b7 \uadf8 \uc5ed\uc5d0\uc11c \ud0c0\ub294 \uce5c\uad6c\ub4e4 (\ube44\ud2b8: SCENE_CHARS \uc21c\uc11c\uc758 \uc790\ub9ac)
+//   \ub9c8\uc9c0\ub9c9 \uc5ed\uc5d0\uc11c\ub294 \ubaa8\ub450 \ub0b4\ub9b0\ub2e4. \ub300\ud45c \uce90\ub9ad\ud130(hero)\ub294 \ub9c8\uc9c0\ub9c9 \uc5ed\uae4c\uc9c0 \ud0c0\uace0 \uac04\ub2e4.
+function sceneTrain(nodes, first, last, hero, cast, seed) {
+  var cnt = Math.max(0, Math.min(last - first + 1, 60)), names = [], stops = [], k, c;
+  var bit = function (id) { var i = SCENE_CHARS.indexOf(id); return i < 0 ? 0 : (1 << i); };
+  var hb = bit(hero), on = hb, order = (cast && cast.length ? cast : SCENE_CHARS).filter(function (id) { return id !== hero; });
+  var h0 = sceneHash(seed + "/T0"), nStart = 1 + (h0 % 3);                                 // \ucc98\uc74c\uc5d4 \ub300\ud45c + 1~3 \uba85
+  for (c = 0; c < order.length && c < nStart; c++) on |= bit(order[c]);
+  var init = on;
+  for (k = 0; k < cnt; k++) {
+    var nd = nodes[first + k], isLast = k === cnt - 1, h = sceneHash(seed + "/T" + (k + 1) + "|" + (nd && nd.name || ""));
+    var before = on, out = 0, inn = 0, i;
+    if (isLast) out = on;
+    else if (k > 0) {                                                                      // \uccab \uc5ed\uc740 \ud0c0\ub294 \uc5ed\uc774\ub77c \ub0b4\ub9ac\uace0 \ud0c0\ub294 \uc77c\uc774 \uc5c6\ub2e4
+      var ids = sceneShuffle(SCENE_CHARS.filter(function (x) { return x !== hero && (on & bit(x)) !== 0; }), h);
+      var rest = sceneShuffle(SCENE_CHARS.filter(function (x) { return (on & bit(x)) === 0; }), h ^ 0x9e3779b9);
+      var nOut = (h >>> 3) % 100 < 58 ? 1 + ((h >>> 11) % 100 < 28 ? 1 : 0) : 0, nIn = (h >>> 5) % 100 < 58 ? 1 + ((h >>> 13) % 100 < 28 ? 1 : 0) : 0;
+      for (i = 0; i < nOut && i < ids.length; i++) out |= bit(ids[i]);
+      for (i = 0; i < nIn && i < rest.length; i++) inn |= bit(rest[i]);
+    }
+    names.push(String(nd && nd.name || "").slice(0, 12));
+    stops.push([before, out, inn]);
+    on = (on & ~out) | inn;
+  }
+  return { first: first, init: init, names: names, stops: stops, line: nodes[first] ? sceneLineLabel(nodes[first]) : "",
+    say: { out: ["\uc548\ub155~", "\uba3c\uc800 \ub0b4\ub9b4\uac8c!", "\ub0b4\uc77c \ubd10!", "\ub2e4\ub140\uc62c\uac8c\uc694"], "in": ["\ud0c0\uc694~", "\uc548\ub155!", "\uac19\uc774 \uac00\uc694", "\uc790\ub9ac \uc788\ub098?"] }, lb: ["\ub2e4\uc74c \uc5ed", "\uc774\ubc88 \uc5ed"] };
+}
+
 function sceneBounds(nodes, i) {
   var bus = !!nodes[i].isBus, ln = nodes[i].lineName || "", a = i, b = i;
   function same(n) { return n && (bus ? n.isBus : n.isSub) && (n.lineName || "") === ln; }
@@ -12677,7 +12715,13 @@ function sceneDecide(inp, wx) {
   else if (bus && here === last && last > first) phase = "alight";                          // \ubc84\uc2a4: \ub0b4\ub9b4 \uc815\ub958\uc7a5\uc5d0 \ub2ff\uc74c
   else if (here === first && !(first === firstTr && inp.boarded === true)) phase = "wait";  // \uccab \ud0c8\uac83\uc774\uba74 \uc2b9\ucc28 \ud655\uc815 \ub4a4\uc5d0\ub9cc \ud0c4 \uac83\uc73c\ub85c \ubcf8\ub2e4
   else phase = "ride";
-  if (!bus && phase === "ride") { out.cong = { kind: "sub", idx: leg.i === here ? here : leg.i, sig: "s|" + (n.lineName || "") + "|" + (nodes[here] && nodes[here].name || n.name) }; if (nodes[here] && nodes[here].isSub) out.cong.idx = here; return out; }   // \uc9c0\ud558\ucca0 \ud0d1\uc2b9 \ud655\uc815 \u2192 \ud63c\uc7a1\ub3c4
+  if (!bus && phase === "ride") {                                                          // \uc9c0\ud558\ucca0 \ud0d1\uc2b9 \ud655\uc815 \u2192 \ud63c\uc7a1\ub3c4 (+ \uc606\uc73c\ub85c \ubc00\uba74 \ubcf4\uc774\ub294 \uac1d\uc2e4 \uc7a5\uba74 \uc7ac\ub8cc)
+    out.cong = { kind: "sub", idx: leg.i === here ? here : leg.i, sig: "s|" + (n.lineName || "") + "|" + (nodes[here] && nodes[here].name || n.name) };
+    if (nodes[here] && nodes[here].isSub) out.cong.idx = here;
+    out.line = sceneLineLabel(n); out.venue = "sub";
+    out.train = sceneTrain(nodes, first, last, out.hero, out.cast, seedL);
+    return out;
+  }
   out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
   out.nearEnd = bus && phase === "ride" && here === last - 1;
   var who = bus ? "\uD83D\uDE8C " + out.line + " \uBC84\uC2A4\uB97C" : "\uD83D\uDE87 " + (n.lineName || "\uC9C0\uD558\uCCA0") + " \uC5F4\uCC28\uB97C";
