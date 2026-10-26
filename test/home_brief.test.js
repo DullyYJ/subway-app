@@ -46,16 +46,18 @@ t('경로 구간: 없음 / 1개 / 여러 개 / 버스 첫 구간', () => {
   assert.ok(lb.includes('정류장에서 146번 버스를 타고 다음정류장까지 가신 다음, 가는 길에 다음에서 2호선으로 갈아타시면 돼요.'), lb);
   assert.ok(!lb.includes('환승이'));
 });
-t('compact(통합 카드용 짧은 브리핑, s217): 핵심 시각 · 첫 탑승 · 환승 한 줄 · 이름 정리 · 기본 모양은 그대로', () => {
+t('compact(통합 카드용 짧은 브리핑, s218): 환승 · 도착 · 총 시간 한 문장 · 경로를 말로 · 날씨와 옷차림 · 제목/맺음말 없음 · 기본 모양은 그대로', () => {
   const s3 = [{ type: 1, line: '2호선', from: 'A', to: 'B' }, { type: 1, line: '9호선', from: 'B', to: 'C' }, { type: 1, line: '공항철도', from: 'C', to: 'D' }];
-  const c = flat(mk({ segs: s3, compact: true, mins: 40, arrMs: NOW + 40 * 60000 }));
-  assert.strictEqual(c[0], '도착은 09:40경 예정이에요. 총 40분 걸려요.');
-  assert.ok(c[1].startsWith('A에서 2호선 타고 출발하세요. 환승이 2번이라 안내 방송을 놓치지 마세요.') && c[1].endsWith('[세부경로 보기]에서 볼 수 있어요.'), c[1]);
-  assert.ok(!c.join('\n').includes('가는 길에') && !c.join('\n').includes('갈아타시면'), '긴 경로 문장은 되풀이하지 않는다');
-  assert.ok(c.join('\n').includes('여유로운') || c.join('\n').includes('붐'), '혼잡 한마디는 남는다');
+  const wx = { wF: { temp: 12, txt: '맑음', rain: 0 }, wT: { temp: 9, txt: '흐림', rain: 50 } };
+  const c = flat(mk(Object.assign({ segs: s3, compact: true, mins: 122, arrMs: NOW + 122 * 60000 }, wx)));
+  assert.strictEqual(c[0], '환승은 2회, 도착은 11:02경 예정이에요. 총 2시간 2분 걸려요.');
+  assert.strictEqual(c[1], 'A에서 2호선을 타고 출발하세요. 가는 길에 B에서 9호선으로, C에서 공항철도로 갈아타시면 돼요.');
+  assert.ok(c[2].length > 0 && !c.join('').includes('5분마다') && !c.join('').includes('[세부경로 보기]'), '맺음말 · 안내 문구 없음');
+  assert.ok(c[3].startsWith('날씨는 출발지 12도 맑음, 도착지 9도 흐림이에요. 추천 옷차림은 자켓이나 가벼운 코트에 니트이에요.') && c[3].endsWith('비가 올 수도 있으니 우산 하나 챙기세요.'), c[3]);
+  assert.strictEqual(c.length, 4);
+  assert.strictEqual(flat(mk({ compact: true, mins: 30, segs: [{ type: 1, line: '2호선', from: 'A', to: 'B' }], arrMs: NOW + 30 * 60000 }))[0], '환승은 없고 도착은 09:30경 예정이에요. 총 30분 걸려요.');
   const ld = flat(mk({ compact: true, mins: 200, segs: [{ type: 1, line: '2호선', from: '강남', to: '서울' }, { type: 4, line: 'KTX', from: '서울', to: '부산', min: 150, depClock: '10:46', arrClock: '13:50', rideMin: 184 }] }));
-  assert.strictEqual(ld[0], 'KTX 10:46 출발, 13:50 도착이에요. 타는 시간은 약 184분이에요. 총 200분 걸려요.');
-  assert.ok(ld[1].includes('승차권과 출발 시각은 한 번 더 확인해 주세요.') && ld[1].includes('환승은 한 번이에요.'), ld[1]);
+  assert.ok(ld[0].startsWith('환승은 1회, 도착은 ') && ld[1].includes('KTX는 10:46 출발, 13:50 도착이에요. 승차권과 출발 시각은 한 번 더 확인해 주세요.'), ld.join('|'));
   assert.ok(flat(mk({ compact: true, from: '부산_부산', to: '구로', segs: [{ type: 1, line: '1호선', from: '부산_부산', to: '구로' }] })).join('').indexOf('부산_부산') < 0, '부산_부산 정리');
   assert.deepStrictEqual(flat(mk({ segs: s3 })), flat(mk({ segs: s3, compact: false })), 'compact 가 아니면 예전과 같다');
 });
