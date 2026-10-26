@@ -11,6 +11,7 @@
 // 입력  rheadScreen({ cap, part }, facts)
 //        cap   = 앱이 그릴 수 있는 화면 규격 수준(10 이상이어야 만든다 — 머리줄 노드 rhd 가 10; part 'k' 는 타임라인 노드 trk + 마커 mk 가 있는 12 이상)
 //        part  = 'h'(머리줄 + 요약 줄 + 환승 안내) | 't'(경로 옵션 탭 줄) | 'n'(공식 공지 · 지연 제보 줄) | 'l'(장거리 열차·버스 고르기 + 대기 제외 안내) | 'k'(구간 타임라인: 머리 노드 trk — facts 는 아래 별도)
+//        part 'g'(s217, 규격 25) = 요약 칩 줄 tags — facts { m: 총 분, n: 환승 횟수, mix: ['KTX','지하철'…], hubs: ['부평','구로'…], } → 타임라인 바로 위. facts.cp=1 이면 part 'h' 가 긴 환승 목록 상자를 빼 준다.
 //        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[이름,위도,경도]…]}], xf:[{k,xi,si}]|null(환승 원자료), bt: 사용자가 정한 예상 시각 ms|null, rb: 이번 탐색이 나간 시각 ms|null,
 //                          now: 그릴 때 기기 시계 ms, sw:[막차 뒤 첫차까지 분…], tz: 기기 시간대(동쪽 분), th:'dark'|'pastel' }
 //                          lv(2단계, 선택): { p:{f,t,r,sn}|null(웹이 정한 마커 위치: 칸 번호 f → t, 구간 비율 r, sn=점프), w:{d}|null(승차 대기 중이면 승차역까지 거리 m), ea:[HH:MM…](웹이 지금 보여 주는 칸별 시각) } → 마커 mk 와 시각 덮어쓰기  → head:[{t:'trk', cells:[…]}] (칸 = 이름·배지·선·점·시각 한 줄; 시각/색/글 전부 엔진이 정한다)
@@ -29,6 +30,17 @@ var RHEAD_SCREEN_V = 1;
 var RHEAD_TABS = [['fast', '최단시간'], ['less', '최소환승'], ['sub', '지하철'], ['bus', '버스'], ['longdist', '장거리']];
 // 새 네이티브 글에는 이모지를 쓰지 않는다
 var RHEAD_EMOJI = /[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;      // 그림 이모지·기호만(화살표 → 는 문장에 쓰이니 남긴다)
+
+// 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217). 뒤가 다르면('서울_1호선') 건드리지 않는다.
+function rheadNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) {
+    var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim();
+    if (a && a.replace(/역$/, '') === b.replace(/역$/, '')) return a.length >= b.length ? a : b;
+  }
+  return s;
+}
 
 function rheadHash(s) {                               // djb2 — 같은 화면이면 같은 rev
   var h = 5381;
@@ -65,13 +77,13 @@ function rheadXferLine(t) {
     if (!name) return type === 2 ? '버스' : '열차';
     return (type === 2 && /^[0-9-]+$/.test(name)) ? name + '번' : name;
   };
-  var at = String(t.at == null ? '' : t.at).trim(), wm = Math.round(Number(t.walkMin) || 0);
+  var at = rheadNmFix(t.at), wm = Math.round(Number(t.walkMin) || 0);
   var walkTxt = (t.kind === 'train') ? '' : (wm > 0 ? ' · 도보 ' + wm + '분' : '');
   if (t.kind === 'train') {
     return at + '에서 ' + (t.service === 'express' ? '급행' : '일반') + ' 열차로 갈아타요 (' + f(1, t.fromLine) + ' 안에서 열차가 바뀌어요)';
   }
   if (t.kind === 'walk') {
-    var to = String(t.boardAt == null ? '' : t.boardAt).trim();
+    var to = rheadNmFix(t.boardAt);
     return at + ' 하차' + (wm > 0 ? ' → 도보 ' + wm + '분' : '') + ' → ' + (to && to !== at ? to + '에서 ' : '') + f(Number(t.toType), t.toLine) + ' 승차';
   }
   return at + '에서 ' + f(Number(t.fromType), t.fromLine) + ' → ' + f(Number(t.toType), t.toLine) + ' 환승' + walkTxt;
@@ -122,7 +134,10 @@ function rheadFacts(f) {
     ln: rheadList(f.ln, 6).map(function (l) { return rheadStr(l, 24).trim(); }).filter(Boolean),
     off: (f.off && typeof f.off === 'object') ? f.off : {}, offAt: Number(f.offAt) > 0 ? Number(f.offAt) : 0,
     al: (f.al && typeof f.al === 'object') ? f.al : {}, now: Number(f.now) > 0 ? Number(f.now) : 0,
-    lg: (f.lg && typeof f.lg === 'object') ? f.lg : null
+    lg: (f.lg && typeof f.lg === 'object') ? f.lg : null,
+    cp: (f.cp === 1 || f.cp === true) ? 1 : 0, n: rheadInt(f.n, 0, 99),
+    mix: rheadList(f.mix, 4).map(function (v) { return rheadStr(v, 12).trim(); }).filter(Boolean),
+    hubs: rheadList(f.hubs, 8).map(function (v) { return rheadNmFix(rheadStr(v, 24)).replace(/역$/, '').trim(); }).filter(Boolean)
   };
 }
 
@@ -234,7 +249,7 @@ function rheadNoteNodes(f) {
 }
 
 function rheadHeadNodes(f) {
-  var nm = function (s) { return String(s || '').replace(/역$/, ''); };
+  var nm = function (s) { return rheadNmFix(s).replace(/역$/, ''); };
   if (f.nr) {                                           // 고른 탭만으로는 갈 수 있는 경로가 없다 — 머리줄에 안내 한 줄만(예전 웹 _showTabNoRoute 와 같은 문구)
     var lb = f.nr === 'sub' ? '지하철' : (f.nr === 'bus' ? '버스' : '이 수단');
     return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '만으로 갈 수 있는 경로가 없어요', xact: { a: 'call', v: 'rh.close' }, btn: '즐겨찾기', act: { a: 'call', v: 'rh.fav' } }];
@@ -253,12 +268,32 @@ function rheadHeadNodes(f) {
   if (f.why) nodes.push({ t: 'text', s: f.why, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });
   rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
   if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];
-  if (f.xs.length) {
+  if (f.xs.length && !f.cp) {                            // 통합 카드(cp)에서는 긴 환승 목록 대신 칩 줄(part g)이 맡고, 자세한 순서는 세부경로 시트가 보여 준다
     var h1 = '환승 ' + f.xs.length + '번', parts = [h1];
     f.xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
     nodes.push({ t: 'box', s: parts.join('\n'), hl: [[0, h1.length]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.4)', r: 10, ip: [10, 7, 10, 7], pad: [0, 0, 0, 8] });
   }
   return nodes;
+}
+
+// ── part 'g': 요약 칩 줄(s217) — '환승 5회 · 293분' · 'KTX + 지하철' · 거점 이름들. 타임라인 바로 위에 놓인다. ──
+function rheadTagNodes(f) {
+  if (!f.m && !f.n && !f.mix.length && !f.hubs.length) return [];
+  var items = [];
+  var first = (f.n > 0 ? '환승 ' + f.n + '회' : '직통') + (f.m > 0 ? ' \u00b7 ' + f.m + '분' : '');
+  items.push({ s: first, b: true, c: 'rgba(255,159,10,0.14)', oc: 'rgba(255,159,10,0.45)', tc: 'gold' });
+  if (f.mix.length) items.push({ s: f.mix.join(' + '), b: true, c: 'card2', oc: 'border', tc: 'text' });
+  var hubs = f.hubs.filter(function (h, i, a) { return a.indexOf(h) === i; }).slice(0, 4);
+  hubs.forEach(function (h) { items.push({ s: h, b: false, c: 'card2', oc: 'border', tc: 'sub' }); });
+  return [{ t: 'tags', pad: [0, 2, 0, 10], gap: 6, h: 24, size: 11, px: 10, items: items }];
+}
+// 세부경로 시트 맨 위 환승 순서 상자(예전 홈 카드 윗부분에 길게 있던 1~N번 목록이 여기로 옮겨 왔다).
+function rheadXferBox(xs, pad) {
+  xs = rheadList(xs, 8).filter(function (t) { return t && typeof t === 'object'; });
+  if (!xs.length) return null;
+  var h1 = '환승 ' + xs.length + '번', parts = [h1];
+  xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
+  return { t: 'box', s: parts.join('\n'), hl: [[0, h1.length]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.4)', r: 10, ip: [10, 7, 10, 7], pad: pad || [0, 0, 0, 8] };
 }
 
 function rheadTabNodes(f) {
@@ -291,7 +326,7 @@ var RTRK_BUS_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];
 var RTRK_W = 64, RTRK_WLD = 108, RTRK_DWELL = 20, RTRK_MINGAP = 20, RTRK_GREY = '#8e8e93';
 var RTRK_DOT = { dark: { s: '#d4af37', e: '#ff2d55' }, pastel: { s: '#1d9bf0', e: '#e0455a' } };
 
-function rheadTrkNm(s) { return String(s == null ? '' : s).replace(/역$/, '').trim(); }
+function rheadTrkNm(s) { return rheadNmFix(s).replace(/역$/, '').trim(); }
 function rheadTrkNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
 function rheadTrkHex2(n) { return (n < 16 ? '0' : '') + n.toString(16); }
 function rheadTrkBright(hex, th) {                      // 어두운 테마에서만 어두운 선 색을 밝힌다
@@ -613,12 +648,13 @@ function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
   if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // 타임라인 노드 trk(+내 위치 마커 mk)는 규격 12
-  var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
+  if (inp.part === 'g' && Number(inp.cap) < 25) return { ok: false, error: 'cap' };      // 알약 줄 tags 는 규격 25
+  var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l' || inp.part === 'g') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
-  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));
+  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : (part === 'g' ? rheadTagNodes(f) : rheadHeadNodes(f))));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // 카드 안에 놓이는 화면 — 바탕은 카드색
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rheadTrkPrep: rheadTrkPrep, rheadTrkPoints: rheadTrkPoints, rheadTrkColor: rheadTrkColor, rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rheadTrkPrep: rheadTrkPrep, rheadTrkPoints: rheadTrkPoints, rheadTrkColor: rheadTrkColor, rheadScreen: rheadScreen, rheadTrackScreen: rheadTrackScreen, rheadFacts: rheadFacts, rheadXferLine: rheadXferLine, rheadDoorLines: rheadDoorLines, rheadXferBox: rheadXferBox, rheadNmFix: rheadNmFix };
