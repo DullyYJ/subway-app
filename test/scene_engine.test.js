@@ -145,6 +145,32 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     SCENE_IDS.forEach(id => ['shiver', 'pant', 'squint', 'gust', 'splash', 'shakeoff', 'snowcatch', 'peer'].forEach(x => assert(!none.traits[id].acts.includes(x), '날씨를 모르면 반응을 지어내지 않는다: ' + x)));
     const a2 = run({ temp: -4, feel: -9, txt: '맑음', rain: 0, wind: 5, uv: 1 }, '2026-01-15T09:00:00'); assert.deepStrictEqual(a2.traits, cold.traits, '같은 입력이면 같은 대본');
   });
+  await t('지하철 객실(s232): 승하차 계획 — 첫 역은 변화 없음 · 내리는 건 타고 있던 친구만 · 타는 건 안 타고 있던 친구만 · 대표는 종점까지 · 종점에서 모두 내림 · 같은 입력이면 같다', () => {
+    const SUBS = [O, S('임학', '인천1호선'), S('박촌', '인천1호선'), S('귤현', '인천1호선'), S('계양', '인천1호선'), S('아시아드', '인천1호선'), S('검단', '인천1호선'), S('검암', '인천1호선'), N({ name: '도착' })];
+    const r = decide({ nowMs: ms('2026-10-26T12:00:00'), tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k', nodes: SUBS }, null);
+    assert.strictEqual(r.mode, null); assert(r.train, '지하철 타는 중엔 train 이 있다');
+    const T = r.train, idx = id => E.SCENE_CHARS ? E.SCENE_CHARS.indexOf(id) : ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'].indexOf(id);
+    assert.strictEqual(T.first, 1); assert.deepStrictEqual(T.names, ['임학', '박촌', '귤현', '계양', '아시아드', '검단', '검암']); assert.strictEqual(T.stops.length, T.names.length);
+    const hb = 1 << idx(r.hero); assert(T.init & hb, '대표는 처음부터 타고 있다');
+    assert.deepStrictEqual(T.stops[0].slice(1), [0, 0], '첫 역(타는 역)에서는 내리고 타는 일이 없다');
+    let on = T.init;
+    T.stops.forEach((sp, k) => {
+      assert.strictEqual(sp[0], on, k + '번째 역 직전 탑승자가 이어진다');
+      assert.strictEqual(sp[1] & ~sp[0], 0, '내리는 건 타고 있던 친구만'); assert.strictEqual(sp[2] & sp[0], 0, '타는 건 안 타고 있던 친구만'); assert.strictEqual(sp[1] & sp[2], 0, '같은 역에서 내리고 바로 타지 않는다');
+      if (k < T.stops.length - 1) assert(!(sp[1] & hb), '대표는 종점 전에는 안 내린다');
+      on = (on & ~sp[1]) | sp[2];
+    });
+    const last = T.stops[T.stops.length - 1]; assert.strictEqual(last[1], last[0], '종점에서는 모두 내린다'); assert.strictEqual(last[2], 0);
+    assert(T.stops.slice(1, -1).some(sp => sp[1] || sp[2]), '중간 역 어딘가에서는 내리거나 타는 친구가 있다');
+    assert(T.say.out.length >= 3 && T.say.in.length >= 3 && T.lb.length === 2, '말풍선 글·라벨은 엔진이 준다');
+    const again = decide({ nowMs: ms('2026-10-26T12:00:00'), tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k', nodes: SUBS }, null);
+    assert.deepStrictEqual(again.train, T, '같은 입력이면 같은 계획');
+    const later = decide({ nowMs: ms('2026-10-26T12:05:00'), tzOffsetMin: 540, locked: true, here: 4, boarded: true, key: 'k', nodes: SUBS }, null);
+    assert.deepStrictEqual(later.train, T, '여정 안에서 역이 지나가도 계획은 그대로(시각·위치가 아니라 여정으로 정해진다)');
+    assert.strictEqual(later.cong.idx, 4, '혼잡도 칸은 지금 역을 따라간다');
+    const busR = decide({ nowMs: ms('2026-10-26T12:00:00'), tzOffsetMin: 540, locked: true, here: 1, boarded: true, key: 'b', nodes: [O, B('A'), B('B'), N({ name: '도착' })] }, null);
+    assert(!busR.train, '버스에는 객실 계획이 없다');
+  });
   await t('잘못된 입력에도 죽지 않는다', () => {
     assert.strictEqual(decide({ locked: true, nodes: [] }, null).mode, null); assert.strictEqual(decide({ locked: true, here: 99, nodes: BUS }, null).mode, 'alight'); assert.strictEqual(decide(null, null).mode, 'idle');
     assert.strictEqual(decide({ locked: true, here: -5, nodes: BUS }, null).mode, 'wait');
