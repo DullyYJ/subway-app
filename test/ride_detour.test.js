@@ -108,5 +108,21 @@ t('닫아 둔(shr) 환승 알약도 열차 시각이 되면 다시 펼쳐진다(
   assert.strictEqual(r.overlay.rs.st, 'board', JSON.stringify(r.overlay.rs));
   assert.ok(r.overlay.rs.bt);
 });
+t('s230: 열차가 시각표보다 3분 앞서 가도, 지하 역사의 정확도 90m 좌표로 영점이 잡혀 마커가 따라잡는다(60m 넘는 좌표를 버리던 때는 시각표에 갇혔다)', () => {
+  const names = ['문학경기장', '인천터미널', '예술회관', '인천시청', '간석오거리', '부평삼거리'], plan = [P(18, 12), P(18, 14), P(18, 15), P(18, 17), P(18, 20), P(18, 22)];
+  const nds = [{ name: '도보', isOrigin: true }].concat(names.map((n, i) => ({ name: n, isSub: true, lineName: '인천1호선', planMin: plan[i] })));
+  const pos = i => 126.69 + i * 0.011, stops = names.map((n, i) => ({ i: i + 1, lat: 37.43, lng: pos(i), arrMs: DAY + plan[i] * 60000, pass: i > 0, fin: i === names.length - 1 }));
+  let st = { v: 1, tripSig: 'E', eta: { nodes: nds, passes: [{ idx: 1, ms: at(18, 12, 0), src: 'gps' }], boarded: true, notDeparted: false, tzOffsetMin: 540, timetableFirst: true }, stops, trail: [],
+    cfg: { targets: [{ seqPos: 5, nodeIdx: 6, name: '부평삼거리', kind: 'dest' }], seq: [1, 2, 3, 4, 5, 6], allowed: {}, destName: '부평삼거리' }, ovl: { cells: nds.map(n => ({ n: n.name, t: '', dc: '#1e9e48' })), map: nds.map((n, i) => i === 0 ? -1 : i), base: 0, theme: { bg: '#1c1c1e', fg: '#fff', sub: '#aaa' } }, fired: {} };
+  const realT = i => DAY + plan[i] * 60000 - 180000;
+  const realLng = ms => { for (let i = 0; i < names.length - 1; i++) if (ms <= realT(i + 1)) return pos(i) + Math.max(0, (ms - realT(i)) / (realT(i + 1) - realT(i))) * (pos(i + 1) - pos(i)); return pos(names.length - 1); };
+  let r = null, atFrom = null;
+  for (let ms = at(18, 12, 0); ms <= at(18, 16, 0); ms += 5000) {
+    const fx = []; for (let q = ms - 4000; q <= ms; q += 1000) fx.push([q, 37.43, realLng(q), 90, null]);
+    r = rideStandby({ nowMs: ms, fixes: fx.map(f => f.slice(0, 4)), state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (ms === at(18, 15, 30)) atFrom = r.pos.from;
+  }
+  assert.ok(atFrom >= 4, '18:15:30 마커는 인천시청(노드 4) 이후여야 한다(시각표만 따르면 예술회관 구간): from=' + atFrom);
+});
 console.log('ride_detour: pass', pass, 'fail', fail);
 process.exit(fail ? 1 : 0);
