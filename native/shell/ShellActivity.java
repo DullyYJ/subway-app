@@ -3147,7 +3147,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    private void closeSheet() { if (mapView != null) mapView.setCover(0f); detLoading = null; brStop(); main.removeCallbacks(walkTick); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+    private void closeSheet() { if (mapView != null) mapView.setCover(0f); detLoading = null; brStop(); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
@@ -3157,7 +3157,6 @@ public class ShellActivity extends Activity {
             if (!"call".equals(a.a)) return;
             if (ShellCore.S_FAV.equals(sheetName)) { favAct(a.v, sheetView == null ? null : sheetView.fields()); return; }
             if (ShellCore.S_DETAIL.equals(sheetName)) { detailAct(a.v); return; }
-            if (ShellCore.S_WALK.equals(sheetName)) { walkAct(a.v); return; }
             if ("wr.close".equals(a.v) || "fm.close".equals(a.v)) { closeSheet(); return; }
             if ("wr.submit".equals(a.v)) { submitWrite(); return; }
             String[] ln = food.sheetLink(a.v);
@@ -4055,7 +4054,6 @@ public class ShellActivity extends Activity {
         home.setRide("", "");
         reloadHome();
         toast("탑승 안내를 끝냈어요");
-        main.postDelayed(new Runnable() { @Override public void run() { openWalkSheet("arrive"); } }, 1200L);        // 웹 _tryWalkAutoArrive: 하차 1.2초 뒤 도보 안내
     }
     private long reviveAt; private int reviveN;
     /** 탑승 서비스가 꺼져 있는데 저장된 안내(30분 안)가 있으면 다시 켠다(앱이 죽었다 살아났거나 시스템이 서비스를 내렸을 때). 다시 켰으면 true — 그동안은 확정을 지우지 않는다. 4초에 한 번 · 최대 6번. */
@@ -4144,80 +4142,7 @@ public class ShellActivity extends Activity {
         });
     }
 
-    // ───────────── 도보 안내 시트(웹 walkModal) ─────────────
-    // 거리 · 시간 · 기준 시각 · 길안내 주소는 엔진(/screen/dlg kind:walk)이 정한다. 여기는 내 위치를 받아 보내고 받은 화면을 그린다. 30초마다 다시 받는다.
-    private final WalkCore walk = new WalkCore();
-    private int walkSeq;
-    private final Runnable walkTick = new Runnable() { @Override public void run() { if (walkOpen()) walkRefresh(); } };
-    private boolean walkOpen() { return sheet != null && sheet.isShowing() && ShellCore.S_WALK.equals(sheetName); }
-    private void openWalkSheet(String mode) {
-        HomeCore.Loc d = home.loc[HomeCore.DEST];
-        if (d == null || d.name.length() == 0 || isFinishing()) return;
-        closeSheet();
-        walk.open(mode, d.name, d.lat, d.lng);
-        sheetName = ShellCore.S_WALK;
-        sheetView = new ScreenView(this);
-        sheetView.setDpr(dpr);
-        final int[] pal = ShellCore.palette(ShellCore.theme(store));
-        sheetView.setPalette(pal);
-        sheetView.setListener(new SheetHost());
-        sheet = new android.app.Dialog(this, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
-        FrameLayout box = new FrameLayout(this);                                       // 웹 카드: 위쪽 모서리 20 · 너비 520 까지
-        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
-        g.setColor(pal[ScreenView.R_CARD]); float r = 20f * dpr; g.setCornerRadii(new float[] { r, r, r, r, 0f, 0f, 0f, 0f });
-        box.setBackground(g);
-        if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
-        box.addView(sheetView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        sheet.setContentView(box);
-        try {
-            android.view.Window w = sheet.getWindow();
-            int wpx = Math.min(getResources().getDisplayMetrics().widthPixels, Math.round(520f * dpr));
-            w.setLayout(wpx, Math.round(WALK_SHEET_H * dpr));
-            w.setGravity(android.view.Gravity.BOTTOM);
-            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            w.setDimAmount(0.8f);
-            w.setWindowAnimations(android.R.style.Animation_InputMethod);
-            sheet.show(); slideIn(sheetView);
-        } catch (Throwable t) { toast("도보 안내를 열지 못했어요"); sheet = null; sheetView = null; sheetName = ""; return; }
-        walkRefresh();
-    }
-    private static final int WALK_SHEET_H = 262;
-    /** 내 위치를 받아(권한이 없거나 못 받으면 - 로 그린다 — 옛 위치는 쓰지 않는다) 엔진에게 다시 그려 달라고 한다. 같은 때 겹쳐도 가장 나중 것만 쓴다. */
-    private void walkRefresh() {
-        final int seq = ++walkSeq;
-        main.removeCallbacks(walkTick);
-        if (!hasLocPerm()) { walkLoad(seq); return; }          // 옛 위치는 쓰지 않는다 — 위치가 없으면 엔진이 - 로 그린다
-        locateNow(8000L, 2000L, 20000L, new LocCb() {
-            @Override public void fix(Location l) { if (seq != walkSeq) return; walk.setMe(l.getLatitude(), l.getLongitude()); walkLoad(seq); }
-            @Override public void fail(boolean noperm) { if (seq != walkSeq) return; walkLoad(seq); }
-        });
-    }
-    private void walkLoad(final int seq) {
-        if (!walkOpen()) return;
-        HomeCore.Env e = homeEnv();
-        final String body = walk.request(ShellCore.CAP, e.nowMs, e.tzoMin, ShellCore.theme(store));
-        new Thread(new Runnable() {
-            @Override public void run() {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", body, 8000);
-                final String txt = r.status == 200 ? r.body : "";
-                main.post(new Runnable() { @Override public void run() {
-                    if (seq != walkSeq || !walkOpen()) return;
-                    if (txt.length() > 0) { walk.onScreen(txt); present(sheetView, txt, false); }
-                    else if (!walk.hasMe) toast("도보 안내를 받지 못했어요");
-                    main.postDelayed(walkTick, walk.refreshMs);
-                } });
-            }
-        }, "shell-walk").start();
-    }
-    private void walkAct(String v) {
-        switch (walk.act(v)) {
-            case WalkCore.W_CLOSE: closeSheet(); break;
-            case WalkCore.W_KAKAO: if (walk.navKakao != null) openNav(walk.navKakao); else toast(walk.msg.length() > 0 ? walk.msg : "목적지 좌표를 찾을 수 없습니다"); break;
-            case WalkCore.W_NAVER: if (walk.navNaver != null) openNav(walk.navNaver); else toast(walk.msg.length() > 0 ? walk.msg : "목적지 좌표를 찾을 수 없습니다"); break;
-            default: break;
-        }
-    }
+    // ───────────── 도보 안내 시트 — 없앴다(s233, YJ: 목적지까지 도보 안내는 아예 없애줘). 안내 종료 뒤에 아래 시트를 띄우지 않는다. ─────────────
 
     // ───────────── 세부경로 시트 ─────────────
     private android.widget.TextView detLoading;
