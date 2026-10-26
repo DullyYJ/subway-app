@@ -1,17 +1,16 @@
 // 출퇴근 브리핑 Worker 연결부 — POST /commute-brief (engine/commute-brief.js 의 cbPlan · cbCompose 를 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/commute-brief") return handleCommuteBrief(request);` 를 넣는다.
 //   본문: { kind:'morn'|'eve', nowMs, from, to, eFrom, eTo (각 {nm,lat?,lng?,bus?}), gps?:{lat,lng} }  → { ok, v, title, body, route }
-//   날씨(온도·체감·습도·최저최고·강수·자외선·바람)는 subway-api /weather(WSAY_WX_URL)에서 출발지·도착지 좌표로 받는다(2.5초 · 10분 캐시). 못 받으면 날씨 줄만 빠진다.
+//   날씨(온도·체감·습도·최저최고·강수·자외선·바람)는 Open-Meteo(wxMeteo, scene-worker.js)에서 출발지·도착지 좌표로 받는다(2.5초 · 10분 캐시). 못 받으면 날씨 줄만 빠진다.
 var CB_WX_CACHE = {};
 async function cbWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = CB_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
-    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 2500);
-    var r = await fetch(WSAY_WX_URL + "?lat=" + lat + "&lng=" + lng, { signal: ac.signal });
+    var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 3500);
+    var j = typeof wxMeteo === "function" ? await wxMeteo(lat, lng, ac.signal) : null;      // s218: Open-Meteo 직접(예전 subway-api /weather 는 배포본에 없었다)
     clearTimeout(t);
-    var j = r.ok ? await r.json() : null;
-    if (j && j.ok !== false && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
+    if (j && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
   } catch (e) {}
   return c ? c.wx : null;
 }
