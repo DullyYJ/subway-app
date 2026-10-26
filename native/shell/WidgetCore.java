@@ -179,6 +179,7 @@ public final class WidgetCore {
                 if (m ? f.hasM : f.hasE) u.append("&lat=").append(m ? f.mLat : f.eLat).append("&lng=").append(m ? f.mLng : f.eLng);
                 h = (HttpURLConnection) new URL(u.toString()).openConnection();
                 h.setConnectTimeout(4000); h.setReadTimeout(5000);
+                if (NetPost.iid != null && NetPost.iid.length() > 0) h.setRequestProperty("X-Gdm-Id", NetPost.iid);
                 InputStream in = h.getInputStream();
                 java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] b = new byte[2048]; int n;
                 while ((n = in.read(b)) > 0 && bo.size() < 65536) bo.write(b, 0, n);
