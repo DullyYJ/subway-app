@@ -426,13 +426,6 @@ var RTX_FOOD_PITCH_DEFAULT = ['내리는 길에 가볍게 들러 봐요', '근�
 // ── s237 (YJ: "각 맛집·카페·쿠팡은 아이템에 맞게 클릭을 유도하는 문구 · 시간 날씨에 따라 매번 다르게") ────────────────────
 //   오버레이 추천 줄의 [버튼 이름](go, 7자 안)과 셋째 줄(m, 16자 안)을 아이템 종류(점심·저녁·야식·카페·쿠팡) · 도착 시각 · 날씨에 맞춰 고른다.
 //   날씨가 있으면 그 날씨 문구를 앞세우고, 고르는 건 호출마다 다른 씨앗(RTX_RND)이라 여정마다 다르다.
-var RTX_GO = {
-  lunch: { base: ['메뉴 보러가기', '점심 둘러보기', '가게 둘러보기', '후기 보러가기', '오늘 점심은?'], rainy: ['비 피할 맛집', '따뜻한 한 끼', '비 오는 점심'], cold: ['뜨끈한 국물', '따뜻한 한 끼'], hot: ['시원한 한 끼', '더위 피할 곳'] },
-  dinner: { base: ['저녁 둘러보기', '메뉴 보러가기', '저녁 고르기', '가게 둘러보기', '오늘 저녁은?'], rainy: ['비 피할 맛집', '비 오는 저녁', '따뜻한 한 끼'], cold: ['뜨끈한 국물', '따뜻한 한 끼'], hot: ['시원한 한 끼', '더위 피할 곳'] },
-  night: { base: ['야식 보러가기', '야식 고르기', '오늘 야식은?', '야식 둘러보기'], rainy: ['빗소리 야식', '비 오는 야식'], cold: ['뜨끈한 야식', '따뜻한 한 입'], hot: ['시원한 야식', '시원한 한 입'] },
-  morning: { base: ['카페 둘러보기', '커피 한 잔?', '커피 보러가기', '아침 커피는?'], rainy: ['창가 카페', '빗소리 카페'], cold: ['따뜻한 한 잔', '따뜻한 라떼'], hot: ['시원한 한 잔', '아이스 한 잔'] },
-  shop: { base: ['특가 보러가기', '지금 담아보기', '구경하러 가기', '오늘 딱 이거', '오늘 밤 쇼핑'], weekend: ['주말 쇼핑'], rainy: ['집콕템 보기', '집콕 쇼핑'], cold: ['따뜻템 보기', '겨울 준비'], hot: ['시원템 보기', '더위 탈출템'] }
-};
 var RTX_TEASE = {
   lunch: { base: ['눌러서 위치 확인', '줄 서기 전에 확인', '미리 보고 정해요', '지도로 바로 확인'], rainy: ['비 피해 가까운 곳', '우산 없이 갈 곳'], cold: ['추운 날 뜨끈하게', '따뜻한 곳 먼저'], hot: ['더운 날 시원하게', '시원한 곳 먼저'], late: ['점심시간 끝나기 전에'] },
   dinner: { base: ['눌러서 위치 확인', '웨이팅 전에 확인', '미리 보고 정해요', '지도로 바로 확인'], rainy: ['비 피해 가까운 곳', '우산 없이 갈 곳'], cold: ['추운 날 뜨끈하게', '따뜻한 곳 먼저'], hot: ['더운 날 시원하게', '시원한 곳 먼저'] },
@@ -441,7 +434,7 @@ var RTX_TEASE = {
   shop: { base: ['눌러서 가격 확인', '재고 있을 때 확인', '놓치면 아쉬워요', '지금 바로 둘러봐요'], weekend: ['주말에 딱이에요'], rainy: ['비 오는 날 딱이에요'], cold: ['추운 날 딱 필요해요'], hot: ['더운 날 딱 필요해요'], late: ['자기 전에 확인하세요'] }
 };
 function rtxPickRnd(list) { return list[Math.floor(RTX_RND() * list.length)]; }
-// kind: 'lunch'|'dinner'|'night'|'morning'|'shop' · cx: 도착 시각·날씨 맥락(rtxCx). 날씨(비·추위·더위)가 있으면 그 문구들을 앞세우고 기본 문구를 두 개만 섞는다.
+// kind: 'lunch'|'dinner'|'night'|'morning'|'shop' · cx: 도착 시각·날씨 맥락(rtxCx). 날씨(비·추위·더위)가 있으면 그 문구들을 앞세우고 기본 문구를 두 개만 섞는다(셋째 줄 클릭 유도 문구).
 function rtxPickWx(tbl, kind, cx, extraKeys) {
   var t = tbl[kind] || tbl.lunch, pool = [], base = t.base;
   cx = cx || {};
@@ -452,7 +445,12 @@ function rtxPickWx(tbl, kind, cx, extraKeys) {
   if (!pool.length) return rtxPickRnd(base);
   return rtxPickRnd(pool.concat(base.slice(0, 2)));
 }
-function rtxGoLabel(kind, cx) { return rtxPickWx(RTX_GO, kind, cx, (kind === 'shop' && cx && cx.weekend) ? ['weekend'] : null); }
+// s237(YJ: 버튼 이름이 아니라 특정 식당·카페·쿠팡 상품을 추천하라): 버튼은 추천한 그 가게·상품 이름으로 — '<이름> 보기'(이름 5자까지, 넘으면 …). 일반 문구 대신 구체적인 대상이 보인다.
+function rtxGoLabel(name) {
+  var n = String(name == null ? '' : name).replace(/\s*[\(\[（].*$/, '').replace(/\s+/g, ' ').trim();
+  if (!n) return '';
+  return (n.length > 5 ? n.slice(0, 4) + '…' : n) + ' 보기';
+}
 function rtxTeaser(kind, cx) {
   var ex = [], h = cx && cx.h != null ? cx.h : -1;
   if (kind === 'shop' || kind === 'night') { if (h >= 23 || (h >= 0 && h < 4)) ex.push('late'); }
@@ -477,7 +475,7 @@ function rtxAd(a, slot, destStn){
         if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
       var shopB = line || say;
-      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel('shop', a.cx) };
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel(it.n) };
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;
@@ -510,7 +508,7 @@ function rtxAd(a, slot, destStn){
     } else {
       d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(sl, a.cx), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
   }catch(e){ return null; }
 }
 
@@ -944,4 +942,4 @@ function handleRecoText(request) {
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, rtxGoLabel: rtxGoLabel, rtxTeaser: rtxTeaser, RTX_GO: RTX_GO, RTX_TEASE: RTX_TEASE, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, rtxGoLabel: rtxGoLabel, rtxTeaser: rtxTeaser, RTX_TEASE: RTX_TEASE, RTX_V: RTX_V };
