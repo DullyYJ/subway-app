@@ -78,7 +78,8 @@ var RIDE_TRACK_DEFAULTS = {
   trailMaxSpeedMps: 60, zeroLeadSec: 25, zeroWinSec: 55, zeroSlideSec: 45, zeroNearM: 200, zeroFinalNearM: 250, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30,
   // ★ 2026-10-13 (YJ: "시간표보다 빠르게 선학에 왔어. 위치는 맞혔는데 시간이 안맞춰져. 시간도 같이 밀거나 당기며 계속 영점"): 시각표 창(도착 15초 전~30초 뒤) 밖에서 닿은 열차(일찍·늦게)도 놓치지 않도록
   //   pass:true 인 정류장은 '표시 도착 시각 앞뒤' 넓은 창에서 GPS 가 그 정류장 150m 안(정확도 60m 이하 좌표)에 든 가장 가까운 순간을 통과 시각(passMs)으로 돌려준다 — 앱은 그 시각을 통과 증거로 엔진에 다시 보낸다.
-  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 60, passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
+  passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 100,   // ★ 2026-10-26 s230 (YJ: 지하에서 영점이 안 잡혀 마커가 열차보다 2~3정거장 뒤처짐): 정확도 60 → 100m — 터널·역사 안 좌표는 정확도가 60m 넘게 나와 전부 버려졌다
+  passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정해야지 — 밀거나 당기거나"): 늦게 오는 열차 — 표시 도착 시각이 지났는데 신선한 GPS 가 '앞 정류장과 이 정류장 사이'에서 이 정류장과 notYetFarM 넘게 떨어져 있으면 notYet:true(아직 안 닿음). 앱은 이 증거를 /ride-eta 에 보내고 엔진이 뒤 시각을 민다.
   notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
   // ★ 2026-10-19 (YJ: "버스는 지상이 대부분이니까 네비게이션처럼 GPS 를 써 · 버스가 계속 움직이는데 마커는 정지(노랑)"): 움직임 · 버스 위치.
