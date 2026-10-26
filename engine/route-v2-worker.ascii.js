@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s225";
+var ENGINE_VERSION = "route-v2-2026-10-26s226";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3421,7 +3421,7 @@ var RATE_LIMIT_WINDOW_MS = 1e4;
 var RATE_LIMIT_MAX = 40;
 var _rateMap = /* @__PURE__ */ new Map();
 function rateLimited(request) {
-  const ip = request.headers.get("CF-Connecting-IP") || request.headers.get("cf-connecting-ip") || "unknown";
+  const ip = (request.headers.get("CF-Connecting-IP") || request.headers.get("cf-connecting-ip") || "unknown") + "|" + gdIid(request.headers.get("X-Gdm-Id"));
   const now = Date.now();
   let e = _rateMap.get(ip);
   if (!e || now - e.start > RATE_LIMIT_WINDOW_MS) {
@@ -8250,6 +8250,8 @@ var route_v2_worker_default = { async scheduled(event, env, ctx) {
   ctx.waitUntil(ldPairsCron(env, ctx).catch(function() {
   }));
 }, async fetch(request, env, ctx) {
+  var _gd = await guardEnter(request, env);
+  if (_gd.res) return _gd.res;
   try {
     return await handleFetchCond(request, env, ctx);
   } catch (e) {
@@ -8257,6 +8259,8 @@ var route_v2_worker_default = { async scheduled(event, env, ctx) {
       error: String(e && e.message || e),
       stack: String(e && e.stack || "").split("\n").slice(0, 4).join(" | ")
     }), { status: 500, headers: CORS_H });
+  } finally {
+    _gd.done();
   }
 } };
 // ===== ride-eta (\ud0d1\uc2b9 \uc911 \ub3c4\ucc29\uc2dc\uac01 \uc5d4\uc9c4) \uc2dc\uc791 =====
@@ -23042,6 +23046,143 @@ async function handleScreenBatch(request) {
   return new Response(JSON.stringify({ ok: true, res: out }), { headers: H });
 }
 // ===== SCACHE ENGINE END =====
+// ===== GUARD ENGINE BEGIN =====
+// \uae38\ub3d9\ubb34 \u2014 API \ub0a8\uc6a9 \u00b7 \ub9e4\ud06c\ub85c \ubc29\uc5b4 \uc5d4\uc9c4 \ubaa8\ub4c8 (route-v2 Worker \uc785\uad6c\uc5d0 \ubd99\uc774\ub294 \uc21c\uc218 \ud568\uc218) \u2014 2026-10-26 (s226)
+//
+// \u2605 \uc6d0\uce59(YJ): "API \ub0a8\uc6a9\u00b7\ub9e4\ud06c\ub85c \uacf5\uaca9\uc73c\ub85c \uc11c\ube44\uc2a4\uac00 \uacfc\ubd80\ud558\ub418\uc9c0 \uc54a\uac8c, \uc0ac\uc6a9\uc790\ub294 \ubd88\ud3b8\ud568\uc774 \uc5c6\uac8c."
+//   - \ubcf4\ud1b5 \uc0ac\uc6a9\uc790\ub294 \uc808\ub300 \uac78\ub9ac\uc9c0 \uc54a\uc744 \ub109\ub109\ud55c \ud55c\ub3c4(\ubc84\ud0b7)\ub9cc \ub454\ub2e4. \ud55c\ub3c4\uc5d0 \uac78\ub824\ub3c4 \uc571\uc774 '\uc870\uc6a9\ud788 \ud55c \ubc88 \ub2e4\uc2dc' \ubcf4\ub0b4\uc11c \ud654\uba74\uc5d0\ub294 \uc544\ubb34 \uc77c\ub3c4 \uc548 \ubcf4\uc778\ub2e4(NetPost).
+//   - \uc694\uccad\ub9c8\ub2e4 \uc571\uc774 \uc124\uce58 \ub54c \ub9cc\ub4e0 \ubb34\uc791\uc704 \ubc88\ud638(X-Gdm-Id)\ub97c \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4. \ud55c \uae30\uae30 = \ud55c \ud1b5. \uc774\ub3d9\ud1b5\uc2e0 \uacf5\uc720 IP(CGNAT) \ub4a4\uc758 \uc5ec\ub7ec \uc0ac\uc6a9\uc790\uac00 \uc11c\ub85c\uc758 \ud55c\ub3c4\ub97c \uac09\uc544\uba39\uc9c0 \uc54a\ub294\ub2e4.
+//     \ubc88\ud638\ub97c \uc694\uccad\ub9c8\ub2e4 \ubc14\uafd4 \uac00\uba70 \uc6b0\ud68c\ud558\ub824\ub294 \uc2dc\ub3c4(\ud55c IP \uc5d0\uc11c 1\ubd84\uc5d0 \ubc88\ud638 120\uac1c \ub118\uac8c)\ub294 \ubc88\ud638\ub97c \ubb34\uc2dc\ud558\uace0 IP \ud558\ub098\ub85c \ubb36\ub294\ub2e4.
+//   - \uc0c1\ud55c\uc774 \ud55c \uad70\ub370\ub85c\ub9cc \uc624\uc9c0 \uc54a\uac8c \uc138 \uacb9: \u2460 IP \uc804\uccb4 \uc0c1\ud55c(\uc544\uc8fc \ub109\ub109) \u2461 \uc885\ub958\ubcc4 \ud1b5(\uac00\ubcbc\uc6b4 \ud654\uba74 \u00b7 \ubb34\uac70\uc6b4 \uc870\ud68c \u00b7 \uad00\ub9ac/\uc9c4\ub2e8\uc6a9) \u2462 \uc5f0\uc774\uc5b4 \ud55c\ub3c4\ub97c \ub118\uc73c\uba74 \uc7a0\uae50(60\ucd08\ubd80\ud130 \ucd5c\ub300 10\ubd84) \ucc28\ub2e8.
+//   - \uad00\ub9ac\u00b7\uc9c4\ub2e8 \uc8fc\uc18c(debug \u00b7 probe \u00b7 fill \u00b7 live-test \u2026)\ub294 \uc571\uc774 \uc548 \uc4f4\ub2e4 \u2192 \uc544\uc8fc \uc791\uc740 \ud55c\ub3c4 + \ube44\ubc00\uac12(env.ADMIN_KEY)\uc774 \uc788\uc73c\uba74 \uadf8\uac83 \uc5c6\uc774\ub294 403.
+//   - \ubb34\uac70\uc6b4 \uc870\ud68c\uac00 \ud55c \uc778\uc2a4\ud134\uc2a4\uc5d0 \ub3d9\uc2dc\uc5d0 \ub108\ubb34 \ubab0\ub9ac\uba74(64) \ub300\uae30\uc2dc\ud0a4\uc9c0 \uc54a\uace0 \ubc14\ub85c 503 + Retry-After(\uc571\uc774 \uc870\uc6a9\ud788 \ud55c \ubc88 \ub2e4\uc2dc).
+//   - \uc774 \ubaa8\ub4c8\uc774 \ud2c0\ub824\ub3c4 \uc0ac\uc6a9\uc790 \uc694\uccad\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4(\uc6cc\ucee4 \uc5f0\uacb0\ubd80\uac00 \uc608\uc678\ub294 \ud1b5\uacfc\uc2dc\ud0a8\ub2e4).
+// \ud55c\uacc4(\uc815\uc9c1): \uc6cc\ucee4 \uc778\uc2a4\ud134\uc2a4\ub9c8\ub2e4 \ub530\ub85c \uc13c\ub2e4(\ud55c \uc778\uc2a4\ud134\uc2a4 \uc548\uc5d0\uc11c\ub9cc \uc815\ud655). \uc5ec\ub7ec \uc778\uc2a4\ud134\uc2a4\uc5d0 \ud769\uc5b4\uc9c4 \ubd84\uc0b0 \uacf5\uaca9\uc740 Cloudflare \uc18d\ub3c4 \uc81c\ud55c \ubc14\uc778\ub529(GDM_RL)\uc774 \uc788\uc73c\uba74 \uadf8\uac83\uc73c\ub85c \ud55c \ubc88 \ub354 \ub9c9\ub294\ub2e4.
+'use strict';
+
+var GD_V = 1;
+// \uc885\ub958\ubcc4 \ud1b5: cap = \ud55c \ubc88\uc5d0 \ubab0\uc544 \ubcf4\ub0bc \uc218 \uc788\ub294 \uc591(\ubc84\uc2a4\ud2b8) \u00b7 rate = \ucd08\ub2f9 \ucc44\uc6cc\uc9c0\ub294 \uc591
+var GD_CFG = {
+  light: { cap: 60, rate: 4 },          // \ud654\uba74 \u00b7 \ud0ed \u00b7 \uce69 \ub204\ub974\uae30 \u2026 (1\ucd08\uc5d0 4\ubc88\uc744 \uacc4\uc18d \ub20c\ub7ec\ub3c4 \uc548 \uac78\ub9b0\ub2e4)
+  heavy: { cap: 40, rate: 2 },          // \uc678\ubd80 \uc870\ud68c\uac00 \ub4dc\ub294 \uac83: \uae38\ucc3e\uae30 \u00b7 \ubc84\uc2a4/\uc9c0\ud558\ucca0 \ub3c4\ucc29 \u00b7 AI \ubb38\uad6c \u00b7 \uc9c0\ub3c4 (\ubd84\ub2f9 120\ubc88)
+  admin: { cap: 5, rate: 1 / 12 },      // \uad00\ub9ac\u00b7\uc9c4\ub2e8 \uc8fc\uc18c: \ubd84\ub2f9 5\ubc88
+  total: { cap: 600, rate: 30 }         // IP \ud558\ub098\uc758 \uc804\uccb4(\uacf5\uc720 IP \ub3c4 \ub109\ub109): \ud55c \ubc88\uc5d0 600 \u00b7 \ucd08\ub2f9 30
+};
+var GD_BAN_VIO = 8;                     // 30\ucd08 \uc548\uc5d0 \ud55c\ub3c4\ub97c 8\ubc88 \ub118\uc73c\uba74
+var GD_BAN_MS = 60000, GD_BAN_MAX_MS = 600000;
+var GD_SPOOF_IDS = 120;                 // \ud55c IP \uac00 1\ubd84\uc5d0 \ubc88\ud638\ub97c \uc774\ub9cc\ud07c \ub118\uac8c \ubc14\uafb8\uba74 \ubc88\ud638\ub97c \ubb34\uc2dc\ud55c\ub2e4
+var GD_BATCH_COST = 3;                  // \ubb36\uc74c \uc694\uccad(/screen/batch)\uc740 \uc548\uc5d0 \ucd5c\ub300 16\uac1c\uac00 \ub4e0\ub2e4 \u2192 3\uce78
+
+var GD_ADMIN_PATHS = ['/stops-near', '/debug-shared-nostop', '/debug-ghost-routes', '/live-usage', '/live-test', '/bt-verify', '/bt-fill', '/ld-pairs-warm',
+  '/kric-rederive', '/kric-status', '/kric-ingest', '/kric-probe', '/kric-derive', '/est-status', '/xfer-status', '/xfer-probe', '/tago-probe', '/bus-split-test'];
+var GD_HEAVY_PATHS = ['/route-v2', '/route-v2-app', '/route-v2-debug', '/warm', '/ride/start', '/ride/buspick', '/reco-text', '/commute-brief', '/widget-say', '/suggest',
+  '/food-pub', '/bus-tago', '/screen/map', '/next-train', '/board-live', '/home-brief', '/scene', '/ride-eta', '/ride-track', '/ride-standby', '/pos-fuse'];
+
+var GD_ST = { b: new Map(), ban: new Map(), vio: new Map(), ids: new Map(), gcAt: 0, stat: { ok: 0, limited: 0, banned: 0, admin: 0, spoof: 0 } };
+
+function gdClass(path) {
+  var p = String(path || '');
+  if (GD_ADMIN_PATHS.indexOf(p) >= 0) return 'admin';
+  if (GD_HEAVY_PATHS.indexOf(p) >= 0) return 'heavy';
+  return 'light';
+}
+function gdIid(s) { s = String(s == null ? '' : s); return /^[A-Za-z0-9_-]{8,48}$/.test(s) ? s : ''; }
+
+// \ud1b5\uc5d0\uc11c cost \uce78\uc744 \uaebc\ub0b8\ub2e4. { ok, waitMs }
+function gdTake(key, cap, rate, cost, now) {
+  var b = GD_ST.b.get(key);
+  if (!b) { b = { v: cap, t: now }; GD_ST.b.set(key, b); }
+  else { b.v = Math.min(cap, b.v + (now - b.t) / 1000 * rate); b.t = now; }
+  if (b.v >= cost) { b.v -= cost; return { ok: true, waitMs: 0 }; }
+  return { ok: false, waitMs: Math.ceil((cost - b.v) / rate * 1000) };
+}
+
+function gdGc(now) {
+  if (now - GD_ST.gcAt < 30000 && GD_ST.b.size < 20000) return;
+  GD_ST.gcAt = now;
+  GD_ST.b.forEach(function (b, k) { if (now - b.t > 300000) GD_ST.b.delete(k); });
+  GD_ST.ban.forEach(function (x, k) { if (x.until < now - 600000) GD_ST.ban.delete(k); });
+  GD_ST.vio.forEach(function (x, k) { if (now - x.t0 > 600000) GD_ST.vio.delete(k); });
+  GD_ST.ids.forEach(function (x, k) { if (now - x.t0 > 120000) GD_ST.ids.delete(k); });
+  if (GD_ST.b.size > 50000) GD_ST.b.clear();                       // \uba54\ubaa8\ub9ac \ubc29\uc5b4(\uacf5\uaca9\uc73c\ub85c \ud0a4\uac00 \ud3ed\uc99d\ud574\ub3c4)
+  if (GD_ST.ids.size > 20000) GD_ST.ids.clear();
+}
+
+// \ud55c \uc694\uccad\uc744 \ud1b5\uacfc\uc2dc\ud0ac\uae4c. o = { ip, iid, path, method, now, adminSet, adminOk }
+//   \u2192 { ok:true, cls } | { ok:false, status, retryS, reason, cls }
+function gdDecide(o) {
+  var now = Number(o.now) || 0, ip = String(o.ip || 'unknown'), method = String(o.method || 'GET').toUpperCase();
+  var path = String(o.path || '/'), cls = gdClass(path);
+  if (method === 'OPTIONS') return { ok: true, cls: cls };
+  gdGc(now);
+  if (cls === 'admin') {
+    if (o.adminSet && !o.adminOk) { GD_ST.stat.admin++; return { ok: false, status: 403, retryS: 0, reason: 'admin', cls: cls }; }
+    var ta = gdTake('A|' + ip, GD_CFG.admin.cap, GD_CFG.admin.rate, 1, now);
+    if (!ta.ok) { GD_ST.stat.limited++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil(ta.waitMs / 1000)), reason: 'admin-rate', cls: cls }; }
+    return { ok: true, cls: cls };
+  }
+  // \ubc88\ud638(\uae30\uae30) \uad6c\ubd84 \u2014 \ud55c IP \uac00 \ubc88\ud638\ub97c \ub9c8\uad6c \ubc14\uafb8\uba74 \ubb34\uc2dc
+  var iid = gdIid(o.iid), spoof = false;
+  if (iid) {
+    var rec = GD_ST.ids.get(ip);
+    if (!rec || now - rec.t0 > 60000) { rec = { t0: now, set: new Set() }; GD_ST.ids.set(ip, rec); }
+    rec.set.add(iid);
+    if (rec.set.size > GD_SPOOF_IDS) { spoof = true; iid = ''; GD_ST.stat.spoof++; }
+  }
+  var who = ip + '|' + iid;
+  var ban = GD_ST.ban.get(who);
+  if (ban && ban.until > now) { GD_ST.stat.banned++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil((ban.until - now) / 1000)), reason: 'ban', cls: cls }; }
+  var cost = path === '/screen/batch' ? GD_BATCH_COST : 1;
+  var c = GD_CFG[cls];
+  var t1 = gdTake('T|' + ip, GD_CFG.total.cap, GD_CFG.total.rate, cost, now);
+  var t2 = t1.ok ? gdTake(cls + '|' + who, spoof ? Math.ceil(c.cap / 2) : c.cap, spoof ? c.rate / 2 : c.rate, cost, now) : t1;
+  if (t2.ok) { GD_ST.stat.ok++; return { ok: true, cls: cls }; }
+  // \ud55c\ub3c4 \ucd08\uacfc \u2014 \uc5f0\uc774\uc5b4 \ub118\uc73c\uba74 \uc7a0\uae50 \ucc28\ub2e8(60\ucd08 \u2192 120\ucd08 \u2026 \ucd5c\ub300 10\ubd84)
+  GD_ST.stat.limited++;
+  var v = GD_ST.vio.get(who);
+  if (!v || now - v.t0 > 30000) { v = { n: 0, t0: now, lvl: v ? v.lvl : 0 }; GD_ST.vio.set(who, v); }
+  v.n++;
+  if (v.n >= GD_BAN_VIO) {
+    var ms = Math.min(GD_BAN_MAX_MS, GD_BAN_MS * Math.pow(2, Math.min(4, v.lvl)));
+    GD_ST.ban.set(who, { until: now + ms }); v.lvl++; v.n = 0; v.t0 = now;
+    return { ok: false, status: 429, retryS: Math.ceil(ms / 1000), reason: 'ban', cls: cls };
+  }
+  return { ok: false, status: 429, retryS: Math.max(1, Math.ceil(t2.waitMs / 1000)), reason: 'rate', cls: cls };
+}
+// API \ub0a8\uc6a9 \ubc29\uc5b4 Worker \uc5f0\uacb0\ubd80 \u2014 route-v2 \uc758 fetch \ub9e8 \uc55e\uc5d0\uc11c guardEnter \ub97c \ubd80\ub978\ub2e4(engine/guard.js \uc758 gdDecide \ub97c \uc4f4\ub2e4).
+//   guardEnter(request, env) \u2192 { res, done } \u2014 res \uac00 \uc788\uc73c\uba74 \uadf8 \uc751\ub2f5(429/403/503)\uc744 \uadf8\ub300\ub85c \ub3cc\ub824\uc8fc\uace0, \uc5c6\uc73c\uba74 \ud1b5\uacfc(\ub05d\ub098\uba74 done() \uc744 \ubd80\ub978\ub2e4).
+//   \uc774 \uc5f0\uacb0\ubd80\ub294 \uc5b4\ub5a4 \uc624\ub958\uac00 \ub098\ub3c4 \uc694\uccad\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4(\ud1b5\uacfc). \uc120\ud0dd: env.GDM_RL(Cloudflare \uc18d\ub3c4 \uc81c\ud55c \ubc14\uc778\ub529, .limit({key}))\uc774 \uc788\uc73c\uba74 \ud55c \ubc88 \ub354 \uac74\ub2e4.
+var GD_HEAVY_MAX = 64;                   // \ud55c \uc778\uc2a4\ud134\uc2a4\uc5d0\uc11c \ub3d9\uc2dc\uc5d0 \ucc98\ub9ac \uc911\uc778 \ubb34\uac70\uc6b4 \uc870\ud68c \uc0c1\ud55c \u2014 \ub118\uc73c\uba74 \uc904 \uc138\uc6b0\uc9c0 \uc54a\uace0 \ubc14\ub85c 503
+var GD_INFLIGHT = { heavy: 0 };
+function gdReject(d) {
+  var h = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  if (d.retryS > 0) h["Retry-After"] = String(d.retryS);
+  return new Response(JSON.stringify({ ok: false, error: d.status === 403 ? "forbidden" : d.status === 503 ? "busy" : "rate", retry: d.retryS || 0 }), { status: d.status, headers: h });
+}
+async function guardEnter(request, env) {
+  var none = { res: null, done: function () { } };
+  try {
+    var url = new URL(request.url), hd = request.headers;
+    var adminSet = !!(env && env.ADMIN_KEY && typeof env.ADMIN_KEY === "string");
+    var adminOk = adminSet && (hd.get("x-admin-key") === env.ADMIN_KEY || url.searchParams.get("k") === env.ADMIN_KEY);
+    var d = gdDecide({ ip: hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip") || "unknown", iid: hd.get("X-Gdm-Id"), path: url.pathname, method: request.method, now: Date.now(), adminSet: adminSet, adminOk: adminOk });
+    if (!d.ok) return { res: gdReject(d), done: none.done };
+    if (request.method !== "OPTIONS" && d.cls !== "admin" && env && env.GDM_RL && typeof env.GDM_RL.limit === "function") {
+      try {
+        var r = await env.GDM_RL.limit({ key: (hd.get("CF-Connecting-IP") || "unknown") + "|" + d.cls });
+        if (r && r.success === false) return { res: gdReject({ status: 429, retryS: 10, reason: "rl" }), done: none.done };
+      } catch (e2) { }
+    }
+    if (d.cls === "heavy") {
+      if (GD_INFLIGHT.heavy >= GD_HEAVY_MAX) return { res: gdReject({ status: 503, retryS: 2, reason: "busy" }), done: none.done };
+      GD_INFLIGHT.heavy++;
+      var fin = false;
+      return { res: null, done: function () { if (!fin) { fin = true; GD_INFLIGHT.heavy = Math.max(0, GD_INFLIGHT.heavy - 1); } } };
+    }
+    return none;
+  } catch (e) { return none; }
+}
+// ===== GUARD ENGINE END =====
 
 async function handleFetch(request, env, ctx) {
   try { await holEnsure(env); } catch (e) {}
