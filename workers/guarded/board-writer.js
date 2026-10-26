@@ -2,15 +2,15 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
 // worker.js
-// 2026-10-01: 예전엔 관리 토큰이 소스에 있었고, 같은 값이 공개 앱(www/index.html)의 /react 호출에도
-//   들어 있어 누구나 /gen·/gentalk·/news(Gemini 호출·글 생성)를 부를 수 있었다.
-//   → 관리 경로는 시크릿 ADMIN_TOKEN 으로만 열리고(없으면 닫힘), 앱이 쓰는 /react 는 토큰 대신
-//     IP·전체 시간당 호출 제한으로 막는다.
+// 2026-10-01: \uc608\uc804\uc5d4 \uad00\ub9ac \ud1a0\ud070\uc774 \uc18c\uc2a4\uc5d0 \uc788\uc5c8\uace0, \uac19\uc740 \uac12\uc774 \uacf5\uac1c \uc571(www/index.html)\uc758 /react \ud638\ucd9c\uc5d0\ub3c4
+//   \ub4e4\uc5b4 \uc788\uc5b4 \ub204\uad6c\ub098 /gen\u00b7/gentalk\u00b7/news(Gemini \ud638\ucd9c\u00b7\uae00 \uc0dd\uc131)\ub97c \ubd80\ub97c \uc218 \uc788\uc5c8\ub2e4.
+//   \u2192 \uad00\ub9ac \uacbd\ub85c\ub294 \uc2dc\ud06c\ub9bf ADMIN_TOKEN \uc73c\ub85c\ub9cc \uc5f4\ub9ac\uace0(\uc5c6\uc73c\uba74 \ub2eb\ud798), \uc571\uc774 \uc4f0\ub294 /react \ub294 \ud1a0\ud070 \ub300\uc2e0
+//     IP\u00b7\uc804\uccb4 \uc2dc\uac04\ub2f9 \ud638\ucd9c \uc81c\ud55c\uc73c\ub85c \ub9c9\ub294\ub2e4.
 function adminOk(url, env) {
   const want = env && env.ADMIN_TOKEN;
   return !!want && url.searchParams.get("token") === want;
 }
-var MSG_PER_IP_HR = 40;      // 한 IP 가 한 시간에 대화로 남길 수 있는 사용자 메시지 수
+var MSG_PER_IP_HR = 40;      // \ud55c IP \uac00 \ud55c \uc2dc\uac04\uc5d0 \ub300\ud654\ub85c \ub0a8\uae38 \uc218 \uc788\ub294 \uc0ac\uc6a9\uc790 \uba54\uc2dc\uc9c0 \uc218
 async function msgAllowed(req, env) {
   try {
     const ip = req.headers.get("CF-Connecting-IP") || "?";
@@ -21,8 +21,8 @@ async function msgAllowed(req, env) {
     return ((r && r.n) || 1) <= MSG_PER_IP_HR;
   } catch (e) { return false; }
 }
-var REACT_PER_IP_HR = 12;    // 한 IP 가 한 시간에 보낼 수 있는 /react 수
-var REACT_ALL_HR = 400;      // 서버 전체 한 시간 상한(Gemini 비용 보호)
+var REACT_PER_IP_HR = 12;    // \ud55c IP \uac00 \ud55c \uc2dc\uac04\uc5d0 \ubcf4\ub0bc \uc218 \uc788\ub294 /react \uc218
+var REACT_ALL_HR = 400;      // \uc11c\ubc84 \uc804\uccb4 \ud55c \uc2dc\uac04 \uc0c1\ud55c(Gemini \ube44\uc6a9 \ubcf4\ud638)
 async function reactAllowed(req, env) {
   try {
     const ip = req.headers.get("CF-Connecting-IP") || "?";
@@ -39,19 +39,19 @@ async function reactAllowed(req, env) {
     return true;
   } catch (e) { return false; }
 }
-// ★ 2026-10-03 (개선안 4·5): 노선별 출퇴근 방 + 지연·혼잡 제보.
-//   ★ 2026-10-04: 방의 일상 대화(chat)는 AI 가 채우기도 한다(generateLineTalks, ipk='ai'). 지연·혼잡 제보(delay/crowd)는 실제 사용자 것만 센다.
-//   · line_msgs: 노선(또는 버스번호)별 한 줄 대화(chat)와 제보(delay=지연, crowd=혼잡). IP 는 해시(ipk)만 저장한다.
-//   · 같은 사람이 같은 노선·역에 같은 제보를 20분 안에 또 보내도 한 번으로 센다(경보 부풀리기 방지).
+// \u2605 2026-10-03 (\uac1c\uc120\uc548 4\u00b75): \ub178\uc120\ubcc4 \ucd9c\ud1f4\uadfc \ubc29 + \uc9c0\uc5f0\u00b7\ud63c\uc7a1 \uc81c\ubcf4.
+//   \u2605 2026-10-04: \ubc29\uc758 \uc77c\uc0c1 \ub300\ud654(chat)\ub294 AI \uac00 \ucc44\uc6b0\uae30\ub3c4 \ud55c\ub2e4(generateLineTalks, ipk='ai'). \uc9c0\uc5f0\u00b7\ud63c\uc7a1 \uc81c\ubcf4(delay/crowd)\ub294 \uc2e4\uc81c \uc0ac\uc6a9\uc790 \uac83\ub9cc \uc13c\ub2e4.
+//   \u00b7 line_msgs: \ub178\uc120(\ub610\ub294 \ubc84\uc2a4\ubc88\ud638)\ubcc4 \ud55c \uc904 \ub300\ud654(chat)\uc640 \uc81c\ubcf4(delay=\uc9c0\uc5f0, crowd=\ud63c\uc7a1). IP \ub294 \ud574\uc2dc(ipk)\ub9cc \uc800\uc7a5\ud55c\ub2e4.
+//   \u00b7 \uac19\uc740 \uc0ac\ub78c\uc774 \uac19\uc740 \ub178\uc120\u00b7\uc5ed\uc5d0 \uac19\uc740 \uc81c\ubcf4\ub97c 20\ubd84 \uc548\uc5d0 \ub610 \ubcf4\ub0b4\ub3c4 \ud55c \ubc88\uc73c\ub85c \uc13c\ub2e4(\uacbd\ubcf4 \ubd80\ud480\ub9ac\uae30 \ubc29\uc9c0).
 var LR_PER_IP_HR = 30;
-// ★ 2026-10-03: 신고가 서로 다른 3명 이상 모인 글은 보이지 않게 한다(자동 숨김). 신고한 기기 식별 코드도 14일 뒤 같이 지운다.
+// \u2605 2026-10-03: \uc2e0\uace0\uac00 \uc11c\ub85c \ub2e4\ub978 3\uba85 \uc774\uc0c1 \ubaa8\uc778 \uae00\uc740 \ubcf4\uc774\uc9c0 \uc54a\uac8c \ud55c\ub2e4(\uc790\ub3d9 \uc228\uae40). \uc2e0\uace0\ud55c \uae30\uae30 \uc2dd\ubcc4 \ucf54\ub4dc\ub3c4 14\uc77c \ub4a4 \uac19\uc774 \uc9c0\uc6b4\ub2e4.
 var LR_HIDE_N = 3;
-// ★ 2026-10-10: AI 가 만든 "치맥… 🍗… 🤤" 식 말줄임표 조각 글은 화면에서 가린다(행은 지우지 않음 — 2일 뒤 자동 삭제). 실제 이용자 글(ipk≠'ai')은 대상이 아니다.
-var LR_HIDDEN_SQL = " AND id NOT IN (SELECT msg_id FROM line_reports GROUP BY msg_id HAVING COUNT(*) >= " + LR_HIDE_N + ") AND NOT (ipk = 'ai' AND (LENGTH(text) - LENGTH(REPLACE(text, '…', ''))) >= 2)";
-var LR_KINDS_OK = ["chat"];   // ★ 2026-10-05 (YJ): 지연·붐벼요 제보 버튼 삭제(악용 우려) — 서버도 일반 대화만 받는다
-// ★ 2026-10-03 (익명 정확도 기록): 앱이 예상한 '탑승~하차' 분과 실제로 걸린 분을 목적지 도착 때 한 번 보낸다.
-//   저장하는 것: 날짜(일 단위), 예상분, 실제분, 환승 횟수, 노선명, 시간대(시), 평일 여부, 수단 구분, 앱 버전.
-//   저장하지 않는 것: 역 이름·좌표·사용자 식별값·IP. IP 는 시간당 횟수 제한에만 쓰고 제한표는 24시간 뒤 지운다. 기록은 1년 뒤 삭제.
+// \u2605 2026-10-10: AI \uac00 \ub9cc\ub4e0 "\uce58\ub9e5\u2026 \ud83c\udf57\u2026 \ud83e\udd24" \uc2dd \ub9d0\uc904\uc784\ud45c \uc870\uac01 \uae00\uc740 \ud654\uba74\uc5d0\uc11c \uac00\ub9b0\ub2e4(\ud589\uc740 \uc9c0\uc6b0\uc9c0 \uc54a\uc74c \u2014 2\uc77c \ub4a4 \uc790\ub3d9 \uc0ad\uc81c). \uc2e4\uc81c \uc774\uc6a9\uc790 \uae00(ipk\u2260'ai')\uc740 \ub300\uc0c1\uc774 \uc544\ub2c8\ub2e4.
+var LR_HIDDEN_SQL = " AND id NOT IN (SELECT msg_id FROM line_reports GROUP BY msg_id HAVING COUNT(*) >= " + LR_HIDE_N + ") AND NOT (ipk = 'ai' AND (LENGTH(text) - LENGTH(REPLACE(text, '\u2026', ''))) >= 2)";
+var LR_KINDS_OK = ["chat"];   // \u2605 2026-10-05 (YJ): \uc9c0\uc5f0\u00b7\ubd90\ubcbc\uc694 \uc81c\ubcf4 \ubc84\ud2bc \uc0ad\uc81c(\uc545\uc6a9 \uc6b0\ub824) \u2014 \uc11c\ubc84\ub3c4 \uc77c\ubc18 \ub300\ud654\ub9cc \ubc1b\ub294\ub2e4
+// \u2605 2026-10-03 (\uc775\uba85 \uc815\ud655\ub3c4 \uae30\ub85d): \uc571\uc774 \uc608\uc0c1\ud55c '\ud0d1\uc2b9~\ud558\ucc28' \ubd84\uacfc \uc2e4\uc81c\ub85c \uac78\ub9b0 \ubd84\uc744 \ubaa9\uc801\uc9c0 \ub3c4\ucc29 \ub54c \ud55c \ubc88 \ubcf4\ub0b8\ub2e4.
+//   \uc800\uc7a5\ud558\ub294 \uac83: \ub0a0\uc9dc(\uc77c \ub2e8\uc704), \uc608\uc0c1\ubd84, \uc2e4\uc81c\ubd84, \ud658\uc2b9 \ud69f\uc218, \ub178\uc120\uba85, \uc2dc\uac04\ub300(\uc2dc), \ud3c9\uc77c \uc5ec\ubd80, \uc218\ub2e8 \uad6c\ubd84, \uc571 \ubc84\uc804.
+//   \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294 \uac83: \uc5ed \uc774\ub984\u00b7\uc88c\ud45c\u00b7\uc0ac\uc6a9\uc790 \uc2dd\ubcc4\uac12\u00b7IP. IP \ub294 \uc2dc\uac04\ub2f9 \ud69f\uc218 \uc81c\ud55c\uc5d0\ub9cc \uc4f0\uace0 \uc81c\ud55c\ud45c\ub294 24\uc2dc\uac04 \ub4a4 \uc9c0\uc6b4\ub2e4. \uae30\ub85d\uc740 1\ub144 \ub4a4 \uc0ad\uc81c.
 var RIDE_PER_IP_HR = 12;
 var RIDE_KEEP_DAYS = 365;
 var _rideReady = false;
@@ -78,7 +78,7 @@ function rideClean(b) {
   if (ratio < 0.3 || ratio > 3) return null;
   if (!(xf >= 0 && xf <= 6) || !(hr >= 0 && hr <= 23) || !(wk === 0 || wk === 1)) return null;
   const lines = String(b.lines == null ? "" : b.lines);
-  if (lines.length > 40 || !/^[0-9A-Za-z가-힣,·\s\-]*$/.test(lines)) return null;
+  if (lines.length > 40 || !/^[0-9A-Za-z\uac00-\ud7a3,\u00b7\s\-]*$/.test(lines)) return null;
   const mode = ["sub", "bus", "mix"].indexOf(b.mode) >= 0 ? b.mode : "sub";
   const av = String(b.av || "").slice(0, 16).replace(/[^0-9A-Za-z._\-]/g, "");
   return { pred: Math.round(pred * 10) / 10, act: Math.round(act * 10) / 10, xf: Math.round(xf), hr: Math.round(hr), wk, lines, mode, av };
@@ -93,7 +93,7 @@ async function rideHandle(req, env, cors) {
     if (!await rideAllowed(req, env)) return new Response(JSON.stringify({ ok: false, error: "rate limited" }), { status: 429, headers: cors });
     const day = Math.floor(Date.now() / 864e5);
     await env.DB.prepare("INSERT INTO ride_log (day, pred, act, xf, lines, hr, wk, mode, av) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)").bind(day, c.pred, c.act, c.xf, c.lines, c.hr, c.wk, c.mode, c.av).run();
-    if (Math.random() < 0.02) {   // 가끔 오래된 기록·제한표 정리(1년 / 24시간)
+    if (Math.random() < 0.02) {   // \uac00\ub054 \uc624\ub798\ub41c \uae30\ub85d\u00b7\uc81c\ud55c\ud45c \uc815\ub9ac(1\ub144 / 24\uc2dc\uac04)
       try {
         await env.DB.prepare("DELETE FROM ride_log WHERE day < ?1").bind(day - RIDE_KEEP_DAYS).run();
         await env.DB.prepare("DELETE FROM react_rl WHERE hr < ?1").bind(Math.floor(Date.now() / 36e5) - 24).run();
@@ -105,9 +105,9 @@ async function rideHandle(req, env, cors) {
   }
 }
 var _lrReady = false;
-// ★ 2026-10-10 (YJ: 게시판·실시간소통 로딩이 길다): 표는 이미 있다. 예전엔 격리(isolate)가 새로 뜰 때마다
-//   표 만들기 3번을 차례로 기다린 뒤에야 읽기를 시작했다(D1 왕복 3번 = 첫 요청이 그만큼 늦음).
-//   이제 한 번에 묶어(batch) 응답과 별개로 보내고, 읽기는 바로 시작한다.
+// \u2605 2026-10-10 (YJ: \uac8c\uc2dc\ud310\u00b7\uc2e4\uc2dc\uac04\uc18c\ud1b5 \ub85c\ub529\uc774 \uae38\ub2e4): \ud45c\ub294 \uc774\ubbf8 \uc788\ub2e4. \uc608\uc804\uc5d4 \uaca9\ub9ac(isolate)\uac00 \uc0c8\ub85c \ub730 \ub54c\ub9c8\ub2e4
+//   \ud45c \ub9cc\ub4e4\uae30 3\ubc88\uc744 \ucc28\ub840\ub85c \uae30\ub2e4\ub9b0 \ub4a4\uc5d0\uc57c \uc77d\uae30\ub97c \uc2dc\uc791\ud588\ub2e4(D1 \uc655\ubcf5 3\ubc88 = \uccab \uc694\uccad\uc774 \uadf8\ub9cc\ud07c \ub2a6\uc74c).
+//   \uc774\uc81c \ud55c \ubc88\uc5d0 \ubb36\uc5b4(batch) \uc751\ub2f5\uacfc \ubcc4\uac1c\ub85c \ubcf4\ub0b4\uace0, \uc77d\uae30\ub294 \ubc14\ub85c \uc2dc\uc791\ud55c\ub2e4.
 var _CTX = null;
 var _cmtIdxDone = false;
 var _MEM = Object.create(null);
@@ -130,7 +130,7 @@ async function ensureLineRoom(env, wait) {
   await p;
 }
 function lrLineOk(line) {
-  return typeof line === "string" && line.length >= 1 && line.length <= 24 && /^[0-9A-Za-z가-힣\s\-·()_]+$/.test(line);
+  return typeof line === "string" && line.length >= 1 && line.length <= 24 && /^[0-9A-Za-z\uac00-\ud7a3\s\-\u00b7()_]+$/.test(line);
 }
 async function lrIpHash(req) {
   try {
@@ -164,233 +164,233 @@ async function lrAlerts(env, lines) {
 }
 var MAX_POSTS = 500;
 var NICKS = [
-  "회식거절마스터",
-  "지하철덕후",
-  "지하철폐인",
-  "대학원노예",
-  "출근지옥러",
-  "자취N년차",
-  "삼성역출퇴근",
-  "판교셔틀버스",
-  "여의도금융맨",
-  "구로공단아재",
-  "성수동힙스터",
-  "칼퇴요정",
-  "월급루팡꿈나무",
-  "환승의달인",
-  "급행만타는사람",
-  "막차의전설",
-  "첫차타는사람",
-  "9호선생존자",
-  "점심메뉴고민중",
-  "퇴사각재는중",
-  "신입사원1일차",
-  "부장님피하기달인",
-  "재택희망자",
-  "야근수당러버",
-  "주말출근싫어",
-  "불금기다림",
-  "카페인수혈중",
-  "다이어트내일부터",
-  "운동간다말만",
-  "집이최고야"
+  "\ud68c\uc2dd\uac70\uc808\ub9c8\uc2a4\ud130",
+  "\uc9c0\ud558\ucca0\ub355\ud6c4",
+  "\uc9c0\ud558\ucca0\ud3d0\uc778",
+  "\ub300\ud559\uc6d0\ub178\uc608",
+  "\ucd9c\uadfc\uc9c0\uc625\ub7ec",
+  "\uc790\ucde8N\ub144\ucc28",
+  "\uc0bc\uc131\uc5ed\ucd9c\ud1f4\uadfc",
+  "\ud310\uad50\uc154\ud2c0\ubc84\uc2a4",
+  "\uc5ec\uc758\ub3c4\uae08\uc735\ub9e8",
+  "\uad6c\ub85c\uacf5\ub2e8\uc544\uc7ac",
+  "\uc131\uc218\ub3d9\ud799\uc2a4\ud130",
+  "\uce7c\ud1f4\uc694\uc815",
+  "\uc6d4\uae09\ub8e8\ud321\uafc8\ub098\ubb34",
+  "\ud658\uc2b9\uc758\ub2ec\uc778",
+  "\uae09\ud589\ub9cc\ud0c0\ub294\uc0ac\ub78c",
+  "\ub9c9\ucc28\uc758\uc804\uc124",
+  "\uccab\ucc28\ud0c0\ub294\uc0ac\ub78c",
+  "9\ud638\uc120\uc0dd\uc874\uc790",
+  "\uc810\uc2ec\uba54\ub274\uace0\ubbfc\uc911",
+  "\ud1f4\uc0ac\uac01\uc7ac\ub294\uc911",
+  "\uc2e0\uc785\uc0ac\uc6d01\uc77c\ucc28",
+  "\ubd80\uc7a5\ub2d8\ud53c\ud558\uae30\ub2ec\uc778",
+  "\uc7ac\ud0dd\ud76c\ub9dd\uc790",
+  "\uc57c\uadfc\uc218\ub2f9\ub7ec\ubc84",
+  "\uc8fc\ub9d0\ucd9c\uadfc\uc2eb\uc5b4",
+  "\ubd88\uae08\uae30\ub2e4\ub9bc",
+  "\uce74\ud398\uc778\uc218\ud608\uc911",
+  "\ub2e4\uc774\uc5b4\ud2b8\ub0b4\uc77c\ubd80\ud130",
+  "\uc6b4\ub3d9\uac04\ub2e4\ub9d0\ub9cc",
+  "\uc9d1\uc774\ucd5c\uace0\uc57c"
 ];
 var LINES = [
-  { name: "1호선", stns: ["서울역", "시청", "종각", "구로", "부평", "인천"] },
-  { name: "2호선", stns: ["강남", "홍대입구", "신촌", "잠실", "성수", "사당", "건대입구"] },
-  { name: "3호선", stns: ["교대", "고속터미널", "압구정", "연신내", "양재"] },
-  { name: "4호선", stns: ["사당", "명동", "동대문", "혜화", "서울역"] },
-  { name: "5호선", stns: ["여의도", "광화문", "천호", "왕십리", "김포공항"] },
-  { name: "7호선", stns: ["가산디지털단지", "건대입구", "상봉", "온수", "논현"] },
-  { name: "9호선", stns: ["김포공항", "여의도", "노량진", "신논현", "가양"] },
-  { name: "신분당선", stns: ["강남", "판교", "정자", "광교", "양재"] },
-  { name: "공항철도", stns: ["서울역", "홍대입구", "김포공항", "검암", "계양"] },
-  { name: "수인분당선", stns: ["왕십리", "서울숲", "정자", "인하대", "수원"] },
-  { name: "경의중앙선", stns: ["홍대입구", "공덕", "왕십리", "용산", "일산"] },
-  { name: "인천1호선", stns: ["부평", "인천시청", "계양", "송도"] },
-  { name: "인천2호선", stns: ["검단오류", "주안", "석남", "인천시청"] },
-  { name: "김포골드라인", stns: ["김포공항", "걸포북변", "구래", "풍무"] }
+  { name: "1\ud638\uc120", stns: ["\uc11c\uc6b8\uc5ed", "\uc2dc\uccad", "\uc885\uac01", "\uad6c\ub85c", "\ubd80\ud3c9", "\uc778\ucc9c"] },
+  { name: "2\ud638\uc120", stns: ["\uac15\ub0a8", "\ud64d\ub300\uc785\uad6c", "\uc2e0\ucd0c", "\uc7a0\uc2e4", "\uc131\uc218", "\uc0ac\ub2f9", "\uac74\ub300\uc785\uad6c"] },
+  { name: "3\ud638\uc120", stns: ["\uad50\ub300", "\uace0\uc18d\ud130\ubbf8\ub110", "\uc555\uad6c\uc815", "\uc5f0\uc2e0\ub0b4", "\uc591\uc7ac"] },
+  { name: "4\ud638\uc120", stns: ["\uc0ac\ub2f9", "\uba85\ub3d9", "\ub3d9\ub300\ubb38", "\ud61c\ud654", "\uc11c\uc6b8\uc5ed"] },
+  { name: "5\ud638\uc120", stns: ["\uc5ec\uc758\ub3c4", "\uad11\ud654\ubb38", "\ucc9c\ud638", "\uc655\uc2ed\ub9ac", "\uae40\ud3ec\uacf5\ud56d"] },
+  { name: "7\ud638\uc120", stns: ["\uac00\uc0b0\ub514\uc9c0\ud138\ub2e8\uc9c0", "\uac74\ub300\uc785\uad6c", "\uc0c1\ubd09", "\uc628\uc218", "\ub17c\ud604"] },
+  { name: "9\ud638\uc120", stns: ["\uae40\ud3ec\uacf5\ud56d", "\uc5ec\uc758\ub3c4", "\ub178\ub7c9\uc9c4", "\uc2e0\ub17c\ud604", "\uac00\uc591"] },
+  { name: "\uc2e0\ubd84\ub2f9\uc120", stns: ["\uac15\ub0a8", "\ud310\uad50", "\uc815\uc790", "\uad11\uad50", "\uc591\uc7ac"] },
+  { name: "\uacf5\ud56d\ucca0\ub3c4", stns: ["\uc11c\uc6b8\uc5ed", "\ud64d\ub300\uc785\uad6c", "\uae40\ud3ec\uacf5\ud56d", "\uac80\uc554", "\uacc4\uc591"] },
+  { name: "\uc218\uc778\ubd84\ub2f9\uc120", stns: ["\uc655\uc2ed\ub9ac", "\uc11c\uc6b8\uc232", "\uc815\uc790", "\uc778\ud558\ub300", "\uc218\uc6d0"] },
+  { name: "\uacbd\uc758\uc911\uc559\uc120", stns: ["\ud64d\ub300\uc785\uad6c", "\uacf5\ub355", "\uc655\uc2ed\ub9ac", "\uc6a9\uc0b0", "\uc77c\uc0b0"] },
+  { name: "\uc778\ucc9c1\ud638\uc120", stns: ["\ubd80\ud3c9", "\uc778\ucc9c\uc2dc\uccad", "\uacc4\uc591", "\uc1a1\ub3c4"] },
+  { name: "\uc778\ucc9c2\ud638\uc120", stns: ["\uac80\ub2e8\uc624\ub958", "\uc8fc\uc548", "\uc11d\ub0a8", "\uc778\ucc9c\uc2dc\uccad"] },
+  { name: "\uae40\ud3ec\uace8\ub4dc\ub77c\uc778", stns: ["\uae40\ud3ec\uacf5\ud56d", "\uac78\ud3ec\ubd81\ubcc0", "\uad6c\ub798", "\ud48d\ubb34"] }
 ];
 var CHAT_POSTS = [
-  { t: "출근길에 이어폰 안 챙긴 날의 공허함", b: "오늘따라 지하철이 왜 이렇게 긴지\n귀가 심심하니까 남의 통화 소리만 들림\n다들 이어폰은 목숨처럼 챙기자" },
-  { t: "회사 탕비실 커피 다 떨어졌을 때 절망감 알지", b: "월요일 아침에 이거 없으면 진짜 힘 안 남\n총무님 언제 채워주시나요 간절합니다" },
-  { t: "점심 뭐 먹을지 정하는 게 회사 최대 난제", b: "매일 이 고민 하는데 왜 안 익숙해지지\n오늘도 결국 김치찌개 각인가" },
-  { t: "지하철에서 조는데 딱 내릴 역에서 깨는 초능력", b: "알람도 안 맞췄는데 신기하게 눈 떠짐\n근데 가끔 한 정거장 지나쳐서 슬픔" },
-  { t: "퇴근하고 집 오면 아무것도 하기 싫음", b: "분명 하고 싶은 거 많았는데\n소파에 앉는 순간 다 리셋됨\n나만 이런 거 아니지?" },
-  { t: "다이어트는 항상 내일부터라는 마법의 단어", b: "오늘 저녁도 치킨 시켜버림ㅋㅋ\n내일의 나야 미안해" },
-  { t: "주말에 늦잠 자면 오히려 더 피곤한 이유가 뭘까", b: "분명 푹 잤는데 몸이 더 무거움\n적당히 자는 게 답인가봄" },
-  { t: "편의점 신상 나오면 일단 사보는 편", b: "이번에 나온 그거 먹어본 사람?\n맛있으면 알려줘 재구매 각 볼게" },
-  { t: "회의 중에 딴생각하다 갑자기 이름 불릴 때", b: '심장 철렁하는 거 나만 그런가\n"어떻게 생각하세요?" → 머릿속 백지' },
-  { t: "금요일 오후의 그 설레는 기분 뭔지 알지", b: "일은 손에 안 잡히고 마음은 이미 주말\n이 맛에 일주일 버팀" },
-  { t: "배달 음식 시키고 기다리는 시간이 제일 행복함", b: "라이더님 지금 어디쯤 오시나 계속 확인\n도착 알림 뜰 때 세상 다 가진 기분" },
-  { t: "아침에 5분만 더 자려다 지각할 뻔한 썰", b: "그 5분이 사람 잡는다 진짜\n결국 택시 타고 출근비 만원 순삭" },
-  { t: "냉장고에 뭐 있는지 까먹고 또 사오는 사람?", b: "집에 오니 똑같은 게 두 개\n계란 이러다 계란탑 쌓겠음" },
-  { t: "노래 하나 꽂히면 일주일 내내 그것만 듣는 편", b: "지금 그 노래 무한반복 중\n질릴 때까지 듣고 갈아탐" },
-  { t: "퇴근길에 붕어빵 사면 그날 하루 성공", b: "요즘 세 개 이천원이던데\n비싸도 겨울엔 못 참지" },
-  { t: "주말에 집에만 있었는데 왜 이렇게 피곤하지", b: "나가지도 않았는데 방전됨\n집콕도 체력 소모라는 거 인정" },
-  { t: "회사 근처 맛집 하나 발견하면 그렇게 뿌듯함", b: "점심 메뉴 하나 늘었다는 안정감\n근데 남한테 알려주긴 싫은 이 마음ㅋㅋ" },
-  { t: "택배 오는 날은 아침부터 기분이 좋음", b: "뭐 시켰는지 기억도 안 나는데 설렘\n문 앞에 박스 있으면 그날은 이긴 날" },
-  { t: "엘리베이터에서 아는 사람 만나면 어색한 정적", b: "인사는 했는데 그 다음이 문제\n층수만 뚫어져라 쳐다보는 중" },
-  { t: "믹스커피가 제일 맛있다는 거 인정하는 사람?", b: "비싼 원두커피보다 이게 더 좋을 때가 있음\n특히 나른한 오후엔 무조건 믹스지" },
-  { t: "자기 전에 폰 보다가 시간 순삭되는 마법", b: "10분만 봐야지 했는데 두 시간\n내일 또 피곤하겠네 알면서도 못 끊음" },
-  { t: "비 오는 날 부침개 생각나는 건 국룰인가", b: "창밖에 비 오니까 갑자기 당김\n오늘 저녁은 이걸로 정했다" },
-  { t: "출근 첫 커피 한 모금의 그 각성 효과", b: "이거 없으면 오전 업무 불가능\n카페인은 직장인의 연료가 맞다" },
-  { t: "주말에 뭐 했냐 물으면 딱히 할 말 없는 사람", b: "분명 바빴는데 뭐 했는지 설명이 안 됨\n그냥 쉬었어요로 퉁치는 중" },
-  { t: "퇴근 후 운동 가려다 결국 집으로 직행", b: "헬스장 등록만 하고 유령회원 됨\n의지가 약한 게 아니라 몸이 무거운 거야" }
+  { t: "\ucd9c\uadfc\uae38\uc5d0 \uc774\uc5b4\ud3f0 \uc548 \ucc59\uae34 \ub0a0\uc758 \uacf5\ud5c8\ud568", b: "\uc624\ub298\ub530\ub77c \uc9c0\ud558\ucca0\uc774 \uc65c \uc774\ub807\uac8c \uae34\uc9c0\n\uadc0\uac00 \uc2ec\uc2ec\ud558\ub2c8\uae4c \ub0a8\uc758 \ud1b5\ud654 \uc18c\ub9ac\ub9cc \ub4e4\ub9bc\n\ub2e4\ub4e4 \uc774\uc5b4\ud3f0\uc740 \ubaa9\uc228\ucc98\ub7fc \ucc59\uae30\uc790" },
+  { t: "\ud68c\uc0ac \ud0d5\ube44\uc2e4 \ucee4\ud53c \ub2e4 \ub5a8\uc5b4\uc84c\uc744 \ub54c \uc808\ub9dd\uac10 \uc54c\uc9c0", b: "\uc6d4\uc694\uc77c \uc544\uce68\uc5d0 \uc774\uac70 \uc5c6\uc73c\uba74 \uc9c4\uc9dc \ud798 \uc548 \ub0a8\n\ucd1d\ubb34\ub2d8 \uc5b8\uc81c \ucc44\uc6cc\uc8fc\uc2dc\ub098\uc694 \uac04\uc808\ud569\ub2c8\ub2e4" },
+  { t: "\uc810\uc2ec \ubb50 \uba39\uc744\uc9c0 \uc815\ud558\ub294 \uac8c \ud68c\uc0ac \ucd5c\ub300 \ub09c\uc81c", b: "\ub9e4\uc77c \uc774 \uace0\ubbfc \ud558\ub294\ub370 \uc65c \uc548 \uc775\uc219\ud574\uc9c0\uc9c0\n\uc624\ub298\ub3c4 \uacb0\uad6d \uae40\uce58\ucc0c\uac1c \uac01\uc778\uac00" },
+  { t: "\uc9c0\ud558\ucca0\uc5d0\uc11c \uc870\ub294\ub370 \ub531 \ub0b4\ub9b4 \uc5ed\uc5d0\uc11c \uae68\ub294 \ucd08\ub2a5\ub825", b: "\uc54c\ub78c\ub3c4 \uc548 \ub9de\ucdc4\ub294\ub370 \uc2e0\uae30\ud558\uac8c \ub208 \ub5a0\uc9d0\n\uadfc\ub370 \uac00\ub054 \ud55c \uc815\uac70\uc7a5 \uc9c0\ub098\uccd0\uc11c \uc2ac\ud514" },
+  { t: "\ud1f4\uadfc\ud558\uace0 \uc9d1 \uc624\uba74 \uc544\ubb34\uac83\ub3c4 \ud558\uae30 \uc2eb\uc74c", b: "\ubd84\uba85 \ud558\uace0 \uc2f6\uc740 \uac70 \ub9ce\uc558\ub294\ub370\n\uc18c\ud30c\uc5d0 \uc549\ub294 \uc21c\uac04 \ub2e4 \ub9ac\uc14b\ub428\n\ub098\ub9cc \uc774\ub7f0 \uac70 \uc544\ub2c8\uc9c0?" },
+  { t: "\ub2e4\uc774\uc5b4\ud2b8\ub294 \ud56d\uc0c1 \ub0b4\uc77c\ubd80\ud130\ub77c\ub294 \ub9c8\ubc95\uc758 \ub2e8\uc5b4", b: "\uc624\ub298 \uc800\ub141\ub3c4 \uce58\ud0a8 \uc2dc\ucf1c\ubc84\ub9bc\u314b\u314b\n\ub0b4\uc77c\uc758 \ub098\uc57c \ubbf8\uc548\ud574" },
+  { t: "\uc8fc\ub9d0\uc5d0 \ub2a6\uc7a0 \uc790\uba74 \uc624\ud788\ub824 \ub354 \ud53c\uace4\ud55c \uc774\uc720\uac00 \ubb58\uae4c", b: "\ubd84\uba85 \ud479 \uc7a4\ub294\ub370 \ubab8\uc774 \ub354 \ubb34\uac70\uc6c0\n\uc801\ub2f9\ud788 \uc790\ub294 \uac8c \ub2f5\uc778\uac00\ubd04" },
+  { t: "\ud3b8\uc758\uc810 \uc2e0\uc0c1 \ub098\uc624\uba74 \uc77c\ub2e8 \uc0ac\ubcf4\ub294 \ud3b8", b: "\uc774\ubc88\uc5d0 \ub098\uc628 \uadf8\uac70 \uba39\uc5b4\ubcf8 \uc0ac\ub78c?\n\ub9db\uc788\uc73c\uba74 \uc54c\ub824\uc918 \uc7ac\uad6c\ub9e4 \uac01 \ubcfc\uac8c" },
+  { t: "\ud68c\uc758 \uc911\uc5d0 \ub534\uc0dd\uac01\ud558\ub2e4 \uac11\uc790\uae30 \uc774\ub984 \ubd88\ub9b4 \ub54c", b: '\uc2ec\uc7a5 \ucca0\ub801\ud558\ub294 \uac70 \ub098\ub9cc \uadf8\ub7f0\uac00\n"\uc5b4\ub5bb\uac8c \uc0dd\uac01\ud558\uc138\uc694?" \u2192 \uba38\ub9bf\uc18d \ubc31\uc9c0' },
+  { t: "\uae08\uc694\uc77c \uc624\ud6c4\uc758 \uadf8 \uc124\ub808\ub294 \uae30\ubd84 \ubb54\uc9c0 \uc54c\uc9c0", b: "\uc77c\uc740 \uc190\uc5d0 \uc548 \uc7a1\ud788\uace0 \ub9c8\uc74c\uc740 \uc774\ubbf8 \uc8fc\ub9d0\n\uc774 \ub9db\uc5d0 \uc77c\uc8fc\uc77c \ubc84\ud300" },
+  { t: "\ubc30\ub2ec \uc74c\uc2dd \uc2dc\ud0a4\uace0 \uae30\ub2e4\ub9ac\ub294 \uc2dc\uac04\uc774 \uc81c\uc77c \ud589\ubcf5\ud568", b: "\ub77c\uc774\ub354\ub2d8 \uc9c0\uae08 \uc5b4\ub514\ucbe4 \uc624\uc2dc\ub098 \uacc4\uc18d \ud655\uc778\n\ub3c4\ucc29 \uc54c\ub9bc \ub730 \ub54c \uc138\uc0c1 \ub2e4 \uac00\uc9c4 \uae30\ubd84" },
+  { t: "\uc544\uce68\uc5d0 5\ubd84\ub9cc \ub354 \uc790\ub824\ub2e4 \uc9c0\uac01\ud560 \ubed4\ud55c \uc370", b: "\uadf8 5\ubd84\uc774 \uc0ac\ub78c \uc7a1\ub294\ub2e4 \uc9c4\uc9dc\n\uacb0\uad6d \ud0dd\uc2dc \ud0c0\uace0 \ucd9c\uadfc\ube44 \ub9cc\uc6d0 \uc21c\uc0ad" },
+  { t: "\ub0c9\uc7a5\uace0\uc5d0 \ubb50 \uc788\ub294\uc9c0 \uae4c\uba39\uace0 \ub610 \uc0ac\uc624\ub294 \uc0ac\ub78c?", b: "\uc9d1\uc5d0 \uc624\ub2c8 \ub611\uac19\uc740 \uac8c \ub450 \uac1c\n\uacc4\ub780 \uc774\ub7ec\ub2e4 \uacc4\ub780\ud0d1 \uc313\uaca0\uc74c" },
+  { t: "\ub178\ub798 \ud558\ub098 \uaf42\ud788\uba74 \uc77c\uc8fc\uc77c \ub0b4\ub0b4 \uadf8\uac83\ub9cc \ub4e3\ub294 \ud3b8", b: "\uc9c0\uae08 \uadf8 \ub178\ub798 \ubb34\ud55c\ubc18\ubcf5 \uc911\n\uc9c8\ub9b4 \ub54c\uae4c\uc9c0 \ub4e3\uace0 \uac08\uc544\ud0d0" },
+  { t: "\ud1f4\uadfc\uae38\uc5d0 \ubd95\uc5b4\ube75 \uc0ac\uba74 \uadf8\ub0a0 \ud558\ub8e8 \uc131\uacf5", b: "\uc694\uc998 \uc138 \uac1c \uc774\ucc9c\uc6d0\uc774\ub358\ub370\n\ube44\uc2f8\ub3c4 \uaca8\uc6b8\uc5d4 \ubabb \ucc38\uc9c0" },
+  { t: "\uc8fc\ub9d0\uc5d0 \uc9d1\uc5d0\ub9cc \uc788\uc5c8\ub294\ub370 \uc65c \uc774\ub807\uac8c \ud53c\uace4\ud558\uc9c0", b: "\ub098\uac00\uc9c0\ub3c4 \uc54a\uc558\ub294\ub370 \ubc29\uc804\ub428\n\uc9d1\ucf55\ub3c4 \uccb4\ub825 \uc18c\ubaa8\ub77c\ub294 \uac70 \uc778\uc815" },
+  { t: "\ud68c\uc0ac \uadfc\ucc98 \ub9db\uc9d1 \ud558\ub098 \ubc1c\uacac\ud558\uba74 \uadf8\ub807\uac8c \ubfcc\ub4ef\ud568", b: "\uc810\uc2ec \uba54\ub274 \ud558\ub098 \ub298\uc5c8\ub2e4\ub294 \uc548\uc815\uac10\n\uadfc\ub370 \ub0a8\ud55c\ud14c \uc54c\ub824\uc8fc\uae34 \uc2eb\uc740 \uc774 \ub9c8\uc74c\u314b\u314b" },
+  { t: "\ud0dd\ubc30 \uc624\ub294 \ub0a0\uc740 \uc544\uce68\ubd80\ud130 \uae30\ubd84\uc774 \uc88b\uc74c", b: "\ubb50 \uc2dc\ucf30\ub294\uc9c0 \uae30\uc5b5\ub3c4 \uc548 \ub098\ub294\ub370 \uc124\ub818\n\ubb38 \uc55e\uc5d0 \ubc15\uc2a4 \uc788\uc73c\uba74 \uadf8\ub0a0\uc740 \uc774\uae34 \ub0a0" },
+  { t: "\uc5d8\ub9ac\ubca0\uc774\ud130\uc5d0\uc11c \uc544\ub294 \uc0ac\ub78c \ub9cc\ub098\uba74 \uc5b4\uc0c9\ud55c \uc815\uc801", b: "\uc778\uc0ac\ub294 \ud588\ub294\ub370 \uadf8 \ub2e4\uc74c\uc774 \ubb38\uc81c\n\uce35\uc218\ub9cc \ub6ab\uc5b4\uc838\ub77c \uccd0\ub2e4\ubcf4\ub294 \uc911" },
+  { t: "\ubbf9\uc2a4\ucee4\ud53c\uac00 \uc81c\uc77c \ub9db\uc788\ub2e4\ub294 \uac70 \uc778\uc815\ud558\ub294 \uc0ac\ub78c?", b: "\ube44\uc2fc \uc6d0\ub450\ucee4\ud53c\ubcf4\ub2e4 \uc774\uac8c \ub354 \uc88b\uc744 \ub54c\uac00 \uc788\uc74c\n\ud2b9\ud788 \ub098\ub978\ud55c \uc624\ud6c4\uc5d4 \ubb34\uc870\uac74 \ubbf9\uc2a4\uc9c0" },
+  { t: "\uc790\uae30 \uc804\uc5d0 \ud3f0 \ubcf4\ub2e4\uac00 \uc2dc\uac04 \uc21c\uc0ad\ub418\ub294 \ub9c8\ubc95", b: "10\ubd84\ub9cc \ubd10\uc57c\uc9c0 \ud588\ub294\ub370 \ub450 \uc2dc\uac04\n\ub0b4\uc77c \ub610 \ud53c\uace4\ud558\uaca0\ub124 \uc54c\uba74\uc11c\ub3c4 \ubabb \ub04a\uc74c" },
+  { t: "\ube44 \uc624\ub294 \ub0a0 \ubd80\uce68\uac1c \uc0dd\uac01\ub098\ub294 \uac74 \uad6d\ub8f0\uc778\uac00", b: "\ucc3d\ubc16\uc5d0 \ube44 \uc624\ub2c8\uae4c \uac11\uc790\uae30 \ub2f9\uae40\n\uc624\ub298 \uc800\ub141\uc740 \uc774\uac78\ub85c \uc815\ud588\ub2e4" },
+  { t: "\ucd9c\uadfc \uccab \ucee4\ud53c \ud55c \ubaa8\uae08\uc758 \uadf8 \uac01\uc131 \ud6a8\uacfc", b: "\uc774\uac70 \uc5c6\uc73c\uba74 \uc624\uc804 \uc5c5\ubb34 \ubd88\uac00\ub2a5\n\uce74\ud398\uc778\uc740 \uc9c1\uc7a5\uc778\uc758 \uc5f0\ub8cc\uac00 \ub9de\ub2e4" },
+  { t: "\uc8fc\ub9d0\uc5d0 \ubb50 \ud588\ub0d0 \ubb3c\uc73c\uba74 \ub531\ud788 \ud560 \ub9d0 \uc5c6\ub294 \uc0ac\ub78c", b: "\ubd84\uba85 \ubc14\ube74\ub294\ub370 \ubb50 \ud588\ub294\uc9c0 \uc124\uba85\uc774 \uc548 \ub428\n\uadf8\ub0e5 \uc26c\uc5c8\uc5b4\uc694\ub85c \ud241\uce58\ub294 \uc911" },
+  { t: "\ud1f4\uadfc \ud6c4 \uc6b4\ub3d9 \uac00\ub824\ub2e4 \uacb0\uad6d \uc9d1\uc73c\ub85c \uc9c1\ud589", b: "\ud5ec\uc2a4\uc7a5 \ub4f1\ub85d\ub9cc \ud558\uace0 \uc720\ub839\ud68c\uc6d0 \ub428\n\uc758\uc9c0\uac00 \uc57d\ud55c \uac8c \uc544\ub2c8\ub77c \ubab8\uc774 \ubb34\uac70\uc6b4 \uac70\uc57c" }
 ];
 var POOLS = {
-  // 새벽 0~5시: 드묾, 감성/야근/첫차
+  // \uc0c8\ubcbd 0~5\uc2dc: \ub4dc\ubb3e, \uac10\uc131/\uc57c\uadfc/\uccab\ucc28
   dawn: [
-    { t: "새벽 {stn}역 근처인데 세상이 너무 조용하다", b: "야근 끝나고 걸어가는 중\n낮에 그렇게 붐비던 거리가 텅 비어있으니까 기분이 이상하네\n다들 어디선가 자고 있겠지", cat: "일상" },
-    { t: "첫차 기다리는 사람 있음?", b: "{line} 첫차 기다리는 중인데 플랫폼에 나 포함 세 명 있음\n다들 무슨 사연으로 이 시간에 나와있는 걸까\n괜히 동지애 느껴진다", cat: "일상" },
-    { t: "야근 끝. 택시비가 아까워서 첫차 기다림", b: "새벽까지 일한 것도 서러운데 택시비 3만원은 도저히 못 쓰겠어서\n{stn}역 앞 편의점에서 컵라면 먹으면서 버티는 중\n이게 사는 건가 싶다가도 라면은 맛있네", cat: "일상" },
-    { t: "새벽 지하철은 왜 이렇게 감성적이냐", b: "창밖에 어둠뿐인데 괜히 노래 들으면서 센치해짐\n낮에 못 하던 생각들이 다 몰려온다\n내일의 나야 미안해 오늘도 늦게 잔다", cat: "일상" },
-    { t: "이 시간에 깨어있는 사람 나뿐인가", b: "잠이 안 와서 그냥 폰만 보는 중\n첫차 뜨면 그날 어디라도 갔다올까 싶기도 하고\n다들 잘 자요", cat: "일상" },
-    { t: "새벽 근무 끝나고 집 가는 길", b: "남들 출근할 때 퇴근하는 삶 벌써 몇 년째인지\n그래도 텅 빈 {line} 앉아서 가는 맛에 버틴다\n교대 근무자들 다들 힘내요", cat: "일상" }
+    { t: "\uc0c8\ubcbd {stn}\uc5ed \uadfc\ucc98\uc778\ub370 \uc138\uc0c1\uc774 \ub108\ubb34 \uc870\uc6a9\ud558\ub2e4", b: "\uc57c\uadfc \ub05d\ub098\uace0 \uac78\uc5b4\uac00\ub294 \uc911\n\ub0ae\uc5d0 \uadf8\ub807\uac8c \ubd90\ube44\ub358 \uac70\ub9ac\uac00 \ud145 \ube44\uc5b4\uc788\uc73c\ub2c8\uae4c \uae30\ubd84\uc774 \uc774\uc0c1\ud558\ub124\n\ub2e4\ub4e4 \uc5b4\ub514\uc120\uac00 \uc790\uace0 \uc788\uaca0\uc9c0", cat: "\uc77c\uc0c1" },
+    { t: "\uccab\ucc28 \uae30\ub2e4\ub9ac\ub294 \uc0ac\ub78c \uc788\uc74c?", b: "{line} \uccab\ucc28 \uae30\ub2e4\ub9ac\ub294 \uc911\uc778\ub370 \ud50c\ub7ab\ud3fc\uc5d0 \ub098 \ud3ec\ud568 \uc138 \uba85 \uc788\uc74c\n\ub2e4\ub4e4 \ubb34\uc2a8 \uc0ac\uc5f0\uc73c\ub85c \uc774 \uc2dc\uac04\uc5d0 \ub098\uc640\uc788\ub294 \uac78\uae4c\n\uad1c\ud788 \ub3d9\uc9c0\uc560 \ub290\uaef4\uc9c4\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uc57c\uadfc \ub05d. \ud0dd\uc2dc\ube44\uac00 \uc544\uae4c\uc6cc\uc11c \uccab\ucc28 \uae30\ub2e4\ub9bc", b: "\uc0c8\ubcbd\uae4c\uc9c0 \uc77c\ud55c \uac83\ub3c4 \uc11c\ub7ec\uc6b4\ub370 \ud0dd\uc2dc\ube44 3\ub9cc\uc6d0\uc740 \ub3c4\uc800\ud788 \ubabb \uc4f0\uaca0\uc5b4\uc11c\n{stn}\uc5ed \uc55e \ud3b8\uc758\uc810\uc5d0\uc11c \ucef5\ub77c\uba74 \uba39\uc73c\uba74\uc11c \ubc84\ud2f0\ub294 \uc911\n\uc774\uac8c \uc0ac\ub294 \uac74\uac00 \uc2f6\ub2e4\uac00\ub3c4 \ub77c\uba74\uc740 \ub9db\uc788\ub124", cat: "\uc77c\uc0c1" },
+    { t: "\uc0c8\ubcbd \uc9c0\ud558\ucca0\uc740 \uc65c \uc774\ub807\uac8c \uac10\uc131\uc801\uc774\ub0d0", b: "\ucc3d\ubc16\uc5d0 \uc5b4\ub460\ubfd0\uc778\ub370 \uad1c\ud788 \ub178\ub798 \ub4e4\uc73c\uba74\uc11c \uc13c\uce58\ud574\uc9d0\n\ub0ae\uc5d0 \ubabb \ud558\ub358 \uc0dd\uac01\ub4e4\uc774 \ub2e4 \ubab0\ub824\uc628\ub2e4\n\ub0b4\uc77c\uc758 \ub098\uc57c \ubbf8\uc548\ud574 \uc624\ub298\ub3c4 \ub2a6\uac8c \uc794\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uc774 \uc2dc\uac04\uc5d0 \uae68\uc5b4\uc788\ub294 \uc0ac\ub78c \ub098\ubfd0\uc778\uac00", b: "\uc7a0\uc774 \uc548 \uc640\uc11c \uadf8\ub0e5 \ud3f0\ub9cc \ubcf4\ub294 \uc911\n\uccab\ucc28 \ub728\uba74 \uadf8\ub0a0 \uc5b4\ub514\ub77c\ub3c4 \uac14\ub2e4\uc62c\uae4c \uc2f6\uae30\ub3c4 \ud558\uace0\n\ub2e4\ub4e4 \uc798 \uc790\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\uc0c8\ubcbd \uadfc\ubb34 \ub05d\ub098\uace0 \uc9d1 \uac00\ub294 \uae38", b: "\ub0a8\ub4e4 \ucd9c\uadfc\ud560 \ub54c \ud1f4\uadfc\ud558\ub294 \uc0b6 \ubc8c\uc368 \uba87 \ub144\uc9f8\uc778\uc9c0\n\uadf8\ub798\ub3c4 \ud145 \ube48 {line} \uc549\uc544\uc11c \uac00\ub294 \ub9db\uc5d0 \ubc84\ud2f4\ub2e4\n\uad50\ub300 \uadfc\ubb34\uc790\ub4e4 \ub2e4\ub4e4 \ud798\ub0b4\uc694", cat: "\uc77c\uc0c1" }
   ],
-  // 평일 출근길 6~9시
+  // \ud3c9\uc77c \ucd9c\uadfc\uae38 6~9\uc2dc
   mornRushWd: [
-    { t: "{line} 오늘따라 왜 이렇게 사람 많냐", b: "평소보다 한 대 늦게 탔더니 지옥이다\n{stn}에서 겨우 탔는데 문에 낀 줄 알았음\n내일부터 10분 일찍 나온다 진짜", cat: "일상" },
-    { t: "{stn}역에서 뛰는 사람들 보면 나도 모르게 같이 뜀", b: "분명 다음 열차 금방 오는데\n앞사람이 뛰니까 나도 반사적으로 뛰고 있음 ㅋㅋ\n출근길 단체 달리기 무엇", cat: "일상" },
-    { t: "출근길 지하철에서 자리 나면 그날 운세 좋은 거임", b: "{stn}에서 앉았다\n오늘 뭔가 잘 풀릴 것 같은 예감\n다들 오늘 하루 화이팅", cat: "일상" },
-    { t: "환승 구간에서 길 막는 사람들 진짜 뭐냐", b: "{stn} 환승통로 한가운데서 폰 보면서 천천히 걷는 사람들\n뒤에 수백 명이 밀려오는 게 안 보이나\n제발 한쪽으로 비켜서 봐요", cat: "일상" },
-    { t: "급행 탈까 완행 탈까 매일 고민함", b: "급행은 빠른데 사람이 미어터지고\n완행은 앉아갈 수 있는데 15분 더 걸리고\n다들 뭐 타고 다님?", cat: "질문" },
-    { t: "오늘 {line} 지연 있었음?", b: "{stn}에서 5분 넘게 안 와서 지각 직전까지 감\n앱에는 정상운행이라는데 체감은 아니었음\n나만 그랬나", cat: "질문" },
-    { t: "출근길에 커피 못 사면 하루가 안 시작됨", b: "{stn}역 앞 카페 줄이 너무 길어서 그냥 왔는데\n지금 머리가 안 돌아감\n회사 커피머신은 왜 맛이 없을까", cat: "일상" },
-    { t: "만원 지하철에서 백팩 앞으로 메는 거 국룰 아니냐", b: "뒤에 백팩 그대로 메고 타는 사람 때문에 계속 찍힘\n본인은 모르겠지만 뒤는 지옥임\n다들 앞으로 멥시다", cat: "일상" }
+    { t: "{line} \uc624\ub298\ub530\ub77c \uc65c \uc774\ub807\uac8c \uc0ac\ub78c \ub9ce\ub0d0", b: "\ud3c9\uc18c\ubcf4\ub2e4 \ud55c \ub300 \ub2a6\uac8c \ud0d4\ub354\ub2c8 \uc9c0\uc625\uc774\ub2e4\n{stn}\uc5d0\uc11c \uaca8\uc6b0 \ud0d4\ub294\ub370 \ubb38\uc5d0 \ub080 \uc904 \uc54c\uc558\uc74c\n\ub0b4\uc77c\ubd80\ud130 10\ubd84 \uc77c\ucc0d \ub098\uc628\ub2e4 \uc9c4\uc9dc", cat: "\uc77c\uc0c1" },
+    { t: "{stn}\uc5ed\uc5d0\uc11c \ub6f0\ub294 \uc0ac\ub78c\ub4e4 \ubcf4\uba74 \ub098\ub3c4 \ubaa8\ub974\uac8c \uac19\uc774 \ub700", b: "\ubd84\uba85 \ub2e4\uc74c \uc5f4\ucc28 \uae08\ubc29 \uc624\ub294\ub370\n\uc55e\uc0ac\ub78c\uc774 \ub6f0\ub2c8\uae4c \ub098\ub3c4 \ubc18\uc0ac\uc801\uc73c\ub85c \ub6f0\uace0 \uc788\uc74c \u314b\u314b\n\ucd9c\uadfc\uae38 \ub2e8\uccb4 \ub2ec\ub9ac\uae30 \ubb34\uc5c7", cat: "\uc77c\uc0c1" },
+    { t: "\ucd9c\uadfc\uae38 \uc9c0\ud558\ucca0\uc5d0\uc11c \uc790\ub9ac \ub098\uba74 \uadf8\ub0a0 \uc6b4\uc138 \uc88b\uc740 \uac70\uc784", b: "{stn}\uc5d0\uc11c \uc549\uc558\ub2e4\n\uc624\ub298 \ubb54\uac00 \uc798 \ud480\ub9b4 \uac83 \uac19\uc740 \uc608\uac10\n\ub2e4\ub4e4 \uc624\ub298 \ud558\ub8e8 \ud654\uc774\ud305", cat: "\uc77c\uc0c1" },
+    { t: "\ud658\uc2b9 \uad6c\uac04\uc5d0\uc11c \uae38 \ub9c9\ub294 \uc0ac\ub78c\ub4e4 \uc9c4\uc9dc \ubb50\ub0d0", b: "{stn} \ud658\uc2b9\ud1b5\ub85c \ud55c\uac00\uc6b4\ub370\uc11c \ud3f0 \ubcf4\uba74\uc11c \ucc9c\ucc9c\ud788 \uac77\ub294 \uc0ac\ub78c\ub4e4\n\ub4a4\uc5d0 \uc218\ubc31 \uba85\uc774 \ubc00\ub824\uc624\ub294 \uac8c \uc548 \ubcf4\uc774\ub098\n\uc81c\ubc1c \ud55c\ucabd\uc73c\ub85c \ube44\ucf1c\uc11c \ubd10\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\uae09\ud589 \ud0c8\uae4c \uc644\ud589 \ud0c8\uae4c \ub9e4\uc77c \uace0\ubbfc\ud568", b: "\uae09\ud589\uc740 \ube60\ub978\ub370 \uc0ac\ub78c\uc774 \ubbf8\uc5b4\ud130\uc9c0\uace0\n\uc644\ud589\uc740 \uc549\uc544\uac08 \uc218 \uc788\ub294\ub370 15\ubd84 \ub354 \uac78\ub9ac\uace0\n\ub2e4\ub4e4 \ubb50 \ud0c0\uace0 \ub2e4\ub2d8?", cat: "\uc9c8\ubb38" },
+    { t: "\uc624\ub298 {line} \uc9c0\uc5f0 \uc788\uc5c8\uc74c?", b: "{stn}\uc5d0\uc11c 5\ubd84 \ub118\uac8c \uc548 \uc640\uc11c \uc9c0\uac01 \uc9c1\uc804\uae4c\uc9c0 \uac10\n\uc571\uc5d0\ub294 \uc815\uc0c1\uc6b4\ud589\uc774\ub77c\ub294\ub370 \uccb4\uac10\uc740 \uc544\ub2c8\uc5c8\uc74c\n\ub098\ub9cc \uadf8\ub7ac\ub098", cat: "\uc9c8\ubb38" },
+    { t: "\ucd9c\uadfc\uae38\uc5d0 \ucee4\ud53c \ubabb \uc0ac\uba74 \ud558\ub8e8\uac00 \uc548 \uc2dc\uc791\ub428", b: "{stn}\uc5ed \uc55e \uce74\ud398 \uc904\uc774 \ub108\ubb34 \uae38\uc5b4\uc11c \uadf8\ub0e5 \uc654\ub294\ub370\n\uc9c0\uae08 \uba38\ub9ac\uac00 \uc548 \ub3cc\uc544\uac10\n\ud68c\uc0ac \ucee4\ud53c\uba38\uc2e0\uc740 \uc65c \ub9db\uc774 \uc5c6\uc744\uae4c", cat: "\uc77c\uc0c1" },
+    { t: "\ub9cc\uc6d0 \uc9c0\ud558\ucca0\uc5d0\uc11c \ubc31\ud329 \uc55e\uc73c\ub85c \uba54\ub294 \uac70 \uad6d\ub8f0 \uc544\ub2c8\ub0d0", b: "\ub4a4\uc5d0 \ubc31\ud329 \uadf8\ub300\ub85c \uba54\uace0 \ud0c0\ub294 \uc0ac\ub78c \ub54c\ubb38\uc5d0 \uacc4\uc18d \ucc0d\ud798\n\ubcf8\uc778\uc740 \ubaa8\ub974\uaca0\uc9c0\ub9cc \ub4a4\ub294 \uc9c0\uc625\uc784\n\ub2e4\ub4e4 \uc55e\uc73c\ub85c \uba65\uc2dc\ub2e4", cat: "\uc77c\uc0c1" }
   ],
-  // 주말 아침
+  // \uc8fc\ub9d0 \uc544\uce68
   mornWe: [
-    { t: "주말 아침 지하철 이 여유 뭐냐", b: "평일엔 전쟁터인 {line}이 텅텅 비었음\n앉아서 창밖 보면서 가니까 여행 가는 기분\n주말 아침 일찍 나온 보람 있다", cat: "일상" },
-    { t: "토요일 아침부터 어디 가는 사람들 많네", b: "{stn}역인데 등산복 부대가 잔뜩이다\n다들 부지런하시네 나는 놀러 가는 건데\n주말은 역시 아침부터 움직여야 김", cat: "일상" },
-    { t: "주말 출근하는 사람 여기 붙어라", b: "{line} 타고 회사 가는 중\n놀러 가는 사람들 사이에서 나만 노트북 가방\n수당이라도 두둑하면 좋겠다", cat: "일상" },
-    { t: "아침 일찍 {stn} 왔는데 벌써 사람 많음", b: "맛집 오픈런 하려고 왔는데 이미 줄 서 있음 ㄷㄷ\n다들 정보력이 대단하다\n주말엔 부지런한 자가 다 먹는구나", cat: "일상" }
+    { t: "\uc8fc\ub9d0 \uc544\uce68 \uc9c0\ud558\ucca0 \uc774 \uc5ec\uc720 \ubb50\ub0d0", b: "\ud3c9\uc77c\uc5d4 \uc804\uc7c1\ud130\uc778 {line}\uc774 \ud145\ud145 \ube44\uc5c8\uc74c\n\uc549\uc544\uc11c \ucc3d\ubc16 \ubcf4\uba74\uc11c \uac00\ub2c8\uae4c \uc5ec\ud589 \uac00\ub294 \uae30\ubd84\n\uc8fc\ub9d0 \uc544\uce68 \uc77c\ucc0d \ub098\uc628 \ubcf4\ub78c \uc788\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ud1a0\uc694\uc77c \uc544\uce68\ubd80\ud130 \uc5b4\ub514 \uac00\ub294 \uc0ac\ub78c\ub4e4 \ub9ce\ub124", b: "{stn}\uc5ed\uc778\ub370 \ub4f1\uc0b0\ubcf5 \ubd80\ub300\uac00 \uc794\ub729\uc774\ub2e4\n\ub2e4\ub4e4 \ubd80\uc9c0\ub7f0\ud558\uc2dc\ub124 \ub098\ub294 \ub180\ub7ec \uac00\ub294 \uac74\ub370\n\uc8fc\ub9d0\uc740 \uc5ed\uc2dc \uc544\uce68\ubd80\ud130 \uc6c0\uc9c1\uc5ec\uc57c \uae40", cat: "\uc77c\uc0c1" },
+    { t: "\uc8fc\ub9d0 \ucd9c\uadfc\ud558\ub294 \uc0ac\ub78c \uc5ec\uae30 \ubd99\uc5b4\ub77c", b: "{line} \ud0c0\uace0 \ud68c\uc0ac \uac00\ub294 \uc911\n\ub180\ub7ec \uac00\ub294 \uc0ac\ub78c\ub4e4 \uc0ac\uc774\uc5d0\uc11c \ub098\ub9cc \ub178\ud2b8\ubd81 \uac00\ubc29\n\uc218\ub2f9\uc774\ub77c\ub3c4 \ub450\ub451\ud558\uba74 \uc88b\uaca0\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uc544\uce68 \uc77c\ucc0d {stn} \uc654\ub294\ub370 \ubc8c\uc368 \uc0ac\ub78c \ub9ce\uc74c", b: "\ub9db\uc9d1 \uc624\ud508\ub7f0 \ud558\ub824\uace0 \uc654\ub294\ub370 \uc774\ubbf8 \uc904 \uc11c \uc788\uc74c \u3137\u3137\n\ub2e4\ub4e4 \uc815\ubcf4\ub825\uc774 \ub300\ub2e8\ud558\ub2e4\n\uc8fc\ub9d0\uc5d4 \ubd80\uc9c0\ub7f0\ud55c \uc790\uac00 \ub2e4 \uba39\ub294\uad6c\ub098", cat: "\uc77c\uc0c1" }
   ],
-  // 평일 오전 9~11시
+  // \ud3c9\uc77c \uc624\uc804 9~11\uc2dc
   forenoonWd: [
-    { t: "오전 회의 3개 연속인 사람 있음?", b: "출근하자마자 회의실 순회 중\n내 일은 대체 언제 하라는 건지\n회의를 위한 회의는 이제 그만", cat: "일상" },
-    { t: "출근하고 두 시간 지났는데 벌써 퇴근 마려움", b: "모니터 보는데 눈에 하나도 안 들어옴\n점심시간만 기다리는 중\n다들 오전 어떻게 버팀?", cat: "일상" },
-    { t: "오전에 타는 지하철은 평화롭네", b: "늦은 출근이라 {line} 탔는데 자리 널널\n러시아워 피하니까 삶의 질이 다르다\n시차출퇴근제 전국 확대 기원", cat: "일상" },
-    { t: "재택 하다가 오랜만에 사무실 나왔더니 적응 안 됨", b: "지하철 타는 것부터가 노동이었다는 걸 잊고 있었음\n{stn}역 인파 뚫고 오니까 이미 지침\n재택이 그립다", cat: "일상" }
+    { t: "\uc624\uc804 \ud68c\uc758 3\uac1c \uc5f0\uc18d\uc778 \uc0ac\ub78c \uc788\uc74c?", b: "\ucd9c\uadfc\ud558\uc790\ub9c8\uc790 \ud68c\uc758\uc2e4 \uc21c\ud68c \uc911\n\ub0b4 \uc77c\uc740 \ub300\uccb4 \uc5b8\uc81c \ud558\ub77c\ub294 \uac74\uc9c0\n\ud68c\uc758\ub97c \uc704\ud55c \ud68c\uc758\ub294 \uc774\uc81c \uadf8\ub9cc", cat: "\uc77c\uc0c1" },
+    { t: "\ucd9c\uadfc\ud558\uace0 \ub450 \uc2dc\uac04 \uc9c0\ub0ac\ub294\ub370 \ubc8c\uc368 \ud1f4\uadfc \ub9c8\ub824\uc6c0", b: "\ubaa8\ub2c8\ud130 \ubcf4\ub294\ub370 \ub208\uc5d0 \ud558\ub098\ub3c4 \uc548 \ub4e4\uc5b4\uc634\n\uc810\uc2ec\uc2dc\uac04\ub9cc \uae30\ub2e4\ub9ac\ub294 \uc911\n\ub2e4\ub4e4 \uc624\uc804 \uc5b4\ub5bb\uac8c \ubc84\ud300?", cat: "\uc77c\uc0c1" },
+    { t: "\uc624\uc804\uc5d0 \ud0c0\ub294 \uc9c0\ud558\ucca0\uc740 \ud3c9\ud654\ub86d\ub124", b: "\ub2a6\uc740 \ucd9c\uadfc\uc774\ub77c {line} \ud0d4\ub294\ub370 \uc790\ub9ac \ub110\ub110\n\ub7ec\uc2dc\uc544\uc6cc \ud53c\ud558\ub2c8\uae4c \uc0b6\uc758 \uc9c8\uc774 \ub2e4\ub974\ub2e4\n\uc2dc\ucc28\ucd9c\ud1f4\uadfc\uc81c \uc804\uad6d \ud655\ub300 \uae30\uc6d0", cat: "\uc77c\uc0c1" },
+    { t: "\uc7ac\ud0dd \ud558\ub2e4\uac00 \uc624\ub79c\ub9cc\uc5d0 \uc0ac\ubb34\uc2e4 \ub098\uc654\ub354\ub2c8 \uc801\uc751 \uc548 \ub428", b: "\uc9c0\ud558\ucca0 \ud0c0\ub294 \uac83\ubd80\ud130\uac00 \ub178\ub3d9\uc774\uc5c8\ub2e4\ub294 \uac78 \uc78a\uace0 \uc788\uc5c8\uc74c\n{stn}\uc5ed \uc778\ud30c \ub6ab\uace0 \uc624\ub2c8\uae4c \uc774\ubbf8 \uc9c0\uce68\n\uc7ac\ud0dd\uc774 \uadf8\ub9bd\ub2e4", cat: "\uc77c\uc0c1" }
   ],
-  // 주말 오전
+  // \uc8fc\ub9d0 \uc624\uc804
   forenoonWe: [
-    { t: "주말 오전 카페에서 여유 부리는 중", b: "{stn}역 근처 카페 창가 자리 잡음\n브런치에 커피에 이게 사는 거지\n평일의 나에게 주는 보상", cat: "일상" },
-    { t: "오늘 나들이 가기 좋은 날씨네", b: "{line} 타고 교외로 나가는 중\n주말엔 역시 어디든 나가야 함\n집에만 있으면 주말이 순삭됨", cat: "일상" },
-    { t: "주말 늦잠 자다가 하루 다 감", b: "일어나니까 11시\n뭐라도 해야 할 것 같아서 일단 나옴\n{stn} 근처 갈만한 데 추천 좀", cat: "질문" }
+    { t: "\uc8fc\ub9d0 \uc624\uc804 \uce74\ud398\uc5d0\uc11c \uc5ec\uc720 \ubd80\ub9ac\ub294 \uc911", b: "{stn}\uc5ed \uadfc\ucc98 \uce74\ud398 \ucc3d\uac00 \uc790\ub9ac \uc7a1\uc74c\n\ube0c\ub7f0\uce58\uc5d0 \ucee4\ud53c\uc5d0 \uc774\uac8c \uc0ac\ub294 \uac70\uc9c0\n\ud3c9\uc77c\uc758 \ub098\uc5d0\uac8c \uc8fc\ub294 \ubcf4\uc0c1", cat: "\uc77c\uc0c1" },
+    { t: "\uc624\ub298 \ub098\ub4e4\uc774 \uac00\uae30 \uc88b\uc740 \ub0a0\uc528\ub124", b: "{line} \ud0c0\uace0 \uad50\uc678\ub85c \ub098\uac00\ub294 \uc911\n\uc8fc\ub9d0\uc5d4 \uc5ed\uc2dc \uc5b4\ub514\ub4e0 \ub098\uac00\uc57c \ud568\n\uc9d1\uc5d0\ub9cc \uc788\uc73c\uba74 \uc8fc\ub9d0\uc774 \uc21c\uc0ad\ub428", cat: "\uc77c\uc0c1" },
+    { t: "\uc8fc\ub9d0 \ub2a6\uc7a0 \uc790\ub2e4\uac00 \ud558\ub8e8 \ub2e4 \uac10", b: "\uc77c\uc5b4\ub098\ub2c8\uae4c 11\uc2dc\n\ubb50\ub77c\ub3c4 \ud574\uc57c \ud560 \uac83 \uac19\uc544\uc11c \uc77c\ub2e8 \ub098\uc634\n{stn} \uadfc\ucc98 \uac08\ub9cc\ud55c \ub370 \ucd94\ucc9c \uc880", cat: "\uc9c8\ubb38" }
   ],
-  // 점심 11~14시
+  // \uc810\uc2ec 11~14\uc2dc
   lunch: [
-    { t: "점심 메뉴 정하는 게 제일 어려운 일임", b: "회사 근처 식당 다 질렸음\n오늘도 결국 국밥 아니면 김치찌개겠지\n다들 오늘 뭐 먹음?", cat: "질문" },
-    { t: "{stn}역 근처 직장인 점심 웨이팅 실화냐", b: "12시 땡 치자마자 나왔는데 이미 줄이 건물 밖까지\n점심시간 1시간으로는 부족하다\n1시간 반으로 늘려주면 안 되나", cat: "일상" },
-    { t: "점심 혼밥 하는 사람 많아진 듯", b: "오늘 혼자 먹으러 갔는데 1인석이 꽉 참\n혼밥이 편할 때가 있음 눈치 안 보고\n다들 혼밥 어디까지 가능함?", cat: "일상" },
-    { t: "점심 먹고 산책하는 게 하루 유일한 낙", b: "{stn} 근처 한 바퀴 돌고 커피 사서 들어가는 코스\n이 20분이 오후를 버티게 해줌\n식후 산책 하는 사람 개추", cat: "일상" },
-    { t: "구내식당 vs 나가서 사먹기", b: "구내식당은 싸고 빠른데 맛이 아쉽고\n나가면 맛있는데 시간과 돈이…\n영원한 딜레마다", cat: "질문" }
+    { t: "\uc810\uc2ec \uba54\ub274 \uc815\ud558\ub294 \uac8c \uc81c\uc77c \uc5b4\ub824\uc6b4 \uc77c\uc784", b: "\ud68c\uc0ac \uadfc\ucc98 \uc2dd\ub2f9 \ub2e4 \uc9c8\ub838\uc74c\n\uc624\ub298\ub3c4 \uacb0\uad6d \uad6d\ubc25 \uc544\ub2c8\uba74 \uae40\uce58\ucc0c\uac1c\uaca0\uc9c0\n\ub2e4\ub4e4 \uc624\ub298 \ubb50 \uba39\uc74c?", cat: "\uc9c8\ubb38" },
+    { t: "{stn}\uc5ed \uadfc\ucc98 \uc9c1\uc7a5\uc778 \uc810\uc2ec \uc6e8\uc774\ud305 \uc2e4\ud654\ub0d0", b: "12\uc2dc \ub561 \uce58\uc790\ub9c8\uc790 \ub098\uc654\ub294\ub370 \uc774\ubbf8 \uc904\uc774 \uac74\ubb3c \ubc16\uae4c\uc9c0\n\uc810\uc2ec\uc2dc\uac04 1\uc2dc\uac04\uc73c\ub85c\ub294 \ubd80\uc871\ud558\ub2e4\n1\uc2dc\uac04 \ubc18\uc73c\ub85c \ub298\ub824\uc8fc\uba74 \uc548 \ub418\ub098", cat: "\uc77c\uc0c1" },
+    { t: "\uc810\uc2ec \ud63c\ubc25 \ud558\ub294 \uc0ac\ub78c \ub9ce\uc544\uc9c4 \ub4ef", b: "\uc624\ub298 \ud63c\uc790 \uba39\uc73c\ub7ec \uac14\ub294\ub370 1\uc778\uc11d\uc774 \uaf49 \ucc38\n\ud63c\ubc25\uc774 \ud3b8\ud560 \ub54c\uac00 \uc788\uc74c \ub208\uce58 \uc548 \ubcf4\uace0\n\ub2e4\ub4e4 \ud63c\ubc25 \uc5b4\ub514\uae4c\uc9c0 \uac00\ub2a5\ud568?", cat: "\uc77c\uc0c1" },
+    { t: "\uc810\uc2ec \uba39\uace0 \uc0b0\ucc45\ud558\ub294 \uac8c \ud558\ub8e8 \uc720\uc77c\ud55c \ub099", b: "{stn} \uadfc\ucc98 \ud55c \ubc14\ud034 \ub3cc\uace0 \ucee4\ud53c \uc0ac\uc11c \ub4e4\uc5b4\uac00\ub294 \ucf54\uc2a4\n\uc774 20\ubd84\uc774 \uc624\ud6c4\ub97c \ubc84\ud2f0\uac8c \ud574\uc90c\n\uc2dd\ud6c4 \uc0b0\ucc45 \ud558\ub294 \uc0ac\ub78c \uac1c\ucd94", cat: "\uc77c\uc0c1" },
+    { t: "\uad6c\ub0b4\uc2dd\ub2f9 vs \ub098\uac00\uc11c \uc0ac\uba39\uae30", b: "\uad6c\ub0b4\uc2dd\ub2f9\uc740 \uc2f8\uace0 \ube60\ub978\ub370 \ub9db\uc774 \uc544\uc27d\uace0\n\ub098\uac00\uba74 \ub9db\uc788\ub294\ub370 \uc2dc\uac04\uacfc \ub3c8\uc774\u2026\n\uc601\uc6d0\ud55c \ub51c\ub808\ub9c8\ub2e4", cat: "\uc9c8\ubb38" }
   ],
-  // 평일 오후 14~17시
+  // \ud3c9\uc77c \uc624\ud6c4 14~17\uc2dc
   afternoonWd: [
-    { t: "오후 3시 졸음은 과학이다", b: "점심 먹고 나면 어김없이 눈이 감김\n커피를 마셔도 소용없음\n낮잠 제도 도입이 시급합니다", cat: "일상" },
-    { t: "갑자기 잡힌 오후 회의 때문에 계획 다 틀어짐", b: "오늘 일찍 끝내고 칼퇴하려 했는데\n4시 회의라니 이게 무슨 소리야\n칼퇴는 다음 생에", cat: "일상" },
-    { t: "오후에 지하철 타면 세상 한가하다", b: "외근 나와서 {line} 탔는데 자리가 텅텅\n이 시간대만 다니면 지하철 탈만 한데\n러시아워가 문제야", cat: "일상" },
-    { t: "퇴근까지 두 시간, 벌써 가방 쌌음", b: "마음은 이미 집에 가 있음\n일은 손에 안 잡히고 시계만 보는 중\n다들 마지막 두 시간 어떻게 버팀?", cat: "일상" }
+    { t: "\uc624\ud6c4 3\uc2dc \uc878\uc74c\uc740 \uacfc\ud559\uc774\ub2e4", b: "\uc810\uc2ec \uba39\uace0 \ub098\uba74 \uc5b4\uae40\uc5c6\uc774 \ub208\uc774 \uac10\uae40\n\ucee4\ud53c\ub97c \ub9c8\uc154\ub3c4 \uc18c\uc6a9\uc5c6\uc74c\n\ub0ae\uc7a0 \uc81c\ub3c4 \ub3c4\uc785\uc774 \uc2dc\uae09\ud569\ub2c8\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uac11\uc790\uae30 \uc7a1\ud78c \uc624\ud6c4 \ud68c\uc758 \ub54c\ubb38\uc5d0 \uacc4\ud68d \ub2e4 \ud2c0\uc5b4\uc9d0", b: "\uc624\ub298 \uc77c\ucc0d \ub05d\ub0b4\uace0 \uce7c\ud1f4\ud558\ub824 \ud588\ub294\ub370\n4\uc2dc \ud68c\uc758\ub77c\ub2c8 \uc774\uac8c \ubb34\uc2a8 \uc18c\ub9ac\uc57c\n\uce7c\ud1f4\ub294 \ub2e4\uc74c \uc0dd\uc5d0", cat: "\uc77c\uc0c1" },
+    { t: "\uc624\ud6c4\uc5d0 \uc9c0\ud558\ucca0 \ud0c0\uba74 \uc138\uc0c1 \ud55c\uac00\ud558\ub2e4", b: "\uc678\uadfc \ub098\uc640\uc11c {line} \ud0d4\ub294\ub370 \uc790\ub9ac\uac00 \ud145\ud145\n\uc774 \uc2dc\uac04\ub300\ub9cc \ub2e4\ub2c8\uba74 \uc9c0\ud558\ucca0 \ud0c8\ub9cc \ud55c\ub370\n\ub7ec\uc2dc\uc544\uc6cc\uac00 \ubb38\uc81c\uc57c", cat: "\uc77c\uc0c1" },
+    { t: "\ud1f4\uadfc\uae4c\uc9c0 \ub450 \uc2dc\uac04, \ubc8c\uc368 \uac00\ubc29 \uc30c\uc74c", b: "\ub9c8\uc74c\uc740 \uc774\ubbf8 \uc9d1\uc5d0 \uac00 \uc788\uc74c\n\uc77c\uc740 \uc190\uc5d0 \uc548 \uc7a1\ud788\uace0 \uc2dc\uacc4\ub9cc \ubcf4\ub294 \uc911\n\ub2e4\ub4e4 \ub9c8\uc9c0\ub9c9 \ub450 \uc2dc\uac04 \uc5b4\ub5bb\uac8c \ubc84\ud300?", cat: "\uc77c\uc0c1" }
   ],
-  // 주말 오후
+  // \uc8fc\ub9d0 \uc624\ud6c4
   afternoonWe: [
-    { t: "주말 오후 {stn} 사람 진짜 많다", b: "약속 있어서 나왔는데 발 디딜 틀이 없음\n다들 약속이 여기였냐\n그래도 오랜만에 나오니까 좋긴 하다", cat: "일상" },
-    { t: "주말에 전시 보러 다니는 사람 있음?", b: "오늘 {stn} 근처 전시 갔다 왔는데 생각보다 좋았음\n주말에 이런 문화생활 하나씩 하면 한 주가 리셋되는 느낌\n추천할만한 전시 있으면 공유 좀", cat: "질문" },
-    { t: "일요일 오후만 되면 마음이 싱숭생숭", b: "아직 반나절 남았는데 벌써 월요일 걱정 중\n이 시간을 즐기지 못하는 내가 싫다\n일요일 오후 증후군 나만 있는 거 아니지?", cat: "일상" }
+    { t: "\uc8fc\ub9d0 \uc624\ud6c4 {stn} \uc0ac\ub78c \uc9c4\uc9dc \ub9ce\ub2e4", b: "\uc57d\uc18d \uc788\uc5b4\uc11c \ub098\uc654\ub294\ub370 \ubc1c \ub514\ub51c \ud2c0\uc774 \uc5c6\uc74c\n\ub2e4\ub4e4 \uc57d\uc18d\uc774 \uc5ec\uae30\uc600\ub0d0\n\uadf8\ub798\ub3c4 \uc624\ub79c\ub9cc\uc5d0 \ub098\uc624\ub2c8\uae4c \uc88b\uae34 \ud558\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uc8fc\ub9d0\uc5d0 \uc804\uc2dc \ubcf4\ub7ec \ub2e4\ub2c8\ub294 \uc0ac\ub78c \uc788\uc74c?", b: "\uc624\ub298 {stn} \uadfc\ucc98 \uc804\uc2dc \uac14\ub2e4 \uc654\ub294\ub370 \uc0dd\uac01\ubcf4\ub2e4 \uc88b\uc558\uc74c\n\uc8fc\ub9d0\uc5d0 \uc774\ub7f0 \ubb38\ud654\uc0dd\ud65c \ud558\ub098\uc529 \ud558\uba74 \ud55c \uc8fc\uac00 \ub9ac\uc14b\ub418\ub294 \ub290\ub08c\n\ucd94\ucc9c\ud560\ub9cc\ud55c \uc804\uc2dc \uc788\uc73c\uba74 \uacf5\uc720 \uc880", cat: "\uc9c8\ubb38" },
+    { t: "\uc77c\uc694\uc77c \uc624\ud6c4\ub9cc \ub418\uba74 \ub9c8\uc74c\uc774 \uc2f1\uc22d\uc0dd\uc22d", b: "\uc544\uc9c1 \ubc18\ub098\uc808 \ub0a8\uc558\ub294\ub370 \ubc8c\uc368 \uc6d4\uc694\uc77c \uac71\uc815 \uc911\n\uc774 \uc2dc\uac04\uc744 \uc990\uae30\uc9c0 \ubabb\ud558\ub294 \ub0b4\uac00 \uc2eb\ub2e4\n\uc77c\uc694\uc77c \uc624\ud6c4 \uc99d\ud6c4\uad70 \ub098\ub9cc \uc788\ub294 \uac70 \uc544\ub2c8\uc9c0?", cat: "\uc77c\uc0c1" }
   ],
-  // 평일 퇴근길 17~20시
+  // \ud3c9\uc77c \ud1f4\uadfc\uae38 17~20\uc2dc
   eveRushWd: [
-    { t: "퇴근길 {line} 지옥철 실화냐", b: "{stn}에서 탔는데 숨을 못 쉬겠음\n세 대 보내고 겨우 탐\n다들 무사귀환 하시길", cat: "일상" },
-    { t: "칼퇴 성공한 날은 지하철도 즐겁다", b: "6시 정각에 나와서 {line} 탔음\n사람 많아도 기분이 좋으니까 견딜만 함\n칼퇴는 최고의 복지다", cat: "일상" },
-    { t: "퇴근길에 폰 배터리 1%면 진짜 불안함", b: "{stn}까지 40분 남았는데 배터리가 간당간당\n노래도 못 듣고 멍때리는 중\n보조배터리 챙길걸", cat: "일상" },
-    { t: "저녁 약속 있는 날 퇴근길은 왜 이리 설레냐", b: "{stn2}에서 친구 만나기로 함\n같은 지하철인데 회사 갈 때랑 기분이 이렇게 다름\n목적지가 중요한 거였어", cat: "일상" },
-    { t: "환승 두 번 하는 퇴근길, 이직하면 나아질까", b: "집까지 도어투도어 1시간 20분\n환승할 때마다 영혼이 갈려나감\n출퇴근 거리도 연봉이다 진짜", cat: "일상" },
-    { t: "{stn}역 퇴근시간 에스컬레이터 줄 무엇", b: "에스컬레이터 타려는 줄이 플랫폼 끝까지 이어짐\n계단으로 올라가는 게 훨씬 빠른데 다들 왜 기다리지\n오늘도 계단으로 운동했다 치자", cat: "일상" }
+    { t: "\ud1f4\uadfc\uae38 {line} \uc9c0\uc625\ucca0 \uc2e4\ud654\ub0d0", b: "{stn}\uc5d0\uc11c \ud0d4\ub294\ub370 \uc228\uc744 \ubabb \uc26c\uaca0\uc74c\n\uc138 \ub300 \ubcf4\ub0b4\uace0 \uaca8\uc6b0 \ud0d0\n\ub2e4\ub4e4 \ubb34\uc0ac\uadc0\ud658 \ud558\uc2dc\uae38", cat: "\uc77c\uc0c1" },
+    { t: "\uce7c\ud1f4 \uc131\uacf5\ud55c \ub0a0\uc740 \uc9c0\ud558\ucca0\ub3c4 \uc990\uac81\ub2e4", b: "6\uc2dc \uc815\uac01\uc5d0 \ub098\uc640\uc11c {line} \ud0d4\uc74c\n\uc0ac\ub78c \ub9ce\uc544\ub3c4 \uae30\ubd84\uc774 \uc88b\uc73c\ub2c8\uae4c \uacac\ub51c\ub9cc \ud568\n\uce7c\ud1f4\ub294 \ucd5c\uace0\uc758 \ubcf5\uc9c0\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ud1f4\uadfc\uae38\uc5d0 \ud3f0 \ubc30\ud130\ub9ac 1%\uba74 \uc9c4\uc9dc \ubd88\uc548\ud568", b: "{stn}\uae4c\uc9c0 40\ubd84 \ub0a8\uc558\ub294\ub370 \ubc30\ud130\ub9ac\uac00 \uac04\ub2f9\uac04\ub2f9\n\ub178\ub798\ub3c4 \ubabb \ub4e3\uace0 \uba4d\ub54c\ub9ac\ub294 \uc911\n\ubcf4\uc870\ubc30\ud130\ub9ac \ucc59\uae38\uac78", cat: "\uc77c\uc0c1" },
+    { t: "\uc800\ub141 \uc57d\uc18d \uc788\ub294 \ub0a0 \ud1f4\uadfc\uae38\uc740 \uc65c \uc774\ub9ac \uc124\ub808\ub0d0", b: "{stn2}\uc5d0\uc11c \uce5c\uad6c \ub9cc\ub098\uae30\ub85c \ud568\n\uac19\uc740 \uc9c0\ud558\ucca0\uc778\ub370 \ud68c\uc0ac \uac08 \ub54c\ub791 \uae30\ubd84\uc774 \uc774\ub807\uac8c \ub2e4\ub984\n\ubaa9\uc801\uc9c0\uac00 \uc911\uc694\ud55c \uac70\uc600\uc5b4", cat: "\uc77c\uc0c1" },
+    { t: "\ud658\uc2b9 \ub450 \ubc88 \ud558\ub294 \ud1f4\uadfc\uae38, \uc774\uc9c1\ud558\uba74 \ub098\uc544\uc9c8\uae4c", b: "\uc9d1\uae4c\uc9c0 \ub3c4\uc5b4\ud22c\ub3c4\uc5b4 1\uc2dc\uac04 20\ubd84\n\ud658\uc2b9\ud560 \ub54c\ub9c8\ub2e4 \uc601\ud63c\uc774 \uac08\ub824\ub098\uac10\n\ucd9c\ud1f4\uadfc \uac70\ub9ac\ub3c4 \uc5f0\ubd09\uc774\ub2e4 \uc9c4\uc9dc", cat: "\uc77c\uc0c1" },
+    { t: "{stn}\uc5ed \ud1f4\uadfc\uc2dc\uac04 \uc5d0\uc2a4\uceec\ub808\uc774\ud130 \uc904 \ubb34\uc5c7", b: "\uc5d0\uc2a4\uceec\ub808\uc774\ud130 \ud0c0\ub824\ub294 \uc904\uc774 \ud50c\ub7ab\ud3fc \ub05d\uae4c\uc9c0 \uc774\uc5b4\uc9d0\n\uacc4\ub2e8\uc73c\ub85c \uc62c\ub77c\uac00\ub294 \uac8c \ud6e8\uc52c \ube60\ub978\ub370 \ub2e4\ub4e4 \uc65c \uae30\ub2e4\ub9ac\uc9c0\n\uc624\ub298\ub3c4 \uacc4\ub2e8\uc73c\ub85c \uc6b4\ub3d9\ud588\ub2e4 \uce58\uc790", cat: "\uc77c\uc0c1" }
   ],
-  // 주말 저녁
+  // \uc8fc\ub9d0 \uc800\ub141
   eveWe: [
-    { t: "주말 저녁 집 가는 길, 아쉽다", b: "하루 종일 잘 놀고 {line} 타고 귀가 중\n내일 하루 더 남았다는 게 유일한 위안\n주말은 왜 이렇게 빠르냐", cat: "일상" },
-    { t: "{stn} 근처 저녁 먹을 곳 추천 좀", b: "가족들이랑 외식하려는데 웨이팅 없는 곳 없나\n주말 저녁은 어딜 가나 만석이네\n숨은 맛집 아시는 분?", cat: "질문" },
-    { t: "주말 저녁 지하철엔 피곤한 얼굴들뿐", b: "다들 하루 종일 놀았는지 꾸벅꾸벅 졸고 있음\n나도 그 중 하나\n잘 놀았다는 증거겠지", cat: "일상" }
+    { t: "\uc8fc\ub9d0 \uc800\ub141 \uc9d1 \uac00\ub294 \uae38, \uc544\uc27d\ub2e4", b: "\ud558\ub8e8 \uc885\uc77c \uc798 \ub180\uace0 {line} \ud0c0\uace0 \uadc0\uac00 \uc911\n\ub0b4\uc77c \ud558\ub8e8 \ub354 \ub0a8\uc558\ub2e4\ub294 \uac8c \uc720\uc77c\ud55c \uc704\uc548\n\uc8fc\ub9d0\uc740 \uc65c \uc774\ub807\uac8c \ube60\ub974\ub0d0", cat: "\uc77c\uc0c1" },
+    { t: "{stn} \uadfc\ucc98 \uc800\ub141 \uba39\uc744 \uacf3 \ucd94\ucc9c \uc880", b: "\uac00\uc871\ub4e4\uc774\ub791 \uc678\uc2dd\ud558\ub824\ub294\ub370 \uc6e8\uc774\ud305 \uc5c6\ub294 \uacf3 \uc5c6\ub098\n\uc8fc\ub9d0 \uc800\ub141\uc740 \uc5b4\ub51c \uac00\ub098 \ub9cc\uc11d\uc774\ub124\n\uc228\uc740 \ub9db\uc9d1 \uc544\uc2dc\ub294 \ubd84?", cat: "\uc9c8\ubb38" },
+    { t: "\uc8fc\ub9d0 \uc800\ub141 \uc9c0\ud558\ucca0\uc5d4 \ud53c\uace4\ud55c \uc5bc\uad74\ub4e4\ubfd0", b: "\ub2e4\ub4e4 \ud558\ub8e8 \uc885\uc77c \ub180\uc558\ub294\uc9c0 \uafb8\ubc85\uafb8\ubc85 \uc878\uace0 \uc788\uc74c\n\ub098\ub3c4 \uadf8 \uc911 \ud558\ub098\n\uc798 \ub180\uc558\ub2e4\ub294 \uc99d\uac70\uaca0\uc9c0", cat: "\uc77c\uc0c1" }
   ],
-  // 평일 밤 20~24시
+  // \ud3c9\uc77c \ubc24 20~24\uc2dc
   nightWd: [
-    { t: "야근 끝나고 타는 지하철은 유독 조용하다", b: "9시 넘어서 {line} 탔는데 다들 지쳐 보임\n낮의 소음이 없으니까 오히려 마음이 편하네\n야근러들 다들 수고했어요", cat: "일상" },
-    { t: "회식 끝나고 막차 시간 계산하는 중", b: "부장님은 3차 가자는데 막차가 40분 남았음\n지금 일어나야 {stn} 환승 가능\n탈출 각 재는 중", cat: "일상" },
-    { t: "밤에 타는 지하철에서 하루를 돌아봄", b: "오늘 하루도 정신없이 지나갔네\n창문에 비친 내 얼굴 보니까 피곤이 그대로 보임\n다들 오늘 하루 수고 많았어요", cat: "일상" },
-    { t: "퇴근이 늦어서 저녁을 집 근처에서 해결함", b: "{stn}역 앞 분식집에서 김밥에 라면\n늦은 시간이라 그런지 유독 맛있음\n소소하지만 확실한 행복", cat: "일상" },
-    { t: "막차 놓칠 뻔한 사람의 전력질주", b: "{stn} 계단을 인생 최고 속도로 뛰어내려감\n문 닫히기 3초 전에 탑승 성공\n심장이 아직도 뛴다 ㅋㅋ", cat: "일상" }
+    { t: "\uc57c\uadfc \ub05d\ub098\uace0 \ud0c0\ub294 \uc9c0\ud558\ucca0\uc740 \uc720\ub3c5 \uc870\uc6a9\ud558\ub2e4", b: "9\uc2dc \ub118\uc5b4\uc11c {line} \ud0d4\ub294\ub370 \ub2e4\ub4e4 \uc9c0\uccd0 \ubcf4\uc784\n\ub0ae\uc758 \uc18c\uc74c\uc774 \uc5c6\uc73c\ub2c8\uae4c \uc624\ud788\ub824 \ub9c8\uc74c\uc774 \ud3b8\ud558\ub124\n\uc57c\uadfc\ub7ec\ub4e4 \ub2e4\ub4e4 \uc218\uace0\ud588\uc5b4\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\ud68c\uc2dd \ub05d\ub098\uace0 \ub9c9\ucc28 \uc2dc\uac04 \uacc4\uc0b0\ud558\ub294 \uc911", b: "\ubd80\uc7a5\ub2d8\uc740 3\ucc28 \uac00\uc790\ub294\ub370 \ub9c9\ucc28\uac00 40\ubd84 \ub0a8\uc558\uc74c\n\uc9c0\uae08 \uc77c\uc5b4\ub098\uc57c {stn} \ud658\uc2b9 \uac00\ub2a5\n\ud0c8\ucd9c \uac01 \uc7ac\ub294 \uc911", cat: "\uc77c\uc0c1" },
+    { t: "\ubc24\uc5d0 \ud0c0\ub294 \uc9c0\ud558\ucca0\uc5d0\uc11c \ud558\ub8e8\ub97c \ub3cc\uc544\ubd04", b: "\uc624\ub298 \ud558\ub8e8\ub3c4 \uc815\uc2e0\uc5c6\uc774 \uc9c0\ub098\uac14\ub124\n\ucc3d\ubb38\uc5d0 \ube44\uce5c \ub0b4 \uc5bc\uad74 \ubcf4\ub2c8\uae4c \ud53c\uace4\uc774 \uadf8\ub300\ub85c \ubcf4\uc784\n\ub2e4\ub4e4 \uc624\ub298 \ud558\ub8e8 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\ud1f4\uadfc\uc774 \ub2a6\uc5b4\uc11c \uc800\ub141\uc744 \uc9d1 \uadfc\ucc98\uc5d0\uc11c \ud574\uacb0\ud568", b: "{stn}\uc5ed \uc55e \ubd84\uc2dd\uc9d1\uc5d0\uc11c \uae40\ubc25\uc5d0 \ub77c\uba74\n\ub2a6\uc740 \uc2dc\uac04\uc774\ub77c \uadf8\ub7f0\uc9c0 \uc720\ub3c5 \ub9db\uc788\uc74c\n\uc18c\uc18c\ud558\uc9c0\ub9cc \ud655\uc2e4\ud55c \ud589\ubcf5", cat: "\uc77c\uc0c1" },
+    { t: "\ub9c9\ucc28 \ub193\uce60 \ubed4\ud55c \uc0ac\ub78c\uc758 \uc804\ub825\uc9c8\uc8fc", b: "{stn} \uacc4\ub2e8\uc744 \uc778\uc0dd \ucd5c\uace0 \uc18d\ub3c4\ub85c \ub6f0\uc5b4\ub0b4\ub824\uac10\n\ubb38 \ub2eb\ud788\uae30 3\ucd08 \uc804\uc5d0 \ud0d1\uc2b9 \uc131\uacf5\n\uc2ec\uc7a5\uc774 \uc544\uc9c1\ub3c4 \ub6f4\ub2e4 \u314b\u314b", cat: "\uc77c\uc0c1" }
   ],
-  // 주말 밤
+  // \uc8fc\ub9d0 \ubc24
   nightWe: [
-    { t: "주말 밤 지하철엔 이야기가 많다", b: "다들 어디서 뭘 하고 왔는지 표정이 다양함\n웃는 사람, 조는 사람, 통화하는 사람\n주말 밤 특유의 분위기가 있음", cat: "일상" },
-    { t: "내일 출근 생각에 잠이 안 옴", b: "일요일 밤마다 반복되는 불면\n주말이 끝났다는 걸 몸이 거부하는 중\n다들 일요일 밤 어떻게 보냄?", cat: "일상" },
-    { t: "주말 마지막 밤에는 야식이 국룰", b: "치킨 시켜놓고 기다리는 중\n다이어트는 내일부터 하기로 함 (매주 반복)\n주말의 마무리는 역시 야식이지", cat: "일상" }
+    { t: "\uc8fc\ub9d0 \ubc24 \uc9c0\ud558\ucca0\uc5d4 \uc774\uc57c\uae30\uac00 \ub9ce\ub2e4", b: "\ub2e4\ub4e4 \uc5b4\ub514\uc11c \ubb58 \ud558\uace0 \uc654\ub294\uc9c0 \ud45c\uc815\uc774 \ub2e4\uc591\ud568\n\uc6c3\ub294 \uc0ac\ub78c, \uc870\ub294 \uc0ac\ub78c, \ud1b5\ud654\ud558\ub294 \uc0ac\ub78c\n\uc8fc\ub9d0 \ubc24 \ud2b9\uc720\uc758 \ubd84\uc704\uae30\uac00 \uc788\uc74c", cat: "\uc77c\uc0c1" },
+    { t: "\ub0b4\uc77c \ucd9c\uadfc \uc0dd\uac01\uc5d0 \uc7a0\uc774 \uc548 \uc634", b: "\uc77c\uc694\uc77c \ubc24\ub9c8\ub2e4 \ubc18\ubcf5\ub418\ub294 \ubd88\uba74\n\uc8fc\ub9d0\uc774 \ub05d\ub0ac\ub2e4\ub294 \uac78 \ubab8\uc774 \uac70\ubd80\ud558\ub294 \uc911\n\ub2e4\ub4e4 \uc77c\uc694\uc77c \ubc24 \uc5b4\ub5bb\uac8c \ubcf4\ub0c4?", cat: "\uc77c\uc0c1" },
+    { t: "\uc8fc\ub9d0 \ub9c8\uc9c0\ub9c9 \ubc24\uc5d0\ub294 \uc57c\uc2dd\uc774 \uad6d\ub8f0", b: "\uce58\ud0a8 \uc2dc\ucf1c\ub193\uace0 \uae30\ub2e4\ub9ac\ub294 \uc911\n\ub2e4\uc774\uc5b4\ud2b8\ub294 \ub0b4\uc77c\ubd80\ud130 \ud558\uae30\ub85c \ud568 (\ub9e4\uc8fc \ubc18\ubcf5)\n\uc8fc\ub9d0\uc758 \ub9c8\ubb34\ub9ac\ub294 \uc5ed\uc2dc \uc57c\uc2dd\uc774\uc9c0", cat: "\uc77c\uc0c1" }
   ]
 };
 var WEATHER_POOLS = {
   rain: [
-    { t: "비 오는 날 지하철역 입구 우산 정체 실화냐", b: "{stn}역 출구에서 다들 우산 펴느라 병목현상\n뒤에서 밀려오는데 나갈 수가 없음\n비 오는 날 출구는 전쟁터다", cat: "일상" },
-    { t: "우산 안 챙긴 날에만 꼭 비가 옴", b: "아침에 하늘 멀쩡했는데 지금 쏟아지는 중\n{stn}역에서 편의점 우산 사야 하나 고민\n집에 편의점 우산만 다섯 개다", cat: "일상" },
-    { t: "비 오는 날 지하철 냄새 나만 신경 쓰임?", b: "젖은 우산이랑 사람들 습기가 합쳐져서\n특유의 꿉꿉한 냄새가 남\n창문이라도 열고 싶다", cat: "일상" },
-    { t: "빗소리 들으면서 퇴근하는 것도 나쁘지 않네", b: "지상 구간에서 창밖에 비 내리는 거 보는 중\n노래 틀어놓으니까 뮤직비디오가 따로 없음\n비 오는 날의 낭만은 실내에서만 유효함", cat: "일상" },
-    { t: "장마철 지하철 에어컨+습기 조합 최악이다", b: "춥긴 한데 꿉꿉하고 끈적임\n겉옷을 입을 수도 벗을 수도 없는 상태\n장마 빨리 끝나라", cat: "일상" }
+    { t: "\ube44 \uc624\ub294 \ub0a0 \uc9c0\ud558\ucca0\uc5ed \uc785\uad6c \uc6b0\uc0b0 \uc815\uccb4 \uc2e4\ud654\ub0d0", b: "{stn}\uc5ed \ucd9c\uad6c\uc5d0\uc11c \ub2e4\ub4e4 \uc6b0\uc0b0 \ud3b4\ub290\ub77c \ubcd1\ubaa9\ud604\uc0c1\n\ub4a4\uc5d0\uc11c \ubc00\ub824\uc624\ub294\ub370 \ub098\uac08 \uc218\uac00 \uc5c6\uc74c\n\ube44 \uc624\ub294 \ub0a0 \ucd9c\uad6c\ub294 \uc804\uc7c1\ud130\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\uc6b0\uc0b0 \uc548 \ucc59\uae34 \ub0a0\uc5d0\ub9cc \uaf2d \ube44\uac00 \uc634", b: "\uc544\uce68\uc5d0 \ud558\ub298 \uba40\uca61\ud588\ub294\ub370 \uc9c0\uae08 \uc3df\uc544\uc9c0\ub294 \uc911\n{stn}\uc5ed\uc5d0\uc11c \ud3b8\uc758\uc810 \uc6b0\uc0b0 \uc0ac\uc57c \ud558\ub098 \uace0\ubbfc\n\uc9d1\uc5d0 \ud3b8\uc758\uc810 \uc6b0\uc0b0\ub9cc \ub2e4\uc12f \uac1c\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ube44 \uc624\ub294 \ub0a0 \uc9c0\ud558\ucca0 \ub0c4\uc0c8 \ub098\ub9cc \uc2e0\uacbd \uc4f0\uc784?", b: "\uc816\uc740 \uc6b0\uc0b0\uc774\ub791 \uc0ac\ub78c\ub4e4 \uc2b5\uae30\uac00 \ud569\uccd0\uc838\uc11c\n\ud2b9\uc720\uc758 \uafc9\uafc9\ud55c \ub0c4\uc0c8\uac00 \ub0a8\n\ucc3d\ubb38\uc774\ub77c\ub3c4 \uc5f4\uace0 \uc2f6\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ube57\uc18c\ub9ac \ub4e4\uc73c\uba74\uc11c \ud1f4\uadfc\ud558\ub294 \uac83\ub3c4 \ub098\uc058\uc9c0 \uc54a\ub124", b: "\uc9c0\uc0c1 \uad6c\uac04\uc5d0\uc11c \ucc3d\ubc16\uc5d0 \ube44 \ub0b4\ub9ac\ub294 \uac70 \ubcf4\ub294 \uc911\n\ub178\ub798 \ud2c0\uc5b4\ub193\uc73c\ub2c8\uae4c \ubba4\uc9c1\ube44\ub514\uc624\uac00 \ub530\ub85c \uc5c6\uc74c\n\ube44 \uc624\ub294 \ub0a0\uc758 \ub0ad\ub9cc\uc740 \uc2e4\ub0b4\uc5d0\uc11c\ub9cc \uc720\ud6a8\ud568", cat: "\uc77c\uc0c1" },
+    { t: "\uc7a5\ub9c8\ucca0 \uc9c0\ud558\ucca0 \uc5d0\uc5b4\ucee8+\uc2b5\uae30 \uc870\ud569 \ucd5c\uc545\uc774\ub2e4", b: "\ucda5\uae34 \ud55c\ub370 \uafc9\uafc9\ud558\uace0 \ub048\uc801\uc784\n\uac89\uc637\uc744 \uc785\uc744 \uc218\ub3c4 \ubc97\uc744 \uc218\ub3c4 \uc5c6\ub294 \uc0c1\ud0dc\n\uc7a5\ub9c8 \ube68\ub9ac \ub05d\ub098\ub77c", cat: "\uc77c\uc0c1" }
   ],
   snow: [
-    { t: "눈 오니까 지하철이 정답이다", b: "도로는 벌써 거북이걸음이라는데\n{line}은 그런 거 없이 정시 도착\n눈 오는 날 차 끌고 나온 사람들 존버하세요", cat: "일상" },
-    { t: "첫눈 오는 거 지하철 지상구간에서 봄", b: "창밖에 눈 내리는 거 보니까 갑자기 기분 좋아짐\n옆자리 사람도 폰 내려놓고 창밖 보는 중\n다 같은 마음이구나", cat: "일상" },
-    { t: "눈길에 {stn}역까지 걸어가는 게 고행이다", b: "빙판길에 펭귄처럼 뒤뚱뒤뚱 걷는 중\n오늘 몇 명 넘어지는 거 봤는지 모름\n다들 조심히 다니세요", cat: "일상" }
+    { t: "\ub208 \uc624\ub2c8\uae4c \uc9c0\ud558\ucca0\uc774 \uc815\ub2f5\uc774\ub2e4", b: "\ub3c4\ub85c\ub294 \ubc8c\uc368 \uac70\ubd81\uc774\uac78\uc74c\uc774\ub77c\ub294\ub370\n{line}\uc740 \uadf8\ub7f0 \uac70 \uc5c6\uc774 \uc815\uc2dc \ub3c4\ucc29\n\ub208 \uc624\ub294 \ub0a0 \ucc28 \ub04c\uace0 \ub098\uc628 \uc0ac\ub78c\ub4e4 \uc874\ubc84\ud558\uc138\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\uccab\ub208 \uc624\ub294 \uac70 \uc9c0\ud558\ucca0 \uc9c0\uc0c1\uad6c\uac04\uc5d0\uc11c \ubd04", b: "\ucc3d\ubc16\uc5d0 \ub208 \ub0b4\ub9ac\ub294 \uac70 \ubcf4\ub2c8\uae4c \uac11\uc790\uae30 \uae30\ubd84 \uc88b\uc544\uc9d0\n\uc606\uc790\ub9ac \uc0ac\ub78c\ub3c4 \ud3f0 \ub0b4\ub824\ub193\uace0 \ucc3d\ubc16 \ubcf4\ub294 \uc911\n\ub2e4 \uac19\uc740 \ub9c8\uc74c\uc774\uad6c\ub098", cat: "\uc77c\uc0c1" },
+    { t: "\ub208\uae38\uc5d0 {stn}\uc5ed\uae4c\uc9c0 \uac78\uc5b4\uac00\ub294 \uac8c \uace0\ud589\uc774\ub2e4", b: "\ube59\ud310\uae38\uc5d0 \ud3ad\uadc4\ucc98\ub7fc \ub4a4\ub6b1\ub4a4\ub6b1 \uac77\ub294 \uc911\n\uc624\ub298 \uba87 \uba85 \ub118\uc5b4\uc9c0\ub294 \uac70 \ubd24\ub294\uc9c0 \ubaa8\ub984\n\ub2e4\ub4e4 \uc870\uc2ec\ud788 \ub2e4\ub2c8\uc138\uc694", cat: "\uc77c\uc0c1" }
   ],
   hot: [
-    { t: "오늘 {temp}도 실화냐 밖에 나가면 익는다", b: "역까지 5분 걷는데 등이 다 젖음\n지하철 에어컨이 유일한 구원\n여름엔 지하가 최고다", cat: "일상" },
-    { t: "폭염에 지하철 계단 올라가면 사우나 직행", b: "{stn}역 출구 계단에서 이미 체력 소진\n지상으로 나가는 순간 훅 끼치는 열기\n다들 물 챙겨 다니세요", cat: "일상" },
-    { t: "더위 때문에 약냉방칸 vs 일반칸 논쟁 중", b: "나는 무조건 일반칸파, 시원해야 살 것 같음\n근데 춥다는 사람도 이해는 감\n다들 어느 칸 타심?", cat: "질문" }
+    { t: "\uc624\ub298 {temp}\ub3c4 \uc2e4\ud654\ub0d0 \ubc16\uc5d0 \ub098\uac00\uba74 \uc775\ub294\ub2e4", b: "\uc5ed\uae4c\uc9c0 5\ubd84 \uac77\ub294\ub370 \ub4f1\uc774 \ub2e4 \uc816\uc74c\n\uc9c0\ud558\ucca0 \uc5d0\uc5b4\ucee8\uc774 \uc720\uc77c\ud55c \uad6c\uc6d0\n\uc5ec\ub984\uc5d4 \uc9c0\ud558\uac00 \ucd5c\uace0\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ud3ed\uc5fc\uc5d0 \uc9c0\ud558\ucca0 \uacc4\ub2e8 \uc62c\ub77c\uac00\uba74 \uc0ac\uc6b0\ub098 \uc9c1\ud589", b: "{stn}\uc5ed \ucd9c\uad6c \uacc4\ub2e8\uc5d0\uc11c \uc774\ubbf8 \uccb4\ub825 \uc18c\uc9c4\n\uc9c0\uc0c1\uc73c\ub85c \ub098\uac00\ub294 \uc21c\uac04 \ud6c5 \ub07c\uce58\ub294 \uc5f4\uae30\n\ub2e4\ub4e4 \ubb3c \ucc59\uaca8 \ub2e4\ub2c8\uc138\uc694", cat: "\uc77c\uc0c1" },
+    { t: "\ub354\uc704 \ub54c\ubb38\uc5d0 \uc57d\ub0c9\ubc29\uce78 vs \uc77c\ubc18\uce78 \ub17c\uc7c1 \uc911", b: "\ub098\ub294 \ubb34\uc870\uac74 \uc77c\ubc18\uce78\ud30c, \uc2dc\uc6d0\ud574\uc57c \uc0b4 \uac83 \uac19\uc74c\n\uadfc\ub370 \ucda5\ub2e4\ub294 \uc0ac\ub78c\ub3c4 \uc774\ud574\ub294 \uac10\n\ub2e4\ub4e4 \uc5b4\ub290 \uce78 \ud0c0\uc2ec?", cat: "\uc9c8\ubb38" }
   ],
   cold: [
-    { t: "한파에 지하철 기다리는 5분이 50분 같다", b: "플랫폼에 바람 들이치는데 발이 얼어붙는 줄\n{line} 도착 안내만 뚫어져라 보는 중\n겨울엔 스크린도어 있는 역이 최고다", cat: "일상" },
-    { t: "추운 날 지하철 히터 자리는 명당이다", b: "좌석 아래 히터 나오는 자리 앉으면 엉덩이가 따뜻함\n내릴 때가 아쉬울 정도\n겨울 지하철의 숨은 낙", cat: "일상" },
-    { t: "영하 날씨엔 목도리가 생존템이다", b: "오늘 목도리 안 하고 나왔다가 후회 중\n{stn}까지 걸어가는데 목이 시려서 혼남\n내일부터 무조건 챙긴다", cat: "일상" }
+    { t: "\ud55c\ud30c\uc5d0 \uc9c0\ud558\ucca0 \uae30\ub2e4\ub9ac\ub294 5\ubd84\uc774 50\ubd84 \uac19\ub2e4", b: "\ud50c\ub7ab\ud3fc\uc5d0 \ubc14\ub78c \ub4e4\uc774\uce58\ub294\ub370 \ubc1c\uc774 \uc5bc\uc5b4\ubd99\ub294 \uc904\n{line} \ub3c4\ucc29 \uc548\ub0b4\ub9cc \ub6ab\uc5b4\uc838\ub77c \ubcf4\ub294 \uc911\n\uaca8\uc6b8\uc5d4 \uc2a4\ud06c\ub9b0\ub3c4\uc5b4 \uc788\ub294 \uc5ed\uc774 \ucd5c\uace0\ub2e4", cat: "\uc77c\uc0c1" },
+    { t: "\ucd94\uc6b4 \ub0a0 \uc9c0\ud558\ucca0 \ud788\ud130 \uc790\ub9ac\ub294 \uba85\ub2f9\uc774\ub2e4", b: "\uc88c\uc11d \uc544\ub798 \ud788\ud130 \ub098\uc624\ub294 \uc790\ub9ac \uc549\uc73c\uba74 \uc5c9\ub369\uc774\uac00 \ub530\ub73b\ud568\n\ub0b4\ub9b4 \ub54c\uac00 \uc544\uc26c\uc6b8 \uc815\ub3c4\n\uaca8\uc6b8 \uc9c0\ud558\ucca0\uc758 \uc228\uc740 \ub099", cat: "\uc77c\uc0c1" },
+    { t: "\uc601\ud558 \ub0a0\uc528\uc5d4 \ubaa9\ub3c4\ub9ac\uac00 \uc0dd\uc874\ud15c\uc774\ub2e4", b: "\uc624\ub298 \ubaa9\ub3c4\ub9ac \uc548 \ud558\uace0 \ub098\uc654\ub2e4\uac00 \ud6c4\ud68c \uc911\n{stn}\uae4c\uc9c0 \uac78\uc5b4\uac00\ub294\ub370 \ubaa9\uc774 \uc2dc\ub824\uc11c \ud63c\ub0a8\n\ub0b4\uc77c\ubd80\ud130 \ubb34\uc870\uac74 \ucc59\uae34\ub2e4", cat: "\uc77c\uc0c1" }
   ]
 };
 var NEWS_FEEDS = [
-  { cat: "사회\xB7정치", badge: "일상", urls: [
+  { cat: "\uc0ac\ud68c\xB7\uc815\uce58", badge: "\uc77c\uc0c1", urls: [
     "https://news.google.com/rss/headlines/section/topic/NATION?hl=ko&gl=KR&ceid=KR:ko",
     "https://www.yna.co.kr/rss/politics.xml",
     "https://www.yna.co.kr/rss/society.xml"
   ] },
-  { cat: "경제\xB7주식", badge: "정보", urls: [
+  { cat: "\uacbd\uc81c\xB7\uc8fc\uc2dd", badge: "\uc815\ubcf4", urls: [
     "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=ko&gl=KR&ceid=KR:ko",
     "https://www.yna.co.kr/rss/economy.xml"
   ] },
-  { cat: "연예", badge: "일상", urls: [
+  { cat: "\uc5f0\uc608", badge: "\uc77c\uc0c1", urls: [
     "https://news.google.com/rss/headlines/section/topic/ENTERTAINMENT?hl=ko&gl=KR&ceid=KR:ko",
     "https://www.yna.co.kr/rss/entertainment.xml"
   ] },
-  { cat: "스포츠", badge: "일상", urls: [
+  { cat: "\uc2a4\ud3ec\uce20", badge: "\uc77c\uc0c1", urls: [
     "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=ko&gl=KR&ceid=KR:ko",
     "https://www.yna.co.kr/rss/sports.xml"
   ] },
-  { cat: "IT", badge: "정보", urls: [
+  { cat: "IT", badge: "\uc815\ubcf4", urls: [
     "https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=ko&gl=KR&ceid=KR:ko",
     "https://rss.etnews.com/Section901.xml"
   ] }
 ];
 var _gemStat = { ok: 0, fail: 0, last: "", model: "", ctxRej: 0 };
-// ★ 2026-10-05: Gemini 무료 한도 대응. 모델마다 하루 한도가 따로라서, flash-lite 가 429(한도)면 다음 모델로 넘어간다.
-//   한도에 걸린 모델은 20분(404 면 6시간) 동안 건너뛴다 → 한도 난 뒤에도 20분마다 헛호출을 쏟아붓지 않는다.
-// ★ 2026-10-10 (YJ: 게시글·댓글·소통방이 하루 만에 멈춘다 / 소통방 문장이 "치맥… 🍗… 🤤" 처럼 깨진다):
-//   원인① 무료 키의 gemini-2.5-flash-lite 는 하루 약 20회뿐이라 오후 몇 시간 만에 소진 → 다음 날 오후까지 429. (다른 gemini 모델은 이 키에서 404)
-//   원인② temperature 1.15 가 flash-lite 에서 말줄임표 조각을 낳았다.
-//   → ⓐ 쿼터가 따로 잡히는 Gemma(gemma-3-27b-it 등, 무료 하루 수천 회)를 예비 모델로 추가하고, 소통방 대량 생성은 Gemma 를 먼저 쓴다.
-//     ⓑ 404/429 외의 400·403 도 멈추지 않고 다음 모델로 넘어간다. ⓒ ListModels 로 이 키에서 실제 쓸 수 있는 모델을 찾아 목록에 보탠다(bw_diag 'gemmodels' 에 기록).
+// \u2605 2026-10-05: Gemini \ubb34\ub8cc \ud55c\ub3c4 \ub300\uc751. \ubaa8\ub378\ub9c8\ub2e4 \ud558\ub8e8 \ud55c\ub3c4\uac00 \ub530\ub85c\ub77c\uc11c, flash-lite \uac00 429(\ud55c\ub3c4)\uba74 \ub2e4\uc74c \ubaa8\ub378\ub85c \ub118\uc5b4\uac04\ub2e4.
+//   \ud55c\ub3c4\uc5d0 \uac78\ub9b0 \ubaa8\ub378\uc740 20\ubd84(404 \uba74 6\uc2dc\uac04) \ub3d9\uc548 \uac74\ub108\ub6f4\ub2e4 \u2192 \ud55c\ub3c4 \ub09c \ub4a4\uc5d0\ub3c4 20\ubd84\ub9c8\ub2e4 \ud5db\ud638\ucd9c\uc744 \uc3df\uc544\ubd93\uc9c0 \uc54a\ub294\ub2e4.
+// \u2605 2026-10-10 (YJ: \uac8c\uc2dc\uae00\u00b7\ub313\uae00\u00b7\uc18c\ud1b5\ubc29\uc774 \ud558\ub8e8 \ub9cc\uc5d0 \uba48\ucd98\ub2e4 / \uc18c\ud1b5\ubc29 \ubb38\uc7a5\uc774 "\uce58\ub9e5\u2026 \ud83c\udf57\u2026 \ud83e\udd24" \ucc98\ub7fc \uae68\uc9c4\ub2e4):
+//   \uc6d0\uc778\u2460 \ubb34\ub8cc \ud0a4\uc758 gemini-2.5-flash-lite \ub294 \ud558\ub8e8 \uc57d 20\ud68c\ubfd0\uc774\ub77c \uc624\ud6c4 \uba87 \uc2dc\uac04 \ub9cc\uc5d0 \uc18c\uc9c4 \u2192 \ub2e4\uc74c \ub0a0 \uc624\ud6c4\uae4c\uc9c0 429. (\ub2e4\ub978 gemini \ubaa8\ub378\uc740 \uc774 \ud0a4\uc5d0\uc11c 404)
+//   \uc6d0\uc778\u2461 temperature 1.15 \uac00 flash-lite \uc5d0\uc11c \ub9d0\uc904\uc784\ud45c \uc870\uac01\uc744 \ub0b3\uc558\ub2e4.
+//   \u2192 \u24d0 \ucffc\ud130\uac00 \ub530\ub85c \uc7a1\ud788\ub294 Gemma(gemma-3-27b-it \ub4f1, \ubb34\ub8cc \ud558\ub8e8 \uc218\ucc9c \ud68c)\ub97c \uc608\ube44 \ubaa8\ub378\ub85c \ucd94\uac00\ud558\uace0, \uc18c\ud1b5\ubc29 \ub300\ub7c9 \uc0dd\uc131\uc740 Gemma \ub97c \uba3c\uc800 \uc4f4\ub2e4.
+//     \u24d1 404/429 \uc678\uc758 400\u00b7403 \ub3c4 \uba48\ucd94\uc9c0 \uc54a\uace0 \ub2e4\uc74c \ubaa8\ub378\ub85c \ub118\uc5b4\uac04\ub2e4. \u24d2 ListModels \ub85c \uc774 \ud0a4\uc5d0\uc11c \uc2e4\uc81c \uc4f8 \uc218 \uc788\ub294 \ubaa8\ub378\uc744 \ucc3e\uc544 \ubaa9\ub85d\uc5d0 \ubcf4\ud0e0\ub2e4(bw_diag 'gemmodels' \uc5d0 \uae30\ub85d).
 var GEM_MODELS = ["gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.0-flash", "gemma-3-27b-it", "gemma-3-12b-it"];
-var GEM_BULK_ORDER = ["gemma-3-27b-it", "gemma-3-12b-it", "gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.0-flash"];   // 소통방(대량) — Gemini 쿼터는 게시판용으로 아낀다
+var GEM_BULK_ORDER = ["gemma-3-27b-it", "gemma-3-12b-it", "gemini-2.5-flash-lite", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.0-flash"];   // \uc18c\ud1b5\ubc29(\ub300\ub7c9) \u2014 Gemini \ucffc\ud130\ub294 \uac8c\uc2dc\ud310\uc6a9\uc73c\ub85c \uc544\ub080\ub2e4
 var _gemDownUntil = {};
 var _gemLast = { status: 0, model: "", tried: "" };
-var _gemUse = {};          // 이 실행에서 성공 호출한 모델별 횟수(끝나면 bw_diag 'gemuse' 로 기록 → 하루 예산 계산)
-var _gemExtra = [];        // ListModels 로 찾은 추가 모델
+var _gemUse = {};          // \uc774 \uc2e4\ud589\uc5d0\uc11c \uc131\uacf5 \ud638\ucd9c\ud55c \ubaa8\ub378\ubcc4 \ud69f\uc218(\ub05d\ub098\uba74 bw_diag 'gemuse' \ub85c \uae30\ub85d \u2192 \ud558\ub8e8 \uc608\uc0b0 \uacc4\uc0b0)
+var _gemExtra = [];        // ListModels \ub85c \ucc3e\uc740 \ucd94\uac00 \ubaa8\ub378
 var _gemDiscAt = 0;
 function gemOrder(base) {
   const out = base.slice();
@@ -419,7 +419,7 @@ async function flushGemUse(env) {
   await bwDiag(env, "gemuse", snap);
 }
 __name(flushGemUse, "flushGemUse");
-// 최근 24시간 동안 Gemini(gemini-*) 모델을 부른 횟수 — 소통방이 게시판 몫까지 써 버리지 않게 예산을 가른다
+// \ucd5c\uadfc 24\uc2dc\uac04 \ub3d9\uc548 Gemini(gemini-*) \ubaa8\ub378\uc744 \ubd80\ub978 \ud69f\uc218 \u2014 \uc18c\ud1b5\ubc29\uc774 \uac8c\uc2dc\ud310 \ubaab\uae4c\uc9c0 \uc368 \ubc84\ub9ac\uc9c0 \uc54a\uac8c \uc608\uc0b0\uc744 \uac00\ub978\ub2e4
 async function geminiUsed24h(env) {
   let n = 0;
   try {
@@ -430,7 +430,7 @@ async function geminiUsed24h(env) {
   return n;
 }
 __name(geminiUsed24h, "geminiUsed24h");
-var GEMINI_TALK_BUDGET = 40;   // 소통방이 24시간에 쓸 수 있는 gemini-* 호출 수. 배포 뒤 실측: gemini-flash-lite-latest 가 따로 잡힌 한도로 응답(Gemma 는 이 키에서 쓰이지 않음) → 8회는 너무 빡빡해 소통방이 다시 멈출 수 있다. 모델별 429 는 다음 모델로 넘어간다
+var GEMINI_TALK_BUDGET = 40;   // \uc18c\ud1b5\ubc29\uc774 24\uc2dc\uac04\uc5d0 \uc4f8 \uc218 \uc788\ub294 gemini-* \ud638\ucd9c \uc218. \ubc30\ud3ec \ub4a4 \uc2e4\uce21: gemini-flash-lite-latest \uac00 \ub530\ub85c \uc7a1\ud78c \ud55c\ub3c4\ub85c \uc751\ub2f5(Gemma \ub294 \uc774 \ud0a4\uc5d0\uc11c \uc4f0\uc774\uc9c0 \uc54a\uc74c) \u2192 8\ud68c\ub294 \ub108\ubb34 \ube61\ube61\ud574 \uc18c\ud1b5\ubc29\uc774 \ub2e4\uc2dc \uba48\ucd9c \uc218 \uc788\ub2e4. \ubaa8\ub378\ubcc4 429 \ub294 \ub2e4\uc74c \ubaa8\ub378\ub85c \ub118\uc5b4\uac04\ub2e4
 async function gemFetch(env, ms, init, order) {
   let last = null, attempted = 0;
   const tried = [];
@@ -448,11 +448,11 @@ async function gemFetch(env, ms, init, order) {
     tried.push(m.replace("gemini-", "") + ":" + r.status);
     if (r.ok) { _gemStat.model = m; _gemUse[m] = (_gemUse[m] || 0) + 1; _gemLast = { status: 200, model: m, tried: tried.join(",") }; return r; }
     last = r;
-    // ★ 2026-10-05: 503(과부하)도 다음 모델로 넘어간다 — 16:00 에 flash-lite 가 503 이라 13개 방이 비었다. 5xx 는 1분만 쉰다.
+    // \u2605 2026-10-05: 503(\uacfc\ubd80\ud558)\ub3c4 \ub2e4\uc74c \ubaa8\ub378\ub85c \ub118\uc5b4\uac04\ub2e4 \u2014 16:00 \uc5d0 flash-lite \uac00 503 \uc774\ub77c 13\uac1c \ubc29\uc774 \ube44\uc5c8\ub2e4. 5xx \ub294 1\ubd84\ub9cc \uc270\ub2e4.
     if (r.status === 429) _gemDownUntil[m] = Date.now() + 20 * 60e3;
     else if (r.status === 404) _gemDownUntil[m] = Date.now() + 6 * 3600e3;
     else if (r.status >= 500) _gemDownUntil[m] = Date.now() + 60e3;
-    else _gemDownUntil[m] = Date.now() + 30 * 60e3;   // 400·403 등: 이 모델은 30분 쉬고 다음 모델을 시도한다(Gemma 가 지원 안 하는 옵션 등)
+    else _gemDownUntil[m] = Date.now() + 30 * 60e3;   // 400\u00b7403 \ub4f1: \uc774 \ubaa8\ub378\uc740 30\ubd84 \uc26c\uace0 \ub2e4\uc74c \ubaa8\ub378\uc744 \uc2dc\ub3c4\ud55c\ub2e4(Gemma \uac00 \uc9c0\uc6d0 \uc548 \ud558\ub294 \uc635\uc158 \ub4f1)
   }
   _gemLast = { status: last ? last.status : (attempted ? 504 : 429), model: "", tried: tried.join(",") };
   return last || { ok: false, status: attempted ? 504 : 429, json: async () => ({}), text: async () => "" };
@@ -471,11 +471,11 @@ function fetchT(url, ms, opts) {
 }
 __name(fetchT, "fetchT");
 var NEWSFEED_SRC = [
-  { cat: "사회", url: "https://www.yna.co.kr/rss/society.xml" },
-  { cat: "정치", url: "https://www.yna.co.kr/rss/politics.xml" },
-  { cat: "경제", url: "https://www.yna.co.kr/rss/economy.xml" },
-  { cat: "연예", url: "https://www.yna.co.kr/rss/entertainment.xml" },
-  { cat: "스포츠", url: "https://www.yna.co.kr/rss/sports.xml" },
+  { cat: "\uc0ac\ud68c", url: "https://www.yna.co.kr/rss/society.xml" },
+  { cat: "\uc815\uce58", url: "https://www.yna.co.kr/rss/politics.xml" },
+  { cat: "\uacbd\uc81c", url: "https://www.yna.co.kr/rss/economy.xml" },
+  { cat: "\uc5f0\uc608", url: "https://www.yna.co.kr/rss/entertainment.xml" },
+  { cat: "\uc2a4\ud3ec\uce20", url: "https://www.yna.co.kr/rss/sports.xml" },
   { cat: "IT", url: "https://rss.etnews.com/Section901.xml" }
 ];
 function _unesc(t) {
@@ -505,7 +505,7 @@ function parseItemsFull(xml) {
     let s = "";
     if (sm) {
       s = _unesc(sm[1].replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
-      if (s.length > 320) s = s.slice(0, 320) + "…";
+      if (s.length > 320) s = s.slice(0, 320) + "\u2026";
     }
     if (t.length >= 8 && l.indexOf("http") === 0) out.push({ t, l, d, s });
   }
@@ -564,36 +564,36 @@ function kstNow() {
   return new Date(Date.now() + 9 * 3600 * 1e3);
 }
 __name(kstNow, "kstNow");
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-05 (YJ): 글·댓글·대화가 '오늘이 무슨 날인지'와 어긋나는 문제 — 개천절 대체공휴일(월요일)인데 일요일 밤에 "낼 월요일 출근"이라고
-//   쓰고, 게시판엔 "내일부터 월요일 시작"이라고 썼다. 요일 이름과 쉬는 날 여부를 따로 계산하던 것이 원인(슬롯 라벨은 '월요일 (평일)').
-//   고친 것: ① 공휴일 표(대체공휴일 포함)로 오늘·내일·다음 출근일·가까운 공휴일을 계산(dayCtx) ② 모든 Gemini 프롬프트에 그 사실과 계절·날씨를
-//   넣는다(ctxBlock) ③ 템플릿(정해진 문구)과 Gemini 결과 모두 요일·휴일·계절·기온·비/눈과 어긋나면 버린다(ctxReject).
-//   공휴일 표는 매년 갱신해야 한다 — 표에 없는 해는 고정일 공휴일(신정·삼일절·어린이날·현충일·광복절·개천절·한글날·성탄절)만 적용한다.
-//   임시공휴일이 생기면 HOLIDAY_NAMES 에 한 줄 추가.
-// ══════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-05 (YJ): \uae00\u00b7\ub313\uae00\u00b7\ub300\ud654\uac00 '\uc624\ub298\uc774 \ubb34\uc2a8 \ub0a0\uc778\uc9c0'\uc640 \uc5b4\uae0b\ub098\ub294 \ubb38\uc81c \u2014 \uac1c\ucc9c\uc808 \ub300\uccb4\uacf5\ud734\uc77c(\uc6d4\uc694\uc77c)\uc778\ub370 \uc77c\uc694\uc77c \ubc24\uc5d0 "\ub0bc \uc6d4\uc694\uc77c \ucd9c\uadfc"\uc774\ub77c\uace0
+//   \uc4f0\uace0, \uac8c\uc2dc\ud310\uc5d4 "\ub0b4\uc77c\ubd80\ud130 \uc6d4\uc694\uc77c \uc2dc\uc791"\uc774\ub77c\uace0 \uc37c\ub2e4. \uc694\uc77c \uc774\ub984\uacfc \uc26c\ub294 \ub0a0 \uc5ec\ubd80\ub97c \ub530\ub85c \uacc4\uc0b0\ud558\ub358 \uac83\uc774 \uc6d0\uc778(\uc2ac\ub86f \ub77c\ubca8\uc740 '\uc6d4\uc694\uc77c (\ud3c9\uc77c)').
+//   \uace0\uce5c \uac83: \u2460 \uacf5\ud734\uc77c \ud45c(\ub300\uccb4\uacf5\ud734\uc77c \ud3ec\ud568)\ub85c \uc624\ub298\u00b7\ub0b4\uc77c\u00b7\ub2e4\uc74c \ucd9c\uadfc\uc77c\u00b7\uac00\uae4c\uc6b4 \uacf5\ud734\uc77c\uc744 \uacc4\uc0b0(dayCtx) \u2461 \ubaa8\ub4e0 Gemini \ud504\ub86c\ud504\ud2b8\uc5d0 \uadf8 \uc0ac\uc2e4\uacfc \uacc4\uc808\u00b7\ub0a0\uc528\ub97c
+//   \ub123\ub294\ub2e4(ctxBlock) \u2462 \ud15c\ud50c\ub9bf(\uc815\ud574\uc9c4 \ubb38\uad6c)\uacfc Gemini \uacb0\uacfc \ubaa8\ub450 \uc694\uc77c\u00b7\ud734\uc77c\u00b7\uacc4\uc808\u00b7\uae30\uc628\u00b7\ube44/\ub208\uacfc \uc5b4\uae0b\ub098\uba74 \ubc84\ub9b0\ub2e4(ctxReject).
+//   \uacf5\ud734\uc77c \ud45c\ub294 \ub9e4\ub144 \uac31\uc2e0\ud574\uc57c \ud55c\ub2e4 \u2014 \ud45c\uc5d0 \uc5c6\ub294 \ud574\ub294 \uace0\uc815\uc77c \uacf5\ud734\uc77c(\uc2e0\uc815\u00b7\uc0bc\uc77c\uc808\u00b7\uc5b4\ub9b0\uc774\ub0a0\u00b7\ud604\ucda9\uc77c\u00b7\uad11\ubcf5\uc808\u00b7\uac1c\ucc9c\uc808\u00b7\ud55c\uae00\ub0a0\u00b7\uc131\ud0c4\uc808)\ub9cc \uc801\uc6a9\ud55c\ub2e4.
+//   \uc784\uc2dc\uacf5\ud734\uc77c\uc774 \uc0dd\uae30\uba74 HOLIDAY_NAMES \uc5d0 \ud55c \uc904 \ucd94\uac00.
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var HOLIDAY_NAMES = {
-  "2026-01-01": "신정", "2026-02-16": "설날 연휴", "2026-02-17": "설날", "2026-02-18": "설날 연휴", "2026-03-01": "삼일절", "2026-03-02": "삼일절 대체공휴일",
-  "2026-05-05": "어린이날", "2026-05-24": "부처님오신날", "2026-05-25": "부처님오신날 대체공휴일", "2026-06-03": "지방선거일", "2026-06-06": "현충일",
-  "2026-08-15": "광복절", "2026-08-17": "광복절 대체공휴일", "2026-09-24": "추석 연휴", "2026-09-25": "추석", "2026-09-26": "추석 연휴",
-  "2026-10-03": "개천절", "2026-10-05": "개천절 대체공휴일", "2026-10-09": "한글날", "2026-12-25": "성탄절",
-  // 2027 — 미리 계산한 값(확정 공고가 나오면 확인)
-  "2027-01-01": "신정", "2027-02-05": "설날 연휴", "2027-02-06": "설날", "2027-02-07": "설날 연휴", "2027-02-08": "설날 대체공휴일", "2027-03-01": "삼일절",
-  "2027-05-05": "어린이날", "2027-05-13": "부처님오신날", "2027-06-06": "현충일", "2027-08-15": "광복절", "2027-08-16": "광복절 대체공휴일",
-  "2027-09-14": "추석 연휴", "2027-09-15": "추석", "2027-09-16": "추석 연휴", "2027-10-03": "개천절", "2027-10-04": "개천절 대체공휴일",
-  "2027-10-09": "한글날", "2027-10-11": "한글날 대체공휴일", "2027-12-25": "성탄절", "2027-12-27": "성탄절 대체공휴일"
+  "2026-01-01": "\uc2e0\uc815", "2026-02-16": "\uc124\ub0a0 \uc5f0\ud734", "2026-02-17": "\uc124\ub0a0", "2026-02-18": "\uc124\ub0a0 \uc5f0\ud734", "2026-03-01": "\uc0bc\uc77c\uc808", "2026-03-02": "\uc0bc\uc77c\uc808 \ub300\uccb4\uacf5\ud734\uc77c",
+  "2026-05-05": "\uc5b4\ub9b0\uc774\ub0a0", "2026-05-24": "\ubd80\ucc98\ub2d8\uc624\uc2e0\ub0a0", "2026-05-25": "\ubd80\ucc98\ub2d8\uc624\uc2e0\ub0a0 \ub300\uccb4\uacf5\ud734\uc77c", "2026-06-03": "\uc9c0\ubc29\uc120\uac70\uc77c", "2026-06-06": "\ud604\ucda9\uc77c",
+  "2026-08-15": "\uad11\ubcf5\uc808", "2026-08-17": "\uad11\ubcf5\uc808 \ub300\uccb4\uacf5\ud734\uc77c", "2026-09-24": "\ucd94\uc11d \uc5f0\ud734", "2026-09-25": "\ucd94\uc11d", "2026-09-26": "\ucd94\uc11d \uc5f0\ud734",
+  "2026-10-03": "\uac1c\ucc9c\uc808", "2026-10-05": "\uac1c\ucc9c\uc808 \ub300\uccb4\uacf5\ud734\uc77c", "2026-10-09": "\ud55c\uae00\ub0a0", "2026-12-25": "\uc131\ud0c4\uc808",
+  // 2027 \u2014 \ubbf8\ub9ac \uacc4\uc0b0\ud55c \uac12(\ud655\uc815 \uacf5\uace0\uac00 \ub098\uc624\uba74 \ud655\uc778)
+  "2027-01-01": "\uc2e0\uc815", "2027-02-05": "\uc124\ub0a0 \uc5f0\ud734", "2027-02-06": "\uc124\ub0a0", "2027-02-07": "\uc124\ub0a0 \uc5f0\ud734", "2027-02-08": "\uc124\ub0a0 \ub300\uccb4\uacf5\ud734\uc77c", "2027-03-01": "\uc0bc\uc77c\uc808",
+  "2027-05-05": "\uc5b4\ub9b0\uc774\ub0a0", "2027-05-13": "\ubd80\ucc98\ub2d8\uc624\uc2e0\ub0a0", "2027-06-06": "\ud604\ucda9\uc77c", "2027-08-15": "\uad11\ubcf5\uc808", "2027-08-16": "\uad11\ubcf5\uc808 \ub300\uccb4\uacf5\ud734\uc77c",
+  "2027-09-14": "\ucd94\uc11d \uc5f0\ud734", "2027-09-15": "\ucd94\uc11d", "2027-09-16": "\ucd94\uc11d \uc5f0\ud734", "2027-10-03": "\uac1c\ucc9c\uc808", "2027-10-04": "\uac1c\ucc9c\uc808 \ub300\uccb4\uacf5\ud734\uc77c",
+  "2027-10-09": "\ud55c\uae00\ub0a0", "2027-10-11": "\ud55c\uae00\ub0a0 \ub300\uccb4\uacf5\ud734\uc77c", "2027-12-25": "\uc131\ud0c4\uc808", "2027-12-27": "\uc131\ud0c4\uc808 \ub300\uccb4\uacf5\ud734\uc77c"
 };
-var HOLIDAY_FIXED = { "01-01": "신정", "03-01": "삼일절", "05-05": "어린이날", "06-06": "현충일", "08-15": "광복절", "10-03": "개천절", "10-09": "한글날", "12-25": "성탄절" };
+var HOLIDAY_FIXED = { "01-01": "\uc2e0\uc815", "03-01": "\uc0bc\uc77c\uc808", "05-05": "\uc5b4\ub9b0\uc774\ub0a0", "06-06": "\ud604\ucda9\uc77c", "08-15": "\uad11\ubcf5\uc808", "10-03": "\uac1c\ucc9c\uc808", "10-09": "\ud55c\uae00\ub0a0", "12-25": "\uc131\ud0c4\uc808" };
 var HOLIDAY_TABLE_YEARS = { "2026": 1, "2027": 1 };
 var HOLIDAYS = Object.keys(HOLIDAY_NAMES);
-var DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
+var DOW_KO = ["\uc77c", "\uc6d4", "\ud654", "\uc218", "\ubaa9", "\uae08", "\ud1a0"];
 function _p2(n) { return ("0" + n).slice(-2); }
 function ymdOf(d) { return d.getUTCFullYear() + "-" + _p2(d.getUTCMonth() + 1) + "-" + _p2(d.getUTCDate()); }
-// ★ 2026-10-09: 공휴일 단일 출처 — 엔진(route-v2)의 /holidays 가 매일 새벽 정부 특일 API 등을 대조해 갱신한다.
-//   여기 표(HOLIDAY_NAMES)는 그 자료를 못 받을 때의 예비다. 받은 자료에 있는 해는 그것만 믿는다(대체공휴일·임시공휴일 포함).
+// \u2605 2026-10-09: \uacf5\ud734\uc77c \ub2e8\uc77c \ucd9c\ucc98 \u2014 \uc5d4\uc9c4(route-v2)\uc758 /holidays \uac00 \ub9e4\uc77c \uc0c8\ubcbd \uc815\ubd80 \ud2b9\uc77c API \ub4f1\uc744 \ub300\uc870\ud574 \uac31\uc2e0\ud55c\ub2e4.
+//   \uc5ec\uae30 \ud45c(HOLIDAY_NAMES)\ub294 \uadf8 \uc790\ub8cc\ub97c \ubabb \ubc1b\uc744 \ub54c\uc758 \uc608\ube44\ub2e4. \ubc1b\uc740 \uc790\ub8cc\uc5d0 \uc788\ub294 \ud574\ub294 \uadf8\uac83\ub9cc \ubbff\ub294\ub2e4(\ub300\uccb4\uacf5\ud734\uc77c\u00b7\uc784\uc2dc\uacf5\ud734\uc77c \ud3ec\ud568).
 var HOLIDAY_LIVE = null, HOLIDAY_LIVE_AT = 0, HOLIDAY_LIVE_TRY = 0;
-// 같은 계정의 워커끼리는 workers.dev 주소로 부를 수 없어(404) 엔진을 직접 부르지 않는다. 대신 갱신 워크플로(refresh-holidays.yml)가 KV 에 올릴 때
-// D1(subway-db)의 holidays_live 표에도 같은 JSON 을 넣어 두고, 여기서는 그것을 읽는다.
+// \uac19\uc740 \uacc4\uc815\uc758 \uc6cc\ucee4\ub07c\ub9ac\ub294 workers.dev \uc8fc\uc18c\ub85c \ubd80\ub97c \uc218 \uc5c6\uc5b4(404) \uc5d4\uc9c4\uc744 \uc9c1\uc811 \ubd80\ub974\uc9c0 \uc54a\ub294\ub2e4. \ub300\uc2e0 \uac31\uc2e0 \uc6cc\ud06c\ud50c\ub85c(refresh-holidays.yml)\uac00 KV \uc5d0 \uc62c\ub9b4 \ub54c
+// D1(subway-db)\uc758 holidays_live \ud45c\uc5d0\ub3c4 \uac19\uc740 JSON \uc744 \ub123\uc5b4 \ub450\uace0, \uc5ec\uae30\uc11c\ub294 \uadf8\uac83\uc744 \uc77d\ub294\ub2e4.
 async function holRefresh(env) {
   const now = Date.now();
   if (now - HOLIDAY_LIVE_AT < 6 * 3600e3 || now - HOLIDAY_LIVE_TRY < 10 * 60e3) return;
@@ -610,7 +610,7 @@ async function holRefresh(env) {
     if (!Object.keys(yrs).length) { await bwDiag(env, "holidays", { ok: false, bad: "empty" }); return; }
     HOLIDAY_LIVE = yrs; HOLIDAY_LIVE_AT = now;
     await bwDiag(env, "holidays", { ok: true, src: o.src, ver: o.version, years: Object.keys(yrs) });
-  } catch (e) { try { await bwDiag(env, "holidays", { ok: false, err: String(e && e.message || e).slice(0, 120) }); } catch (e2) {} /* 예비 표를 그대로 쓴다 */ }
+  } catch (e) { try { await bwDiag(env, "holidays", { ok: false, err: String(e && e.message || e).slice(0, 120) }); } catch (e2) {} /* \uc608\ube44 \ud45c\ub97c \uadf8\ub300\ub85c \uc4f4\ub2e4 */ }
 }
 __name(holRefresh, "holRefresh");
 function holidayName(ymd) {
@@ -636,142 +636,142 @@ __name(dayInfo, "dayInfo");
 function dayCtx(kst) {
   const t = dayInfo(kst), tm = dayInfo(dayShift(kst, 1)), y = dayInfo(dayShift(kst, -1));
   let nw = null, nm = null, i;
-  for (i = 1; i <= 14 && !nw; i++) { const x = dayInfo(dayShift(kst, i)); if (!x.rest) { nw = x; nw.after = i; } }   // 다음 출근·등교일
-  for (i = 1; i <= 7 && !nm; i++) { const x = dayInfo(dayShift(kst, i)); if (x.dow === 1) { nm = x; nm.after = i; } }   // 다음 월요일(오늘 제외)
+  for (i = 1; i <= 14 && !nw; i++) { const x = dayInfo(dayShift(kst, i)); if (!x.rest) { nw = x; nw.after = i; } }   // \ub2e4\uc74c \ucd9c\uadfc\u00b7\ub4f1\uad50\uc77c
+  for (i = 1; i <= 7 && !nm; i++) { const x = dayInfo(dayShift(kst, i)); if (x.dow === 1) { nm = x; nm.after = i; } }   // \ub2e4\uc74c \uc6d4\uc694\uc77c(\uc624\ub298 \uc81c\uc678)
   const hols = [];
-  for (i = 1; i <= 14; i++) { const x = dayInfo(dayShift(kst, i)); if (x.hol && x.dow >= 1 && x.dow <= 5) { x.after = i; hols.push(x); } }   // 평일에 낀 공휴일
+  for (i = 1; i <= 14; i++) { const x = dayInfo(dayShift(kst, i)); if (x.hol && x.dow >= 1 && x.dow <= 5) { x.after = i; hols.push(x); } }   // \ud3c9\uc77c\uc5d0 \ub080 \uacf5\ud734\uc77c
   return { t: t, tm: tm, y: y, nw: nw, nm: nm, hols: hols, hw: !!(t.hol && t.dow >= 1 && t.dow <= 5) };
 }
 __name(dayCtx, "dayCtx");
 function seasonText(md) {
-  if (md >= 301 && md <= 320) return "초봄(아직 쌀쌀, 꽃샘추위)";
-  if (md >= 321 && md <= 430) return "봄(벚꽃철, 일교차 큼)";
-  if (md >= 501 && md <= 531) return "늦봄·초여름(신록, 낮엔 더움)";
-  if (md >= 601 && md <= 620) return "초여름(더워지는 중)";
-  if (md >= 621 && md <= 720) return "장마철(덥고 습함)";
-  if (md >= 721 && md <= 820) return "한여름(무더위·열대야)";
-  if (md >= 821 && md <= 920) return "늦여름~초가을(늦더위 남아 있음)";
-  if (md >= 921 && md <= 1020) return "가을(선선함, 단풍이 들기 시작, 일교차 큼)";
-  if (md >= 1021 && md <= 1120) return "늦가을(쌀쌀, 단풍·낙엽, 겨울옷 꺼내는 시기)";
-  if (md >= 1121 && md <= 1220) return "초겨울(추워지는 중, 첫눈·붕어빵 철)";
-  return "한겨울(추위)";
+  if (md >= 301 && md <= 320) return "\ucd08\ubd04(\uc544\uc9c1 \uc300\uc300, \uaf43\uc0d8\ucd94\uc704)";
+  if (md >= 321 && md <= 430) return "\ubd04(\ubc9a\uaf43\ucca0, \uc77c\uad50\ucc28 \ud07c)";
+  if (md >= 501 && md <= 531) return "\ub2a6\ubd04\u00b7\ucd08\uc5ec\ub984(\uc2e0\ub85d, \ub0ae\uc5d4 \ub354\uc6c0)";
+  if (md >= 601 && md <= 620) return "\ucd08\uc5ec\ub984(\ub354\uc6cc\uc9c0\ub294 \uc911)";
+  if (md >= 621 && md <= 720) return "\uc7a5\ub9c8\ucca0(\ub365\uace0 \uc2b5\ud568)";
+  if (md >= 721 && md <= 820) return "\ud55c\uc5ec\ub984(\ubb34\ub354\uc704\u00b7\uc5f4\ub300\uc57c)";
+  if (md >= 821 && md <= 920) return "\ub2a6\uc5ec\ub984~\ucd08\uac00\uc744(\ub2a6\ub354\uc704 \ub0a8\uc544 \uc788\uc74c)";
+  if (md >= 921 && md <= 1020) return "\uac00\uc744(\uc120\uc120\ud568, \ub2e8\ud48d\uc774 \ub4e4\uae30 \uc2dc\uc791, \uc77c\uad50\ucc28 \ud07c)";
+  if (md >= 1021 && md <= 1120) return "\ub2a6\uac00\uc744(\uc300\uc300, \ub2e8\ud48d\u00b7\ub099\uc5fd, \uaca8\uc6b8\uc637 \uaebc\ub0b4\ub294 \uc2dc\uae30)";
+  if (md >= 1121 && md <= 1220) return "\ucd08\uaca8\uc6b8(\ucd94\uc6cc\uc9c0\ub294 \uc911, \uccab\ub208\u00b7\ubd95\uc5b4\ube75 \ucca0)";
+  return "\ud55c\uaca8\uc6b8(\ucd94\uc704)";
 }
 __name(seasonText, "seasonText");
 function tempWord(t) {
-  if (t <= -5) return "매우 추움(한파)";
-  if (t <= 2) return "한겨울 추위";
-  if (t <= 9) return "춥다";
-  if (t <= 15) return "쌀쌀하다";
-  if (t <= 21) return "선선하고 활동하기 좋다";
-  if (t <= 25) return "포근하거나 약간 따뜻하다";
-  if (t <= 29) return "덥다";
-  return "무더위(폭염)";
+  if (t <= -5) return "\ub9e4\uc6b0 \ucd94\uc6c0(\ud55c\ud30c)";
+  if (t <= 2) return "\ud55c\uaca8\uc6b8 \ucd94\uc704";
+  if (t <= 9) return "\ucda5\ub2e4";
+  if (t <= 15) return "\uc300\uc300\ud558\ub2e4";
+  if (t <= 21) return "\uc120\uc120\ud558\uace0 \ud65c\ub3d9\ud558\uae30 \uc88b\ub2e4";
+  if (t <= 25) return "\ud3ec\uadfc\ud558\uac70\ub098 \uc57d\uac04 \ub530\ub73b\ud558\ub2e4";
+  if (t <= 29) return "\ub365\ub2e4";
+  return "\ubb34\ub354\uc704(\ud3ed\uc5fc)";
 }
 __name(tempWord, "tempWord");
 function skyWord(w) {
   const c = w.code || 0;
-  if (c === 0) return "맑음";
-  if (c <= 3) return "구름 조금~흐림(비·눈 없음)";
-  if (c === 45 || c === 48) return "안개";
-  if (c >= 51 && c <= 57) return "이슬비(비 옴)";
-  if (c >= 61 && c <= 67) return "비 옴";
-  if (c >= 71 && c <= 77 || c === 85 || c === 86) return "눈 옴";
-  if (c >= 80 && c <= 82) return "소나기(비 옴)";
-  if (c >= 95) return "천둥번개·비";
-  return "보통(비·눈 없음)";
+  if (c === 0) return "\ub9d1\uc74c";
+  if (c <= 3) return "\uad6c\ub984 \uc870\uae08~\ud750\ub9bc(\ube44\u00b7\ub208 \uc5c6\uc74c)";
+  if (c === 45 || c === 48) return "\uc548\uac1c";
+  if (c >= 51 && c <= 57) return "\uc774\uc2ac\ube44(\ube44 \uc634)";
+  if (c >= 61 && c <= 67) return "\ube44 \uc634";
+  if (c >= 71 && c <= 77 || c === 85 || c === 86) return "\ub208 \uc634";
+  if (c >= 80 && c <= 82) return "\uc18c\ub098\uae30(\ube44 \uc634)";
+  if (c >= 95) return "\ucc9c\ub465\ubc88\uac1c\u00b7\ube44";
+  return "\ubcf4\ud1b5(\ube44\u00b7\ub208 \uc5c6\uc74c)";
 }
 __name(skyWord, "skyWord");
-var DAY_RULES = "규칙: ① 요일·휴일을 정확히. 쉬는 날(주말·공휴일)에는 '출근길·등교·회사·수업·월요병' 같은 말을 오늘의 일상으로 쓰지 마라(휴일 출근·특근·알바를 일부러 말하는 경우만 가능). ② 내일이 쉬는 날이면 '내일 출근·내일 월요일·월요병' 금지, 내일이 평일이면 '내일도 쉼' 금지. 월요일이어도 공휴일이면 월요일 출근 얘기 금지. ③ 계절·기온에 안 맞는 소재 금지(가을에 장마·빙수·한겨울 패딩 같은 것). ④ 비·눈이 안 오면 비·눈 얘기 금지, 비가 오면 '날씨 좋다' 금지. ⑤ 오늘이 평일 공휴일이면 '주말' 대신 '휴일·공휴일'이라고 말한다.";
+var DAY_RULES = "\uaddc\uce59: \u2460 \uc694\uc77c\u00b7\ud734\uc77c\uc744 \uc815\ud655\ud788. \uc26c\ub294 \ub0a0(\uc8fc\ub9d0\u00b7\uacf5\ud734\uc77c)\uc5d0\ub294 '\ucd9c\uadfc\uae38\u00b7\ub4f1\uad50\u00b7\ud68c\uc0ac\u00b7\uc218\uc5c5\u00b7\uc6d4\uc694\ubcd1' \uac19\uc740 \ub9d0\uc744 \uc624\ub298\uc758 \uc77c\uc0c1\uc73c\ub85c \uc4f0\uc9c0 \ub9c8\ub77c(\ud734\uc77c \ucd9c\uadfc\u00b7\ud2b9\uadfc\u00b7\uc54c\ubc14\ub97c \uc77c\ubd80\ub7ec \ub9d0\ud558\ub294 \uacbd\uc6b0\ub9cc \uac00\ub2a5). \u2461 \ub0b4\uc77c\uc774 \uc26c\ub294 \ub0a0\uc774\uba74 '\ub0b4\uc77c \ucd9c\uadfc\u00b7\ub0b4\uc77c \uc6d4\uc694\uc77c\u00b7\uc6d4\uc694\ubcd1' \uae08\uc9c0, \ub0b4\uc77c\uc774 \ud3c9\uc77c\uc774\uba74 '\ub0b4\uc77c\ub3c4 \uc27c' \uae08\uc9c0. \uc6d4\uc694\uc77c\uc774\uc5b4\ub3c4 \uacf5\ud734\uc77c\uc774\uba74 \uc6d4\uc694\uc77c \ucd9c\uadfc \uc598\uae30 \uae08\uc9c0. \u2462 \uacc4\uc808\u00b7\uae30\uc628\uc5d0 \uc548 \ub9de\ub294 \uc18c\uc7ac \uae08\uc9c0(\uac00\uc744\uc5d0 \uc7a5\ub9c8\u00b7\ube59\uc218\u00b7\ud55c\uaca8\uc6b8 \ud328\ub529 \uac19\uc740 \uac83). \u2463 \ube44\u00b7\ub208\uc774 \uc548 \uc624\uba74 \ube44\u00b7\ub208 \uc598\uae30 \uae08\uc9c0, \ube44\uac00 \uc624\uba74 '\ub0a0\uc528 \uc88b\ub2e4' \uae08\uc9c0. \u2464 \uc624\ub298\uc774 \ud3c9\uc77c \uacf5\ud734\uc77c\uc774\uba74 '\uc8fc\ub9d0' \ub300\uc2e0 '\ud734\uc77c\u00b7\uacf5\ud734\uc77c'\uc774\ub77c\uace0 \ub9d0\ud55c\ub2e4.";
 function ctxBlock(kst, w, wcat) {
   const c = dayCtx(kst), t = c.t, tm = c.tm;
-  const dn = function(x) { return x.m + "월 " + x.d + "일 " + DOW_KO[x.dow] + "요일"; };
-  const kindOf = function(x) { return x.hol ? (x.dow >= 1 && x.dow <= 5 ? x.hol + "이라 평일이지만 쉬는 날(출근·등교 없음)" : x.hol + "(쉬는 날)") : x.dow === 0 || x.dow === 6 ? "주말(쉬는 날)" : "평일(출근·등교하는 날)"; };
-  const today = "오늘: " + dn(t) + " — " + kindOf(t);
-  const tomo = "내일: " + DOW_KO[tm.dow] + "요일 — " + kindOf(tm);
-  const nw = c.nw ? "다음 출근·등교일: " + (c.nw.after === 1 ? "내일" : c.nw.after + "일 뒤") + " " + DOW_KO[c.nw.dow] + "요일" : "";
-  const up = c.hols.length ? "가까운 공휴일: " + c.hols.slice(0, 2).map(function(h) { return h.m + "/" + h.d + "(" + DOW_KO[h.dow] + ") " + h.hol + " — " + h.after + "일 뒤"; }).join(", ") : "";
-  const wx = w ? "서울 현재 " + w.temp + "도(" + tempWord(w.temp) + "), 하늘: " + skyWord(w) : "날씨 정보 없음(날씨 얘기는 하지 마라)";
-  return "\n[날짜·계절·날씨 — 사실이다. 이와 어긋나는 말은 쓰지 마라]\n" + [today, tomo, nw, up, "계절: " + seasonText(t.md), wx].filter(Boolean).join("\n") + "\n" + DAY_RULES;
+  const dn = function(x) { return x.m + "\uc6d4 " + x.d + "\uc77c " + DOW_KO[x.dow] + "\uc694\uc77c"; };
+  const kindOf = function(x) { return x.hol ? (x.dow >= 1 && x.dow <= 5 ? x.hol + "\uc774\ub77c \ud3c9\uc77c\uc774\uc9c0\ub9cc \uc26c\ub294 \ub0a0(\ucd9c\uadfc\u00b7\ub4f1\uad50 \uc5c6\uc74c)" : x.hol + "(\uc26c\ub294 \ub0a0)") : x.dow === 0 || x.dow === 6 ? "\uc8fc\ub9d0(\uc26c\ub294 \ub0a0)" : "\ud3c9\uc77c(\ucd9c\uadfc\u00b7\ub4f1\uad50\ud558\ub294 \ub0a0)"; };
+  const today = "\uc624\ub298: " + dn(t) + " \u2014 " + kindOf(t);
+  const tomo = "\ub0b4\uc77c: " + DOW_KO[tm.dow] + "\uc694\uc77c \u2014 " + kindOf(tm);
+  const nw = c.nw ? "\ub2e4\uc74c \ucd9c\uadfc\u00b7\ub4f1\uad50\uc77c: " + (c.nw.after === 1 ? "\ub0b4\uc77c" : c.nw.after + "\uc77c \ub4a4") + " " + DOW_KO[c.nw.dow] + "\uc694\uc77c" : "";
+  const up = c.hols.length ? "\uac00\uae4c\uc6b4 \uacf5\ud734\uc77c: " + c.hols.slice(0, 2).map(function(h) { return h.m + "/" + h.d + "(" + DOW_KO[h.dow] + ") " + h.hol + " \u2014 " + h.after + "\uc77c \ub4a4"; }).join(", ") : "";
+  const wx = w ? "\uc11c\uc6b8 \ud604\uc7ac " + w.temp + "\ub3c4(" + tempWord(w.temp) + "), \ud558\ub298: " + skyWord(w) : "\ub0a0\uc528 \uc815\ubcf4 \uc5c6\uc74c(\ub0a0\uc528 \uc598\uae30\ub294 \ud558\uc9c0 \ub9c8\ub77c)";
+  return "\n[\ub0a0\uc9dc\u00b7\uacc4\uc808\u00b7\ub0a0\uc528 \u2014 \uc0ac\uc2e4\uc774\ub2e4. \uc774\uc640 \uc5b4\uae0b\ub098\ub294 \ub9d0\uc740 \uc4f0\uc9c0 \ub9c8\ub77c]\n" + [today, tomo, nw, up, "\uacc4\uc808: " + seasonText(t.md), wx].filter(Boolean).join("\n") + "\n" + DAY_RULES;
 }
 __name(ctxBlock, "ctxBlock");
-// 평일 공휴일에 '주말'이라고 쓴 것은 '휴일'로 바꾼다(이번 주말·다음 주말처럼 다른 주말을 가리키는 말은 그대로).
+// \ud3c9\uc77c \uacf5\ud734\uc77c\uc5d0 '\uc8fc\ub9d0'\uc774\ub77c\uace0 \uc4f4 \uac83\uc740 '\ud734\uc77c'\ub85c \ubc14\uafbc\ub2e4(\uc774\ubc88 \uc8fc\ub9d0\u00b7\ub2e4\uc74c \uc8fc\ub9d0\ucc98\ub7fc \ub2e4\ub978 \uc8fc\ub9d0\uc744 \uac00\ub9ac\ud0a4\ub294 \ub9d0\uc740 \uadf8\ub300\ub85c).
 function holFix(text, kst) {
   const s = String(text == null ? "" : text);
   if (!dayCtx(kst).hw) return s;
-  return s.replace(/(이번 |다음 |담 |지난 |다가오는 )?주말/g, function(m, pre) { return pre ? m : "휴일"; });
+  return s.replace(/(\uc774\ubc88 |\ub2e4\uc74c |\ub2f4 |\uc9c0\ub09c |\ub2e4\uac00\uc624\ub294 )?\uc8fc\ub9d0/g, function(m, pre) { return pre ? m : "\ud734\uc77c"; });
 }
 __name(holFix, "holFix");
-// 계절어 — [정규식, [[시작 MMDD, 끝 MMDD], ...]] 이 기간 밖에서 나오면 어색하다
+// \uacc4\uc808\uc5b4 \u2014 [\uc815\uaddc\uc2dd, [[\uc2dc\uc791 MMDD, \ub05d MMDD], ...]] \uc774 \uae30\uac04 \ubc16\uc5d0\uc11c \ub098\uc624\uba74 \uc5b4\uc0c9\ud558\ub2e4
 var SEASON_RULES = [
-  [/장마/, [[615, 731]]], [/폭염|열대야|무더위|찜통|삼복|복날/, [[601, 915]]], [/빙수|물놀이|워터파크|해수욕/, [[501, 930]]],
-  [/에어컨/, [[501, 1015]]], [/모기/, [[601, 1010]]], [/히터/, [[1020, 415]]], [/붕어빵|호빵|군고구마/, [[1001, 430]]],
-  [/패딩|목도리|장갑|핫팩|털장화/, [[1020, 415]]], [/한파|혹한/, [[1115, 315]]], [/첫눈|눈사람|폭설|눈길|빙판/, [[1101, 331]]],
-  [/벚꽃|꽃구경/, [[320, 515]]], [/황사/, [[301, 531]]], [/단풍|낙엽/, [[925, 1205]]], [/은행잎/, [[1001, 1130]]],
-  [/크리스마스|산타|캐롤/, [[1115, 1231]]], [/송년|연말/, [[1201, 1231]]], [/새해|신년|새해복/, [[1226, 131]]],
-  [/개강/, [[225, 325], [825, 925]]], [/종강/, [[610, 705], [1205, 1231]]], [/방학/, [[620, 831], [1215, 229]]],
-  [/수능/, [[1001, 1130]]], [/중간고사/, [[405, 505], [1005, 1031]]], [/기말고사/, [[601, 701], [1201, 1231]]]
+  [/\uc7a5\ub9c8/, [[615, 731]]], [/\ud3ed\uc5fc|\uc5f4\ub300\uc57c|\ubb34\ub354\uc704|\ucc1c\ud1b5|\uc0bc\ubcf5|\ubcf5\ub0a0/, [[601, 915]]], [/\ube59\uc218|\ubb3c\ub180\uc774|\uc6cc\ud130\ud30c\ud06c|\ud574\uc218\uc695/, [[501, 930]]],
+  [/\uc5d0\uc5b4\ucee8/, [[501, 1015]]], [/\ubaa8\uae30/, [[601, 1010]]], [/\ud788\ud130/, [[1020, 415]]], [/\ubd95\uc5b4\ube75|\ud638\ube75|\uad70\uace0\uad6c\ub9c8/, [[1001, 430]]],
+  [/\ud328\ub529|\ubaa9\ub3c4\ub9ac|\uc7a5\uac11|\ud56b\ud329|\ud138\uc7a5\ud654/, [[1020, 415]]], [/\ud55c\ud30c|\ud639\ud55c/, [[1115, 315]]], [/\uccab\ub208|\ub208\uc0ac\ub78c|\ud3ed\uc124|\ub208\uae38|\ube59\ud310/, [[1101, 331]]],
+  [/\ubc9a\uaf43|\uaf43\uad6c\uacbd/, [[320, 515]]], [/\ud669\uc0ac/, [[301, 531]]], [/\ub2e8\ud48d|\ub099\uc5fd/, [[925, 1205]]], [/\uc740\ud589\uc78e/, [[1001, 1130]]],
+  [/\ud06c\ub9ac\uc2a4\ub9c8\uc2a4|\uc0b0\ud0c0|\uce90\ub864/, [[1115, 1231]]], [/\uc1a1\ub144|\uc5f0\ub9d0/, [[1201, 1231]]], [/\uc0c8\ud574|\uc2e0\ub144|\uc0c8\ud574\ubcf5/, [[1226, 131]]],
+  [/\uac1c\uac15/, [[225, 325], [825, 925]]], [/\uc885\uac15/, [[610, 705], [1205, 1231]]], [/\ubc29\ud559/, [[620, 831], [1215, 229]]],
+  [/\uc218\ub2a5/, [[1001, 1130]]], [/\uc911\uac04\uace0\uc0ac/, [[405, 505], [1005, 1031]]], [/\uae30\ub9d0\uace0\uc0ac/, [[601, 701], [1201, 1231]]]
 ];
-// 명절·기념일어 — 그 공휴일 앞뒤 10일 안에서만
+// \uba85\uc808\u00b7\uae30\ub150\uc77c\uc5b4 \u2014 \uadf8 \uacf5\ud734\uc77c \uc55e\ub4a4 10\uc77c \uc548\uc5d0\uc11c\ub9cc
 var HOLIDAY_WORDS = [
-  [/추석|한가위|귀성|귀경/, ["추석"]], [/설날|세배|세뱃돈/, ["설날"]], [/명절/, ["추석", "설날"]], [/개천절/, ["개천절"]], [/한글날/, ["한글날"]],
-  [/어린이날/, ["어린이날"]], [/광복절/, ["광복절"]], [/삼일절/, ["삼일절"]], [/현충일/, ["현충일"]], [/부처님오신날|석가탄신일/, ["부처님오신날"]]
+  [/\ucd94\uc11d|\ud55c\uac00\uc704|\uadc0\uc131|\uadc0\uacbd/, ["\ucd94\uc11d"]], [/\uc124\ub0a0|\uc138\ubc30|\uc138\ubc43\ub3c8/, ["\uc124\ub0a0"]], [/\uba85\uc808/, ["\ucd94\uc11d", "\uc124\ub0a0"]], [/\uac1c\ucc9c\uc808/, ["\uac1c\ucc9c\uc808"]], [/\ud55c\uae00\ub0a0/, ["\ud55c\uae00\ub0a0"]],
+  [/\uc5b4\ub9b0\uc774\ub0a0/, ["\uc5b4\ub9b0\uc774\ub0a0"]], [/\uad11\ubcf5\uc808/, ["\uad11\ubcf5\uc808"]], [/\uc0bc\uc77c\uc808/, ["\uc0bc\uc77c\uc808"]], [/\ud604\ucda9\uc77c/, ["\ud604\ucda9\uc77c"]], [/\ubd80\ucc98\ub2d8\uc624\uc2e0\ub0a0|\uc11d\uac00\ud0c4\uc2e0\uc77c/, ["\ubd80\ucc98\ub2d8\uc624\uc2e0\ub0a0"]]
 ];
 function _inRange(md, r) { return r[0] <= r[1] ? (md >= r[0] && md <= r[1]) : (md >= r[0] || md <= r[1]); }
-// 어긋나는 점이 있으면 이유(짧은 문자열), 없으면 "" — 템플릿을 고를 때와 Gemini 결과를 거를 때 모두 쓴다.
+// \uc5b4\uae0b\ub098\ub294 \uc810\uc774 \uc788\uc73c\uba74 \uc774\uc720(\uc9e7\uc740 \ubb38\uc790\uc5f4), \uc5c6\uc73c\uba74 "" \u2014 \ud15c\ud50c\ub9bf\uc744 \uace0\ub97c \ub54c\uc640 Gemini \uacb0\uacfc\ub97c \uac70\ub97c \ub54c \ubaa8\ub450 \uc4f4\ub2e4.
 function ctxReject(text, kst, w, cOpt) {
   const s = String(text == null ? "" : text);
   if (!s) return "";
   const c = cOpt || dayCtx(kst), t = c.t, tm = c.tm;
   let m;
-  const NEG = /아니|없|안 ?(가|해|하|간|나|와|갈)|쉬|쉰|휴일|공휴일|연휴|대체|노는|놀|부럽/;
-  // 내일이 쉬는 날인데 내일 출근·월요일·수업 얘기
-  const re1 = /(내일|낼)[^.!?\n]{0,10}?(출근|등교|월요|월욜|회사|학교|수업|일가|일 가|근무|야근|지각|개강|일 해|일해)/g;
-  while ((m = re1.exec(s))) { if (tm.rest && !NEG.test(s.slice(m.index, m.index + m[0].length + 8))) return "내일은 쉬는 날인데 출근·월요일 얘기"; }
-  // 내일이 평일인데 내일도 쉰다고
-  if (!tm.rest && /(내일|낼)(도|까지)? ?(하루 더 )?(쉬는|쉰다|쉼|휴일|공휴일|연휴)/.test(s) && !/안 ?쉬|못 ?쉬/.test(s)) return "내일은 평일인데 쉰다고 함";
-  // '내일 X요일'·'오늘 X요일' 이 실제와 다름
-  m = /(내일|낼)(부터|은|도|이)?\s*([일월화수목금토])(요일|욜)/.exec(s);
-  if (m && DOW_KO.indexOf(m[3]) !== tm.dow) return "내일 요일이 틀림";
-  m = /오늘\s*(은|도)?\s*([일월화수목금토])(요일|욜)/.exec(s);
-  if (m && DOW_KO.indexOf(m[2]) !== t.dow) return "오늘 요일이 틀림";
-  // 요일 이름 — 어제·오늘·내일 요일이 아니면 '이번·다음·지난' 같은 말이 붙어야 한다(화요일에 "금요일 오후의 설렘" 같은 글 방지)
-  if (!/이번|다음|담주|담 |지난|저번|주 /.test(s)) {
-    const reD = /([일월화수목금토])(요일|욜)/g;
-    while ((m = reD.exec(s))) { const d = DOW_KO.indexOf(m[1]); if (d !== t.dow && d !== tm.dow && d !== c.y.dow) return "요일 안 맞음:" + m[1]; }
-    if (/불금/.test(s) && t.dow !== 5 && t.dow !== 4) return "불금인데 금요일이 아님";
+  const NEG = /\uc544\ub2c8|\uc5c6|\uc548 ?(\uac00|\ud574|\ud558|\uac04|\ub098|\uc640|\uac08)|\uc26c|\uc270|\ud734\uc77c|\uacf5\ud734\uc77c|\uc5f0\ud734|\ub300\uccb4|\ub178\ub294|\ub180|\ubd80\ub7fd/;
+  // \ub0b4\uc77c\uc774 \uc26c\ub294 \ub0a0\uc778\ub370 \ub0b4\uc77c \ucd9c\uadfc\u00b7\uc6d4\uc694\uc77c\u00b7\uc218\uc5c5 \uc598\uae30
+  const re1 = /(\ub0b4\uc77c|\ub0bc)[^.!?\n]{0,10}?(\ucd9c\uadfc|\ub4f1\uad50|\uc6d4\uc694|\uc6d4\uc69c|\ud68c\uc0ac|\ud559\uad50|\uc218\uc5c5|\uc77c\uac00|\uc77c \uac00|\uadfc\ubb34|\uc57c\uadfc|\uc9c0\uac01|\uac1c\uac15|\uc77c \ud574|\uc77c\ud574)/g;
+  while ((m = re1.exec(s))) { if (tm.rest && !NEG.test(s.slice(m.index, m.index + m[0].length + 8))) return "\ub0b4\uc77c\uc740 \uc26c\ub294 \ub0a0\uc778\ub370 \ucd9c\uadfc\u00b7\uc6d4\uc694\uc77c \uc598\uae30"; }
+  // \ub0b4\uc77c\uc774 \ud3c9\uc77c\uc778\ub370 \ub0b4\uc77c\ub3c4 \uc270\ub2e4\uace0
+  if (!tm.rest && /(\ub0b4\uc77c|\ub0bc)(\ub3c4|\uae4c\uc9c0)? ?(\ud558\ub8e8 \ub354 )?(\uc26c\ub294|\uc270\ub2e4|\uc27c|\ud734\uc77c|\uacf5\ud734\uc77c|\uc5f0\ud734)/.test(s) && !/\uc548 ?\uc26c|\ubabb ?\uc26c/.test(s)) return "\ub0b4\uc77c\uc740 \ud3c9\uc77c\uc778\ub370 \uc270\ub2e4\uace0 \ud568";
+  // '\ub0b4\uc77c X\uc694\uc77c'\u00b7'\uc624\ub298 X\uc694\uc77c' \uc774 \uc2e4\uc81c\uc640 \ub2e4\ub984
+  m = /(\ub0b4\uc77c|\ub0bc)(\ubd80\ud130|\uc740|\ub3c4|\uc774)?\s*([\uc77c\uc6d4\ud654\uc218\ubaa9\uae08\ud1a0])(\uc694\uc77c|\uc69c)/.exec(s);
+  if (m && DOW_KO.indexOf(m[3]) !== tm.dow) return "\ub0b4\uc77c \uc694\uc77c\uc774 \ud2c0\ub9bc";
+  m = /\uc624\ub298\s*(\uc740|\ub3c4)?\s*([\uc77c\uc6d4\ud654\uc218\ubaa9\uae08\ud1a0])(\uc694\uc77c|\uc69c)/.exec(s);
+  if (m && DOW_KO.indexOf(m[2]) !== t.dow) return "\uc624\ub298 \uc694\uc77c\uc774 \ud2c0\ub9bc";
+  // \uc694\uc77c \uc774\ub984 \u2014 \uc5b4\uc81c\u00b7\uc624\ub298\u00b7\ub0b4\uc77c \uc694\uc77c\uc774 \uc544\ub2c8\uba74 '\uc774\ubc88\u00b7\ub2e4\uc74c\u00b7\uc9c0\ub09c' \uac19\uc740 \ub9d0\uc774 \ubd99\uc5b4\uc57c \ud55c\ub2e4(\ud654\uc694\uc77c\uc5d0 "\uae08\uc694\uc77c \uc624\ud6c4\uc758 \uc124\ub818" \uac19\uc740 \uae00 \ubc29\uc9c0)
+  if (!/\uc774\ubc88|\ub2e4\uc74c|\ub2f4\uc8fc|\ub2f4 |\uc9c0\ub09c|\uc800\ubc88|\uc8fc /.test(s)) {
+    const reD = /([\uc77c\uc6d4\ud654\uc218\ubaa9\uae08\ud1a0])(\uc694\uc77c|\uc69c)/g;
+    while ((m = reD.exec(s))) { const d = DOW_KO.indexOf(m[1]); if (d !== t.dow && d !== tm.dow && d !== c.y.dow) return "\uc694\uc77c \uc548 \ub9de\uc74c:" + m[1]; }
+    if (/\ubd88\uae08/.test(s) && t.dow !== 5 && t.dow !== 4) return "\ubd88\uae08\uc778\ub370 \uae08\uc694\uc77c\uc774 \uc544\ub2d8";
   }
-  // 다음 월요일이 공휴일인데 '담주 월요일'
-  if (c.nm && c.nm.rest && /(담|다음)\s*주?\s*(월요일|월욜|월요)/.test(s)) return "다음 월요일은 휴일";
-  // 월요병 — 다음 출근일이 월요일(또는 오늘이 근무하는 월요일)일 때만
-  if (/월요병/.test(s)) {
+  // \ub2e4\uc74c \uc6d4\uc694\uc77c\uc774 \uacf5\ud734\uc77c\uc778\ub370 '\ub2f4\uc8fc \uc6d4\uc694\uc77c'
+  if (c.nm && c.nm.rest && /(\ub2f4|\ub2e4\uc74c)\s*\uc8fc?\s*(\uc6d4\uc694\uc77c|\uc6d4\uc69c|\uc6d4\uc694)/.test(s)) return "\ub2e4\uc74c \uc6d4\uc694\uc77c\uc740 \ud734\uc77c";
+  // \uc6d4\uc694\ubcd1 \u2014 \ub2e4\uc74c \ucd9c\uadfc\uc77c\uc774 \uc6d4\uc694\uc77c(\ub610\ub294 \uc624\ub298\uc774 \uadfc\ubb34\ud558\ub294 \uc6d4\uc694\uc77c)\uc77c \ub54c\ub9cc
+  if (/\uc6d4\uc694\ubcd1/.test(s)) {
     const ok = (t.dow === 1 && !t.rest) || (c.nw && c.nw.dow === 1 && c.nw.after <= 3);
-    if (!ok) return "월요병인데 다음 출근일이 월요일이 아님";
+    if (!ok) return "\uc6d4\uc694\ubcd1\uc778\ub370 \ub2e4\uc74c \ucd9c\uadfc\uc77c\uc774 \uc6d4\uc694\uc77c\uc774 \uc544\ub2d8";
   }
-  // 쉬는 날에 출퇴근·수업 일상
-  if (t.rest && /출근길|퇴근길|출근 ?시간|퇴근 ?시간|출근 ?러시|퇴근 ?러시|등굣길|하굣길|등교|급식|1교시|야자|지옥철|월급루팡/.test(s) && !/휴일|공휴일|주말|특근|알바|내일|낼|담|다음|연휴|어제|지난|부럽|쉬/.test(s)) return "쉬는 날에 출퇴근 얘기";
-  // 월요일이 공휴일인데 평소 월요일처럼 말함
-  if (t.dow === 1 && t.rest && /월요일|월욜|월요병/.test(s) && !/휴일|공휴일|대체|쉬|연휴|개천절|담|다음|지난/.test(s)) return "휴일인 월요일을 평소 월요일처럼 말함";
-  // 평일인데 '오늘 주말/휴일'
-  if (!t.rest && /(오늘|지금)[^.!?\n]{0,6}(주말|휴일|공휴일|연휴)/.test(s) && !/내일|낼|담|다음|이번|언제|처럼|같/.test(s)) return "평일에 휴일 얘기";
-  // 계절어
+  // \uc26c\ub294 \ub0a0\uc5d0 \ucd9c\ud1f4\uadfc\u00b7\uc218\uc5c5 \uc77c\uc0c1
+  if (t.rest && /\ucd9c\uadfc\uae38|\ud1f4\uadfc\uae38|\ucd9c\uadfc ?\uc2dc\uac04|\ud1f4\uadfc ?\uc2dc\uac04|\ucd9c\uadfc ?\ub7ec\uc2dc|\ud1f4\uadfc ?\ub7ec\uc2dc|\ub4f1\uad63\uae38|\ud558\uad63\uae38|\ub4f1\uad50|\uae09\uc2dd|1\uad50\uc2dc|\uc57c\uc790|\uc9c0\uc625\ucca0|\uc6d4\uae09\ub8e8\ud321/.test(s) && !/\ud734\uc77c|\uacf5\ud734\uc77c|\uc8fc\ub9d0|\ud2b9\uadfc|\uc54c\ubc14|\ub0b4\uc77c|\ub0bc|\ub2f4|\ub2e4\uc74c|\uc5f0\ud734|\uc5b4\uc81c|\uc9c0\ub09c|\ubd80\ub7fd|\uc26c/.test(s)) return "\uc26c\ub294 \ub0a0\uc5d0 \ucd9c\ud1f4\uadfc \uc598\uae30";
+  // \uc6d4\uc694\uc77c\uc774 \uacf5\ud734\uc77c\uc778\ub370 \ud3c9\uc18c \uc6d4\uc694\uc77c\ucc98\ub7fc \ub9d0\ud568
+  if (t.dow === 1 && t.rest && /\uc6d4\uc694\uc77c|\uc6d4\uc69c|\uc6d4\uc694\ubcd1/.test(s) && !/\ud734\uc77c|\uacf5\ud734\uc77c|\ub300\uccb4|\uc26c|\uc5f0\ud734|\uac1c\ucc9c\uc808|\ub2f4|\ub2e4\uc74c|\uc9c0\ub09c/.test(s)) return "\ud734\uc77c\uc778 \uc6d4\uc694\uc77c\uc744 \ud3c9\uc18c \uc6d4\uc694\uc77c\ucc98\ub7fc \ub9d0\ud568";
+  // \ud3c9\uc77c\uc778\ub370 '\uc624\ub298 \uc8fc\ub9d0/\ud734\uc77c'
+  if (!t.rest && /(\uc624\ub298|\uc9c0\uae08)[^.!?\n]{0,6}(\uc8fc\ub9d0|\ud734\uc77c|\uacf5\ud734\uc77c|\uc5f0\ud734)/.test(s) && !/\ub0b4\uc77c|\ub0bc|\ub2f4|\ub2e4\uc74c|\uc774\ubc88|\uc5b8\uc81c|\ucc98\ub7fc|\uac19/.test(s)) return "\ud3c9\uc77c\uc5d0 \ud734\uc77c \uc598\uae30";
+  // \uacc4\uc808\uc5b4
   for (let i = 0; i < SEASON_RULES.length; i++) {
-    if (SEASON_RULES[i][0].test(s) && !SEASON_RULES[i][1].some(function(r) { return _inRange(t.md, r); })) return "계절 안 맞음:" + SEASON_RULES[i][0].source.slice(0, 8);
+    if (SEASON_RULES[i][0].test(s) && !SEASON_RULES[i][1].some(function(r) { return _inRange(t.md, r); })) return "\uacc4\uc808 \uc548 \ub9de\uc74c:" + SEASON_RULES[i][0].source.slice(0, 8);
   }
-  // 명절·기념일어
+  // \uba85\uc808\u00b7\uae30\ub150\uc77c\uc5b4
   for (let i = 0; i < HOLIDAY_WORDS.length; i++) {
     if (!HOLIDAY_WORDS[i][0].test(s)) continue;
     let near = false;
     for (let k = -10; k <= 10 && !near; k++) { const h = holidayName(ymdOf(dayShift(kst, k))); if (h && HOLIDAY_WORDS[i][1].some(function(n) { return h.indexOf(n) >= 0; })) near = true; }
-    if (!near) return "기념일 안 맞음:" + HOLIDAY_WORDS[i][0].source.slice(0, 8);
+    if (!near) return "\uae30\ub150\uc77c \uc548 \ub9de\uc74c:" + HOLIDAY_WORDS[i][0].source.slice(0, 8);
   }
-  // 기온·날씨
+  // \uae30\uc628\u00b7\ub0a0\uc528
   if (w && typeof w.temp === "number") {
-    if (w.temp >= 24 && /한파|패딩|핫팩|목도리|장갑|붕어빵|호빵|군고구마|히터/.test(s)) return "기온이 높은데 추위 얘기";
-    if (w.temp <= 10 && /폭염|열대야|무더위|찜통|땀 ?(뻘뻘|줄줄|범벅)|에어컨 ?(빵빵|세|켜)|빙수|덥다|더워|더운/.test(s)) return "기온이 낮은데 더위 얘기";
+    if (w.temp >= 24 && /\ud55c\ud30c|\ud328\ub529|\ud56b\ud329|\ubaa9\ub3c4\ub9ac|\uc7a5\uac11|\ubd95\uc5b4\ube75|\ud638\ube75|\uad70\uace0\uad6c\ub9c8|\ud788\ud130/.test(s)) return "\uae30\uc628\uc774 \ub192\uc740\ub370 \ucd94\uc704 \uc598\uae30";
+    if (w.temp <= 10 && /\ud3ed\uc5fc|\uc5f4\ub300\uc57c|\ubb34\ub354\uc704|\ucc1c\ud1b5|\ub540 ?(\ubed8\ubed8|\uc904\uc904|\ubc94\ubc85)|\uc5d0\uc5b4\ucee8 ?(\ube75\ube75|\uc138|\ucf1c)|\ube59\uc218|\ub365\ub2e4|\ub354\uc6cc|\ub354\uc6b4/.test(s)) return "\uae30\uc628\uc774 \ub0ae\uc740\ub370 \ub354\uc704 \uc598\uae30";
     const cat = weatherCat(w);
-    if (cat !== "rain" && /비\s?(가\s?)?(오|와|옴|온다|내려|내리|쏟)|빗길|빗소리|장대비|소나기|우산/.test(s)) return "비가 안 오는데 비 얘기";
-    if (cat !== "snow" && /눈\s?(이\s?)?(오|와|옴|온다|내려|내리)|첫눈|폭설/.test(s)) return "눈이 안 오는데 눈 얘기";
-    if ((cat === "rain" || cat === "snow") && /맑|화창|햇빛|햇살|날씨 ?(가 )?(너무 |진짜 )?좋/.test(s)) return "비·눈이 오는데 맑다고 함";
+    if (cat !== "rain" && /\ube44\s?(\uac00\s?)?(\uc624|\uc640|\uc634|\uc628\ub2e4|\ub0b4\ub824|\ub0b4\ub9ac|\uc3df)|\ube57\uae38|\ube57\uc18c\ub9ac|\uc7a5\ub300\ube44|\uc18c\ub098\uae30|\uc6b0\uc0b0/.test(s)) return "\ube44\uac00 \uc548 \uc624\ub294\ub370 \ube44 \uc598\uae30";
+    if (cat !== "snow" && /\ub208\s?(\uc774\s?)?(\uc624|\uc640|\uc634|\uc628\ub2e4|\ub0b4\ub824|\ub0b4\ub9ac)|\uccab\ub208|\ud3ed\uc124/.test(s)) return "\ub208\uc774 \uc548 \uc624\ub294\ub370 \ub208 \uc598\uae30";
+    if ((cat === "rain" || cat === "snow") && /\ub9d1|\ud654\ucc3d|\ud587\ube5b|\ud587\uc0b4|\ub0a0\uc528 ?(\uac00 )?(\ub108\ubb34 |\uc9c4\uc9dc )?\uc88b/.test(s)) return "\ube44\u00b7\ub208\uc774 \uc624\ub294\ub370 \ub9d1\ub2e4\uace0 \ud568";
   }
   return "";
 }
@@ -790,7 +790,7 @@ function pickPool(kst) {
 __name(pickPool, "pickPool");
 var _wxCache = { at: 0, v: null };
 async function getWeather() {
-  // ★ 2026-10-05: 10분 캐시 — 글·댓글·대화·반응이 모두 날씨를 쓰게 됐다(호출이 몰리지 않게). 실패하면 3시간 안의 옛 값을 쓴다.
+  // \u2605 2026-10-05: 10\ubd84 \uce90\uc2dc \u2014 \uae00\u00b7\ub313\uae00\u00b7\ub300\ud654\u00b7\ubc18\uc751\uc774 \ubaa8\ub450 \ub0a0\uc528\ub97c \uc4f0\uac8c \ub410\ub2e4(\ud638\ucd9c\uc774 \ubab0\ub9ac\uc9c0 \uc54a\uac8c). \uc2e4\ud328\ud558\uba74 3\uc2dc\uac04 \uc548\uc758 \uc61b \uac12\uc744 \uc4f4\ub2e4.
   if (_wxCache.v && Date.now() - _wxCache.at < 10 * 60e3) return _wxCache.v;
   try {
     const u = "https://api.open-meteo.com/v1/forecast?latitude=37.57&longitude=126.98&current=temperature_2m,weather_code&timezone=Asia%2FSeoul";
@@ -819,25 +819,25 @@ function fill(s, ctx) {
   return s.replace(/\{line\}/g, ctx.line).replace(/\{stn\}/g, ctx.stn).replace(/\{stn2\}/g, ctx.stn2).replace(/\{temp\}/g, ctx.temp);
 }
 __name(fill, "fill");
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-09-24: 게시글도 실시간소통(generateTalks/geminiTalks)처럼 Gemini로
-//   먼저 새 글을 시도한다. 그동안 게시글은 CHAT_POSTS(25개)+POOLS(슬롯당 3~8개)
-//   뿐인 고정 템플릿이라 실시간소통보다 훨씬 빨리 소재가 바닥났다.
-//   GEMINI_KEY가 없거나 호출이 실패하면 기존 템플릿 경로로 100% 그대로 폴백한다
-//   (generatePosts 안의 기존 분기는 손대지 않음 — 기존 동작 보존).
-// ══════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-09-24: \uac8c\uc2dc\uae00\ub3c4 \uc2e4\uc2dc\uac04\uc18c\ud1b5(generateTalks/geminiTalks)\ucc98\ub7fc Gemini\ub85c
+//   \uba3c\uc800 \uc0c8 \uae00\uc744 \uc2dc\ub3c4\ud55c\ub2e4. \uadf8\ub3d9\uc548 \uac8c\uc2dc\uae00\uc740 CHAT_POSTS(25\uac1c)+POOLS(\uc2ac\ub86f\ub2f9 3~8\uac1c)
+//   \ubfd0\uc778 \uace0\uc815 \ud15c\ud50c\ub9bf\uc774\ub77c \uc2e4\uc2dc\uac04\uc18c\ud1b5\ubcf4\ub2e4 \ud6e8\uc52c \ube68\ub9ac \uc18c\uc7ac\uac00 \ubc14\ub2e5\ub0ac\ub2e4.
+//   GEMINI_KEY\uac00 \uc5c6\uac70\ub098 \ud638\ucd9c\uc774 \uc2e4\ud328\ud558\uba74 \uae30\uc874 \ud15c\ud50c\ub9bf \uacbd\ub85c\ub85c 100% \uadf8\ub300\ub85c \ud3f4\ubc31\ud55c\ub2e4
+//   (generatePosts \uc548\uc758 \uae30\uc874 \ubd84\uae30\ub294 \uc190\ub300\uc9c0 \uc54a\uc74c \u2014 \uae30\uc874 \ub3d9\uc791 \ubcf4\uc874).
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 async function geminiPosts(env, n, recentTitles, kst, w, wcat, topics, hotWords) {
   if (!env.GEMINI_KEY || n <= 0) return null;
   try {
-    // ★ 2026-10-03: '맑음! 왠지 ○○ 땡기네' 틀이 거의 매 글에 나왔다(붕어빵·뻥튀기·솜사탕 반복).
-    //   원인: 프롬프트에 기온·날씨를 매번 넣고, 소재 지시가 없어 모델이 같은 틀로 수렴.
-    //   → 날씨는 비·눈·폭염·한파처럼 특이할 때만 알려주고, 글마다 서로 다른 소재(topics)를 배정한다.
-    const wtxt = (wcat === "rain" ? "비 옴" : wcat === "hot" ? "폭염" : wcat === "cold" ? "한파" : wcat === "snow" ? "눈 옴" : "");
-    const avoid = recentTitles.slice(0, 60).join(" / ") || "(없음)";
+    // \u2605 2026-10-03: '\ub9d1\uc74c! \uc660\uc9c0 \u25cb\u25cb \ub561\uae30\ub124' \ud2c0\uc774 \uac70\uc758 \ub9e4 \uae00\uc5d0 \ub098\uc654\ub2e4(\ubd95\uc5b4\ube75\u00b7\ubee5\ud280\uae30\u00b7\uc19c\uc0ac\ud0d5 \ubc18\ubcf5).
+    //   \uc6d0\uc778: \ud504\ub86c\ud504\ud2b8\uc5d0 \uae30\uc628\u00b7\ub0a0\uc528\ub97c \ub9e4\ubc88 \ub123\uace0, \uc18c\uc7ac \uc9c0\uc2dc\uac00 \uc5c6\uc5b4 \ubaa8\ub378\uc774 \uac19\uc740 \ud2c0\ub85c \uc218\ub834.
+    //   \u2192 \ub0a0\uc528\ub294 \ube44\u00b7\ub208\u00b7\ud3ed\uc5fc\u00b7\ud55c\ud30c\ucc98\ub7fc \ud2b9\uc774\ud560 \ub54c\ub9cc \uc54c\ub824\uc8fc\uace0, \uae00\ub9c8\ub2e4 \uc11c\ub85c \ub2e4\ub978 \uc18c\uc7ac(topics)\ub97c \ubc30\uc815\ud55c\ub2e4.
+    const wtxt = (wcat === "rain" ? "\ube44 \uc634" : wcat === "hot" ? "\ud3ed\uc5fc" : wcat === "cold" ? "\ud55c\ud30c" : wcat === "snow" ? "\ub208 \uc634" : "");
+    const avoid = recentTitles.slice(0, 60).join(" / ") || "(\uc5c6\uc74c)";
     const tp = (topics && topics.length) ? topics.slice(0, n) : [];
-    const topicTxt = tp.length ? "\n각 글의 소재(순서대로 하나씩, 반드시 이 소재로): " + tp.map(function(t, i) { return (i + 1) + ") " + t; }).join(" ") : "";
-    const hotTxt = (hotWords && hotWords.length) ? "\n최근 너무 많이 쓴 단어(이번엔 쓰지 마): " + hotWords.join(", ") : "";
-    const prompt = "너는 한국 지하철\xB7버스로 출퇴근\xB7통학하는 사람들이 모인 온라인 커뮤니티 게시판에 글을 쓰는 여러 명의 평범한 이용자다.\n지금: " + slotLabel(kst) + (wtxt ? ", 날씨: " + wtxt : "") + ctxBlock(kst, w, wcat) + topicTxt + hotTxt + "\n서로 다른 사람이 쓴 것처럼, 짧은 게시글 " + n + "개를 새로 써라.\n규칙:\n1. 실제 커뮤니티 게시글투 — 제목은 15~40자, 본문은 2~4문장(줄바꿈은 \\n으로 구분), 반말\xB7편한 말투, 가끔 ㅋㅋ\xB7ㅠㅠ\xB7줄임말.\n2. 지하철\xB7버스\xB7통근\xB7통학뿐 아니라 카페\xB7음식\xB7운동\xB7취미\xB7날씨\xB7계절 등 생활 소재도 섞어라.\n3. 아래 '최근에 나온 글 제목'과 겹치는 주제\xB7표현\xB7문장 틀은 피하고 매번 새로운 각도로 써라. 특히 \"날씨 한마디 + 왠지 ○○ 땡긴다\" 같은 공식 금지, 글마다 문장 구조와 첫 단어를 다르게: " + avoid + "\n4. 날씨\xB7기온\xB7요일 언급은 꼭 필요할 때만, 전체 글의 1/5 이하로. 숫자 기온을 제목에 쓰지 마라.\n5. 정치\xB7선거\xB7혐오\xB7욕설\xB7실존인물 비방 금지. 역\xB7노선 이름은 자유롭게 지어내도 됨.\nJSON 배열만 출력: [{\"t\":\"제목\",\"b\":\"본문\"}]";
+    const topicTxt = tp.length ? "\n\uac01 \uae00\uc758 \uc18c\uc7ac(\uc21c\uc11c\ub300\ub85c \ud558\ub098\uc529, \ubc18\ub4dc\uc2dc \uc774 \uc18c\uc7ac\ub85c): " + tp.map(function(t, i) { return (i + 1) + ") " + t; }).join(" ") : "";
+    const hotTxt = (hotWords && hotWords.length) ? "\n\ucd5c\uadfc \ub108\ubb34 \ub9ce\uc774 \uc4f4 \ub2e8\uc5b4(\uc774\ubc88\uc5d4 \uc4f0\uc9c0 \ub9c8): " + hotWords.join(", ") : "";
+    const prompt = "\ub108\ub294 \ud55c\uad6d \uc9c0\ud558\ucca0\xB7\ubc84\uc2a4\ub85c \ucd9c\ud1f4\uadfc\xB7\ud1b5\ud559\ud558\ub294 \uc0ac\ub78c\ub4e4\uc774 \ubaa8\uc778 \uc628\ub77c\uc778 \ucee4\ubba4\ub2c8\ud2f0 \uac8c\uc2dc\ud310\uc5d0 \uae00\uc744 \uc4f0\ub294 \uc5ec\ub7ec \uba85\uc758 \ud3c9\ubc94\ud55c \uc774\uc6a9\uc790\ub2e4.\n\uc9c0\uae08: " + slotLabel(kst) + (wtxt ? ", \ub0a0\uc528: " + wtxt : "") + ctxBlock(kst, w, wcat) + topicTxt + hotTxt + "\n\uc11c\ub85c \ub2e4\ub978 \uc0ac\ub78c\uc774 \uc4f4 \uac83\ucc98\ub7fc, \uc9e7\uc740 \uac8c\uc2dc\uae00 " + n + "\uac1c\ub97c \uc0c8\ub85c \uc368\ub77c.\n\uaddc\uce59:\n1. \uc2e4\uc81c \ucee4\ubba4\ub2c8\ud2f0 \uac8c\uc2dc\uae00\ud22c \u2014 \uc81c\ubaa9\uc740 15~40\uc790, \ubcf8\ubb38\uc740 2~4\ubb38\uc7a5(\uc904\ubc14\uafc8\uc740 \\n\uc73c\ub85c \uad6c\ubd84), \ubc18\ub9d0\xB7\ud3b8\ud55c \ub9d0\ud22c, \uac00\ub054 \u314b\u314b\xB7\u3160\u3160\xB7\uc904\uc784\ub9d0.\n2. \uc9c0\ud558\ucca0\xB7\ubc84\uc2a4\xB7\ud1b5\uadfc\xB7\ud1b5\ud559\ubfd0 \uc544\ub2c8\ub77c \uce74\ud398\xB7\uc74c\uc2dd\xB7\uc6b4\ub3d9\xB7\ucde8\ubbf8\xB7\ub0a0\uc528\xB7\uacc4\uc808 \ub4f1 \uc0dd\ud65c \uc18c\uc7ac\ub3c4 \uc11e\uc5b4\ub77c.\n3. \uc544\ub798 '\ucd5c\uadfc\uc5d0 \ub098\uc628 \uae00 \uc81c\ubaa9'\uacfc \uacb9\uce58\ub294 \uc8fc\uc81c\xB7\ud45c\ud604\xB7\ubb38\uc7a5 \ud2c0\uc740 \ud53c\ud558\uace0 \ub9e4\ubc88 \uc0c8\ub85c\uc6b4 \uac01\ub3c4\ub85c \uc368\ub77c. \ud2b9\ud788 \"\ub0a0\uc528 \ud55c\ub9c8\ub514 + \uc660\uc9c0 \u25cb\u25cb \ub561\uae34\ub2e4\" \uac19\uc740 \uacf5\uc2dd \uae08\uc9c0, \uae00\ub9c8\ub2e4 \ubb38\uc7a5 \uad6c\uc870\uc640 \uccab \ub2e8\uc5b4\ub97c \ub2e4\ub974\uac8c: " + avoid + "\n4. \ub0a0\uc528\xB7\uae30\uc628\xB7\uc694\uc77c \uc5b8\uae09\uc740 \uaf2d \ud544\uc694\ud560 \ub54c\ub9cc, \uc804\uccb4 \uae00\uc758 1/5 \uc774\ud558\ub85c. \uc22b\uc790 \uae30\uc628\uc744 \uc81c\ubaa9\uc5d0 \uc4f0\uc9c0 \ub9c8\ub77c.\n5. \uc815\uce58\xB7\uc120\uac70\xB7\ud610\uc624\xB7\uc695\uc124\xB7\uc2e4\uc874\uc778\ubb3c \ube44\ubc29 \uae08\uc9c0. \uc5ed\xB7\ub178\uc120 \uc774\ub984\uc740 \uc790\uc720\ub86d\uac8c \uc9c0\uc5b4\ub0b4\ub3c4 \ub428.\nJSON \ubc30\uc5f4\ub9cc \ucd9c\ub825: [{\"t\":\"\uc81c\ubaa9\",\"b\":\"\ubcf8\ubb38\"}]";
     const r = await gemFetch(env, 12e3, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -864,17 +864,17 @@ async function geminiPosts(env, n, recentTitles, kst, w, wcat, topics, hotWords)
 }
 __name(geminiPosts, "geminiPosts");
 
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-03: 6개월(183일) 중복 금지 원장 (post_ledger)
-//   YJ 지시: "최소 6개월 동안 중복되는 말이나 게시글은 올라오면 안 돼".
-//   기존엔 ① 제목이 '완전히 같은지'만 ② 최근 60일(그나마 posts 500개 상한 안)에서만 봤다 —
-//   그래서 '맑음! 왠지 ○○ 땡기네'처럼 제목만 조금씩 다른 같은 틀이 매일 올라왔다.
-//   원장은 posts 의 500개 상한과 무관하게 183일치를 따로 보관하고, 아래 네 가지를 막는다.
-//     ① 정규화 제목 동일  ② 역·숫자·날씨·요일을 지운 '골격' 동일
-//     ③ 글자 2-gram 유사도 높음(제목 0.5↑ / 제목+본문 0.55↑)
-//     ④ 같은 단어 포화 — 최근 10일 제목에 이미 3번 쓴 단어(붕어빵·왠지 같은 것)는 당분간 금지
-//   원장이 비어 있으면 현재 posts 로 한 번 채운다(마이그레이션).
-// ══════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-03: 6\uac1c\uc6d4(183\uc77c) \uc911\ubcf5 \uae08\uc9c0 \uc6d0\uc7a5 (post_ledger)
+//   YJ \uc9c0\uc2dc: "\ucd5c\uc18c 6\uac1c\uc6d4 \ub3d9\uc548 \uc911\ubcf5\ub418\ub294 \ub9d0\uc774\ub098 \uac8c\uc2dc\uae00\uc740 \uc62c\ub77c\uc624\uba74 \uc548 \ub3fc".
+//   \uae30\uc874\uc5d4 \u2460 \uc81c\ubaa9\uc774 '\uc644\uc804\ud788 \uac19\uc740\uc9c0'\ub9cc \u2461 \ucd5c\uadfc 60\uc77c(\uadf8\ub098\ub9c8 posts 500\uac1c \uc0c1\ud55c \uc548)\uc5d0\uc11c\ub9cc \ubd24\ub2e4 \u2014
+//   \uadf8\ub798\uc11c '\ub9d1\uc74c! \uc660\uc9c0 \u25cb\u25cb \ub561\uae30\ub124'\ucc98\ub7fc \uc81c\ubaa9\ub9cc \uc870\uae08\uc529 \ub2e4\ub978 \uac19\uc740 \ud2c0\uc774 \ub9e4\uc77c \uc62c\ub77c\uc654\ub2e4.
+//   \uc6d0\uc7a5\uc740 posts \uc758 500\uac1c \uc0c1\ud55c\uacfc \ubb34\uad00\ud558\uac8c 183\uc77c\uce58\ub97c \ub530\ub85c \ubcf4\uad00\ud558\uace0, \uc544\ub798 \ub124 \uac00\uc9c0\ub97c \ub9c9\ub294\ub2e4.
+//     \u2460 \uc815\uaddc\ud654 \uc81c\ubaa9 \ub3d9\uc77c  \u2461 \uc5ed\u00b7\uc22b\uc790\u00b7\ub0a0\uc528\u00b7\uc694\uc77c\uc744 \uc9c0\uc6b4 '\uace8\uaca9' \ub3d9\uc77c
+//     \u2462 \uae00\uc790 2-gram \uc720\uc0ac\ub3c4 \ub192\uc74c(\uc81c\ubaa9 0.5\u2191 / \uc81c\ubaa9+\ubcf8\ubb38 0.55\u2191)
+//     \u2463 \uac19\uc740 \ub2e8\uc5b4 \ud3ec\ud654 \u2014 \ucd5c\uadfc 10\uc77c \uc81c\ubaa9\uc5d0 \uc774\ubbf8 3\ubc88 \uc4f4 \ub2e8\uc5b4(\ubd95\uc5b4\ube75\u00b7\uc660\uc9c0 \uac19\uc740 \uac83)\ub294 \ub2f9\ubd84\uac04 \uae08\uc9c0
+//   \uc6d0\uc7a5\uc774 \ube44\uc5b4 \uc788\uc73c\uba74 \ud604\uc7ac posts \ub85c \ud55c \ubc88 \ucc44\uc6b4\ub2e4(\ub9c8\uc774\uadf8\ub808\uc774\uc158).
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var LEDGER_DAYS = 183;
 var _ledgerReady = false;
 async function ensureLedger(env) {
@@ -897,15 +897,15 @@ function stnRe() {
   _STN_RE = new RegExp(words.join("|"), "g");
   return _STN_RE;
 }
-// 골격: 역·노선·숫자·날씨·시간대·요일·기호를 지운 글자열
-var _FRAME_STRIP = /(맑음|맑은|맑고|맑다|흐림|흐린|비오는|비가|눈오는|날씨|기온|오늘은|오늘|어제|내일|아침|점심|저녁|새벽|오전|오후|퇴근길|출근길|퇴근|출근|월요일|화요일|수요일|목요일|금요일|토요일|일요일|월욜|화욜|수욜|목욜|금욜|불금|주말|평일|지하철|버스)/g;
+// \uace8\uaca9: \uc5ed\u00b7\ub178\uc120\u00b7\uc22b\uc790\u00b7\ub0a0\uc528\u00b7\uc2dc\uac04\ub300\u00b7\uc694\uc77c\u00b7\uae30\ud638\ub97c \uc9c0\uc6b4 \uae00\uc790\uc5f4
+var _FRAME_STRIP = /(\ub9d1\uc74c|\ub9d1\uc740|\ub9d1\uace0|\ub9d1\ub2e4|\ud750\ub9bc|\ud750\ub9b0|\ube44\uc624\ub294|\ube44\uac00|\ub208\uc624\ub294|\ub0a0\uc528|\uae30\uc628|\uc624\ub298\uc740|\uc624\ub298|\uc5b4\uc81c|\ub0b4\uc77c|\uc544\uce68|\uc810\uc2ec|\uc800\ub141|\uc0c8\ubcbd|\uc624\uc804|\uc624\ud6c4|\ud1f4\uadfc\uae38|\ucd9c\uadfc\uae38|\ud1f4\uadfc|\ucd9c\uadfc|\uc6d4\uc694\uc77c|\ud654\uc694\uc77c|\uc218\uc694\uc77c|\ubaa9\uc694\uc77c|\uae08\uc694\uc77c|\ud1a0\uc694\uc77c|\uc77c\uc694\uc77c|\uc6d4\uc69c|\ud654\uc69c|\uc218\uc69c|\ubaa9\uc69c|\uae08\uc69c|\ubd88\uae08|\uc8fc\ub9d0|\ud3c9\uc77c|\uc9c0\ud558\ucca0|\ubc84\uc2a4)/g;
 function skelText(t) {
   return String(t == null ? "" : t)
     .replace(stnRe(), "")
     .replace(/[0-9]+/g, "")
     .replace(_FRAME_STRIP, "")
-    .replace(/[^가-힣a-zA-Z]/g, "")
-    .replace(/[ㅋㅎㅠㅜ]/g, "")
+    .replace(/[^\uac00-\ud7a3a-zA-Z]/g, "")
+    .replace(/[\u314b\u314e\u3160\u315c]/g, "")
     .toLowerCase();
 }
 __name(skelText, "skelText");
@@ -926,11 +926,11 @@ function jaccard(a, b) {
 }
 __name(jaccard, "jaccard");
 var _TOK_STOP = {};
-"지하철 버스 사람 진짜 너무 정말 다들 이번 우리 요즘 역시 그냥 오랜 하루 오늘 내일 어제 아침 점심 저녁 새벽 퇴근 출근 날씨 이제 지금 계속 완전 갑자 혹시 다음 마지 처음 하나 그리 하지 그래 근데 그런 이런 저런 어떤 모든 같은 아직 다시 결국 가끔 자주 항상 매일 같이 많이 조금 열차 환승 승강 이용 승객 운행".split(" ").forEach(function(w) { _TOK_STOP[w] = 1; });
-// 제목 → 어간 토큰(앞 2글자). 조사·어미 때문에 '붕어빵을/붕어빵이'가 갈라지지 않게 앞 2글자로 묶는다.
+"\uc9c0\ud558\ucca0 \ubc84\uc2a4 \uc0ac\ub78c \uc9c4\uc9dc \ub108\ubb34 \uc815\ub9d0 \ub2e4\ub4e4 \uc774\ubc88 \uc6b0\ub9ac \uc694\uc998 \uc5ed\uc2dc \uadf8\ub0e5 \uc624\ub79c \ud558\ub8e8 \uc624\ub298 \ub0b4\uc77c \uc5b4\uc81c \uc544\uce68 \uc810\uc2ec \uc800\ub141 \uc0c8\ubcbd \ud1f4\uadfc \ucd9c\uadfc \ub0a0\uc528 \uc774\uc81c \uc9c0\uae08 \uacc4\uc18d \uc644\uc804 \uac11\uc790 \ud639\uc2dc \ub2e4\uc74c \ub9c8\uc9c0 \ucc98\uc74c \ud558\ub098 \uadf8\ub9ac \ud558\uc9c0 \uadf8\ub798 \uadfc\ub370 \uadf8\ub7f0 \uc774\ub7f0 \uc800\ub7f0 \uc5b4\ub5a4 \ubaa8\ub4e0 \uac19\uc740 \uc544\uc9c1 \ub2e4\uc2dc \uacb0\uad6d \uac00\ub054 \uc790\uc8fc \ud56d\uc0c1 \ub9e4\uc77c \uac19\uc774 \ub9ce\uc774 \uc870\uae08 \uc5f4\ucc28 \ud658\uc2b9 \uc2b9\uac15 \uc774\uc6a9 \uc2b9\uac1d \uc6b4\ud589".split(" ").forEach(function(w) { _TOK_STOP[w] = 1; });
+// \uc81c\ubaa9 \u2192 \uc5b4\uac04 \ud1a0\ud070(\uc55e 2\uae00\uc790). \uc870\uc0ac\u00b7\uc5b4\ubbf8 \ub54c\ubb38\uc5d0 '\ubd95\uc5b4\ube75\uc744/\ubd95\uc5b4\ube75\uc774'\uac00 \uac08\ub77c\uc9c0\uc9c0 \uc54a\uac8c \uc55e 2\uae00\uc790\ub85c \ubb36\ub294\ub2e4.
 function titleToks(title) {
   const out = [];
-  String(title || "").replace(stnRe(), " ").replace(/[0-9]+/g, " ").split(/[^가-힣]+/).forEach(function(w) {
+  String(title || "").replace(stnRe(), " ").replace(/[0-9]+/g, " ").split(/[^\uac00-\ud7a3]+/).forEach(function(w) {
     if (w.length < 2) return;
     const k = w.slice(0, 2);
     if (_TOK_STOP[k] || _TOK_STOP[w]) return;
@@ -939,13 +939,13 @@ function titleToks(title) {
   return out;
 }
 __name(titleToks, "titleToks");
-// 글머리 4글자(역·숫자 제거) — "오늘 날씨 N도!"처럼 같은 첫머리가 계속 반복되는 걸 막는 용도
+// \uae00\uba38\ub9ac 4\uae00\uc790(\uc5ed\u00b7\uc22b\uc790 \uc81c\uac70) \u2014 "\uc624\ub298 \ub0a0\uc528 N\ub3c4!"\ucc98\ub7fc \uac19\uc740 \uccab\uba38\ub9ac\uac00 \uacc4\uc18d \ubc18\ubcf5\ub418\ub294 \uac78 \ub9c9\ub294 \uc6a9\ub3c4
 function openerKey(t) {
-  return String(t || "").replace(stnRe(), "").replace(/[0-9]+/g, "").replace(/[^가-힣]/g, "").slice(0, 4);
+  return String(t || "").replace(stnRe(), "").replace(/[0-9]+/g, "").replace(/[^\uac00-\ud7a3]/g, "").slice(0, 4);
 }
 var OPENER_MAX = 2;
 function normExact(t) {
-  return String(t).replace(/[\s.,!?~…·ㅋㅎㅠㅜ()]/g, "");
+  return String(t).replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315c()]/g, "");
 }
 async function loadLedger(env) {
   await ensureLedger(env);
@@ -973,14 +973,14 @@ function ledgerAdd(idx, title, body, recent) {
 }
 __name(ledgerAdd, "ledgerAdd");
 var TOK_SATURATION = 3;
-// 중복이면 사유 문자열, 아니면 null
+// \uc911\ubcf5\uc774\uba74 \uc0ac\uc720 \ubb38\uc790\uc5f4, \uc544\ub2c8\uba74 null
 function titleSane(t, b) {
-  // 깨진 글 차단(실제로 "estranho...", "핑계 대고  }+" 같은 제목이 올라온 적 있음)
+  // \uae68\uc9c4 \uae00 \ucc28\ub2e8(\uc2e4\uc81c\ub85c "estranho...", "\ud551\uacc4 \ub300\uace0  }+" \uac19\uc740 \uc81c\ubaa9\uc774 \uc62c\ub77c\uc628 \uc801 \uc788\uc74c)
   const s = String(t || "") + " " + String(b || "");
   if (/[{}\[\]<>|\\]/.test(s)) return false;
   if (/[A-Za-z]{5,}/.test(s)) return false;
   if (/\s{2,}/.test(String(t || ""))) return false;
-  if (String(t || "").replace(/[^가-힣]/g, "").length < 4) return false;
+  if (String(t || "").replace(/[^\uac00-\ud7a3]/g, "").length < 4) return false;
   return true;
 }
 __name(titleSane, "titleSane");
@@ -1011,22 +1011,22 @@ function hotTokens(idx) {
   return Object.keys(idx.tokCount).filter(function(k) { return idx.tokCount[k] >= 2; }).sort(function(a, b) { return idx.tokCount[b] - idx.tokCount[a]; }).slice(0, 25);
 }
 __name(hotTokens, "hotTokens");
-// 글마다 다른 소재를 배정해 같은 틀로 수렴하지 않게 한다
+// \uae00\ub9c8\ub2e4 \ub2e4\ub978 \uc18c\uc7ac\ub97c \ubc30\uc815\ud574 \uac19\uc740 \ud2c0\ub85c \uc218\ub834\ud558\uc9c0 \uc54a\uac8c \ud55c\ub2e4
 var POST_TOPICS = [
-  "이어폰·헤드폰 고르는 법", "만원 지하철에서 가방 메는 법", "자리 양보 경험", "환승 통로 걷는 속도 차이", "편의점 신상 후기",
-  "회사 점심 메뉴 정하기 스트레스", "학교·학원 끝나고 귀가", "출근길 팟캐스트·오디오북 추천", "책·웹툰 읽다 내릴 역 놓친 이야기", "카페 자리 전쟁",
-  "운동 시작했다가 사흘 만에 포기", "러닝·헬스 후기", "자취 요리 실패담", "배달음식 vs 집밥", "반려동물 이야기",
-  "넷플릭스·드라마 정주행 후기", "게임 이야기(모바일·콘솔)", "월요병 극복법", "연차 쓰는 날의 아침", "야근 후 귀가길 감성",
-  "알바 첫 출근 기억", "취업 준비하는 요즘 일상", "시험기간 도서관 풍경", "팀 회식 문화 이야기", "상사·동료와의 소소한 에피소드",
-  "스마트폰 배터리 절약", "충전기·보조배터리 분실담", "교통카드·티머니 잔액 부족 사건", "스크린도어 광고 감상", "버스 기사님 친절 사연",
-  "지하철 졸다가 종점까지 간 이야기", "앉아서 가기 위한 나만의 요령", "환승 할인 알뜰 팁", "막차 놓친 날", "새벽 첫차 풍경",
-  "비 오는 날 우산 이야기", "미세먼지·마스크 고민", "계절 옷차림 고민", "제철 음식 얘기", "동네 빵집·맛집 발견",
-  "퇴근 후 취미생활(그림·악기·뜨개질)", "주말 나들이 코스", "여행 계획·다녀온 후기", "중고거래 후기", "이사·자취방 구하기",
-  "월급날·월말 지갑 사정", "재밌는 안내방송 문구", "역 근처 길냥이", "출근길 마주치는 단골 얼굴들", "플랫폼 벤치에서 본 장면",
-  "에스컬레이터 에티켓", "지하철 소리 에티켓", "지하철에서 본 독특한 패션", "하루 걸음 수 챙기기", "카톡 읽씹 고민",
-  "SNS 피드 구경", "새로 산 물건 자랑", "커피·차 취향", "이번 주 소소한 행복", "학생 시절 통학 추억",
-  "어릴 적 지하철 타던 기억", "공연·전시 다녀온 후기", "영화관 다녀온 후기", "아침형 인간 도전기", "수면 부족 해결법",
-  "점심시간 산책 코스", "회사 근처 숨은 장소", "도시락 싸기 도전", "다이어트 중 유혹"
+  "\uc774\uc5b4\ud3f0\u00b7\ud5e4\ub4dc\ud3f0 \uace0\ub974\ub294 \ubc95", "\ub9cc\uc6d0 \uc9c0\ud558\ucca0\uc5d0\uc11c \uac00\ubc29 \uba54\ub294 \ubc95", "\uc790\ub9ac \uc591\ubcf4 \uacbd\ud5d8", "\ud658\uc2b9 \ud1b5\ub85c \uac77\ub294 \uc18d\ub3c4 \ucc28\uc774", "\ud3b8\uc758\uc810 \uc2e0\uc0c1 \ud6c4\uae30",
+  "\ud68c\uc0ac \uc810\uc2ec \uba54\ub274 \uc815\ud558\uae30 \uc2a4\ud2b8\ub808\uc2a4", "\ud559\uad50\u00b7\ud559\uc6d0 \ub05d\ub098\uace0 \uadc0\uac00", "\ucd9c\uadfc\uae38 \ud31f\uce90\uc2a4\ud2b8\u00b7\uc624\ub514\uc624\ubd81 \ucd94\ucc9c", "\ucc45\u00b7\uc6f9\ud230 \uc77d\ub2e4 \ub0b4\ub9b4 \uc5ed \ub193\uce5c \uc774\uc57c\uae30", "\uce74\ud398 \uc790\ub9ac \uc804\uc7c1",
+  "\uc6b4\ub3d9 \uc2dc\uc791\ud588\ub2e4\uac00 \uc0ac\ud758 \ub9cc\uc5d0 \ud3ec\uae30", "\ub7ec\ub2dd\u00b7\ud5ec\uc2a4 \ud6c4\uae30", "\uc790\ucde8 \uc694\ub9ac \uc2e4\ud328\ub2f4", "\ubc30\ub2ec\uc74c\uc2dd vs \uc9d1\ubc25", "\ubc18\ub824\ub3d9\ubb3c \uc774\uc57c\uae30",
+  "\ub137\ud50c\ub9ad\uc2a4\u00b7\ub4dc\ub77c\ub9c8 \uc815\uc8fc\ud589 \ud6c4\uae30", "\uac8c\uc784 \uc774\uc57c\uae30(\ubaa8\ubc14\uc77c\u00b7\ucf58\uc194)", "\uc6d4\uc694\ubcd1 \uadf9\ubcf5\ubc95", "\uc5f0\ucc28 \uc4f0\ub294 \ub0a0\uc758 \uc544\uce68", "\uc57c\uadfc \ud6c4 \uadc0\uac00\uae38 \uac10\uc131",
+  "\uc54c\ubc14 \uccab \ucd9c\uadfc \uae30\uc5b5", "\ucde8\uc5c5 \uc900\ube44\ud558\ub294 \uc694\uc998 \uc77c\uc0c1", "\uc2dc\ud5d8\uae30\uac04 \ub3c4\uc11c\uad00 \ud48d\uacbd", "\ud300 \ud68c\uc2dd \ubb38\ud654 \uc774\uc57c\uae30", "\uc0c1\uc0ac\u00b7\ub3d9\ub8cc\uc640\uc758 \uc18c\uc18c\ud55c \uc5d0\ud53c\uc18c\ub4dc",
+  "\uc2a4\ub9c8\ud2b8\ud3f0 \ubc30\ud130\ub9ac \uc808\uc57d", "\ucda9\uc804\uae30\u00b7\ubcf4\uc870\ubc30\ud130\ub9ac \ubd84\uc2e4\ub2f4", "\uad50\ud1b5\uce74\ub4dc\u00b7\ud2f0\uba38\ub2c8 \uc794\uc561 \ubd80\uc871 \uc0ac\uac74", "\uc2a4\ud06c\ub9b0\ub3c4\uc5b4 \uad11\uace0 \uac10\uc0c1", "\ubc84\uc2a4 \uae30\uc0ac\ub2d8 \uce5c\uc808 \uc0ac\uc5f0",
+  "\uc9c0\ud558\ucca0 \uc878\ub2e4\uac00 \uc885\uc810\uae4c\uc9c0 \uac04 \uc774\uc57c\uae30", "\uc549\uc544\uc11c \uac00\uae30 \uc704\ud55c \ub098\ub9cc\uc758 \uc694\ub839", "\ud658\uc2b9 \ud560\uc778 \uc54c\ub730 \ud301", "\ub9c9\ucc28 \ub193\uce5c \ub0a0", "\uc0c8\ubcbd \uccab\ucc28 \ud48d\uacbd",
+  "\ube44 \uc624\ub294 \ub0a0 \uc6b0\uc0b0 \uc774\uc57c\uae30", "\ubbf8\uc138\uba3c\uc9c0\u00b7\ub9c8\uc2a4\ud06c \uace0\ubbfc", "\uacc4\uc808 \uc637\ucc28\ub9bc \uace0\ubbfc", "\uc81c\ucca0 \uc74c\uc2dd \uc598\uae30", "\ub3d9\ub124 \ube75\uc9d1\u00b7\ub9db\uc9d1 \ubc1c\uacac",
+  "\ud1f4\uadfc \ud6c4 \ucde8\ubbf8\uc0dd\ud65c(\uadf8\ub9bc\u00b7\uc545\uae30\u00b7\ub728\uac1c\uc9c8)", "\uc8fc\ub9d0 \ub098\ub4e4\uc774 \ucf54\uc2a4", "\uc5ec\ud589 \uacc4\ud68d\u00b7\ub2e4\ub140\uc628 \ud6c4\uae30", "\uc911\uace0\uac70\ub798 \ud6c4\uae30", "\uc774\uc0ac\u00b7\uc790\ucde8\ubc29 \uad6c\ud558\uae30",
+  "\uc6d4\uae09\ub0a0\u00b7\uc6d4\ub9d0 \uc9c0\uac11 \uc0ac\uc815", "\uc7ac\ubc0c\ub294 \uc548\ub0b4\ubc29\uc1a1 \ubb38\uad6c", "\uc5ed \uadfc\ucc98 \uae38\ub0e5\uc774", "\ucd9c\uadfc\uae38 \ub9c8\uc8fc\uce58\ub294 \ub2e8\uace8 \uc5bc\uad74\ub4e4", "\ud50c\ub7ab\ud3fc \ubca4\uce58\uc5d0\uc11c \ubcf8 \uc7a5\uba74",
+  "\uc5d0\uc2a4\uceec\ub808\uc774\ud130 \uc5d0\ud2f0\ucf13", "\uc9c0\ud558\ucca0 \uc18c\ub9ac \uc5d0\ud2f0\ucf13", "\uc9c0\ud558\ucca0\uc5d0\uc11c \ubcf8 \ub3c5\ud2b9\ud55c \ud328\uc158", "\ud558\ub8e8 \uac78\uc74c \uc218 \ucc59\uae30\uae30", "\uce74\ud1a1 \uc77d\uc539 \uace0\ubbfc",
+  "SNS \ud53c\ub4dc \uad6c\uacbd", "\uc0c8\ub85c \uc0b0 \ubb3c\uac74 \uc790\ub791", "\ucee4\ud53c\u00b7\ucc28 \ucde8\ud5a5", "\uc774\ubc88 \uc8fc \uc18c\uc18c\ud55c \ud589\ubcf5", "\ud559\uc0dd \uc2dc\uc808 \ud1b5\ud559 \ucd94\uc5b5",
+  "\uc5b4\ub9b4 \uc801 \uc9c0\ud558\ucca0 \ud0c0\ub358 \uae30\uc5b5", "\uacf5\uc5f0\u00b7\uc804\uc2dc \ub2e4\ub140\uc628 \ud6c4\uae30", "\uc601\ud654\uad00 \ub2e4\ub140\uc628 \ud6c4\uae30", "\uc544\uce68\ud615 \uc778\uac04 \ub3c4\uc804\uae30", "\uc218\uba74 \ubd80\uc871 \ud574\uacb0\ubc95",
+  "\uc810\uc2ec\uc2dc\uac04 \uc0b0\ucc45 \ucf54\uc2a4", "\ud68c\uc0ac \uadfc\ucc98 \uc228\uc740 \uc7a5\uc18c", "\ub3c4\uc2dc\ub77d \uc2f8\uae30 \ub3c4\uc804", "\ub2e4\uc774\uc5b4\ud2b8 \uc911 \uc720\ud639"
 ];
 function pickTopics(n) {
   return POST_TOPICS.slice().sort(function() { return Math.random() - 0.5; }).slice(0, n);
@@ -1043,56 +1043,56 @@ async function generatePosts(env) {
   const w = await getWeather();
   const wcat = weatherCat(w);
   let recent = [];
-  // ★ 2026-09-27 (YJ 지시로 실측 점검 중 발견): 아래 D1 조회가 실패하면 catch가 아무 말 없이
-  //   삼켜서 recent=[]로 계속 진행했다 — 그러면 이번 주기는 '최근 글이 하나도 없는 것처럼'
-  //   동작해 중복방지(seen/recent 검사)가 통째로 꺼진 채로 새 글을 만들게 된다. 실제로
-  //   "칼퇴 성공한 날은 지하철도 즐겁다"(id 2107→2108) 같은 완전히 동일한 제목이 20분
-  //   간격(크론 주기와 일치)으로 두 번 올라온 걸 실측 확인했는데, 이 조용한 폴백이
-  //   유력한 원인이다(다른 스킵 조건들처럼 조용히 넘어가는 대신, 여기선 중복방지 없이
-  //   글을 쓰느니 이번 주기를 건너뛰는 게 낫다 — 09-22 방침과 같은 방향).
+  // \u2605 2026-09-27 (YJ \uc9c0\uc2dc\ub85c \uc2e4\uce21 \uc810\uac80 \uc911 \ubc1c\uacac): \uc544\ub798 D1 \uc870\ud68c\uac00 \uc2e4\ud328\ud558\uba74 catch\uac00 \uc544\ubb34 \ub9d0 \uc5c6\uc774
+  //   \uc0bc\ucf1c\uc11c recent=[]\ub85c \uacc4\uc18d \uc9c4\ud589\ud588\ub2e4 \u2014 \uadf8\ub7ec\uba74 \uc774\ubc88 \uc8fc\uae30\ub294 '\ucd5c\uadfc \uae00\uc774 \ud558\ub098\ub3c4 \uc5c6\ub294 \uac83\ucc98\ub7fc'
+  //   \ub3d9\uc791\ud574 \uc911\ubcf5\ubc29\uc9c0(seen/recent \uac80\uc0ac)\uac00 \ud1b5\uc9f8\ub85c \uaebc\uc9c4 \ucc44\ub85c \uc0c8 \uae00\uc744 \ub9cc\ub4e4\uac8c \ub41c\ub2e4. \uc2e4\uc81c\ub85c
+  //   "\uce7c\ud1f4 \uc131\uacf5\ud55c \ub0a0\uc740 \uc9c0\ud558\ucca0\ub3c4 \uc990\uac81\ub2e4"(id 2107\u21922108) \uac19\uc740 \uc644\uc804\ud788 \ub3d9\uc77c\ud55c \uc81c\ubaa9\uc774 20\ubd84
+  //   \uac04\uaca9(\ud06c\ub860 \uc8fc\uae30\uc640 \uc77c\uce58)\uc73c\ub85c \ub450 \ubc88 \uc62c\ub77c\uc628 \uac78 \uc2e4\uce21 \ud655\uc778\ud588\ub294\ub370, \uc774 \uc870\uc6a9\ud55c \ud3f4\ubc31\uc774
+  //   \uc720\ub825\ud55c \uc6d0\uc778\uc774\ub2e4(\ub2e4\ub978 \uc2a4\ud0b5 \uc870\uac74\ub4e4\ucc98\ub7fc \uc870\uc6a9\ud788 \ub118\uc5b4\uac00\ub294 \ub300\uc2e0, \uc5ec\uae30\uc120 \uc911\ubcf5\ubc29\uc9c0 \uc5c6\uc774
+  //   \uae00\uc744 \uc4f0\ub290\ub2c8 \uc774\ubc88 \uc8fc\uae30\ub97c \uac74\ub108\ub6f0\ub294 \uac8c \ub0ab\ub2e4 \u2014 09-22 \ubc29\uce68\uacfc \uac19\uc740 \ubc29\ud5a5).
   let recentOk = false;
   let ledger = null;
   try {
     ledger = await loadLedger(env);
   } catch (e) {
-    // ★ 원장을 못 읽으면 6개월 중복 검사를 못 하므로 이번 주기는 쓰지 않는다(조용히 중복을 만드는 것보다 낫다)
-    console.log("[board-writer][posts] 원장 로드 실패, 이번 주기는 건너뜀:", e.message);
+    // \u2605 \uc6d0\uc7a5\uc744 \ubabb \uc77d\uc73c\uba74 6\uac1c\uc6d4 \uc911\ubcf5 \uac80\uc0ac\ub97c \ubabb \ud558\ubbc0\ub85c \uc774\ubc88 \uc8fc\uae30\ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4(\uc870\uc6a9\ud788 \uc911\ubcf5\uc744 \ub9cc\ub4dc\ub294 \uac83\ubcf4\ub2e4 \ub0ab\ub2e4)
+    console.log("[board-writer][posts] \uc6d0\uc7a5 \ub85c\ub4dc \uc2e4\ud328, \uc774\ubc88 \uc8fc\uae30\ub294 \uac74\ub108\ub700:", e.message);
     return { made: 0, slot: slot.key, skipped: "ledger-failed" };
   }
   try {
-    // ★ 2026-09-22: 150개 → 500개(MAX_POSTS 전체) — 여기까지는 이미 배포돼 있던 수정.
-    // ★ 2026-09-24: 개수(500개) 창 → 60일(시간) 창으로 다시 전환.
-    //   템플릿 풀이 CHAT_POSTS+POOLS 합쳐 90개 안팎뿐이라, 글이 활발히 쌓이는
-    //   시기엔 최근 500개 '안'에 90개 템플릿이 전부 들어차버린다 — 그러면 그 뒤로는
-    //   매 주기 '신선한 템플릿 없음'으로 계속 건너뛰기만 반복하고, 새 글이 영원히
-    //   안 올라온다(오래된 글이 밀려나려면 새 글이 계속 들어와야 하는데, 새 글이
-    //   안 만들어지니 창이 절대 안 비워지는 순환). 시간 창은 며칠만 지나도
-    //   오래된 글이 자연히 '다시 써도 되는' 상태로 풀려서 이 교착을 막는다.
-    //   (아래 geminiPosts 추가로 템플릿 풀 자체도 사실상 무한해지지만, Gemini가
-    //   실패/미설정일 때의 템플릿 폴백 경로를 위해 이 안전장치는 그대로 둔다.)
+    // \u2605 2026-09-22: 150\uac1c \u2192 500\uac1c(MAX_POSTS \uc804\uccb4) \u2014 \uc5ec\uae30\uae4c\uc9c0\ub294 \uc774\ubbf8 \ubc30\ud3ec\ub3fc \uc788\ub358 \uc218\uc815.
+    // \u2605 2026-09-24: \uac1c\uc218(500\uac1c) \ucc3d \u2192 60\uc77c(\uc2dc\uac04) \ucc3d\uc73c\ub85c \ub2e4\uc2dc \uc804\ud658.
+    //   \ud15c\ud50c\ub9bf \ud480\uc774 CHAT_POSTS+POOLS \ud569\uccd0 90\uac1c \uc548\ud30e\ubfd0\uc774\ub77c, \uae00\uc774 \ud65c\ubc1c\ud788 \uc313\uc774\ub294
+    //   \uc2dc\uae30\uc5d4 \ucd5c\uadfc 500\uac1c '\uc548'\uc5d0 90\uac1c \ud15c\ud50c\ub9bf\uc774 \uc804\ubd80 \ub4e4\uc5b4\ucc28\ubc84\ub9b0\ub2e4 \u2014 \uadf8\ub7ec\uba74 \uadf8 \ub4a4\ub85c\ub294
+    //   \ub9e4 \uc8fc\uae30 '\uc2e0\uc120\ud55c \ud15c\ud50c\ub9bf \uc5c6\uc74c'\uc73c\ub85c \uacc4\uc18d \uac74\ub108\ub6f0\uae30\ub9cc \ubc18\ubcf5\ud558\uace0, \uc0c8 \uae00\uc774 \uc601\uc6d0\ud788
+    //   \uc548 \uc62c\ub77c\uc628\ub2e4(\uc624\ub798\ub41c \uae00\uc774 \ubc00\ub824\ub098\ub824\uba74 \uc0c8 \uae00\uc774 \uacc4\uc18d \ub4e4\uc5b4\uc640\uc57c \ud558\ub294\ub370, \uc0c8 \uae00\uc774
+    //   \uc548 \ub9cc\ub4e4\uc5b4\uc9c0\ub2c8 \ucc3d\uc774 \uc808\ub300 \uc548 \ube44\uc6cc\uc9c0\ub294 \uc21c\ud658). \uc2dc\uac04 \ucc3d\uc740 \uba70\uce60\ub9cc \uc9c0\ub098\ub3c4
+    //   \uc624\ub798\ub41c \uae00\uc774 \uc790\uc5f0\ud788 '\ub2e4\uc2dc \uc368\ub3c4 \ub418\ub294' \uc0c1\ud0dc\ub85c \ud480\ub824\uc11c \uc774 \uad50\ucc29\uc744 \ub9c9\ub294\ub2e4.
+    //   (\uc544\ub798 geminiPosts \ucd94\uac00\ub85c \ud15c\ud50c\ub9bf \ud480 \uc790\uccb4\ub3c4 \uc0ac\uc2e4\uc0c1 \ubb34\ud55c\ud574\uc9c0\uc9c0\ub9cc, Gemini\uac00
+    //   \uc2e4\ud328/\ubbf8\uc124\uc815\uc77c \ub54c\uc758 \ud15c\ud50c\ub9bf \ud3f4\ubc31 \uacbd\ub85c\ub97c \uc704\ud574 \uc774 \uc548\uc804\uc7a5\uce58\ub294 \uadf8\ub300\ub85c \ub454\ub2e4.)
     const cut = Date.now() - 60 * 24 * 3600 * 1e3;
     const rs = await env.DB.prepare("SELECT title FROM posts WHERE ts > ? ORDER BY id DESC LIMIT 2000").bind(cut).all();
     recent = (rs.results || []).map((r) => r.title);
-    // ★ 템플릿 재사용 검사·프롬프트 회피 목록도 원장(183일)을 기준으로 한다
+    // \u2605 \ud15c\ud50c\ub9bf \uc7ac\uc0ac\uc6a9 \uac80\uc0ac\u00b7\ud504\ub86c\ud504\ud2b8 \ud68c\ud53c \ubaa9\ub85d\ub3c4 \uc6d0\uc7a5(183\uc77c)\uc744 \uae30\uc900\uc73c\ub85c \ud55c\ub2e4
     ledger.rows.forEach(function(r) { if (recent.indexOf(r.title) < 0) recent.push(r.title); });
     recentOk = true;
   } catch (e) {
-    console.log("[board-writer][posts] recent-titles 조회 실패, 이번 주기는 건너뜀:", e.message);
+    console.log("[board-writer][posts] recent-titles \uc870\ud68c \uc2e4\ud328, \uc774\ubc88 \uc8fc\uae30\ub294 \uac74\ub108\ub700:", e.message);
   }
   if (!recentOk) return { made: 0, slot: slot.key, skipped: "recent-fetch-failed" };
   const norm = /* @__PURE__ */ __name(function(s) {
-    return String(s).replace(/[\s.,!?~…·ㅋㅎㅠㅜ()]/g, "");
+    return String(s).replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315c()]/g, "");
   }, "norm");
   const seen = {};
   recent.forEach(function(t) {
     var k = norm(t);
     if (k) seen[k] = 1;
   });
-  // ★ 2026-09-24: Gemini(설정돼 있으면)로 먼저 새 글을 시도한다. 실패/미설정이면
-  //   아래 기존 분기(CHAT_POSTS 60% / POOLS·WEATHER_POOLS 40%)로 그대로 폴백한다.
+  // \u2605 2026-09-24: Gemini(\uc124\uc815\ub3fc \uc788\uc73c\uba74)\ub85c \uba3c\uc800 \uc0c8 \uae00\uc744 \uc2dc\ub3c4\ud55c\ub2e4. \uc2e4\ud328/\ubbf8\uc124\uc815\uc774\uba74
+  //   \uc544\ub798 \uae30\uc874 \ubd84\uae30(CHAT_POSTS 60% / POOLS\u00b7WEATHER_POOLS 40%)\ub85c \uadf8\ub300\ub85c \ud3f4\ubc31\ud55c\ub2e4.
   let aiPosts = null, aiAsked = 0;
   try {
-    // 후보를 넉넉히(필요한 수의 3배, 최대 9) 받아 원장 검사를 통과한 것만 쓴다
+    // \ud6c4\ubcf4\ub97c \ub109\ub109\ud788(\ud544\uc694\ud55c \uc218\uc758 3\ubc30, \ucd5c\ub300 9) \ubc1b\uc544 \uc6d0\uc7a5 \uac80\uc0ac\ub97c \ud1b5\uacfc\ud55c \uac83\ub9cc \uc4f4\ub2e4
     const want = Math.min(9, count * 3);
     aiAsked = want;
     aiPosts = await geminiPosts(env, want, ledger.rows.slice(0, 60).map(function(r) { return r.title; }), kst, w, wcat, pickTopics(want), hotTokens(ledger.idx));
@@ -1126,9 +1126,9 @@ async function generatePosts(env) {
           break;
         }
       }
-      // ★ 2026-09-22: 예전엔 신선한 글이 없으면 rnd(CHAT_POSTS)로 '무조건' 아무거나
-      //   골라서 이미 썼던 글을 그대로 다시 올렸다(YJ 제보 원인 1). 억지로 반복해서
-      //   보여주느니, 이번 주기엔 그냥 건너뛴다 — 20분 뒤 다음 주기에 다시 시도된다.
+      // \u2605 2026-09-22: \uc608\uc804\uc5d4 \uc2e0\uc120\ud55c \uae00\uc774 \uc5c6\uc73c\uba74 rnd(CHAT_POSTS)\ub85c '\ubb34\uc870\uac74' \uc544\ubb34\uac70\ub098
+      //   \uace8\ub77c\uc11c \uc774\ubbf8 \uc37c\ub358 \uae00\uc744 \uadf8\ub300\ub85c \ub2e4\uc2dc \uc62c\ub838\ub2e4(YJ \uc81c\ubcf4 \uc6d0\uc778 1). \uc5b5\uc9c0\ub85c \ubc18\ubcf5\ud574\uc11c
+      //   \ubcf4\uc5ec\uc8fc\ub290\ub2c8, \uc774\ubc88 \uc8fc\uae30\uc5d4 \uadf8\ub0e5 \uac74\ub108\ub6f4\ub2e4 \u2014 20\ubd84 \ub4a4 \ub2e4\uc74c \uc8fc\uae30\uc5d0 \ub2e4\uc2dc \uc2dc\ub3c4\ub41c\ub2e4.
       if (!pick) { continue; }
       title = holFix(pick.t, kst);
       body = holFix(pick.b, kst);
@@ -1144,7 +1144,7 @@ async function generatePosts(env) {
       let stn2 = rnd(L.stns);
       if (stn2 === stn) stn2 = L.stns[(L.stns.indexOf(stn) + 1) % L.stns.length];
       const ctx = { line: L.name, stn, stn2, temp: w ? String(w.temp) : "30" };
-      usedStn = stn;   // ★ 2026-09-27: 아래 제목 중복 태그가 이 값을 그대로 쓰게 한다(본문과 항상 같은 역이 되도록)
+      usedStn = stn;   // \u2605 2026-09-27: \uc544\ub798 \uc81c\ubaa9 \uc911\ubcf5 \ud0dc\uadf8\uac00 \uc774 \uac12\uc744 \uadf8\ub300\ub85c \uc4f0\uac8c \ud55c\ub2e4(\ubcf8\ubb38\uacfc \ud56d\uc0c1 \uac19\uc740 \uc5ed\uc774 \ub418\ub3c4\ub85d)
       let tpl = null;
       const ord2 = pool.slice().sort(() => Math.random() - 0.5);
       for (const cand of ord2) {
@@ -1154,7 +1154,7 @@ async function generatePosts(env) {
           break;
         }
       }
-      // ★ 2026-09-22: 여기도 동일 — 억지 rnd(pool) 반복 대신 이번엔 건너뛴다(YJ 제보 원인 2).
+      // \u2605 2026-09-22: \uc5ec\uae30\ub3c4 \ub3d9\uc77c \u2014 \uc5b5\uc9c0 rnd(pool) \ubc18\ubcf5 \ub300\uc2e0 \uc774\ubc88\uc5d4 \uac74\ub108\ub6f4\ub2e4(YJ \uc81c\ubcf4 \uc6d0\uc778 2).
       if (!tpl) { continue; }
       title = holFix(fill(tpl.t, ctx), kst);
       body = holFix(fill(tpl.b, ctx), kst);
@@ -1162,18 +1162,18 @@ async function generatePosts(env) {
     if (!title) continue;
     if (seen[norm(title)]) {
       if (kind.indexOf("daily:") === 0 || kind.indexOf("weather:") === 0) {
-        // ★ 2026-09-27 (YJ 지시로 실측 확인 중 발견): 여기서 붙이던 구분용 역명이 본문을
-        //   채운 역(usedStn/ctx.stn)과 무관하게 새로 무작위로 뽑혀서, 실제로 제목엔
-        //   "(김포공항)"인데 본문은 "인천시청 계단을..."처럼 서로 다른 역이 나오는 글이
-        //   production에 실제로 올라간 걸 확인함(id 2112·2113). 구분 태그는 반드시
-        //   이 글이 실제로 쓴 역(usedStn)이어야 본문과 어긋나지 않는다.
+        // \u2605 2026-09-27 (YJ \uc9c0\uc2dc\ub85c \uc2e4\uce21 \ud655\uc778 \uc911 \ubc1c\uacac): \uc5ec\uae30\uc11c \ubd99\uc774\ub358 \uad6c\ubd84\uc6a9 \uc5ed\uba85\uc774 \ubcf8\ubb38\uc744
+        //   \ucc44\uc6b4 \uc5ed(usedStn/ctx.stn)\uacfc \ubb34\uad00\ud558\uac8c \uc0c8\ub85c \ubb34\uc791\uc704\ub85c \ubf51\ud600\uc11c, \uc2e4\uc81c\ub85c \uc81c\ubaa9\uc5d4
+        //   "(\uae40\ud3ec\uacf5\ud56d)"\uc778\ub370 \ubcf8\ubb38\uc740 "\uc778\ucc9c\uc2dc\uccad \uacc4\ub2e8\uc744..."\ucc98\ub7fc \uc11c\ub85c \ub2e4\ub978 \uc5ed\uc774 \ub098\uc624\ub294 \uae00\uc774
+        //   production\uc5d0 \uc2e4\uc81c\ub85c \uc62c\ub77c\uac04 \uac78 \ud655\uc778\ud568(id 2112\u00b72113). \uad6c\ubd84 \ud0dc\uadf8\ub294 \ubc18\ub4dc\uc2dc
+        //   \uc774 \uae00\uc774 \uc2e4\uc81c\ub85c \uc4f4 \uc5ed(usedStn)\uc774\uc5b4\uc57c \ubcf8\ubb38\uacfc \uc5b4\uae0b\ub098\uc9c0 \uc54a\ub294\ub2e4.
         var s2 = usedStn || rnd(rnd(LINES).stns);
         if (title.indexOf(s2) < 0) title = title + " (" + s2 + ")";
         if (seen[norm(title)]) continue;
       } else continue;
     }
     {
-      // ★ 템플릿 글도 같은 원장 검사를 통과해야 한다(AI 글은 위에서 이미 통과)
+      // \u2605 \ud15c\ud50c\ub9bf \uae00\ub3c4 \uac19\uc740 \uc6d0\uc7a5 \uac80\uc0ac\ub97c \ud1b5\uacfc\ud574\uc57c \ud55c\ub2e4(AI \uae00\uc740 \uc704\uc5d0\uc11c \uc774\ubbf8 \ud1b5\uacfc)
       const why2 = kind === "ai" ? null : ledgerDupReason(ledger.idx, title, body);
       if (why2) { rejected.push(why2); continue; }
     }
@@ -1188,7 +1188,7 @@ async function generatePosts(env) {
         nick,
         title,
         body,
-        cat: "잡담",
+        cat: "\uc7a1\ub2f4",
         ts: Date.now(),
         views,
         likes,
@@ -1197,19 +1197,19 @@ async function generatePosts(env) {
         link: ""
       };
       const use = Object.keys(data).filter((k) => cols.indexOf(k) >= 0);
-      if (!use.length) throw new Error("posts 테이블 컬럼 불일치");
+      if (!use.length) throw new Error("posts \ud14c\uc774\ube14 \uceec\ub7fc \ubd88\uc77c\uce58");
       const sql = "INSERT INTO posts (" + use.join(",") + ") VALUES (" + use.map(() => "?").join(",") + ")";
       await env.DB.prepare(sql).bind(...use.map((k) => data[k])).run();
       try {
         await env.DB.prepare("INSERT INTO post_ledger (ts, title, body) VALUES (?, ?, ?)").bind(data.ts, title, String(body).slice(0, 160)).run();
         ledgerAdd(ledger.idx, title, body, true);
       } catch (e) {
-        console.log("[board-writer] 원장 기록 실패:", e.message);
+        console.log("[board-writer] \uc6d0\uc7a5 \uae30\ub85d \uc2e4\ud328:", e.message);
       }
       made++;
       kinds.push(kind);
     } catch (e) {
-      console.log("[board-writer] INSERT 실패:", e.message);
+      console.log("[board-writer] INSERT \uc2e4\ud328:", e.message);
     }
   }
   try {
@@ -1222,23 +1222,23 @@ async function generatePosts(env) {
 }
 __name(generatePosts, "generatePosts");
 
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-03: 글 댓글도 서버가 만들어 모든 사용자에게 똑같이 보여준다 (generateComments)
-//   그동안 서버 글(isServer)의 댓글은 앱이 기기마다 템플릿으로 따로 붙였다(기기마다 다르고, 원장은 30일).
-//   · 최근 36시간 안의 글 중 댓글이 적은 글에 사이클마다 최대 10개를 붙인다.
-//   · 댓글 시각(ts)은 다음 19분 안에 흩뿌려 저장하고, GET /comments 는 ts<=지금 인 것만 내려준다.
-//   · 6개월 중복 금지: 채팅(talks)과 같은 talk_ledger 를 쓴다 — 채팅·댓글을 통틀어 같은 말이 183일 안에 다시 안 나온다.
-//     (3글자 미만 추임새는 제외 — 위 talk_ledger 설명 참고)
-//   · Gemini 가 없거나 실패하면 이번 주기는 댓글을 안 만든다(템플릿 반복으로 중복을 만들지 않기 위해).
-// ══════════════════════════════════════════════════════════════════════
-var CMT_TARGET_MAX = 12;       // 글당 서버 댓글 상한
-var CMT_PER_CYCLE = 10;        // 한 사이클에 새로 붙이는 최대 댓글 수
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-03: \uae00 \ub313\uae00\ub3c4 \uc11c\ubc84\uac00 \ub9cc\ub4e4\uc5b4 \ubaa8\ub4e0 \uc0ac\uc6a9\uc790\uc5d0\uac8c \ub611\uac19\uc774 \ubcf4\uc5ec\uc900\ub2e4 (generateComments)
+//   \uadf8\ub3d9\uc548 \uc11c\ubc84 \uae00(isServer)\uc758 \ub313\uae00\uc740 \uc571\uc774 \uae30\uae30\ub9c8\ub2e4 \ud15c\ud50c\ub9bf\uc73c\ub85c \ub530\ub85c \ubd99\uc600\ub2e4(\uae30\uae30\ub9c8\ub2e4 \ub2e4\ub974\uace0, \uc6d0\uc7a5\uc740 30\uc77c).
+//   \u00b7 \ucd5c\uadfc 36\uc2dc\uac04 \uc548\uc758 \uae00 \uc911 \ub313\uae00\uc774 \uc801\uc740 \uae00\uc5d0 \uc0ac\uc774\ud074\ub9c8\ub2e4 \ucd5c\ub300 10\uac1c\ub97c \ubd99\uc778\ub2e4.
+//   \u00b7 \ub313\uae00 \uc2dc\uac01(ts)\uc740 \ub2e4\uc74c 19\ubd84 \uc548\uc5d0 \ud769\ubfcc\ub824 \uc800\uc7a5\ud558\uace0, GET /comments \ub294 ts<=\uc9c0\uae08 \uc778 \uac83\ub9cc \ub0b4\ub824\uc900\ub2e4.
+//   \u00b7 6\uac1c\uc6d4 \uc911\ubcf5 \uae08\uc9c0: \ucc44\ud305(talks)\uacfc \uac19\uc740 talk_ledger \ub97c \uc4f4\ub2e4 \u2014 \ucc44\ud305\u00b7\ub313\uae00\uc744 \ud1b5\ud2c0\uc5b4 \uac19\uc740 \ub9d0\uc774 183\uc77c \uc548\uc5d0 \ub2e4\uc2dc \uc548 \ub098\uc628\ub2e4.
+//     (3\uae00\uc790 \ubbf8\ub9cc \ucd94\uc784\uc0c8\ub294 \uc81c\uc678 \u2014 \uc704 talk_ledger \uc124\uba85 \ucc38\uace0)
+//   \u00b7 Gemini \uac00 \uc5c6\uac70\ub098 \uc2e4\ud328\ud558\uba74 \uc774\ubc88 \uc8fc\uae30\ub294 \ub313\uae00\uc744 \uc548 \ub9cc\ub4e0\ub2e4(\ud15c\ud50c\ub9bf \ubc18\ubcf5\uc73c\ub85c \uc911\ubcf5\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\uae30 \uc704\ud574).
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+var CMT_TARGET_MAX = 12;       // \uae00\ub2f9 \uc11c\ubc84 \ub313\uae00 \uc0c1\ud55c
+var CMT_PER_CYCLE = 10;        // \ud55c \uc0ac\uc774\ud074\uc5d0 \uc0c8\ub85c \ubd99\uc774\ub294 \ucd5c\ub300 \ub313\uae00 \uc218
 async function geminiComments(env, posts, perPost, kst, w, wcat) {
   if (!env.GEMINI_KEY || !posts.length) return null;
   try {
-    const list = posts.map(function(p) { return "[" + p.id + "] 제목: " + p.title + "\n본문: " + String(p.body || "").slice(0, 160).replace(/\n/g, " / "); }).join("\n\n");
+    const list = posts.map(function(p) { return "[" + p.id + "] \uc81c\ubaa9: " + p.title + "\n\ubcf8\ubb38: " + String(p.body || "").slice(0, 160).replace(/\n/g, " / "); }).join("\n\n");
     const personas = NICKS.slice().sort(() => Math.random() - 0.5).slice(0, 12).join(", ");
-    const prompt = "한국 지하철\xB7버스 이용자 커뮤니티 게시판의 글에 달리는 댓글을 쓴다. 지금: " + slotLabel(kst) + ctxBlock(kst, w, wcat) + "\n아래 글마다 서로 다른 사람이 단 것처럼 댓글을 " + perPost + "개씩 써라.\n" + list + "\n규칙:\n1. 그 글의 내용에 직접 반응(공감\xB7되묻기\xB7농담\xB7경험담\xB7추천). 글 제목을 그대로 따라 쓰지 마라.\n2. 5~40자, 반말\xB7편한 말투, ㅋㅋ\xB7ㅠㅠ 가끔. 같은 문장 틀\xB7같은 첫 단어 반복 금지(특히 \"ㅇㅈ\", \"공감\", \"맞아요\"로만 시작하지 말 것).\n3. 닉네임은 이 중에서: " + personas + "\n4. 정치\xB7혐오\xB7욕설\xB7실존인물 비방 금지.\nJSON 배열만 출력: [{\"p\":글번호,\"n\":\"닉\",\"t\":\"댓글\"}]";
+    const prompt = "\ud55c\uad6d \uc9c0\ud558\ucca0\xB7\ubc84\uc2a4 \uc774\uc6a9\uc790 \ucee4\ubba4\ub2c8\ud2f0 \uac8c\uc2dc\ud310\uc758 \uae00\uc5d0 \ub2ec\ub9ac\ub294 \ub313\uae00\uc744 \uc4f4\ub2e4. \uc9c0\uae08: " + slotLabel(kst) + ctxBlock(kst, w, wcat) + "\n\uc544\ub798 \uae00\ub9c8\ub2e4 \uc11c\ub85c \ub2e4\ub978 \uc0ac\ub78c\uc774 \ub2e8 \uac83\ucc98\ub7fc \ub313\uae00\uc744 " + perPost + "\uac1c\uc529 \uc368\ub77c.\n" + list + "\n\uaddc\uce59:\n1. \uadf8 \uae00\uc758 \ub0b4\uc6a9\uc5d0 \uc9c1\uc811 \ubc18\uc751(\uacf5\uac10\xB7\ub418\ubb3b\uae30\xB7\ub18d\ub2f4\xB7\uacbd\ud5d8\ub2f4\xB7\ucd94\ucc9c). \uae00 \uc81c\ubaa9\uc744 \uadf8\ub300\ub85c \ub530\ub77c \uc4f0\uc9c0 \ub9c8\ub77c.\n2. 5~40\uc790, \ubc18\ub9d0\xB7\ud3b8\ud55c \ub9d0\ud22c, \u314b\u314b\xB7\u3160\u3160 \uac00\ub054. \uac19\uc740 \ubb38\uc7a5 \ud2c0\xB7\uac19\uc740 \uccab \ub2e8\uc5b4 \ubc18\ubcf5 \uae08\uc9c0(\ud2b9\ud788 \"\u3147\u3148\", \"\uacf5\uac10\", \"\ub9de\uc544\uc694\"\ub85c\ub9cc \uc2dc\uc791\ud558\uc9c0 \ub9d0 \uac83).\n3. \ub2c9\ub124\uc784\uc740 \uc774 \uc911\uc5d0\uc11c: " + personas + "\n4. \uc815\uce58\xB7\ud610\uc624\xB7\uc695\uc124\xB7\uc2e4\uc874\uc778\ubb3c \ube44\ubc29 \uae08\uc9c0.\nJSON \ubc30\uc5f4\ub9cc \ucd9c\ub825: [{\"p\":\uae00\ubc88\ud638,\"n\":\"\ub2c9\",\"t\":\"\ub313\uae00\"}]";
     const r = await gemFetch(env, 12e3, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1273,7 +1273,7 @@ async function generateComments(env) {
   const cnt = {};
   const cs = await env.DB.prepare("SELECT post_id, COUNT(*) AS n FROM comments WHERE post_id IN (" + posts.map(function() { return "?"; }).join(",") + ") GROUP BY post_id").bind(...posts.map(function(p) { return p.id; })).all();
   (cs.results || []).forEach(function(r) { cnt[r.post_id] = r.n; });
-  // 댓글이 적은 글을 우선, 같으면 최신 글 우선. 새 글일수록 목표 개수를 높게(3~12) 잡는다.
+  // \ub313\uae00\uc774 \uc801\uc740 \uae00\uc744 \uc6b0\uc120, \uac19\uc73c\uba74 \ucd5c\uc2e0 \uae00 \uc6b0\uc120. \uc0c8 \uae00\uc77c\uc218\ub85d \ubaa9\ud45c \uac1c\uc218\ub97c \ub192\uac8c(3~12) \uc7a1\ub294\ub2e4.
   const cand = posts.map(function(p, i) { return { p: p, n: cnt[p.id] || 0, want: Math.max(3, CMT_TARGET_MAX - i) }; })
     .filter(function(x) { return x.n < x.want; })
     .sort(function(a, b) { return a.n - b.n; })
@@ -1287,10 +1287,10 @@ async function generateComments(env) {
     const clean = gen.filter(function(g) { return g.text && !containsBadWord(g.text) && !containsBadWord(g.nick); });
     kept = await talkLedgerFilter(env, clean);
   } catch (e) {
-    console.log("[board-writer][comments] 원장 처리 실패, 이번 주기는 건너뜀:", e.message);
+    console.log("[board-writer][comments] \uc6d0\uc7a5 \ucc98\ub9ac \uc2e4\ud328, \uc774\ubc88 \uc8fc\uae30\ub294 \uac74\ub108\ub700:", e.message);
     return { made: 0, skipped: "ledger-failed" };
   }
-  // 글마다 상한을 넘기지 않게 자르고, 한 사이클 총량도 제한
+  // \uae00\ub9c8\ub2e4 \uc0c1\ud55c\uc744 \ub118\uae30\uc9c0 \uc54a\uac8c \uc790\ub974\uace0, \ud55c \uc0ac\uc774\ud074 \ucd1d\ub7c9\ub3c4 \uc81c\ud55c
   const per = {};
   kept = kept.filter(function(g) {
     const have = (cnt[g.post_id] || 0) + (per[g.post_id] || 0);
@@ -1308,7 +1308,7 @@ async function generateComments(env) {
       await env.DB.prepare("INSERT INTO comments (" + use.join(",") + ") VALUES (" + use.map(() => "?").join(",") + ")").bind(...use.map((k) => data[k])).run();
       made++;
     } catch (e) {
-      console.log("[board-writer] 댓글 INSERT 실패:", e.message);
+      console.log("[board-writer] \ub313\uae00 INSERT \uc2e4\ud328:", e.message);
       break;
     }
   }
@@ -1336,68 +1336,68 @@ function slotLabel(kst) {
   const h = kst.getUTCHours();
   const c = dayCtx(kst), t = c.t;
   let tm;
-  if (h < 6) tm = "새벽";
-  else if (h < 9) tm = "출근 시간";
-  else if (h < 11) tm = "오전";
-  else if (h < 14) tm = "점심시간";
-  else if (h < 17) tm = "오후";
-  else if (h < 20) tm = "퇴근 시간";
-  else tm = "밤";
-  // ★ 2026-10-05: '월요일 (평일)'로 나가던 개천절 대체공휴일 — 날짜·요일·공휴일 이름·쉬는 날 여부를 함께 적는다. 쉬는 날이면 '출근 시간'은 '이른 아침'.
-  if (t.rest && tm === "출근 시간") tm = "이른 아침";
-  if (t.rest && tm === "퇴근 시간") tm = "저녁 무렵";
-  return t.m + "월 " + t.d + "일 " + DOW_KO[t.dow] + "요일" + (t.hol ? "(" + t.hol + ")" : "") + " " + tm + (t.rest ? " (쉬는 날)" : " (평일)");
+  if (h < 6) tm = "\uc0c8\ubcbd";
+  else if (h < 9) tm = "\ucd9c\uadfc \uc2dc\uac04";
+  else if (h < 11) tm = "\uc624\uc804";
+  else if (h < 14) tm = "\uc810\uc2ec\uc2dc\uac04";
+  else if (h < 17) tm = "\uc624\ud6c4";
+  else if (h < 20) tm = "\ud1f4\uadfc \uc2dc\uac04";
+  else tm = "\ubc24";
+  // \u2605 2026-10-05: '\uc6d4\uc694\uc77c (\ud3c9\uc77c)'\ub85c \ub098\uac00\ub358 \uac1c\ucc9c\uc808 \ub300\uccb4\uacf5\ud734\uc77c \u2014 \ub0a0\uc9dc\u00b7\uc694\uc77c\u00b7\uacf5\ud734\uc77c \uc774\ub984\u00b7\uc26c\ub294 \ub0a0 \uc5ec\ubd80\ub97c \ud568\uaed8 \uc801\ub294\ub2e4. \uc26c\ub294 \ub0a0\uc774\uba74 '\ucd9c\uadfc \uc2dc\uac04'\uc740 '\uc774\ub978 \uc544\uce68'.
+  if (t.rest && tm === "\ucd9c\uadfc \uc2dc\uac04") tm = "\uc774\ub978 \uc544\uce68";
+  if (t.rest && tm === "\ud1f4\uadfc \uc2dc\uac04") tm = "\uc800\ub141 \ubb34\ub835";
+  return t.m + "\uc6d4 " + t.d + "\uc77c " + DOW_KO[t.dow] + "\uc694\uc77c" + (t.hol ? "(" + t.hol + ")" : "") + " " + tm + (t.rest ? " (\uc26c\ub294 \ub0a0)" : " (\ud3c9\uc77c)");
 }
 __name(slotLabel, "slotLabel");
 var TALK_DIALOGS = {
   rush: [
-    ["{stn} 지금 사람 터짐", "ㄹㅇ 방금 두 대 보냄", "다들 힘내라…", "급행은 좀 낫냐", "급행이 더 심함 ㅋㅋ", "오늘따라 왜 이럼"],
-    ["{line} 또 지연이냐", "안내방송 나옴?", "앞 열차 간격 조정이래", "맨날 간격 조정 ㅋㅋ", "지각이다 지각"],
-    ["자리 앉은 사람 오늘 운세 무엇", "부럽다", "나는 세 정거장째 서있음", "{stn}쯤 되면 좀 빠짐", "거기까지가 고비지"],
-    ["에어컨 빵빵한 칸 찾음", "몇 번째 칸?", "중간쯤이 시원함", "약냉방칸은 피해라", "ㅇㅈ 거긴 사우나"]
+    ["{stn} \uc9c0\uae08 \uc0ac\ub78c \ud130\uc9d0", "\u3139\u3147 \ubc29\uae08 \ub450 \ub300 \ubcf4\ub0c4", "\ub2e4\ub4e4 \ud798\ub0b4\ub77c\u2026", "\uae09\ud589\uc740 \uc880 \ub0ab\ub0d0", "\uae09\ud589\uc774 \ub354 \uc2ec\ud568 \u314b\u314b", "\uc624\ub298\ub530\ub77c \uc65c \uc774\ub7fc"],
+    ["{line} \ub610 \uc9c0\uc5f0\uc774\ub0d0", "\uc548\ub0b4\ubc29\uc1a1 \ub098\uc634?", "\uc55e \uc5f4\ucc28 \uac04\uaca9 \uc870\uc815\uc774\ub798", "\ub9e8\ub0a0 \uac04\uaca9 \uc870\uc815 \u314b\u314b", "\uc9c0\uac01\uc774\ub2e4 \uc9c0\uac01"],
+    ["\uc790\ub9ac \uc549\uc740 \uc0ac\ub78c \uc624\ub298 \uc6b4\uc138 \ubb34\uc5c7", "\ubd80\ub7fd\ub2e4", "\ub098\ub294 \uc138 \uc815\uac70\uc7a5\uc9f8 \uc11c\uc788\uc74c", "{stn}\ucbe4 \ub418\uba74 \uc880 \ube60\uc9d0", "\uac70\uae30\uae4c\uc9c0\uac00 \uace0\ube44\uc9c0"],
+    ["\uc5d0\uc5b4\ucee8 \ube75\ube75\ud55c \uce78 \ucc3e\uc74c", "\uba87 \ubc88\uc9f8 \uce78?", "\uc911\uac04\ucbe4\uc774 \uc2dc\uc6d0\ud568", "\uc57d\ub0c9\ubc29\uce78\uc740 \ud53c\ud574\ub77c", "\u3147\u3148 \uac70\uae34 \uc0ac\uc6b0\ub098"]
   ],
   lunch: [
-    ["점심 뭐 먹지", "국밥 ㄱ?", "어제도 국밥이었잖아 ㅋㅋ", "그럼 돈까스", "{stn} 근처 돈까스 맛집 있음?", "역 3번출구 쪽에 하나 있음"],
-    ["웨이팅 30분이래…", "다른 데 가자", "이 시간에는 어딜 가나 똑같음", "편의점 도시락 각", "그것도 나쁘지 않지"],
-    ["식후 커피는 국룰", "아아 vs 라떼", "이 날씨엔 무조건 아아", "인정", "커피 없인 오후 못 버팀"]
+    ["\uc810\uc2ec \ubb50 \uba39\uc9c0", "\uad6d\ubc25 \u3131?", "\uc5b4\uc81c\ub3c4 \uad6d\ubc25\uc774\uc5c8\uc796\uc544 \u314b\u314b", "\uadf8\ub7fc \ub3c8\uae4c\uc2a4", "{stn} \uadfc\ucc98 \ub3c8\uae4c\uc2a4 \ub9db\uc9d1 \uc788\uc74c?", "\uc5ed 3\ubc88\ucd9c\uad6c \ucabd\uc5d0 \ud558\ub098 \uc788\uc74c"],
+    ["\uc6e8\uc774\ud305 30\ubd84\uc774\ub798\u2026", "\ub2e4\ub978 \ub370 \uac00\uc790", "\uc774 \uc2dc\uac04\uc5d0\ub294 \uc5b4\ub51c \uac00\ub098 \ub611\uac19\uc74c", "\ud3b8\uc758\uc810 \ub3c4\uc2dc\ub77d \uac01", "\uadf8\uac83\ub3c4 \ub098\uc058\uc9c0 \uc54a\uc9c0"],
+    ["\uc2dd\ud6c4 \ucee4\ud53c\ub294 \uad6d\ub8f0", "\uc544\uc544 vs \ub77c\ub5bc", "\uc774 \ub0a0\uc528\uc5d4 \ubb34\uc870\uac74 \uc544\uc544", "\uc778\uc815", "\ucee4\ud53c \uc5c6\uc778 \uc624\ud6c4 \ubabb \ubc84\ud300"]
   ],
   day: [
-    ["오후 되니까 졸리다", "커피 마셨는데도 잠옴", "3시가 제일 고비", "퇴근까지 세 시간…", "파이팅"],
-    ["외근 나왔는데 지하철 한산해서 좋다", "이 시간이 꿀이지", "앉아서 가는 지하철 오랜만", "부럽", "러시아워만 피하면 살만함"]
+    ["\uc624\ud6c4 \ub418\ub2c8\uae4c \uc878\ub9ac\ub2e4", "\ucee4\ud53c \ub9c8\uc168\ub294\ub370\ub3c4 \uc7a0\uc634", "3\uc2dc\uac00 \uc81c\uc77c \uace0\ube44", "\ud1f4\uadfc\uae4c\uc9c0 \uc138 \uc2dc\uac04\u2026", "\ud30c\uc774\ud305"],
+    ["\uc678\uadfc \ub098\uc654\ub294\ub370 \uc9c0\ud558\ucca0 \ud55c\uc0b0\ud574\uc11c \uc88b\ub2e4", "\uc774 \uc2dc\uac04\uc774 \uafc0\uc774\uc9c0", "\uc549\uc544\uc11c \uac00\ub294 \uc9c0\ud558\ucca0 \uc624\ub79c\ub9cc", "\ubd80\ub7fd", "\ub7ec\uc2dc\uc544\uc6cc\ub9cc \ud53c\ud558\uba74 \uc0b4\ub9cc\ud568"]
   ],
   evening: [
-    ["칼퇴 성공", "부럽다 난 아직 회사", "오늘은 일찍 들어가서 쉬어야지", "{stn}쪽 벌써 붐빔?", "붐비기 시작함 서둘러"],
-    ["저녁 약속 가는 길", "뭐 먹으러 감?", "고기 먹으러 ㅋㅋ", "좋겠다 난 집밥", "집밥이 최고임 사실"],
-    ["퇴근길 노래 추천 좀", "요즘 차트 틀어놓으면 무난함", "팟캐스트도 괜찮음", "내일 출근 생각하면 벌써 피곤", "그 생각은 내일 하자"]
+    ["\uce7c\ud1f4 \uc131\uacf5", "\ubd80\ub7fd\ub2e4 \ub09c \uc544\uc9c1 \ud68c\uc0ac", "\uc624\ub298\uc740 \uc77c\ucc0d \ub4e4\uc5b4\uac00\uc11c \uc26c\uc5b4\uc57c\uc9c0", "{stn}\ucabd \ubc8c\uc368 \ubd90\ube54?", "\ubd90\ube44\uae30 \uc2dc\uc791\ud568 \uc11c\ub458\ub7ec"],
+    ["\uc800\ub141 \uc57d\uc18d \uac00\ub294 \uae38", "\ubb50 \uba39\uc73c\ub7ec \uac10?", "\uace0\uae30 \uba39\uc73c\ub7ec \u314b\u314b", "\uc88b\uaca0\ub2e4 \ub09c \uc9d1\ubc25", "\uc9d1\ubc25\uc774 \ucd5c\uace0\uc784 \uc0ac\uc2e4"],
+    ["\ud1f4\uadfc\uae38 \ub178\ub798 \ucd94\ucc9c \uc880", "\uc694\uc998 \ucc28\ud2b8 \ud2c0\uc5b4\ub193\uc73c\uba74 \ubb34\ub09c\ud568", "\ud31f\uce90\uc2a4\ud2b8\ub3c4 \uad1c\ucc2e\uc74c", "\ub0b4\uc77c \ucd9c\uadfc \uc0dd\uac01\ud558\uba74 \ubc8c\uc368 \ud53c\uace4", "\uadf8 \uc0dd\uac01\uc740 \ub0b4\uc77c \ud558\uc790"]
   ],
   night: [
-    ["이제 집 가는 사람?", "야근 끝났다…", "수고했어요", "막차 시간 확인들 하셈", "아직 여유 있음"],
-    ["오늘 하루 순삭", "내일이 벌써 무섭다", "자기 전에 뭐라도 하나 하자", "치맥 각인데", "참아라 ㅋㅋ"]
+    ["\uc774\uc81c \uc9d1 \uac00\ub294 \uc0ac\ub78c?", "\uc57c\uadfc \ub05d\ub0ac\ub2e4\u2026", "\uc218\uace0\ud588\uc5b4\uc694", "\ub9c9\ucc28 \uc2dc\uac04 \ud655\uc778\ub4e4 \ud558\uc148", "\uc544\uc9c1 \uc5ec\uc720 \uc788\uc74c"],
+    ["\uc624\ub298 \ud558\ub8e8 \uc21c\uc0ad", "\ub0b4\uc77c\uc774 \ubc8c\uc368 \ubb34\uc12d\ub2e4", "\uc790\uae30 \uc804\uc5d0 \ubb50\ub77c\ub3c4 \ud558\ub098 \ud558\uc790", "\uce58\ub9e5 \uac01\uc778\ub370", "\ucc38\uc544\ub77c \u314b\u314b"]
   ],
   dawn: [
-    ["이 시간에 깨있는 사람 있음?", "야근 끝나고 집 가는 중", "고생했다 진짜", "첫차까지 버틴다", "다들 무사귀가"],
-    ["새벽 지하철은 조용해서 좋음", "약간 감성적이 됨", "노래 들으면서 가는 중", "푹 쉬어요 다들"]
+    ["\uc774 \uc2dc\uac04\uc5d0 \uae68\uc788\ub294 \uc0ac\ub78c \uc788\uc74c?", "\uc57c\uadfc \ub05d\ub098\uace0 \uc9d1 \uac00\ub294 \uc911", "\uace0\uc0dd\ud588\ub2e4 \uc9c4\uc9dc", "\uccab\ucc28\uae4c\uc9c0 \ubc84\ud2f4\ub2e4", "\ub2e4\ub4e4 \ubb34\uc0ac\uadc0\uac00"],
+    ["\uc0c8\ubcbd \uc9c0\ud558\ucca0\uc740 \uc870\uc6a9\ud574\uc11c \uc88b\uc74c", "\uc57d\uac04 \uac10\uc131\uc801\uc774 \ub428", "\ub178\ub798 \ub4e4\uc73c\uba74\uc11c \uac00\ub294 \uc911", "\ud479 \uc26c\uc5b4\uc694 \ub2e4\ub4e4"]
   ],
   weekendNight: [
-    ["주말 잘 보냈냐", "ㅇㅇ 하루 순삭", "나는 집에서 뒹굴", "그것도 완벽한 주말이지", "내일 걱정은 내일 하자"],
-    ["일요일 밤 특유의 싱숭생숭함", "이 기분 뭔지 다 알잖아 ㅋㅋ", "야식이나 시키자", "치킨 콜?", "살은 주말에 안 찐다는 설"],
-    ["주말 마무리 뭐함?", "넷플 보는 중", "나는 일찍 잘 준비", "부지런하네", "내일을 위한 투자임"]
+    ["\uc8fc\ub9d0 \uc798 \ubcf4\ub0c8\ub0d0", "\u3147\u3147 \ud558\ub8e8 \uc21c\uc0ad", "\ub098\ub294 \uc9d1\uc5d0\uc11c \ub4b9\uad74", "\uadf8\uac83\ub3c4 \uc644\ubcbd\ud55c \uc8fc\ub9d0\uc774\uc9c0", "\ub0b4\uc77c \uac71\uc815\uc740 \ub0b4\uc77c \ud558\uc790"],
+    ["\uc77c\uc694\uc77c \ubc24 \ud2b9\uc720\uc758 \uc2f1\uc22d\uc0dd\uc22d\ud568", "\uc774 \uae30\ubd84 \ubb54\uc9c0 \ub2e4 \uc54c\uc796\uc544 \u314b\u314b", "\uc57c\uc2dd\uc774\ub098 \uc2dc\ud0a4\uc790", "\uce58\ud0a8 \ucf5c?", "\uc0b4\uc740 \uc8fc\ub9d0\uc5d0 \uc548 \ucc10\ub2e4\ub294 \uc124"],
+    ["\uc8fc\ub9d0 \ub9c8\ubb34\ub9ac \ubb50\ud568?", "\ub137\ud50c \ubcf4\ub294 \uc911", "\ub098\ub294 \uc77c\ucc0d \uc798 \uc900\ube44", "\ubd80\uc9c0\ub7f0\ud558\ub124", "\ub0b4\uc77c\uc744 \uc704\ud55c \ud22c\uc790\uc784"]
   ],
   weekendDay: [
-    ["주말인데 다들 어디 감?", "{stn} 나들이 중", "날씨 좋아서 나옴", "집이 최고인 사람도 있음 ㅋㅋ", "그것도 인정"],
-    ["주말 지하철 여유롭다", "평일이랑 완전 다름", "앉아서 가는 게 이렇게 좋은 거였나", "주말엔 시간도 천천히 가는 느낌"]
+    ["\uc8fc\ub9d0\uc778\ub370 \ub2e4\ub4e4 \uc5b4\ub514 \uac10?", "{stn} \ub098\ub4e4\uc774 \uc911", "\ub0a0\uc528 \uc88b\uc544\uc11c \ub098\uc634", "\uc9d1\uc774 \ucd5c\uace0\uc778 \uc0ac\ub78c\ub3c4 \uc788\uc74c \u314b\u314b", "\uadf8\uac83\ub3c4 \uc778\uc815"],
+    ["\uc8fc\ub9d0 \uc9c0\ud558\ucca0 \uc5ec\uc720\ub86d\ub2e4", "\ud3c9\uc77c\uc774\ub791 \uc644\uc804 \ub2e4\ub984", "\uc549\uc544\uc11c \uac00\ub294 \uac8c \uc774\ub807\uac8c \uc88b\uc740 \uac70\uc600\ub098", "\uc8fc\ub9d0\uc5d4 \uc2dc\uac04\ub3c4 \ucc9c\ucc9c\ud788 \uac00\ub294 \ub290\ub08c"]
   ],
   rain: [
-    ["비 쏟아진다", "우산 없는데 ㅠㅠ", "편의점 우산 사셈", "집에 편의점 우산만 다섯 개임 ㅋㅋ", "{stn} 출구 우산 정체 심함"],
-    ["비 오니까 지하철이 꿉꿉하네", "습기 장난 아님", "그래도 버스보다 낫다", "ㅇㅈ 도로 막힐 듯"]
+    ["\ube44 \uc3df\uc544\uc9c4\ub2e4", "\uc6b0\uc0b0 \uc5c6\ub294\ub370 \u3160\u3160", "\ud3b8\uc758\uc810 \uc6b0\uc0b0 \uc0ac\uc148", "\uc9d1\uc5d0 \ud3b8\uc758\uc810 \uc6b0\uc0b0\ub9cc \ub2e4\uc12f \uac1c\uc784 \u314b\u314b", "{stn} \ucd9c\uad6c \uc6b0\uc0b0 \uc815\uccb4 \uc2ec\ud568"],
+    ["\ube44 \uc624\ub2c8\uae4c \uc9c0\ud558\ucca0\uc774 \uafc9\uafc9\ud558\ub124", "\uc2b5\uae30 \uc7a5\ub09c \uc544\ub2d8", "\uadf8\ub798\ub3c4 \ubc84\uc2a4\ubcf4\ub2e4 \ub0ab\ub2e4", "\u3147\u3148 \ub3c4\ub85c \ub9c9\ud790 \ub4ef"]
   ],
   hot: [
-    ["밖에 {temp}도 실화냐", "익는다 익어", "지하철 에어컨이 구원임", "내리기 싫다 ㅋㅋ", "물 챙겨 다니셈"],
-    ["등에 땀 줄줄", "오늘 최고기온 몇 도래?", "{temp}도 넘는대", "여름 싫다…", "겨울엔 여름이 그리울걸"]
+    ["\ubc16\uc5d0 {temp}\ub3c4 \uc2e4\ud654\ub0d0", "\uc775\ub294\ub2e4 \uc775\uc5b4", "\uc9c0\ud558\ucca0 \uc5d0\uc5b4\ucee8\uc774 \uad6c\uc6d0\uc784", "\ub0b4\ub9ac\uae30 \uc2eb\ub2e4 \u314b\u314b", "\ubb3c \ucc59\uaca8 \ub2e4\ub2c8\uc148"],
+    ["\ub4f1\uc5d0 \ub540 \uc904\uc904", "\uc624\ub298 \ucd5c\uace0\uae30\uc628 \uba87 \ub3c4\ub798?", "{temp}\ub3c4 \ub118\ub294\ub300", "\uc5ec\ub984 \uc2eb\ub2e4\u2026", "\uaca8\uc6b8\uc5d4 \uc5ec\ub984\uc774 \uadf8\ub9ac\uc6b8\uac78"]
   ],
   cold: [
-    ["플랫폼 개추움", "발 얼겠다", "히터 자리 앉으면 천국", "그 자리 경쟁 치열함 ㅋㅋ", "목도리 필수"],
-    ["한파에 지하철 기다리는 거 고문임", "스크린도어 있는 역이 최고", "{line}은 좀 나은 편", "겨울아 빨리 가라"]
+    ["\ud50c\ub7ab\ud3fc \uac1c\ucd94\uc6c0", "\ubc1c \uc5bc\uaca0\ub2e4", "\ud788\ud130 \uc790\ub9ac \uc549\uc73c\uba74 \ucc9c\uad6d", "\uadf8 \uc790\ub9ac \uacbd\uc7c1 \uce58\uc5f4\ud568 \u314b\u314b", "\ubaa9\ub3c4\ub9ac \ud544\uc218"],
+    ["\ud55c\ud30c\uc5d0 \uc9c0\ud558\ucca0 \uae30\ub2e4\ub9ac\ub294 \uac70 \uace0\ubb38\uc784", "\uc2a4\ud06c\ub9b0\ub3c4\uc5b4 \uc788\ub294 \uc5ed\uc774 \ucd5c\uace0", "{line}\uc740 \uc880 \ub098\uc740 \ud3b8", "\uaca8\uc6b8\uc544 \ube68\ub9ac \uac00\ub77c"]
   ]
 };
 function pickDialogKey(kst, wcat) {
@@ -1422,39 +1422,39 @@ __name(slotDialogKey, "slotDialogKey");
 function _slotTopicsBase(kst) {
   const h = kst.getUTCHours();
   const we = isRestDay(kst);
-  if (h < 6) return { ok: "새벽 감성, 야간 알바\xB7야근 귀가, 잠 안 옴, 첫차 기다림", no: "점심 메뉴, 퇴근 러시" };
+  if (h < 6) return { ok: "\uc0c8\ubcbd \uac10\uc131, \uc57c\uac04 \uc54c\ubc14\xB7\uc57c\uadfc \uadc0\uac00, \uc7a0 \uc548 \uc634, \uccab\ucc28 \uae30\ub2e4\ub9bc", no: "\uc810\uc2ec \uba54\ub274, \ud1f4\uadfc \ub7ec\uc2dc" };
   if (we) {
-    if (h < 11) return { ok: "주말 늦잠, 브런치, 나들이 준비, 약속 잡기", no: "출근, 수업, 회사, 학교" };
-    if (h < 14) return { ok: "주말 점심, 나들이 중, 카페, 약속\xB7데이트", no: "회사, 수업, 야근" };
-    if (h < 18) return { ok: "주말 오후 나들이, 카페, 쇼핑, 집콕, 낮잠", no: "점심 메뉴 고르기(지남), 회사, 수업" };
-    return { ok: "주말 저녁 귀가, 저녁 약속, 일요일 밤 월요병, 야식", no: "점심, 출근, 수업" };
+    if (h < 11) return { ok: "\uc8fc\ub9d0 \ub2a6\uc7a0, \ube0c\ub7f0\uce58, \ub098\ub4e4\uc774 \uc900\ube44, \uc57d\uc18d \uc7a1\uae30", no: "\ucd9c\uadfc, \uc218\uc5c5, \ud68c\uc0ac, \ud559\uad50" };
+    if (h < 14) return { ok: "\uc8fc\ub9d0 \uc810\uc2ec, \ub098\ub4e4\uc774 \uc911, \uce74\ud398, \uc57d\uc18d\xB7\ub370\uc774\ud2b8", no: "\ud68c\uc0ac, \uc218\uc5c5, \uc57c\uadfc" };
+    if (h < 18) return { ok: "\uc8fc\ub9d0 \uc624\ud6c4 \ub098\ub4e4\uc774, \uce74\ud398, \uc1fc\ud551, \uc9d1\ucf55, \ub0ae\uc7a0", no: "\uc810\uc2ec \uba54\ub274 \uace0\ub974\uae30(\uc9c0\ub0a8), \ud68c\uc0ac, \uc218\uc5c5" };
+    return { ok: "\uc8fc\ub9d0 \uc800\ub141 \uadc0\uac00, \uc800\ub141 \uc57d\uc18d, \uc77c\uc694\uc77c \ubc24 \uc6d4\uc694\ubcd1, \uc57c\uc2dd", no: "\uc810\uc2ec, \ucd9c\uadfc, \uc218\uc5c5" };
   }
-  if (h < 9) return { ok: "출근\xB7등교 러시, 지각 위기, 만원 지하철\xB7버스, 아침잠, 1교시 걱정", no: "점심 메뉴, 퇴근" };
-  if (h < 11) return { ok: "오전 수업\xB7업무, 회의, 졸림, 커피 수혈, 과제 마감", no: "퇴근, 하교" };
-  if (h < 14) return { ok: "점심 메뉴, 학식\xB7구내식당, 급식, 식후 커피\xB7산책", no: "출근 러시, 퇴근 러시" };
-  if (h < 17) return { ok: "오후 슬럼프, 졸림, 간식, 남은 수업\xB7업무, 퇴근\xB7하교 카운트다운, 야자\xB7학원 걱정", no: "점심 메뉴 얘기(이미 지남), 아침 출근" };
-  if (h < 20) return { ok: "퇴근\xB7하교 러시, 저녁 메뉴, 저녁 약속, 학원 이동, 지옥철", no: "점심 메뉴, 아침 출근" };
-  return { ok: "야근, 과제\xB7시험공부, 야자 끝 귀가, 하루 마무리, 내일 걱정, 휴식", no: "점심 메뉴, 출근 러시" };
+  if (h < 9) return { ok: "\ucd9c\uadfc\xB7\ub4f1\uad50 \ub7ec\uc2dc, \uc9c0\uac01 \uc704\uae30, \ub9cc\uc6d0 \uc9c0\ud558\ucca0\xB7\ubc84\uc2a4, \uc544\uce68\uc7a0, 1\uad50\uc2dc \uac71\uc815", no: "\uc810\uc2ec \uba54\ub274, \ud1f4\uadfc" };
+  if (h < 11) return { ok: "\uc624\uc804 \uc218\uc5c5\xB7\uc5c5\ubb34, \ud68c\uc758, \uc878\ub9bc, \ucee4\ud53c \uc218\ud608, \uacfc\uc81c \ub9c8\uac10", no: "\ud1f4\uadfc, \ud558\uad50" };
+  if (h < 14) return { ok: "\uc810\uc2ec \uba54\ub274, \ud559\uc2dd\xB7\uad6c\ub0b4\uc2dd\ub2f9, \uae09\uc2dd, \uc2dd\ud6c4 \ucee4\ud53c\xB7\uc0b0\ucc45", no: "\ucd9c\uadfc \ub7ec\uc2dc, \ud1f4\uadfc \ub7ec\uc2dc" };
+  if (h < 17) return { ok: "\uc624\ud6c4 \uc2ac\ub7fc\ud504, \uc878\ub9bc, \uac04\uc2dd, \ub0a8\uc740 \uc218\uc5c5\xB7\uc5c5\ubb34, \ud1f4\uadfc\xB7\ud558\uad50 \uce74\uc6b4\ud2b8\ub2e4\uc6b4, \uc57c\uc790\xB7\ud559\uc6d0 \uac71\uc815", no: "\uc810\uc2ec \uba54\ub274 \uc598\uae30(\uc774\ubbf8 \uc9c0\ub0a8), \uc544\uce68 \ucd9c\uadfc" };
+  if (h < 20) return { ok: "\ud1f4\uadfc\xB7\ud558\uad50 \ub7ec\uc2dc, \uc800\ub141 \uba54\ub274, \uc800\ub141 \uc57d\uc18d, \ud559\uc6d0 \uc774\ub3d9, \uc9c0\uc625\ucca0", no: "\uc810\uc2ec \uba54\ub274, \uc544\uce68 \ucd9c\uadfc" };
+  return { ok: "\uc57c\uadfc, \uacfc\uc81c\xB7\uc2dc\ud5d8\uacf5\ubd80, \uc57c\uc790 \ub05d \uadc0\uac00, \ud558\ub8e8 \ub9c8\ubb34\ub9ac, \ub0b4\uc77c \uac71\uc815, \ud734\uc2dd", no: "\uc810\uc2ec \uba54\ub274, \ucd9c\uadfc \ub7ec\uc2dc" };
 }
 __name(_slotTopicsBase, "_slotTopicsBase");
 function slotTopics(kst) {
   const r = _slotTopicsBase(kst);
   const c = dayCtx(kst), h = kst.getUTCHours();
   let ok = r.ok, no = r.no;
-  if (c.hw) ok = ok.replace(/주말/g, "휴일");
+  if (c.hw) ok = ok.replace(/\uc8fc\ub9d0/g, "\ud734\uc77c");
   if (c.t.rest && h >= 18) {
-    // 쉬는 날 저녁: 내일도 쉬면 월요병·출근 걱정 금지, 내일이 평일이면 휴일의 마지막 저녁
-    ok = ok.replace("일요일 밤 월요병", c.tm.rest ? "내일도 쉬는 날이라 느긋한 저녁" : "휴일 마지막 저녁, 내일 출근·등교 걱정");
-    if (c.tm.rest) no += ", 월요병, 내일 출근·등교";
+    // \uc26c\ub294 \ub0a0 \uc800\ub141: \ub0b4\uc77c\ub3c4 \uc26c\uba74 \uc6d4\uc694\ubcd1\u00b7\ucd9c\uadfc \uac71\uc815 \uae08\uc9c0, \ub0b4\uc77c\uc774 \ud3c9\uc77c\uc774\uba74 \ud734\uc77c\uc758 \ub9c8\uc9c0\ub9c9 \uc800\ub141
+    ok = ok.replace("\uc77c\uc694\uc77c \ubc24 \uc6d4\uc694\ubcd1", c.tm.rest ? "\ub0b4\uc77c\ub3c4 \uc26c\ub294 \ub0a0\uc774\ub77c \ub290\uae0b\ud55c \uc800\ub141" : "\ud734\uc77c \ub9c8\uc9c0\ub9c9 \uc800\ub141, \ub0b4\uc77c \ucd9c\uadfc\u00b7\ub4f1\uad50 \uac71\uc815");
+    if (c.tm.rest) no += ", \uc6d4\uc694\ubcd1, \ub0b4\uc77c \ucd9c\uadfc\u00b7\ub4f1\uad50";
   } else if (!c.t.rest && h >= 20 && c.tm.rest) {
-    ok = ok.replace("내일 걱정", "내일 쉬는 날이라 여유(약속·한잔·야식·늦잠 계획)");
-    no += ", 월요병, 내일 출근·등교";
+    ok = ok.replace("\ub0b4\uc77c \uac71\uc815", "\ub0b4\uc77c \uc26c\ub294 \ub0a0\uc774\ub77c \uc5ec\uc720(\uc57d\uc18d\u00b7\ud55c\uc794\u00b7\uc57c\uc2dd\u00b7\ub2a6\uc7a0 \uacc4\ud68d)");
+    no += ", \uc6d4\uc694\ubcd1, \ub0b4\uc77c \ucd9c\uadfc\u00b7\ub4f1\uad50";
   }
-  if (c.t.rest) no += ", 오늘 출근·등교하는 것처럼 말하기";
+  if (c.t.rest) no += ", \uc624\ub298 \ucd9c\uadfc\u00b7\ub4f1\uad50\ud558\ub294 \uac83\ucc98\ub7fc \ub9d0\ud558\uae30";
   return { ok: ok, no: no };
 }
 __name(slotTopics, "slotTopics");
-// ★ 2026-10-10: 모델 출력에서 JSON 배열만 뽑는다(Gemma 는 앞뒤에 설명을 붙이기도 한다) / 말줄임표 조각·이모지 범벅 같은 깨진 문장 판별
+// \u2605 2026-10-10: \ubaa8\ub378 \ucd9c\ub825\uc5d0\uc11c JSON \ubc30\uc5f4\ub9cc \ubf51\ub294\ub2e4(Gemma \ub294 \uc55e\ub4a4\uc5d0 \uc124\uba85\uc744 \ubd99\uc774\uae30\ub3c4 \ud55c\ub2e4) / \ub9d0\uc904\uc784\ud45c \uc870\uac01\u00b7\uc774\ubaa8\uc9c0 \ubc94\ubc85 \uac19\uc740 \uae68\uc9c4 \ubb38\uc7a5 \ud310\ubcc4
 function parseJsonArr(txt) {
   let t = String(txt || "").replace(/```json|```/g, "").trim();
   try { const a = JSON.parse(t); if (Array.isArray(a)) return a; } catch (e) {}
@@ -1465,15 +1465,15 @@ function parseJsonArr(txt) {
 __name(parseJsonArr, "parseJsonArr");
 function aiJunk(text) {
   const t = String(text || "");
-  const ell = (t.match(/…|\.{3,}/g) || []).length;
+  const ell = (t.match(/\u2026|\.{3,}/g) || []).length;
   const emo = (t.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu) || []).length;
-  if (ell >= 2) return true;                 // "치맥… 🍗… 🤤" 같은 조각
-  if (emo >= 2) return true;                 // 이모지 거의 안 쓰는 방이다
-  if (t.replace(/[\s.,!?~…·ㅋㅎㅠㅜ]/g, "").length < 2) return true;   // 의미 있는 글자가 없음
+  if (ell >= 2) return true;                 // "\uce58\ub9e5\u2026 \ud83c\udf57\u2026 \ud83e\udd24" \uac19\uc740 \uc870\uac01
+  if (emo >= 2) return true;                 // \uc774\ubaa8\uc9c0 \uac70\uc758 \uc548 \uc4f0\ub294 \ubc29\uc774\ub2e4
+  if (t.replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315c]/g, "").length < 2) return true;   // \uc758\ubbf8 \uc788\ub294 \uae00\uc790\uac00 \uc5c6\uc74c
   return false;
 }
 __name(aiJunk, "aiJunk");
-var PERSONA_ROLES = ["직장인", "대학생", "고등학생", "취준생", "알바생", "대학원생", "신입사원"];
+var PERSONA_ROLES = ["\uc9c1\uc7a5\uc778", "\ub300\ud559\uc0dd", "\uace0\ub4f1\ud559\uc0dd", "\ucde8\uc900\uc0dd", "\uc54c\ubc14\uc0dd", "\ub300\ud559\uc6d0\uc0dd", "\uc2e0\uc785\uc0ac\uc6d0"];
 async function geminiTalks(env, n, recentTalks, kst, w, wcat, room, order) {
   if (!env.GEMINI_KEY) { _gemStat.fail++; _gemStat.last = "nokey"; return null; }
   try {
@@ -1481,15 +1481,15 @@ async function geminiTalks(env, n, recentTalks, kst, w, wcat, room, order) {
     recentTalks.slice(-5).forEach((t) => {
       if (t.nick && personas.indexOf(t.nick) < 0) personas.push(t.nick);
     });
-    const ctx = recentTalks.slice(-20).map((t) => t.nick + ": " + t.text).join("\n") || "(대화 시작)";
-    const wtxt = w ? "기온 " + w.temp + "도" + (wcat === "rain" ? ", 비" : wcat === "hot" ? ", 폭염" : wcat === "cold" ? ", 한파" : wcat === "snow" ? ", 눈" : ", 맑은 편") : "보통";
+    const ctx = recentTalks.slice(-20).map((t) => t.nick + ": " + t.text).join("\n") || "(\ub300\ud654 \uc2dc\uc791)";
+    const wtxt = w ? "\uae30\uc628 " + w.temp + "\ub3c4" + (wcat === "rain" ? ", \ube44" : wcat === "hot" ? ", \ud3ed\uc5fc" : wcat === "cold" ? ", \ud55c\ud30c" : wcat === "snow" ? ", \ub208" : ", \ub9d1\uc740 \ud3b8") : "\ubcf4\ud1b5";
     const tp = slotTopics(kst);
-    // ★ 2026-10-04 노선별 방: 그 노선 이용자 입장에서 말하되, 실시간 운행 상황은 지어내지 않는다(지연·혼잡은 이용자 제보 기능이 따로 다룬다).
-    const lineRule = room ? "\n이 방은 '" + room.name + "' 이용자 방이다. 이 노선을 자주 타는 사람들의 말투와 일상(자주 가는 역: " + room.stns.join("\xB7") + ")으로 쓴다. 이 노선의 지금 운행 상황(지연\xB7사고\xB7고장\xB7운행중단\xB7얼마나 붐비는지)을 사실처럼 말하거나 지어내지 마라." + " 이 대화는 앞으로 약 6시간에 걸쳐 올라가니 특정 시각·식사 시간·'지금 막'을 단정하지 말고 " + (kst.getUTCHours() >= 20 ? "자정을 넘기는 표현(내일 아침 등)도 피한다." : "시간대가 조금 바뀌어도 어색하지 않게 쓴다.") : "";
+    // \u2605 2026-10-04 \ub178\uc120\ubcc4 \ubc29: \uadf8 \ub178\uc120 \uc774\uc6a9\uc790 \uc785\uc7a5\uc5d0\uc11c \ub9d0\ud558\ub418, \uc2e4\uc2dc\uac04 \uc6b4\ud589 \uc0c1\ud669\uc740 \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub294\ub2e4(\uc9c0\uc5f0\u00b7\ud63c\uc7a1\uc740 \uc774\uc6a9\uc790 \uc81c\ubcf4 \uae30\ub2a5\uc774 \ub530\ub85c \ub2e4\ub8ec\ub2e4).
+    const lineRule = room ? "\n\uc774 \ubc29\uc740 '" + room.name + "' \uc774\uc6a9\uc790 \ubc29\uc774\ub2e4. \uc774 \ub178\uc120\uc744 \uc790\uc8fc \ud0c0\ub294 \uc0ac\ub78c\ub4e4\uc758 \ub9d0\ud22c\uc640 \uc77c\uc0c1(\uc790\uc8fc \uac00\ub294 \uc5ed: " + room.stns.join("\xB7") + ")\uc73c\ub85c \uc4f4\ub2e4. \uc774 \ub178\uc120\uc758 \uc9c0\uae08 \uc6b4\ud589 \uc0c1\ud669(\uc9c0\uc5f0\xB7\uc0ac\uace0\xB7\uace0\uc7a5\xB7\uc6b4\ud589\uc911\ub2e8\xB7\uc5bc\ub9c8\ub098 \ubd90\ube44\ub294\uc9c0)\uc744 \uc0ac\uc2e4\ucc98\ub7fc \ub9d0\ud558\uac70\ub098 \uc9c0\uc5b4\ub0b4\uc9c0 \ub9c8\ub77c." + " \uc774 \ub300\ud654\ub294 \uc55e\uc73c\ub85c \uc57d 6\uc2dc\uac04\uc5d0 \uac78\uccd0 \uc62c\ub77c\uac00\ub2c8 \ud2b9\uc815 \uc2dc\uac01\u00b7\uc2dd\uc0ac \uc2dc\uac04\u00b7'\uc9c0\uae08 \ub9c9'\uc744 \ub2e8\uc815\ud558\uc9c0 \ub9d0\uace0 " + (kst.getUTCHours() >= 20 ? "\uc790\uc815\uc744 \ub118\uae30\ub294 \ud45c\ud604(\ub0b4\uc77c \uc544\uce68 \ub4f1)\ub3c4 \ud53c\ud55c\ub2e4." : "\uc2dc\uac04\ub300\uac00 \uc870\uae08 \ubc14\ub00c\uc5b4\ub3c4 \uc5b4\uc0c9\ud558\uc9c0 \uc54a\uac8c \uc4f4\ub2e4.") : "";
     const personaStr = personas.map(function(p, i) {
       return p + "(" + PERSONA_ROLES[i % PERSONA_ROLES.length] + ")";
     }).join(", ");
-    const prompt = "너는 한국의 지하철\xB7버스로 출퇴근하고 등하교하는 사람들이 모인 실시간 단체 오픈채팅방을 재현한다. 진짜 카톡 오픈채팅처럼 자연스럽게." + lineRule + "\n지금: " + slotLabel(kst) + ", 날씨: " + wtxt + ctxBlock(kst, w, wcat) + "\n방금 전 대화:\n" + ctx + "\n\n이 흐름을 자연스럽게 이어서 채팅 " + n + "개를 써라.\n참여자(역할 고정): " + personaStr + "\n규칙:\n1. 진짜 사람처럼. 완결된 문장 말고 실제 채팅투 — 짧게 툭툭, 오타틱한 줄임말(ㄱㄱ,ㅇㅇ,ㅇㅈ,ㄹㅇ,ㅋㅋ,ㅠ,ㄷㄷ,담,낼,걍,넘,쫌), 한 명이 두세 줄 연달아 치기도 함.\n2. 서로 진짜 대화. 앞사람 말에 대답/맞장구/되묻기/딴지/부러움/투정. 각자 혼잣말 나열 절대 금지.\n3. 직장인은 회사\xB7야근\xB7상사\xB7월급, 학생은 수업\xB7과제\xB7시험\xB7급식 얘기로 서로 티키타카 (부러워하거나 놀리거나).\n4. 지금 시간대 얘기만: " + tp.ok + ". 금지: " + tp.no + '\n5. 방금 전 대화에 나온 말\xB7소재는 절대 반복하지 마. 새 메시지에끼리도 같은 말 반복 금지.\n6. 가끔 새 화제를 누가 툭 던져서 주제가 자연스럽게 바뀌어도 됨.\n7. 정치 편들기\xB7욕설\xB7혐오\xB7실존인물 비방 금지. 이모지는 쓰지 않는다.\n8. 모든 채팅은 말이 되는 한 문장 이상. "…"로 끊긴 단어 조각이나 단어만 나열한 줄 금지.\nJSON 배열만: [{"n":"닉","t":"채팅내용","d":지연초(3~15)}]';
+    const prompt = "\ub108\ub294 \ud55c\uad6d\uc758 \uc9c0\ud558\ucca0\xB7\ubc84\uc2a4\ub85c \ucd9c\ud1f4\uadfc\ud558\uace0 \ub4f1\ud558\uad50\ud558\ub294 \uc0ac\ub78c\ub4e4\uc774 \ubaa8\uc778 \uc2e4\uc2dc\uac04 \ub2e8\uccb4 \uc624\ud508\ucc44\ud305\ubc29\uc744 \uc7ac\ud604\ud55c\ub2e4. \uc9c4\uc9dc \uce74\ud1a1 \uc624\ud508\ucc44\ud305\ucc98\ub7fc \uc790\uc5f0\uc2a4\ub7fd\uac8c." + lineRule + "\n\uc9c0\uae08: " + slotLabel(kst) + ", \ub0a0\uc528: " + wtxt + ctxBlock(kst, w, wcat) + "\n\ubc29\uae08 \uc804 \ub300\ud654:\n" + ctx + "\n\n\uc774 \ud750\ub984\uc744 \uc790\uc5f0\uc2a4\ub7fd\uac8c \uc774\uc5b4\uc11c \ucc44\ud305 " + n + "\uac1c\ub97c \uc368\ub77c.\n\ucc38\uc5ec\uc790(\uc5ed\ud560 \uace0\uc815): " + personaStr + "\n\uaddc\uce59:\n1. \uc9c4\uc9dc \uc0ac\ub78c\ucc98\ub7fc. \uc644\uacb0\ub41c \ubb38\uc7a5 \ub9d0\uace0 \uc2e4\uc81c \ucc44\ud305\ud22c \u2014 \uc9e7\uac8c \ud22d\ud22d, \uc624\ud0c0\ud2f1\ud55c \uc904\uc784\ub9d0(\u3131\u3131,\u3147\u3147,\u3147\u3148,\u3139\u3147,\u314b\u314b,\u3160,\u3137\u3137,\ub2f4,\ub0bc,\uac4d,\ub118,\ucacc), \ud55c \uba85\uc774 \ub450\uc138 \uc904 \uc5f0\ub2ec\uc544 \uce58\uae30\ub3c4 \ud568.\n2. \uc11c\ub85c \uc9c4\uc9dc \ub300\ud654. \uc55e\uc0ac\ub78c \ub9d0\uc5d0 \ub300\ub2f5/\ub9de\uc7a5\uad6c/\ub418\ubb3b\uae30/\ub534\uc9c0/\ubd80\ub7ec\uc6c0/\ud22c\uc815. \uac01\uc790 \ud63c\uc7a3\ub9d0 \ub098\uc5f4 \uc808\ub300 \uae08\uc9c0.\n3. \uc9c1\uc7a5\uc778\uc740 \ud68c\uc0ac\xB7\uc57c\uadfc\xB7\uc0c1\uc0ac\xB7\uc6d4\uae09, \ud559\uc0dd\uc740 \uc218\uc5c5\xB7\uacfc\uc81c\xB7\uc2dc\ud5d8\xB7\uae09\uc2dd \uc598\uae30\ub85c \uc11c\ub85c \ud2f0\ud0a4\ud0c0\uce74 (\ubd80\ub7ec\uc6cc\ud558\uac70\ub098 \ub180\ub9ac\uac70\ub098).\n4. \uc9c0\uae08 \uc2dc\uac04\ub300 \uc598\uae30\ub9cc: " + tp.ok + ". \uae08\uc9c0: " + tp.no + '\n5. \ubc29\uae08 \uc804 \ub300\ud654\uc5d0 \ub098\uc628 \ub9d0\xB7\uc18c\uc7ac\ub294 \uc808\ub300 \ubc18\ubcf5\ud558\uc9c0 \ub9c8. \uc0c8 \uba54\uc2dc\uc9c0\uc5d0\ub07c\ub9ac\ub3c4 \uac19\uc740 \ub9d0 \ubc18\ubcf5 \uae08\uc9c0.\n6. \uac00\ub054 \uc0c8 \ud654\uc81c\ub97c \ub204\uac00 \ud22d \ub358\uc838\uc11c \uc8fc\uc81c\uac00 \uc790\uc5f0\uc2a4\ub7fd\uac8c \ubc14\ub00c\uc5b4\ub3c4 \ub428.\n7. \uc815\uce58 \ud3b8\ub4e4\uae30\xB7\uc695\uc124\xB7\ud610\uc624\xB7\uc2e4\uc874\uc778\ubb3c \ube44\ubc29 \uae08\uc9c0. \uc774\ubaa8\uc9c0\ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4.\n8. \ubaa8\ub4e0 \ucc44\ud305\uc740 \ub9d0\uc774 \ub418\ub294 \ud55c \ubb38\uc7a5 \uc774\uc0c1. "\u2026"\ub85c \ub04a\uae34 \ub2e8\uc5b4 \uc870\uac01\uc774\ub098 \ub2e8\uc5b4\ub9cc \ub098\uc5f4\ud55c \uc904 \uae08\uc9c0.\nJSON \ubc30\uc5f4\ub9cc: [{"n":"\ub2c9","t":"\ucc44\ud305\ub0b4\uc6a9","d":\uc9c0\uc5f0\ucd08(3~15)}]';
     const r = await gemFetch(env, 25e3, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1520,7 +1520,7 @@ function fallbackTalks(n, kst, w, wcat, room) {
   const ctx = { line: L.name, stn: rnd(L.stns), stn2: "", temp: w ? String(w.temp) : "30" };
   const dc = dayCtx(kst);
   let guard = 0;
-  // ★ 2026-10-05: 정해진 대사도 오늘 날짜·계절·날씨와 맞는 것만 쓴다(일요일 밤 대사가 월요일 휴일에 나오는 일 방지). 맞는 게 없으면 덜 만든다.
+  // \u2605 2026-10-05: \uc815\ud574\uc9c4 \ub300\uc0ac\ub3c4 \uc624\ub298 \ub0a0\uc9dc\u00b7\uacc4\uc808\u00b7\ub0a0\uc528\uc640 \ub9de\ub294 \uac83\ub9cc \uc4f4\ub2e4(\uc77c\uc694\uc77c \ubc24 \ub300\uc0ac\uac00 \uc6d4\uc694\uc77c \ud734\uc77c\uc5d0 \ub098\uc624\ub294 \uc77c \ubc29\uc9c0). \ub9de\ub294 \uac8c \uc5c6\uc73c\uba74 \ub35c \ub9cc\ub4e0\ub2e4.
   while (out.length < n && guard++ < 60) {
     let key = pickDialogKey(kst, wcat) || slotDialogKey(kst);
     const pool = TALK_DIALOGS[key] || TALK_DIALOGS.day;
@@ -1537,16 +1537,16 @@ function fallbackTalks(n, kst, w, wcat, room) {
 }
 __name(fallbackTalks, "fallbackTalks");
 
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-03: 실시간소통(talks) 6개월(183일) 중복 금지 원장 (talk_ledger)
-//   YJ 지시: 사용자 모두가 같은 대화를 보게 하고(GET /talks), 그 대화에서도 같은 말이
-//   6개월 안에 다시 나오면 안 된다. 기존엔 '최근 400줄'만 봐서 약 1시간이면 같은 말이 돌아왔다.
-//   · 키 = 역·노선·숫자·기호·ㅋㅎㅠㅜ·자모(ㅇㅈ 등)를 지운 한글/영문 글자열(앞 60자)
-//   · 키가 3글자 미만인 짧은 추임새("ㅇㅈ", "ㄹㅇ", "ㅋㅋ 맞음")는 6개월 규칙에서 제외한다
-//     (제외하지 않으면 추임새가 한 번씩 쓰이고 나면 채팅이 말라 버린다). 이런 것은 기존
-//     '최근 400줄' 검사만 받는다.
-//   · 원장을 못 읽거나 쓰지 못하면 이번 주기는 대화를 만들지 않는다(조용히 중복을 만들지 않기 위해).
-// ══════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-03: \uc2e4\uc2dc\uac04\uc18c\ud1b5(talks) 6\uac1c\uc6d4(183\uc77c) \uc911\ubcf5 \uae08\uc9c0 \uc6d0\uc7a5 (talk_ledger)
+//   YJ \uc9c0\uc2dc: \uc0ac\uc6a9\uc790 \ubaa8\ub450\uac00 \uac19\uc740 \ub300\ud654\ub97c \ubcf4\uac8c \ud558\uace0(GET /talks), \uadf8 \ub300\ud654\uc5d0\uc11c\ub3c4 \uac19\uc740 \ub9d0\uc774
+//   6\uac1c\uc6d4 \uc548\uc5d0 \ub2e4\uc2dc \ub098\uc624\uba74 \uc548 \ub41c\ub2e4. \uae30\uc874\uc5d4 '\ucd5c\uadfc 400\uc904'\ub9cc \ubd10\uc11c \uc57d 1\uc2dc\uac04\uc774\uba74 \uac19\uc740 \ub9d0\uc774 \ub3cc\uc544\uc654\ub2e4.
+//   \u00b7 \ud0a4 = \uc5ed\u00b7\ub178\uc120\u00b7\uc22b\uc790\u00b7\uae30\ud638\u00b7\u314b\u314e\u3160\u315c\u00b7\uc790\ubaa8(\u3147\u3148 \ub4f1)\ub97c \uc9c0\uc6b4 \ud55c\uae00/\uc601\ubb38 \uae00\uc790\uc5f4(\uc55e 60\uc790)
+//   \u00b7 \ud0a4\uac00 3\uae00\uc790 \ubbf8\ub9cc\uc778 \uc9e7\uc740 \ucd94\uc784\uc0c8("\u3147\u3148", "\u3139\u3147", "\u314b\u314b \ub9de\uc74c")\ub294 6\uac1c\uc6d4 \uaddc\uce59\uc5d0\uc11c \uc81c\uc678\ud55c\ub2e4
+//     (\uc81c\uc678\ud558\uc9c0 \uc54a\uc73c\uba74 \ucd94\uc784\uc0c8\uac00 \ud55c \ubc88\uc529 \uc4f0\uc774\uace0 \ub098\uba74 \ucc44\ud305\uc774 \ub9d0\ub77c \ubc84\ub9b0\ub2e4). \uc774\ub7f0 \uac83\uc740 \uae30\uc874
+//     '\ucd5c\uadfc 400\uc904' \uac80\uc0ac\ub9cc \ubc1b\ub294\ub2e4.
+//   \u00b7 \uc6d0\uc7a5\uc744 \ubabb \uc77d\uac70\ub098 \uc4f0\uc9c0 \ubabb\ud558\uba74 \uc774\ubc88 \uc8fc\uae30\ub294 \ub300\ud654\ub97c \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4(\uc870\uc6a9\ud788 \uc911\ubcf5\uc744 \ub9cc\ub4e4\uc9c0 \uc54a\uae30 \uc704\ud574).
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var TALK_LEDGER_DAYS = 183;
 var _talkLedgerReady = false;
 var _talkLedgerPurgedAt = 0;
@@ -1561,7 +1561,7 @@ function talkKey(text) {
   return String(text == null ? "" : text)
     .replace(stnRe(), "")
     .replace(/[0-9]+/g, "")
-    .replace(/[^가-힣a-zA-Z]/g, "")
+    .replace(/[^\uac00-\ud7a3a-zA-Z]/g, "")
     .toLowerCase()
     .slice(0, 60);
 }
@@ -1610,11 +1610,11 @@ async function generateTalks(env) {
   const wcat = weatherCat(w);
   let recent = [];
   try {
-    // ★ 2026-09-22: 60개 → 400개(MAX_TALKS 전체). Gemini 프롬프트용 문맥은 아래에서
-    //   어차피 slice(-20)/slice(-5)로 최근 것만 잘라 쓰므로 영향 없고, 반복 방지용
-    //   _seenT 판정만 훨씬 더 오래 전 대화까지 기억하게 된다(YJ 제보: 채팅이
-    //   같은 말을 반복함 — 특히 Gemini 실패 시 폴백 대사가 60개짜리 창 밖으로
-    //   밀려나자마자 아무 방지 없이 재사용됐다).
+    // \u2605 2026-09-22: 60\uac1c \u2192 400\uac1c(MAX_TALKS \uc804\uccb4). Gemini \ud504\ub86c\ud504\ud2b8\uc6a9 \ubb38\ub9e5\uc740 \uc544\ub798\uc5d0\uc11c
+    //   \uc5b4\ucc28\ud53c slice(-20)/slice(-5)\ub85c \ucd5c\uadfc \uac83\ub9cc \uc798\ub77c \uc4f0\ubbc0\ub85c \uc601\ud5a5 \uc5c6\uace0, \ubc18\ubcf5 \ubc29\uc9c0\uc6a9
+    //   _seenT \ud310\uc815\ub9cc \ud6e8\uc52c \ub354 \uc624\ub798 \uc804 \ub300\ud654\uae4c\uc9c0 \uae30\uc5b5\ud558\uac8c \ub41c\ub2e4(YJ \uc81c\ubcf4: \ucc44\ud305\uc774
+    //   \uac19\uc740 \ub9d0\uc744 \ubc18\ubcf5\ud568 \u2014 \ud2b9\ud788 Gemini \uc2e4\ud328 \uc2dc \ud3f4\ubc31 \ub300\uc0ac\uac00 60\uac1c\uc9dc\ub9ac \ucc3d \ubc16\uc73c\ub85c
+    //   \ubc00\ub824\ub098\uc790\ub9c8\uc790 \uc544\ubb34 \ubc29\uc9c0 \uc5c6\uc774 \uc7ac\uc0ac\uc6a9\ub410\ub2e4).
     const rs = await env.DB.prepare("SELECT nick, text FROM talks ORDER BY id DESC LIMIT " + MAX_TALKS).all();
     recent = (rs.results || []).reverse();
   } catch (e) {
@@ -1645,7 +1645,7 @@ async function generateTalks(env) {
     script = script.concat(fb);
   }
   const _normT = /* @__PURE__ */ __name(function(s) {
-    return String(s).replace(/[\s.,!?~…·ㅋㅎㅠㅜzZ]/g, "");
+    return String(s).replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315czZ]/g, "");
   }, "_normT");
   const _seenT = {};
   recent.forEach(function(t) {
@@ -1661,7 +1661,7 @@ async function generateTalks(env) {
   try {
     script = await talkLedgerFilter(env, script);
   } catch (e) {
-    console.log("[board-writer][talks] 원장 처리 실패, 이번 주기는 건너뜀:", e.message);
+    console.log("[board-writer][talks] \uc6d0\uc7a5 \ucc98\ub9ac \uc2e4\ud328, \uc774\ubc88 \uc8fc\uae30\ub294 \uac74\ub108\ub700:", e.message);
     return { made: 0, skipped: "ledger-failed" };
   }
   const SPAN = 19 * 60;
@@ -1685,7 +1685,7 @@ async function generateTalks(env) {
       await env.DB.prepare(sql).bind(...use.map((k) => data[k])).run();
       made++;
     } catch (e) {
-      console.log("[board-writer] talk INSERT 실패:", e.message);
+      console.log("[board-writer] talk INSERT \uc2e4\ud328:", e.message);
       break;
     }
   }
@@ -1698,34 +1698,34 @@ async function generateTalks(env) {
   return { made, planned: n, ai: usedAi, weather: wcat || "normal" };
 }
 __name(generateTalks, "generateTalks");
-// ══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-04 (YJ): 노선별 실시간소통 — 각 호선 방에 AI 가 대화를 올린다. 이용자가 많은 노선일수록 글이 많다.
-//   · 방별 비중(w)은 대략적인 노선 이용 규모다. 한 주기(20분)의 전체 줄 수(talkCount)를 비중대로 나눈다.
-//   · 저장은 line_msgs(kind='chat', ipk='ai'). 지연·혼잡 제보(kind delay/crowd)는 만들지 않는다 → 경보 집계(lrAlerts)에 섞이지 않는다.
-//   · 대화 내용에서도 그 노선의 '지금 운행 상황'을 지어내지 않도록 프롬프트에서 막는다(geminiTalks 의 lineRule).
-//   · 전체 탭(GET /talks)은 이 방들의 대화를 시간순으로 모아서 내려준다. AI 글은 2일 뒤 지운다(실제 이용자 글은 14일).
-//   · 6개월 중복 원장(talkLedgerFilter)은 방 구분 없이 함께 쓴다.
-// ══════════════════════════════════════════════════════════════════════
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-04 (YJ): \ub178\uc120\ubcc4 \uc2e4\uc2dc\uac04\uc18c\ud1b5 \u2014 \uac01 \ud638\uc120 \ubc29\uc5d0 AI \uac00 \ub300\ud654\ub97c \uc62c\ub9b0\ub2e4. \uc774\uc6a9\uc790\uac00 \ub9ce\uc740 \ub178\uc120\uc77c\uc218\ub85d \uae00\uc774 \ub9ce\ub2e4.
+//   \u00b7 \ubc29\ubcc4 \ube44\uc911(w)\uc740 \ub300\ub7b5\uc801\uc778 \ub178\uc120 \uc774\uc6a9 \uaddc\ubaa8\ub2e4. \ud55c \uc8fc\uae30(20\ubd84)\uc758 \uc804\uccb4 \uc904 \uc218(talkCount)\ub97c \ube44\uc911\ub300\ub85c \ub098\ub208\ub2e4.
+//   \u00b7 \uc800\uc7a5\uc740 line_msgs(kind='chat', ipk='ai'). \uc9c0\uc5f0\u00b7\ud63c\uc7a1 \uc81c\ubcf4(kind delay/crowd)\ub294 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4 \u2192 \uacbd\ubcf4 \uc9d1\uacc4(lrAlerts)\uc5d0 \uc11e\uc774\uc9c0 \uc54a\ub294\ub2e4.
+//   \u00b7 \ub300\ud654 \ub0b4\uc6a9\uc5d0\uc11c\ub3c4 \uadf8 \ub178\uc120\uc758 '\uc9c0\uae08 \uc6b4\ud589 \uc0c1\ud669'\uc744 \uc9c0\uc5b4\ub0b4\uc9c0 \uc54a\ub3c4\ub85d \ud504\ub86c\ud504\ud2b8\uc5d0\uc11c \ub9c9\ub294\ub2e4(geminiTalks \uc758 lineRule).
+//   \u00b7 \uc804\uccb4 \ud0ed(GET /talks)\uc740 \uc774 \ubc29\ub4e4\uc758 \ub300\ud654\ub97c \uc2dc\uac04\uc21c\uc73c\ub85c \ubaa8\uc544\uc11c \ub0b4\ub824\uc900\ub2e4. AI \uae00\uc740 2\uc77c \ub4a4 \uc9c0\uc6b4\ub2e4(\uc2e4\uc81c \uc774\uc6a9\uc790 \uae00\uc740 14\uc77c).
+//   \u00b7 6\uac1c\uc6d4 \uc911\ubcf5 \uc6d0\uc7a5(talkLedgerFilter)\uc740 \ubc29 \uad6c\ubd84 \uc5c6\uc774 \ud568\uaed8 \uc4f4\ub2e4.
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
 var LR_MAX_AI_ROOMS = 9;
 var LR_AI_ROOMS = [
-  { name: "2호선", w: 10, stns: ["강남", "홍대입구", "신촌", "잠실", "성수", "사당", "건대입구"] },
-  { name: "1호선", w: 6, stns: ["서울역", "시청", "종각", "구로", "부평", "인천"] },
-  { name: "5호선", w: 6, stns: ["여의도", "광화문", "천호", "왕십리", "김포공항"] },
-  { name: "3호선", w: 5.5, stns: ["교대", "고속터미널", "압구정", "연신내", "양재"] },
-  { name: "4호선", w: 5.5, stns: ["사당", "명동", "동대문", "혜화", "서울역"] },
-  { name: "7호선", w: 5.5, stns: ["가산디지털단지", "건대입구", "상봉", "온수", "논현"] },
-  { name: "9호선", w: 4, stns: ["김포공항", "여의도", "노량진", "신논현", "가양"] },
-  { name: "6호선", w: 3.5, stns: ["공덕", "이태원", "합정", "월드컵경기장", "신내"] },
-  { name: "수인분당선", w: 3.5, stns: ["왕십리", "서울숲", "정자", "인하대", "수원"] },
-  { name: "경의중앙선", w: 3, stns: ["홍대입구", "공덕", "왕십리", "용산", "일산"] },
-  { name: "8호선", w: 2.5, stns: ["잠실", "천호", "가락시장", "복정", "암사"] },
-  { name: "신분당선", w: 2, stns: ["강남", "판교", "정자", "광교", "양재"] },
-  { name: "공항철도", w: 1.5, stns: ["서울역", "홍대입구", "김포공항", "검암", "계양"] },
-  { name: "인천1호선", w: 1.5, stns: ["부평", "인천시청", "계양", "송도"] },
-  { name: "김포골드라인", w: 1.5, stns: ["김포공항", "걸포북변", "구래", "풍무"] },
-  { name: "경춘선", w: 1, stns: ["청량리", "상봉", "평내호평", "가평", "춘천"] },
-  { name: "GTX-A", w: 1, stns: ["수서", "성남", "동탄", "운정", "서울역"] },
-  { name: "인천2호선", w: 1, stns: ["검단오류", "주안", "석남", "인천시청"] }
+  { name: "2\ud638\uc120", w: 10, stns: ["\uac15\ub0a8", "\ud64d\ub300\uc785\uad6c", "\uc2e0\ucd0c", "\uc7a0\uc2e4", "\uc131\uc218", "\uc0ac\ub2f9", "\uac74\ub300\uc785\uad6c"] },
+  { name: "1\ud638\uc120", w: 6, stns: ["\uc11c\uc6b8\uc5ed", "\uc2dc\uccad", "\uc885\uac01", "\uad6c\ub85c", "\ubd80\ud3c9", "\uc778\ucc9c"] },
+  { name: "5\ud638\uc120", w: 6, stns: ["\uc5ec\uc758\ub3c4", "\uad11\ud654\ubb38", "\ucc9c\ud638", "\uc655\uc2ed\ub9ac", "\uae40\ud3ec\uacf5\ud56d"] },
+  { name: "3\ud638\uc120", w: 5.5, stns: ["\uad50\ub300", "\uace0\uc18d\ud130\ubbf8\ub110", "\uc555\uad6c\uc815", "\uc5f0\uc2e0\ub0b4", "\uc591\uc7ac"] },
+  { name: "4\ud638\uc120", w: 5.5, stns: ["\uc0ac\ub2f9", "\uba85\ub3d9", "\ub3d9\ub300\ubb38", "\ud61c\ud654", "\uc11c\uc6b8\uc5ed"] },
+  { name: "7\ud638\uc120", w: 5.5, stns: ["\uac00\uc0b0\ub514\uc9c0\ud138\ub2e8\uc9c0", "\uac74\ub300\uc785\uad6c", "\uc0c1\ubd09", "\uc628\uc218", "\ub17c\ud604"] },
+  { name: "9\ud638\uc120", w: 4, stns: ["\uae40\ud3ec\uacf5\ud56d", "\uc5ec\uc758\ub3c4", "\ub178\ub7c9\uc9c4", "\uc2e0\ub17c\ud604", "\uac00\uc591"] },
+  { name: "6\ud638\uc120", w: 3.5, stns: ["\uacf5\ub355", "\uc774\ud0dc\uc6d0", "\ud569\uc815", "\uc6d4\ub4dc\ucef5\uacbd\uae30\uc7a5", "\uc2e0\ub0b4"] },
+  { name: "\uc218\uc778\ubd84\ub2f9\uc120", w: 3.5, stns: ["\uc655\uc2ed\ub9ac", "\uc11c\uc6b8\uc232", "\uc815\uc790", "\uc778\ud558\ub300", "\uc218\uc6d0"] },
+  { name: "\uacbd\uc758\uc911\uc559\uc120", w: 3, stns: ["\ud64d\ub300\uc785\uad6c", "\uacf5\ub355", "\uc655\uc2ed\ub9ac", "\uc6a9\uc0b0", "\uc77c\uc0b0"] },
+  { name: "8\ud638\uc120", w: 2.5, stns: ["\uc7a0\uc2e4", "\ucc9c\ud638", "\uac00\ub77d\uc2dc\uc7a5", "\ubcf5\uc815", "\uc554\uc0ac"] },
+  { name: "\uc2e0\ubd84\ub2f9\uc120", w: 2, stns: ["\uac15\ub0a8", "\ud310\uad50", "\uc815\uc790", "\uad11\uad50", "\uc591\uc7ac"] },
+  { name: "\uacf5\ud56d\ucca0\ub3c4", w: 1.5, stns: ["\uc11c\uc6b8\uc5ed", "\ud64d\ub300\uc785\uad6c", "\uae40\ud3ec\uacf5\ud56d", "\uac80\uc554", "\uacc4\uc591"] },
+  { name: "\uc778\ucc9c1\ud638\uc120", w: 1.5, stns: ["\ubd80\ud3c9", "\uc778\ucc9c\uc2dc\uccad", "\uacc4\uc591", "\uc1a1\ub3c4"] },
+  { name: "\uae40\ud3ec\uace8\ub4dc\ub77c\uc778", w: 1.5, stns: ["\uae40\ud3ec\uacf5\ud56d", "\uac78\ud3ec\ubd81\ubcc0", "\uad6c\ub798", "\ud48d\ubb34"] },
+  { name: "\uacbd\ucd98\uc120", w: 1, stns: ["\uccad\ub7c9\ub9ac", "\uc0c1\ubd09", "\ud3c9\ub0b4\ud638\ud3c9", "\uac00\ud3c9", "\ucd98\ucc9c"] },
+  { name: "GTX-A", w: 1, stns: ["\uc218\uc11c", "\uc131\ub0a8", "\ub3d9\ud0c4", "\uc6b4\uc815", "\uc11c\uc6b8\uc5ed"] },
+  { name: "\uc778\ucc9c2\ud638\uc120", w: 1, stns: ["\uac80\ub2e8\uc624\ub958", "\uc8fc\uc548", "\uc11d\ub0a8", "\uc778\ucc9c\uc2dc\uccad"] }
 ];
 async function generateLineTalks(env) {
   const kst = kstNow();
@@ -1735,11 +1735,11 @@ async function generateLineTalks(env) {
   const w = await getWeather();
   const wcat = weatherCat(w);
   const wsum = LR_AI_ROOMS.reduce((a, r) => a + r.w, 0);
-  // ★ 2026-10-05 (YJ): 호선 방이 비어 보이는 문제 — 두 가지를 고쳤다.
-  //   ① 호선마다 시간당 최소 글 수(낮 9개, 새벽 2개)를 보장한다. 작은 호선은 가중치만으로는 회차마다 0~1개라 방이 비었다.
-  //   ② 글을 '앞으로 4시간치' 미리 만들어 미래 시각(ts)으로 넣는다(화면은 ts<=지금 인 글만 보여 준다).
-  //      방마다 "아직 안 나온 글"이 목표의 35% 밑으로 줄었을 때만 AI 를 부른다 → AI 호출이 회차×방 수에서 방당 1~2시간에 한 번으로 준다
-  //      (전에는 매 20분마다 방마다 불러서 하루 한도를 몇 시간 만에 다 쓰고, 그 뒤엔 몇 개 안 되는 정형 문구가 중복 검사에 걸려 방이 비었다).
+  // \u2605 2026-10-05 (YJ): \ud638\uc120 \ubc29\uc774 \ube44\uc5b4 \ubcf4\uc774\ub294 \ubb38\uc81c \u2014 \ub450 \uac00\uc9c0\ub97c \uace0\ucce4\ub2e4.
+  //   \u2460 \ud638\uc120\ub9c8\ub2e4 \uc2dc\uac04\ub2f9 \ucd5c\uc18c \uae00 \uc218(\ub0ae 9\uac1c, \uc0c8\ubcbd 2\uac1c)\ub97c \ubcf4\uc7a5\ud55c\ub2e4. \uc791\uc740 \ud638\uc120\uc740 \uac00\uc911\uce58\ub9cc\uc73c\ub85c\ub294 \ud68c\ucc28\ub9c8\ub2e4 0~1\uac1c\ub77c \ubc29\uc774 \ube44\uc5c8\ub2e4.
+  //   \u2461 \uae00\uc744 '\uc55e\uc73c\ub85c 4\uc2dc\uac04\uce58' \ubbf8\ub9ac \ub9cc\ub4e4\uc5b4 \ubbf8\ub798 \uc2dc\uac01(ts)\uc73c\ub85c \ub123\ub294\ub2e4(\ud654\uba74\uc740 ts<=\uc9c0\uae08 \uc778 \uae00\ub9cc \ubcf4\uc5ec \uc900\ub2e4).
+  //      \ubc29\ub9c8\ub2e4 "\uc544\uc9c1 \uc548 \ub098\uc628 \uae00"\uc774 \ubaa9\ud45c\uc758 35% \ubc11\uc73c\ub85c \uc904\uc5c8\uc744 \ub54c\ub9cc AI \ub97c \ubd80\ub978\ub2e4 \u2192 AI \ud638\ucd9c\uc774 \ud68c\ucc28\u00d7\ubc29 \uc218\uc5d0\uc11c \ubc29\ub2f9 1~2\uc2dc\uac04\uc5d0 \ud55c \ubc88\uc73c\ub85c \uc900\ub2e4
+  //      (\uc804\uc5d0\ub294 \ub9e4 20\ubd84\ub9c8\ub2e4 \ubc29\ub9c8\ub2e4 \ubd88\ub7ec\uc11c \ud558\ub8e8 \ud55c\ub3c4\ub97c \uba87 \uc2dc\uac04 \ub9cc\uc5d0 \ub2e4 \uc4f0\uace0, \uadf8 \ub4a4\uc5d4 \uba87 \uac1c \uc548 \ub418\ub294 \uc815\ud615 \ubb38\uad6c\uac00 \uc911\ubcf5 \uac80\uc0ac\uc5d0 \uac78\ub824 \ubc29\uc774 \ube44\uc5c8\ub2e4).
   const nowMs = Date.now();
   const floorPerHour = kst.getUTCHours() < 5 ? 2 : 6;
   const HORIZON_MIN = 360;
@@ -1756,11 +1756,11 @@ async function generateLineTalks(env) {
     if (target < 1 || have >= target * 0.35) continue;
     plan.push({ room, k: Math.min(60, Math.max(1, target - have)), perHour, ratio: have / target, startTs: Math.max(nowMs, (haveMap[room.name] && haveMap[room.name].mx) || 0) });
   }
-  // ★ 2026-10-05: 한 회차에 AI 를 부르는 방은 가장 비어 있는 9개까지 — 나머지는 다음 회차(20분 뒤). Gemini 가 한꺼번에 몰려 과부하·한도에 걸리는 것을 줄인다.
+  // \u2605 2026-10-05: \ud55c \ud68c\ucc28\uc5d0 AI \ub97c \ubd80\ub974\ub294 \ubc29\uc740 \uac00\uc7a5 \ube44\uc5b4 \uc788\ub294 9\uac1c\uae4c\uc9c0 \u2014 \ub098\uba38\uc9c0\ub294 \ub2e4\uc74c \ud68c\ucc28(20\ubd84 \ub4a4). Gemini \uac00 \ud55c\uaebc\ubc88\uc5d0 \ubab0\ub824 \uacfc\ubd80\ud558\u00b7\ud55c\ub3c4\uc5d0 \uac78\ub9ac\ub294 \uac83\uc744 \uc904\uc778\ub2e4.
   plan.sort((a, b) => a.ratio - b.ratio);
   if (plan.length > LR_MAX_AI_ROOMS) plan.length = LR_MAX_AI_ROOMS;
   _gemStat.ok = 0; _gemStat.fail = 0; _gemStat.last = ""; _gemStat.ctxRej = 0; _gemStat.junk = 0;
-  // ★ 2026-10-10: Gemma 먼저, gemini-* 는 하루 예산(GEMINI_TALK_BUDGET) 안에서만 — 게시글·댓글이 쓸 한도를 남긴다
+  // \u2605 2026-10-10: Gemma \uba3c\uc800, gemini-* \ub294 \ud558\ub8e8 \uc608\uc0b0(GEMINI_TALK_BUDGET) \uc548\uc5d0\uc11c\ub9cc \u2014 \uac8c\uc2dc\uae00\u00b7\ub313\uae00\uc774 \uc4f8 \ud55c\ub3c4\ub97c \ub0a8\uae34\ub2e4
   let talkOrder = GEM_BULK_ORDER;
   const usedG = await geminiUsed24h(env);
   if (usedG >= GEMINI_TALK_BUDGET) talkOrder = GEM_BULK_ORDER.filter((m) => m.indexOf("gemma-") === 0);
@@ -1781,9 +1781,9 @@ async function generateLineTalks(env) {
       }
       if (script.length < p.k) script = script.concat(fallbackTalks(p.k - script.length, kst, w, wcat, p.room));
       const seen = {};
-      recent.forEach((t) => { seen[String(t.text).replace(/[\s.,!?~…·ㅋㅎㅠㅜzZ]/g, "")] = 1; });
+      recent.forEach((t) => { seen[String(t.text).replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315czZ]/g, "")] = 1; });
       script = script.filter((m) => {
-        const k = String(m.text).replace(/[\s.,!?~…·ㅋㅎㅠㅜzZ]/g, "");
+        const k = String(m.text).replace(/[\s.,!?~\u2026\u00b7\u314b\u314e\u3160\u315czZ]/g, "");
         if (!k || seen[k] || containsBadWord(m.text) || containsBadWord(m.nick)) return false;
         seen[k] = 1;
         return true;
@@ -1797,7 +1797,7 @@ async function generateLineTalks(env) {
   try {
     kept = await talkLedgerFilter(env, scripts);
   } catch (e) {
-    console.log("[board-writer][linetalks] 원장 처리 실패, 이번 주기는 건너뜀:", e.message);
+    console.log("[board-writer][linetalks] \uc6d0\uc7a5 \ucc98\ub9ac \uc2e4\ud328, \uc774\ubc88 \uc8fc\uae30\ub294 \uac74\ub108\ub700:", e.message);
     await bwDiag(env, "linetalks", { err: "ledger-failed", m: String((e && e.message) || e).slice(0, 80) });
     return { made: 0, skipped: "ledger-failed" };
   }
@@ -1809,7 +1809,7 @@ async function generateLineTalks(env) {
   for (const ln of Object.keys(byLine)) {
     const arr = byLine[ln];
     const pl = planBy[ln];
-    const gapSec = Math.max(20, Math.min(900, 3600 / Math.max(1, pl ? pl.perHour : 9)));   // 글 사이 평균 간격(초). 이미 예약된 마지막 글 뒤부터 이어 붙인다
+    const gapSec = Math.max(20, Math.min(900, 3600 / Math.max(1, pl ? pl.perHour : 9)));   // \uae00 \uc0ac\uc774 \ud3c9\uade0 \uac04\uaca9(\ucd08). \uc774\ubbf8 \uc608\uc57d\ub41c \ub9c8\uc9c0\ub9c9 \uae00 \ub4a4\ubd80\ud130 \uc774\uc5b4 \ubd99\uc778\ub2e4
     let ts = (pl ? pl.startTs : nowMs) + rndInt(2, 6) * 1e3;
     for (const m of arr) {
       ts += Math.floor(gapSec * (0.6 + Math.random() * 0.8) * 1e3);
@@ -1819,7 +1819,7 @@ async function generateLineTalks(env) {
   let made = 0, insErr = "";
   for (let i = 0; i < stmts.length; i += 50) {
     try { await env.DB.batch(stmts.slice(i, i + 50)); made += Math.min(50, stmts.length - i); }
-    catch (e) { insErr = String((e && e.message) || e).slice(0, 80); console.log("[board-writer][linetalks] INSERT 실패:", e.message); break; }
+    catch (e) { insErr = String((e && e.message) || e).slice(0, 80); console.log("[board-writer][linetalks] INSERT \uc2e4\ud328:", e.message); break; }
   }
   const res = { made, planned: total, rooms: Object.keys(byLine).length, planRooms: plan.length, scripts: scripts.length, kept: kept.length, aiRooms: usedAi, gem: { ok: _gemStat.ok, fail: _gemStat.fail, last: _gemStat.last, model: _gemStat.model, rej: _gemStat.ctxRej, junk: _gemStat.junk || 0, tried: _gemLast.tried, usedG: usedG }, weather: wcat || "normal" };
   if (insErr) res.insErr = insErr;
@@ -1828,7 +1828,7 @@ async function generateLineTalks(env) {
   return res;
 }
 __name(generateLineTalks, "generateLineTalks");
-// 진단 기록 — 서버 로그를 볼 수 없어서 D1 에 남긴다(최근 3일치만 유지). 조회: SELECT * FROM bw_diag ORDER BY ts DESC
+// \uc9c4\ub2e8 \uae30\ub85d \u2014 \uc11c\ubc84 \ub85c\uadf8\ub97c \ubcfc \uc218 \uc5c6\uc5b4\uc11c D1 \uc5d0 \ub0a8\uae34\ub2e4(\ucd5c\uadfc 3\uc77c\uce58\ub9cc \uc720\uc9c0). \uc870\ud68c: SELECT * FROM bw_diag ORDER BY ts DESC
 var _bwDiagReady = false, _bwDiagPurgedAt = 0;
 async function bwDiag(env, k, v) {
   try {
@@ -1840,24 +1840,24 @@ async function bwDiag(env, k, v) {
 }
 __name(bwDiag, "bwDiag");
 var REACT_FALLBACK = [
-  "ㅇㅈ",
-  "ㄹㅇ?",
-  "ㅋㅋㅋ 맞음",
-  "오 그래?",
-  "헐 진짜?",
-  "나도 그 생각함",
-  "그건 좀 부럽네",
-  "고생이 많다",
-  "자세히 좀 ㅋㅋ",
-  "어디쪽인데?",
-  "인정합니다"
+  "\u3147\u3148",
+  "\u3139\u3147?",
+  "\u314b\u314b\u314b \ub9de\uc74c",
+  "\uc624 \uadf8\ub798?",
+  "\ud5d0 \uc9c4\uc9dc?",
+  "\ub098\ub3c4 \uadf8 \uc0dd\uac01\ud568",
+  "\uadf8\uac74 \uc880 \ubd80\ub7fd\ub124",
+  "\uace0\uc0dd\uc774 \ub9ce\ub2e4",
+  "\uc790\uc138\ud788 \uc880 \u314b\u314b",
+  "\uc5b4\ub514\ucabd\uc778\ub370?",
+  "\uc778\uc815\ud569\ub2c8\ub2e4"
 ];
 async function generateReaction(env, userNick, userText, line) {
   let recent = [];
   try {
     const rs = line
       ? await env.DB.prepare("SELECT nick, text FROM line_msgs WHERE line=?1 AND kind='chat' AND ts <= ?2 ORDER BY ts DESC, id DESC LIMIT 12").bind(line, Date.now()).all()
-      : await env.DB.prepare("SELECT nick, text FROM talks WHERE ts <= ? ORDER BY ts DESC, id DESC LIMIT 12").bind(Date.now()).all();   // 아직 화면에 안 나온(미래 시각) 줄은 문맥에서 뺀다
+      : await env.DB.prepare("SELECT nick, text FROM talks WHERE ts <= ? ORDER BY ts DESC, id DESC LIMIT 12").bind(Date.now()).all();   // \uc544\uc9c1 \ud654\uba74\uc5d0 \uc548 \ub098\uc628(\ubbf8\ub798 \uc2dc\uac01) \uc904\uc740 \ubb38\ub9e5\uc5d0\uc11c \ube80\ub2e4
     recent = (rs.results || []).reverse();
   } catch (e) {
   }
@@ -1870,7 +1870,7 @@ async function generateReaction(env, userNick, userText, line) {
         return p + "(" + PERSONA_ROLES[i % PERSONA_ROLES.length] + ")";
       });
       const ctx = recent.map((t) => t.nick + ": " + t.text).join("\n");
-      const prompt = "한국 지하철/출퇴근 커뮤니티 실시간 단체채팅입니다. 상황: " + slotLabel(kst) + ctxBlock(kst, rw, weatherCat(rw)) + "\n최근 대화:\n" + ctx + "\n" + userNick + ": " + userText + '\n마지막에 "' + userNick + '"가 방금 보낸 메시지에 자연스럽게 반응하는 답장을 1~3개 만드세요.\n- 반드시 그 메시지 내용에 직접 반응할 것 (질문이면 답하고, 얘기면 맞장구/되묻기/농담)\n- 참여자 닉네임은 이 중에서만: ' + personas.join(", ") + '\n- 위 최근 대화에 나온 문장\xB7표현 반복 금지\n- 짧게(5~35자), 반말, ㅋㅋ/ㄷㄷ 자연스럽게. 정치/혐오/욕설 금지\n- JSON 배열만 출력: [{"n":"닉","t":"내용","d":지연초(4~40)}]';
+      const prompt = "\ud55c\uad6d \uc9c0\ud558\ucca0/\ucd9c\ud1f4\uadfc \ucee4\ubba4\ub2c8\ud2f0 \uc2e4\uc2dc\uac04 \ub2e8\uccb4\ucc44\ud305\uc785\ub2c8\ub2e4. \uc0c1\ud669: " + slotLabel(kst) + ctxBlock(kst, rw, weatherCat(rw)) + "\n\ucd5c\uadfc \ub300\ud654:\n" + ctx + "\n" + userNick + ": " + userText + '\n\ub9c8\uc9c0\ub9c9\uc5d0 "' + userNick + '"\uac00 \ubc29\uae08 \ubcf4\ub0b8 \uba54\uc2dc\uc9c0\uc5d0 \uc790\uc5f0\uc2a4\ub7fd\uac8c \ubc18\uc751\ud558\ub294 \ub2f5\uc7a5\uc744 1~3\uac1c \ub9cc\ub4dc\uc138\uc694.\n- \ubc18\ub4dc\uc2dc \uadf8 \uba54\uc2dc\uc9c0 \ub0b4\uc6a9\uc5d0 \uc9c1\uc811 \ubc18\uc751\ud560 \uac83 (\uc9c8\ubb38\uc774\uba74 \ub2f5\ud558\uace0, \uc598\uae30\uba74 \ub9de\uc7a5\uad6c/\ub418\ubb3b\uae30/\ub18d\ub2f4)\n- \ucc38\uc5ec\uc790 \ub2c9\ub124\uc784\uc740 \uc774 \uc911\uc5d0\uc11c\ub9cc: ' + personas.join(", ") + '\n- \uc704 \ucd5c\uadfc \ub300\ud654\uc5d0 \ub098\uc628 \ubb38\uc7a5\xB7\ud45c\ud604 \ubc18\ubcf5 \uae08\uc9c0\n- \uc9e7\uac8c(5~35\uc790), \ubc18\ub9d0, \u314b\u314b/\u3137\u3137 \uc790\uc5f0\uc2a4\ub7fd\uac8c. \uc815\uce58/\ud610\uc624/\uc695\uc124 \uae08\uc9c0\n- JSON \ubc30\uc5f4\ub9cc \ucd9c\ub825: [{"n":"\ub2c9","t":"\ub0b4\uc6a9","d":\uc9c0\uc5f0\ucd08(4~40)}]';
       const r = await gemFetch(env, 1e4, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1892,14 +1892,14 @@ async function generateReaction(env, userNick, userText, line) {
     } catch (e) {
     }
   }
-  // ★ 2026-10-03: 반응 문구도 6개월 원장을 통과해야 한다. 다 걸러지면 6개월 규칙에서 빠지는 짧은 추임새로 대신한다.
+  // \u2605 2026-10-03: \ubc18\uc751 \ubb38\uad6c\ub3c4 6\uac1c\uc6d4 \uc6d0\uc7a5\uc744 \ud1b5\uacfc\ud574\uc57c \ud55c\ub2e4. \ub2e4 \uac78\ub7ec\uc9c0\uba74 6\uac1c\uc6d4 \uaddc\uce59\uc5d0\uc11c \ube60\uc9c0\ub294 \uc9e7\uc740 \ucd94\uc784\uc0c8\ub85c \ub300\uc2e0\ud55c\ub2e4.
   if (replies && replies.length) {
     try { replies = await talkLedgerFilter(env, replies); } catch (e) { replies = null; }
   }
   const usedAi = !!(replies && replies.length);
   if (!usedAi) {
     const fb = REACT_FALLBACK.filter(function(t) { return talkKey(t).length < 3; });
-    replies = [{ nick: rnd(NICKS), text: rnd(fb.length ? fb : ["ㅇㅈ"]), d: rndInt(5, 20) }];
+    replies = [{ nick: rnd(NICKS), text: rnd(fb.length ? fb : ["\u3147\u3148"]), d: rndInt(5, 20) }];
   }
   let cols = [];
   try {
@@ -1933,11 +1933,11 @@ async function generateReaction(env, userNick, userText, line) {
 }
 __name(generateReaction, "generateReaction");
 var BAD_WORDS = [
-  "시발", "씨발", "시팔", "씨팔", "ㅅㅂ", "ㅂㅅ", "병신", "ㅂㅅ", "개새", "새끼", "새기", "색끼",
-  "좌", "존나", "존마", "읔냨", "지랑", "ㅈㄹ", "꾠져", "닥쳐", "엿먹", "미친놓", "미친년", "또라이",
-  "등신", "멍청", "버러지", "쓰레기같", "죽어", "뒤져", "듈져", "개같", "개소리", "걸레", "창녀",
-  "느금", "니애미", "니미", "애미", "애비", "보지", "자지", "섬스", "강간", "fuck", "shit", "bitch", "asshole",
-  "한남", "한녀", "김치녀", "된장녀", "만충", "틀딱", "급식충", "노친네", "정신병자", "장애인같"
+  "\uc2dc\ubc1c", "\uc528\ubc1c", "\uc2dc\ud314", "\uc528\ud314", "\u3145\u3142", "\u3142\u3145", "\ubcd1\uc2e0", "\u3142\u3145", "\uac1c\uc0c8", "\uc0c8\ub07c", "\uc0c8\uae30", "\uc0c9\ub07c",
+  "\uc88c", "\uc874\ub098", "\uc874\ub9c8", "\uc754\ub0e8", "\uc9c0\ub791", "\u3148\u3139", "\uafa0\uc838", "\ub2e5\uccd0", "\uc5ff\uba39", "\ubbf8\uce5c\ub193", "\ubbf8\uce5c\ub144", "\ub610\ub77c\uc774",
+  "\ub4f1\uc2e0", "\uba4d\uccad", "\ubc84\ub7ec\uc9c0", "\uc4f0\ub808\uae30\uac19", "\uc8fd\uc5b4", "\ub4a4\uc838", "\ub4c8\uc838", "\uac1c\uac19", "\uac1c\uc18c\ub9ac", "\uac78\ub808", "\ucc3d\ub140",
+  "\ub290\uae08", "\ub2c8\uc560\ubbf8", "\ub2c8\ubbf8", "\uc560\ubbf8", "\uc560\ube44", "\ubcf4\uc9c0", "\uc790\uc9c0", "\uc12c\uc2a4", "\uac15\uac04", "fuck", "shit", "bitch", "asshole",
+  "\ud55c\ub0a8", "\ud55c\ub140", "\uae40\uce58\ub140", "\ub41c\uc7a5\ub140", "\ub9cc\ucda9", "\ud2c0\ub531", "\uae09\uc2dd\ucda9", "\ub178\uce5c\ub124", "\uc815\uc2e0\ubcd1\uc790", "\uc7a5\uc560\uc778\uac19"
 ];
 function containsBadWord(text) {
   if (!text) return false;
@@ -1948,11 +1948,11 @@ function containsBadWord(text) {
   return false;
 }
 __name(containsBadWord, "containsBadWord");
-// ★ 2026-09-25: "게시판 들어가면 2~3초 있다가 뜬다" 제보 원인 — /posts·/comment·/comments가
-//   요청마다 pragma_table_info로 컬럼을 매번 새로 물어본 뒤(D1 왕복 1회) 본 쿼리(왕복 1회)를
-//   또 날려서, 매 요청이 D1을 직렬로 두 번 왕복했다(콜드일 때 왕복당 수백ms~1초+, route-v2
-//   D1 코리도조회가 느렸던 것과 같은 모양의 문제). 스키마는 운영 중 거의 안 바뀌므로
-//   route-v2의 L1 메모리캐시(ROWS_CACHE)와 같은 방식으로 10분만 캐시해 두 번째 왕복을 없앤다.
+// \u2605 2026-09-25: "\uac8c\uc2dc\ud310 \ub4e4\uc5b4\uac00\uba74 2~3\ucd08 \uc788\ub2e4\uac00 \ub72c\ub2e4" \uc81c\ubcf4 \uc6d0\uc778 \u2014 /posts\u00b7/comment\u00b7/comments\uac00
+//   \uc694\uccad\ub9c8\ub2e4 pragma_table_info\ub85c \uceec\ub7fc\uc744 \ub9e4\ubc88 \uc0c8\ub85c \ubb3c\uc5b4\ubcf8 \ub4a4(D1 \uc655\ubcf5 1\ud68c) \ubcf8 \ucffc\ub9ac(\uc655\ubcf5 1\ud68c)\ub97c
+//   \ub610 \ub0a0\ub824\uc11c, \ub9e4 \uc694\uccad\uc774 D1\uc744 \uc9c1\ub82c\ub85c \ub450 \ubc88 \uc655\ubcf5\ud588\ub2e4(\ucf5c\ub4dc\uc77c \ub54c \uc655\ubcf5\ub2f9 \uc218\ubc31ms~1\ucd08+, route-v2
+//   D1 \ucf54\ub9ac\ub3c4\uc870\ud68c\uac00 \ub290\ub838\ub358 \uac83\uacfc \uac19\uc740 \ubaa8\uc591\uc758 \ubb38\uc81c). \uc2a4\ud0a4\ub9c8\ub294 \uc6b4\uc601 \uc911 \uac70\uc758 \uc548 \ubc14\ub00c\ubbc0\ub85c
+//   route-v2\uc758 L1 \uba54\ubaa8\ub9ac\uce90\uc2dc(ROWS_CACHE)\uc640 \uac19\uc740 \ubc29\uc2dd\uc73c\ub85c 10\ubd84\ub9cc \uce90\uc2dc\ud574 \ub450 \ubc88\uc9f8 \uc655\ubcf5\uc744 \uc5c6\uc564\ub2e4.
 var _colsCache = {};
 var _COLS_TTL_MS = 10 * 60 * 1000;
 async function getCols(env, table) {
@@ -1964,14 +1964,14 @@ async function getCols(env, table) {
   return cols;
 }
 __name(getCols, "getCols");
-// ═══════════════════════════════════════════════════════════════════════
-// ★ 2026-10-08 (YJ: "내가 쓴 글은 앱 사용자 모두 보게 해줘"): 사용자 글 등록 · 신고 · 관리자 삭제
-//   · POST /post   {nick,title,body,cat}  → posts 에 user=1 로 저장 → GET /posts 로 모두에게 내려간다
-//   · POST /report {post_id}               → 사용자 글만 신고 가능, 서로 다른 3곳(IP)이 신고하면 hidden=1
-//   · GET  /post/delete?id=&token=         → 관리자 삭제(글+댓글),  GET /reports?token= → 신고된 글 목록
-//   악용 방지: 욕설 필터(기존 BAD_WORDS) · 링크/전화번호 차단 · IP당 시간 5건/하루 15건 · 같은 닉+제목 하루 1건 · 길이 제한
-// ═══════════════════════════════════════════════════════════════════════
-var USER_POST_CATS = ["잡담", "현장제보", "일상", "정보", "제보", "지연", "혼잡"];
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+// \u2605 2026-10-08 (YJ: "\ub0b4\uac00 \uc4f4 \uae00\uc740 \uc571 \uc0ac\uc6a9\uc790 \ubaa8\ub450 \ubcf4\uac8c \ud574\uc918"): \uc0ac\uc6a9\uc790 \uae00 \ub4f1\ub85d \u00b7 \uc2e0\uace0 \u00b7 \uad00\ub9ac\uc790 \uc0ad\uc81c
+//   \u00b7 POST /post   {nick,title,body,cat}  \u2192 posts \uc5d0 user=1 \ub85c \uc800\uc7a5 \u2192 GET /posts \ub85c \ubaa8\ub450\uc5d0\uac8c \ub0b4\ub824\uac04\ub2e4
+//   \u00b7 POST /report {post_id}               \u2192 \uc0ac\uc6a9\uc790 \uae00\ub9cc \uc2e0\uace0 \uac00\ub2a5, \uc11c\ub85c \ub2e4\ub978 3\uacf3(IP)\uc774 \uc2e0\uace0\ud558\uba74 hidden=1
+//   \u00b7 GET  /post/delete?id=&token=         \u2192 \uad00\ub9ac\uc790 \uc0ad\uc81c(\uae00+\ub313\uae00),  GET /reports?token= \u2192 \uc2e0\uace0\ub41c \uae00 \ubaa9\ub85d
+//   \uc545\uc6a9 \ubc29\uc9c0: \uc695\uc124 \ud544\ud130(\uae30\uc874 BAD_WORDS) \u00b7 \ub9c1\ud06c/\uc804\ud654\ubc88\ud638 \ucc28\ub2e8 \u00b7 IP\ub2f9 \uc2dc\uac04 5\uac74/\ud558\ub8e8 15\uac74 \u00b7 \uac19\uc740 \ub2c9+\uc81c\ubaa9 \ud558\ub8e8 1\uac74 \u00b7 \uae38\uc774 \uc81c\ud55c
+// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
+var USER_POST_CATS = ["\uc7a1\ub2f4", "\ud604\uc7a5\uc81c\ubcf4", "\uc77c\uc0c1", "\uc815\ubcf4", "\uc81c\ubcf4", "\uc9c0\uc5f0", "\ud63c\uc7a1"];
 var POST_PER_IP_HR = 5, POST_PER_IP_DAY = 15, REPORT_PER_IP_HR = 30, REPORT_HIDE_AT = 3;
 function hasLinkOrPhone(t) {
   t = String(t || "");
@@ -2016,24 +2016,24 @@ async function purgePostsCache(url) {
 }
 __name(purgePostsCache, "purgePostsCache");
 var worker_default = {
-  // 크론 (20분마다)
+  // \ud06c\ub860 (20\ubd84\ub9c8\ub2e4)
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => { try { await ensureLineRoom(env); await env.DB.prepare("DELETE FROM line_msgs WHERE ts < ?1").bind(Date.now() - 14 * 24 * 3600 * 1000).run(); await env.DB.prepare("DELETE FROM line_reports WHERE ts < ?1").bind(Date.now() - 14 * 24 * 3600 * 1000).run(); await env.DB.prepare("DELETE FROM line_msgs WHERE ipk = 'ai' AND ts < ?1").bind(Date.now() - 2 * 24 * 3600 * 1000).run(); } catch (e) {} })());
-    // ★ 2026-10-05: 게시판 글·댓글을 먼저, 호선 방은 그 다음 — Gemini 가 모자랄 때 게시판이 굶지 않게 한다. 하나가 실패해도 다음 단계는 계속한다.
+    // \u2605 2026-10-05: \uac8c\uc2dc\ud310 \uae00\u00b7\ub313\uae00\uc744 \uba3c\uc800, \ud638\uc120 \ubc29\uc740 \uadf8 \ub2e4\uc74c \u2014 Gemini \uac00 \ubaa8\uc790\ub784 \ub54c \uac8c\uc2dc\ud310\uc774 \uad76\uc9c0 \uc54a\uac8c \ud55c\ub2e4. \ud558\ub098\uac00 \uc2e4\ud328\ud574\ub3c4 \ub2e4\uc74c \ub2e8\uacc4\ub294 \uacc4\uc18d\ud55c\ub2e4.
     ctx.waitUntil((async () => {
       await holRefresh(env);
-      try { console.log("[board-writer][posts]", JSON.stringify(await generatePosts(env))); } catch (e) { console.log("[board-writer][posts] 실패:", e && e.message); }
-      try { console.log("[board-writer][comments]", JSON.stringify(await generateComments(env))); } catch (e) { console.log("[board-writer][comments] 실패:", e && e.message); }
+      try { console.log("[board-writer][posts]", JSON.stringify(await generatePosts(env))); } catch (e) { console.log("[board-writer][posts] \uc2e4\ud328:", e && e.message); }
+      try { console.log("[board-writer][comments]", JSON.stringify(await generateComments(env))); } catch (e) { console.log("[board-writer][comments] \uc2e4\ud328:", e && e.message); }
       try { await flushGemUse(env); } catch (e) {}
-      try { console.log("[board-writer][linetalks]", JSON.stringify(await generateLineTalks(env))); } catch (e) { console.log("[board-writer][linetalks] 실패:", e && e.message); }
+      try { console.log("[board-writer][linetalks]", JSON.stringify(await generateLineTalks(env))); } catch (e) { console.log("[board-writer][linetalks] \uc2e4\ud328:", e && e.message); }
     })());
   },
-  // 수동 테스트/상태 확인
+  // \uc218\ub3d9 \ud14c\uc2a4\ud2b8/\uc0c1\ud0dc \ud655\uc778
   async fetch(req, env, ctx) {
     _CTX = ctx || null;
-    if (req.method === "POST") _MEM = Object.create(null);   // 글·제보·댓글을 쓰면 이 격리의 메모리 스냅샷은 모두 버린다(바로 보이게)
+    if (req.method === "POST") _MEM = Object.create(null);   // \uae00\u00b7\uc81c\ubcf4\u00b7\ub313\uae00\uc744 \uc4f0\uba74 \uc774 \uaca9\ub9ac\uc758 \uba54\ubaa8\ub9ac \uc2a4\ub0c5\uc0f7\uc740 \ubaa8\ub450 \ubc84\ub9b0\ub2e4(\ubc14\ub85c \ubcf4\uc774\uac8c)
     const url = new URL(req.url);
-    // ★ 2026-10-10: 공휴일 자료 읽기(D1 왕복 3번)가 모든 첫 요청을 막고 있었다 → 응답과 별개로 처리한다
+    // \u2605 2026-10-10: \uacf5\ud734\uc77c \uc790\ub8cc \uc77d\uae30(D1 \uc655\ubcf5 3\ubc88)\uac00 \ubaa8\ub4e0 \uccab \uc694\uccad\uc744 \ub9c9\uace0 \uc788\uc5c8\ub2e4 \u2192 \uc751\ub2f5\uacfc \ubcc4\uac1c\ub85c \ucc98\ub9ac\ud55c\ub2e4
     try { if (ctx) ctx.waitUntil(holRefresh(env)); else holRefresh(env).catch(function () {}); } catch (e) {}
     const cors = {
       "Access-Control-Allow-Origin": "*",
@@ -2088,21 +2088,21 @@ var worker_default = {
       }
       return res;
     }
-    // ★ 2026-09-24 신설: generatePosts(크론, 20분마다)가 D1 posts 테이블에 계속
-    //   쌓아왔지만, 정작 이걸 앱에 돌려주는 GET 엔드포인트가 여태 없었다.
-    //   그래서 앱은 (엉뚱한 워커 주소로 /posts를 시도하다 실패하고) 매번 기기별
-    //   로컬 생성으로 떨어졌었다 — 서버가 애써 만든 글이 사용자에게 전혀 도달하지
-    //   못하고 있었던 것. 이 라우트를 추가하고 앱 index.html의 요청 주소를
-    //   board-writer로 고쳐야 실제로 연결된다.
+    // \u2605 2026-09-24 \uc2e0\uc124: generatePosts(\ud06c\ub860, 20\ubd84\ub9c8\ub2e4)\uac00 D1 posts \ud14c\uc774\ube14\uc5d0 \uacc4\uc18d
+    //   \uc313\uc544\uc654\uc9c0\ub9cc, \uc815\uc791 \uc774\uac78 \uc571\uc5d0 \ub3cc\ub824\uc8fc\ub294 GET \uc5d4\ub4dc\ud3ec\uc778\ud2b8\uac00 \uc5ec\ud0dc \uc5c6\uc5c8\ub2e4.
+    //   \uadf8\ub798\uc11c \uc571\uc740 (\uc5c9\ub6b1\ud55c \uc6cc\ucee4 \uc8fc\uc18c\ub85c /posts\ub97c \uc2dc\ub3c4\ud558\ub2e4 \uc2e4\ud328\ud558\uace0) \ub9e4\ubc88 \uae30\uae30\ubcc4
+    //   \ub85c\uceec \uc0dd\uc131\uc73c\ub85c \ub5a8\uc5b4\uc84c\uc5c8\ub2e4 \u2014 \uc11c\ubc84\uac00 \uc560\uc368 \ub9cc\ub4e0 \uae00\uc774 \uc0ac\uc6a9\uc790\uc5d0\uac8c \uc804\ud600 \ub3c4\ub2ec\ud558\uc9c0
+    //   \ubabb\ud558\uace0 \uc788\uc5c8\ub358 \uac83. \uc774 \ub77c\uc6b0\ud2b8\ub97c \ucd94\uac00\ud558\uace0 \uc571 index.html\uc758 \uc694\uccad \uc8fc\uc18c\ub97c
+    //   board-writer\ub85c \uace0\uccd0\uc57c \uc2e4\uc81c\ub85c \uc5f0\uacb0\ub41c\ub2e4.
     if (url.pathname === "/posts") {
       const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "50", 10)));
       const cat = url.searchParams.get("cat");
-      // ★ 2026-09-25: 글은 20분 cron(generatePosts)으로만 바뀌므로 짧은 엣지캐시를 둬도
-      //   신선도 손해가 없다. newsfeed 라우트와 동일한 방식(caches.default)으로 실제 캐싱을
-      //   적용한다(이전엔 Cache-Control 헤더만 있고 caches.default 저장/조회가 없어 매번
-      //   D1까지 갔었음 — 게시판 진입 2~3초 지연의 주원인).
+      // \u2605 2026-09-25: \uae00\uc740 20\ubd84 cron(generatePosts)\uc73c\ub85c\ub9cc \ubc14\ub00c\ubbc0\ub85c \uc9e7\uc740 \uc5e3\uc9c0\uce90\uc2dc\ub97c \ub46c\ub3c4
+      //   \uc2e0\uc120\ub3c4 \uc190\ud574\uac00 \uc5c6\ub2e4. newsfeed \ub77c\uc6b0\ud2b8\uc640 \ub3d9\uc77c\ud55c \ubc29\uc2dd(caches.default)\uc73c\ub85c \uc2e4\uc81c \uce90\uc2f1\uc744
+      //   \uc801\uc6a9\ud55c\ub2e4(\uc774\uc804\uc5d4 Cache-Control \ud5e4\ub354\ub9cc \uc788\uace0 caches.default \uc800\uc7a5/\uc870\ud68c\uac00 \uc5c6\uc5b4 \ub9e4\ubc88
+      //   D1\uae4c\uc9c0 \uac14\uc5c8\uc74c \u2014 \uac8c\uc2dc\ud310 \uc9c4\uc785 2~3\ucd08 \uc9c0\uc5f0\uc758 \uc8fc\uc6d0\uc778).
       const cacheKey = new Request(url.origin + "/posts?limit=" + limit + (cat ? "&cat=" + encodeURIComponent(cat) : ""));
-      // ★ 2026-10-10: workers.dev 에서는 엣지 캐시가 동작하지 않아 매 요청 D1 까지 갔다 → 같은 격리 안에서 15초 메모리 캐시
+      // \u2605 2026-10-10: workers.dev \uc5d0\uc11c\ub294 \uc5e3\uc9c0 \uce90\uc2dc\uac00 \ub3d9\uc791\ud558\uc9c0 \uc54a\uc544 \ub9e4 \uc694\uccad D1 \uae4c\uc9c0 \uac14\ub2e4 \u2192 \uac19\uc740 \uaca9\ub9ac \uc548\uc5d0\uc11c 15\ucd08 \uba54\ubaa8\ub9ac \uce90\uc2dc
       const memBody = memGet("posts:" + limit + ":" + (cat || ""), 15000);
       if (memBody) return new Response(memBody, { headers: Object.assign({}, cors, { "Cache-Control": "public, s-maxage=30, max-age=15" }) });
       try {
@@ -2111,17 +2111,17 @@ var worker_default = {
       } catch (e) {
       }
       try {
-        // ★ 2026-09-24: 실제 posts 테이블에 없는 컬럼(views 등)을 하드코딩해서
-        //   SELECT하면 스키마가 조금만 달라도 500 에러가 난다. generatePosts의
-        //   INSERT처럼 pragma_table_info로 실제 존재하는 컬럼만 골라서 SELECT한다.
-        //   (2026-09-25: 매 요청 D1 왕복이던 걸 getCols로 10분 메모리캐시함)
-        const [cols, cmtCols] = await Promise.all([getCols(env, "posts"), getCols(env, "comments").catch(function () { return []; })]);   // ★ 2026-10-10: 차례로 → 동시에
+        // \u2605 2026-09-24: \uc2e4\uc81c posts \ud14c\uc774\ube14\uc5d0 \uc5c6\ub294 \uceec\ub7fc(views \ub4f1)\uc744 \ud558\ub4dc\ucf54\ub529\ud574\uc11c
+        //   SELECT\ud558\uba74 \uc2a4\ud0a4\ub9c8\uac00 \uc870\uae08\ub9cc \ub2ec\ub77c\ub3c4 500 \uc5d0\ub7ec\uac00 \ub09c\ub2e4. generatePosts\uc758
+        //   INSERT\ucc98\ub7fc pragma_table_info\ub85c \uc2e4\uc81c \uc874\uc7ac\ud558\ub294 \uceec\ub7fc\ub9cc \uace8\ub77c\uc11c SELECT\ud55c\ub2e4.
+        //   (2026-09-25: \ub9e4 \uc694\uccad D1 \uc655\ubcf5\uc774\ub358 \uac78 getCols\ub85c 10\ubd84 \uba54\ubaa8\ub9ac\uce90\uc2dc\ud568)
+        const [cols, cmtCols] = await Promise.all([getCols(env, "posts"), getCols(env, "comments").catch(function () { return []; })]);   // \u2605 2026-10-10: \ucc28\ub840\ub85c \u2192 \ub3d9\uc2dc\uc5d0
         const want = ["id", "nick", "title", "body", "cat", "ts", "views", "likes", "lols", "sads", "link", "user"];
         const use = want.filter((c) => cols.indexOf(c) >= 0);
-        if (!use.length) throw new Error("posts 테이블 컬럼을 찾을 수 없음");
-        // ★ 2026-10-03: 목록의 💬 숫자가 글을 펼치기 전엔 항상 0이었다 → 올 때가 된 서버 댓글 수를 같이 내려준다
+        if (!use.length) throw new Error("posts \ud14c\uc774\ube14 \uceec\ub7fc\uc744 \ucc3e\uc744 \uc218 \uc5c6\uc74c");
+        // \u2605 2026-10-03: \ubaa9\ub85d\uc758 \ud83d\udcac \uc22b\uc790\uac00 \uae00\uc744 \ud3bc\uce58\uae30 \uc804\uc5d4 \ud56d\uc0c1 0\uc774\uc5c8\ub2e4 \u2192 \uc62c \ub54c\uac00 \ub41c \uc11c\ubc84 \ub313\uae00 \uc218\ub97c \uac19\uc774 \ub0b4\ub824\uc900\ub2e4
         const hasCmt = cmtCols.length > 0;
-        // ★ 2026-10-10: 목록의 💬 숫자(글마다 댓글 수 세기)가 빠르도록 댓글 표에 색인을 한 번 만들어 둔다(이미 있으면 아무 일 없음)
+        // \u2605 2026-10-10: \ubaa9\ub85d\uc758 \ud83d\udcac \uc22b\uc790(\uae00\ub9c8\ub2e4 \ub313\uae00 \uc218 \uc138\uae30)\uac00 \ube60\ub974\ub3c4\ub85d \ub313\uae00 \ud45c\uc5d0 \uc0c9\uc778\uc744 \ud55c \ubc88 \ub9cc\ub4e4\uc5b4 \ub454\ub2e4(\uc774\ubbf8 \uc788\uc73c\uba74 \uc544\ubb34 \uc77c \uc5c6\uc74c)
         if (hasCmt && !_cmtIdxDone) { _cmtIdxDone = true; try { const pi = env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id, ts)").run().catch(function () {}); if (_CTX) _CTX.waitUntil(pi); } catch (e) {} }
         let sql = "SELECT " + use.join(",") + (hasCmt ? ", (SELECT COUNT(*) FROM comments c WHERE c.post_id = posts.id AND c.ts <= " + Date.now() + ") AS cmts" : "") + " FROM posts";
         const binds = [];
@@ -2130,7 +2130,7 @@ var worker_default = {
           conds.push("cat = ?");
           binds.push(cat);
         }
-        // ★ 2026-10-08: 신고가 쌓여 숨김 처리된 사용자 글은 내려주지 않는다
+        // \u2605 2026-10-08: \uc2e0\uace0\uac00 \uc313\uc5ec \uc228\uae40 \ucc98\ub9ac\ub41c \uc0ac\uc6a9\uc790 \uae00\uc740 \ub0b4\ub824\uc8fc\uc9c0 \uc54a\ub294\ub2e4
         if (cols.indexOf("hidden") >= 0) conds.push("(hidden IS NULL OR hidden = 0)");
         if (conds.length) sql += " WHERE " + conds.join(" AND ");
         sql += " ORDER BY id DESC LIMIT ?";
@@ -2147,10 +2147,10 @@ var worker_default = {
         return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: cors });
       }
     }
-    // ★ 2026-09-25 신설: 실제 유저가 글에 달는 댓글을 D1에 저장하고, 같은 글을 보는 다른
-    //   기기/사용자에게도 그대로 보여준다. 토큰 게이팅 없음 — /react(가짜 반응 생성)과달리
-    //   실제 유저 액션이라 앱이 토큰 없이 호출함(subway-api의 실제 사용자 /react와 같은 결).
-    // ★ 2026-10-08: 사용자 글 등록
+    // \u2605 2026-09-25 \uc2e0\uc124: \uc2e4\uc81c \uc720\uc800\uac00 \uae00\uc5d0 \ub2ec\ub294 \ub313\uae00\uc744 D1\uc5d0 \uc800\uc7a5\ud558\uace0, \uac19\uc740 \uae00\uc744 \ubcf4\ub294 \ub2e4\ub978
+    //   \uae30\uae30/\uc0ac\uc6a9\uc790\uc5d0\uac8c\ub3c4 \uadf8\ub300\ub85c \ubcf4\uc5ec\uc900\ub2e4. \ud1a0\ud070 \uac8c\uc774\ud305 \uc5c6\uc74c \u2014 /react(\uac00\uc9dc \ubc18\uc751 \uc0dd\uc131)\uacfc\ub2ec\ub9ac
+    //   \uc2e4\uc81c \uc720\uc800 \uc561\uc158\uc774\ub77c \uc571\uc774 \ud1a0\ud070 \uc5c6\uc774 \ud638\ucd9c\ud568(subway-api\uc758 \uc2e4\uc81c \uc0ac\uc6a9\uc790 /react\uc640 \uac19\uc740 \uacb0).
+    // \u2605 2026-10-08: \uc0ac\uc6a9\uc790 \uae00 \ub4f1\ub85d
     if (url.pathname === "/post" && req.method === "POST") {
       const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: cors });
       let b = {};
@@ -2158,19 +2158,19 @@ var worker_default = {
       const nick = String(b.nick || "").replace(/\s+/g, " ").trim().slice(0, 16);
       const title = String(b.title || "").replace(/\s+/g, " ").trim().slice(0, 60);
       const body = String(b.body || "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, 800);
-      const cat = USER_POST_CATS.indexOf(b.cat) >= 0 ? b.cat : "잡담";
-      if (!nick) return J({ ok: false, error: "커뮤니티 아이디가 필요해요" }, 400);
-      if (!title || !body) return J({ ok: false, error: "제목과 내용을 입력해주세요" }, 400);
-      if (containsBadWord(nick) || containsBadWord(title) || containsBadWord(body)) return J({ ok: false, error: "욕설·비방이 포함되어 등록할 수 없어요" }, 400);
-      if (hasLinkOrPhone(title) || hasLinkOrPhone(body)) return J({ ok: false, error: "링크·전화번호는 올릴 수 없어요" }, 400);
+      const cat = USER_POST_CATS.indexOf(b.cat) >= 0 ? b.cat : "\uc7a1\ub2f4";
+      if (!nick) return J({ ok: false, error: "\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514\uac00 \ud544\uc694\ud574\uc694" }, 400);
+      if (!title || !body) return J({ ok: false, error: "\uc81c\ubaa9\uacfc \ub0b4\uc6a9\uc744 \uc785\ub825\ud574\uc8fc\uc138\uc694" }, 400);
+      if (containsBadWord(nick) || containsBadWord(title) || containsBadWord(body)) return J({ ok: false, error: "\uc695\uc124\u00b7\ube44\ubc29\uc774 \ud3ec\ud568\ub418\uc5b4 \ub4f1\ub85d\ud560 \uc218 \uc5c6\uc5b4\uc694" }, 400);
+      if (hasLinkOrPhone(title) || hasLinkOrPhone(body)) return J({ ok: false, error: "\ub9c1\ud06c\u00b7\uc804\ud654\ubc88\ud638\ub294 \uc62c\ub9b4 \uc218 \uc5c6\uc5b4\uc694" }, 400);
       try {
         await ensureUserPostCols(env);
-        const ip = (await ownerHash("ip:" + (req.headers.get("CF-Connecting-IP") || "?"))).slice(0, 24);   // IP 원문은 저장하지 않는다
+        const ip = (await ownerHash("ip:" + (req.headers.get("CF-Connecting-IP") || "?"))).slice(0, 24);   // IP \uc6d0\ubb38\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4
         const hr = Math.floor(Date.now() / 36e5), day = Math.floor(Date.now() / 864e5);
         if (!(await bumpLimit(env, "post:" + ip, hr, POST_PER_IP_HR)) || !(await bumpLimit(env, "postd:" + ip, day, POST_PER_IP_DAY)))
-          return J({ ok: false, error: "글을 너무 자주 올리고 있어요. 잠시 뒤 다시 써주세요" }, 429);
+          return J({ ok: false, error: "\uae00\uc744 \ub108\ubb34 \uc790\uc8fc \uc62c\ub9ac\uace0 \uc788\uc5b4\uc694. \uc7a0\uc2dc \ub4a4 \ub2e4\uc2dc \uc368\uc8fc\uc138\uc694" }, 429);
         const dup = await env.DB.prepare("SELECT id FROM posts WHERE nick = ?1 AND title = ?2 AND ts > ?3 LIMIT 1").bind(nick, title, Date.now() - 864e5).first();
-        if (dup) return J({ ok: false, error: "같은 제목의 글을 이미 올렸어요" }, 400);
+        if (dup) return J({ ok: false, error: "\uac19\uc740 \uc81c\ubaa9\uc758 \uae00\uc744 \uc774\ubbf8 \uc62c\ub838\uc5b4\uc694" }, 400);
         const ts = Date.now();
         const cols = await getCols(env, "posts");
         const ok = String(b.owner_key || "");
@@ -2181,21 +2181,21 @@ var worker_default = {
         await purgePostsCache(url);
         return J({ ok: true, id, ts });
       } catch (e) {
-        return J({ ok: false, error: "서버 오류: " + e.message }, 500);
+        return J({ ok: false, error: "\uc11c\ubc84 \uc624\ub958: " + e.message }, 500);
       }
     }
-    // ★ 2026-10-08: 작성자 본인 삭제 — 등록할 때 보낸 기기 비밀키(owner_key)가 맞아야 한다(개인정보처리방침의 '직접 삭제' 약속)
+    // \u2605 2026-10-08: \uc791\uc131\uc790 \ubcf8\uc778 \uc0ad\uc81c \u2014 \ub4f1\ub85d\ud560 \ub54c \ubcf4\ub0b8 \uae30\uae30 \ube44\ubc00\ud0a4(owner_key)\uac00 \ub9de\uc544\uc57c \ud55c\ub2e4(\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68\uc758 '\uc9c1\uc811 \uc0ad\uc81c' \uc57d\uc18d)
     if (url.pathname === "/post/mine-delete" && req.method === "POST") {
       const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: cors });
       let b = {};
       try { b = await req.json(); } catch (e) {}
       const pid = parseInt(b.post_id, 10), ok = String(b.owner_key || "");
-      if (!pid || ok.length < 16) return J({ ok: false, error: "post_id·owner_key 필요" }, 400);
+      if (!pid || ok.length < 16) return J({ ok: false, error: "post_id\u00b7owner_key \ud544\uc694" }, 400);
       try {
         await ensureUserPostCols(env);
         const row = await env.DB.prepare("SELECT owner FROM posts WHERE id = ?1 AND user = 1").bind(pid).first();
-        if (!row) return J({ ok: true, deleted: false });   // 이미 없음
-        if (!row.owner || row.owner !== (await ownerHash(ok))) return J({ ok: false, error: "본인 글만 삭제할 수 있어요" }, 403);
+        if (!row) return J({ ok: true, deleted: false });   // \uc774\ubbf8 \uc5c6\uc74c
+        if (!row.owner || row.owner !== (await ownerHash(ok))) return J({ ok: false, error: "\ubcf8\uc778 \uae00\ub9cc \uc0ad\uc81c\ud560 \uc218 \uc788\uc5b4\uc694" }, 403);
         await env.DB.prepare("DELETE FROM posts WHERE id = ?1").bind(pid).run();
         try { await env.DB.prepare("DELETE FROM comments WHERE post_id = ?1").bind(pid).run(); } catch (e) {}
         await purgePostsCache(url);
@@ -2204,21 +2204,21 @@ var worker_default = {
         return J({ ok: false, error: e.message }, 500);
       }
     }
-    // ★ 2026-10-08: 사용자 글 신고 — 서로 다른 3곳이 신고하면 숨긴다
+    // \u2605 2026-10-08: \uc0ac\uc6a9\uc790 \uae00 \uc2e0\uace0 \u2014 \uc11c\ub85c \ub2e4\ub978 3\uacf3\uc774 \uc2e0\uace0\ud558\uba74 \uc228\uae34\ub2e4
     if (url.pathname === "/report" && req.method === "POST") {
       const J = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: cors });
       let b = {};
       try { b = await req.json(); } catch (e) {}
       const pid = parseInt(b.post_id, 10);
-      if (!pid) return J({ ok: false, error: "post_id 필요" }, 400);
+      if (!pid) return J({ ok: false, error: "post_id \ud544\uc694" }, 400);
       try {
         await ensureUserPostCols(env);
-        const ip = (await ownerHash("ip:" + (req.headers.get("CF-Connecting-IP") || "?"))).slice(0, 24);   // IP 원문은 저장하지 않는다
+        const ip = (await ownerHash("ip:" + (req.headers.get("CF-Connecting-IP") || "?"))).slice(0, 24);   // IP \uc6d0\ubb38\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4
         if (!(await bumpLimit(env, "rep:" + ip, Math.floor(Date.now() / 36e5), REPORT_PER_IP_HR))) return J({ ok: false, error: "too many" }, 429);
         const post = await env.DB.prepare("SELECT id, user FROM posts WHERE id = ?1").bind(pid).first();
-        if (!post || !post.user) return J({ ok: false, error: "신고할 수 없는 글이에요" }, 400);
+        if (!post || !post.user) return J({ ok: false, error: "\uc2e0\uace0\ud560 \uc218 \uc5c6\ub294 \uae00\uc774\uc5d0\uc694" }, 400);
         await env.DB.prepare("CREATE TABLE IF NOT EXISTS post_reports (post_id INTEGER, k TEXT, ts INTEGER, PRIMARY KEY (post_id, k))").run();
-        if (Math.random() < 0.05) { try { await env.DB.prepare("DELETE FROM post_reports WHERE ts < ?1").bind(Date.now() - 14 * 864e5).run(); } catch (e) {} }   // 14일 지난 신고 기록 삭제(방침과 동일)
+        if (Math.random() < 0.05) { try { await env.DB.prepare("DELETE FROM post_reports WHERE ts < ?1").bind(Date.now() - 14 * 864e5).run(); } catch (e) {} }   // 14\uc77c \uc9c0\ub09c \uc2e0\uace0 \uae30\ub85d \uc0ad\uc81c(\ubc29\uce68\uacfc \ub3d9\uc77c)
         await env.DB.prepare("INSERT OR IGNORE INTO post_reports (post_id,k,ts) VALUES (?1,?2,?3)").bind(pid, ip, Date.now()).run();
         const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM post_reports WHERE post_id = ?1").bind(pid).first();
         let hidden = false;
@@ -2228,13 +2228,13 @@ var worker_default = {
         return J({ ok: false, error: e.message }, 500);
       }
     }
-    // ★ 2026-10-08: 관리자 — 글 삭제 / 신고된 글 보기 (ADMIN_TOKEN)
+    // \u2605 2026-10-08: \uad00\ub9ac\uc790 \u2014 \uae00 \uc0ad\uc81c / \uc2e0\uace0\ub41c \uae00 \ubcf4\uae30 (ADMIN_TOKEN)
     if (url.pathname === "/post/delete" || url.pathname === "/reports") {
       if (!adminOk(url, env)) return new Response(JSON.stringify({ ok: false, error: "unauthorized" }), { status: 401, headers: cors });
       try {
         if (url.pathname === "/post/delete") {
           const id = parseInt(url.searchParams.get("id"), 10);
-          if (!id) return new Response(JSON.stringify({ ok: false, error: "id 필요" }), { status: 400, headers: cors });
+          if (!id) return new Response(JSON.stringify({ ok: false, error: "id \ud544\uc694" }), { status: 400, headers: cors });
           await env.DB.prepare("DELETE FROM posts WHERE id = ?1").bind(id).run();
           try { await env.DB.prepare("DELETE FROM comments WHERE post_id = ?1").bind(id).run(); } catch (e) {}
           await purgePostsCache(url);
@@ -2254,17 +2254,17 @@ var worker_default = {
       } catch (e) {
       }
       const postId = parseInt(body.post_id, 10);
-      const nick = String(body.nick || "나").slice(0, 16).trim() || "나";
+      const nick = String(body.nick || "\ub098").slice(0, 16).trim() || "\ub098";
       const text = String(body.body || "").slice(0, 300).trim();
-      if (!postId) return new Response(JSON.stringify({ ok: false, error: "post_id 필요" }), { status: 400, headers: cors });
+      if (!postId) return new Response(JSON.stringify({ ok: false, error: "post_id \ud544\uc694" }), { status: 400, headers: cors });
       if (!text) return new Response(JSON.stringify({ ok: false, error: "empty" }), { status: 400, headers: cors });
       if (containsBadWord(nick) || containsBadWord(text)) {
-        return new Response(JSON.stringify({ ok: false, error: "부적절한 내용이 포함되어 있습니다" }), { status: 400, headers: cors });
+        return new Response(JSON.stringify({ ok: false, error: "\ubd80\uc801\uc808\ud55c \ub0b4\uc6a9\uc774 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4" }), { status: 400, headers: cors });
       }
       try {
         const ts = Date.now();
         const cols = await getCols(env, "comments");
-        if (!cols.length) throw new Error("comments 테이블이 없습니다 (D1에 CREATE TABLE 필요)");
+        if (!cols.length) throw new Error("comments \ud14c\uc774\ube14\uc774 \uc5c6\uc2b5\ub2c8\ub2e4 (D1\uc5d0 CREATE TABLE \ud544\uc694)");
         const data = { post_id: postId, nick, body: text, ts };
         const use = Object.keys(data).filter((k) => cols.indexOf(k) >= 0);
         const sql = "INSERT INTO comments (" + use.join(",") + ") VALUES (" + use.map(() => "?").join(",") + ")";
@@ -2278,7 +2278,7 @@ var worker_default = {
     if (url.pathname === "/comments") {
       const postId = parseInt(url.searchParams.get("post_id"), 10);
       const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") || "50", 10)));
-      if (!postId) return new Response(JSON.stringify({ ok: false, error: "post_id 필요" }), { status: 400, headers: cors });
+      if (!postId) return new Response(JSON.stringify({ ok: false, error: "post_id \ud544\uc694" }), { status: 400, headers: cors });
       try {
         const cols = await getCols(env, "comments");
         if (!cols.length) {
@@ -2286,7 +2286,7 @@ var worker_default = {
         }
         const want = ["id", "nick", "body", "ts"];
         const use = want.filter((c) => cols.indexOf(c) >= 0);
-        // ★ 2026-10-03: 아직 올 때가 안 된(ts 가 미래인) 서버 댓글은 숨긴다 — 실제 댓글처럼 하나씩 나타난다
+        // \u2605 2026-10-03: \uc544\uc9c1 \uc62c \ub54c\uac00 \uc548 \ub41c(ts \uac00 \ubbf8\ub798\uc778) \uc11c\ubc84 \ub313\uae00\uc740 \uc228\uae34\ub2e4 \u2014 \uc2e4\uc81c \ub313\uae00\ucc98\ub7fc \ud558\ub098\uc529 \ub098\ud0c0\ub09c\ub2e4
         const sql = "SELECT " + use.join(",") + " FROM comments WHERE post_id = ? AND ts <= ? ORDER BY ts ASC, id ASC LIMIT ?";
         const rs = await env.DB.prepare(sql).bind(postId, Date.now(), limit).all();
         return new Response(JSON.stringify({ ok: true, now: Date.now(), comments: rs.results || [] }), {
@@ -2296,18 +2296,18 @@ var worker_default = {
         return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: cors });
       }
     }
-    // ★ 2026-10-03: 모든 사용자가 같은 대화를 본다. 앱이 6초마다 이 라우트를 불러 새 줄만 받아 간다.
-    //   · ts 가 '지금 이전'인 줄만 내려준다(generateTalks 는 19분에 걸쳐 시각을 미리 흩뿌려 저장하므로,
-    //     아직 올 때가 안 된 줄은 숨겨져야 실제 채팅처럼 한 줄씩 나타난다).
-    //   · 커서는 id 가 아니라 ts(since)다 — 사용자 메시지·반응이 같은 배치 사이사이 끼어들어 id 순서와
-    //     시각 순서가 다르다. 같은 ts 줄을 다시 받을 수 있으니 앱이 id 로 중복을 걸러낸다.
-    //   · 최근 100줄 스냅샷을 5초만 엣지캐시해 사용자가 몰려도 D1 은 몇 초에 한 번만 읽는다.
+    // \u2605 2026-10-03: \ubaa8\ub4e0 \uc0ac\uc6a9\uc790\uac00 \uac19\uc740 \ub300\ud654\ub97c \ubcf8\ub2e4. \uc571\uc774 6\ucd08\ub9c8\ub2e4 \uc774 \ub77c\uc6b0\ud2b8\ub97c \ubd88\ub7ec \uc0c8 \uc904\ub9cc \ubc1b\uc544 \uac04\ub2e4.
+    //   \u00b7 ts \uac00 '\uc9c0\uae08 \uc774\uc804'\uc778 \uc904\ub9cc \ub0b4\ub824\uc900\ub2e4(generateTalks \ub294 19\ubd84\uc5d0 \uac78\uccd0 \uc2dc\uac01\uc744 \ubbf8\ub9ac \ud769\ubfcc\ub824 \uc800\uc7a5\ud558\ubbc0\ub85c,
+    //     \uc544\uc9c1 \uc62c \ub54c\uac00 \uc548 \ub41c \uc904\uc740 \uc228\uaca8\uc838\uc57c \uc2e4\uc81c \ucc44\ud305\ucc98\ub7fc \ud55c \uc904\uc529 \ub098\ud0c0\ub09c\ub2e4).
+    //   \u00b7 \ucee4\uc11c\ub294 id \uac00 \uc544\ub2c8\ub77c ts(since)\ub2e4 \u2014 \uc0ac\uc6a9\uc790 \uba54\uc2dc\uc9c0\u00b7\ubc18\uc751\uc774 \uac19\uc740 \ubc30\uce58 \uc0ac\uc774\uc0ac\uc774 \ub07c\uc5b4\ub4e4\uc5b4 id \uc21c\uc11c\uc640
+    //     \uc2dc\uac01 \uc21c\uc11c\uac00 \ub2e4\ub974\ub2e4. \uac19\uc740 ts \uc904\uc744 \ub2e4\uc2dc \ubc1b\uc744 \uc218 \uc788\uc73c\ub2c8 \uc571\uc774 id \ub85c \uc911\ubcf5\uc744 \uac78\ub7ec\ub0b8\ub2e4.
+    //   \u00b7 \ucd5c\uadfc 100\uc904 \uc2a4\ub0c5\uc0f7\uc744 5\ucd08\ub9cc \uc5e3\uc9c0\uce90\uc2dc\ud574 \uc0ac\uc6a9\uc790\uac00 \ubab0\ub824\ub3c4 D1 \uc740 \uba87 \ucd08\uc5d0 \ud55c \ubc88\ub9cc \uc77d\ub294\ub2e4.
     if (url.pathname === "/talks") {
       const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
       const limit = Math.min(60, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
       const snapKey = new Request(url.origin + "/talks?snap=1");
-      // ★ 2026-10-10: workers.dev 에서는 엣지 캐시(caches.default)가 동작하지 않는다(Cloudflare 문서: 사용자 지정 도메인에서만) →
-      //   같은 격리 안에서 5초간은 메모리 스냅샷을 쓴다.
+      // \u2605 2026-10-10: workers.dev \uc5d0\uc11c\ub294 \uc5e3\uc9c0 \uce90\uc2dc(caches.default)\uac00 \ub3d9\uc791\ud558\uc9c0 \uc54a\ub294\ub2e4(Cloudflare \ubb38\uc11c: \uc0ac\uc6a9\uc790 \uc9c0\uc815 \ub3c4\uba54\uc778\uc5d0\uc11c\ub9cc) \u2192
+      //   \uac19\uc740 \uaca9\ub9ac \uc548\uc5d0\uc11c 5\ucd08\uac04\uc740 \uba54\ubaa8\ub9ac \uc2a4\ub0c5\uc0f7\uc744 \uc4f4\ub2e4.
       let snap = memGet("talks", 5000);
       try {
         if (!snap) {
@@ -2318,8 +2318,8 @@ var worker_default = {
       }
       if (!snap) {
         try {
-          // ★ 2026-10-04: 전체 = 각 노선 방(line_msgs 의 chat)을 시간순으로 모은 것. 각 줄에 line(노선명)이 붙는다.
-          //   옛 talks(전체에서 노선 없이 보낸 말·예전 반응)도 최근 6시간분은 함께 섞는다(line 은 null).
+          // \u2605 2026-10-04: \uc804\uccb4 = \uac01 \ub178\uc120 \ubc29(line_msgs \uc758 chat)\uc744 \uc2dc\uac04\uc21c\uc73c\ub85c \ubaa8\uc740 \uac83. \uac01 \uc904\uc5d0 line(\ub178\uc120\uba85)\uc774 \ubd99\ub294\ub2e4.
+          //   \uc61b talks(\uc804\uccb4\uc5d0\uc11c \ub178\uc120 \uc5c6\uc774 \ubcf4\ub0b8 \ub9d0\u00b7\uc608\uc804 \ubc18\uc751)\ub3c4 \ucd5c\uadfc 6\uc2dc\uac04\ubd84\uc740 \ud568\uaed8 \uc11e\ub294\ub2e4(line \uc740 null).
           await ensureLineRoom(env);
           const nowT = Date.now();
           const rs = await env.DB.prepare("SELECT * FROM (SELECT 'L' || id AS id, nick, text, ts, line FROM line_msgs WHERE kind='chat' AND ts <= ?1 AND ts > ?2" + LR_HIDDEN_SQL + " UNION ALL SELECT id, nick, text, ts, NULL AS line FROM talks WHERE ts <= ?1 AND ts > ?2) ORDER BY ts DESC LIMIT 100").bind(nowT, nowT - 6 * 3600 * 1000).all();
@@ -2338,17 +2338,17 @@ var worker_default = {
       rows = since > 0 ? rows.filter(function(t) { return t.ts >= since; }) : rows.slice(-limit);
       return new Response(JSON.stringify({ ok: true, now: Date.now(), talks: rows }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
     }
-    // ★ 2026-10-03 (개선안 4·5): 노선별 방. 대화 읽기/쓰기 + 지연 제보 집계.
+    // \u2605 2026-10-03 (\uac1c\uc120\uc548 4\u00b75): \ub178\uc120\ubcc4 \ubc29. \ub300\ud654 \uc77d\uae30/\uc4f0\uae30 + \uc9c0\uc5f0 \uc81c\ubcf4 \uc9d1\uacc4.
     if (url.pathname === "/lroom" && req.method === "POST") {
       let body = {};
       try { body = await req.json(); } catch (e) {}
       const line = String(body.line || "").trim();
       const kind = LR_KINDS_OK.indexOf(body.kind) >= 0 ? body.kind : "chat";
-      const nick = String(body.nick || "나").slice(0, 16).trim() || "나";
+      const nick = String(body.nick || "\ub098").slice(0, 16).trim() || "\ub098";
       const stn = String(body.stn || "").slice(0, 20).trim();
       let text = String(body.text || "").slice(0, 120).trim();
       if (!lrLineOk(line)) return new Response(JSON.stringify({ ok: false, error: "line" }), { status: 400, headers: cors });
-      if (!text) text = kind === "delay" ? (stn ? stn + " 쪽 지연돼요" : "지연돼요") : kind === "crowd" ? (stn ? stn + " 많이 붐벼요" : "많이 붐벼요") : "";
+      if (!text) text = kind === "delay" ? (stn ? stn + " \ucabd \uc9c0\uc5f0\ub3fc\uc694" : "\uc9c0\uc5f0\ub3fc\uc694") : kind === "crowd" ? (stn ? stn + " \ub9ce\uc774 \ubd90\ubcbc\uc694" : "\ub9ce\uc774 \ubd90\ubcbc\uc694") : "";
       if (!text) return new Response(JSON.stringify({ ok: false, error: "empty" }), { status: 400, headers: cors });
       if (containsBadWord(nick) || containsBadWord(text) || containsBadWord(stn)) return new Response(JSON.stringify({ ok: false, error: "filtered" }), { status: 400, headers: cors });
       try {
@@ -2356,7 +2356,7 @@ var worker_default = {
         if (!await lrAllowed(req, env)) return new Response(JSON.stringify({ ok: false, error: "rate limited" }), { status: 429, headers: cors });
         const ipk = await lrIpHash(req);
         const now = Date.now();
-        // 같은 사람의 같은 글·제보는 짧은 시간 안에 한 번만 저장한다
+        // \uac19\uc740 \uc0ac\ub78c\uc758 \uac19\uc740 \uae00\u00b7\uc81c\ubcf4\ub294 \uc9e7\uc740 \uc2dc\uac04 \uc548\uc5d0 \ud55c \ubc88\ub9cc \uc800\uc7a5\ud55c\ub2e4
         const dupWin = kind === "chat" ? 60 * 1000 : 20 * 60 * 1000;
         const dup = kind === "chat"
           ? await env.DB.prepare("SELECT id FROM line_msgs WHERE line=?1 AND ipk=?2 AND text=?3 AND ts > ?4 LIMIT 1").bind(line, ipk, text, now - dupWin).first()
@@ -2380,7 +2380,7 @@ var worker_default = {
         const ipk = await lrIpHash(req);
         const m = await env.DB.prepare("SELECT id, ipk FROM line_msgs WHERE id=?1").bind(id).first();
         if (!m) return new Response(JSON.stringify({ ok: true, gone: true }), { headers: cors });
-        if (m.ipk === ipk) return new Response(JSON.stringify({ ok: true, own: true }), { headers: cors });   // 내 글은 신고 대상이 아니다
+        if (m.ipk === ipk) return new Response(JSON.stringify({ ok: true, own: true }), { headers: cors });   // \ub0b4 \uae00\uc740 \uc2e0\uace0 \ub300\uc0c1\uc774 \uc544\ub2c8\ub2e4
         await env.DB.prepare("INSERT OR IGNORE INTO line_reports (msg_id, ipk, ts) VALUES (?1,?2,?3)").bind(id, ipk, Date.now()).run();
         const c = await env.DB.prepare("SELECT COUNT(*) AS n FROM line_reports WHERE msg_id=?1").bind(id).first();
         return new Response(JSON.stringify({ ok: true, hidden: ((c && c.n) || 0) >= LR_HIDE_N }), { headers: cors });
@@ -2399,9 +2399,9 @@ var worker_default = {
         try {
           await ensureLineRoom(env);
           const now = Date.now();
-          const alP = lrAlerts(env, [line]);   // ★ 2026-10-10: 대화와 지연 제보 집계를 동시에 읽는다
+          const alP = lrAlerts(env, [line]);   // \u2605 2026-10-10: \ub300\ud654\uc640 \uc9c0\uc5f0 \uc81c\ubcf4 \uc9d1\uacc4\ub97c \ub3d9\uc2dc\uc5d0 \uc77d\ub294\ub2e4
           alP.catch(function () {});
-          const rs = await env.DB.prepare("SELECT id, kind, nick, text, stn, ts FROM line_msgs WHERE line=?1 AND ts <= ?2 AND ts > ?3" + LR_HIDDEN_SQL + " ORDER BY ts DESC, id DESC LIMIT 80").bind(line, now, now - 24 * 3600 * 1000).all();   // ★ 2026-10-05: 화면에 보이는 기간 12시간→24시간(새벽에도 전날 저녁 대화가 남아 방이 비어 보이지 않게)
+          const rs = await env.DB.prepare("SELECT id, kind, nick, text, stn, ts FROM line_msgs WHERE line=?1 AND ts <= ?2 AND ts > ?3" + LR_HIDDEN_SQL + " ORDER BY ts DESC, id DESC LIMIT 80").bind(line, now, now - 24 * 3600 * 1000).all();   // \u2605 2026-10-05: \ud654\uba74\uc5d0 \ubcf4\uc774\ub294 \uae30\uac04 12\uc2dc\uac04\u219224\uc2dc\uac04(\uc0c8\ubcbd\uc5d0\ub3c4 \uc804\ub0a0 \uc800\ub141 \ub300\ud654\uac00 \ub0a8\uc544 \ubc29\uc774 \ube44\uc5b4 \ubcf4\uc774\uc9c0 \uc54a\uac8c)
           const al = await alP;
           snap = { msgs: (rs.results || []).reverse(), alert: al[line] || { reporters: 0, stations: [] } };
           memPut("lroom:" + line, snap);
@@ -2436,14 +2436,14 @@ var worker_default = {
         body = await req.json();
       } catch (e) {
       }
-      const nick = String(body.nick || "나").slice(0, 16);
+      const nick = String(body.nick || "\ub098").slice(0, 16);
       const text = String(body.text || "").slice(0, 200).trim();
-      const rline = body.line == null ? "" : String(body.line).trim();   // ★ 2026-10-04: 노선 방에서 보낸 말이면 그 방에 저장하고 그 방에서 반응한다
+      const rline = body.line == null ? "" : String(body.line).trim();   // \u2605 2026-10-04: \ub178\uc120 \ubc29\uc5d0\uc11c \ubcf4\ub0b8 \ub9d0\uc774\uba74 \uadf8 \ubc29\uc5d0 \uc800\uc7a5\ud558\uace0 \uadf8 \ubc29\uc5d0\uc11c \ubc18\uc751\ud55c\ub2e4
       if (rline && !lrLineOk(rline)) return new Response(JSON.stringify({ ok: false, error: "line" }), { status: 400, headers: cors });
       if (!text) return new Response(JSON.stringify({ ok: false, error: "empty" }), { status: 400, headers: cors });
       if (containsBadWord(nick) || containsBadWord(text)) return new Response(JSON.stringify({ ok: false, error: "filtered" }), { status: 400, headers: cors });
-      // ★ 2026-10-03: 사용자가 친 말을 대화에 저장해야 다른 사용자에게도 보인다(전에는 AI 반응만 저장).
-      //   욕설·비방은 저장하지 않는다. 사용자 말 저장은 AI 반응과 별도의 한도(IP당 시간당 40줄)를 쓴다.
+      // \u2605 2026-10-03: \uc0ac\uc6a9\uc790\uac00 \uce5c \ub9d0\uc744 \ub300\ud654\uc5d0 \uc800\uc7a5\ud574\uc57c \ub2e4\ub978 \uc0ac\uc6a9\uc790\uc5d0\uac8c\ub3c4 \ubcf4\uc778\ub2e4(\uc804\uc5d0\ub294 AI \ubc18\uc751\ub9cc \uc800\uc7a5).
+      //   \uc695\uc124\u00b7\ube44\ubc29\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uc0ac\uc6a9\uc790 \ub9d0 \uc800\uc7a5\uc740 AI \ubc18\uc751\uacfc \ubcc4\ub3c4\uc758 \ud55c\ub3c4(IP\ub2f9 \uc2dc\uac04\ub2f9 40\uc904)\ub97c \uc4f4\ub2e4.
       let stored = false;
       try {
         if (rline && !containsBadWord(nick) && !containsBadWord(text) && await msgAllowed(req, env)) {
@@ -2496,7 +2496,7 @@ var worker_default = {
         return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: cors });
       }
     }
-    return new Response(JSON.stringify({ ok: true, name: "board-writer", endpoints: ["/gen?token=..&n=3", "/posts?limit=50&cat=all", "/comment (POST)", "/comments?post_id=&limit=50", "/newsfeed", "/talks?since=<ts>", "/lroom?line=<노선>&since=<ts>", "/lroom (POST)", "/lalerts?lines=a,b", "/react (POST)", "/status"] }), { headers: cors });
+    return new Response(JSON.stringify({ ok: true, name: "board-writer", endpoints: ["/gen?token=..&n=3", "/posts?limit=50&cat=all", "/comment (POST)", "/comments?post_id=&limit=50", "/newsfeed", "/talks?since=<ts>", "/lroom?line=<\ub178\uc120>&since=<ts>", "/lroom (POST)", "/lalerts?lines=a,b", "/react (POST)", "/status"] }), { headers: cors });
   }
 };
 // ===== GUARD BEGIN (API abuse protection, tools/guard-wrap.js) =====
