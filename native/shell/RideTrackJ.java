@@ -31,7 +31,7 @@ final class RideTrackJ {
         busStopNearReachM = 200, busGpsSnapM = 500, busAdvanceSec = 8,
         trailMaxSpeedMps = 60, zeroLeadSec = 25, zeroWinSec = 55, zeroSlideSec = 45, zeroNearM = 200, zeroFinalNearM = 250, zeroFarM = 600,
         zeroApplyLeadSec = 3, zeroKeepSec = 20, zeroFinalKeepMin = 30,
-        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 60, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
+        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 100, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
         notYetFarM = 400, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
         motionWinSec = 14, motionMinSpanSec = 4, motionMaxAcc = 60, motionMoveMps = 1.4, motionStopMps = 0.7,
         busPosOffM = 150, busPosFixAccM = 60, busPosMinStops = 2, busPosMinGapM = 15;
