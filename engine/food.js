@@ -59,7 +59,8 @@ function foodFacts(f) {
   var st = FOOD_STATES.indexOf(f.st) >= 0 ? f.st : (stn ? 'ready' : 'idle');
   var flt = FOOD_CHIPS.indexOf(f.flt) >= 0 ? f.flt : '전체';
   var sel = (f.sel && typeof f.sel === 'object' && !Array.isArray(f.sel)) ? f.sel : null;
-  return { stn: stn, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
+  var dst = f.dst === undefined || f.dst === null ? !!stn : (f.dst === 1 || f.dst === true || f.dst === '1');   // 도착지가 정해졌나 — 앱이 안 알려 주면 도착역 이름이 왔는지로 본다
+  return { stn: stn, dst: dst, st: st, flt: flt, fail: f.fail === 1 || f.fail === true || f.fail === '1',
            gps: foodLL(f.gps), dl: foodLL(f.dl), me: foodLL(f.me), ctr: foodLL(f.ctr), sel: sel,
            pn: f.pn === 1 || f.pn === true || f.pn === '1', res: (f.res && typeof f.res === 'object' && !Array.isArray(f.res)) ? f.res : {} };
 }
@@ -92,7 +93,7 @@ function foodResolve(f) {
   if (f.gps) {
     var best = 1e12, near = null;
     for (i = 0; i < T.length; i++) { s = T[i]; var d = foodHav(f.gps[0], f.gps[1], s[2], s[3]); if (d < best) { best = d; near = s; } }
-    if (near) return { stn: String(near[0]).replace(/역$/, ''), ctr: [near[2], near[3]] };
+    if (near) return { stn: String(near[0]).replace(/역$/, ''), ctr: f.gps };      // 도착지가 없으면 '주변' — 중심은 가까운 역이 아니라 내 위치
     return { stn: '', ctr: f.gps };
   }
   return { stn: '', ctr: null };
@@ -169,20 +170,23 @@ function foodScreenOf(f, all, allP) {
   cur.forEach(function (p) { seen[foodKey(p.n)] = 1; });
   pub = pub.filter(function (p) { return !seen[foodKey(p.n)]; });
 
-  var label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '역 인근' : (f.st === 'locating' ? '위치 확인 중...' : '도착역을 설정하면 맛집을 추천해드려요');
+  var label;
+  if (f.dst) label = f.stn && (f.st === 'ready' || f.st === 'loading' || f.st === 'none') ? f.stn + '역 인근' : (f.st === 'locating' ? '위치 확인 중...' : '도착역을 설정하면 맛집을 추천해드려요');
+  else label = f.st === 'locating' ? '위치 확인 중...' : (f.st === 'noperm' ? '위치 권한이 필요해요' : '내 위치 주변');
+  var title = f.dst ? '🍽️ 도착역 맛집' : '🍽️ 주변 맛집';
   var head = [
-    { t: 'bar', pad: [16, 16, 16, 8], title: '🍽️ 도착역 맛집', sub: label, btn: '🔄 새로고침', act: { a: 'refresh' } },
+    { t: 'bar', pad: [16, 16, 16, 8], title: title, sub: label, btn: '🔄 새로고침', act: { a: 'refresh' } },
     { t: 'chips', pad: [16, 0, 16, 12], gap: 8, h: 31, fs: 12, px: 15, onc: 'gold', onfg: '#ffffff', offf: 'card2', offb: 'border', offt: 'sub',      // 웹 .food-chip: 31px · 12px · 바탕 card2
       items: FOOD_CHIPS.map(function (c) { return { label: (FOOD_CHIP_EMOJI[c] ? FOOD_CHIP_EMOJI[c] + ' ' : '') + c, on: c === f.flt, act: { a: 'cat', v: c } }; }) }
   ];
 
   var body = [], go = {};
-  if (f.st === 'idle') body.push(foodMsgN('경로를 설정하면\n도착역 주변 맛집을 추천해드려요!'));
+  if (f.st === 'idle') body.push(foodMsgN(f.dst ? '경로를 설정하면\n도착역 주변 맛집을 추천해드려요!' : '도착지를 설정하면 도착역 맛집을,\n없으면 내 주변 맛집을 보여드려요!'));
   else if (f.st === 'locating') body.push(foodMsgN('내 위치 확인 중...'));
-  else if (f.st === 'noperm') body.push(foodMsgN('위치 권한을 허용하거나\n경로를 설정하면 맛집을 추천해드려요!'));
+  else if (f.st === 'noperm') body.push(foodMsgN(f.dst ? '위치 권한을 허용하거나\n경로를 설정하면 맛집을 추천해드려요!' : '위치 권한을 허용하면\n내 주변 맛집을 추천해드려요!'));
   else if (!cur.length && !pub.length) {
-    if (f.st === 'loading') body.push(foodMsgN((f.stn || '이곳') + ' 주변 음식점 불러오는 중...'));
-    else if (f.st === 'none' && !all.length && !allP.length) body.push(foodMsgN((f.stn || '이곳') + '역 인근 등록 음식점 정보가 없어요'));
+    if (f.st === 'loading') body.push(foodMsgN((f.dst ? (f.stn || '이곳') : '내') + ' 주변 음식점 불러오는 중...'));
+    else if (f.st === 'none' && !all.length && !allP.length) body.push(foodMsgN(f.dst ? (f.stn || '이곳') + '역 인근 등록 음식점 정보가 없어요' : '내 주변 등록 음식점 정보가 없어요'));
     else if (f.fail) body.push(foodMsgN('맛집 정보를 불러오지 못했어요.\n잠시 뒤 새로고침을 눌러주세요.'));
     else body.push(foodMsgN('해당 카테고리 음식점이 없습니다.'));
   } else {
@@ -209,7 +213,7 @@ function foodPrep(factsIn, itemsIn) {
   return { f: f, stn: rs.stn, ctr: rs.ctr, all: foodList(c, FOOD_MAX_IN_C), allP: foodList(p, FOOD_MAX_IN_P) };
 }
 function foodFactsFor(f, base) {                   // 화면 하나에 쓸 사실: 도착역 이름·좌표를 채우고 'done' 을 ready/none 으로 정한다
-  var o = { stn: base.stn || f.stn, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
+  var o = { stn: base.stn || f.stn, dst: !!f.dst, st: f.st, flt: f.flt, fail: f.fail, ctr: base.ctr };
   if (o.st === 'loading' && !base.ctr && o.stn) o.st = 'none';             // 좌표를 못 정하는 도착지 — 영영 '불러오는 중'에 머물지 않게
   if (o.st === 'done') o.st = (base.all.length || base.allP.length) ? 'ready' : (f.fail ? 'ready' : 'none');
   return o;
@@ -370,13 +374,13 @@ function foodPanel(f) {
   var distTxt = s ? foodDist(Math.round(foodHav(s[0], s[1], la, lo))) : '';
   var pts = [{ la: la, lo: lo, k: 'b', n: '도착', l: name }], need = [], line = null, meters = 0;
   if (hasStn) {
-    pts.push({ la: s[0], lo: s[1], k: 'a', n: '출발', l: (stn || '출발') + '역' });
+    pts.push({ la: s[0], lo: s[1], k: 'a', n: '출발', l: f.dst ? (stn || '출발') + '역' : '내 위치' });
     var rr = foodRouteOf(f.res || {}, s, d);
     if (rr.need) { need.push(rr.need); line = [[s[0], s[1]], d]; }
     else if (rr.pts) { line = foodThin(rr.pts); meters = rr.m || 0; }
     else line = [[s[0], s[1]], d];
   }
-  var foot = '🚶 ' + (stn ? stn + '역 → ' : '') + name + ' 도보 경로' + (meters ? ' · 약 ' + Math.round(meters) + 'm' : '');
+  var foot = '🚶 ' + (f.dst ? (stn ? stn + '역 → ' : '') : (hasStn ? '내 위치 → ' : '')) + name + ' 도보 경로' + (meters ? ' · 약 ' + Math.round(meters) + 'm' : '');
   var map = { t: 'tmap', pad: [0, 0, 0, 0], h: 260, r: 0, pts: pts, fp: 46, fz: 18 };
   if (line) map.line = line;
   var navs = { t: 'row', pad: [8, 12, 12, 12], gap: 8, kids: [
