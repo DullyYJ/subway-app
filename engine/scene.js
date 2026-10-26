@@ -123,6 +123,38 @@ function sceneLegNode(nodes, here) {
   for (k = here - 1; k >= 0; k--) if (sceneIsTr(nodes[k])) return { i: k, n: nodes[k] };
   return null;
 }
+// ★ 2026-10-26 (YJ: "혼잡도를 좌우로 슬라이드하면 길동무 친구들이 지하철을 타고 이동하는 장면 … 정지하면 일부가 랜덤으로 내리고 타는 애니메이션"):
+//   지하철 객실 장면의 재료. 누가 타고 있다가 어느 역에서 내리고 타는지는 여기서 정한다(앱은 받은 대로 그리기만 한다).
+//   이동 중인지 정차 중인지·언제 닿는지는 탑승 엔진(ride-eta 의 pos.segs 시각표)이 정하고, 앱은 그 시각표를 받아 그린다.
+//   names[k]  = 이 구간 k 번째 역 이름(k=0 이 첫 탑승역, 노드 번호는 first+k)
+//   stops[k]  = [on, out, in] — k 번째 역에 닿기 직전 객실에 있던 친구들 · 그 역에서 내리는 친구들 · 그 역에서 타는 친구들 (비트: SCENE_CHARS 순서의 자리)
+//   마지막 역에서는 모두 내린다. 대표 캐릭터(hero)는 마지막 역까지 타고 간다.
+function sceneTrain(nodes, first, last, hero, cast, seed) {
+  var cnt = Math.max(0, Math.min(last - first + 1, 60)), names = [], stops = [], k, c;
+  var bit = function (id) { var i = SCENE_CHARS.indexOf(id); return i < 0 ? 0 : (1 << i); };
+  var hb = bit(hero), on = hb, order = (cast && cast.length ? cast : SCENE_CHARS).filter(function (id) { return id !== hero; });
+  var h0 = sceneHash(seed + "/T0"), nStart = 1 + (h0 % 3);                                 // 처음엔 대표 + 1~3 명
+  for (c = 0; c < order.length && c < nStart; c++) on |= bit(order[c]);
+  var init = on;
+  for (k = 0; k < cnt; k++) {
+    var nd = nodes[first + k], isLast = k === cnt - 1, h = sceneHash(seed + "/T" + (k + 1) + "|" + (nd && nd.name || ""));
+    var before = on, out = 0, inn = 0, i;
+    if (isLast) out = on;
+    else if (k > 0) {                                                                      // 첫 역은 타는 역이라 내리고 타는 일이 없다
+      var ids = sceneShuffle(SCENE_CHARS.filter(function (x) { return x !== hero && (on & bit(x)) !== 0; }), h);
+      var rest = sceneShuffle(SCENE_CHARS.filter(function (x) { return (on & bit(x)) === 0; }), h ^ 0x9e3779b9);
+      var nOut = (h >>> 3) % 100 < 58 ? 1 + ((h >>> 11) % 100 < 28 ? 1 : 0) : 0, nIn = (h >>> 5) % 100 < 58 ? 1 + ((h >>> 13) % 100 < 28 ? 1 : 0) : 0;
+      for (i = 0; i < nOut && i < ids.length; i++) out |= bit(ids[i]);
+      for (i = 0; i < nIn && i < rest.length; i++) inn |= bit(rest[i]);
+    }
+    names.push(String(nd && nd.name || "").slice(0, 12));
+    stops.push([before, out, inn]);
+    on = (on & ~out) | inn;
+  }
+  return { first: first, init: init, names: names, stops: stops, line: nodes[first] ? sceneLineLabel(nodes[first]) : "",
+    say: { out: ["안녕~", "먼저 내릴게!", "내일 봐!", "다녀올게요"], "in": ["타요~", "안녕!", "같이 가요", "자리 있나?"] }, lb: ["다음 역", "이번 역"] };
+}
+
 function sceneBounds(nodes, i) {
   var bus = !!nodes[i].isBus, ln = nodes[i].lineName || "", a = i, b = i;
   function same(n) { return n && (bus ? n.isBus : n.isSub) && (n.lineName || "") === ln; }
@@ -166,7 +198,13 @@ function sceneDecide(inp, wx) {
   else if (bus && here === last && last > first) phase = "alight";                          // 버스: 내릴 정류장에 닿음
   else if (here === first && !(first === firstTr && inp.boarded === true)) phase = "wait";  // 첫 탈것이면 승차 확정 뒤에만 탄 것으로 본다
   else phase = "ride";
-  if (!bus && phase === "ride") { out.cong = { kind: "sub", idx: leg.i === here ? here : leg.i, sig: "s|" + (n.lineName || "") + "|" + (nodes[here] && nodes[here].name || n.name) }; if (nodes[here] && nodes[here].isSub) out.cong.idx = here; return out; }   // 지하철 탑승 확정 → 혼잡도
+  if (!bus && phase === "ride") {                                                          // 지하철 탑승 확정 → 혼잡도 (+ 옆으로 밀면 보이는 객실 장면 재료)
+    out.cong = { kind: "sub", idx: leg.i === here ? here : leg.i, sig: "s|" + (n.lineName || "") + "|" + (nodes[here] && nodes[here].name || n.name) };
+    if (nodes[here] && nodes[here].isSub) out.cong.idx = here;
+    out.line = sceneLineLabel(n); out.venue = "sub";
+    out.train = sceneTrain(nodes, first, last, out.hero, out.cast, seedL);
+    return out;
+  }
   out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
   out.nearEnd = bus && phase === "ride" && here === last - 1;
   var who = bus ? "\uD83D\uDE8C " + out.line + " \uBC84\uC2A4\uB97C" : "\uD83D\uDE87 " + (n.lineName || "\uC9C0\uD558\uCCA0") + " \uC5F4\uCC28\uB97C";
@@ -174,4 +212,4 @@ function sceneDecide(inp, wx) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { sceneDecide: sceneDecide, sceneSlot: sceneSlot, sceneLineLabel: sceneLineLabel, sceneWxKind: sceneWxKind, sceneLook: sceneLook, SCENE_CHARS: SCENE_CHARS, SCENE_HINT_BUS: SCENE_HINT_BUS, SCENE_PLACES: SCENE_PLACES, SCENE_SAY: SCENE_SAY, sceneWxActs: sceneWxActs, scenePlace: scenePlace };
+if (typeof module !== 'undefined' && module.exports) module.exports = { sceneDecide: sceneDecide, sceneTrain: sceneTrain, sceneSlot: sceneSlot, sceneLineLabel: sceneLineLabel, sceneWxKind: sceneWxKind, sceneLook: sceneLook, SCENE_CHARS: SCENE_CHARS, SCENE_HINT_BUS: SCENE_HINT_BUS, SCENE_PLACES: SCENE_PLACES, SCENE_SAY: SCENE_SAY, sceneWxActs: sceneWxActs, scenePlace: scenePlace };
