@@ -2015,8 +2015,8 @@ public class ShellActivity extends Activity {
         boolean onBus = resumed && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
         if (!onBus) { if (MapCore.VW_NEAR.equals(map.busView()) || map.busLL == null) map.setBusLoc(la, lo); return; }
         if (!MapCore.VW_NEAR.equals(map.busView()) && map.busLL != null) return;                    // 즐겨찾기 화면은 위치와 상관없다
-        if (map.busLL == null || map.stopCount() == 0 || farLL(map.busLL, la, lo, BUS_FAR_DEG)) { map.setBusLoc(la, lo); reloadMap(false); return; }
-        busMove(la, lo);
+        if (map.busLL == null || map.stopCount() == 0) { map.setBusLoc(la, lo); reloadMap(false); return; }      // 처음 그릴 때만 — 정류장이 이미 떠 있으면 위치가 바뀌어도 자동으로 다시 찾지 않는다(새로고침 단추만)
+        return;
     }
     private static final double BUS_FAR_DEG = 0.0015;                         // 약 165m — 이만큼 옮겼으면 보던 정류장은 이제 상관없다(바로 새 동네 화면)
     private void liveSet(Location l) { if (l != null) { liveLoc = l; liveAt = System.currentTimeMillis(); saveLoc(l); locHub(l); if (resumed && (locf == null || !locf.tracking())) trackStart(); } }
@@ -2383,8 +2383,8 @@ public class ShellActivity extends Activity {
     private boolean busQuiet; private long busQuietAt;
     private void busMove(final double la, final double lo) {
         final boolean quiet = busShowing() && map.stopCount() > 0 && MapCore.VW_NEAR.equals(map.busView());
-        // s231 (YJ: 정류장을 열어서 보고 있으면 위치가 조금 바뀌어도 재탐색하지 마 — 헷갈린다, 버스 도착시간만 갱신): 고른 정류장이 있으면 165m 넘게 옮기기 전에는 동네를 다시 찾지 않는다.
-        if (quiet && map.busSel >= 0 && !farLL(map.busLL, la, lo, BUS_FAR_DEG)) return;
+        // s231 (YJ: 정류장 위치 탭을 보고 있으면 계속 이동 중이어도 실시간 위치로 자동 재탐색하지 마 — 수동 재탐색(새로고침 단추)을 누를 때만, 그동안은 버스 도착시간만 갱신): 보는 중 자동 이동 추적은 하지 않는다.
+        if (quiet) return;
         if (!quiet) { map.setBusLoc(la, lo); loadMapBody(body, true); return; }
         long now = System.currentTimeMillis();
         if (busQuiet && now - busQuietAt < 25000L) return;
