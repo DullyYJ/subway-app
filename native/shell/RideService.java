@@ -53,6 +53,14 @@ public class RideService extends Service {
     private static final Handler mainH = new Handler(Looper.getMainLooper());
     /** 앱 탑승 시트의 손짓(press · undo · open · close · pill)을 엔진의 다음 걸음에 알린다 — 오버레이 줄과 같은 길. */
     static void rsAct(String a) { RideService s = inst; if (s != null) s.ovHost.act(a); }
+    /** 확정 · [탑승]을 눌렀을 때의 짧은 진동(s228) — 손끝으로 눌렸다는 걸 알리려는 것이라 짧고(45ms) 한 번뿐이다. 진동이 없거나 끈 기기에서는 조용히 넘어간다. */
+    static void buzz(Context c) {
+        try {
+            Vibrator v = (Vibrator) c.getSystemService(Context.VIBRATOR_SERVICE);
+            if (v == null || !v.hasVibrator()) return;
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(45L, 180)); else v.vibrate(45L);
+        } catch (Throwable ignored) { }
+    }
     static void rsNotify() { Runnable l = rsListener; if (l != null) mainH.post(l); }
     static volatile long recoStageAt = 0L;
 
@@ -201,6 +209,7 @@ public class RideService extends Service {
     private final RideOverlay.Host ovHost = new RideOverlay.Host() {
         @Override public void act(String a) {
             if (core == null) return;
+            if ("press".equals(a)) buzz(RideService.this);                                         // [탑승]: 앱 시트 · 알약 · 경로 카드 칸 · 오버레이가 모두 이 길을 지난다
             core.queueAct(a);
             if (h != null) { h.removeCallbacks(stepRunnable); h.post(stepRunnable); }             // 5초를 기다리지 않고 바로 한 걸음
         }
