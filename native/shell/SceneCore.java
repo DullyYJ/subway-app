@@ -90,6 +90,7 @@ public final class SceneCore {
     List<Actor> actors = new ArrayList<>(); List<Traffic> traffic = new ArrayList<>(); List<Pt> pt = new ArrayList<>(); List<Gfx> gfx = new ArrayList<>(); List<Ripple> ripples = new ArrayList<>();
     Actor hero; Seq seq; Ride ride; double nextCar, spawnAt, waitNext, bellAt; int castI;
     double stopX, entX; String venue = "bus"; int baseDir = -1; int busColor; String busNo; String bgKey = "";
+    SceneTrain.St tr;
     double dtLast; Drag DRAG; Pend PEND; boolean rideBell;
     P wxP;
     final Map<String, Act> ACT = new HashMap<>();
@@ -300,6 +301,8 @@ public final class SceneCore {
     void setup(String m) {
         dragReset(); mode = m; actors = new ArrayList<>(); traffic = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); hero = null; seq = null; nextCar = t + rnd(1.2, 3); spawnAt = t + .2; castI = 0; ripples = new ArrayList<>(); rideBell = false;
         stopX = Math.round(W * .3); entX = Math.round(W * .36); venue = "sub".equals(res.venue) ? "sub" : "bus"; baseDir = venue.equals("sub") ? 1 : -1;
+        if (m.equals("train")) { venue = "sub"; SceneTrain.setup(this); return; }                  // 지하철 객실(혼잡도 카드의 두 번째 쪽): 친구·자리·승하차는 엔진(res.train)이 정한 값
+        tr = null;
         String heroId = res.hero != null && SceneModel.D3.containsKey(res.hero) ? res.hero : null;       // 대표 캐릭터는 엔진이 정한다. 없으면 앱이 대신 고르지 않고 캐릭터 없이 배경만 그린다
         if (heroId == null && !m.equals("idle")) { m = "idle"; mode = "idle"; }
         if (m.equals("wait")) {
@@ -391,7 +394,7 @@ public final class SceneCore {
     }
     /** 손가락이 캐릭터 위에 닿았다. 캐릭터가 있으면 true(길게 누르기 대기 시작) */
     public boolean down(double xdp, double ydp) {
-        if (!running || "ride".equals(mode) || DRAG != null || tv >= 0) return false;      // TV 전환 중에는 집지 못한다
+        if (!running || "ride".equals(mode) || "train".equals(mode) || DRAG != null || tv >= 0) return false;      // TV 전환 중에는 집지 못한다
         Actor a = hitActor(xdp / k, ydp / k); if (a == null) return false;
         Pend p = new Pend(); p.a = a; p.t0 = t; p.sxdp = xdp; p.sydp = ydp; PEND = p; return true;
     }
@@ -870,6 +873,7 @@ public final class SceneCore {
             SceneArt.Pal L2 = SceneArt.paint(r.look); L = L2;
             if (!(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + L2.place + "|w" + L2.wind + "|" + dark + "|" + W + "|" + H).equals(bgKey)) resetBG();
             if (modeChanged) { snapshot(); setup(r.mode); }
+            else if ("train".equals(mode)) SceneTrain.refresh(this);
             if ("wait".equals(mode) || "alight".equals(mode)) { boolean um = L.wk.equals("rain") || L.wk.equals("snow"); if (hero != null) hero.umb = um; }
         }
         return true;
@@ -891,6 +895,9 @@ public final class SceneCore {
     public double designW() { return W; }
     public double designH() { return H; }
     public String mode() { return mode; }
+    /** 지하철 객실 쪽에 탑승 엔진의 위치 글(pos: segs 시각표)과 지금 시각(ms)을 알려 준다. 시각표를 읽어 달림/섬을 고르는 건 SceneTrain, 시각표 자체는 엔진이 만든다. */
+    public void trainPos(String posJson) { SceneTrain.feedPos(this, posJson); }
+    public void trainClock(long nowMs) { SceneTrain.feedClock(this, nowMs); }
 
     public void update(double dt) {
         if (!running) return;
@@ -900,7 +907,8 @@ public final class SceneCore {
         // 꾹 누르기: 정해진 시간이 지나면 잡힌다
         if (PEND != null && t - PEND.t0 >= LONGPRESS) grab();
         try {
-            if (!"ride".equals(mode)) {
+            if ("train".equals(mode)) SceneTrain.step(this, dt);
+            else if (!"ride".equals(mode)) {
                 stepTraffic(dt);
                 if (L.wk.equals("rain") && R.next() < dt * 14) { Ripple rp = new Ripple(); rp.x = rnd(4, W - 4); rp.y = rnd(g.nearTop + 6, g.floor); rp.t0 = t; ripples.add(rp); if (ripples.size() > 14) ripples.remove(0); }
                 if ("wait".equals(mode)) waitManage(); else if ("alight".equals(mode)) alightManage(dt);
@@ -920,7 +928,7 @@ public final class SceneCore {
         } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
     }
     void paintAll(SceneCv c, double dt) {
-        if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
+        if ("train".equals(mode)) SceneTrain.draw(this, c); else if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
         if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H); }
     }
     // ═══ TV 전원 전환 ═══
