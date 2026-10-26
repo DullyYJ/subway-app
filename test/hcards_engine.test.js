@@ -29,6 +29,22 @@ ok(o.info.ai === 'brief' && /24분/.test(txt(o.body)) && /1호선/.test(txt(o.bo
 const cgh = nodesRide.find(n => n.t === 'cgh');
 ok(cgh && /부평/.test(cgh.nm + cgh.lab) && nodesRide.some(n => n.t === 'gauge') && nodesRide.some(n => n.t === 'chart') && oRide.info.cong === 'sub' && oRide.info.stn === '부평' && oRide.body[1].ip.join() === '17,14,14,14' && oRide.body[0].badge.length > 0, '혼잡도: 처음 타는 역(부평) 기준 게이지·24시간 막대');
 ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t === 'inbar' && n.key === 'talk.in') && nodes.some(n => n.t === 'lth' && n.act.v === 'tk.open'), '대화: 최근 줄 · 입력줄 · 머리줄 누름');
+// s217 경로 통합 카드: 규격 25 + 보던 경로가 있으면 AI 승무원은 제목줄 없이 into:'ai' 카드 하나로 맨 앞에 오고, 브리핑이 짧아지며, 규격 24 이하는 예전 그대로
+{
+  const f25 = E.hcardsScreen({ cap: 25 }, base()), f24 = E.hcardsScreen({ cap: 24 }, base());
+  ok(f25.ok && f25.body.map(n => n.t).join() === 'panel,sec,panel,panel' && f25.body[0].into === 'ai' && !f25.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '통합: AI 카드가 맨 앞 · into:ai · 제목줄 없음');
+  const a25 = flat(f25.body[0].kids).find(n => n.t === 'aih');
+  ok(a25 && a25.s === 'AI 승무원 브리핑' && a25.act.v === 'ai.refresh', '통합: AI 제목은 짧게(출발·도착 이름은 위 머리줄에 이미 있다) · 새로고침은 그대로');
+  const t25 = txt(f25.body[0].kids);
+  ok(/도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && !/에서 .*까지는 약/.test(t25) && /1호선 타고 출발하세요/.test(t25), '통합: 브리핑은 핵심 시각 · 첫 탑승 위주(긴 경로 문장 없음) — ' + t25.replace(/\n/g, ' / '));
+  ok(f24.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && !f24.body.some(n => n.into) && /부평 → 강남 · 남은시간: 24분/.test(flat(f24.body).find(n => n.t === 'aih').s), '규격 24 이하는 예전 모양 그대로');
+  const noRoute = E.hcardsScreen({ cap: 25 }, base({ r: null, gps: [37.5, 127.0] }));
+  ok(noRoute.ok && !noRoute.body.some(n => n.into) && noRoute.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '경로가 없으면 합칠 곳이 없어 예전 모양');
+  const dup = E.hcardsScreen({ cap: 25 }, base({ r: { data: mk([walk(3), sub('부산_부산', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부산_부산', b: '강남', bt: null, rb: now } }));
+  ok(!/부산_부산/.test(JSON.stringify(dup.body)), "'부산_부산' 이 브리핑에 안 나온다");
+  const c = screenCheck([f25, f24]);
+  ok(!c.err && c.out.every(l => l.startsWith('OK ')), '앱 검증기 통과 ' + (c.err || c.out.join('|')));
+}
 // 기준시각을 정한 탐색 → 예상 브리핑
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: now + 3 * 3600000, rb: now } }));
 ok(o.info.ai === 'preview' && /예상/.test(flat(o.body).find(n => n.t === 'aih').s), '기준시각을 정하면 예상 브리핑');
