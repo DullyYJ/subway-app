@@ -630,6 +630,9 @@ function findAndroidJar() {
     assert.ok(/"shop"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /si\[0\] - dir/.test(a) && /sx < cats\.length\) \{ body\.slideNext\(dir\); hostBody\.handle\(cats\[sx\], false\)/.test(a), 's224: 쇼핑 탭도 좌우 밀기 — 카테고리 칩을 한 칸씩 · 양 끝에서 멈춤');
     assert.ok(/followChip = true;/.test(sv) && /private void followOnChip\(\)/.test(sv) && /if \(followChip\) followOnChip\(\);/.test(sv) && /if \(!followChip\) scrollX = 0f/.test(sv) && /flingX\.startScroll\(Math\.round\(scrollX \* dpr\)/.test(sv), 's224: 밀어서 카테고리가 바뀌면 위 칩 줄이 켜진 칩을 가운데로 따라간다(부드럽게 0.26초 · 처음으로 튀지 않음)');
     assert.ok(/mkBack/.test(sv) && /back > 0\.01f && back <= Math\.max\(24f, Math\.abs\(k\.x1 - k\.x0\)\) \* 0\.5f && \+\+mkBack < 3\) return;/.test(sv) && /mkBack = 0;/.test(sv), 's225: 마커 역주행 가드 — 역에 서 있을 때 GPS 흔들림으로 되돌아가는 작은 값(반 구간 이하)은 두 번까지 무시, 세 번 이어지면 받아들인다');
+    { const np = fs.readFileSync(N('NetPost.java'), 'utf8'), ga = fs.readFileSync(N('GdmApp.java'), 'utf8'), wc = fs.readFileSync(N('WidgetCore.java'), 'utf8');
+      assert.ok(/setRequestProperty\("X-Gdm-Id", id\)/.test(np) && /public static volatile String iid/.test(np) && /NetPost\.iid = loadIid\(app\)/.test(ga) && /UUID\.randomUUID\(\)\.toString\(\)\.replace\("-", ""\)/.test(ga) && /X-Gdm-Id/.test(wc), 's226: 요청마다 설치 때 만든 무작위 기기 번호(X-Gdm-Id)를 싣는다 — 공유 IP 의 다른 사용자와 한도가 섞이지 않게');
+      assert.ok(/retryable\(r\.status, r\.retryS\)/.test(np) && /code == 429 \|\| code == 503/.test(np) && /sendOnce\(method, url, body, timeoutMs, etag\)/.test(np), 's226: 429 · 503(Retry-After 3초 이하)이면 사용자는 모르게 한 번만 다시 보낸다'); }
     const nw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nw)[1].split(',').map(x => x.replace(/['\s]/g, ''));
     assert.ok(sc.indexOf('NEWS_FIRST = "' + cats[0] + '", NEWS_LAST = "' + cats[cats.length - 1] + '"') > 0, '뉴스 처음·마지막 카테고리 이름이 엔진 목록과 같다');
   });
