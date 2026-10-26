@@ -26,6 +26,14 @@ function hcHolAt(ms) {
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
 function hcStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+// 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217)
+function hcNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/역$/, '') === b.replace(/역$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
+var HC_FUSE_CAP = 25;                                       // 경로 통합 카드(AI 승무원이 경로 결과 카드 안으로 합쳐진다)를 아는 앱
 function hcHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function hcStnTable() {
   if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
@@ -167,7 +175,8 @@ function hcardsScreen(inp, f) {
   var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;      // f.hol 이 참/거짓으로 오면 그대로(옛 앱), 안 오면 아래에서 엔진이 기준 날짜로 정한다(s207)
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = hcRoute(f.r, now, tz), near = gps ? hcNearest(gps[0], gps[1]) : null;
-  var a = f.r && typeof f.r === 'object' ? hcStr(f.r.a, 40) : '', b = f.r && typeof f.r === 'object' ? hcStr(f.r.b, 40) : '';
+  var a = f.r && typeof f.r === 'object' ? hcNmFix(hcStr(f.r.a, 40)) : '', b = f.r && typeof f.r === 'object' ? hcNmFix(hcStr(f.r.b, 40)) : '';
+  var fuse = Number(inp.cap) >= HC_FUSE_CAP && !!rt;
   var hour = new Date(now + tz * 60000).getUTCHours(), nowMin = hour * 60 + new Date(now + tz * 60000).getUTCMinutes();
   // 어느 역/정류장의 혼잡도를 보일지: 보던 경로의 처음 대중교통 > 가까운 역
   var cs = { mode: 'none', now: now, tz: tz, th: th, stn: '', line: '', ld: 0, live: null, bus: {} }, stn = '';
@@ -187,7 +196,8 @@ function hcardsScreen(inp, f) {
     var rem = rt.mins > 0 ? rt.mins : 0, fromN = a || rt.segs[0].from, toN = b || rt.segs[rt.segs.length - 1].to;
     var preview = f.r.bt != null;
     af.tk = preview ? 'preview' : 'brief'; af.mode = preview ? 'preview' : 'brief';
-    af.from = fromN; af.to = toN; af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
+    af.from = hcNmFix(fromN); af.to = hcNmFix(toN);
+    if (fuse) { af.cp = true; af.fz = true; } af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
     if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
     af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
     var wxs = f.wx && typeof f.wx === 'object' ? f.wx : {};
@@ -215,7 +225,10 @@ function hcardsScreen(inp, f) {
     if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
     else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
-  if (aiS && aiS.ok) { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+  if (aiS && aiS.ok) {
+    if (fuse) { var fp = hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // 통합 카드: 제목줄 없이 앱이 경로 결과 카드의 'slot:ai' 자리로 옮긴다(못 옮기면 그 자리에 그대로 남는다)
+    else { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+  }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
