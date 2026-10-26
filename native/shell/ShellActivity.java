@@ -3908,6 +3908,7 @@ public class ShellActivity extends Activity {
     /** 경로 확정: 엔진이 대기 모드 state 를 만들면 포그라운드 서비스가 이어받는다. */
     private void startRide() {
         if (!home.hasRoute() || home.riding()) return;
+        RideService.buzz(this);                                                  // [경로 확정] 진동(s228)
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             locGate(new Runnable() { @Override public void run() {
                     if (Build.VERSION.SDK_INT >= 33) requestPermissions(new String[] { android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.POST_NOTIFICATIONS }, REQ_RIDE);
@@ -4041,7 +4042,7 @@ public class ShellActivity extends Activity {
         String sl = RideService.liveRowSlot;
         if ("arrive".equals(sl)) { stopRide(); return; }
         if (!RideService.running || !("board".equals(sl) || "transfer".equals(sl))) return;
-        if (RideService.liveRowCan) { RideService.rsAct("press"); if (tabs != null) tabs.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP); }
+        if (RideService.liveRowCan) RideService.rsAct("press");                      // 진동은 rsAct → 서비스 act 에서 한 번(s228)
         else toast("앞 구간을 내린 뒤에 눌러 주세요");
     }
     private void stopRide() {
