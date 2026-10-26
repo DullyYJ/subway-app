@@ -77,7 +77,7 @@ const { sceneDecide } = require('../engine/scene.js');
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8'), tr = fs.readFileSync(N('SceneTrain.java'), 'utf8'), sc = fs.readFileSync(N('SceneCore.java'), 'utf8');
     assert.ok(/isPager\(bit\)\) \{ i \+= drawPager\(/.test(v) && /mode = 10; pgDragOn = true/.test(v) && /if \(mode == 10\)/.test(v), '쪽 넘기기 그리기·손가락');
     assert.ok(/pgPage == 0\)[^;]*pgPage == 1/.test(v), '끝 쪽에서 바깥으로 미는 몸짓은 화면 넘기기(탭 이동)에 양보');
-    assert.ok(/"train"\.equals\(scene\.mode\(\)\)/.test(v) && /RideService\.livePos/.test(v) && /trainClock\(System\.currentTimeMillis\(\)\)/.test(v), '객실 장면에 시각표·지금 시각');
+    assert.ok(/"train"\.equals\(scene\.mode\(\)\)/.test(v) && /trainFeed/.test(v) && /RideService\.livePos/.test(fs.readFileSync(N('ShellActivity.java'), 'utf8')) && /trainClock\(System\.currentTimeMillis\(\)\)/.test(v), '객실 장면에 시각표·지금 시각');
     assert.ok(/livePos = core\.posJson/.test(rs) && (rs.match(/livePos = ""/g) || []).length >= 2, '탑승 서비스가 시각표를 올리고 끝나면 지운다');
     assert.ok(/sc2/.test(c) && /pgN/.test(c), '코어가 두 쪽 카드를 안다');
     assert.ok(sc.includes('"train".equals(mode)') && /SceneTrain\.(step|draw|setup)/.test(sc), 'SceneCore 가 train 장면을 그린다');
