@@ -136,12 +136,12 @@ async function usageJson(env, url) {
 // Browser-side renderer. Written as a real function and embedded with toString().
 function usagePageClient() {
   var KEYS = {
-    k1: "키1 (TAGO_KEY)",
-    k2: "키2 (TAGO_KEY2)",
-    relay: "중계서버 키 (gentle-lab)",
-    app: "앱 버스서버 키 (gildongmu-bus)",
-    etc: "기타 키",
-    u: "키 미구분 (집계 초기분)"
+    k1: "\ud0a41 (TAGO_KEY)",
+    k2: "\ud0a42 (TAGO_KEY2)",
+    relay: "\uc911\uacc4\uc11c\ubc84 \ud0a4 (gentle-lab)",
+    app: "\uc571 \ubc84\uc2a4\uc11c\ubc84 \ud0a4 (gildongmu-bus)",
+    etc: "\uae30\ud0c0 \ud0a4",
+    u: "\ud0a4 \ubbf8\uad6c\ubd84 (\uc9d1\uacc4 \ucd08\uae30\ubd84)"
   };
   function ldCols(svc) {
     return [
@@ -158,64 +158,64 @@ function usagePageClient() {
     ];
   }
   var SEC = [
-    { id: "tago-arr", grp: "공공데이터포털 · 국토교통부 TAGO", title: "버스도착정보", op: "ArvlInfoInqireService / getSttnAcctoArvlPrearngeInfoList (정류소별 도착예정정보 목록 조회)", use: "경로탐색 + 앱 버스 화면", limit: 500000, cols: [
+    { id: "tago-arr", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO", title: "\ubc84\uc2a4\ub3c4\ucc29\uc815\ubcf4", op: "ArvlInfoInqireService / getSttnAcctoArvlPrearngeInfoList (\uc815\ub958\uc18c\ubcc4 \ub3c4\ucc29\uc608\uc815\uc815\ubcf4 \ubaa9\ub85d \uc870\ud68c)", use: "\uacbd\ub85c\ud0d0\uc0c9 + \uc571 \ubc84\uc2a4 \ud654\uba74", limit: 500000, cols: [
       { s: "k1", k: ["tago.env-key"], e: ["tago.env-key.err"] },
       { s: "k2", k: ["tago.env-key2"], e: ["tago.env-key2.err"] },
       { s: "relay", k: ["gl.tago.arr"], fb: ["tago.binding"], e: ["gl.tago.arr.err"], fe: ["tago.binding.err"] },
       { s: "app", k: ["bus.tago.arr"] }
     ] },
-    { id: "tago-bus", grp: "공공데이터포털 · 국토교통부 TAGO", title: "버스정류소·노선·위치 정보", op: "BusSttnInfoInqireService / BusRouteInfoInqireService / BusLcInfoInqireService 등", use: "앱 버스 화면", cols: [
+    { id: "tago-bus", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO", title: "\ubc84\uc2a4\uc815\ub958\uc18c\u00b7\ub178\uc120\u00b7\uc704\uce58 \uc815\ubcf4", op: "BusSttnInfoInqireService / BusRouteInfoInqireService / BusLcInfoInqireService \ub4f1", use: "\uc571 \ubc84\uc2a4 \ud654\uba74", cols: [
       { s: "app", k: ["bus.tago.stop", "bus.tago.route", "bus.tago.loc", "bus.tago.other"] }
     ] },
-    { id: "tago-train", grp: "공공데이터포털 · 국토교통부 TAGO", title: "열차정보", op: "TrainInfo / GetStrtpntAlocFndTrainInfo (출·도착지 기반 열차정보 조회)", use: "경로탐색 (장거리)", cols: ldCols("TrainInfo") },
-    { id: "tago-exp", grp: "공공데이터포털 · 국토교통부 TAGO", title: "고속버스정보", op: "ExpBusInfo / GetStrtpntAlocFndExpbusInfo (출·도착지 기반 고속버스정보 조회)", use: "경로탐색 (장거리)", cols: ldCols("ExpBusInfo") },
-    { id: "tago-sub", grp: "공공데이터포털 · 국토교통부 TAGO", title: "시외버스정보", op: "SuburbsBusInfo / GetStrtpntAlocFndSuberbsBusInfo (출·도착지 기반 시외버스정보 조회)", use: "경로탐색 (장거리)", cols: ldCols("SuburbsBusInfo") },
-    { id: "gbis", grp: "공공데이터포털 · 경기도", title: "버스도착정보 조회", op: "busarrivalservice/v2 / getBusArrivalListv2", use: "경로탐색 + 앱 버스 화면", cols: [
+    { id: "tago-train", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO", title: "\uc5f4\ucc28\uc815\ubcf4", op: "TrainInfo / GetStrtpntAlocFndTrainInfo (\ucd9c\u00b7\ub3c4\ucc29\uc9c0 \uae30\ubc18 \uc5f4\ucc28\uc815\ubcf4 \uc870\ud68c)", use: "\uacbd\ub85c\ud0d0\uc0c9 (\uc7a5\uac70\ub9ac)", cols: ldCols("TrainInfo") },
+    { id: "tago-exp", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO", title: "\uace0\uc18d\ubc84\uc2a4\uc815\ubcf4", op: "ExpBusInfo / GetStrtpntAlocFndExpbusInfo (\ucd9c\u00b7\ub3c4\ucc29\uc9c0 \uae30\ubc18 \uace0\uc18d\ubc84\uc2a4\uc815\ubcf4 \uc870\ud68c)", use: "\uacbd\ub85c\ud0d0\uc0c9 (\uc7a5\uac70\ub9ac)", cols: ldCols("ExpBusInfo") },
+    { id: "tago-sub", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uad6d\ud1a0\uad50\ud1b5\ubd80 TAGO", title: "\uc2dc\uc678\ubc84\uc2a4\uc815\ubcf4", op: "SuburbsBusInfo / GetStrtpntAlocFndSuberbsBusInfo (\ucd9c\u00b7\ub3c4\ucc29\uc9c0 \uae30\ubc18 \uc2dc\uc678\ubc84\uc2a4\uc815\ubcf4 \uc870\ud68c)", use: "\uacbd\ub85c\ud0d0\uc0c9 (\uc7a5\uac70\ub9ac)", cols: ldCols("SuburbsBusInfo") },
+    { id: "gbis", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uacbd\uae30\ub3c4", title: "\ubc84\uc2a4\ub3c4\ucc29\uc815\ubcf4 \uc870\ud68c", op: "busarrivalservice/v2 / getBusArrivalListv2", use: "\uacbd\ub85c\ud0d0\uc0c9 + \uc571 \ubc84\uc2a4 \ud654\uba74", cols: [
       { s: "k1", k: ["gbis.env-key"], e: ["gbis.env-key.err"] },
       { s: "k2", k: ["gbis.env-key2"], e: ["gbis.env-key2.err"] },
       { s: "relay", k: ["gl.gbis"], fb: ["gbis.binding"], e: ["gl.gbis.err"], fe: ["gbis.binding.err"] },
       { s: "app", k: ["bus.gbis"] }
     ] },
-    { id: "seoul-arr", grp: "공공데이터포털 · 서울특별시", title: "버스도착정보조회 (정류소 기준)", op: "ws.bus.go.kr/api/rest/arrive / getLowArrInfoByStId", use: "경로탐색", limit: 10000, cols: [
+    { id: "seoul-arr", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uc11c\uc6b8\ud2b9\ubcc4\uc2dc", title: "\ubc84\uc2a4\ub3c4\ucc29\uc815\ubcf4\uc870\ud68c (\uc815\ub958\uc18c \uae30\uc900)", op: "ws.bus.go.kr/api/rest/arrive / getLowArrInfoByStId", use: "\uacbd\ub85c\ud0d0\uc0c9", limit: 10000, cols: [
       { s: "k1", k: ["seoul.k1"] },
       { s: "k2", k: ["seoul.k2"] },
       { s: "u", f: function(o) { return Math.max(0, (o["seoul.call"] || 0) - (o["seoul.k1"] || 0) - (o["seoul.k2"] || 0)); } },
-      { t: "오류", x: 1, k: ["seoul.err"] },
-      { t: "한도 초과 응답", x: 1, k: ["seoul.quota"] }
+      { t: "\uc624\ub958", x: 1, k: ["seoul.err"] },
+      { t: "\ud55c\ub3c4 \ucd08\uacfc \uc751\ub2f5", x: 1, k: ["seoul.quota"] }
     ] },
-    { id: "seoul-stn", grp: "공공데이터포털 · 서울특별시", title: "정류소정보조회", op: "ws.bus.go.kr/api/rest/stationinfo / getStationByUid, getStationByPos", use: "앱 버스 화면", limit: 10000, cols: [
+    { id: "seoul-stn", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uc11c\uc6b8\ud2b9\ubcc4\uc2dc", title: "\uc815\ub958\uc18c\uc815\ubcf4\uc870\ud68c", op: "ws.bus.go.kr/api/rest/stationinfo / getStationByUid, getStationByPos", use: "\uc571 \ubc84\uc2a4 \ud654\uba74", limit: 10000, cols: [
       { s: "app", k: ["bus.seoul.arr", "bus.seoul.pos", "bus.seoul.other"] }
     ] },
-    { id: "xfer", grp: "공공데이터포털 · 환승/출구", title: "환승 이동 데이터 (odcloud 15098252)", op: "api.odcloud.kr/api/15098252/v1/uddi:... (주기적 수집)", use: "경로탐색", cols: xCols("xfer.xfer") },
-    { id: "exit", grp: "공공데이터포털 · 환승/출구", title: "출구 정보", op: "apis.data.go.kr/B553766/inout / getFstExit (주기적 수집)", use: "경로탐색", cols: xCols("xfer.exit") },
-    { id: "ntce", grp: "공공데이터포털 · 철도 공지", title: "운행 공지", op: "apis.data.go.kr/B553766/ntce / getNtceList", use: "경로탐색", cols: xCols("ntce") },
-    { id: "kric", grp: "포털 외 · 철도 시간표", title: "KRIC 역 시간표", op: "openapi.kric.go.kr / convenientInfo/stationTimetable (주기적 수집)", use: "경로탐색 데이터 수집", cols: [
-      { t: "호출", k: ["kric.stationTimetable"] }
+    { id: "xfer", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \ud658\uc2b9/\ucd9c\uad6c", title: "\ud658\uc2b9 \uc774\ub3d9 \ub370\uc774\ud130 (odcloud 15098252)", op: "api.odcloud.kr/api/15098252/v1/uddi:... (\uc8fc\uae30\uc801 \uc218\uc9d1)", use: "\uacbd\ub85c\ud0d0\uc0c9", cols: xCols("xfer.xfer") },
+    { id: "exit", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \ud658\uc2b9/\ucd9c\uad6c", title: "\ucd9c\uad6c \uc815\ubcf4", op: "apis.data.go.kr/B553766/inout / getFstExit (\uc8fc\uae30\uc801 \uc218\uc9d1)", use: "\uacbd\ub85c\ud0d0\uc0c9", cols: xCols("xfer.exit") },
+    { id: "ntce", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \ucca0\ub3c4 \uacf5\uc9c0", title: "\uc6b4\ud589 \uacf5\uc9c0", op: "apis.data.go.kr/B553766/ntce / getNtceList", use: "\uacbd\ub85c\ud0d0\uc0c9", cols: xCols("ntce") },
+    { id: "kric", grp: "\ud3ec\ud138 \uc678 \u00b7 \ucca0\ub3c4 \uc2dc\uac04\ud45c", title: "KRIC \uc5ed \uc2dc\uac04\ud45c", op: "openapi.kric.go.kr / convenientInfo/stationTimetable (\uc8fc\uae30\uc801 \uc218\uc9d1)", use: "\uacbd\ub85c\ud0d0\uc0c9 \ub370\uc774\ud130 \uc218\uc9d1", cols: [
+      { t: "\ud638\ucd9c", k: ["kric.stationTimetable"] }
     ] },
-    { id: "est", grp: "포털 외 · 서울 열린데이터광장", title: "지하철 실시간 열차위치", op: "swopenapi.seoul.go.kr / realtimePosition (중계서버 경유, 요청 수 기준)", use: "경로탐색 (실시간 보정)", cols: [
-      { t: "요청", k: ["est.seoul-position"] }
+    { id: "est", grp: "\ud3ec\ud138 \uc678 \u00b7 \uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130\uad11\uc7a5", title: "\uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 \uc5f4\ucc28\uc704\uce58", op: "swopenapi.seoul.go.kr / realtimePosition (\uc911\uacc4\uc11c\ubc84 \uacbd\uc720, \uc694\uccad \uc218 \uae30\uc900)", use: "\uacbd\ub85c\ud0d0\uc0c9 (\uc2e4\uc2dc\uac04 \ubcf4\uc815)", cols: [
+      { t: "\uc694\uccad", k: ["est.seoul-position"] }
     ] },
-    { id: "sw", grp: "포털 외 · 서울 열린데이터광장", title: "지하철 실시간 (중계서버가 서울시 API를 실제로 부른 횟수)", op: "swopenapi.seoul.go.kr/api/subway (SEOUL_API_KEY 키별, 방식 재시도 포함)", use: "경로탐색 (실시간 보정) + 앱", cols: [
-      { t: "서울 열린데이터 키 1", k: ["gl.sw.k1"], e: ["gl.sw.k1.err"] },
-      { t: "서울 열린데이터 키 2", k: ["gl.sw.k2"], e: ["gl.sw.k2.err"] },
-      { t: "서울 열린데이터 키 3", k: ["gl.sw.k3"], e: ["gl.sw.k3.err"] },
-      { t: "캐시·한국 중계로 처리 (상위 호출 아님)", x: 1, k: ["gl.sw.saved", "gl.sw.relay"] }
+    { id: "sw", grp: "\ud3ec\ud138 \uc678 \u00b7 \uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130\uad11\uc7a5", title: "\uc9c0\ud558\ucca0 \uc2e4\uc2dc\uac04 (\uc911\uacc4\uc11c\ubc84\uac00 \uc11c\uc6b8\uc2dc API\ub97c \uc2e4\uc81c\ub85c \ubd80\ub978 \ud69f\uc218)", op: "swopenapi.seoul.go.kr/api/subway (SEOUL_API_KEY \ud0a4\ubcc4, \ubc29\uc2dd \uc7ac\uc2dc\ub3c4 \ud3ec\ud568)", use: "\uacbd\ub85c\ud0d0\uc0c9 (\uc2e4\uc2dc\uac04 \ubcf4\uc815) + \uc571", cols: [
+      { t: "\uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130 \ud0a4 1", k: ["gl.sw.k1"], e: ["gl.sw.k1.err"] },
+      { t: "\uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130 \ud0a4 2", k: ["gl.sw.k2"], e: ["gl.sw.k2.err"] },
+      { t: "\uc11c\uc6b8 \uc5f4\ub9b0\ub370\uc774\ud130 \ud0a4 3", k: ["gl.sw.k3"], e: ["gl.sw.k3.err"] },
+      { t: "\uce90\uc2dc\u00b7\ud55c\uad6d \uc911\uacc4\ub85c \ucc98\ub9ac (\uc0c1\uc704 \ud638\ucd9c \uc544\ub2d8)", x: 1, k: ["gl.sw.saved", "gl.sw.relay"] }
     ] },
-    { id: "kakao", grp: "포털 외 · 카카오", title: "카카오 로컬 API", op: "dapi.kakao.com/v2/local (장소·주소 검색, 좌표 변환)", use: "앱 검색", cols: [
-      { t: "장소·주소 검색", k: ["gl.kakao.search"] },
-      { t: "좌표 변환", k: ["gl.kakao.geo"] },
-      { t: "오류", x: 1, k: ["gl.kakao.err"] },
-      { t: "캐시로 아낌", x: 1, k: ["gl.kakao.saved"] }
+    { id: "kakao", grp: "\ud3ec\ud138 \uc678 \u00b7 \uce74\uce74\uc624", title: "\uce74\uce74\uc624 \ub85c\uceec API", op: "dapi.kakao.com/v2/local (\uc7a5\uc18c\u00b7\uc8fc\uc18c \uac80\uc0c9, \uc88c\ud45c \ubcc0\ud658)", use: "\uc571 \uac80\uc0c9", cols: [
+      { t: "\uc7a5\uc18c\u00b7\uc8fc\uc18c \uac80\uc0c9", k: ["gl.kakao.search"] },
+      { t: "\uc88c\ud45c \ubcc0\ud658", k: ["gl.kakao.geo"] },
+      { t: "\uc624\ub958", x: 1, k: ["gl.kakao.err"] },
+      { t: "\uce90\uc2dc\ub85c \uc544\ub08c", x: 1, k: ["gl.kakao.saved"] }
     ] },
-    { id: "glo", grp: "공공데이터포털 · 중계서버", title: "중계서버 기타 호출", op: "gentle-lab /tago 로 나간 위 분류 외 호출", use: "경로탐색", cols: [
-      { t: "서울 TOPIS", k: ["gl.seoul-bus"] },
+    { id: "glo", grp: "\uacf5\uacf5\ub370\uc774\ud130\ud3ec\ud138 \u00b7 \uc911\uacc4\uc11c\ubc84", title: "\uc911\uacc4\uc11c\ubc84 \uae30\ud0c0 \ud638\ucd9c", op: "gentle-lab /tago \ub85c \ub098\uac04 \uc704 \ubd84\ub958 \uc678 \ud638\ucd9c", use: "\uacbd\ub85c\ud0d0\uc0c9", cols: [
+      { t: "\uc11c\uc6b8 TOPIS", k: ["gl.seoul-bus"] },
       { t: "odcloud", k: ["gl.odcloud"] },
-      { t: "기타", k: ["gl.datago.other", "gl.gbis-alt", "gl.other"] }
+      { t: "\uae30\ud0c0", k: ["gl.datago.other", "gl.gbis-alt", "gl.other"] }
     ] }
   ];
-  var SAVE = { id: "save", grp: "절약", title: "캐시로 아낀 호출", op: "같은 요청을 합쳐서 상위 API를 부르지 않은 횟수", use: "", cols: [
-    { t: "경로탐색 서버 공유 캐시", k: ["share.hit"] },
-    { t: "앱 버스서버 캐시", f: function(o) { var s = 0; for (var k in o) if (k.slice(-6) === ".saved") s += o[k]; return s; } }
+  var SAVE = { id: "save", grp: "\uc808\uc57d", title: "\uce90\uc2dc\ub85c \uc544\ub080 \ud638\ucd9c", op: "\uac19\uc740 \uc694\uccad\uc744 \ud569\uccd0\uc11c \uc0c1\uc704 API\ub97c \ubd80\ub974\uc9c0 \uc54a\uc740 \ud69f\uc218", use: "", cols: [
+    { t: "\uacbd\ub85c\ud0d0\uc0c9 \uc11c\ubc84 \uacf5\uc720 \uce90\uc2dc", k: ["share.hit"] },
+    { t: "\uc571 \ubc84\uc2a4\uc11c\ubc84 \uce90\uc2dc", f: function(o) { var s = 0; for (var k in o) if (k.slice(-6) === ".saved") s += o[k]; return s; } }
   ] };
   var known = {};
   SEC.concat([SAVE]).forEach(function(sc) {
@@ -243,16 +243,16 @@ function usagePageClient() {
     Object.keys(u).forEach(function(day) { Object.keys(u[day]).forEach(function(k) { if (!known[k] && k.slice(-6) !== ".saved") other[k] = 1; }); });
     var okeys = Object.keys(other).sort();
     var secs = SEC.slice();
-    if (okeys.length) secs.push({ id: "other", grp: "기타", title: "분류되지 않은 항목", op: "", use: "", cols: okeys.map(function(k) { return { t: k, k: [k] }; }) });
+    if (okeys.length) secs.push({ id: "other", grp: "\uae30\ud0c0", title: "\ubd84\ub958\ub418\uc9c0 \uc54a\uc740 \ud56d\ubaa9", op: "", use: "", cols: okeys.map(function(k) { return { t: k, k: [k] }; }) });
     secs.push(SAVE);
 
     var h = "";
     // overview matrix
     var real = secs.filter(function(sc) { return sc.id !== "save"; });
-    h += "<h2>일자별 종합</h2><div class='wrap'><table><tr><th>날짜</th>" + real.map(function(sc) { return "<th>" + esc(sc.title) + "<br><span class='mu'>" + esc(sc.grp.split(" · ").pop()) + "</span></th>"; }).join("") + "</tr>";
+    h += "<h2>\uc77c\uc790\ubcc4 \uc885\ud569</h2><div class='wrap'><table><tr><th>\ub0a0\uc9dc</th>" + real.map(function(sc) { return "<th>" + esc(sc.title) + "<br><span class='mu'>" + esc(sc.grp.split(" \u00b7 ").pop()) + "</span></th>"; }).join("") + "</tr>";
     var tot = real.map(function() { return 0; });
     var pre = days.filter(function(x) { return x < first; });
-    var preRow = pre.length ? "<tr><td>" + pre[pre.length - 1] + " ~ " + pre[0] + "</td><td class='z' colspan='" + real.length + "'>집계 전 (" + pre.length + "일) - 이 서버가 호출 수를 기록하기 전이라 값이 없습니다</td></tr>" : "";
+    var preRow = pre.length ? "<tr><td>" + pre[pre.length - 1] + " ~ " + pre[0] + "</td><td class='z' colspan='" + real.length + "'>\uc9d1\uacc4 \uc804 (" + pre.length + "\uc77c) - \uc774 \uc11c\ubc84\uac00 \ud638\ucd9c \uc218\ub97c \uae30\ub85d\ud558\uae30 \uc804\uc774\ub77c \uac12\uc774 \uc5c6\uc2b5\ub2c8\ub2e4</td></tr>" : "";
     days.forEach(function(day) {
       if (day < first) return;
       var o = u[day] || {};
@@ -261,17 +261,17 @@ function usagePageClient() {
         return v ? "<td>" + num(v) + "</td>" : "<td class='z'>-</td>";
       }).join("") + "</tr>";
     });
-    h += preRow + "<tr class='tot'><td>합계</td>" + tot.map(function(v) { return "<td>" + num(v) + "</td>"; }).join("") + "</tr></table></div>";
+    h += preRow + "<tr class='tot'><td>\ud569\uacc4</td>" + tot.map(function(v) { return "<td>" + num(v) + "</td>"; }).join("") + "</tr></table></div>";
 
     // per-API details
-    h += "<h2>호출명별 상세 (키별)</h2>";
+    h += "<h2>\ud638\ucd9c\uba85\ubcc4 \uc0c1\uc138 (\ud0a4\ubcc4)</h2>";
     secs.forEach(function(sc) {
       var cols = sc.cols;
       var todayV = secTotal(u[today] || {}, sc), mx = 0, all = 0;
       days.forEach(function(day) { if (day >= first) { var v = secTotal(u[day] || {}, sc); all += v; if (v > mx) mx = v; } });
-      h += "<details" + (all ? " open" : "") + "><summary><b>" + esc(sc.title) + "</b> <span class='mu'>" + esc(sc.grp) + "</span><span class='sm'>오늘 " + num(todayV) + " · 최대 " + num(mx) + " · 합계 " + num(all) + (sc.limit ? " · 일 한도 " + num(sc.limit) : "") + "</span></summary>";
-      if (sc.op) h += "<div class='mu op'>" + esc(sc.op) + (sc.use ? " · 사용처: " + esc(sc.use) : "") + "</div>";
-      h += "<div class='wrap'><table><tr><th>날짜</th>" + cols.map(function(c) { return "<th>" + esc(colTitle(c)) + "</th>"; }).join("") + "<th>합계</th></tr>";
+      h += "<details" + (all ? " open" : "") + "><summary><b>" + esc(sc.title) + "</b> <span class='mu'>" + esc(sc.grp) + "</span><span class='sm'>\uc624\ub298 " + num(todayV) + " \u00b7 \ucd5c\ub300 " + num(mx) + " \u00b7 \ud569\uacc4 " + num(all) + (sc.limit ? " \u00b7 \uc77c \ud55c\ub3c4 " + num(sc.limit) : "") + "</span></summary>";
+      if (sc.op) h += "<div class='mu op'>" + esc(sc.op) + (sc.use ? " \u00b7 \uc0ac\uc6a9\ucc98: " + esc(sc.use) : "") + "</div>";
+      h += "<div class='wrap'><table><tr><th>\ub0a0\uc9dc</th>" + cols.map(function(c) { return "<th>" + esc(colTitle(c)) + "</th>"; }).join("") + "<th>\ud569\uacc4</th></tr>";
       var ct = cols.map(function() { return 0; }), ce = cols.map(function() { return 0; }), gt = 0;
       var rows = "";
       days.forEach(function(day) {
@@ -282,14 +282,14 @@ function usagePageClient() {
           var v = val(o, c); ct[i] += v; if (!c.x) rt += v;
           var er = errOf(o, c); ce[i] += er;
           if (!v) return "<td class='z'>-</td>";
-          return "<td>" + num(v) + (er ? " <small class='er'>오류 " + num(er) + "</small>" : "") + "</td>";
+          return "<td>" + num(v) + (er ? " <small class='er'>\uc624\ub958 " + num(er) + "</small>" : "") + "</td>";
         }).join("") + "<td><b>" + (rt ? num(rt) : "-") + "</b></td></tr>";
         gt += rt;
       });
-      h += "<tr class='tot'><td>합계</td>" + cols.map(function(c, i) { return "<td>" + num(ct[i]) + (ce[i] ? " <small class='er'>오류 " + num(ce[i]) + "</small>" : "") + "</td>"; }).join("") + "<td>" + num(gt) + "</td></tr>" + rows + (pre.length ? "<tr><td>" + pre[pre.length - 1] + " ~ " + pre[0] + "</td><td class='z' colspan='" + (cols.length + 1) + "'>집계 전 (" + pre.length + "일)</td></tr>" : "") + "</table></div></details>";
+      h += "<tr class='tot'><td>\ud569\uacc4</td>" + cols.map(function(c, i) { return "<td>" + num(ct[i]) + (ce[i] ? " <small class='er'>\uc624\ub958 " + num(ce[i]) + "</small>" : "") + "</td>"; }).join("") + "<td>" + num(gt) + "</td></tr>" + rows + (pre.length ? "<tr><td>" + pre[pre.length - 1] + " ~ " + pre[0] + "</td><td class='z' colspan='" + (cols.length + 1) + "'>\uc9d1\uacc4 \uc804 (" + pre.length + "\uc77c)</td></tr>" : "") + "</table></div></details>";
     });
     document.getElementById("main").innerHTML = h;
-    document.getElementById("sub").textContent = "집계 시작: " + first + " · 표시 기간: " + d.start + " ~ " + today + " (한국 시간)" + (d.error ? " · 오류: " + d.error : "");
+    document.getElementById("sub").textContent = "\uc9d1\uacc4 \uc2dc\uc791: " + first + " \u00b7 \ud45c\uc2dc \uae30\uac04: " + d.start + " ~ " + today + " (\ud55c\uad6d \uc2dc\uac04)" + (d.error ? " \u00b7 \uc624\ub958: " + d.error : "");
     window.__csv = function() {
       var lines = ["date,group,api,operation,key_source,count,errors"];
       secs.forEach(function(sc) {
@@ -312,14 +312,14 @@ function usagePageClient() {
   }
   document.getElementById("csv").onclick = function() { if (window.__csv) window.__csv(); };
   fetch("/usage.json", { cache: "no-store" }).then(function(r) { return r.json(); }).then(render).catch(function(e) {
-    document.getElementById("sub").textContent = "불러오기 실패: " + e;
+    document.getElementById("sub").textContent = "\ubd88\ub7ec\uc624\uae30 \uc2e4\ud328: " + e;
   });
 }
 
 var USAGE_PAGE = [
   "<!doctype html><html lang='ko'><head><meta charset='utf-8'>",
   "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-  "<title>API 호출량</title>",
+  "<title>API \ud638\ucd9c\ub7c9</title>",
   "<style>",
   ":root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6b7480;--ln:#e3e6ea;--ac:#2b7cff;--bd:#d33a24}",
   "@media (prefers-color-scheme:dark){:root{--bg:#14171a;--card:#1d2126;--tx:#e8ebee;--mu:#98a1ab;--ln:#2d333a;--ac:#5b9bff;--bd:#ff6a4f}}",
@@ -335,12 +335,12 @@ var USAGE_PAGE = [
   "details{margin:6px 0}summary{cursor:pointer;padding:8px 2px}summary .sm{display:block;color:var(--mu);font-size:12px;font-weight:400}",
   ".op{margin:0 2px 4px;word-break:break-all}small.er{color:var(--bd)}",
   "</style></head><body><header>",
-  "<h1>API 호출량 (호출명별 · 키별 · 날짜별)</h1>",
-  "<div class='sub' id='sub'>불러오는 중...</div>",
-  "<button id='csv'>CSV 내려받기</button>",
+  "<h1>API \ud638\ucd9c\ub7c9 (\ud638\ucd9c\uba85\ubcc4 \u00b7 \ud0a4\ubcc4 \u00b7 \ub0a0\uc9dc\ubcc4)</h1>",
+  "<div class='sub' id='sub'>\ubd88\ub7ec\uc624\ub294 \uc911...</div>",
+  "<button id='csv'>CSV \ub0b4\ub824\ubc1b\uae30</button>",
   "</header><main id='main'></main><main>",
-  "<p class='mu'>상위 API를 실제로 부른 횟수입니다(캐시로 처리된 요청은 제외). 서버 메모리에 모았다가 약 1분 단위로 기록하므로 최근 수치는 조금 늦게 반영됩니다. ",
-  "'집계 전'은 이 서버가 호출 수를 기록하기 시작하기 전 날짜입니다.</p>",
+  "<p class='mu'>\uc0c1\uc704 API\ub97c \uc2e4\uc81c\ub85c \ubd80\ub978 \ud69f\uc218\uc785\ub2c8\ub2e4(\uce90\uc2dc\ub85c \ucc98\ub9ac\ub41c \uc694\uccad\uc740 \uc81c\uc678). \uc11c\ubc84 \uba54\ubaa8\ub9ac\uc5d0 \ubaa8\uc558\ub2e4\uac00 \uc57d 1\ubd84 \ub2e8\uc704\ub85c \uae30\ub85d\ud558\ubbc0\ub85c \ucd5c\uadfc \uc218\uce58\ub294 \uc870\uae08 \ub2a6\uac8c \ubc18\uc601\ub429\ub2c8\ub2e4. ",
+  "'\uc9d1\uacc4 \uc804'\uc740 \uc774 \uc11c\ubc84\uac00 \ud638\ucd9c \uc218\ub97c \uae30\ub85d\ud558\uae30 \uc2dc\uc791\ud558\uae30 \uc804 \ub0a0\uc9dc\uc785\ub2c8\ub2e4.</p>",
   "</main><script>(" + usagePageClient.toString() + ")();</script></body></html>"
 ].join("\n");
 
@@ -435,7 +435,7 @@ var index_default = {
         cf: cfOpt
       });
     };
-    const isKeyError = (t) => /SERVICE_?\s?KEY_?\s?IS_?\s?NOT_?\s?REGISTERED|인증모듈 에러코드|Key인증실패|SERVICE_KEY_IS_NOT_REGISTERED_ERROR/i.test(t || "");
+    const isKeyError = (t) => /SERVICE_?\s?KEY_?\s?IS_?\s?NOT_?\s?REGISTERED|\uc778\uc99d\ubaa8\ub4c8 \uc5d0\ub7ec\ucf54\ub4dc|Key\uc778\uc99d\uc2e4\ud328|SERVICE_KEY_IS_NOT_REGISTERED_ERROR/i.test(t || "");
     const attempt = async (target2) => {
       try {
         const r = await tryFetch(target2);
