@@ -135,7 +135,7 @@ public final class HomeCore {
     @SuppressWarnings("unchecked")
     public boolean restoreRide(String snap) {
         try {
-            Object o = ScreenCore.parse(snap == null ? "" : snap);
+            Object o = ScreenCore.parseSaved(snap == null ? "" : snap);
             if (!(o instanceof Map)) return false;
             Map<String, Object> m = (Map<String, Object>) o;
             if (!(m.get("raw") instanceof String) || !(m.get("tab") instanceof String)) return false;
