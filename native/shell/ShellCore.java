@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 24;
+    public static final int CAP = 25;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
@@ -479,9 +479,44 @@ public final class ShellCore {
             if (!(ma.get("body") instanceof List) || !(mb.get("body") instanceof List)) return first;
             List<Object> body = new ArrayList<Object>((List<Object>) ma.get("body"));
             body.addAll((List<Object>) mb.get("body"));
+            fuseAi(body);
             ma.put("body", body);
             return HomeSearchCore.toJson(ma);
         } catch (Exception e) { return first; }
+    }
+    /**
+     * 경로 통합 카드(s217): 엔진이 AI 승무원 카드에 {"into":"ai"} 를, 경로 결과 카드 안에 {"t":"spacer","slot":"ai"} 자리를 달아 두었으면
+     * AI 카드의 내용을 그 자리로 옮겨(위에 가는 선 하나를 두고) 하나의 연속된 카드로 만든다. 한쪽이라도 없으면 아무것도 바꾸지 않는다(AI 카드는 따로 남는다).
+     */
+    @SuppressWarnings("unchecked")
+    static void fuseAi(List<Object> body) {
+        int ia = -1;
+        for (int i = 0; i < body.size(); i++) {
+            Object o = body.get(i);
+            if (o instanceof Map && "ai".equals(((Map<String, Object>) o).get("into")) && ((Map<String, Object>) o).get("kids") instanceof List) { ia = i; break; }
+        }
+        if (ia < 0) return;
+        for (int i = 0; i < body.size(); i++) {
+            if (i == ia || !(body.get(i) instanceof Map)) continue;
+            Map<String, Object> pm = (Map<String, Object>) body.get(i);
+            if (!(pm.get("kids") instanceof List)) continue;
+            List<Object> kids = (List<Object>) pm.get("kids");
+            int si = -1;
+            for (int k = 0; k < kids.size(); k++) {
+                Object ko = kids.get(k);
+                if (ko instanceof Map && "ai".equals(((Map<String, Object>) ko).get("slot"))) { si = k; break; }
+            }
+            if (si < 0) continue;
+            List<Object> nk = new ArrayList<Object>(kids.subList(0, si));
+            Map<String, Object> dv = new java.util.LinkedHashMap<String, Object>();
+            dv.put("t", "divider"); dv.put("pad", java.util.Arrays.asList((Object) 0.0, (Object) 6.0, (Object) 0.0, (Object) 12.0));
+            nk.add(dv);
+            nk.addAll((List<Object>) ((Map<String, Object>) body.get(ia)).get("kids"));
+            nk.addAll(kids.subList(si + 1, kids.size()));
+            pm.put("kids", nk);
+            body.remove(ia);
+            return;
+        }
     }
     /** 설정에 저장된 커뮤니티 아이디(없으면 빈 글). */
     public static String commId(Store st) { return st.get(K_ID, ""); }
