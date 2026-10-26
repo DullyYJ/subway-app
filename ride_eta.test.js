@@ -52,14 +52,15 @@ function scene(line) {
 }
 t('pos.segs — 앞으로의 구간 목록을 함께 준다(응답이 끊겨도 앱이 시각표대로 이어 그린다)', () => {
   const nodes = scene();
-  const r = rideEta({ nowMs: at(17, 36), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true });
+  const NH = { holdAfterStops: 0 };          // s231: 도착 확정 대기(hold)를 끈 순수 시각표 구간(대기 규칙은 아래 별도 시험)
+  const r = rideEta({ nowMs: at(17, 36), nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true, opts: NH });
   assert.ok(r.pos && r.pos.segs && r.pos.segs.length >= 5, JSON.stringify(r.pos && r.pos.segs && r.pos.segs.length));
   const sg = r.pos.segs;
   assert.strictEqual(sg[0].from, r.pos.from); assert.strictEqual(sg[0].to, r.pos.to); assert.strictEqual(sg[0].t0, r.pos.t0); assert.strictEqual(sg[0].t1, r.pos.t1);
   for (let i = 1; i < sg.length; i++) { assert.strictEqual(sg[i].from, sg[i - 1].to); assert.ok(sg[i].a >= sg[i - 1].t1 - 1 && sg[i].t1 > sg[i].a); }
   // 5분 뒤에 새로 묻지 않아도, 같은 목록에서 그 시각이 드는 구간을 찾으면 엔진이 5분 뒤에 계산한 위치와 같다
   const later = at(17, 41);
-  const fresh = rideEta({ nowMs: later, nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true }).pos;
+  const fresh = rideEta({ nowMs: later, nodes, passes: [{ idx: 1, ms: at(17, 35), src: 'board' }], boarded: true, timetableFirst: true, opts: NH }).pos;
   const hit = sg.find(s => later < s.t1) || sg[sg.length - 1];
   assert.strictEqual(hit.from, fresh.from); assert.strictEqual(hit.to, fresh.to);
 });
@@ -619,6 +620,30 @@ t('지연 수준이 그려진 값과 0.4분 안이면 그린 값을 유지한다
   assert.ok(Math.abs(r2.delayMin - d0) < 1e-6, '크게 다르면 새 값 ' + r2.delayMin);
   const r3 = rideEta(Object.assign({}, base, { prevLevelMin: d0 + 0.25, prevAnchorIdx: r0.anchorIdx + 3 }));
   assert.ok(Math.abs(r3.delayMin - d0) < 1e-6, '앞선 앵커의 값은 쓰지 않는다');
+});
+
+// ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 3정거장 이상 탄 뒤에는 도착 확정이 없으면 역을 건너뛰지 마)
+t('s231 hold — 승차 구간 3번째 정류장부터는 통과 증거(gps·move·pf)가 없으면 마커가 그 정류장 앞에서 기다린다(알림용 시각표 위치 ttFrom 은 그대로 간다)', () => {
+  const base = Date.UTC(2026, 9, 26, 9, 0, 0);
+  const nodes = [{ name: '출발', isOrigin: true }].concat(Array.from({ length: 9 }, (_, i) => ({ name: '역' + i, isSub: true, lineName: '인천1호선', planMin: i * 2.5 })));
+  const run = (min, ps) => rideEta({ nowMs: base + min * 60000, nodes, passes: ps, boarded: true, timetableFirst: true, opts: { planSecOffset: 0 } }).pos;
+  const ps = [{ idx: 1, ms: base, src: 'board' }];
+  assert.strictEqual(run(2, ps).hold, undefined, '아직 시각이 안 됐다');
+  const a = run(9, ps);
+  assert.strictEqual(a.hold, 4, '4번 노드(승차역 뒤 3번째) 앞에서 기다린다'); assert.strictEqual(a.from, 3); assert.strictEqual(a.to, 4); assert.ok(a.ratio < 1 && a.ratio > .8 && a.moving === true);
+  assert.ok(a.ttFrom >= 5, '시각표상으로는 이미 지났다(하차 알림은 시각표대로): ' + a.ttFrom);
+  assert.strictEqual(a.segs.length, 1);
+  const b = run(20, ps); assert.strictEqual(b.hold, 4); assert.ok(b.ratio < 1, '오래 기다려도 닿지는 않는다');
+  const c = run(9, ps.concat([{ idx: 4, ms: base + 8 * 60000, src: 'gps' }])); assert.strictEqual(c.hold === 5 || c.hold === undefined, true); assert.ok(c.from >= 4, '4번 영점이 잡히면 풀린다: ' + c.from);
+  const d = run(9, ps.concat([{ idx: 5, ms: base + 8.5 * 60000, src: 'move' }])); assert.ok(d.from >= 5 && d.hold !== 4, '뒤 정류장 증거는 앞 정류장도 확정한다');
+  const e = run(9, ps.concat([{ idx: 4, ms: base + 8 * 60000, src: 'cell' }])); assert.strictEqual(e.hold, 4, '기지국 선행(cell)은 도착 확정이 아니다');
+  const f = rideEta({ nowMs: base + 9 * 60000, nodes, passes: ps, boarded: true, timetableFirst: true, opts: { planSecOffset: 0, holdAfterStops: 0 } }).pos; assert.strictEqual(f.hold, undefined, '0 이면 끈다');
+});
+t('s231 hold — 승차 구간이 짧거나 환승으로 구간이 바뀌면 그 구간의 승차역부터 다시 센다(버스도 같다)', () => {
+  const base = Date.UTC(2026, 9, 26, 9, 0, 0);
+  const nodes = [{ name: '출발', isOrigin: true }, { name: 'A', isSub: true, lineName: '1호선', planMin: 0 }, { name: 'B', isSub: true, lineName: '1호선', planMin: 2 }, { name: 'C', isSub: true, lineName: '2호선', planMin: 4 }, { name: 'D', isSub: true, lineName: '2호선', planMin: 6 }, { name: 'E', isSub: true, lineName: '2호선', planMin: 8 }];
+  const p = rideEta({ nowMs: base + 12 * 60000, nodes, passes: [{ idx: 1, ms: base, src: 'board' }], boarded: true, timetableFirst: true, opts: { planSecOffset: 0 } }).pos;
+  assert.strictEqual(p.hold, undefined, '3정거장째 앞에 닿는 정류장이 없다(2호선 구간은 승차역 C 부터 0)');
 });
 
 console.log('[Worker 진입점 handleRideEta]');
