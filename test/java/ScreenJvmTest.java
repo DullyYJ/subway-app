@@ -804,6 +804,22 @@ public class ScreenJvmTest {
         ok(bad(scBase + "{\"t\":\"scene\",\"h\":170}]}") && bad(scBase + "{\"t\":\"scene\",\"sc\":\"\"}]}") && bad(scBase + "{\"t\":\"scene\",\"h\":20,\"sc\":\"x\"}]}"), "scene: sc 없음 · 너무 낮음은 거절");
         ok(bad(scBase + "{\"t\":\"scene\",\"sc\":\"" + new String(new char[ScreenCore.SCENE_MAX]).replace('\0', 'a') + "\"}]}"), "scene: 너무 긴 글은 거절");
 
+        // ── 두 쪽 카드(panel sc2: 옆으로 밀면 지하철 객실 장면) ──
+        {
+            String tp_pk = "{\"t\":\"text\",\"s\":\"가\"},{\"t\":\"text\",\"s\":\"나\"}";
+            ScreenCore.Layout tp_PL = ScreenCore.layout(ScreenCore.load(scBase + "{\"t\":\"panel\",\"sc2\":\"" + scJ + "\",\"kids\":[" + tp_pk + "]},{\"t\":\"text\",\"s\":\"뒤\"}]}"), 300f, M);
+            ScreenCore.Item tp_pgI = null; int tp_pgIdx = -1; for (int q = 0; q < tp_PL.body.length; q++) if (tp_PL.body[q].kind == ScreenCore.K_PANEL) { tp_pgI = tp_PL.body[q]; tp_pgIdx = q; }
+            ok(tp_pgI != null && tp_pgI.sc2.startsWith("{\"ok\":true") && tp_pgI.pgN == 2 && tp_pgIdx + 2 < tp_PL.body.length, "panel sc2: 두 번째 쪽 글을 쥐고 첫 쪽 칸 수(pgN)를 안다 pgN=" + (tp_pgI == null ? -1 : tp_pgI.pgN));
+            boolean inside = true; for (int q = 1; q <= 2; q++) { ScreenCore.Item k = tp_PL.body[tp_pgIdx + q]; if (k.y < tp_pgI.y || k.y + k.h > tp_pgI.y + tp_pgI.h + 0.5f) inside = false; }
+            ok(inside && tp_PL.body[tp_pgIdx + 3].y >= tp_pgI.y + tp_pgI.h - 0.5f, "panel sc2: 뒤따르는 pgN 칸은 카드 안에 있고 그 다음 칸은 카드 밖이다");
+            ScreenCore.Layout tp_PL0 = ScreenCore.layout(ScreenCore.load(scBase + "{\"t\":\"panel\",\"kids\":[" + tp_pk + "]}]}"), 300f, M);
+            ScreenCore.Item tp_p0 = null; for (ScreenCore.Item q : tp_PL0.body) if (q.kind == ScreenCore.K_PANEL) tp_p0 = q;
+            ok(tp_p0 != null && tp_p0.pgN == 0 && tp_p0.sc2.length() == 0 && Math.abs(tp_p0.h - tp_pgI.h) < 0.5f, "panel sc2 없으면 한 쪽 카드 그대로(높이도 같다)");
+            ScreenCore.Layout tp_PL2 = ScreenCore.layout(ScreenCore.load(scBase + "{\"t\":\"panel\",\"sc2\":\"" + new String(new char[ScreenCore.SCENE_MAX]).replace('\0', 'a') + "\",\"kids\":[" + tp_pk + "]}]}"), 300f, M);
+            ScreenCore.Item tp_p2 = null; for (ScreenCore.Item q : tp_PL2.body) if (q.kind == ScreenCore.K_PANEL) tp_p2 = q;
+            ok(tp_p2 != null && tp_p2.sc2.length() == 0 && tp_p2.pgN == 0, "panel sc2: 너무 긴 글은 객실 쪽을 버리고 한 쪽 카드로(카드는 살린다)");
+        }
+
         // ── 타일 지도 노드(tmap) ──
         try {
             ScreenCore.Screen tms = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"map\",\"head\":[],\"body\":[{\"t\":\"tmap\",\"h\":210,\"r\":12,\"pad\":[8,12,2,12],\"pts\":[{\"la\":37.2661,\"lo\":127.0011,\"k\":\"s\",\"n\":\"1\",\"l\":\"수원역, 환승|센터\"},{\"la\":37.267,\"lo\":127.002,\"k\":\"m\"},{\"la\":0,\"lo\":0}],\"act\":{\"a\":\"call\",\"v\":\"mp.all\"}}]}");
