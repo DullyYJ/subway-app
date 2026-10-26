@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s223";
+var ENGINE_VERSION = "route-v2-2026-10-26s225";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20031,7 +20031,12 @@ function resLiveFacts(r) {
   var f = null, t = null, ratio = 0, pos = (L.pos && typeof L.pos === 'object') ? L.pos : null;
   if (pos && isFinite(Number(pos.from))) { f = Math.floor(Number(pos.from)); t = isFinite(Number(pos.to)) ? Math.floor(Number(pos.to)) : f; ratio = resNum(pos.ratio, 0); }
   else { var cur = Math.floor(resNum(L.cur, -1)); if (cur >= 1) { f = cur; t = f; } }
-  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: null, na: na.length ? na : null };
+  var w = null, wt = (L.wait && typeof L.wait === 'object') ? L.wait : null;                 // \uc2b9\ucc28 \ub300\uae30 \uc911: \ub9c8\ucee4\ub294 \ud0d1\uc2b9 \uc9c0\uc810\uc5d0 \uc11c\uc11c \uc8fc\ud669 \ub9e5\ubc15 + '\ub300\uae30 \uc911 \u00b7 120m'
+  if (wt && isFinite(Number(wt.i)) && Number(wt.i) >= 1) {
+    f = Math.floor(Number(wt.i)); t = f; ratio = 0;
+    w = { d: (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null };
+  }
+  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null };
 }
 // \uc694\uc57d \uce69 \uc904(rhead part 'g') \uc0ac\uc2e4: \ucd1d \ubd84 \u00b7 \ud658\uc2b9 \ud69f\uc218 \u00b7 \uc774\ub3d9 \uc218\ub2e8 \ubb36\uc74c(\uc7a5\uac70\ub9ac \uc774\ub984 \u2192 \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4) \u00b7 \ud658\uc2b9\u00b7\uac70\uc810 \uc774\ub984(\uacb9\uce58\ub294 \uc774\ub984\uc740 \ud55c \ubc88\ub9cc)
 function resTagFacts(route, hf) {
