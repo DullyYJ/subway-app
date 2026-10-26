@@ -138,7 +138,7 @@ console.log('동등성 대조 ' + cases.length + '건');
     u = String(u);
     if (u.includes('gildongmu-shop')) return new Response(JSON.stringify({ ok: true, version: 't1', data }));
     if (u.includes('app-config')) return new Response(JSON.stringify({ ok: false }));
-    if (u.includes('/weather')) { weatherAsked++; return new Response(JSON.stringify({ ok: true, temp: 4, rain: 70, txt: '비' })); }
+    if (u.includes('api.open-meteo.com')) { weatherAsked++; return new Response(JSON.stringify({ current: { time: '2026-10-18T12:00', temperature_2m: 4, weather_code: 61 }, hourly: { time: ['2026-10-18T12:00'], precipitation_probability: [70] }, daily: {} })); }   // s219: 날씨는 Open-Meteo 직접
     return new Response('{}', { status: 404 });
   };
   try {
