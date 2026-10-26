@@ -990,6 +990,22 @@ public class ShellJvmTest {
                 ok(!RideCore.recoBody((java.util.Map<String, Object>) ScreenCore.parse("{\"fire\":true,\"arrMs\":5,\"dest\":\"X\"}")).contains("loc"), "좌표가 없으면 loc 를 싣지 않는다");
                 String[] tx = RideCore.recoText("{\"ok\":true,\"slot\":\"lunch\",\"title\":\"하차 5분 전\",\"body\":\"점심 어때요\"}");
                 ok(tx != null && tx[0].equals("하차 5분 전") && tx[1].equals("점심 어때요"), "추천 글 읽기");
+                {
+                    RideCore wr = new RideCore();
+                    wr.addFix(1000L, 37.5000, 127.0000, 10.0);
+                    wr.onStep("{\"state\":{\"wait\":{\"i\":2,\"lat\":37.5009,\"lng\":127.0}},\"nextMs\":5000}");
+                    ok(wr.lvJson().contains("\"wait\":{\"i\":2,\"d\":100}"), "승차 대기 중이면 내 위치 JSON 에 대기 노드 · 탑승 지점까지 거리(s225)");
+                    wr.onStep("{\"state\":{},\"nextMs\":5000}");
+                    ok(!wr.lvJson().contains("wait"), "대기가 끝나면 wait 가 빠진다");
+                    RideCore wn = new RideCore();
+                    wn.onStep("{\"state\":{\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}},\"nextMs\":5000}");
+                    ok(wn.lvJson().contains("\"wait\":{\"i\":3}"), "내 위치를 아직 모르면 거리 없이 대기만");
+                }
+                {
+                    String[] fr = RideCore.freshenReco(new String[] { "🚉 하차 7분 전 · 부평 ☕", "하차 7분 전이에요.\n부평 도착 예정 07:30\n\n카푸치노" }, 1760000000000L, 1760000000000L - 120000L);
+                    ok(fr[0].equals("🚉 하차 2분 전 · 부평 ☕") && fr[1].equals("하차 2분 전이에요.\n부평 도착 예정 17:53\n\n카푸치노"), "받아 둔 추천 글: 남은 분 · 도착 시각을 지금 값으로(s225)");
+                    ok(RideCore.freshenReco(new String[] { "하차 7분 전" }, 1760000000000L, 1760000000000L - 3600000L)[0].equals("하차 7분 전") && RideCore.freshenReco(new String[] { "하차 7분 전" }, 1760000000000L, 1760000000000L + 60000L)[0].equals("하차 1분 전") && RideCore.freshenReco(null, 1L, 1L) == null && RideCore.freshenReco(new String[] { "하차 7분 전" }, 0L, 5L)[0].equals("하차 7분 전"), "1~7분으로 맞춤 · 입력이 이상하면 그대로");
+                }
                 ok(RideCore.recoText("{\"ok\":true,\"slot\":\"none\"}") == null && RideCore.recoText("{\"ok\":false}") == null && RideCore.recoText("망가짐") == null, "시간대 아님·오류·깨진 응답은 글 없음");
             }
             {
