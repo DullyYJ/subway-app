@@ -122,6 +122,24 @@ const web = new Function(
   ok(!r.err && r.out.length === sc.length && r.out.every(l => l.startsWith('OK ')), '모든 화면이 앱 검증기를 통과 ' + (r.err || r.out.filter(l => !l.startsWith('OK ')).join('|')));
   ok(r.out.every(l => Number(l.split(' ')[2]) === 0), '건너뛴 노드 없음');
 }
+// ── ⑥-2 s217: 요약 칩 줄(part g) · 통합 카드(cp)에서는 긴 환승 상자 없음 · 이름 정리 ──
+{
+  const xs = [{ kind: 'transfer', at: '부평', walkMin: 3, toType: 1, toLine: '1호선', fromType: 1, fromLine: '7호선' }, { kind: 'transfer', at: '구로_구로', walkMin: 0, toType: 4, toLine: 'KTX', fromType: 1, fromLine: '1호선' }];
+  const base = { m: 293, a: '서울', b: '부산_부산', xs };
+  const hOld = E.rheadScreen({ cap: 25, part: 'h' }, base), hCp = E.rheadScreen({ cap: 25, part: 'h' }, Object.assign({ cp: 1 }, base));
+  ok(hOld.body.some(n => n.t === 'box' && /^환승 2번/.test(n.s)) && !hCp.body.some(n => n.t === 'box'), 'cp 가 있으면 환승 1~N번 상자를 뺀다(없으면 예전 그대로)');
+  ok(hCp.body[0].s === '서울 → 부산', "머리줄 이름의 '부산_부산' 정리");
+  const g = E.rheadScreen({ cap: 25, part: 'g' }, { m: 293, n: 5, mix: ['KTX', '지하철'], hubs: ['부평', '구로_구로', '광명', '부산', '부평', '서울'] });
+  const tg = g.body[0];
+  ok(g.ok && tg.t === 'tags' && tg.items[0].s === '환승 5회 \u00b7 293분' && tg.items[1].s === 'KTX + 지하철' && tg.items.slice(2).map(i => i.s).join() === '부평,구로,광명,부산', '칩 줄: 환승 횟수·분 / 수단 / 거점(겹침 제거 · 최대 4개)');
+  ok(E.rheadScreen({ cap: 24, part: 'g' }, { m: 1 }).ok === false, '규격 24 이하는 칩 줄을 만들지 않는다');
+  ok(E.rheadScreen({ cap: 25, part: 'g' }, { m: 12, n: 0 }).body[0].items[0].s === '직통 \u00b7 12분', '환승이 없으면 직통');
+  ok(E.rheadScreen({ cap: 25, part: 'g' }, {}).body.length === 0, '아무 사실도 없으면 비움');
+  const b = E.rheadXferBox(xs);
+  ok(b && /^환승 2번\n1\. 부평에서/.test(b.s) && b.s.indexOf('2. 구로에서') > 0 && E.rheadXferBox([]) === null, '세부경로 시트용 환승 순서 상자');
+  const c = screenCheck([g, hCp]);
+  ok(!c.err && c.out.every(l => l.startsWith('OK ')) && c.out.every(l => Number(l.split(' ')[2]) === 0), '칩 줄 화면이 앱 검증기를 통과 ' + (c.err || c.out.join('|')));
+}
 // ── ⑦ 워커 내장 ──
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
