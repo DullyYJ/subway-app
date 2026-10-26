@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s216";
+var ENGINE_VERSION = "route-v2-2026-10-26s217";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17088,6 +17088,13 @@ function hbJosRo(w) {
   return (j === 0 || j === 8) ? '\ub85c' : '\uc73c\ub85c';
 }
 function hbNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+// \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217)
+function hbNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/\uc5ed$/, '') === b.replace(/\uc5ed$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
 
 var HB_CLOSINGS = [
   '\uc774\ub3d9 \uc911\uc5d0\ub3c4 5\ubd84\ub9c8\ub2e4 \ud604\ud669\uc744 \uc0c8\ub85c \uc54c\ub824\ub4dc\ub9b4\uac8c\uc694.',
@@ -17098,12 +17105,12 @@ var HB_CLOSINGS = [
 
 function homeBrief(o) {
   o = o || {};
-  var from = String(o.from == null ? '' : o.from), to = String(o.to == null ? '' : o.to);
+  var from = hbNmFix(o.from), to = hbNmFix(o.to);
   var hasRoute = !!to && to !== from;
   var hour = hbNum(o.hour, 12), cong = hbNum(o.cong, 0), hol = o.hol === true;
   var mins = hbNum(o.mins, 0);
   var wF = hbWx(o.wF), wT = hbWx(o.wT);
-  var segs = Array.isArray(o.segs) ? o.segs.filter(function (x) { return x && typeof x === 'object'; }) : null;
+  var segs = Array.isArray(o.segs) ? o.segs.filter(function (x) { return x && typeof x === 'object'; }).map(function (x) { return (x.from != null || x.to != null) ? Object.assign({}, x, { from: hbNmFix(x.from), to: hbNmFix(x.to) }) : x; }) : null;
   var peak = (hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 19);
   var late = (hour >= 22 || hour < 5);
   var ps = [];
@@ -17140,6 +17147,37 @@ function homeBrief(o) {
     return out;
   }
 
+  if (hasRoute && o.compact === true && o.metro !== true) {
+    // \ud1b5\ud569 \uce74\ub4dc\uc6a9 \uc9e7\uc740 \ube0c\ub9ac\ud551(s217): \uc704 \uacbd\ub85c \uce74\ub4dc\uac00 \uc774\ubbf8 \ubcf4\uc5ec \uc8fc\ub294 '\uc5b4\ub514\uc11c \uc5b4\ub514\ub85c' \uae34 \ubb38\uc7a5\uc740 \ub418\ud480\uc774\ud558\uc9c0 \uc54a\uace0
+    //   \ud575\uc2ec \uc2dc\uac01(\ucd9c\ubc1c\u00b7\ub3c4\ucc29) \u2192 \uccab \ud0d1\uc2b9\u00b7\ud658\uc2b9 \ud55c \uc904 \u2192 \ud63c\uc7a1 \u2192 \ub0a0\uc528\u00b7\uc900\ube44\ubb3c \u2192 \ub9c8\ubb34\ub9ac \uc21c\uc73c\ub85c \ub9d0\ud55c\ub2e4. \ub2e8\uacc4\ubcc4 \ud658\uc2b9\u00b7\uc815\uac70\uc7a5\uc740 [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30] \ub85c \ubbf8\ub8ec\ub2e4.
+    var cs = segs || [], cld = -1;
+    for (var ci = 0; ci < cs.length; ci++) { if (cs[ci] && cs[ci].type === 4) { cld = ci; break; } }
+    var cx = Math.max(0, cs.length - 1), tot = mins > 0 ? [' \ucd1d ', { b: mins + '\ubd84' }, ' \uac78\ub824\uc694.'] : [];
+    if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) {
+      var cl = cs[cld], pk = [{ ln: cl.line }, ' ', { b: cl.depClock }, ' \ucd9c\ubc1c, ', { b: cl.arrClock }, ' \ub3c4\ucc29\uc774\uc5d0\uc694.'];
+      if (cl.rideMin) pk.push(' \ud0c0\ub294 \uc2dc\uac04\uc740 \uc57d ' + cl.rideMin + '\ubd84\uc774\uc5d0\uc694.');
+      P(pk.concat(tot));
+    } else if (mins > 0) {
+      var carr = hbNum(o.arrMs, NaN); if (!isFinite(carr) || !carr) carr = hbNum(o.nowMs, 0) + mins * 60000;
+      var cline = [{ id: 'homeAiArr', t: ['\ub3c4\ucc29\uc740 ', { b: hbKstClock(carr) }, '\uacbd \uc608\uc815\uc774\uc5d0\uc694.'].concat(tot) }];
+      if (o.dm) { cline.push(' '); cline.push({ id: 'homeAiDep', raw: String(o.dm) }); }
+      P(cline);
+    } else P(['\uc18c\uc694\uc2dc\uac04\uc740 \uacbd\ub85c\uac00 \uc815\ud574\uc9c0\uba74 \uc54c\ub824\ub4dc\ub9b4\uac8c\uc694.']);
+    if (cs.length) {
+      var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '\uc5d0\uc11c '];
+      if (c0.type === 2) { tp.push({ ln: c0.line + '\ubc88' }); tp.push(' \ubc84\uc2a4\ub97c \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694.'); } else { tp.push({ ln: c0.line || '\uc5f4\ucc28' }); tp.push(' \ud0c0\uace0 \ucd9c\ubc1c\ud558\uc138\uc694.'); }
+      if (cx >= 2) tp.push(' \ud658\uc2b9\uc774 ' + cx + '\ubc88\uc774\ub77c \uc548\ub0b4 \ubc29\uc1a1\uc744 \ub193\uce58\uc9c0 \ub9c8\uc138\uc694.');
+      else if (cx === 1) tp.push(' \ud658\uc2b9\uc740 \ud55c \ubc88\uc774\uc5d0\uc694.');
+      if (cld >= 0) tp.push(' \uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.');
+      if (cx >= 1) tp.push(' \ud658\uc2b9 \uc21c\uc11c\uc640 \uc815\uac70\uc7a5\uc740 [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30]\uc5d0\uc11c \ubcfc \uc218 \uc788\uc5b4\uc694.');
+      P(tp);
+    }
+    P([cgLine()]);
+    wxParas().forEach(function (x) { P(x); });
+    var cr = Number(o.rnd); if (!isFinite(cr) || cr < 0 || cr >= 1) cr = 0;
+    ps.push({ sub: [HB_CLOSINGS[Math.floor(cr * HB_CLOSINGS.length)]] });
+    return { v: HB_V, paras: ps };
+  }
   if (hasRoute) {
     // 1) \ud575\uc2ec: \uc18c\uc694\uc2dc\uac04 + \ud658\uc2b9 \uc548\ub0b4
     var head = [{ b: from }, '\uc5d0\uc11c ', { b: to }, '\uae4c\uc9c0\ub294 '];
@@ -17946,6 +17984,7 @@ async function handleScreenWrite(request) {
 // \uc785\ub825  rheadScreen({ cap, part }, facts)
 //        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(10 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4 \u2014 \uba38\ub9ac\uc904 \ub178\ub4dc rhd \uac00 10; part 'k' \ub294 \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk + \ub9c8\ucee4 mk \uac00 \uc788\ub294 12 \uc774\uc0c1)
 //        part  = 'h'(\uba38\ub9ac\uc904 + \uc694\uc57d \uc904 + \ud658\uc2b9 \uc548\ub0b4) | 't'(\uacbd\ub85c \uc635\uc158 \ud0ed \uc904) | 'n'(\uacf5\uc2dd \uacf5\uc9c0 \u00b7 \uc9c0\uc5f0 \uc81c\ubcf4 \uc904) | 'l'(\uc7a5\uac70\ub9ac \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uace0\ub974\uae30 + \ub300\uae30 \uc81c\uc678 \uc548\ub0b4) | 'k'(\uad6c\uac04 \ud0c0\uc784\ub77c\uc778: \uba38\ub9ac \ub178\ub4dc trk \u2014 facts \ub294 \uc544\ub798 \ubcc4\ub3c4)
+//        part 'g'(s217, \uaddc\uaca9 25) = \uc694\uc57d \uce69 \uc904 tags \u2014 facts { m: \ucd1d \ubd84, n: \ud658\uc2b9 \ud69f\uc218, mix: ['KTX','\uc9c0\ud558\ucca0'\u2026], hubs: ['\ubd80\ud3c9','\uad6c\ub85c'\u2026], } \u2192 \ud0c0\uc784\ub77c\uc778 \ubc14\ub85c \uc704. facts.cp=1 \uc774\uba74 part 'h' \uac00 \uae34 \ud658\uc2b9 \ubaa9\ub85d \uc0c1\uc790\ub97c \ube7c \uc900\ub2e4.
 //        part 'k' facts = { secs:[{ty,nm,du,di,ws,ar,ss,es,sts,tw,we,tc:[{at,to}],st:[[\uc774\ub984,\uc704\ub3c4,\uacbd\ub3c4]\u2026]}], xf:[{k,xi,si}]|null(\ud658\uc2b9 \uc6d0\uc790\ub8cc), bt: \uc0ac\uc6a9\uc790\uac00 \uc815\ud55c \uc608\uc0c1 \uc2dc\uac01 ms|null, rb: \uc774\ubc88 \ud0d0\uc0c9\uc774 \ub098\uac04 \uc2dc\uac01 ms|null,
 //                          now: \uadf8\ub9b4 \ub54c \uae30\uae30 \uc2dc\uacc4 ms, sw:[\ub9c9\ucc28 \ub4a4 \uccab\ucc28\uae4c\uc9c0 \ubd84\u2026], tz: \uae30\uae30 \uc2dc\uac04\ub300(\ub3d9\ucabd \ubd84), th:'dark'|'pastel' }
 //                          lv(2\ub2e8\uacc4, \uc120\ud0dd): { p:{f,t,r,sn}|null(\uc6f9\uc774 \uc815\ud55c \ub9c8\ucee4 \uc704\uce58: \uce78 \ubc88\ud638 f \u2192 t, \uad6c\uac04 \ube44\uc728 r, sn=\uc810\ud504), w:{d}|null(\uc2b9\ucc28 \ub300\uae30 \uc911\uc774\uba74 \uc2b9\ucc28\uc5ed\uae4c\uc9c0 \uac70\ub9ac m), ea:[HH:MM\u2026](\uc6f9\uc774 \uc9c0\uae08 \ubcf4\uc5ec \uc8fc\ub294 \uce78\ubcc4 \uc2dc\uac01) } \u2192 \ub9c8\ucee4 mk \uc640 \uc2dc\uac01 \ub36e\uc5b4\uc4f0\uae30  \u2192 head:[{t:'trk', cells:[\u2026]}] (\uce78 = \uc774\ub984\u00b7\ubc30\uc9c0\u00b7\uc120\u00b7\uc810\u00b7\uc2dc\uac01 \ud55c \uc904; \uc2dc\uac01/\uc0c9/\uae00 \uc804\ubd80 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
@@ -17964,6 +18003,17 @@ var RHEAD_SCREEN_V = 1;
 var RHEAD_TABS = [['fast', '\ucd5c\ub2e8\uc2dc\uac04'], ['less', '\ucd5c\uc18c\ud658\uc2b9'], ['sub', '\uc9c0\ud558\ucca0'], ['bus', '\ubc84\uc2a4'], ['longdist', '\uc7a5\uac70\ub9ac']];
 // \uc0c8 \ub124\uc774\ud2f0\ube0c \uae00\uc5d0\ub294 \uc774\ubaa8\uc9c0\ub97c \uc4f0\uc9c0 \uc54a\ub294\ub2e4
 var RHEAD_EMOJI = /[\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;      // \uadf8\ub9bc \uc774\ubaa8\uc9c0\u00b7\uae30\ud638\ub9cc(\ud654\uc0b4\ud45c \u2192 \ub294 \ubb38\uc7a5\uc5d0 \uc4f0\uc774\ub2c8 \ub0a8\uae34\ub2e4)
+
+// \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217). \ub4a4\uac00 \ub2e4\ub974\uba74('\uc11c\uc6b8_1\ud638\uc120') \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+function rheadNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) {
+    var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim();
+    if (a && a.replace(/\uc5ed$/, '') === b.replace(/\uc5ed$/, '')) return a.length >= b.length ? a : b;
+  }
+  return s;
+}
 
 function rheadHash(s) {                               // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
   var h = 5381;
@@ -18000,13 +18050,13 @@ function rheadXferLine(t) {
     if (!name) return type === 2 ? '\ubc84\uc2a4' : '\uc5f4\ucc28';
     return (type === 2 && /^[0-9-]+$/.test(name)) ? name + '\ubc88' : name;
   };
-  var at = String(t.at == null ? '' : t.at).trim(), wm = Math.round(Number(t.walkMin) || 0);
+  var at = rheadNmFix(t.at), wm = Math.round(Number(t.walkMin) || 0);
   var walkTxt = (t.kind === 'train') ? '' : (wm > 0 ? ' \u00b7 \ub3c4\ubcf4 ' + wm + '\ubd84' : '');
   if (t.kind === 'train') {
     return at + '\uc5d0\uc11c ' + (t.service === 'express' ? '\uae09\ud589' : '\uc77c\ubc18') + ' \uc5f4\ucc28\ub85c \uac08\uc544\ud0c0\uc694 (' + f(1, t.fromLine) + ' \uc548\uc5d0\uc11c \uc5f4\ucc28\uac00 \ubc14\ub00c\uc5b4\uc694)';
   }
   if (t.kind === 'walk') {
-    var to = String(t.boardAt == null ? '' : t.boardAt).trim();
+    var to = rheadNmFix(t.boardAt);
     return at + ' \ud558\ucc28' + (wm > 0 ? ' \u2192 \ub3c4\ubcf4 ' + wm + '\ubd84' : '') + ' \u2192 ' + (to && to !== at ? to + '\uc5d0\uc11c ' : '') + f(Number(t.toType), t.toLine) + ' \uc2b9\ucc28';
   }
   return at + '\uc5d0\uc11c ' + f(Number(t.fromType), t.fromLine) + ' \u2192 ' + f(Number(t.toType), t.toLine) + ' \ud658\uc2b9' + walkTxt;
@@ -18057,7 +18107,10 @@ function rheadFacts(f) {
     ln: rheadList(f.ln, 6).map(function (l) { return rheadStr(l, 24).trim(); }).filter(Boolean),
     off: (f.off && typeof f.off === 'object') ? f.off : {}, offAt: Number(f.offAt) > 0 ? Number(f.offAt) : 0,
     al: (f.al && typeof f.al === 'object') ? f.al : {}, now: Number(f.now) > 0 ? Number(f.now) : 0,
-    lg: (f.lg && typeof f.lg === 'object') ? f.lg : null
+    lg: (f.lg && typeof f.lg === 'object') ? f.lg : null,
+    cp: (f.cp === 1 || f.cp === true) ? 1 : 0, n: rheadInt(f.n, 0, 99),
+    mix: rheadList(f.mix, 4).map(function (v) { return rheadStr(v, 12).trim(); }).filter(Boolean),
+    hubs: rheadList(f.hubs, 8).map(function (v) { return rheadNmFix(rheadStr(v, 24)).replace(/\uc5ed$/, '').trim(); }).filter(Boolean)
   };
 }
 
@@ -18169,7 +18222,7 @@ function rheadNoteNodes(f) {
 }
 
 function rheadHeadNodes(f) {
-  var nm = function (s) { return String(s || '').replace(/\uc5ed$/, ''); };
+  var nm = function (s) { return rheadNmFix(s).replace(/\uc5ed$/, ''); };
   if (f.nr) {                                           // \uace0\ub978 \ud0ed\ub9cc\uc73c\ub85c\ub294 \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\ub2e4 \u2014 \uba38\ub9ac\uc904\uc5d0 \uc548\ub0b4 \ud55c \uc904\ub9cc(\uc608\uc804 \uc6f9 _showTabNoRoute \uc640 \uac19\uc740 \ubb38\uad6c)
     var lb = f.nr === 'sub' ? '\uc9c0\ud558\ucca0' : (f.nr === 'bus' ? '\ubc84\uc2a4' : '\uc774 \uc218\ub2e8');
     return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '\ub9cc\uc73c\ub85c \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\uc5b4\uc694', xact: { a: 'call', v: 'rh.close' }, btn: '\uc990\uaca8\ucc3e\uae30', act: { a: 'call', v: 'rh.fav' } }];
@@ -18188,12 +18241,32 @@ function rheadHeadNodes(f) {
   if (f.why) nodes.push({ t: 'text', s: f.why, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] });
   rheadDoorLines(f.dx, f.ex).forEach(function (s) { nodes.push({ t: 'text', s: s, size: 12, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }); });
   if (nodes.length > 1) nodes[nodes.length - 1].pad = [0, 0, 0, 8];
-  if (f.xs.length) {
+  if (f.xs.length && !f.cp) {                            // \ud1b5\ud569 \uce74\ub4dc(cp)\uc5d0\uc11c\ub294 \uae34 \ud658\uc2b9 \ubaa9\ub85d \ub300\uc2e0 \uce69 \uc904(part g)\uc774 \ub9e1\uace0, \uc790\uc138\ud55c \uc21c\uc11c\ub294 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8\uac00 \ubcf4\uc5ec \uc900\ub2e4
     var h1 = '\ud658\uc2b9 ' + f.xs.length + '\ubc88', parts = [h1];
     f.xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
     nodes.push({ t: 'box', s: parts.join('\n'), hl: [[0, h1.length]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.4)', r: 10, ip: [10, 7, 10, 7], pad: [0, 0, 0, 8] });
   }
   return nodes;
+}
+
+// \u2500\u2500 part 'g': \uc694\uc57d \uce69 \uc904(s217) \u2014 '\ud658\uc2b9 5\ud68c \u00b7 293\ubd84' \u00b7 'KTX + \uc9c0\ud558\ucca0' \u00b7 \uac70\uc810 \uc774\ub984\ub4e4. \ud0c0\uc784\ub77c\uc778 \ubc14\ub85c \uc704\uc5d0 \ub193\uc778\ub2e4. \u2500\u2500
+function rheadTagNodes(f) {
+  if (!f.m && !f.n && !f.mix.length && !f.hubs.length) return [];
+  var items = [];
+  var first = (f.n > 0 ? '\ud658\uc2b9 ' + f.n + '\ud68c' : '\uc9c1\ud1b5') + (f.m > 0 ? ' \u00b7 ' + f.m + '\ubd84' : '');
+  items.push({ s: first, b: true, c: 'rgba(255,159,10,0.14)', oc: 'rgba(255,159,10,0.45)', tc: 'gold' });
+  if (f.mix.length) items.push({ s: f.mix.join(' + '), b: true, c: 'card2', oc: 'border', tc: 'text' });
+  var hubs = f.hubs.filter(function (h, i, a) { return a.indexOf(h) === i; }).slice(0, 4);
+  hubs.forEach(function (h) { items.push({ s: h, b: false, c: 'card2', oc: 'border', tc: 'sub' }); });
+  return [{ t: 'tags', pad: [0, 2, 0, 10], gap: 6, h: 24, size: 11, px: 10, items: items }];
+}
+// \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8 \ub9e8 \uc704 \ud658\uc2b9 \uc21c\uc11c \uc0c1\uc790(\uc608\uc804 \ud648 \uce74\ub4dc \uc717\ubd80\ubd84\uc5d0 \uae38\uac8c \uc788\ub358 1~N\ubc88 \ubaa9\ub85d\uc774 \uc5ec\uae30\ub85c \uc62e\uaca8 \uc654\ub2e4).
+function rheadXferBox(xs, pad) {
+  xs = rheadList(xs, 8).filter(function (t) { return t && typeof t === 'object'; });
+  if (!xs.length) return null;
+  var h1 = '\ud658\uc2b9 ' + xs.length + '\ubc88', parts = [h1];
+  xs.forEach(function (t, i) { parts.push((i + 1) + '. ' + rheadXferLine(t).replace(RHEAD_EMOJI, '').slice(0, 160)); });
+  return { t: 'box', s: parts.join('\n'), hl: [[0, h1.length]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.4)', r: 10, ip: [10, 7, 10, 7], pad: pad || [0, 0, 0, 8] };
 }
 
 function rheadTabNodes(f) {
@@ -18226,7 +18299,7 @@ var RTRK_BUS_COLS = ['#30d158', '#bf5af2', '#ff6482', '#40c8e0', '#ffd60a'];
 var RTRK_W = 64, RTRK_WLD = 108, RTRK_DWELL = 20, RTRK_MINGAP = 20, RTRK_GREY = '#8e8e93';
 var RTRK_DOT = { dark: { s: '#d4af37', e: '#ff2d55' }, pastel: { s: '#1d9bf0', e: '#e0455a' } };
 
-function rheadTrkNm(s) { return String(s == null ? '' : s).replace(/\uc5ed$/, '').trim(); }
+function rheadTrkNm(s) { return rheadNmFix(s).replace(/\uc5ed$/, '').trim(); }
 function rheadTrkNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
 function rheadTrkHex2(n) { return (n < 16 ? '0' : '') + n.toString(16); }
 function rheadTrkBright(hex, th) {                      // \uc5b4\ub450\uc6b4 \ud14c\ub9c8\uc5d0\uc11c\ub9cc \uc5b4\ub450\uc6b4 \uc120 \uc0c9\uc744 \ubc1d\ud78c\ub2e4
@@ -18548,9 +18621,10 @@ function rheadScreen(inp, factsIn) {
   inp = inp || {};
   if (!(Number(inp.cap) >= 10)) return { ok: false, error: 'cap' };
   if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk(+\ub0b4 \uc704\uce58 \ub9c8\ucee4 mk)\ub294 \uaddc\uaca9 12
-  var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l') ? inp.part : 'h';
+  if (inp.part === 'g' && Number(inp.cap) < 25) return { ok: false, error: 'cap' };      // \uc54c\uc57d \uc904 tags \ub294 \uaddc\uaca9 25
+  var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l' || inp.part === 'g') ? inp.part : 'h';
   var f = rheadFacts(factsIn);
-  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : rheadHeadNodes(f)));
+  var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : (part === 'g' ? rheadTagNodes(f) : rheadHeadNodes(f))));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // \uce74\ub4dc \uc548\uc5d0 \ub193\uc774\ub294 \ud654\uba74 \u2014 \ubc14\ud0d5\uc740 \uce74\ub4dc\uc0c9
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
   return out;
@@ -18909,6 +18983,7 @@ function aiPara(toks, last, sub) {
 function aiTitle(f, tz) {
   var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
   var base = aiNum(f.base, aiNum(f.now, 0)), timeStr = aiClock(base, tz);
+  if (f.fz === true) return f.tk === 'preview' ? 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551 \u00b7 \uc608\uc0c1 ' + timeStr : 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551';      // \uacbd\ub85c \ud1b5\ud569 \uce74\ub4dc(s217): \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc774\ub984\uc740 \uc704 \uba38\ub9ac\uc904\uc5d0 \uc774\ubbf8 \uc788\ub2e4
   if (f.tk === 'preview') return (hasRoute ? from + ' \u2192 ' + to : from) + ' \u00b7 \uc608\uc0c1 \u00b7 ' + timeStr;
   if (f.tk === 'brief') {
     var rem = aiNum(f.rem, 0);
@@ -18959,7 +19034,7 @@ function aiBriefParas(f, tz) {
   var o = {
     from: from, to: to, hour: hour, cong: aiNum(f.cong, 0), hol: f.hol === true, mins: aiMins(f, hasRoute),
     wF: f.wF || null, wT: f.wT || null, segs: Array.isArray(f.segs) ? f.segs.slice(0, 20) : null, metro: f.metro === true,
-    nt: f.nt || null, tl: f.tl || null, nowMin: aiNum(f.nowMin, 0), nowMs: now, arrMs: aiNum(f.arrMs, 0), dm: aiStr(f.dm, 200), rnd: aiNum(f.rnd, 0)
+    nt: f.nt || null, tl: f.tl || null, nowMin: aiNum(f.nowMin, 0), nowMs: now, arrMs: aiNum(f.arrMs, 0), dm: aiStr(f.dm, 200), rnd: aiNum(f.rnd, 0), compact: f.cp === true
   };
   var r = HB(o);
   return r && r.paras ? r.paras : null;
@@ -19780,13 +19855,24 @@ if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = requi
 var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
 if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
 
+var resXferBox = (typeof rheadXferBox === 'function') ? rheadXferBox : null;
+if (!resXferBox) { try { if (typeof require === 'function') resXferBox = require('./rhead').rheadXferBox; } catch (eRq4) {} }
+// \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217)
+function resNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/\uc5ed$/, '') === b.replace(/\uc5ed$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
+var RES_TAGS_CAP = 25;                                                          // \uc54c\uc57d \uc904(tags) \u00b7 \uacbd\ub85c \ud1b5\ud569 \uce74\ub4dc \uc790\ub9ac(slot)\ub97c \uc544\ub294 \uc571
+
 function resNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function resArr(v) { return Array.isArray(v) ? v : []; }
 
 // \uc608\uc804 \uc6f9 _normStop \uacfc \uac19\ub2e4: \uc815\ub958\uc7a5 \ud55c \uacf3\uc758 \uc774\ub984\u00b7\uc88c\ud45c\u00b7\ub204\uc801 \ucd08\u00b7\uc2dc\uac01\uc744 \ud55c \ubaa8\uc591\uc73c\ub85c.
 function resNormStop(sv) {
   if (!sv) return { stationName: '', lat: null, lon: null };
-  var o = { stationName: (sv.stationName || sv.name || ''),
+  var o = { stationName: resNmFix(sv.stationName || sv.name || ''),
             lat: (sv.y != null ? sv.y : (sv.lat != null ? sv.lat : null)),
             lon: (sv.x != null ? sv.x : (sv.lon != null ? sv.lon : (sv.lng != null ? sv.lng : null))) };
   var sec = null;
@@ -19880,14 +19966,14 @@ function resR5(v) { return (v == null || !isFinite(v)) ? null : Math.round(Numbe
 
 // \uba38\ub9ac\uc904 \uc0ac\uc2e4 (rhead part 'h')
 function resHeadFacts(route, r, tab) {
-  var f = { m: 0, a: String(r.a || ''), b: String(r.b || ''), fav: r.fav === 0 ? 0 : 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
+  var f = { m: 0, a: resNmFix(r.a), b: resNmFix(r.b), fav: r.fav === 0 ? 0 : 1, sp: null, why: '', dx: [], ex: null, xs: [], u: 0, nr: '' };
   if (!route) { f.nr = tab; return f; }
   f.m = Math.round(resNum(route.summary.duration, 0) / 60);
   var rs = route.rvSplit;
   if (route.why !== undefined && rs && rs.tot === f.m) f.sp = { ride: rs.ride, wait: rs.wait, walk: rs.walk };
   f.why = route.why ? String(route.why) : '';
   resArr(route.transfers).slice(0, 8).forEach(function (t) {
-    if (t) f.xs.push({ kind: t.kind, at: t.at, walkMin: t.walkMin, boardAt: t.boardAt, toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
+    if (t) f.xs.push({ kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service });
   });
   var secs = route.sections || [], i;
   secs.forEach(function (sc) {
@@ -19912,6 +19998,21 @@ function resLiveFacts(r) {
   if (pos && isFinite(Number(pos.from))) { f = Math.floor(Number(pos.from)); t = isFinite(Number(pos.to)) ? Math.floor(Number(pos.to)) : f; ratio = resNum(pos.ratio, 0); }
   else { var cur = Math.floor(resNum(L.cur, -1)); if (cur >= 1) { f = cur; t = f; } }
   return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: null, na: na.length ? na : null };
+}
+// \uc694\uc57d \uce69 \uc904(rhead part 'g') \uc0ac\uc2e4: \ucd1d \ubd84 \u00b7 \ud658\uc2b9 \ud69f\uc218 \u00b7 \uc774\ub3d9 \uc218\ub2e8 \ubb36\uc74c(\uc7a5\uac70\ub9ac \uc774\ub984 \u2192 \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4) \u00b7 \ud658\uc2b9\u00b7\uac70\uc810 \uc774\ub984(\uacb9\uce58\ub294 \uc774\ub984\uc740 \ud55c \ubc88\ub9cc)
+function resTagFacts(route, hf) {
+  var kinds = { ld: [], sub: 0, bus: 0 }, hubs = [];
+  route.sections.forEach(function (sc) {
+    var tr = (sc && sc.transportation) || {};
+    if (tr.type === 4) { var nm = String(tr.name || '').replace(/\s+/g, ' ').trim().slice(0, 10) || '\uc7a5\uac70\ub9ac'; if (kinds.ld.indexOf(nm) < 0) kinds.ld.push(nm); }
+    else if (tr.type === 1) kinds.sub = 1;
+    else if (tr.type === 2) kinds.bus = 1;
+  });
+  var mix = kinds.ld.slice(0, 2);
+  if (kinds.sub) mix.push('\uc9c0\ud558\ucca0');
+  if (kinds.bus) mix.push('\ubc84\uc2a4');
+  hf.xs.forEach(function (t) { var a = String(t.at || '').replace(/\uc5ed$/, '').trim(); if (a && hubs.indexOf(a) < 0) hubs.push(a); });
+  return { m: hf.m, n: hf.xs.length, mix: mix.slice(0, 4), hubs: hubs.slice(0, 4) };
 }
 function resTrkFacts(route, r, noGeo) {
   var secs = route.sections.slice(0, 12).map(function (sec) {
@@ -19982,6 +20083,10 @@ function resDetailScreen(route, r, tab, cap) {
   var web = cap >= RES_SHD_CAP, ttl = total + '\ubd84 \u00b7 ' + String(r.a || '') + ' \u2192 ' + String(r.b || ''), optName = RES_OPT_NAMES[tab] || '\uc120\ud0dd\ud55c';
   var kids = web ? [] : [{ t: 'bar', pad: [16, 0, 0, 8], title: ttl, btn: '\ub2eb\uae30', act: { a: 'call', v: 'rd.close' } }];
   var cum = base, busN = 0, busIdx = {}, exp = [], rows = [];
+  if (cap >= RES_TAGS_CAP && resXferBox) {                          // s217: \ud648 \uce74\ub4dc\uc5d0\uc11c \ube80 '\ud658\uc2b9 1~N\ubc88' \uc21c\uc11c\uac00 \uc5ec\uae30 \ub9e8 \uc704\ub85c \uc628\ub2e4
+    var xb = resXferBox(resArr(route.transfers).slice(0, 8).filter(function (t) { return t; }).map(function (t) { return { kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service }; }), [14, 6, 14, 10]);
+    if (xb) kids.push(xb);
+  }
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // \uc6f9 \uc138\ubd80\uacbd\ub85c \uc904(.tdsec-row)\uacfc \uac19\uc740 \uac12: \uc0c9 \u00b7 \uc544\uc774\ucf58 \u00b7 \ubc43\uc9c0 \u00b7 \uacbd\uc720 \u00b7 \uc2dc\uac04\ub300
     sec = sec || {};
@@ -20178,7 +20283,9 @@ function resultScreen(opt, r) {
   if (r.view === 'detail') return route ? resDetailScreen(route, r, tab, cap) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
-  var h = anyRoute ? resPart(cap, 'h', resHeadFacts(route, r, tab)) : null;
+  var fuse = cap >= RES_TAGS_CAP && !!route, hfacts = anyRoute ? resHeadFacts(route, r, tab) : null;
+  if (hfacts && fuse) hfacts.cp = 1;                              // \ud1b5\ud569 \uce74\ub4dc: \uae34 \ud658\uc2b9 \ubaa9\ub85d \uc0c1\uc790\ub294 \ube7c\uace0 \uc544\ub798 \uce69 \uc904 \u00b7 \uc138\ubd80\uacbd\ub85c \uc2dc\ud2b8\uac00 \ub9e1\ub294\ub2e4
+  var h = anyRoute ? resPart(cap, 'h', hfacts) : null;
   if (anyRoute && !h) return { ok: false, error: 'head' };
   if (h) nodes = nodes.concat(h.body);
   else nodes = nodes.concat(resNoRouteNodes(data));   // \uc751\ub2f5\uc5d0 \uc4f8 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c \u2014 \uc65c \uc5c6\ub294\uc9c0(\uc6b4\ud589 \uc885\ub8cc \u00b7 \ub178\uc120 \ub370\uc774\ud130 \uc5c6\uc74c \u00b7 \uadf8 \ubc16)\ub97c \ub9d0\ud574 \uc900\ub2e4
@@ -20190,9 +20297,11 @@ function resultScreen(opt, r) {
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
+    if (fuse) { var tg = resPart(cap, 'g', resTagFacts(route, hfacts)); if (tg && tg.body.length) nodes = nodes.concat(tg.body); }      // \uce69 \uc904\uc740 \ub178\uc120 \ud0c0\uc784\ub77c\uc778 \ubc14\ub85c \uc704
     var k = resPart(cap, 'k', resTrkFacts(route, r, false));
     if (!k) k = resPart(cap, 'k', resTrkFacts(route, r, true));
     if (k) nodes = nodes.concat(k.head).concat(k.body);
+    if (fuse) nodes.push({ t: 'spacer', h: 0, slot: 'ai' });          // \ud648 \uce74\ub4dc\uc758 AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551\uc774 \ud569\uccd0\uc838 \ub4e4\uc5b4\uc62c \uc790\ub9ac(\uc571\uc774 into:'ai' \uce74\ub4dc\ub97c \uc5ec\uae30\ub85c \uc62e\uae34\ub2e4; \ubabb \uc62e\uae30\uba74 \uadf8\ub300\ub85c 0 \ub192\uc774)
     if (r.ride && r.ride.on) {
       var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // \uc6f9 routeActRow: \uc624\ub978\ucabd\uc5d0 \ud0d1\uc2b9 \u2192 \ud658\uc2b9 \u2192 \ub3c4\ucc29 \uce78(\uce78\uc758 \ub73b\u00b7\uc804\ud658\uc740 \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
       var rowKids = [
@@ -21766,6 +21875,14 @@ function hcHolAt(ms) {
 function hcNum(v, d) { v = Number(v); return isFinite(v) ? v : d; }
 function hcArr(v) { return Array.isArray(v) ? v : []; }
 function hcStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }
+// \uc2dc\uc2a4\ud15c \uc774\ub984\uc774 '\ubd80\uc0b0_\ubd80\uc0b0' \ucc98\ub7fc \uac19\uc740 \ub9d0 \ub450 \ubc88\uc73c\ub85c \uc624\uba74 \ud55c \ubc88\ub9cc(s217)
+function hcNmFix(s) {
+  s = String(s == null ? '' : s).trim();
+  var i = s.indexOf('_');
+  if (i > 0) { var a = s.slice(0, i).trim(), b = s.slice(i + 1).trim(); if (a && a.replace(/\uc5ed$/, '') === b.replace(/\uc5ed$/, '')) return a.length >= b.length ? a : b; }
+  return s;
+}
+var HC_FUSE_CAP = 25;                                       // \uacbd\ub85c \ud1b5\ud569 \uce74\ub4dc(AI \uc2b9\ubb34\uc6d0\uc774 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc \uc548\uc73c\ub85c \ud569\uccd0\uc9c4\ub2e4)\ub97c \uc544\ub294 \uc571
 function hcHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
 function hcStnTable() {
   if (typeof HOME_STNS !== 'undefined' && HOME_STNS) return HOME_STNS;
@@ -21907,7 +22024,8 @@ function hcardsScreen(inp, f) {
   var th = f.th === 'pastel' ? 'pastel' : 'dark', hol = f.hol === true;      // f.hol \uc774 \ucc38/\uac70\uc9d3\uc73c\ub85c \uc624\uba74 \uadf8\ub300\ub85c(\uc61b \uc571), \uc548 \uc624\uba74 \uc544\ub798\uc5d0\uc11c \uc5d4\uc9c4\uc774 \uae30\uc900 \ub0a0\uc9dc\ub85c \uc815\ud55c\ub2e4(s207)
   var gps = (Array.isArray(f.gps) && isFinite(Number(f.gps[0])) && isFinite(Number(f.gps[1]))) ? [Number(f.gps[0]), Number(f.gps[1])] : null;
   var rt = hcRoute(f.r, now, tz), near = gps ? hcNearest(gps[0], gps[1]) : null;
-  var a = f.r && typeof f.r === 'object' ? hcStr(f.r.a, 40) : '', b = f.r && typeof f.r === 'object' ? hcStr(f.r.b, 40) : '';
+  var a = f.r && typeof f.r === 'object' ? hcNmFix(hcStr(f.r.a, 40)) : '', b = f.r && typeof f.r === 'object' ? hcNmFix(hcStr(f.r.b, 40)) : '';
+  var fuse = Number(inp.cap) >= HC_FUSE_CAP && !!rt;
   var hour = new Date(now + tz * 60000).getUTCHours(), nowMin = hour * 60 + new Date(now + tz * 60000).getUTCMinutes();
   // \uc5b4\ub290 \uc5ed/\uc815\ub958\uc7a5\uc758 \ud63c\uc7a1\ub3c4\ub97c \ubcf4\uc77c\uc9c0: \ubcf4\ub358 \uacbd\ub85c\uc758 \ucc98\uc74c \ub300\uc911\uad50\ud1b5 > \uac00\uae4c\uc6b4 \uc5ed
   var cs = { mode: 'none', now: now, tz: tz, th: th, stn: '', line: '', ld: 0, live: null, bus: {} }, stn = '';
@@ -21927,7 +22045,8 @@ function hcardsScreen(inp, f) {
     var rem = rt.mins > 0 ? rt.mins : 0, fromN = a || rt.segs[0].from, toN = b || rt.segs[rt.segs.length - 1].to;
     var preview = f.r.bt != null;
     af.tk = preview ? 'preview' : 'brief'; af.mode = preview ? 'preview' : 'brief';
-    af.from = fromN; af.to = toN; af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
+    af.from = hcNmFix(fromN); af.to = hcNmFix(toN);
+    if (fuse) { af.cp = true; af.fz = true; } af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
     if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
     af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
     var wxs = f.wx && typeof f.wx === 'object' ? f.wx : {};
@@ -21955,7 +22074,10 @@ function hcardsScreen(inp, f) {
     if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // \uc7a5\uba74\ub9cc \ubcf4\uc77c \ub550 \uc548\ucabd \uc5ec\ubc31\uc744 \uc904\uc5ec \uc7a5\uba74\uc5d0 \uc790\ub9ac\ub97c \ub354 \uc900\ub2e4(\uc6f9 .cs-on)
     else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
   }
-  if (aiS && aiS.ok) { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+  if (aiS && aiS.ok) {
+    if (fuse) { var fp = hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // \ud1b5\ud569 \uce74\ub4dc: \uc81c\ubaa9\uc904 \uc5c6\uc774 \uc571\uc774 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 'slot:ai' \uc790\ub9ac\ub85c \uc62e\uae34\ub2e4(\ubabb \uc62e\uae30\uba74 \uadf8 \uc790\ub9ac\uc5d0 \uadf8\ub300\ub85c \ub0a8\ub294\ub2e4)
+    else { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+  }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
