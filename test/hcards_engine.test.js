@@ -143,6 +143,24 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   const hanguel = Date.UTC(2026, 9, 8, 23, 30, 0);          // KST 금 10/9 한글날 08:30
   ok(wk(call(noHol({ now: hanguel }))), 's207: 평일(금)이라도 공휴일(한글날)이면 주말·공휴일 카드');
 }
+// s232 (YJ 10-26): 지하철을 타고 가는 동안 혼잡도 카드는 '지금 지나는 역'을 따라가고(역명·호선만 조용히 바뀐다 — 출발역에 고정되지 않는다), 옆으로 밀면 객실 장면(sc2)이 나온다
+{
+  const names = ['임학', '박촌', '귤현', '계양', '아시아드', '검단'];
+  const rdAt = h => ({ here: h, boarded: true, key: 'k232', nodes: [{ name: '출발', isOrigin: true }].concat(names.map(n => ({ name: n, isSub: true, lineName: '인천1호선' }))).concat([{ name: '도착' }]) });
+  const at = h => call(base({ rd: rdAt(h) }));
+  const outs = [1, 2, 3, 4].map(at);
+  ok(outs.every(x => x.ok), 's232: 타고 가는 동안 카드가 만들어진다');
+  ok(outs.map(x => x.info.stn).join() === '임학,박촌,귤현,계양', 's232: 혼잡도 역이 지나는 역을 따라간다: ' + outs.map(x => x.info.stn).join());
+  ok(outs.every((x, i) => flat(x.body[1].kids).some(n => n.t === 'cgh' && n.nm === names[i])), 's232: 혼잡도 카드 제목줄·게이지에 지금 역 이름이 들어 있다');
+  ok(outs.every(x => x.body[1].ip.join() === '17,14,14,14' && x.body[1].lb === 4), 's232: 카드 모양은 그대로(조용히 이름만 바뀜)');
+  const p0 = outs[0].body[1], tr = p0.sc2 ? JSON.parse(p0.sc2) : null;
+  ok(tr && tr.mode === 'train' && tr.venue === 'sub' && tr.train && tr.train.names.length >= 3 && tr.train.stops.length === tr.train.names.length && p0.sc2.length < 6000, 's232: 옆 쪽 객실 장면(sc2) 이 붙는다: mode=train · 역 ' + (tr && tr.train ? tr.train.names.length : 0) + '개');
+  ok(tr.train.names[0] === '임학' && tr.train.stops.every(a => Array.isArray(a) && a.length === 3) && tr.train.stops[tr.train.stops.length - 1][1] === tr.train.stops[tr.train.stops.length - 1][0], 's232: 정차표 [타고 있던 · 내림 · 탐] 3칸 · 종점에서는 모두 내린다');
+  ok(outs.every(x => JSON.parse(x.body[1].sc2).train.names.join() === tr.train.names.join()), 's232: 같은 여정이면 역이 바뀌어도 친구·승하차 계획은 같다(여정 내내 안 흔들린다)');
+  ok(!call(base()).body[1].sc2, 's232: 경로가 없으면 객실 쪽이 없다');
+  const busRd = { here: 1, boarded: true, key: 'b1', nodes: [{ name: '출발', isOrigin: true }, { name: '정류장A', isBus: true, lineName: '6001' }, { name: '정류장B', isBus: true, lineName: '6001' }, { name: '도착' }] };
+  const ob = call(base({ rd: busRd })); ok(ob.ok && !JSON.stringify(ob.body).includes('"sc2"'), 's232: 버스를 탈 땐 객실 쪽이 없다(버스 장면은 따로)');
+}
 (async () => {
   const os = require('os'), tmp = path.join(os.tmpdir(), 'rv2_hc_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
@@ -155,6 +173,13 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
     ok(res.status === 200 && j.ok && j.body.length === 5 && JSON.stringify(j.body) === JSON.stringify(call(base()).body), '워커 안에서 직접 계산과 같은 카드 세 장');
     const r2 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 3, f: {} }) }), {}, { waitUntil() { } });
     ok(r2.status === 400, '워커: cap 부족은 400');
+    {   // s232: 워커에 내장된 엔진(scene · hcards)에도 객실 장면(sc2)이 들어 있다 — 직접 계산과 같은 글
+      const rd232 = { here: 2, boarded: true, key: 'k232', nodes: [{ name: '출발', isOrigin: true }].concat(['임학', '박촌', '귤현', '계양'].map(n => ({ name: n, isSub: true, lineName: '인천1호선' }))).concat([{ name: '도착' }]) };
+      const realFetch2 = globalThis.fetch; globalThis.fetch = async () => { throw new Error('offline'); };
+      let jr; try { const rr = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base({ rd: rd232 }) }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } }); jr = await rr.json(); } finally { globalThis.fetch = realFetch2; }
+      const dr = call(base({ rd: rd232 }));
+      ok(jr && jr.ok && jr.body[1].sc2 && jr.body[1].sc2 === dr.body[1].sc2 && jr.info.stn === '박촌', 's232: 워커 안에서도 객실 장면(sc2)과 지나는 역(박촌)을 따라간다');
+    }
     // 날씨: Worker 가 /weather 를 받아 f.wx 로 넣어 준다(받은 주소 · 값 확인)
     const realFetch = globalThis.fetch, asked = [];
     globalThis.fetch = async (u) => { asked.push(String(u)); return /api\.open-meteo\.com/.test(String(u)) ? new Response(JSON.stringify({ current: { time: '2026-10-26T09:00', temperature_2m: -3, weather_code: 71 }, hourly: { time: ['2026-10-26T09:00'], precipitation_probability: [80] }, daily: {} }), { headers: { 'content-type': 'application/json' } }) : realFetch(u); };
