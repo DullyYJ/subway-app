@@ -8,22 +8,26 @@ function gdReject(d) {
   if (d.retryS > 0) h["Retry-After"] = String(d.retryS);
   return new Response(JSON.stringify({ ok: false, error: d.status === 403 ? "forbidden" : d.status === 503 ? "busy" : "rate", retry: d.retryS || 0 }), { status: d.status, headers: h });
 }
-async function guardEnter(request, env) {
+//   opt(선택 · 다른 워커용) = { cls: function (path, method) → 'light'|'heavy'|'write'|'admin'|'free', cfg: { 종류: { cap, rate } }, heavyMax }
+//   CF-Connecting-IP 가 없는 요청(워커끼리 서비스 바인딩으로 부르는 내부 호출)은 검사하지 않는다 — 바깥에서 오는 요청에는 클라우드플레어가 항상 붙인다.
+async function guardEnter(request, env, opt) {
   var none = { res: null, done: function () { } };
   try {
     var url = new URL(request.url), hd = request.headers;
+    if (!(hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip"))) return none;
+    opt = opt || {};
     var adminSet = !!(env && env.ADMIN_KEY && typeof env.ADMIN_KEY === "string");
     var adminOk = adminSet && (hd.get("x-admin-key") === env.ADMIN_KEY || url.searchParams.get("k") === env.ADMIN_KEY);
-    var d = gdDecide({ ip: hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip") || "unknown", iid: hd.get("X-Gdm-Id"), path: url.pathname, method: request.method, now: Date.now(), adminSet: adminSet, adminOk: adminOk });
+    var d = gdDecide({ ip: hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip"), iid: hd.get("X-Gdm-Id"), path: url.pathname, method: request.method, now: Date.now(), adminSet: adminSet, adminOk: adminOk, cls: opt.cls ? opt.cls(url.pathname, request.method) : undefined, cfg: opt.cfg });
     if (!d.ok) return { res: gdReject(d), done: none.done };
-    if (request.method !== "OPTIONS" && d.cls !== "admin" && env && env.GDM_RL && typeof env.GDM_RL.limit === "function") {
+    if (request.method !== "OPTIONS" && d.cls !== "admin" && d.cls !== "free" && env && env.GDM_RL && typeof env.GDM_RL.limit === "function") {
       try {
         var r = await env.GDM_RL.limit({ key: (hd.get("CF-Connecting-IP") || "unknown") + "|" + d.cls });
         if (r && r.success === false) return { res: gdReject({ status: 429, retryS: 10, reason: "rl" }), done: none.done };
       } catch (e2) { }
     }
     if (d.cls === "heavy") {
-      if (GD_INFLIGHT.heavy >= GD_HEAVY_MAX) return { res: gdReject({ status: 503, retryS: 2, reason: "busy" }), done: none.done };
+      if (GD_INFLIGHT.heavy >= (opt.heavyMax || GD_HEAVY_MAX)) return { res: gdReject({ status: 503, retryS: 2, reason: "busy" }), done: none.done };
       GD_INFLIGHT.heavy++;
       var fin = false;
       return { res: null, done: function () { if (!fin) { fin = true; GD_INFLIGHT.heavy = Math.max(0, GD_INFLIGHT.heavy - 1); } } };
