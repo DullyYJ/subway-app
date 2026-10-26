@@ -9,7 +9,7 @@ import java.util.Map;
  * ★ YJ 핵심 규칙: "탑승이 확정된 이후에는 외부 서버 요청을 일체 발생시키지 않는다."
  *   서버 엔진(ride-standby · ride-eta · ride-track · posfusion)을 한 줄씩 옮긴 RideStandbyJ 로 5초 걸음을 폰 안에서 계산한다.
  *   입력(요청 글)과 출력(응답 글)의 모양은 서버 /ride-standby 와 똑같아서 RideCore 는 그대로다.
- *   서버가 필요한 경우는 딱 하나 — 사용자가 [탑승]을 눌러 어느 열차인지 가릴 때 시각표를 읽는 한 번(needsTable). 그 한 번이 '최초 탑승 판정'이다.
+ *   서버가 필요한 경우는 딱 둘 — 사용자가 [탑승]을 눌러 어느 열차인지 가릴 때 시각표를 읽는 한 번(needsTable). 그 한 번이 '최초 탑승 판정'이고, 둘째는 [역까지 이동] 으로 역에 닿았을 때 가장 빠른 열차를 읽는 한 번이다.
  *   하차 추천 문구(/reco-text)도 탑승 전에 한 번만 받아 두고(prefetchBody) 탑승 뒤에는 받아 둔 글만 쓴다(cacheMatches).
  */
 final class RideLocal {
@@ -30,10 +30,12 @@ final class RideLocal {
     /** 이 걸음이 시각표(서버)를 한 번 읽어야 하는 [탑승] 손짓인가 — 최초 탑승 판정. 그 밖의 걸음은 전부 폰 안에서 끝난다. */
     @SuppressWarnings("unchecked")
     static boolean needsTable(String body) {
-        if (body == null || body.indexOf("\"act\":\"press\"") < 0) return false;      // 거의 모든 걸음은 여기서 바로 false
+        if (body == null) return false;
+        boolean press = body.indexOf("\"act\":\"press\"") >= 0, detour = body.indexOf("\"dt\":{") >= 0 && body.indexOf("\"arr\":") >= 0;      // 거의 모든 걸음은 여기서 바로 false
+        if (!press && !detour) return false;
         try {
-            Object o = ScreenCore.parse(body);
-            return o instanceof Map && RideStandbyJ.pressQuery((Map<String, Object>) o) != null;
+            Object o = ScreenCore.parse(body);      // s229: 역까지 이동으로 역에 닿은 걸음(detourQuery)도 시각표를 한 번 읽는다
+            return o instanceof Map && (RideStandbyJ.pressQuery((Map<String, Object>) o) != null || RideStandbyJ.detourQuery((Map<String, Object>) o) != null);
         } catch (ScreenCore.ParseError e) { return false; }
         catch (RuntimeException e) { return false; }
     }
