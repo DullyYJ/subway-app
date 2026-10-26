@@ -34,19 +34,25 @@ ok(tg('n.arrive').on === true && tg('n.transfer').on === false && tg('n.arrive_r
 }
 const boxes = nodes.filter(n => n.t === 'box').map(n => n.s);
 ok(boxes.some(t => /^알림 권한이 꺼져 있어요/.test(t)) && boxes.some(t => /^이 앱의 배터리 사용이 제한됨으로/.test(t)), '권한 거부·배터리 제한 경고 상자');
-const cur = nodes.find(n => n.t === 'box' && /^현재 아이디/.test(n.s));
-ok(cur && cur.s === '현재 아이디  길동' && JSON.stringify(cur.hl) === '[[8,10]]', '현재 아이디 상자(굵은 구간 = 아이디)');
+const cur = nodes.find(n => n.t === 'box' && /^현재 아이디\n/.test(n.s));
+ok(cur && cur.s === '현재 아이디\n길동' && JSON.stringify(cur.hl) === '[[7,9]]' && cur.hc === 'gold' && cur.fill === '#1c1c1e', '현재 아이디 상자(웹 #curIdBox: 작은 글 아래 금색 굵은 아이디 두 줄)');
 const fld = nodes.find(n => n.t === 'field');
 ok(fld && fld.key === 'cid' && fld.value === '길동' && fld.maxlen === 12, '입력칸 cid · 현재 값 · 12자');
 const btns = nodes.filter(n => n.t === 'button');
-ok(btns.length === 2 && btns[0].act.v === 'saveId' && btns[1].act.v === 'clearId', '버튼: 저장 → 삭제');
+ok(btns.filter(n => n.act.v === 'saveId' || n.act.v === 'clearId').map(n => n.act.v).join() === 'saveId,clearId', '버튼: 저장 → 삭제');
+ok(btns.filter(n => n.act.v === 'sam').length === 1 && btns.find(n => n.act.v === 'sam').fill === 'gold' && btns.find(n => n.act.v === 'sam').s === '자동 절전 제외 설정 열기', '갤럭시: 웹처럼 금색 전체 폭 단추');
 const sels = nodes.filter(n => n.t === 'select');
 ok(sels.length === 2 && sels[0].on === true && sels[1].on === false && sels[0].act.v === 'dark' && sels[1].act.v === 'pastel', '테마 고르기: 다크가 선택됨');
 const navs = nodes.filter(n => n.t === 'navrow');
-const webIds = navs.filter(n => n.act.a === 'web').map(n => n.act.v).join(), callIds = navs.filter(n => n.act.a === 'call').map(n => n.act.v).join();
+const webIds = [btns.filter(n => n.act.a === 'web').map(n => n.act.v)[0]].concat(navs.filter(n => n.act.a === 'web').map(n => n.act.v)).join(), callIds = navs.filter(n => n.act.a === 'call').map(n => n.act.v).join();
 ok(webIds === 'sam,cm,gw,arr,ovl,dev', '웹 카드로 이어지는 행: ' + webIds);
 ok(callIds === 'pol.privacy,pol.location,pol.opensource,errlog', '앱 함수 호출 행: ' + callIds);
-ok(navs.find(n => n.act.v === 'errlog').sub === '3' && navs.find(n => n.act.v === 'cm').sub === '켜짐' && navs.find(n => n.act.v === 'ovl').sub === '꺼짐' && navs.find(n => n.act.v === 'sam').sub === '제한됨', '오른쪽 글: 오류 3 · 켜짐 · 꺼짐 · 제한됨');
+ok(navs.find(n => n.act.v === 'errlog').sub === '3' && navs.find(n => n.act.v === 'cm').sub === '켜짐' && navs.find(n => n.act.v === 'ovl').sub === '꺼짐', '오른쪽 글: 오류 3 · 켜짐 · 꺼짐');
+{
+  const titles = s.body.filter(n => n.t === 'panel' && n.kids[0] && n.kids[0].t === 'text').map(n => n.kids[0].s);
+  ok(titles.join() === '커뮤니티 아이디,알림 설정,갤럭시 백그라운드 유지,안내 정확도 향상,출퇴근 브리핑 알림,캐릭터 시계 위젯,하차 5분 전 추천,다른 앱 위에 표시,개발자 도구,테마 설정,약관 및 정책', '카드 순서가 웹 설정 탭과 같다(아이디 · 알림 · 갤럭시 · 정확도 · 출퇴근 · 위젯 · 하차 추천 · 오버레이 · 개발자 · 테마 · 약관): ' + titles.join());
+  ok(!s.body.some(n => n.t === 'panel' && n.kids[0] && n.kids[0].s === '기능 설정'), '한 칸짜리 \'기능 설정\' 묶음은 없다');
+}
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
 ok(!nodes.some(n => [n.s, n.title, n.sub, n.hint].some(t => t && EMOJI.test(t))), '새 화면 글에는 이모지가 없다');
 ok(JSON.stringify(E.settingsScreen({ cap: 3 }, full)) === JSON.stringify(s), '같은 입력 → 같은 출력');
@@ -59,9 +65,9 @@ const bn = all(bare);
 ok(bn.filter(n => n.t === 'toggle').map(n => n.key).join() === 'n.arrive,n.transfer,n.arrive_reco,rl', '사실이 없으면: 알림 3개(기본 켜짐) + 정확도만');
 ok(bn.filter(n => n.t === 'toggle').every(n => n.on === true), '알림·기록 기본값은 켜짐');
 ok(!bn.some(n => n.t === 'field' && n.value) && !bn.some(n => n.t === 'box'), '아이디·경고 상자 없음');
-ok(bn.filter(n => n.t === 'button').length === 1, '아이디가 없으면 삭제 버튼 없음');
+ok(bn.filter(n => n.t === 'button' && (n.act.v === 'saveId' || n.act.v === 'clearId')).length === 1, '아이디가 없으면 삭제 버튼 없음');
 ok(bn.filter(n => n.t === 'select').find(n => n.on).act.v === 'pastel', '테마 기본 = 파스텔');
-ok(!bn.some(n => n.t === 'navrow' && n.act.v === 'sam'), '갤럭시가 아니면 갤럭시 행 없음');
+ok(!bn.some(n => n.act && n.act.v === 'sam'), '갤럭시가 아니면 갤럭시 칸 없음');
 ok(bn.filter(n => n.t === 'navrow' && (n.act.v === 'cm' || n.act.v === 'ovl')).every(n => !n.sub), '모르는 상태는 오른쪽 글 없음');
 const odd = E.settingsScreen({ cap: 3 }, { id: 'x'.repeat(50), errn: -5, th: 'zzz', np: 'bad', pt: 'zz', day: 5 });
 ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한 사실은 걸러진다(아이디 12자로 자름)');
@@ -112,7 +118,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   // 입구
   ok(PG('cm', {}, 3).ok === false && PG('cm', {}, 7).ok === false, '하위 화면은 cap 8 미만이면 만들지 않는다');
   ok(PG('nope').ok === false && E.settingsScreen({ cap: 8, p: '' }, {}).screen === 'settings', '모르는 화면은 거절 · p 가 없으면 설정 첫 화면');
-  const s8 = E.settingsScreen({ cap: 8 }, full), navs8 = flat(s8.body).filter(n => n.t === 'navrow' && n.act.v && /^pg\./.test(n.act.v));
+  const s8 = E.settingsScreen({ cap: 8 }, full), navs8 = flat(s8.body).filter(n => (n.t === 'navrow' || n.t === 'button') && n.act && n.act.v && /^pg\./.test(n.act.v));
   ok(navs8.map(n => n.act.v).join() === 'pg.sam,pg.cm,pg.gw,pg.arr,pg.ovl,pg.dev', 'cap 8: 웹 카드 행이 하위 화면(pg.*)으로 이어진다 ' + navs8.map(n => n.act.v).join());
   ok(!flat(s8.body).some(n => n.act && n.act.a === 'web'), 'cap 8 에는 웹 카드 시트 행동이 남지 않는다');
   ok(flat(E.settingsScreen({ cap: 3 }, full).body).filter(n => n.act && n.act.a === 'web').length === 6, 'cap 3 은 예전 그대로(web 6개)');
@@ -203,11 +209,11 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(/arr\.demo/.test(JSON.stringify(PG('arr', {}).body)), '추천 시험(예전 웹 방식)은 미리보기 버튼이 그대로');
   }
   {
-    const navV = sc => flat(sc.body).filter(n => n.t === 'navrow' && n.act && /^pg\./.test(n.act.v)).map(n => n.act.v);
+    const navV = sc => flat(sc.body).filter(n => (n.t === 'navrow' || n.t === 'button') && n.act && /^pg\./.test(n.act.v)).map(n => n.act.v);
     const all8 = E.settingsScreen({ cap: 8 }, { sam: 1 }), some8 = E.settingsScreen({ cap: 8 }, { sam: 1, pgs: ['sam', 'ovl', 'arr'] });
     ok(['pg.cm', 'pg.gw', 'pg.arr', 'pg.ovl', 'pg.dev', 'pg.sam'].every(v => navV(all8).includes(v)), 'pgs 가 없으면 하위 화면 줄이 모두 보인다');
     ok(navV(some8).sort().join() === 'pg.arr,pg.ovl,pg.sam', 'pgs 에 든 화면 줄만 보인다: ' + navV(some8).join());
-    ok(flat(some8.body).some(n => n.t === 'navrow' && n.title === '하차 7분 전 추천 시험'), 'pgs 가 있으면 시험 줄 이름이 7분');
+    ok(flat(some8.body).some(n => n.t === 'text' && n.s === '하차 7분 전 추천') && !flat(some8.body).some(n => n.t === 'text' && n.s === '하차 5분 전 추천'), 'pgs 가 있으면 하차 추천 카드 제목이 7분');
   }
   {
     const cmT = pf => flat(PG('cm', pf).body).map(n => n.s || n.title || '').join('\n');
