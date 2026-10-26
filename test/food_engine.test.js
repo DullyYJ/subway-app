@@ -53,7 +53,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   [[37.4979, 127.0276], [37.5547, 126.9707], [37.2661, 127.0], [35.1151, 129.0422]].forEach(g => {
     let best = 1e12, near = null; T.forEach(s => { const d = hv(g[0], g[1], s[2], s[3]); if (d < best) { best = d; near = s; } });
     const r = E.foodResolve({ stn: '', gps: g, dl: null });
-    ok(r.stn === String(near[0]).replace(/역$/, '') && r.ctr[0] === near[2] && r.ctr[1] === near[3], '가까운 역: ' + g + ' → ' + r.stn);
+    ok(r.stn === String(near[0]).replace(/역$/, '') && r.ctr[0] === g[0] && r.ctr[1] === g[1], '가까운 역 이름 + 중심은 내 위치: ' + g + ' → ' + r.stn);
   });
   let r = E.foodResolve({ stn: '강남', gps: null, dl: null }); ok(r.stn === '강남' && r.ctr && r.ctr.length === 2, '도착역 이름 → 표 좌표');
   r = E.foodResolve({ stn: '없는역xyz', gps: null, dl: [37.5, 127.0] }); ok(r.stn === '없는역xyz' && r.ctr[0] === 37.5, '표에 없으면 앱이 준 도착지 좌표');
@@ -64,7 +64,8 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   const f0 = { stn: '', gps: [37.4979, 127.0276], st: 'done', flt: '전체' };
   const sc = E.foodScreen({ cap: 4 }, f0, { s: srv, u });
   ok(sc.ok && sc.info.stn === '강남' && sc.info.ctr.length === 2, '위치만으로 가까운 역 이름·중심을 정한다 ' + sc.info.stn);
-  ok(sc.head[0].sub === '강남역 인근' && places(sc.body).length === 3 + 3, '서버 3곳(중복 뺀) + 공공 3곳');
+  ok(sc.head[0].title === '🍽️ 주변 맛집' && sc.head[0].sub === '내 위치 주변' && sc.info.ctr[0] === 37.4979, '도착지 없음 → 주변 맛집 · 내 위치 주변(중심 = 내 위치)');
+  ok(places(sc.body).length === 3 + 3, '서버 3곳(중복 뺀) + 공공 3곳');
   ok(sc.info.go['c.0'] && sc.info.go['c.0'][0] === '나 나' && sc.info.go['p.0'][0] === '공공A', '눌림 번호 → 가게 사실(info.go)');
   const none = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체' }, { s: [], u: [] });
   ok(/등록 음식점 정보가 없어요/.test(JSON.stringify(none.body)), 'done + 빈 목록 → 정보 없음');
@@ -95,10 +96,13 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
 // ③ 상태별 문구 (이모지 없이 엔진이 정한다)
 {
   const txt = (st, extra) => { const o = E.foodScreen({ cap: 4 }, Object.assign({ stn: '강남', st, flt: '전체' }, extra || {}), { c: [], p: [] }); return { o, t: o.body.map(n => n.s || '').join('|'), l: o.head[0].sub }; };
-  let r = txt('idle', { stn: '' }); ok(/경로를 설정하면\n도착역 주변 맛집을 추천해드려요!/.test(r.t) && r.l === '도착역을 설정하면 맛집을 추천해드려요', '경로 없음');
+  let r = txt('idle', { stn: '' }); ok(/도착지를 설정하면 도착역 맛집을,\n없으면 내 주변 맛집을 보여드려요!/.test(r.t) && r.l === '내 위치 주변' && r.o.head[0].title === '🍽️ 주변 맛집', '도착지 없음(대기)');
+  r = txt('idle', { stn: '강남', dst: 1 }); ok(/경로를 설정하면\n도착역 주변 맛집을 추천해드려요!/.test(r.t) && r.l === '도착역을 설정하면 맛집을 추천해드려요', '도착지 있음(대기)');
   r = txt('locating', { stn: '' }); ok(/내 위치 확인 중/.test(r.t) && r.l === '위치 확인 중...', '위치 확인 중');
-  r = txt('noperm', { stn: '' }); ok(/위치 권한을 허용하거나\n경로를 설정하면/.test(r.t) && r.l === '도착역을 설정하면 맛집을 추천해드려요', '위치 권한 없음');
+  r = txt('noperm', { stn: '' }); ok(/위치 권한을 허용하면\n내 주변 맛집을 추천해드려요!/.test(r.t) && r.l === '위치 권한이 필요해요', '위치 권한 없음');
   r = txt('loading'); ok(r.t === '강남 주변 음식점 불러오는 중...' && r.l === '강남역 인근', '불러오는 중');
+  r = txt('loading', { stn: '', gps: [37.4979, 127.0276] }); ok(r.t === '내 주변 음식점 불러오는 중...' && r.l === '내 위치 주변' && r.o.head[0].title === '🍽️ 주변 맛집', '주변: 불러오는 중');
+  r = txt('none', { stn: '', gps: [37.4979, 127.0276] }); ok(r.t === '내 주변 등록 음식점 정보가 없어요', '주변: 등록 음식점 없음');
   r = txt('none'); ok(r.t === '강남역 인근 등록 음식점 정보가 없어요', '등록 음식점 없음');
   r = txt('ready'); ok(r.t === '해당 카테고리 음식점이 없습니다.' && r.l === '강남역 인근', '빈 결과');
   r = txt('ready', { fail: 1 }); ok(/맛집 정보를 불러오지 못했어요\.\n잠시 뒤 새로고침을 눌러주세요\./.test(r.t), '불러오기 실패');
@@ -119,7 +123,7 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   ok(cur[0].act.v === 'fm.c.0' && cur[4].act.v === 'fm.c.4' && cur[5].act.v === 'fm.c.5', '번호 = 앱이 보낸 배열의 원래 위치(이름 없는 항목이 있어도 밀리지 않는다)');
   ok(pub.map(p => p.act.v).join() === 'fm.p.0,fm.p.2' && pub.every(p => p.badge === '공공데이터' && p.rank === '' && !p.stars), '공공데이터: 번호 원래 위치 · 딱지 · 순위 없음');
   ok(S.body.some(n => n.t === 'divider') && S.body.some(n => n.t === 'text' && n.s === '공공데이터 · 주변 음식점 2곳'), '구분선 + 제목');
-  ok(S.head[0].t === 'bar' && S.head[0].title === '🍽️ 도착역 맛집' && S.head[0].btn === '🔄 새로고침' && S.head[0].act.a === 'refresh', '머리줄');
+  ok(S.head[0].t === 'bar' && S.head[0].title === '🍽️ 도착역 맛집' && /* 도착지 있음 */ S.head[0].btn === '🔄 새로고침' && S.head[0].act.a === 'refresh', '머리줄');
   ok(S.head[1].t === 'chips' && S.head[1].items.length === 6 && S.head[1].items[0].on && S.head[1].items.slice(1).every(c => !c.on) && S.head[1].items[2].act.v === '밥집', '칩 6개 · 켜진 칩');
   // 거르기
   const f1 = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: '카페' }, { c: C, p: P });
@@ -255,6 +259,10 @@ ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(
   const nb = pn.kids[3];
   ok(nb.t === 'row' && nb.kids[0].fill === '#03C75A' && nb.kids[0].tc === '#ffffff' && nb.kids[0].act.v === 'fm.ni' && nb.kids[1].fill === '#FEE500' && nb.kids[1].tc === '#3C1E1E' && nb.kids[1].act.v === 'fm.ki', '펼침: 네이버 초록 · 카카오 노랑 단추');
   ok(o.info.nv && o.info.nv.ninfo && o.info.nv.kinfo, '펼침: 열 주소(info.nv)');
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { dst: 0 }), {});
+  ok(o.body[0].kids[1].pts.some(p => p.k === 'a' && p.l === '내 위치') && /^🚶 내 위치 → /.test(o.body[0].kids[2].s), '펼침: 도착지 없음 → 출발 = 내 위치');
+  o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { dst: 1 }), {});
+  ok(o.body[0].kids[1].pts.some(p => p.k === 'a' && /역$/.test(p.l)) && /^🚶 .+역 → /.test(o.body[0].kids[2].s), '펼침: 도착지 있음 → 출발 = 도착역');
   o = E.foodScreens({ cap: 18 }, Object.assign({}, f0, { ctr: null, stn: '' }), {});
   ok(o.ok && o.body[0].kids[1].pts.length === 1 && o.info.need.length === 0 && o.body[0].kids[1].line === undefined, '펼침: 도착역 좌표가 없으면 가게 핀 하나만');
 }
