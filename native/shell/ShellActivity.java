@@ -3970,10 +3970,10 @@ public class ShellActivity extends Activity {
     private void rideCommit(final String txt, final int rid) {
             if (rid != home.routeId || !home.hasRoute() || home.riding()) return;                  // 그 사이 다른 경로를 찾았다
             String err = txt.length() == 0 ? "탑승 안내를 시작하지 못했어요" : ride.onStart(txt);
-            if (err.length() > 0) { toast(err); return; }
+            if (err.length() > 0) { toast(err); try { ErrLog.record(this, new IllegalStateException("RIDE_START " + err), false); } catch (Throwable ignored) { } return; }
             RideService.save(ShellActivity.this, ride);
             store.put(ShellCore.K_RIDESNAP, home.rideSnapshot());
-            try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); return; }
+            try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); try { ErrLog.record(this, t, false); } catch (Throwable ignored) { } return; }
             home.rideRouteId = rid; rideSeq = seqRoute; lostN = 0;
             rideGraceUntil = System.currentTimeMillis() + 8000L;
             home.setRide(ride.rideJson(), ride.lvJson());
