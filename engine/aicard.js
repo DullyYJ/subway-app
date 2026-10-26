@@ -105,6 +105,7 @@ function aiPara(toks, last, sub) {
 function aiTitle(f, tz) {
   var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
   var base = aiNum(f.base, aiNum(f.now, 0)), timeStr = aiClock(base, tz);
+  if (f.fz === true) return f.tk === 'preview' ? 'AI 승무원 브리핑 · 예상 ' + timeStr : 'AI 승무원 브리핑';      // 경로 통합 카드(s217): 출발·도착 이름은 위 머리줄에 이미 있다
   if (f.tk === 'preview') return (hasRoute ? from + ' → ' + to : from) + ' · 예상 · ' + timeStr;
   if (f.tk === 'brief') {
     var rem = aiNum(f.rem, 0);
@@ -155,7 +156,7 @@ function aiBriefParas(f, tz) {
   var o = {
     from: from, to: to, hour: hour, cong: aiNum(f.cong, 0), hol: f.hol === true, mins: aiMins(f, hasRoute),
     wF: f.wF || null, wT: f.wT || null, segs: Array.isArray(f.segs) ? f.segs.slice(0, 20) : null, metro: f.metro === true,
-    nt: f.nt || null, tl: f.tl || null, nowMin: aiNum(f.nowMin, 0), nowMs: now, arrMs: aiNum(f.arrMs, 0), dm: aiStr(f.dm, 200), rnd: aiNum(f.rnd, 0)
+    nt: f.nt || null, tl: f.tl || null, nowMin: aiNum(f.nowMin, 0), nowMs: now, arrMs: aiNum(f.arrMs, 0), dm: aiStr(f.dm, 200), rnd: aiNum(f.rnd, 0), compact: f.cp === true
   };
   var r = HB(o);
   return r && r.paras ? r.paras : null;
