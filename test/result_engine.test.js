@@ -240,6 +240,31 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const lv = trk(call('fast', { a: '내 위치', me: [37.5, 126.8], lv: { cur: 1, arr: [] } }));
   ok(lv && lv.mk && lv.mk.f === 1, '탑승 추적이 있으면 추적 위치가 우선');
 }
+// ⑤-2 경로 통합 카드 (s217): 환승 긴 목록 상자 → 요약 칩 줄, AI 승무원이 합쳐질 자리, 세부경로 시트 맨 위 환승 순서, '부산_부산' 이름 정리
+{
+  const XP = JSON.parse(JSON.stringify(P3));
+  XP.info.transfers = [{ kind: 'transfer', at: '광명_광명', walkMin: 3, toType: 1, toLine: '1호선', fromType: 4, fromLine: 'KTX' }, { kind: 'transfer', at: '구로', walkMin: 2, toType: 2, toLine: '77', fromType: 1, fromLine: '1호선' }];
+  XP.subPath.splice(1, 0, Object.assign(sub('부산_부산', '구로', 'KTX', 10), { trafficType: 4 }));
+  const xd = { result: { path: [XP] } };
+  const xc = (cap, extra) => E.resultScreen({ cap }, Object.assign({ data: xd, tab: 'fast', a: '부산_부산', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1 }, extra || {}));
+  const o25 = xc(25), o24 = xc(24);
+  const k25 = o25.body[0].kids, k24 = o24.body[0].kids;
+  ok(o25.ok && !k25.some(n => n.t === 'box' && /^환승 2번/.test(n.s)), '통합 카드: 환승 1~N번 긴 상자가 홈 카드에서 빠졌다');
+  ok(k24.some(n => n.t === 'box' && /^환승 2번/.test(n.s)) && !k24.some(n => n.t === 'tags' || n.slot), '옛 앱(규격 24)은 예전 모양 그대로(상자 · 칩 줄 없음 · 자리 없음)');
+  const ti = k25.findIndex(n => n.t === 'tags'), ki = k25.findIndex(n => n.t === 'trk'), si = k25.findIndex(n => n.slot === 'ai'), bi = k25.length - 1;
+  ok(ti >= 0 && ki === ti + 1, '칩 줄이 노선 타임라인 바로 위에 있다');
+  ok(si > ki && bi === si + 1 && k25[si].t === 'spacer' && k25[si].h === 0, 'AI 승무원 자리(slot)는 타임라인 아래 · 버튼 줄 위');
+  const items = k25[ti].items.map(i => i.s);
+  ok(items[0] === '환승 2회 \u00b7 40분' && items.some(x => x === 'KTX + 지하철 + 버스') && items.indexOf('광명') > 0 && items.indexOf('구로') > 0, '칩: 환승 횟수·분 / 이동 수단 / 거점 — ' + items.join('|'));
+  ok(!items.some(x => /_/.test(x)) && o25.body[0].kids[0].s !== '부산_부산 \u2192 부산_부산', "'광명_광명' 같은 겹친 이름은 한 번만");
+  ok(/부산 \u2192 두정/.test(k25[0].s) && !/부산_부산/.test(JSON.stringify(o25.body)), "머리줄·타임라인 어디에도 '부산_부산' 이 남지 않는다");
+  const det = xc(25, { view: 'detail' });
+  ok(det.ok && det.body[0].t === 'box' && /^환승 2번\n1\. 광명에서/.test(det.body[0].s) && det.body[0].s.indexOf('2. 구로에서') > 0, '세부경로 시트 맨 위에 환승 1~N번 순서');
+  ok(!(xc(24, { view: 'detail' }).body || []).some(n => n.t === 'box' && /^환승 2번/.test(n.s)), '옛 앱 세부경로 시트는 그대로');
+  const chk = screenCheck([o25, det, o24]);
+  ok(!chk.err && chk.out.every(l => l.startsWith('OK ')) && chk.out.every(l => Number(l.split(' ')[2]) === 0), '앱 검증기 통과 · 건너뛴 노드 없음 ' + (chk.err || chk.out.join('|')));
+  ok(E.resNmFix('부산_부산') === '부산' && E.resNmFix('부산역_부산') === '부산역' && E.resNmFix('서울_1호선') === '서울_1호선' && E.resNmFix('서울') === '서울', 'resNmFix');
+}
 // ⑥ 워커 내장
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
