@@ -39,7 +39,10 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     assert.ok(/RideLocal\.needsTable\(body\)[\s\S]{0,200}NetPost\.post\(ShellCore\.BASE \+ "\/ride-standby"/.test(s), '/ride-standby 는 needsTable 일 때만');
     assert.ok(/if \(resp == null\) resp = RideLocal\.step\(body\)/.test(s), '나머지는 로컬 엔진');
     const i = s.indexOf('private void fireReco');
-    assert.ok(i > 0 && !/NetPost|RecoNotify\.send\(/.test(s.slice(i, s.indexOf('private void fireAlert'))), '추천 알림을 띄울 때(탑승 후)는 서버 요청이 없다');
+    const fr = s.slice(i, s.indexOf('private void fireAlert'));
+    assert.ok(i > 0 && !/NetPost/.test(fr) && /RecoNotify\.sendCached\(/.test(fr), '추천 알림은 받아 둔 문구로 띄운다(서버 요청 없음)');
+    // s237: 받아 둔 글이 없거나 시간대가 달라진 때만(한 여정에 한 번뿐인 추천이 사라지지 않게) 바로 한 번 받는다
+    assert.ok(/if \(ok \|\| recoLive\) return;[\s\S]*RecoNotify\.send\(app, body, core\)/.test(fr), '받아 둔 문구가 없을 때만 바로 받는다');
     assert.ok(/prefetchReco\(body, resp\)/.test(s) && /RideLocal\.prefetchBody/.test(s), '추천 문구는 탑승 전에 미리 받는다');
     const n = fs.readFileSync(N('RecoNotify.java'), 'utf8');
     assert.ok(/static boolean sendCached\(/.test(n), '받아 둔 글로 알림');
