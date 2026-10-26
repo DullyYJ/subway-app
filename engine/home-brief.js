@@ -112,7 +112,9 @@ function homeBrief(o) {
         if (sg.type === 2) { tl2.push({ ln: ln ? ln + '번' : '버스' }); tl2.push(ln ? ' 버스를 타고 ' : '를 타고 '); }
         else { tl2.push({ ln: ln }); tl2.push(hbJosEul(ln) + ' 타고 '); }
         tl2.push({ stn: [sg.to, sg.line] }); tl2.push('에서 내려요.');
-        if (sg.type === 4 && sg.depClock && sg.arrClock) { tl2.push(' ('); tl2.push({ b: sg.depClock }); tl2.push(' 출발, '); tl2.push({ b: sg.arrClock }); tl2.push(' 도착)'); }
+        var sm = hbNum(sg.min, 0);
+        if (sg.type === 4 && sg.depClock && sg.arrClock) { tl2.push(' ('); tl2.push({ b: sg.depClock }); tl2.push(' 출발, '); tl2.push({ b: sg.arrClock }); tl2.push(' 도착' + (sm > 0 ? ', ' + durTxt(sm) + ' 소요' : '') + ')'); }
+        else if (sm > 0) tl2.push(' (' + durTxt(sm) + ' 소요)');             // s220: 구간마다 소요시간
         P(tl2);
       });
       if (cld >= 0) P(['승차권과 출발 시각은 한 번 더 확인해 주세요.']);
