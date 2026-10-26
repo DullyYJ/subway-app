@@ -32,7 +32,7 @@ import android.os.Vibrator;
 public class RideService extends Service {
     static final String CH_RIDE = "gdm_ride", CH_ALERT = "gdm_ride_alert";
     static final int NOTI_ID = 7101, ALERT_ID = 7102;
-    static final String ACT_START = "gdm.ride.START", ACT_STOP = "gdm.ride.STOP";
+    static final String ACT_START = "gdm.ride.START", ACT_STOP = "gdm.ride.STOP", ACT_DETOUR = "gdm.ride.DETOUR";
     static final String PREFS = "gdm_ride", KEY_SAVED = "saved";
 
     /** 서비스가 돌고 있나, 그리고 앱 화면이 읽는 가장 새 값(같은 프로세스). */
@@ -41,6 +41,7 @@ public class RideService extends Service {
     static volatile String liveRowSlot = ""; static volatile boolean liveRowCan;
     /** 서비스가 끝난 까닭 — "user"(사용자가 끝냄) · "arrive"(도착) 만 확정을 풀어도 되는 끝이다. 그 밖("engine-done" · "no-saved" · 시스템이 내림)은 뜻밖의 끝 — 앱은 확정을 풀지 않고 다시 켠다. */
     static volatile String endReason = "";
+    static volatile String liveOffStn = "";                  // s229: 이탈 때 첫 지하철역 이름(없으면 "")
     static volatile long liveOff = 0L;                       // 엔진이 알린 이탈 시작 시각(없으면 0)
     static volatile String liveRide = "", liveLv = "", liveScene = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
@@ -108,6 +109,10 @@ public class RideService extends Service {
         ErrLog.install(this);
         String act = intent == null ? null : intent.getAction();
         if (ACT_STOP.equals(act)) { finishRide("user"); return START_NOT_STICKY; }
+        if (ACT_DETOUR.equals(act)) {                              // s229: 이탈 알림의 [역까지 이동] — 안내 중일 때만(아니면 아무것도 켜지 않는다)
+            if (running && core != null && inst == this) { ovHost.act("detour"); return START_STICKY; }
+            stopSelf(); return START_NOT_STICKY;
+        }
         RideCore restored = RideCore.restore(getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_SAVED, ""), System.currentTimeMillis());
         if (restored == null) {                                   // 저장본이 없거나 너무 낡았다 — 더 이어갈 안내가 없다
             endReason = "no-saved"; try { ErrLog.record(this, new IllegalStateException("RIDE_END no-saved"), false); } catch (Throwable ignored) { }
@@ -234,7 +239,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveOff = core.offAt; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
+        liveOff = core.offAt; liveOffStn = core.offStn; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -244,7 +249,7 @@ public class RideService extends Service {
         if (ov != null) ov.hide();
         if (legit) clearSaved(this);                                                          // 사용자가 끝냈거나 도착했다 — 저장본을 지운다. 뜻밖의 끝은 남겨 두어 앱이 다시 켠다
         else { try { ErrLog.record(this, new IllegalStateException("RIDE_END " + reason), false); } catch (Throwable ignored) { } }
-        liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        liveOff = 0L; liveOffStn = ""; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();
@@ -341,6 +346,10 @@ public class RideService extends Service {
         try {
             Notification.Builder b = builder(CH_ALERT).setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(s.title).setContentText(s.body).setAutoCancel(true).setContentIntent(openIntent());
             if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH);
+            if ("offroute".equals(s.type) && core != null && core.offStn.length() > 0) {         // s229: 자차 등으로 벗어났다면 첫 지하철역까지 GPS 로 안내받는 길
+                Intent dt = new Intent(this, RideService.class).setAction(ACT_DETOUR);
+                b.addAction(new Notification.Action.Builder(android.R.drawable.ic_dialog_map, "역까지 이동", PendingIntent.getService(this, 2, dt, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build());
+            }
             ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE)).notify(ALERT_ID, b.build());
         } catch (Throwable ignored) { }
         try {
