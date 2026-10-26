@@ -167,7 +167,12 @@ function resLiveFacts(r) {
   var f = null, t = null, ratio = 0, pos = (L.pos && typeof L.pos === 'object') ? L.pos : null;
   if (pos && isFinite(Number(pos.from))) { f = Math.floor(Number(pos.from)); t = isFinite(Number(pos.to)) ? Math.floor(Number(pos.to)) : f; ratio = resNum(pos.ratio, 0); }
   else { var cur = Math.floor(resNum(L.cur, -1)); if (cur >= 1) { f = cur; t = f; } }
-  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: null, na: na.length ? na : null };
+  var w = null, wt = (L.wait && typeof L.wait === 'object') ? L.wait : null;                 // 승차 대기 중: 마커는 탑승 지점에 서서 주황 맥박 + '대기 중 · 120m'
+  if (wt && isFinite(Number(wt.i)) && Number(wt.i) >= 1) {
+    f = Math.floor(Number(wt.i)); t = f; ratio = 0;
+    w = { d: (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null };
+  }
+  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null };
 }
 // 요약 칩 줄(rhead part 'g') 사실: 총 분 · 환승 횟수 · 이동 수단 묶음(장거리 이름 → 지하철 → 버스) · 환승·거점 이름(겹치는 이름은 한 번만)
 function resTagFacts(route, hf) {
