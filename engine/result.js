@@ -23,6 +23,8 @@ if (!resTrkColor) { try { if (typeof require === 'function') resTrkColor = requi
 var resPvl = (typeof pvlPillNode === 'function') ? pvlPillNode : null;
 if (!resPvl) { try { if (typeof require === 'function') resPvl = require('./pvlabel').pvlPillNode; } catch (eRq3) {} }
 
+var resDoorLines = (typeof rheadDoorLines === 'function') ? rheadDoorLines : null;
+if (!resDoorLines) { try { if (typeof require === 'function') resDoorLines = require('./rhead').rheadDoorLines; } catch (eRq5) {} }
 var resXferBox = (typeof rheadXferBox === 'function') ? rheadXferBox : null;
 if (!resXferBox) { try { if (typeof require === 'function') resXferBox = require('./rhead').rheadXferBox; } catch (eRq4) {} }
 // 시스템 이름이 '부산_부산' 처럼 같은 말 두 번으로 오면 한 번만(s217)
@@ -254,6 +256,10 @@ function resDetailScreen(route, r, tab, cap) {
   if (cap >= RES_TAGS_CAP && resXferBox) {                          // s217: 홈 카드에서 뺀 '환승 1~N번' 순서가 여기 맨 위로 온다
     var xb = resXferBox(resArr(route.transfers).slice(0, 8).filter(function (t) { return t; }).map(function (t) { return { kind: t.kind, at: resNmFix(t.at), walkMin: t.walkMin, boardAt: resNmFix(t.boardAt), toType: t.toType, toLine: t.toLine, fromType: t.fromType, fromLine: t.fromLine, service: t.service }; }), [14, 6, 14, 10]);
     if (xb) kids.push(xb);
+    if (resDoorLines) {                                              // s219: 홈 카드 머리에서 옮겨 온 호차·문 / 빠른 하차 안내
+      var hf2 = resHeadFacts(route, r, tab), dl2 = resDoorLines(hf2.dx, hf2.ex);
+      if (dl2.length) kids.push({ t: 'box', s: '호차·문 안내\n' + dl2.join('\n'), hl: [[0, 7]], size: 12, lh: 1.55, color: 'text', fill: 'rgba(10,132,255,0.10)', line: 'rgba(10,132,255,0.35)', r: 10, ip: [10, 7, 10, 7], pad: [14, 0, 14, 10] });
+    }
   }
   route.sections.forEach(function (s, i) { if (s && s.transportation && s.transportation.type === 2) busIdx[i] = busN++; });
   route.sections.forEach(function (sec, si) {                    // 웹 세부경로 줄(.tdsec-row)과 같은 값: 색 · 아이콘 · 뱃지 · 경유 · 시간대
