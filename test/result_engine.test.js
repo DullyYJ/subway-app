@@ -245,6 +245,7 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const XP = JSON.parse(JSON.stringify(P3));
   XP.info.transfers = [{ kind: 'transfer', at: '광명_광명', walkMin: 3, toType: 1, toLine: '1호선', fromType: 4, fromLine: 'KTX' }, { kind: 'transfer', at: '구로', walkMin: 2, toType: 2, toLine: '77', fromType: 1, fromLine: '1호선' }];
   XP.subPath.splice(1, 0, Object.assign(sub('부산_부산', '구로', 'KTX', 10), { trafficType: 4 }));
+  XP.subPath.filter(q => q.trafficType === 1).forEach((q, qi, arr) => { if (qi === 0) q.xfer = { dropCar: '4', dropDoor: '2', boardCar: '5', boardDoor: '1', to: '2', secs: 90 }; if (qi === arr.length - 1) q.exitFast = [{ fac: '엘리베이터', door: '7-2' }]; });
   const xd = { result: { path: [XP] } };
   const xc = (cap, extra) => E.resultScreen({ cap }, Object.assign({ data: xd, tab: 'fast', a: '부산_부산', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1 }, extra || {}));
   const o25 = xc(25), o24 = xc(24);
@@ -260,6 +261,9 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const det = xc(25, { view: 'detail' });
   ok(det.ok && det.body[0].t === 'box' && /^환승 2번\n1\. 광명에서/.test(det.body[0].s) && det.body[0].s.indexOf('2. 구로에서') > 0, '세부경로 시트 맨 위에 환승 1~N번 순서');
   ok(!(xc(24, { view: 'detail' }).body || []).some(n => n.t === 'box' && /^환승 2번/.test(n.s)), '옛 앱 세부경로 시트는 그대로');
+  const dbx = det.body.find(n => n.t === 'box' && /^호차·문 안내/.test(n.s));
+  ok(dbx && /4호차 2번 문에서 내리면/.test(dbx.s) && /하차:/.test(dbx.s) && det.body.indexOf(dbx) === 1, 's219: 호차·문 안내가 세부경로 시트 환승 순서 바로 아래로 옮겨 왔다');
+  ok(!(xc(24, { view: 'detail' }).body || []).some(n => n.t === 'box' && /^호차·문 안내/.test(n.s)), 's219: 옛 앱 세부경로 시트에는 호차·문 상자 없음');
   const chk = screenCheck([o25, det, o24]);
   ok(!chk.err && chk.out.every(l => l.startsWith('OK ')) && chk.out.every(l => Number(l.split(' ')[2]) === 0), '앱 검증기 통과 · 건너뛴 노드 없음 ' + (chk.err || chk.out.join('|')));
   ok(E.resNmFix('부산_부산') === '부산' && E.resNmFix('부산역_부산') === '부산역' && E.resNmFix('서울_1호선') === '서울_1호선' && E.resNmFix('서울') === '서울', 'resNmFix');
