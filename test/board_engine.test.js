@@ -37,10 +37,12 @@ const ROWS = [
 ];
 const post = o => o.body.filter(n => n.t === 'post');
 const S = E.boardScreen({ cap: 6, now: NOW }, { rep: ['d'] }, ROWS);
+// ── s241 좌우 밀기(sw): 게시판은 왼쪽 = 뉴스(전체부터) · 오른쪽 = 실시간소통 (머리 탭 칩 쪽 행동) ──
+ok(S.sw && S.sw.l.v === 'cc.news' && S.sw.lh === true && S.sw.lc === '전체' && S.sw.r.v === 'cc.chat' && S.sw.rh === true, 'sw: 게시판 좌우 = 뉴스 · 실시간소통');
 
 // ── ① ③ ──
 ok(E.boardScreen({ cap: 5, now: NOW }, {}, ROWS).ok === false && E.boardScreen({}, {}, ROWS).ok === false && E.boardScreen(null, null, null).ok === false, 'cap 6 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b2:/.test(S.rev) && S.head.length === 1 && S.head[0].t === 'divider' && S.head[0].c === 'border' && S.fab && S.fab.s === '✏️ 제보 글쓰기' && S.fab.act.v === 'bd.write' && S.body[0].t === 'spacer' && S.body[0].h === 12 && S.body[S.body.length - 1].h === 72, '기본 모양 · 머리 구분선 · 떠 있는 글쓰기 단추 · 위 12/아래 72');
+ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b3:/.test(S.rev) && S.head.length === 1 && S.head[0].t === 'divider' && S.head[0].c === 'border' && S.fab && S.fab.s === '✏️ 제보 글쓰기' && S.fab.act.v === 'bd.write' && S.body[0].t === 'spacer' && S.body[0].h === 12 && S.body[S.body.length - 1].h === 72, '기본 모양 · 머리 구분선 · 떠 있는 글쓰기 단추 · 위 12/아래 72');
 {
   const ps = post(S);
   ok(ps.length === 4, '뉴스 글 3개 · 신고한 글 · 제목 없는 글을 뺀다 ' + ps.map(p => p.title).join('|'));

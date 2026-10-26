@@ -180,6 +180,8 @@ public class ScreenView extends View {
     }
     /** 다음에 오는 새 화면은 dir 쪽으로 밀어서 넘어온 것이다(dir -1 = 왼쪽으로 밀어 다음 칸 → 새 내용은 오른쪽에서 들어온다). 3초 안에 안 오면 잊는다. */
     public void slideNext(int dir) { pendSlide = dir; pendSlideAt = SystemClock.uptimeMillis(); }
+    /** 지금 그리는 화면(엔진이 준 좌우 밀기 행동 sw 를 읽을 때 쓴다). 없으면 null. */
+    public ScreenCore.Screen currentScreen() { return screen; }
     /** 머리 줄(chips)의 칩 행동들과 켜진 칸 번호(onOut[0], 없으면 -1). */
     public ScreenCore.Act[] chipActs(int[] onOut) {
         java.util.ArrayList<ScreenCore.Act> o = new java.util.ArrayList<ScreenCore.Act>();

@@ -1305,43 +1305,22 @@ public class ShellActivity extends Activity {
     // ───────────── 눌림 ─────────────
     private Host hostHead, hostBody;
     /**
-     * 커뮤니티 좌우 밀기(웹 _commSwipeStep). dir -1 = 왼쪽으로 밀어 다음 · +1 = 오른쪽으로 밀어 이전.
-     * 순서·켜진 칸은 엔진이 준 칩에서 읽는다(앱은 칩 순서대로 한 칸 옮길 뿐): 실시간소통 = 호선 칩 먼저 → 끝에서 다음 탭 · 뉴스 = 카테고리 먼저(끝에서 왼쪽은 멈춤 · 처음에서 오른쪽은 게시판) · 게시판·설정 = 탭 순서(실시간소통 → 게시판 → 뉴스 → 설정).
-     * @return 몸짓을 쓴 경우(끝에서 멈추는 것도 포함) true
+     * 좌우 밀기(웹 _commSwipeStep · 쇼핑 · 맛집). dir -1 = 왼쪽으로 밀기 · +1 = 오른쪽으로 밀기.
+     * 어디로 넘길지(다음 칩 · 끝에서 처음으로 도는지 · 다른 탭)는 전부 엔진이 화면에 담아 준 sw 다 — 앱은 그 행동을 그대로 실행하고 미끄러지는 그림만 낸다(계산 없음).
+     * @return 몸짓을 쓴 경우(넘길 곳이 없어 멈추는 것도 포함) true
      */
     private boolean commSwipe(int dir) {
-        if ("shop".equals(ShellCore.currentTab(store)) && (dir == -1 || dir == 1)) {            // 쇼핑: 카테고리 칩을 한 칸씩(양 끝에서 멈춘다)
-            int[] si = new int[1];
-            ScreenCore.Act[] cats = body.chipActs(si);
-            int sx = si[0] - dir;
-            if (si[0] >= 0 && sx >= 0 && sx < cats.length) { body.slideNext(dir); hostBody.handle(cats[sx], false); }
-            return true;
-        }
-        if ("food".equals(ShellCore.currentTab(store)) && (dir == -1 || dir == 1)) {             // 맛집: 카테고리 칩을 끝없이 돈다(YJ: 좌우 무한) — 끝에서 더 밀면 반대쪽 끝으로. 칩 화면은 칩별로 미리 받아 둔 것이라 바로 뜬다
-            int[] si = new int[1];
-            ScreenCore.Act[] cats = body.chipActs(si);
-            int n = 0; for (ScreenCore.Act c : cats) if (c != null && "cat".equals(c.a)) n++;
-            if (si[0] >= 0 && n > 1 && n == cats.length) { int sx = ((si[0] - dir) % n + n) % n; body.slideNext(dir); hostBody.handle(cats[sx], false); }
-            return true;
-        }
-        if (!"community".equals(ShellCore.currentTab(store)) || (dir != -1 && dir != 1)) return false;
-        String mode = ShellCore.mode(store);
-        boolean chat = "chat".equals(mode), news = "news".equals(mode);
-        if (chat || news) {
-            int[] oi = new int[1];
-            ScreenCore.Act[] inner = body.chipActs(oi);
-            int nx = oi[0] - dir;
-            if (oi[0] >= 0 && nx >= 0 && nx < inner.length) { body.slideNext(dir); hostBody.handle(inner[nx], false); return true; }
-            if (news && dir == -1) return true;                                  // 뉴스 마지막 카테고리에서 왼쪽: 설정으로 넘어가지 않고 멈춘다(웹)
-        }
-        int[] ti = new int[1];
-        ScreenCore.Act[] tabs = head.chipActs(ti);
-        int nx = ti[0] - dir;
-        if (ti[0] < 0 || nx < 0 || nx >= tabs.length) return true;               // 양 끝에서 멈춘다
-        ScreenCore.Act t = tabs[nx];
-        if (t.v != null && t.v.equals("cc.news")) store.put(ShellCore.K_NEWS_CAT, dir == -1 ? ShellCore.NEWS_FIRST : ShellCore.NEWS_LAST);          // 게시판 → 뉴스는 첫 카테고리부터 · 설정 → 뉴스는 마지막 카테고리 (웹)
+        String tab = ShellCore.currentTab(store);
+        if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab)) || (dir != -1 && dir != 1)) return false;
+        ScreenCore.Screen sc = body.currentScreen();
+        if (sc == null) return true;
+        ScreenCore.Act a = dir == -1 ? sc.swL : sc.swR;
+        boolean headHost = dir == -1 ? sc.swLh : sc.swRh;
+        String cat = dir == -1 ? sc.swLc : sc.swRc;
+        if (a == null) return true;                                              // 엔진이 넘길 곳을 주지 않았다 = 이 끝에서 멈춘다
+        if (cat.length() > 0) store.put(ShellCore.K_NEWS_CAT, cat);              // 뉴스로 넘어갈 때 먼저 켤 카테고리(엔진이 정함)
         body.slideNext(dir);
-        hostHead.handle(t, false);
+        (headHost ? hostHead : hostBody).handle(a, false);
         return true;
     }
     private final class Host implements ScreenView.Listener {

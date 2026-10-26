@@ -17,7 +17,7 @@
 //      newsDetail({ cap, now }, row) → { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  상세 팝업에 그대로 쓸 문구
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var NEWS_SCREEN_V = 2;
+var NEWS_SCREEN_V = 3;
 var NW_CATS = ['전체','증시','경제','사회','정치','연예','스포츠','IT'];
 var NW_QUOTE_MAX = 200;                 // 요약 노출 상한(웹 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // 받는 기사 수 상한(웹 저장소 상한과 같다)
@@ -236,6 +236,8 @@ function nwScreenOf(now, f, all) {
     body.push({ t: 'spacer', h: 72 });
   }
   var out = { ok: true, v: 1, screen: 'news', cover: 'tab', head: head, body: body, info: { cat: f.cat, n: items.length, all: all.length } };
+  var ni = NW_CATS.indexOf(f.cat);
+  if (ni >= 0) out.sw = { l: { a: 'cat', v: NW_CATS[(ni + 1) % NW_CATS.length] }, r: { a: 'cat', v: NW_CATS[(ni - 1 + NW_CATS.length) % NW_CATS.length] } };      // 좌우 밀기: 카테고리를 끝없이 돈다(IT 다음은 전체)
   out.rev = 'n' + NEWS_SCREEN_V + ':' + nwHash(JSON.stringify([head, body]));
   return out;
 }

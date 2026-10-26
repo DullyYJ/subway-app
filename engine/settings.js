@@ -151,7 +151,8 @@ function settingsScreen(inp, factsIn) {
   body.push({ t: 'spacer', h: 28 });
 
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
-  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
+  out.sw = { r: { a: 'call', v: 'cc.news' }, rh: true, rc: 'IT' };      // 좌우 밀기: 오른쪽 = 뉴스(마지막 카테고리 IT 부터 — news.js NW_CATS 의 끝) · 왼쪽 = 없음
+  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify([body, out.sw]));      // sw 도 지문에 넣는다 — 옛 화면(sw 없음)이 같은 rev 로 남지 않게
   return out;
 }
 

@@ -250,6 +250,9 @@ public final class ScreenCore {
         public String anchor = "", bg = "bg";                  // bg: 화면 바탕 색 역할(기본 bg = 페이지 바탕 · card = 카드 안에 놓이는 화면)
         public int skipped = 0, nodes = 0;
         public Node fab;                                   // 화면 아래 가운데에 떠 있는 둥근 단추(웹 .fab '제보 글쓰기')
+        public Act swL, swR;                               // 좌우 밀기(엔진이 정한다): 왼쪽으로 밀면 swL · 오른쪽으로 밀면 swR(없으면 아무 일 없음). 어디로 넘길지 계산은 엔진, 앱은 이 행동을 그대로 실행한다
+        public boolean swLh, swRh;                         // 그 행동이 머리(탭 칩) 쪽 것인가(아니면 이 화면 본문 쪽)
+        public String swLc = "", swRc = "";                // (뉴스로 넘어갈 때) 먼저 켤 카테고리 — 엔진이 정한다
         public Node fitNode;                               // 남는 세로를 채우는 장면 노드(웹 _sceneFit) — 엔진이 fit 을 켠 것만
         public List<Node> foldRows = new ArrayList<Node>();   // 작은 폰에서 오래된 것부터 접히는 실시간 대화 줄(fo 1~3)
     }
@@ -1024,6 +1027,12 @@ public final class ScreenCore {
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
         if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
+        if (m.get("sw") != null) {
+            Map<String, Object> wm = asObj(m.get("sw"), "sw");
+            sc.swL = act(wm.get("l"), false); sc.swR = act(wm.get("r"), false);
+            sc.swLh = optBool(wm, "lh", false); sc.swRh = optBool(wm, "rh", false);
+            sc.swLc = optStr(wm, "lc", "", 20); sc.swRc = optStr(wm, "rc", "", 20);
+        }
         Object fabO = m.get("fab");
         if (fabO != null) {                                                          // 떠 있는 단추: 글 · (아이콘) · 행동 — 자리·색은 앱이 웹 .fab 과 같게 그린다
             Map<String, Object> fm = asObj(fabO, "fab");

@@ -39,12 +39,21 @@ const G = [['빨간모자', '안녕하세요', NOW - 5 * MIN, 0, '2호선'], ['�
 const Rm = [['m1', NOW - 5 * MIN, '출근러', '지금 지연이에요', 'delay'], ['m2', NOW - 3 * MIN, '나', '저도요', ''], ['m3', NOW - 9 * MIN, '혼잡러', '사람 많아요', 'crowd'], ['m4', NOW - 2 * MIN, '숨김', '숨길 글', ''], ['m5', NOW, 'x', '', '']];
 const base = { sel: 'all', mine: ['2호선', '9호선'], lc: { '2호선': '#00a84d', '9호선': '#bdb092', '1호선': 'bad' }, tzo: -540, me: '나', hid: ['m4'] };
 const chat = (f, d) => E.chatScreen({ cap: 6, now: NOW }, Object.assign({}, base, f), d);
+// ── s241 좌우 밀기(sw): 호선 칩을 끝없이 돈다 — 마지막 호선에서 왼쪽으로 밀면 전체, 전체에서 오른쪽으로 밀면 마지막 호선 ──
+{
+  const labels = c => c.head.find(n => n.t === 'chips').items;
+  const all0 = chat({ sel: 'all' }, {}), its = labels(all0), last = its[its.length - 1];
+  ok(all0.sw && all0.sw.l.v === its[1].act.v && all0.sw.r.v === last.act.v && all0.sw.r.a === 'cat', 'sw: 전체에서 왼쪽 = 다음 칩 · 오른쪽 = 마지막 호선으로 돈다');
+  const lastSel = chat({ sel: last.act.v }, {});
+  ok(lastSel.sw.l.v === 'all' && lastSel.sw.r.v === its[its.length - 2].act.v, 'sw: 마지막 호선(' + last.act.v + ')에서 왼쪽으로 밀면 전체');
+  ok(!lastSel.sw.lh && !lastSel.sw.rh && !('lc' in lastSel.sw), 'sw: 본문 쪽 행동(머리 탭 아님)');
+}
 
 // ── ① ③ ──
 ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({}, base, {}).ok === false && E.chatScreen(null, null, null).ok === false, 'cap 6 미만이면 만들지 않는다');
 {
   const s = chat({}, { g: G });
-  ok(s.ok && s.v === 1 && s.screen === 'chat' && s.cover === 'tab' && s.anchor === 'bottom' && /^c2:/.test(s.rev), '기본 모양 · anchor bottom');
+  ok(s.ok && s.v === 1 && s.screen === 'chat' && s.cover === 'tab' && s.anchor === 'bottom' && /^c3:/.test(s.rev), '기본 모양 · anchor bottom');
   const chips = s.head[0].items;
   ok(chips.map(c => c.label).slice(0, 4).join() === '전체,📍 2호선,📍 9호선,1호선' && chips.length === 1 + E.CHT_KNOWN.length, '칩 순서: 전체 → 내 노선 → 나머지(웹 _chatItems)');
   ok(chips[0].on && chips.filter(c => c.on).length === 1 && chips[0].act.a === 'cat' && chips[0].act.v === 'all' && chips[1].act.v === '2호선', '고른 칩 · 행동 cat');

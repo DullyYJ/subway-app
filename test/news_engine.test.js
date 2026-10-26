@@ -63,9 +63,17 @@ const ROWS = [
   '문자열'
 ];
 const S = E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, ROWS);
+// ── s241 좌우 밀기(sw): 카테고리를 끝없이 돈다 — IT 다음은 전체 ──
+{
+  const cats = E.NW_CATS || ['전체', '증시', '경제', '사회', '정치', '연예', '스포츠', 'IT'];
+  const at = c => E.newsScreen({ cap: 5, now: NOW }, { cat: c }, ROWS).sw;
+  const lastC = cats[cats.length - 1];
+  ok(at(lastC).l.v === cats[0] && at(lastC).l.a === 'cat' && at(lastC).r.v === cats[cats.length - 2], 'sw: ' + lastC + ' 에서 왼쪽으로 밀면 ' + cats[0] + '(멈추지 않고 돈다)');
+  ok(at(cats[0]).r.v === lastC && at(cats[0]).l.v === cats[1], 'sw: 전체에서 오른쪽으로 밀면 마지막 카테고리');
+}
 const newsN = o => o.body.filter(x => x.t === 'news');
 ok(E.newsScreen({ cap: 4, now: NOW }, {}, ROWS).ok === false && E.newsScreen({}, {}, ROWS).ok === false && E.newsScreen(null, null, null).ok === false, 'cap 5 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n2:/.test(S.rev), '기본 모양');
+ok(S.ok && S.v === 1 && S.screen === 'news' && S.cover === 'tab' && /^n3:/.test(S.rev), '기본 모양');
 
 // ── ③ 거르기·골고루·3일 컷·번호 ──
 {

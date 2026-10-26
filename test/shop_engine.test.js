@@ -83,6 +83,13 @@ console.log('동등성 대조 ' + cases.length + '건');
   ok(s2.seed === s.seed, '같은 시각이면 같은 시드(카테고리 바꿔도 순서 일관)');
   const s3 = E.shopScreen({ nowMs: t, cat: '없는카테고리' }, data, null, null);
   ok(s3.cat === '추천', '없는 카테고리는 추천');
+  { // s241 좌우 밀기(sw): 양 끝에서 멈춘다(처음에서 오른쪽·끝에서 왼쪽은 없음)
+    ok(s3.sw && s3.sw.l && s3.sw.l.a === 'cat' && !s3.sw.r, 'sw: 처음 칩(추천)에서는 왼쪽 = 다음 칩 · 오른쪽 없음');
+    { const it = s.head[0].items, k2 = it.findIndex(c => c.on === false && c.act.v === c1); ok(s2.sw && s2.sw.r && s2.sw.r.v === it[k2 - 1].act.v && s2.sw.l.v === it[k2 + 1].act.v, 'sw: 가운데 칩에서 오른쪽 = 앞 칩 · 왼쪽 = 뒤 칩'); }
+    const nCats = s.head[0].items.length, lastC = s.head[0].items[nCats - 1].act.v;
+    const sl = E.shopScreen({ nowMs: t, cat: lastC }, data, null, { temp: 14, rain: 20 });
+    ok(sl.sw && !sl.sw.l && sl.sw.r, 'sw: 마지막 칩에서는 왼쪽 없음(멈춤)');
+  }
   ok(!E.shopScreen({ nowMs: t }, { WEEKDAY: [], CATS: [] }, null, null).ok, '자료 없으면 ok:false');
   const bad = JSON.parse(JSON.stringify(data)); bad.CATS[0].items[0].u = 'javascript:alert(1)'; bad.CATS[0].items[1].i = 'file:///x';
   const s4 = E.shopScreen({ nowMs: t, cat: bad.CATS[0].c }, bad, null, null);

@@ -59,6 +59,13 @@ public class ScreenJvmTest {
         ok(bad(screen(1).replace("\"cols\":2", "\"cols\":9")), "칸 수 범위 밖은 거절");
         ok(bad(screen(1).replace("\"pad\":[14,4,14,0]", "\"pad\":[14,4]")), "pad 가 4개가 아니면 거절");
         ok(bad(screen(1).replace("\"color\":\"sub\"", "\"color\":\"#ff0000\"")), "모르는 색 이름은 거절(엔진은 역할 이름만 쓴다)");
+        {   // s241 좌우 밀기 sw — 엔진이 정한 행동을 그대로 읽는다(l/r 행동 · 머리 쪽 표시 · 뉴스 카테고리)
+            ScreenCore.Screen sw = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"l\":{\"a\":\"call\",\"v\":\"cc.news\"},\"lh\":true,\"lc\":\"전체\",\"r\":{\"a\":\"cat\",\"v\":\"IT\"}}}");
+            ok(sw.swL != null && "cc.news".equals(sw.swL.v) && sw.swLh && "전체".equals(sw.swLc) && sw.swR != null && "cat".equals(sw.swR.a) && "IT".equals(sw.swR.v) && !sw.swRh && sw.swRc.length() == 0, "sw: 좌우 행동 · 머리 쪽 · 카테고리");
+            ScreenCore.Screen no = ScreenCore.load(wrapBody("{\"t\":\"spacer\",\"h\":4}"));
+            ok(no.swL == null && no.swR == null, "sw 없으면 밀어도 아무 일 없음(멈춤)");
+            ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"l\":{\"a\":\"zzz\"}}}"), "sw 행동이 엉터리면 거절");
+        }
         ScreenCore.Screen s2 = ScreenCore.load(screen(2).replace("{\"t\":\"spacer\",\"h\":10}", "{\"t\":\"hologram\",\"x\":1},{\"t\":\"spacer\",\"h\":10}"));
         ok(s2.skipped == 1 && s2.body.size() == 5, "모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다)");
         ScreenCore.Screen s3 = ScreenCore.load(screen(1).replace("https://img/a.jpg", "file:///etc/passwd"));

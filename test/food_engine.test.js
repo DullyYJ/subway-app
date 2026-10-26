@@ -17,7 +17,13 @@ const places = n => n.filter(x => x.t === 'place');
 
 // ① cap
 ok(E.foodScreen({ cap: 3 }, {}, {}).ok === false && E.foodScreen({}, {}, {}).ok === false && E.foodScreen(null, null, null).ok === false, 'cap 4 미만이면 만들지 않는다');
-ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f2:/.test(S.rev), '기본 모양');
+ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f3:/.test(S.rev), '기본 모양');
+{ // s241 좌우 밀기(sw): 카테고리를 끝없이 돈다
+  const chips = S.head.find(n => n.t === 'chips').items, lastV = chips[chips.length - 1].act.v;
+  ok(S.sw.l.v === chips[1].act.v && S.sw.r.v === lastV, 'sw: 첫 칩에서 왼쪽 = 다음 · 오른쪽 = 마지막으로 돈다');
+  const L = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: lastV }, { c: C, p: P });
+  ok(L.sw.l.v === chips[0].act.v && L.sw.r.v === chips[chips.length - 2].act.v, 'sw: 마지막 칩(' + lastV + ')에서 왼쪽 = 처음으로 돈다');
+}
 
 // ② 분류 = 웹 _foodKind (index.html 에서 함수를 꺼내 같은 표본을 넣어 본다)
 {

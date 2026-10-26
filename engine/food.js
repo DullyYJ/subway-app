@@ -15,7 +15,7 @@
 //        가게를 누르면 앱이 보냈던 목록의 그 번호 가게를 지도 시트로 연다(번호 = 앱이 보낸 배열의 원래 위치).
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var FOOD_SCREEN_V = 2;
+var FOOD_SCREEN_V = 3;
 var FOOD_CHIPS = ['전체', '카페', '밥집', '육식', '회집', '주점'];
 var FOOD_CHIP_EMOJI = { '카페': '☕', '밥집': '🍚', '육식': '🍖', '회집': '🍣', '주점': '🍺' };     // 웹 .food-chip 앞 그림
 var FOOD_MAX_SHOW = 150;          // 위·아래 목록 각각 최대 개수(웹과 같다)
@@ -200,6 +200,8 @@ function foodScreenOf(f, all, allP) {
     body.push({ t: 'spacer', h: 80 });
   }
   var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
+  var fi = FOOD_CHIPS.indexOf(f.flt);
+  if (fi >= 0 && FOOD_CHIPS.length > 1) out.sw = { l: { a: 'cat', v: FOOD_CHIPS[(fi + 1) % FOOD_CHIPS.length] }, r: { a: 'cat', v: FOOD_CHIPS[(fi - 1 + FOOD_CHIPS.length) % FOOD_CHIPS.length] } };      // 좌우 밀기: 카테고리를 끝없이 돈다
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
 }

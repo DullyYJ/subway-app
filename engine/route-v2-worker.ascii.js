@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s241";
+var ENGINE_VERSION = "route-v2-2026-10-27s242";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13022,9 +13022,14 @@ function shopScreen(inp, data, cfg, wx) {
     cards.push(c);
   });
   var chipsNode = { t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips };
+  var si = -1; chips.forEach(function (c, k) { if (c.on) si = k; });
+  var sw = {};
+  if (si >= 0 && si + 1 < chips.length) sw.l = chips[si + 1].act;           // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ud55c \uce78\uc529(\uc591 \ub05d\uc5d0\uc11c \uba48\ucd98\ub2e4)
+  if (si > 0) sw.r = chips[si - 1].act;
   var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
-    rev: pick.seed + ':' + cat + ':' + cards.length,
+    rev: pick.seed + ':' + cat + ':' + cards.length + ':s',
+    sw: sw,
     head: [chipsNode],
     body: [
       { t: 'grid', cols: 2, gap: 8, pad: [14, 4, 14, 0], items: cards },
@@ -13285,7 +13290,8 @@ function settingsScreen(inp, factsIn) {
   body.push({ t: 'spacer', h: 28 });
 
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
-  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
+  out.sw = { r: { a: 'call', v: 'cc.news' }, rh: true, rc: 'IT' };      // \uc88c\uc6b0 \ubc00\uae30: \uc624\ub978\ucabd = \ub274\uc2a4(\ub9c8\uc9c0\ub9c9 \uce74\ud14c\uace0\ub9ac IT \ubd80\ud130 \u2014 news.js NW_CATS \uc758 \ub05d) \u00b7 \uc67c\ucabd = \uc5c6\uc74c
+  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify([body, out.sw]));      // sw \ub3c4 \uc9c0\ubb38\uc5d0 \ub123\ub294\ub2e4 \u2014 \uc61b \ud654\uba74(sw \uc5c6\uc74c)\uc774 \uac19\uc740 rev \ub85c \ub0a8\uc9c0 \uc54a\uac8c
   return out;
 }
 
@@ -13755,7 +13761,7 @@ async function handleScreenSettings(request) {
 //        \uac00\uac8c\ub97c \ub204\ub974\uba74 \uc571\uc774 \ubcf4\ub0c8\ub358 \ubaa9\ub85d\uc758 \uadf8 \ubc88\ud638 \uac00\uac8c\ub97c \uc9c0\ub3c4 \uc2dc\ud2b8\ub85c \uc5f0\ub2e4(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58).
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var FOOD_SCREEN_V = 2;
+var FOOD_SCREEN_V = 3;
 var FOOD_CHIPS = ['\uc804\uccb4', '\uce74\ud398', '\ubc25\uc9d1', '\uc721\uc2dd', '\ud68c\uc9d1', '\uc8fc\uc810'];
 var FOOD_CHIP_EMOJI = { '\uce74\ud398': '\u2615', '\ubc25\uc9d1': '\ud83c\udf5a', '\uc721\uc2dd': '\ud83c\udf56', '\ud68c\uc9d1': '\ud83c\udf63', '\uc8fc\uc810': '\ud83c\udf7a' };     // \uc6f9 .food-chip \uc55e \uadf8\ub9bc
 var FOOD_MAX_SHOW = 150;          // \uc704\u00b7\uc544\ub798 \ubaa9\ub85d \uac01\uac01 \ucd5c\ub300 \uac1c\uc218(\uc6f9\uacfc \uac19\ub2e4)
@@ -13940,6 +13946,8 @@ function foodScreenOf(f, all, allP) {
     body.push({ t: 'spacer', h: 80 });
   }
   var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
+  var fi = FOOD_CHIPS.indexOf(f.flt);
+  if (fi >= 0 && FOOD_CHIPS.length > 1) out.sw = { l: { a: 'cat', v: FOOD_CHIPS[(fi + 1) % FOOD_CHIPS.length] }, r: { a: 'cat', v: FOOD_CHIPS[(fi - 1 + FOOD_CHIPS.length) % FOOD_CHIPS.length] } };      // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
 }
@@ -14324,7 +14332,7 @@ async function handleSuggest(request, env, ctx) {
 //      newsDetail({ cap, now }, row) \u2192 { ok, v:1, detail:{ cat, title, meta, desc, empty, src, notice, btn } }  \uc0c1\uc138 \ud31d\uc5c5\uc5d0 \uadf8\ub300\ub85c \uc4f8 \ubb38\uad6c
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var NEWS_SCREEN_V = 2;
+var NEWS_SCREEN_V = 3;
 var NW_CATS = ['\uc804\uccb4','\uc99d\uc2dc','\uacbd\uc81c','\uc0ac\ud68c','\uc815\uce58','\uc5f0\uc608','\uc2a4\ud3ec\uce20','IT'];
 var NW_QUOTE_MAX = 200;                 // \uc694\uc57d \ub178\ucd9c \uc0c1\ud55c(\uc6f9 _NEWS_POLICY.quoteMaxChars)
 var NW_MAX_IN = 1200;                   // \ubc1b\ub294 \uae30\uc0ac \uc218 \uc0c1\ud55c(\uc6f9 \uc800\uc7a5\uc18c \uc0c1\ud55c\uacfc \uac19\ub2e4)
@@ -14543,6 +14551,8 @@ function nwScreenOf(now, f, all) {
     body.push({ t: 'spacer', h: 72 });
   }
   var out = { ok: true, v: 1, screen: 'news', cover: 'tab', head: head, body: body, info: { cat: f.cat, n: items.length, all: all.length } };
+  var ni = NW_CATS.indexOf(f.cat);
+  if (ni >= 0) out.sw = { l: { a: 'cat', v: NW_CATS[(ni + 1) % NW_CATS.length] }, r: { a: 'cat', v: NW_CATS[(ni - 1 + NW_CATS.length) % NW_CATS.length] } };      // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4(IT \ub2e4\uc74c\uc740 \uc804\uccb4)
   out.rev = 'n' + NEWS_SCREEN_V + ':' + nwHash(JSON.stringify([head, body]));
   return out;
 }
@@ -14643,7 +14653,7 @@ async function handleScreenNews(request) {
 //        \ud589\ub3d9 \uc774\ub984(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58): bd.lk.<i> \uc88b\uc544\uc694 \u00b7 bd.lo.<i> \u314b\u314b \u00b7 bd.sd.<i> \u3160\u3160 \u00b7 bd.dl.<i> \uc0ad\uc81c \u00b7 bd.rp.<i> \uc2e0\uace0 \u00b7 bd.cm.<i> \ub313\uae00 \ub4f1\ub85d \u00b7 bd.more \ub354 \ubcf4\uae30 \u00b7 bd.write \uae00\uc4f0\uae30
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var BOARD_SCREEN_V = 2;
+var BOARD_SCREEN_V = 3;
 var BRD_SHOW0 = 30, BRD_SHOW_MAX = 300, BRD_MAX_IN = 400, BRD_MAX_CMT = 60, BRD_MAX_REPLY = 10;
 var BRD_CAT_COLOR = { '\ub274\uc2a4': '#0a84ff', '\uc77c\uc0c1': '#34c759', '\uc9c0\uc5f0': '#ff9f0a', '\ud63c\uc7a1': '#ff6b35', '\uc815\ubcf4': '#5e5ce6', '\uc81c\ubcf4': '#ff375f' };   // \uc6f9 _renderPost \uc758 CAT_COLOR \uc640 \uac19\ub2e4
 var BRD_OTHER_COLOR = '#8e8e93';
@@ -14803,6 +14813,7 @@ function boardScreen(inp, factsIn, rowsIn) {
     body.push({ t: 'spacer', h: 72 });                                    // \uc6f9 .comm-scroll \uc544\ub798 \uc5ec\ubc31 72
   }
   var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, fab: { s: '\u270f\ufe0f \uc81c\ubcf4 \uae00\uc4f0\uae30', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', act: { a: 'call', v: 'bd.write' } }, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
+  out.sw = { l: { a: 'call', v: 'cc.news' }, lh: true, lc: '\uc804\uccb4', r: { a: 'call', v: 'cc.chat' }, rh: true };      // \uc88c\uc6b0 \ubc00\uae30: \uc67c\ucabd = \ub274\uc2a4(\uccab \uce74\ud14c\uace0\ub9ac \uc804\uccb4\ubd80\ud130) \u00b7 \uc624\ub978\ucabd = \uc2e4\uc2dc\uac04\uc18c\ud1b5
   out.rev = 'b' + BOARD_SCREEN_V + ':' + brdHash(JSON.stringify([head, body]));
   return out;
 }
@@ -14847,7 +14858,7 @@ async function handleScreenBoard(request) {
 //        \ud589\ub3d9 \uc774\ub984: ch.send \ubcf4\ub0b4\uae30 \u00b7 ch.x.<\ubc88\ud638> \ub178\uc120 \ubc29 \uae00 \uc2e0\uace0(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 r \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58 \u00b7 act.id = \uadf8 \uae00\uc758 \uace0\uc720 id \u2014 \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \uc4f4\ub2e4) \u00b7 \uce69\uc740 {a:'cat', v:\ub178\uc120|'all'}
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
-var CHAT_SCREEN_V = 2;
+var CHAT_SCREEN_V = 3;
 var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // \ub178\uc120 \uc0c9\uc740 \ud0c0\uc784\ub77c\uc778(rhead)\uacfc \uac19\uc740 \ud45c\ub97c \uc4f4\ub2e4. Node \uc2dc\ud5d8\uc5d0\uc11c\ub294 \uc544\ub798\uc5d0\uc11c \ubd88\ub7ec\uc628\ub2e4.
 if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 \uc218 \uc788\ub294 '\ub2e4\ub978 \ubc29' \uc218 \uc0c1\ud55c(\uc804\uccb4 + \ud638\uc120 18\uac1c)
@@ -15012,6 +15023,8 @@ function chatScreen(inp, factsIn, dataIn) {
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // \uc6f9 .chat-inputbar: \uc785\ub825 37 + \ud30c\ub780 \ub3d9\uadf8\ub77c\ubbf8 \u27a4 38 \u00b7 \uc704 1px \uc904 + \uc704\uc544\ub798 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
+  var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
+  if (chips.length > 1 && ci >= 0) out.sw = { l: chips[(ci + 1) % chips.length].act, r: chips[(ci - 1 + chips.length) % chips.length].act };      // \uc88c\uc6b0 \ubc00\uae30: \ud638\uc120 \uce69\uc744 \ub05d\uc5c6\uc774 \ub3c8\ub2e4(\ub9c8\uc9c0\ub9c9 \ud638\uc120 \u2192 \uc804\uccb4 \u2192 \u2026 \ucc98\uc74c\uc758 \uc624\ub978\ucabd \ubc00\uae30\ub294 \ub9c8\uc9c0\ub9c9 \ud638\uc120)
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }

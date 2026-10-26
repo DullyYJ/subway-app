@@ -632,18 +632,20 @@ function findAndroidJar() {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /Math\.abs\(sdx\) >= SW_MIN_DP \* dpr/.test(sv) && /ay9 > SW_OFF_DP \* dpr && ay9 > ax9/.test(sv), '웹 판정값: 32px 넘게 밀면 넘김 · 세로로 80px 넘게 벗어나면 스크롤로 되돌린다');
     assert.ok(/adx > ady \* SW_LOCK_SW && swCan\) \{ mode = 9;/.test(sv) && /else if \(mode == 9\) \{ swOx = swShift;/.test(sv) && /if \(mode == 9\) \{/.test(sv) && !/\(mode == 3 \|\| mode == 1\) && !fabDown/.test(sv), 's200: 가로로 먼저 움직이면 가로로 잠가(mode 9) 세로 스크롤을 멈춘다 — 비스듬히 밀어도 목록이 위아래로 흔들리지 않는다 · 스크롤 중에는 넘김이 안 된다');
-    assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /oi\[0\] - dir/.test(a) && /ti\[0\] - dir/.test(a) && /canSwipe\(\) \{ String ct = ShellCore\.currentTab\(store\); return "community"\.equals\(ct\) \|\| "shop"\.equals\(ct\)/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
+    assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /dir == -1 \? sc\.swL : sc\.swR/.test(a) && /canSwipe\(\) \{ String ct = ShellCore\.currentTab\(store\); return "community"\.equals\(ct\) \|\| "shop"\.equals\(ct\)/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
     assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_FIELD \|\| pressed\.kind == ScreenCore\.K_INBAR/.test(sv) && !/pressed\.kind == ScreenCore\.K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '칩 줄 · 가로 영역 · 입력칸에서 시작한 몸짓은 무시(s236: 단추 위에서 시작해도 밀린다)');
     assert.ok(/SLIDE_DP = 56f/.test(sv) && /SLIDE_MS = 380L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
-    assert.ok(/private boolean commSwipe\(int dir\)/.test(a) && /body\.chipActs\(oi\)/.test(a) && /head\.chipActs\(ti\)/.test(a) && /news && dir == -1\) return true/.test(a) && /ShellCore\.NEWS_FIRST : ShellCore\.NEWS_LAST/.test(a), '실시간소통·뉴스는 안쪽 칩 먼저 · 뉴스 끝에서 왼쪽은 멈춤 · 뉴스로 들어올 때 첫/마지막 카테고리');
-    assert.ok(/"shop"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /si\[0\] - dir/.test(a) && /sx < cats\.length\) \{ body\.slideNext\(dir\); hostBody\.handle\(cats\[sx\], false\)/.test(a), 's224: 쇼핑 탭도 좌우 밀기 — 카테고리 칩을 한 칸씩 · 양 끝에서 멈춤');
+    { const m = /private boolean commSwipe\(int dir\) \{[\s\S]*?\n    \}\n/.exec(a)[0];
+      assert.ok(/body\.currentScreen\(\)/.test(m) && /dir == -1 \? sc\.swL : sc\.swR/.test(m) && /if \(a == null\) return true;/.test(m) && /body\.slideNext\(dir\)/.test(m) && /\(headHost \? hostHead : hostBody\)\.handle\(a, false\)/.test(m) && /K_NEWS_CAT, cat/.test(m),
+        's241: 좌우 밀기는 엔진이 화면에 담은 sw(swL/swR)를 그대로 실행한다 — 넘길 곳이 없으면 멈춤');
+      assert.ok(!/chipActs|% n|\+ n\) % n|NEWS_FIRST|NEWS_LAST|\.equals\("chat"\)|\.equals\("news"\)/.test(m), '앱은 칩 순서·끝에서 도는 것·뉴스 카테고리를 계산하지 않는다(계산은 엔진)');
+      const sv2 = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+      assert.ok(/public Act swL, swR;/.test(sv2) && /m\.get\("sw"\)/.test(sv2) && /sc\.swLc = optStr\(wm, "lc"/.test(sv2), '화면 규격 sw: l · r 행동 · lh/rh(머리 쪽) · lc/rc(뉴스 카테고리)'); }
     assert.ok(/followChip = true;/.test(sv) && /private void followOnChip\(\)/.test(sv) && /if \(followChip\) followOnChip\(\);/.test(sv) && /if \(!followChip\) scrollX = 0f/.test(sv) && /flingX\.startScroll\(Math\.round\(scrollX \* dpr\)/.test(sv), 's224: 밀어서 카테고리가 바뀌면 위 칩 줄이 켜진 칩을 가운데로 따라간다(부드럽게 0.26초 · 처음으로 튀지 않음)');
     assert.ok(/mkBack/.test(sv) && /back > 0\.01f && back <= Math\.max\(24f, Math\.abs\(k\.x1 - k\.x0\)\) \* 0\.5f && \+\+mkBack < 3\) return;/.test(sv) && /mkBack = 0;/.test(sv), 's225: 마커 역주행 가드 — 역에 서 있을 때 GPS 흔들림으로 되돌아가는 작은 값(반 구간 이하)은 두 번까지 무시, 세 번 이어지면 받아들인다');
     { const np = fs.readFileSync(N('NetPost.java'), 'utf8'), ga = fs.readFileSync(N('GdmApp.java'), 'utf8'), wc = fs.readFileSync(N('WidgetCore.java'), 'utf8');
       assert.ok(/setRequestProperty\("X-Gdm-Id", id\)/.test(np) && /public static volatile String iid/.test(np) && /NetPost\.iid = loadIid\(app\)/.test(ga) && /UUID\.randomUUID\(\)\.toString\(\)\.replace\("-", ""\)/.test(ga) && /X-Gdm-Id/.test(wc), 's226: 요청마다 설치 때 만든 무작위 기기 번호(X-Gdm-Id)를 싣는다 — 공유 IP 의 다른 사용자와 한도가 섞이지 않게');
       assert.ok(/retryable\(r\.status, r\.retryS\)/.test(np) && /code == 429 \|\| code == 503/.test(np) && /sendOnce\(method, url, body, timeoutMs, etag\)/.test(np), 's226: 429 · 503(Retry-After 3초 이하)이면 사용자는 모르게 한 번만 다시 보낸다'); }
-    const nw = fs.readFileSync(path.join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nw)[1].split(',').map(x => x.replace(/['\s]/g, ''));
-    assert.ok(sc.indexOf('NEWS_FIRST = "' + cats[0] + '", NEWS_LAST = "' + cats[cats.length - 1] + '"') > 0, '뉴스 처음·마지막 카테고리 이름이 엔진 목록과 같다');
   });
   await t('s200: 버스 정류장이 다른 탭을 다녀와야 나오던 일 — 엔진과 주고받는 바퀴 한도(3)가 이웃·바꾼 ID·방면으로 길어진 체인보다 짧아 마지막 그림을 버렸다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
@@ -741,7 +743,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/CHAT_BG_MS = 20000L/.test(a) && /private void chatBgSweep\(\)/.test(a) && /chatSels = new ArrayList<String>\(sels\)/.test(a) && /chatBgStart\(\); setupResume/.test(a) && /removeCallbacks\(chatBg\)/.test(a), '모든 방 20초 주기 갱신(켤 때 방 목록 · onResume 시작 · 끝낼 때 정리)');
     assert.ok(/if \(chatShown && sel\.equals\(liveSel\)\) continue;/.test(a) && /cacheAge\(key\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(pfChatB\)/.test(a) && /warm\(txt\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 미리 읽기');
-    assert.ok(/"food"\.equals\(ShellCore\.currentTab\(store\)\) && \(dir == -1 \|\| dir == 1\)/.test(a) && /\(si\[0\] - dir\) % n \+ n\) % n/.test(a) && /"food"\.equals\(ct\)/.test(a), '맛집 탭: 좌우 밀기 = 카테고리 칩 끝없이(끝에서 반대쪽 끝으로)');
+    assert.ok(/"food"\.equals\(tab\)/.test(a) && /"food"\.equals\(ct\)/.test(a) && !/\(si\[0\] - dir\) % n/.test(a), '맛집 탭: 좌우 밀기 = 엔진이 준 sw(카테고리 칩 끝없이 · 끝에서 반대쪽 끝으로) — 앱은 계산하지 않는다(food_engine 시험이 도는 것을 확인)');
   });
   await t('s237: 경고 테두리는 카드 모양을 그대로 두고 빛만 둘레를 따라 달린다 · 추천 버튼 글은 엔진 값 · 앱 종료 줄 3분/자동 종료 5분은 엔진 · 추천은 받아 둔 글이 없으면 바로 받는다', () => {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), ov = fs.readFileSync(N('OvCore.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');

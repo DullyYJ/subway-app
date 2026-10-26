@@ -20,6 +20,11 @@ ok(E.settingsScreen({}, full).ok === false && E.settingsScreen({ cap: 2 }, full)
 const s = E.settingsScreen({ cap: 3 }, full);
 ok(s.ok && s.v === 1 && s.screen === 'settings' && s.cover === 'tab' && Array.isArray(s.head) && s.head.length === 1 && s.head[0].t === 'divider', '기본 모양: v1 · settings · cover=tab · head 는 아래 구분선뿐');
 ok(/^s2:[0-9a-z]+$/.test(s.rev), 'rev 형식 ' + s.rev);
+// ── s241 좌우 밀기(sw): 설정에서 오른쪽 = 뉴스(마지막 카테고리부터) · 왼쪽 = 없음. 마지막 카테고리 이름은 news.js 의 NW_CATS 끝과 같다 ──
+{
+  const nwSrc = require('fs').readFileSync(require('path').join(__dirname, '..', 'engine', 'news.js'), 'utf8'), cats = /var NW_CATS = \[([^\]]*)\]/.exec(nwSrc)[1].split(',').map(x => x.replace(/['\s]/g, ''));
+  ok(s.sw && s.sw.r.v === 'cc.news' && s.sw.rh === true && s.sw.rc === cats[cats.length - 1] && !s.sw.l, 'sw: 설정 오른쪽 = 뉴스(' + cats[cats.length - 1] + ' 부터) · 왼쪽 없음');
+}
 
 // ② 내용
 const nodes = all(s), toggles = nodes.filter(n => n.t === 'toggle');

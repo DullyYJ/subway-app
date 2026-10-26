@@ -19,7 +19,7 @@
 //        행동 이름(번호 = 앱이 보낸 배열의 원래 위치): bd.lk.<i> 좋아요 · bd.lo.<i> ㅋㅋ · bd.sd.<i> ㅠㅠ · bd.dl.<i> 삭제 · bd.rp.<i> 신고 · bd.cm.<i> 댓글 등록 · bd.more 더 보기 · bd.write 글쓰기
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var BOARD_SCREEN_V = 2;
+var BOARD_SCREEN_V = 3;
 var BRD_SHOW0 = 30, BRD_SHOW_MAX = 300, BRD_MAX_IN = 400, BRD_MAX_CMT = 60, BRD_MAX_REPLY = 10;
 var BRD_CAT_COLOR = { '뉴스': '#0a84ff', '일상': '#34c759', '지연': '#ff9f0a', '혼잡': '#ff6b35', '정보': '#5e5ce6', '제보': '#ff375f' };   // 웹 _renderPost 의 CAT_COLOR 와 같다
 var BRD_OTHER_COLOR = '#8e8e93';
@@ -179,6 +179,7 @@ function boardScreen(inp, factsIn, rowsIn) {
     body.push({ t: 'spacer', h: 72 });                                    // 웹 .comm-scroll 아래 여백 72
   }
   var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, fab: { s: '✏️ 제보 글쓰기', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', act: { a: 'call', v: 'bd.write' } }, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
+  out.sw = { l: { a: 'call', v: 'cc.news' }, lh: true, lc: '전체', r: { a: 'call', v: 'cc.chat' }, rh: true };      // 좌우 밀기: 왼쪽 = 뉴스(첫 카테고리 전체부터) · 오른쪽 = 실시간소통
   out.rev = 'b' + BOARD_SCREEN_V + ':' + brdHash(JSON.stringify([head, body]));
   return out;
 }

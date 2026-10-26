@@ -17,7 +17,7 @@
 //        행동 이름: ch.send 보내기 · ch.x.<번호> 노선 방 글 신고(번호 = 앱이 보낸 r 배열의 원래 위치 · act.id = 그 글의 고유 id — 새 앱은 id 를 먼저 쓴다) · 칩은 {a:'cat', v:노선|'all'}
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var CHAT_SCREEN_V = 2;
+var CHAT_SCREEN_V = 3;
 var chtTrkColor = (typeof rheadTrkColor === 'function') ? rheadTrkColor : null;      // 노선 색은 타임라인(rhead)과 같은 표를 쓴다. Node 시험에서는 아래에서 불러온다.
 if (!chtTrkColor) { try { if (typeof require === 'function') chtTrkColor = require('./rhead').rheadTrkColor; } catch (eRq) {} }
 var CHT_ALTS_MAX = 24;                // 한 요청에 실을 수 있는 '다른 방' 수 상한(전체 + 호선 18개)
@@ -182,6 +182,8 @@ function chatScreen(inp, factsIn, dataIn) {
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // 웹 .chat-inputbar: 입력 37 + 파란 동그라미 ➤ 38 · 위 1px 줄 + 위아래 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
+  var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
+  if (chips.length > 1 && ci >= 0) out.sw = { l: chips[(ci + 1) % chips.length].act, r: chips[(ci - 1 + chips.length) % chips.length].act };      // 좌우 밀기: 호선 칩을 끝없이 돈다(마지막 호선 → 전체 → … 처음의 오른쪽 밀기는 마지막 호선)
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }
