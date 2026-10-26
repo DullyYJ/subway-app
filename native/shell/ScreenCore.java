@@ -184,6 +184,7 @@ public final class ScreenCore {
     /** 노드 하나(chips·grid·text·button·spacer) 또는 그 안의 항목(chip·card). */
     public static final class Node {
         public String t = "";
+        public String sc2 = "";                          // panel: 옆으로 밀면 보이는 두 번째 쪽(지하철 객실 장면)의 엔진 글(JSON). 없으면 한 쪽짜리 카드
         public float padL, padT, padR, padB;
         public float gap = 6f, h = 0f, size = 12f, lh = 1.35f, alpha = 1f;
         public int cols = 2, maxLines = 0;
@@ -493,6 +494,7 @@ public final class ScreenCore {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border"); n.r = optNum(m, "r", 14f, 0f, 40f);
             n.glow = optBool(m, "glow", false);
+            n.sc2 = optStr(m, "sc2", "", SCENE_MAX); if (n.sc2.length() >= SCENE_MAX) n.sc2 = "";
             n.lbw = optNum(m, "lb", 0f, 0f, 12f); n.lbc = roleOrCss(m, "lc", "gold"); if (n.lbc.length() == 0) n.lbc = "gold";       // 왼쪽 굵은 띠(웹 border-left)
             for (Object ko : asArr(m.get("kids"), "panel.kids")) {
                 Map<String, Object> km = asObj(ko, "panel 안 노드");
@@ -1120,6 +1122,7 @@ public final class ScreenCore {
         public boolean top;                          // 줄 위에 가는 선
         public Col[] prevC = new Col[0];
         public String key = "", value = "";
+        public String sc2 = ""; public int pgN;      // 쪽 넘기는 카드(panel): 두 번째 쪽 장면 글 · 이 카드 안에 들어 있는 뒤따르는 칸 수(본문 목록에서 바로 뒤 pgN 개)
         public String rol = "", rod = "";             // 정류장 카드: 순서 바꾸기 줄 글(첫 주변 카드에만)
         public String lmt = "";                       // 정류장 카드: 이름 옆 방향 글 '(○○역 방향)'
         public float lx, ly, lh;                      // 정류장 카드: 방향 글(lmt)의 왼쪽 · 위쪽 · 줄 높이
@@ -1990,7 +1993,7 @@ public final class ScreenCore {
             Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = n.r;
             pn.fill = col(n.fill, null); pn.line = col(n.line, null); pn.sw = n.lbw; if (n.lbw > 0f) pn.ac = col(n.lbc, new Col("gold", 0));
             pn.pub = n.glow;
-            out.add(pn);
+            out.add(pn); final int pg0 = out.size();
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
             Item sbox = null; float sy0 = 0f;
             for (Node k : n.kids) {
@@ -2004,6 +2007,7 @@ public final class ScreenCore {
             }
             if (sbox != null) { sbox.h = cy - sy0; cy += SUG_BOX_GAP; }
             pn.h = (cy + n.ipB + 1f) - y;
+            if (n.sc2.length() > 0) { pn.sc2 = n.sc2; pn.pgN = out.size() - pg0; }          // 두 쪽 카드: 첫 쪽(원래 칸들)은 pgN 개, 두 번째 쪽은 장면 — 앱은 둘을 가로로 밀어 넘기기만 한다
             return y + pn.h + n.padB;
         }
         if ("toggle".equals(n.t)) {
