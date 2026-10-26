@@ -75,6 +75,7 @@ public final class NetPost {
     // 버스 서버(gildongmu-bus)는 키 1개, route-v2 의 /bus-tago 는 키 2개를 번갈아 쓴다. 정류장을 번호 짝·홀로 나눠 서로 다른 길로 먼저 보내면(반반) 같은 키에 몰리지 않아 오류가 줄고 빠르다.
     // 정류장 목록처럼 하나뿐인 요청은 두 길에 동시에 보내(hedge) 먼저 온 정상 본문을 쓴다. route-v2 쪽이 아직 없거나(404) 막혀 있으면 이번 실행 동안 그 길을 끄고 예전처럼 버스 서버만 쓴다.
     private static volatile boolean altOff = false;
+    static final long HEDGE_LATE_MS = 1500L;
     private static final java.util.concurrent.Semaphore ALT_GATE = new java.util.concurrent.Semaphore(4);     // 두 번째 길은 자기 줄을 따로 쓴다 — 두 길이 동시에 4곳씩, 모두 8곳이 한꺼번에
     public static boolean altEnabled() { return !altOff; }
     public static void altReset() { altOff = false; }
@@ -86,23 +87,37 @@ public final class NetPost {
         if (isAlt && (r.status == 404 || r.status == 403 || r.status == 405)) altOff = true;
         return r;
     }
-    private static Res race(final String a, final String b, final double ms) {
+    private static Res race(final String a, final String b, final double ms) { return race(a, false, b, true, ms, 0L); }
+    /** 두 길로 받는다. lateMs > 0 이면 두 번째 길은 그만큼(ms) 기다려도 첫 길이 정상 본문을 못 줬을 때만 시작한다(느린 망에서 첫 요청이 멎어도 5초를 기다리지 않게 · 평소엔 요청이 늘지 않는다). */
+    private static Res race(final String a, final boolean aAlt, final String b, final boolean bAlt, final double ms, final long lateMs) {
         final Res[] out = new Res[2]; final Object lock = new Object();
         for (int i = 0; i < 2; i++) {
             final int k = i;
             Thread t = new Thread(new Runnable() { @Override public void run() {
-                Res r = once(k == 0 ? a : b, ms, k == 1);
+                if (k == 1 && lateMs > 0L) {
+                    long until = System.currentTimeMillis() + lateMs;
+                    synchronized (lock) {
+                        while (true) {
+                            Res f = out[0];
+                            if (f != null && f.status == 200 && !busBodyBad(f.body)) { out[1] = new Res(-1, "", "skipped"); lock.notifyAll(); return; }
+                            long left = until - System.currentTimeMillis();
+                            if (f != null || left <= 0) break;
+                            try { lock.wait(left); } catch (InterruptedException ie) { return; }
+                        }
+                    }
+                }
+                Res r = once(k == 0 ? a : b, ms, k == 0 ? aAlt : bAlt);
                 synchronized (lock) { out[k] = r; lock.notifyAll(); }
             } }, "bus-race"); t.setDaemon(true); t.start();
         }
-        long end = System.currentTimeMillis() + (long) ms + 1500L;
+        long end = System.currentTimeMillis() + (long) ms + lateMs + 1500L;
         synchronized (lock) {
             while (true) {
                 Res bestBad = null; int n = 0;
                 for (int k = 0; k < 2; k++) {
                     Res r = out[k]; if (r == null) continue; n++;
                     if (r.status == 200 && !busBodyBad(r.body)) return r;
-                    bestBad = r;
+                    if (!"skipped".equals(r.err)) bestBad = r;
                 }
                 long left = end - System.currentTimeMillis();
                 if (n == 2 || left <= 0) return bestBad != null ? bestBad : new Res(-1, "", "timeout");
@@ -134,7 +149,13 @@ public final class NetPost {
     }
     /** 도착정보 받기 — 무조건 받는다: 오류 · 못 받음 · '비어 있음'이면 다른 길 + 일회용 글자로 오류는 최대 두 번 · 비어 있음은 한 번 더 묻는다. 끝내 비어 있으면 그 빈 본문을 그대로 건넨다(엔진이 '도착정보 없음'). */
     public static Res getBusArr(String url, String alt, int pref, double firstMs, double retryMs) {
-        Res r = getBus2(url, alt, pref, false, firstMs, retryMs);
+        // s231 (YJ: 지하철에서 정류장은 떴는데 도착 버스가 10초 뒤에야 나왔다): 첫 길이 1.5초 안에 못 주면 다른 길로도 바로 같이 보낸다(먼저 온 정상 본문 사용) — 예전엔 첫 요청이 멎어도 5초를 다 기다린 뒤에야 다른 길로 다시 보냈다.
+        Res r;
+        if (alt != null && alt.length() > 0 && !altOff) {
+            boolean altFirst = (pref & 1) == 1;
+            r = altFirst ? race(alt, true, url, false, firstMs, HEDGE_LATE_MS) : race(url, false, alt, true, firstMs, HEDGE_LATE_MS);
+            if (r.status != 200 || busBodyBad(r.body)) r = getBus2(url, alt, pref, false, firstMs, retryMs);
+        } else r = getBus2(url, alt, pref, false, firstMs, retryMs);
         for (int k = 0; k < 2; k++) {
             if ("blocked".equals(r.err)) return r;
             boolean bad = r.status != 200 || busBodyBad(r.body);
