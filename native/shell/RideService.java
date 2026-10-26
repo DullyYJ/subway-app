@@ -154,6 +154,12 @@ public class RideService extends Service {
         } catch (Throwable ignored) { }
     }
 
+    /** 5초 걸음이 값을 못 내는 까닭을 오류 기록에 남긴다(s222) — 같은 까닭은 한 번만(기록이 넘치지 않게). 하단 안내 문구를 없앤 뒤로 실패가 보이지 않아서. */
+    private String diagLast = "";
+    private void diagOnce(String why) {
+        try { if (why.equals(diagLast)) return; diagLast = why; ErrLog.record(this, new IllegalStateException(why), false); } catch (Throwable ignored) { }
+    }
+
     // ── 5초마다 엔진 ──
     private final Runnable stepRunnable = new Runnable() {
         @Override public void run() {
@@ -168,8 +174,10 @@ public class RideService extends Service {
                     try { NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride-standby", body, 5000); if (r.status == 200) resp = r.body; } catch (Throwable ignored) { }
                 }
                 if (resp == null) resp = RideLocal.step(body);
+                if (resp == null) diagOnce("RIDE_STEP resp=null (폰 안 엔진이 값을 못 냈다)");
                 if (resp != null) {
                     RideCore.Step s = core.onStep(resp);
+                    if (!s.ok) diagOnce("RIDE_STEP onStep ok=false");
                     if (s.ok) {
                         prefetchReco(body, resp);
                         save(RideService.this, core);
@@ -183,7 +191,7 @@ public class RideService extends Service {
                         delay = core.nextMs;
                     }
                 }
-            } catch (Throwable ignored) { }
+            } catch (Throwable t) { diagOnce("RIDE_STEP " + t); }
             stepping = false;
             if (!stopped) h.postDelayed(this, delay);
         }
