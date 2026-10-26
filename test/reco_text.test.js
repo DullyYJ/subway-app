@@ -95,25 +95,26 @@ t('작은 화면 문구(pip)와 오버레이 추천 줄(ad)이 함께 온다: �
   for (const h of [8, 12, 18, 20]) {
     const a = ask(h); assert.ok(a.pip && a.pip.title === '하차 5분 전 · 강남', JSON.stringify(a.pip)); assert.strictEqual(a.pip.lines[0], a.hook);
     assert.ok(a.pip.lines.length >= 3 && a.pip.lines.length <= 5);
-    assert.ok(a.ad && (a.ad.k === 'cafe' || a.ad.k === 'food') && a.ad.m.length > 0 && a.ad.m.length <= 16 && a.ad.go.length > 0 && a.ad.go.length <= 7 && a.ad.pn, JSON.stringify(a.ad));
+    assert.ok(a.ad && (a.ad.k === 'cafe' || a.ad.k === 'food') && a.ad.m.length > 0 && a.ad.m.length <= 16 && a.ad.go.length > 0 && a.ad.go.length <= 8 && a.ad.pn, JSON.stringify(a.ad));
     assert.ok(a.ad.piIdx >= 0 && FOOD[a.ad.piIdx].n === a.ad.pn, '가게 목록 항목과 이름이 맞아야 한다');
     assert.ok(a.ad.a.indexOf(a.ad.pn) === 0 && a.ad.b.length > 3);
   }
-  const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.ok(s.ad.m.length > 0 && s.ad.m.length <= 16 && s.ad.go.length > 0 && s.ad.go.length <= 7, JSON.stringify(s.ad)); assert.ok(!('pn' in s.ad));
+  const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.ok(s.ad.m.length > 0 && s.ad.m.length <= 16 && s.ad.go.length > 0 && s.ad.go.length <= 8, JSON.stringify(s.ad)); assert.ok(!('pn' in s.ad));
   assert.strictEqual(s.pip.lines[1], '우산');
   const none = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 }); assert.strictEqual(none.ad, null);
 });
-t('s237 오버레이 추천 줄: 버튼 글(go ≤7자) · 셋째 줄(m ≤16자)은 아이템 종류와 날씨·시간에 맞고, 호출(씨앗)마다 달라진다', () => {
-  for (const tb of [R.RTX_GO, R.RTX_TEASE]) for (const k of Object.keys(tb)) for (const g of Object.keys(tb[k])) tb[k][g].forEach(x => assert.ok(x.length > 0 && x.length <= (tb === R.RTX_GO ? 7 : 16) && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x), k + '.' + g + ': ' + x));
+t('s237 오버레이 추천 줄: 버튼은 추천한 그 가게·상품 이름("<이름> 보기", 8자 안) · 셋째 줄(m ≤16자)은 날씨·시간에 맞는 클릭 유도 문구, 호출(씨앗)마다 달라진다', () => {
+  for (const k of Object.keys(R.RTX_TEASE)) for (const g of Object.keys(R.RTX_TEASE[k])) R.RTX_TEASE[k][g].forEach(x => assert.ok(x.length > 0 && x.length <= 16 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x), k + '.' + g + ': ' + x));
+  assert.strictEqual(R.rtxGoLabel('국밥집A'), '국밥집A 보기'); assert.strictEqual(R.rtxGoLabel('스타벅스 서울역점'), '스타벅스… 보기'); assert.strictEqual(R.rtxGoLabel('투썸플레이스 (본점)'), '투썸플레… 보기'); assert.strictEqual(R.rtxGoLabel(''), '');
   const wxs = { rainy: { temp: 12, feel: 10, rain: 90, txt: '비' }, cold: { temp: 2, feel: -3, rain: 0, txt: '맑음' }, hot: { temp: 30, feel: 32, rain: 0, txt: '맑음' } };
   const kinds = [[8, 'morning'], [12, 'lunch'], [18, 'dinner'], [20, 'night'], [22, 'shop']];
   for (const [h, kd] of kinds) for (const w of Object.keys(wxs)) {
-    const T = R.RTX_GO[kd], pool = (w === 'rainy' ? T.rainy : (w === 'cold' ? T.cold : T.hot)).concat(T.base.slice(0, 2)).concat(kd === 'shop' ? T.weekend || [] : []);
-    for (let sd = 1; sd < 25; sd++) { const a = ask(h, { weather: wxs[w], seed: sd }).ad; assert.ok(a && pool.indexOf(a.go) >= 0, kd + ' ' + w + ' ' + (a && a.go)); }
+    const T = R.RTX_TEASE[kd], pool = (w === 'rainy' ? T.rainy : (w === 'cold' ? T.cold : T.hot)).concat(T.base.slice(0, 2)).concat(T.weekend || [], T.late || [], T.early || []);
+    for (let sd = 1; sd < 25; sd++) { const a = ask(h, { weather: wxs[w], seed: sd }).ad; assert.ok(a && pool.indexOf(a.m) >= 0 && a.go.endsWith(' 보기') && a.go.length <= 8, kd + ' ' + w + ' ' + JSON.stringify(a)); }
   }
-  for (const [h, kd] of kinds) { const set = new Set(); for (let sd = 1; sd < 60; sd++) { const a = ask(h, { seed: sd }).ad; set.add(a.go + '|' + a.m); } assert.ok(set.size >= 3, kd + ' 여러 모양: ' + set.size); }
+  for (const [h, kd] of kinds) { const a = ask(h).ad; const nm = kd === 'shop' ? '우산' : a.pn; assert.ok(a.go === R.rtxGoLabel(nm) && a.a.indexOf(nm) === 0, kd + ' 버튼은 추천한 대상 이름: ' + JSON.stringify(a)); }
+  for (const [h, kd] of kinds) { const set = new Set(); for (let sd = 1; sd < 60; sd++) { const a = ask(h, { seed: sd }).ad; set.add(a.a + '|' + a.m); } assert.ok(set.size >= 3, kd + ' 여러 모양: ' + set.size); }
   assert.deepStrictEqual(ask(12, { seed: 5 }).ad, ask(12, { seed: 5 }).ad, '같은 씨앗은 같은 글');
-  const nw = ask(12, { weather: null, seed: 3 }).ad; assert.ok(R.RTX_GO.lunch.base.indexOf(nw.go) >= 0, '날씨 없으면 기본 글');
   const late = new Set(); for (let sd = 1; sd < 80; sd++) late.add(R.recoAlert({ arrMs: kst(23, 30), nowMs: kst(23, 25), dest: '강남', weather: null, shop: { n: '우산', _t: '우천대비' }, seed: sd }).ad.m); assert.ok(late.has('자기 전에 확인하세요'), '밤늦게엔 밤 문구도 섞인다');
 });
 t('작은 화면 문구 줄 길이: 한 줄 46자 안, 길면 …로 자르고 전체 7줄 안쪽', () => {
@@ -248,7 +249,7 @@ async function call(method, body) {
   t('POST: 날씨를 안 보내고 좌표만 보내면 엔진이 그 좌표의 날씨를 한 번 받아 쓴다(비 → rainy 문구)', () => {
     assert.strictEqual(L.wx.length, 1); assert.deepStrictEqual(L.wx[0], { lat: 37.4979, lng: 127.0276 });
     assert.ok(r.json.cx && r.json.cx.rainy === true && r.json.cx.rain === 80, JSON.stringify(r.json.cx));
-    assert.ok(R.RTX_GO.lunch.rainy.concat(R.RTX_GO.lunch.base.slice(0, 2)).indexOf(r.json.ad.go) >= 0, r.json.ad && r.json.ad.go);
+    assert.ok(r.json.ad && r.json.ad.go.endsWith(' 보기'), r.json.ad && r.json.ad.go);
   });
   rst(); r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', loc: { lat: 37.4979, lng: 127.0276 }, weather: WX, foodPref: 'server', recent: [], seed: 7 });
   t('POST: 날씨를 보냈으면 날씨 서버를 부르지 않는다 · 좌표가 없으면 안 부른다', async () => { assert.strictEqual(L.wx.length, 0); });
