@@ -20,7 +20,7 @@ final class RideStandbyJ {
     private RideStandbyJ() { }
 
     // ── 조정값(RIDE_STANDBY_DEFAULTS) ──
-    static final double trailMax = 60, trailMaxAgeSec = 600, notYetKeepSec = 45, gpsGapDeadReckonSec = 180, doneAfterSec = 180, maxStaleSec = 3 * 3600,
+    static final double trailMax = 60, trailMaxAgeSec = 600, notYetKeepSec = 45, gpsGapDeadReckonSec = 180, doneAfterSec = 300, maxStaleSec = 3 * 3600,
         stepMs = 5000, nearStepMs = 2500, nearBeforeSec = 30, nearAfterSec = 40,
         waitNearM = 150, waitAwayM = 400, waitMoveMps = 4.0, waitSpanSec = 15, waitWinSec = 60, waitFreshSec = 25, waitStartLateSec = 90, waitGraceSec = 480;
     static final String ongoingTitle = "길동무 경로 안내 중";
@@ -324,7 +324,7 @@ final class RideStandbyJ {
             String sig = str(g(rc, "a")) + "|" + str(g(rc, "b"));
             Map<String, Object> ad = mm(st.get("rcAd"));
             if (ad == null || !sig.equals(ad.get("sig")))
-                st.put("rcAd", obj("sig", sig, "at", now, "a", clampTxt(g(rc, "a"), 40), "b", clampTxt(g(rc, "b"), 64), "m", clampTxt(g(rc, "m"), 32), "go", "쿠팡 보기".equals(g(rc, "go")) ? "쿠팡 보기" : "맛집 보기"));
+                st.put("rcAd", obj("sig", sig, "at", now, "a", clampTxt(g(rc, "a"), 40), "b", clampTxt(g(rc, "b"), 64), "m", clampTxt(g(rc, "m"), 32), "go", clampTxt(g(rc, "go"), 8).length() > 0 ? clampTxt(g(rc, "go"), 8) : "맛집 보기"));
         }
         if (fin(req.get("rcDis")) && num(req.get("rcDis")) > 0) st.put("rcDis", num(req.get("rcDis")));
         Object a = req.get("act");
@@ -494,7 +494,8 @@ final class RideStandbyJ {
         return obj("st", "hidden");
     }
 
-    // ═════════════ 하단 줄(추천 · 내릴 준비) ═════════════
+    // ═════════════ 하단 줄(추천 · 앱 종료) ═════════════
+    static final double RS_END_BTN_MS = 180000;
     static Map<String, Object> rows(Map<String, Object> st, Map<String, Object> r, double now, Map<String, Object> dest, int finLv, boolean arrived) {
         Map<String, Object> cfg = mm(st.get("cfg")); if (cfg == null) cfg = obj();
         Map<String, Object> ad = mm(st.get("rcAd"));
@@ -502,7 +503,7 @@ final class RideStandbyJ {
         Map<String, Object> reco = null, getoff = null;
         Object etaMs = r.get("etaMs");
         double rem = (dn >= 0 && etaMs != null && hasEta(etaMs, dn)) ? round((etaAt(etaMs, dn) - now) / 1000) : Double.NaN;
-        if (!arrived && finLv == 1 && st.get("wait") == null) {
+        if (arrived && truthy(st.get("arrivedAt")) && now - num(st.get("arrivedAt")) >= RS_END_BTN_MS) {
             String cheer = "오늘도 수고 많았어요";
             try {
                 Map<String, Object> eta = mm(st.get("eta"));
@@ -510,8 +511,8 @@ final class RideStandbyJ {
                 String c = RideEtaJ.arrCheer(now, tz, null);
                 if (truthy(c)) cheer = c;
             } catch (RuntimeException e) { }
-            double gat = truthy(mm(st.get("ovlAlert")) == null ? null : mm(st.get("ovlAlert")).get("at")) ? num(mm(st.get("ovlAlert")).get("at")) : 0;
-            getoff = obj("on", Boolean.TRUE, "ch", charOf(gat), "a", "내릴 준비를 해주세요", "b", clampTxt(cheer, 40), "end", "앱 종료", "at", gat); k = 2;
+            double gat = num(st.get("arrivedAt"));
+            getoff = obj("on", Boolean.TRUE, "ch", charOf(gat), "a", "도착했어요", "b", clampTxt(cheer, 40), "end", "앱 종료", "at", gat); k = 2;
         } else if (ad != null && !Boolean.FALSE.equals(mm(cfg.get("allowed")) == null ? null : mm(cfg.get("allowed")).get("arrive_reco")) && !(st.get("rcDis") != null && num(st.get("rcDis")) == num(ad.get("at")))
             && now - num(ad.get("at")) < 25 * 60000 && !Double.isNaN(rem) && rem <= 7 * 60 && rem > -30 && st.get("wait") == null) {
             reco = obj("on", Boolean.TRUE, "ch", charOf(num(ad.get("at"))), "a", ad.get("a"), "b", ad.get("b"), "m", ad.get("m"), "go", ad.get("go"), "ok", "확인", "at", ad.get("at")); k = 1;
@@ -522,7 +523,7 @@ final class RideStandbyJ {
             if (k > 0) { rh.put("k", (double) k); rh.put("at", now); rh.put("reco", reco); rh.put("getoff", getoff); } else rh.put("k", 0.0);
         } else {
             Map<String, Object> rhr = mm(rh.get("reco"));
-            boolean dead = (num(rh.get("k")) == 1 && rhr != null && st.get("rcDis") != null && num(st.get("rcDis")) == num(rhr.get("at"))) || (truthy(st.get("arrivedAt")) && now - num(st.get("arrivedAt")) >= 150000);
+            boolean dead = (num(rh.get("k")) == 1 && rhr != null && st.get("rcDis") != null && num(st.get("rcDis")) == num(rhr.get("at")));
             if (dead) rh.put("k", 0.0); else { reco = rhr; getoff = mm(rh.get("getoff")); }
         }
         return obj("reco", reco != null ? reco : obj("on", Boolean.FALSE), "getoff", getoff != null ? getoff : obj("on", Boolean.FALSE));
@@ -614,6 +615,7 @@ final class RideStandbyJ {
         }
         if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
         boolean arrived = dest != null && curPos >= num(dest.get("seqPos"));
+        if (arrived && !truthy(st.get("arrivedAt"))) st.put("arrivedAt", now);
         Map<String, Object> rs = arrived ? obj("st", "board", "end", Boolean.TRUE, "bt", "안내 종료", "k", "목적지에 도착했어요", "ch", "도착", "nm", destName == null ? "" : destName, "bar", -1, "cbg", "", "cfg", "#0a84ff") : rsState(st, r, now);
         boolean xf = false; int cur0 = cur;
         if (!arrived && st.get("wait") == null && truthy(st.get("xw")) && rs != null && ("board".equals(rs.get("st")) || "wait".equals(rs.get("st")))) {
