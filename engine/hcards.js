@@ -165,6 +165,15 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   if (sc.fill === true) { node.fit = true; node.fmin = 90; node.fmax = 900; node.frh = 26; }      // 웹 _sceneFit: 경로가 없으면 남는 세로를 채운다(최소 90) — 앱은 잰 높이로 뺄셈만 한다
   return node;
 }
+
+// ★ 2026-10-26 (YJ: "혼잡도를 좌우로 슬라이드하면 길동무 친구들이 지하철을 타고 이동하는 장면"): 지하철을 타고 가는 동안 혼잡도 카드 옆 쪽에 붙는 객실 장면.
+//   누가 타고 있다가 어느 역에서 내리고 타는지(sceneTrain)는 장면 엔진이 정한다. 이동 중/정차 중과 도착 시각은 탑승 엔진이 앱에 준 시각표(pos.segs)를 앱이 받아 그린다.
+function hcTrainJs(sc) {
+  if (!sc || sc.ok !== true || !sc.cong || sc.cong.kind !== 'sub' || !sc.train || !sc.train.names || !sc.train.names.length) return '';
+  var o = { ok: true, mode: 'train', venue: 'sub', line: sc.line || '', hero: sc.hero, cast: sc.cast, look: sc.look, tag: '', hint: '', nearEnd: false, train: sc.train };
+  var js = JSON.stringify(o);
+  return js.length < 6000 ? js : '';
+}
 var HC_SHARE = { a: 'call', v: 'share.loc' };
 function hcardsScreen(inp, f) {
   if (!(Number(inp && inp.cap) >= 18)) return { ok: false, error: 'cap' };
@@ -180,10 +189,17 @@ function hcardsScreen(inp, f) {
   var hour = new Date(now + tz * 60000).getUTCHours(), nowMin = hour * 60 + new Date(now + tz * 60000).getUTCMinutes();
   // 어느 역/정류장의 혼잡도를 보일지: 보던 경로의 처음 대중교통 > 가까운 역
   var cs = { mode: 'none', now: now, tz: tz, th: th, stn: '', line: '', ld: 0, live: null, bus: {} }, stn = '';
+  var wxF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), rn = hcRideNodes(f.rd), sc0 = null;
+  if (rn && hcScene) { try { sc0 = hcScene({ nowMs: now, tzOffsetMin: tz, locked: true, here: rn.here, boarded: rn.boarded, key: rn.key, nodes: rn.nodes, routeShown: true }, wxF || null); } catch (e) { sc0 = null; } }
   if (rt) {
     var first = rt.segs[0];
     if (first.type === 1 && first.from) { cs.mode = 'sub'; cs.stn = first.from; cs.line = first.line; }
     else if (first.type === 2) { cs.mode = 'bus'; cs.bus = { no: first.line, stop: first.from, none: 1 }; }
+  }
+  // (YJ 2026-10-26) 지하철을 타고 가는 동안은 혼잡도가 '지금 지나는 역'을 따라간다 — 조용히 역 이름·호선만 바꿔 같은 카드로 이어진다(출발역에 고정되지 않는다)
+  if (sc0 && sc0.ok === true && sc0.cong && sc0.cong.kind === 'sub' && rn) {
+    var cn = rn.nodes[sc0.cong.idx];
+    if (cn && cn.name) { cs.mode = 'sub'; cs.bus = {}; cs.stn = cn.name; cs.line = cn.lineName || cs.line; }
   }
   if (cs.mode === 'none' && near) { cs.mode = 'sub'; cs.stn = near[0]; cs.line = near[1]; }
   stn = cs.stn || (cs.bus && cs.bus.stop) || '';
@@ -215,7 +231,7 @@ function hcardsScreen(inp, f) {
   var body = [];
   // 순서는 웹 홈과 같다: 혼잡도(제목줄 + 캐릭터 장면 카드) → AI 승무원 → 실시간 대화
   if (congS && congS.ok) {
-    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), stn, f.rd);
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, wxF, stn, f.rd);
     var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
@@ -223,7 +239,11 @@ function hcardsScreen(inp, f) {
     var pvBt = f.r && typeof f.r === 'object' && f.r.bt != null ? hcNum(f.r.bt, null) : null, pvMetro = f.r && typeof f.r === 'object' && f.r.metro === true;
     var pvC = hcPvl ? hcPvl('cong', pvBt, pvMetro, now, tz) : null, pvA = hcPvl ? hcPvl('ai', pvBt, pvMetro, now, tz) : null;
     if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
-    else body.push(hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }));
+    else {
+      var cp = hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }), trn = hcTrainJs(sc0);
+      if (trn) cp.sc2 = trn;                                                                // 옆으로 밀면 보이는 객실 장면(앱은 두 쪽을 가로로 밀어 넘기기만 한다)
+      body.push(cp);
+    }
   }
   if (aiS && aiS.ok) {
     if (fuse) { var fp = hcPanel(hcKids(aiS).filter(function (n) { return n.t !== 'aih'; }), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // s218: 제목줄(AI 승무원 브리핑 · 카운트다운 · 새로고침)도 뺀다 — 앱이 경로 결과 카드의 'slot:ai' 자리로 옮긴다
@@ -234,4 +254,4 @@ function hcardsScreen(inp, f) {
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcSceneNode: hcSceneNode, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };
+if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcTrainJs: hcTrainJs, hcSceneNode: hcSceneNode, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };
