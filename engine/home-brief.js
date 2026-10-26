@@ -105,35 +105,35 @@ function homeBrief(o) {
     var line1 = [{ id: 'homeAiArr', t: p1 }];
     if (o.dm) { line1.push(' '); line1.push({ id: 'homeAiDep', raw: String(o.dm) }); }
     P(line1);
-    if (cs.length) {
-      var c0 = cs[0], tp = [{ stn: [c0.from, c0.line] }, '에서 '];
-      if (cx === 0) { tp.push({ ln: c0.type === 2 ? c0.line + '번' : (c0.line || '열차') }); tp.push(c0.type === 2 ? ' 버스로 한 번에 가시면 돼요.' : hbJosRo(c0.line) + ' 한 번에 가시면 돼요.'); }
-      else {
-        tp.push({ ln: c0.type === 2 ? c0.line + '번' : (c0.line || '열차') }); tp.push(c0.type === 2 ? ' 버스를 타고 출발하세요. 가는 길에 ' : hbJosEul(c0.line || '열차') + ' 타고 출발하세요. 가는 길에 ');
-        for (var i2 = 1; i2 < cs.length; i2++) { var nl3 = cs[i2].line || '다음 노선'; if (i2 > 1) tp.push(', '); tp.push({ stn: [cs[i2].from, cs[i2].line] }); tp.push('에서 '); tp.push({ ln: cs[i2].type === 2 ? nl3 + '번' : nl3 }); tp.push(cs[i2].type === 2 ? '로' : hbJosRo(nl3)); }
-        tp.push(' 갈아타시면 돼요.');
-      }
-      if (cld >= 0 && cs[cld].depClock && cs[cld].arrClock) { tp.push(' '); tp.push({ ln: cs[cld].line }); tp.push('는 '); tp.push({ b: cs[cld].depClock }); tp.push(' 출발, '); tp.push({ b: cs[cld].arrClock }); tp.push(' 도착이에요. 승차권과 출발 시각은 한 번 더 확인해 주세요.'); }
-      P(tp);
+    if (cs.length) {                                             // s219: 구간마다 한 문장씩, 한 줄에 하나('어디서 몇 번 버스를 타고 어디서 내려요')
+      cs.slice(0, 10).forEach(function (sg) {
+        if (!sg) return;
+        var ln = sg.line || (sg.type === 2 ? '' : '열차'), tl2 = [{ stn: [sg.from, sg.line] }, '에서 '];
+        if (sg.type === 2) { tl2.push({ ln: ln ? ln + '번' : '버스' }); tl2.push(ln ? ' 버스를 타고 ' : '를 타고 '); }
+        else { tl2.push({ ln: ln }); tl2.push(hbJosEul(ln) + ' 타고 '); }
+        tl2.push({ stn: [sg.to, sg.line] }); tl2.push('에서 내려요.');
+        if (sg.type === 4 && sg.depClock && sg.arrClock) { tl2.push(' ('); tl2.push({ b: sg.depClock }); tl2.push(' 출발, '); tl2.push({ b: sg.arrClock }); tl2.push(' 도착)'); }
+        P(tl2);
+      });
+      if (cld >= 0) P(['승차권과 출발 시각은 한 번 더 확인해 주세요.']);
     }
     P([cgLine()]);
-    if (wF || wT) {                                              // 출발지·도착지 날씨 + 추천 옷차림(더 쌀쌀한 쪽 기준) + 우산
-      var wl = ['날씨는 '];
+    if (wF || wT) {                                              // 마지막 한 줄: 출발지·도착지 날씨 + 추천 옷차림(더 쌀쌀한 쪽 기준) + 우산
+      var wl = [];
       if (wF) { wl.push({ b: '출발지' }); wl.push(' '); wl.push({ b: wF.temp + '도' }); wl.push(' ' + wF.txt); }
-      if (wF && wT) wl.push(', ');
+      if (wF && wT) wl.push(' · ');
       if (wT) { wl.push({ b: '도착지' }); wl.push(' '); wl.push({ b: wT.temp + '도' }); wl.push(' ' + wT.txt); }
-      wl.push('이에요.');
       var cold = Math.min(wF ? wF.temp : 99, wT ? wT.temp : 99), wear;
-      if (cold <= 4) wear = '두꺼운 패딩이나 코트에 목도리까지';
+      if (cold <= 4) wear = '두꺼운 패딩이나 코트에 목도리';
       else if (cold <= 8) wear = '코트나 두툼한 외투';
       else if (cold <= 11) wear = '자켓이나 가벼운 코트에 니트';
       else if (cold <= 16) wear = '가디건이나 얇은 자켓';
-      else if (cold <= 22) wear = '얇은 긴팔 정도';
-      else if (cold <= 27) wear = '반팔에 얇은 겉옷 하나';
+      else if (cold <= 22) wear = '얇은 긴팔';
+      else if (cold <= 27) wear = '반팔에 얇은 겉옷';
       else wear = '시원한 반팔 차림';
-      wl.push(' 추천 옷차림은 '); wl.push({ b: wear }); wl.push('이에요.');
+      wl.push(', '); wl.push({ b: wear }); wl.push(' 추천해요.');
       var rn = Math.max((wF && wF.rain) || 0, (wT && wT.rain) || 0);
-      if (rn >= 60) wl.push(' 비 소식이 있으니 우산 꼭 챙기세요.'); else if (rn >= 40) wl.push(' 비가 올 수도 있으니 우산 하나 챙기세요.');
+      if (rn >= 60) wl.push(' 우산 꼭 챙기세요.'); else if (rn >= 40) wl.push(' 우산 하나 챙기세요.');
       P(wl);
     }
     return { v: HB_V, paras: ps };
