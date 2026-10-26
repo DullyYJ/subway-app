@@ -62,7 +62,7 @@ public final class ScreenCore {
     public static final int MAX_ROW = 8;
 
     private static final class P {
-        final String s; int i = 0, depth = 0;
+        final String s; int i = 0, depth = 0; int strMax = MAX_STR * 4;
         P(String s) { this.s = s; }
         ParseError err(String m) { return new ParseError("JSON " + i + ": " + m); }
         void ws() { while (i < s.length()) { char c = s.charAt(i); if (c == ' ' || c == '\n' || c == '\r' || c == '\t') i++; else break; } }
@@ -135,7 +135,7 @@ public final class ScreenCore {
                         default: throw err("이스케이프 " + e);
                     }
                 } else b.append(c);
-                if (b.length() > MAX_STR * 4) throw err("문자열이 너무 길다");
+                if (b.length() > strMax) throw err("문자열이 너무 길다");
             }
             return b.toString();
         }
@@ -146,6 +146,19 @@ public final class ScreenCore {
             try { double d = Double.parseDouble(s.substring(st, i)); if (Double.isNaN(d) || Double.isInfinite(d)) throw err("수"); return d; }
             catch (NumberFormatException e) { throw err("수"); }
         }
+    }
+
+    /**
+     * 앱이 스스로 저장한 글(탑승 상태 저장본 · 결과 카드 저장본)을 읽는다 — 화면 JSON 이 아니라 '문자열 속에 JSON 이 통째로 든' 글이라 한 문자열이 8천 자를 쉽게 넘는다
+     * (긴 경로의 탑승 상태는 1만 자 이상 — 이 한도에 걸려 저장본이 없는 것으로 읽혀 탑승 안내 서비스가 바로 끝났다, s222). 나머지 한도(전체 크기 · 깊이)는 그대로.
+     */
+    public static Object parseSaved(String s) throws ParseError {
+        if (s == null || s.length() == 0) throw new ParseError("비어 있다");
+        if (s.length() > MAX_JSON) throw new ParseError("너무 크다");
+        P p = new P(s); p.strMax = MAX_JSON;
+        Object v = p.value(); p.ws();
+        if (p.i != s.length()) throw p.err("뒤에 남은 글자");
+        return v;
     }
 
     public static Object parse(String s) throws ParseError {
