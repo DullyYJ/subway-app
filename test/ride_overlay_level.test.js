@@ -69,11 +69,29 @@ t('환승 승차를 누르면 래치가 풀리고 새 구간에서 다시 계산
   assert.ok(after.length && after[0].o.alert === 2 && !after[0].st.ovlLatch.fin === false, '풀린 뒤 첫 단계 ' + after[0].o.alert);
   assert.strictEqual(after[0].st.ovlLatch.a, 6);
 });
-t('내릴 준비 줄(getoff)은 마지막 구간 한 정거장 전에만 — 환승역 한 정거장 전에는 안 나온다', () => {
-  assert.ok(rows.filter(r => r.o.getoff.on).every(r => r.ms > at(12, 59, 0)), '환승역에서는 안 나온다');
-  assert.ok(rows.filter(r => r.o.alert === 1 && r.ms > at(12, 59, 0)).every(r => r.o.getoff.on), '마지막 구간 한 정거장 전에는 계속 나온다');
-  assert.ok(rows.some(r => r.o.getoff.on));
-  assert.ok(rows.filter(r => r.o.alert === 1 && r.ms < at(12, 58, 0)).every(r => !r.o.getoff.on));
+t('앱 종료 줄(getoff, s237): 도착 전에는 한 번도 안 나오고(환승역 · 마지막 구간 한 정거장 전 포함), 도착 3분 뒤부터 나오며, 5분 뒤 done+quit', () => {
+  assert.ok(rows.every(r => !r.o.getoff.on), '도착 전(13:05 까지, 도착은 13:03 쯤)에는 앱 종료 줄이 없다');
+  let st = mk({}), arrAt = null, firstOff = null, doneAt = null, q = null;
+  for (let ms = at(12, 50, 10); ms <= at(13, 14, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)), act: ms >= at(12, 58, 0) && ms < at(12, 58, 5) ? 'press' : undefined }); st = r.state;
+    if (st.arrivedAt && !arrAt) arrAt = st.arrivedAt;
+    if (r.overlay && r.overlay.active && r.overlay.getoff.on && !firstOff) firstOff = { ms: ms, g: r.overlay.getoff, rs: r.overlay.rs };
+    if (r.done) { doneAt = ms; q = r.quit; break; }
+  }
+  assert.ok(arrAt && firstOff && doneAt, '도착 · 앱 종료 줄 · 종료가 모두 있다');
+  assert.ok(firstOff.ms - arrAt >= 180000 && firstOff.ms - arrAt <= 190000, '도착 3분 뒤에 뜬다: ' + (firstOff.ms - arrAt));
+  assert.ok(firstOff.g.end === '앱 종료' && firstOff.g.a === '도착했어요' && firstOff.g.b.length > 0 && firstOff.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(firstOff.g.ch), JSON.stringify(firstOff.g));
+  assert.ok(doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000 && q === true, '안 눌러도 도착 5분 뒤 스스로 종료(quit): ' + (doneAt - arrAt));
+});
+t('도착 알림을 꺼 둬도(allowed.arrive=false 등) 도착하면 기준 시각이 서서 3분 뒤 앱 종료 줄 · 5분 뒤 종료가 선다', () => {
+  let st = mk({ arrive: false, near_arrive: false, near_arrive2: false }), arrAt = null, firstOff = null, doneAt = null;
+  for (let ms = at(12, 50, 10); ms <= at(13, 16, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)), act: ms >= at(12, 58, 0) && ms < at(12, 58, 5) ? 'press' : undefined }); st = r.state;
+    if (st.arrivedAt && !arrAt) arrAt = st.arrivedAt;
+    if (r.overlay && r.overlay.active && r.overlay.getoff.on && !firstOff) firstOff = ms;
+    if (r.done) { doneAt = ms; break; }
+  }
+  assert.ok(arrAt && firstOff && doneAt && firstOff - arrAt >= 180000 && firstOff - arrAt <= 190000 && doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000, [arrAt, firstOff, doneAt].join());
 });
 t('승차 대기(st.wait) 중에는 단계가 켜지지 않는다', () => {
   const s = mk(); s.wait = { i: 1, arrMs: at(12, 50, 0) };
