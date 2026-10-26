@@ -151,7 +151,7 @@ public final class FoodCore {
     }
     /** 가게 지도 펼침 본문(엔진 f.pn=1): 고른 가게 · 내 위치 · 도착역 좌표와 이름 · 이미 받은 경로 글. */
     public String panelRequest(int cap) {
-        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"pn\":1,\"sel\":").append(pendingSel).append(",\"me\":").append(ll(gps)).append(",\"ctr\":").append(ll(ctr)).append(",\"stn\":").append(ShellCore.q(stnName));
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"pn\":1,\"sel\":").append(pendingSel).append(",\"me\":").append(ll(gps)).append(",\"ctr\":").append(ll(ctr)).append(",\"stn\":").append(ShellCore.q(stnName)).append(",\"dst\":").append(dest.length() > 0 ? 1 : 0);
         if (!panelRes.isEmpty()) {
             b.append(",\"res\":{"); boolean first = true;
             for (Map.Entry<String, String> e : panelRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
