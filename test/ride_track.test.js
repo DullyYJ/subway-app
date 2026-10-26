@@ -342,8 +342,10 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   ok(s0 && s0.passMs === NOW - 1000, 's207: 가장 가까웠던 순간에서 20초가 지나면(정차 · 좌표 끊김 포함) 그 순간을 통과로 적는다 ' + JSON.stringify(s0));
   z = run(72, [{ t: -10, dx: -100 }, { t: -5, dx: -20 }, { t: -1, dx: 130 }], true, 0); s0 = z.zero.stops[0];
   ok(s0 && s0.passMs !== undefined && s0.passMs > NOW - 5001 - 1000 && s0.passMs < NOW - 1000, 's207: 가장 가까웠던 뒤 100m 이상 멀어졌으면 바로 통과로 적는다 ' + JSON.stringify(s0));
-  z = run(72, [{ t: -20, acc: 100 }], true);
-  ok(z.zero.stops.length === 0 || z.zero.stops[0].passMs === undefined, '정확도 60m 넘는 좌표는 통과 시각에 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
+  z = run(72, [{ t: -20, acc: 150 }], true);
+  ok(z.zero.stops.length === 0 || z.zero.stops[0].passMs === undefined, '정확도 100m 넘는 좌표는 통과 시각에 쓰지 않는다 ' + JSON.stringify(z.zero.stops));
+  z = run(72, [{ t: -20, acc: 90 }], true);
+  ok(z.zero.stops.length > 0 && z.zero.stops[0].passMs !== undefined, 's230: 정확도 90m(지하 역사 안) 좌표도 통과 시각에 쓴다 ' + JSON.stringify(z.zero.stops));
   z = run(-200, [{ t: -50 }], true); s0 = z.zero.stops[0];
   ok(s0 && s0.passMs === NOW - 50000 && s0.passEarlySec === 150, '늦게 닿음(표시보다 150초 뒤): 통과 시각을 돌려준다 ' + JSON.stringify(s0));
   z = run(-600, [{ t: -50 }], true);
