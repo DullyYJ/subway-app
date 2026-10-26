@@ -153,4 +153,18 @@ public final class OvCore {
     public static boolean rsShown(Ov v) { return v != null && !v.rsEnd && ("board".equals(v.rsSt) || "wait".equals(v.rsSt) || "undo".equals(v.rsSt)); }
     /** 경고 테두리 한 바퀴 시간(ms): 2정거장 전 6초 · 1정거장 전 1.1초(웹과 같다), 없으면 0. */
     public static long spinMs(int alert) { return alert == 1 ? 1100L : (alert == 2 ? 6000L : 0L); }
+
+    /**
+     * 테두리 하이라이트(s237): 테두리 한 바퀴(0~1)를 따라 밝은 꼬리 달린 빛이 달린다. 카드 모양은 그대로 두고 빛만 움직인다.
+     * pos = 테두리 위 위치(0~1) · head = 빛의 머리 위치(0~1) · 반환 0~1 (머리 1 → 꼬리 끝 0). 머리 앞쪽은 0.
+     */
+    public static final double GLOW_TAIL = 0.34, GLOW_BASE = 0.30;
+    public static double glow(double pos, double head) {
+        double d = head - pos; d -= Math.floor(d);                    // 머리에서 뒤로 얼마나 떨어졌나(0~1)
+        if (d >= GLOW_TAIL) return 0d;
+        double t = 1d - d / GLOW_TAIL;
+        return t * t;
+    }
+    /** 그 자리의 테두리 진하기(0~1): 늘 켜진 옅은 둘레(GLOW_BASE) 위에 빛이 얹힌다. */
+    public static double ringAlpha(double pos, double head) { return GLOW_BASE + (1d - GLOW_BASE) * glow(pos, head); }
 }
