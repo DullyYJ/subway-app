@@ -354,6 +354,9 @@ public class ShellJvmTest {
             ok(rt != null && rt.etag.equals("\"abc\"") && rt.at == 1000L && rt.maxAge == 60 && rt.sig == 7 && ShellCore.Cond.parse("") == null && ShellCore.Cond.parse("a\nb") == null && ShellCore.Cond.parse("a\nx\n1\n2") == null, "조건부 요청 메모 저장 · 읽기(깨진 글은 버린다)");
             ShellCore.Cond tc = cd.touched(5000L, 0, 7);
             ok(tc.at == 5000L && tc.maxAge == 60 && tc.etag.equals(cd.etag) && ShellCore.condKey("news|x").startsWith("cm_"), "304 를 받으면 받은 시각만 새로 한다");
+            ok(NetPost.parseRetryAfter("2") == 2 && NetPost.parseRetryAfter(" 60 ") == 60 && NetPost.parseRetryAfter(null) == 0 && NetPost.parseRetryAfter("Wed, 21 Oct") == 0 && NetPost.parseRetryAfter("") == 0, "Retry-After 초 읽기");
+            ok(NetPost.retryable(429, 2) && NetPost.retryable(503, 3) && NetPost.retryable(429, 0) && !NetPost.retryable(429, 60) && !NetPost.retryable(200, 0) && !NetPost.retryable(500, 1) && !NetPost.retryable(-1, 0), "429 · 503 이고 3초 이하일 때만 조용히 한 번 다시(오래 차단 중이면 기다리지 않는다)");
+            ok(NetPost.iidOk("0123456789abcdef0123456789abcdef") && !NetPost.iidOk("short") && !NetPost.iidOk("has space 12345678") && !NetPost.iidOk(null), "기기 번호 모양(서버 gdIid 와 같다)");
             ok(NetPost.parseMaxAge("private, max-age=45") == 45 && NetPost.parseMaxAge("no-store") == 0 && NetPost.parseMaxAge(null) == 0 && NetPost.parseMaxAge("max-age=") == 0 && NetPost.parseMaxAge("max-age=99999999999") < 100000000, "Cache-Control max-age 읽기");
         }
         {
