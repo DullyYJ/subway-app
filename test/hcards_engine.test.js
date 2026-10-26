@@ -148,8 +148,10 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
   try {
     const mod = await import(tmp), wk = mod.default;
-    const res = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base() }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } });
-    const j = await res.json();
+    const realFetch0 = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('offline'); };               // s220: 워커가 날씨를 직접 받으므로(인터넷이 되는 CI 에서도) 첫 계산은 날씨 없이 비교한다
+    let res, j;
+    try { res = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 18, f: base() }), headers: { 'Content-Type': 'text/plain;charset=UTF-8' } }), {}, { waitUntil() { } }); j = await res.json(); } finally { globalThis.fetch = realFetch0; }
     ok(res.status === 200 && j.ok && j.body.length === 5 && JSON.stringify(j.body) === JSON.stringify(call(base()).body), '워커 안에서 직접 계산과 같은 카드 세 장');
     const r2 = await wk.fetch(new Request('https://x/screen/hcards', { method: 'POST', body: JSON.stringify({ cap: 3, f: {} }) }), {}, { waitUntil() { } });
     ok(r2.status === 400, '워커: cap 부족은 400');
