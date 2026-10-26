@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s226";
+var ENGINE_VERSION = "route-v2-2026-10-26s227";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23065,6 +23065,7 @@ var GD_V = 1;
 var GD_CFG = {
   light: { cap: 60, rate: 4 },          // \ud654\uba74 \u00b7 \ud0ed \u00b7 \uce69 \ub204\ub974\uae30 \u2026 (1\ucd08\uc5d0 4\ubc88\uc744 \uacc4\uc18d \ub20c\ub7ec\ub3c4 \uc548 \uac78\ub9b0\ub2e4)
   heavy: { cap: 40, rate: 2 },          // \uc678\ubd80 \uc870\ud68c\uac00 \ub4dc\ub294 \uac83: \uae38\ucc3e\uae30 \u00b7 \ubc84\uc2a4/\uc9c0\ud558\ucca0 \ub3c4\ucc29 \u00b7 AI \ubb38\uad6c \u00b7 \uc9c0\ub3c4 (\ubd84\ub2f9 120\ubc88)
+  write: { cap: 20, rate: 0.5 },        // \uae00 \u00b7 \ub313\uae00 \u00b7 \uc81c\ubcf4 \u00b7 \ucc44\ud305 \uc4f0\uae30(\ub3c4\ubc30 \ubc29\uc9c0): \ud55c \ubc88\uc5d0 20\uac1c, \uc774\ud6c4 \ubd84\ub2f9 30\uac1c (\uc0ac\ub78c\uc774 \uce58\ub294 \uc18d\ub3c4\ub294 \uac78\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
   admin: { cap: 5, rate: 1 / 12 },      // \uad00\ub9ac\u00b7\uc9c4\ub2e8 \uc8fc\uc18c: \ubd84\ub2f9 5\ubc88
   total: { cap: 600, rate: 30 }         // IP \ud558\ub098\uc758 \uc804\uccb4(\uacf5\uc720 IP \ub3c4 \ub109\ub109): \ud55c \ubc88\uc5d0 600 \u00b7 \ucd08\ub2f9 30
 };
@@ -23080,6 +23081,7 @@ var GD_HEAVY_PATHS = ['/route-v2', '/route-v2-app', '/route-v2-debug', '/warm', 
 
 var GD_ST = { b: new Map(), ban: new Map(), vio: new Map(), ids: new Map(), gcAt: 0, stat: { ok: 0, limited: 0, banned: 0, admin: 0, spoof: 0 } };
 
+// \ub2e4\ub978 \uc6cc\ucee4(\uac8c\uc2dc\ud310 \u00b7 \ubc84\uc2a4 \u00b7 \uc74c\uc2dd \u00b7 \uc1fc\ud551 \u00b7 \uc911\uacc4)\ub294 o.cls(\uc885\ub958 \uc774\ub984 \u00b7 'free' \uba74 \uac80\uc0ac \uc5c6\uc774 \ud1b5\uacfc)\uc640 o.cfg(\uc885\ub958\ubcc4 \ud1b5 \ud06c\uae30 \ub36e\uc5b4\uc4f0\uae30)\ub97c \ub118\uae34\ub2e4.
 function gdClass(path) {
   var p = String(path || '');
   if (GD_ADMIN_PATHS.indexOf(p) >= 0) return 'admin';
@@ -23108,16 +23110,19 @@ function gdGc(now) {
   if (GD_ST.ids.size > 20000) GD_ST.ids.clear();
 }
 
+function gdCfgOf(o, cls) { return (o.cfg && o.cfg[cls]) || GD_CFG[cls] || GD_CFG.light; }
+
 // \ud55c \uc694\uccad\uc744 \ud1b5\uacfc\uc2dc\ud0ac\uae4c. o = { ip, iid, path, method, now, adminSet, adminOk }
 //   \u2192 { ok:true, cls } | { ok:false, status, retryS, reason, cls }
 function gdDecide(o) {
   var now = Number(o.now) || 0, ip = String(o.ip || 'unknown'), method = String(o.method || 'GET').toUpperCase();
-  var path = String(o.path || '/'), cls = gdClass(path);
-  if (method === 'OPTIONS') return { ok: true, cls: cls };
+  var path = String(o.path || '/'), cls = o.cls ? String(o.cls) : gdClass(path);
+  if (method === 'OPTIONS' || cls === 'free') return { ok: true, cls: cls };
   gdGc(now);
   if (cls === 'admin') {
     if (o.adminSet && !o.adminOk) { GD_ST.stat.admin++; return { ok: false, status: 403, retryS: 0, reason: 'admin', cls: cls }; }
-    var ta = gdTake('A|' + ip, GD_CFG.admin.cap, GD_CFG.admin.rate, 1, now);
+    var ca = gdCfgOf(o, 'admin');
+    var ta = gdTake('A|' + ip, ca.cap, ca.rate, 1, now);
     if (!ta.ok) { GD_ST.stat.limited++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil(ta.waitMs / 1000)), reason: 'admin-rate', cls: cls }; }
     return { ok: true, cls: cls };
   }
@@ -23133,8 +23138,8 @@ function gdDecide(o) {
   var ban = GD_ST.ban.get(who);
   if (ban && ban.until > now) { GD_ST.stat.banned++; return { ok: false, status: 429, retryS: Math.max(1, Math.ceil((ban.until - now) / 1000)), reason: 'ban', cls: cls }; }
   var cost = path === '/screen/batch' ? GD_BATCH_COST : 1;
-  var c = GD_CFG[cls];
-  var t1 = gdTake('T|' + ip, GD_CFG.total.cap, GD_CFG.total.rate, cost, now);
+  var c = gdCfgOf(o, cls), ct = gdCfgOf(o, 'total');
+  var t1 = gdTake('T|' + ip, ct.cap, ct.rate, cost, now);
   var t2 = t1.ok ? gdTake(cls + '|' + who, spoof ? Math.ceil(c.cap / 2) : c.cap, spoof ? c.rate / 2 : c.rate, cost, now) : t1;
   if (t2.ok) { GD_ST.stat.ok++; return { ok: true, cls: cls }; }
   // \ud55c\ub3c4 \ucd08\uacfc \u2014 \uc5f0\uc774\uc5b4 \ub118\uc73c\uba74 \uc7a0\uae50 \ucc28\ub2e8(60\ucd08 \u2192 120\ucd08 \u2026 \ucd5c\ub300 10\ubd84)
@@ -23159,22 +23164,26 @@ function gdReject(d) {
   if (d.retryS > 0) h["Retry-After"] = String(d.retryS);
   return new Response(JSON.stringify({ ok: false, error: d.status === 403 ? "forbidden" : d.status === 503 ? "busy" : "rate", retry: d.retryS || 0 }), { status: d.status, headers: h });
 }
-async function guardEnter(request, env) {
+//   opt(\uc120\ud0dd \u00b7 \ub2e4\ub978 \uc6cc\ucee4\uc6a9) = { cls: function (path, method) \u2192 'light'|'heavy'|'write'|'admin'|'free', cfg: { \uc885\ub958: { cap, rate } }, heavyMax }
+//   CF-Connecting-IP \uac00 \uc5c6\ub294 \uc694\uccad(\uc6cc\ucee4\ub07c\ub9ac \uc11c\ube44\uc2a4 \ubc14\uc778\ub529\uc73c\ub85c \ubd80\ub974\ub294 \ub0b4\ubd80 \ud638\ucd9c)\uc740 \uac80\uc0ac\ud558\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ubc14\uae65\uc5d0\uc11c \uc624\ub294 \uc694\uccad\uc5d0\ub294 \ud074\ub77c\uc6b0\ub4dc\ud50c\ub808\uc5b4\uac00 \ud56d\uc0c1 \ubd99\uc778\ub2e4.
+async function guardEnter(request, env, opt) {
   var none = { res: null, done: function () { } };
   try {
     var url = new URL(request.url), hd = request.headers;
+    if (!(hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip"))) return none;
+    opt = opt || {};
     var adminSet = !!(env && env.ADMIN_KEY && typeof env.ADMIN_KEY === "string");
     var adminOk = adminSet && (hd.get("x-admin-key") === env.ADMIN_KEY || url.searchParams.get("k") === env.ADMIN_KEY);
-    var d = gdDecide({ ip: hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip") || "unknown", iid: hd.get("X-Gdm-Id"), path: url.pathname, method: request.method, now: Date.now(), adminSet: adminSet, adminOk: adminOk });
+    var d = gdDecide({ ip: hd.get("CF-Connecting-IP") || hd.get("cf-connecting-ip"), iid: hd.get("X-Gdm-Id"), path: url.pathname, method: request.method, now: Date.now(), adminSet: adminSet, adminOk: adminOk, cls: opt.cls ? opt.cls(url.pathname, request.method) : undefined, cfg: opt.cfg });
     if (!d.ok) return { res: gdReject(d), done: none.done };
-    if (request.method !== "OPTIONS" && d.cls !== "admin" && env && env.GDM_RL && typeof env.GDM_RL.limit === "function") {
+    if (request.method !== "OPTIONS" && d.cls !== "admin" && d.cls !== "free" && env && env.GDM_RL && typeof env.GDM_RL.limit === "function") {
       try {
         var r = await env.GDM_RL.limit({ key: (hd.get("CF-Connecting-IP") || "unknown") + "|" + d.cls });
         if (r && r.success === false) return { res: gdReject({ status: 429, retryS: 10, reason: "rl" }), done: none.done };
       } catch (e2) { }
     }
     if (d.cls === "heavy") {
-      if (GD_INFLIGHT.heavy >= GD_HEAVY_MAX) return { res: gdReject({ status: 503, retryS: 2, reason: "busy" }), done: none.done };
+      if (GD_INFLIGHT.heavy >= (opt.heavyMax || GD_HEAVY_MAX)) return { res: gdReject({ status: 503, retryS: 2, reason: "busy" }), done: none.done };
       GD_INFLIGHT.heavy++;
       var fin = false;
       return { res: null, done: function () { if (!fin) { fin = true; GD_INFLIGHT.heavy = Math.max(0, GD_INFLIGHT.heavy - 1); } } };
