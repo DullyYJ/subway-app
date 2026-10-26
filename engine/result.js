@@ -477,12 +477,11 @@ function resultScreen(opt, r) {
     if (k) nodes = nodes.concat(k.head).concat(k.body);
     if (fuse) nodes.push({ t: 'spacer', h: 0, slot: 'ai' });          // 홈 카드의 AI 승무원 브리핑이 합쳐져 들어올 자리(앱이 into:'ai' 카드를 여기로 옮긴다; 못 옮기면 그대로 0 높이)
     if (r.ride && r.ride.on) {
-      var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // 웹 routeActRow: 오른쪽에 탑승 → 환승 → 도착 칸(칸의 뜻·전환은 대기 모드 엔진이 정한다)
+      // s223(YJ): 카드 오른쪽 [탑승/환승/도착] 칸은 뺐다 — 하단 알약의 버튼과 겹쳐 중복이다(resSlotNode · rh.slot 은 그대로 둔다)
       var rowKids = [
         { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
         { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
       var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
-      if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
       nodes.push(rowNode);
     } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // 웹 routeActRow(안내 전): [세부경로 보기][경로 확정(파랑)]
       { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
