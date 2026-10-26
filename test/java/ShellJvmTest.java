@@ -1035,6 +1035,14 @@ public class ShellJvmTest {
             String sv = rc.save(10000L);
             RideCore back = RideCore.restore(sv, 10000L + 60000L);
             ok(back != null && back.hasState() && back.text.equals(rc.text) && RideCore.restore(sv, 10000L + RideCore.MAX_AGE_MS + 1) == null && RideCore.restore("", 1L) == null && RideCore.restore("{\"at\":1}", 5L) == null, "저장 · 복원(30분 지나면 버린다)");
+            {   // s222: 긴 경로의 탑승 상태(1만 자 넘음)도 저장 · 복원된다 — 예전엔 8천 자 한도에 걸려 '저장본 없음'으로 읽혀 탑승 안내 서비스가 바로 끝났다
+                StringBuilder big = new StringBuilder("{\"ok\":true,\"state\":{\"v\":1,\"tripSig\":\"x\",\"eta\":{\"nodes\":[");
+                for (int bi = 0; bi < 120; bi++) { if (bi > 0) big.append(','); big.append("{\"name\":\"역").append(bi).append("\",\"isSub\":true,\"lineName\":\"수인분당선\",\"planMin\":").append(700 + bi).append('}'); }
+                big.append("]}}}");
+                RideCore bgc = new RideCore(); String berr = bgc.onStart(big.toString());
+                String bsv = bgc.save(5000L);
+                ok(berr.length() == 0 && bsv.length() > 8000 && RideCore.restore(bsv, 5000L + 1000L) != null && RideCore.restore(bsv, 5000L + 1000L).hasState(), "긴 탑승 상태(" + bsv.length() + "자)도 저장·복원 " + berr);
+            }
             ok(RideCore.vibPattern(null).length == 2 && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[1] == 1000L && RideCore.vibPattern(java.util.Arrays.asList(Double.valueOf(5000.0), Double.valueOf(-5.0)))[2] == 0L, "진동 무늬 안전 범위");
             HcardsCore hcc = new HcardsCore();
             HomeCore.Env en = new HomeCore.Env(); en.nowMs = 1000000L; en.tzoMin = -540;
