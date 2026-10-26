@@ -8,7 +8,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.RectF;
-import android.graphics.SweepGradient;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -473,15 +472,28 @@ final class RideOverlay {
         }
     }
 
-    /** 하차 임박 테두리: 무지개 그라데이션이 카드 둘레를 돈다(2정거장 전 천천히 · 1정거장 전 빠르게). mode 0 이면 그리지도 돌리지도 않는다. */
+    /** 하차 임박 테두리: 카드 둘레에 옅은 무지개 띠가 깔려 있고, 밝은 빛 하나가 둘레를 따라 달린다(2정거장 전 천천히 · 1정거장 전 빠르게). 카드 모양·띠는 가만히 있고 빛만 움직인다. mode 0 이면 그리지도 돌리지도 않는다. */
     private final class Border extends View {
+        private static final int N = 120;                                        // 둘레를 나눈 조각 수(색이 조각마다 다르다)
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rf = new RectF();
+        private final android.graphics.Path[] seg = new android.graphics.Path[N];
+        private final int[] col = new int[N];
         private ValueAnimator anim;
-        private int mode;
+        private int mode, built = -1;
         boolean pill;
-        private float angle;
-        Border(Context c) { super(c); p.setStyle(Paint.Style.STROKE); setClickable(false); setVisibility(View.GONE); }       // 처음엔 숨김 — 보이는 채로 카드(WRAP_CONTENT)에 MATCH_PARENT 로 들어가면 화면 높이만큼 카드가 늘어난다
+        private float head;                                                        // 빛의 머리 위치(0~1)
+        private static final int RAINBOW_N = 8;
+        private final int[] rainbow = new int[] { 0xFFFF3B30, 0xFFFF9500, 0xFFFFD60A, 0xFF34C759, 0xFF00C7BE, 0xFF0A84FF, 0xFFAF52DE, 0xFFFF2D92, 0xFFFF3B30 };
+        Border(Context c) {
+            super(c); p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.BUTT); setClickable(false); setVisibility(View.GONE);       // 처음엔 숨김 — 보이는 채로 카드(WRAP_CONTENT)에 MATCH_PARENT 로 들어가면 화면 높이만큼 카드가 늘어난다
+            for (int i = 0; i < N; i++) { seg[i] = new android.graphics.Path(); col[i] = rainbowAt((i + 0.5f) / N); }
+        }
+        private int rainbowAt(float f) {
+            float x = f * RAINBOW_N; int i = Math.min(RAINBOW_N - 1, (int) x); float t = x - i;
+            int a = rainbow[i], b = rainbow[i + 1];
+            return 0xFF000000 | (((int) (((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t)) << 16) | (((int) (((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t)) << 8) | (int) ((a & 255) * (1 - t) + (b & 255) * t);
+        }
         /** 카드 크기에 영향을 주지 않는다: 카드가 정해진 뒤(EXACTLY)에만 그 크기를 따르고, 재는 동안엔 0. */
         @Override protected void onMeasure(int ws, int hs) {
             setMeasuredDimension(MeasureSpec.getMode(ws) == MeasureSpec.EXACTLY ? MeasureSpec.getSize(ws) : 0, MeasureSpec.getMode(hs) == MeasureSpec.EXACTLY ? MeasureSpec.getSize(hs) : 0);
@@ -492,20 +504,37 @@ final class RideOverlay {
             if (anim != null) { anim.cancel(); anim = null; }
             if (m == 0) { setVisibility(View.GONE); return; }
             setVisibility(View.VISIBLE);
-            anim = ValueAnimator.ofFloat(0f, 360f); anim.setInterpolator(new LinearInterpolator()); anim.setRepeatCount(ValueAnimator.INFINITE); anim.setDuration(OvCore.spinMs(m));
-            anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { angle = (Float) a.getAnimatedValue(); invalidate(); } });
+            anim = ValueAnimator.ofFloat(0f, 1f); anim.setInterpolator(new LinearInterpolator()); anim.setRepeatCount(ValueAnimator.INFINITE); anim.setDuration(OvCore.spinMs(m));
+            anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(ValueAnimator a) { head = (Float) a.getAnimatedValue(); invalidate(); } });
             anim.start();
         }
         @Override protected void onDetachedFromWindow() { super.onDetachedFromWindow(); if (anim != null) { anim.cancel(); anim = null; mode = 0; } }
+        /** 카드 크기(또는 모양)가 바뀌면 둘레 조각 길을 다시 만든다 — 그릴 때마다 만들지 않는다. */
+        private void build(float w) {
+            int key = getWidth() * 7919 + getHeight() * 31 + (pill ? 1 : 0);
+            if (key == built) return;
+            built = key;
+            float in = w * 0.65f;                                                                              // 가장 굵을 때(1.3배)도 카드 밖으로 안 잘리게
+            rf.set(in, in, getWidth() - in, getHeight() - in);
+            android.graphics.Path ring = new android.graphics.Path(); float r = dp(pill ? 15 : 14);
+            ring.addRoundRect(rf, r, r, android.graphics.Path.Direction.CW);
+            android.graphics.PathMeasure pm = new android.graphics.PathMeasure(ring, true);
+            float len = pm.getLength();
+            for (int i = 0; i < N; i++) {
+                seg[i].reset();
+                pm.getSegment(len * i / N, Math.min(len, len * (i + 1) / N + 1.2f), seg[i], true);          // 이웃 조각과 1px 겹쳐 틈이 안 생기게
+            }
+        }
         @Override protected void onDraw(Canvas cv) {
-            if (mode == 0 || getWidth() == 0) return;
+            if (mode == 0 || getWidth() == 0 || getHeight() == 0) return;
             float w = dp(2.5f);
-            p.setStrokeWidth(w);
-            p.setShader(new SweepGradient(getWidth() / 2f, getHeight() / 2f, new int[] { 0xFFFF3B30, 0xFFFF9500, 0xFFFFD60A, 0xFF34C759, 0xFF00C7BE, 0xFF0A84FF, 0xFFAF52DE, 0xFFFF2D92, 0xFFFF3B30 }, null));
-            rf.set(w / 2f, w / 2f, getWidth() - w / 2f, getHeight() - w / 2f);
-            cv.save(); cv.rotate(angle, getWidth() / 2f, getHeight() / 2f);
-            cv.drawRoundRect(rf, dp(pill ? 15 : 14), dp(pill ? 15 : 14), p);
-            cv.restore();
+            build(w);
+            for (int i = 0; i < N; i++) {
+                double pos = (i + 0.5) / N, a = OvCore.ringAlpha(pos, head);
+                p.setStrokeWidth(w * (float) (1.0 + 0.3 * OvCore.glow(pos, head)));                           // 빛이 지나는 자리는 살짝 굵게
+                p.setColor((col[i] & 0x00FFFFFF) | ((int) Math.round(255 * a) << 24));
+                cv.drawPath(seg[i], p);
+            }
         }
     }
 
@@ -551,7 +580,7 @@ final class RideOverlay {
         @Override protected void onMeasure(int w, int h) { setMeasuredDimension(MeasureSpec.getSize(w), dp(64)); }
         private void layoutBtns() {
             float w = getWidth(), top = dp(17), bot = dp(47);
-            if (row.kind == 1) { b2.set(w - dp(8) - dp(46), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(78), top, b2.left - dp(6), bot); }
+            if (row.kind == 1) { b2.set(w - dp(8) - dp(42), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(92), top, b2.left - dp(6), bot); }
             else { b1.set(w - dp(8) - dp(84), top, w - dp(8), bot); b2.setEmpty(); }
         }
         /** 화면 좌표(rx, ry)가 어느 버튼인가: 1 첫 버튼 · 2 둘째 버튼 · 0 글 부분 · -1 줄 밖. */
