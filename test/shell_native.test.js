@@ -577,7 +577,7 @@ function findAndroidJar() {
     assert.ok(/private void locHub\(Location l\)[\s\S]{0,260}hcFixFrom\(la, lo\);\s*busLocFollow\(la, lo\);/.test(a), '허브: 홈 카드 위치와 버스 탭을 한 곳에서');
     assert.ok(/saveLoc\(l\); locHub\(l\);/.test(a) && /got\[0\] = true; locHub\(l\);/.test(a), '현재 위치(1초) · 기기가 알던 위치(0.1초) 둘 다 허브로');
     const f = a.slice(a.indexOf('private void busLocFollow'), a.indexOf('private static final double BUS_FAR_DEG'));
-    assert.ok(/home\.riding\(\)\) return;/.test(f) && /BUS_MOVE_DEG\)\) return;/.test(f) && /farLL\(map\.busLL, la, lo, BUS_FAR_DEG\)\) \{ map\.setBusLoc\(la, lo\); reloadMap\(false\); return; \}/.test(f) && /busMove\(la, lo\);/.test(f), '탑승 중 제외 · 55m 안이면 그대로 · 165m 넘게는 곧바로 그 동네 화면 · 그 안쪽은 조용히 바꿔 끼움');
+    assert.ok(/home\.riding\(\)\) return;/.test(f) && /BUS_MOVE_DEG\)\) return;/.test(f) && /map\.busLL == null \|\| map\.stopCount\(\) == 0\) \{ map\.setBusLoc\(la, lo\); reloadMap\(false\); return; \}/.test(f) && !/busMove\(la, lo\);/.test(f) && /if \(quiet\) return;/.test(a.slice(a.indexOf('private void busMove('), a.indexOf('private void busMove(') + 900)), 's231: 탑승 중 제외 · 55m 안이면 그대로 · 정류장이 이미 떠 있으면 이동해도 자동 재탐색 없음(새로고침 단추만) · 처음 그릴 때만 그 동네 화면');
     assert.ok(/preconnectBus\(\); locKick\(\);/.test(a) && /private void locKick\(\)[\s\S]{0,200}locateNow\(8000L, 1000L, 60000L, 120000L/.test(a), '버스 탭에 들어올 때 위치를 한 번 더 확인(0.1초 → 1초)');
     assert.ok(/K_BUSCELL = \"bus_cell\"/.test(sc.replace(/\\"/g, '"')) || /K_BUSCELL = "bus_cell"/.test(sc), '위치 칸 저장 열쇠');
     assert.ok(/busViewSuffix\(String screen, String mode, Store st, String cell\)/.test(sc) && /\"\|\" \+ MapCore\.VW_NEAR \+ \"\|\" \+ \(cell == null/.test(sc.replace(/\\"/g, '"')) || /"\|" \+ MapCore\.VW_NEAR \+ "\|" \+ \(cell == null/.test(sc), '버스 주변 화면 열쇠에 위치 칸');
