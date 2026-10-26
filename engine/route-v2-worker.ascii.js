@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s221";
+var ENGINE_VERSION = "route-v2-2026-10-26s223";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -20341,12 +20341,11 @@ function resultScreen(opt, r) {
     if (k) nodes = nodes.concat(k.head).concat(k.body);
     if (fuse) nodes.push({ t: 'spacer', h: 0, slot: 'ai' });          // \ud648 \uce74\ub4dc\uc758 AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551\uc774 \ud569\uccd0\uc838 \ub4e4\uc5b4\uc62c \uc790\ub9ac(\uc571\uc774 into:'ai' \uce74\ub4dc\ub97c \uc5ec\uae30\ub85c \uc62e\uae34\ub2e4; \ubabb \uc62e\uae30\uba74 \uadf8\ub300\ub85c 0 \ub192\uc774)
     if (r.ride && r.ride.on) {
-      var sl = cap >= RES_ROW_CAP ? resSlotNode(r.ride.row) : null;                 // \uc6f9 routeActRow: \uc624\ub978\ucabd\uc5d0 \ud0d1\uc2b9 \u2192 \ud658\uc2b9 \u2192 \ub3c4\ucc29 \uce78(\uce78\uc758 \ub73b\u00b7\uc804\ud658\uc740 \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
+      // s223(YJ): \uce74\ub4dc \uc624\ub978\ucabd [\ud0d1\uc2b9/\ud658\uc2b9/\ub3c4\ucc29] \uce78\uc740 \ube90\ub2e4 \u2014 \ud558\ub2e8 \uc54c\uc57d\uc758 \ubc84\ud2bc\uacfc \uacb9\uccd0 \uc911\ubcf5\uc774\ub2e4(resSlotNode \u00b7 rh.slot \uc740 \uadf8\ub300\ub85c \ub454\ub2e4)
       var rowKids = [
         { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
         { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
       var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
-      if (sl) { rowKids.push(sl.btn); if (sl.an) rowNode.an = sl.an; }
       nodes.push(rowNode);
     } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // \uc6f9 routeActRow(\uc548\ub0b4 \uc804): [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30][\uacbd\ub85c \ud655\uc815(\ud30c\ub791)]
       { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
@@ -22938,7 +22937,7 @@ function hdrScreen(inp) {
   var msgs = [];
   for (var k = 0; k < arr.length && msgs.length < 60; k++) { var s = hdrStripEmoji(arr[k]); if (s) msgs.push(s.length > 80 ? s.slice(0, 80) : s); }
   return { ok: true, v: 1, screen: 'hdr', rev: cat + ':' + day + ':' + h, cover: 'tab', head: [],
-    body: [{ t: 'marq', h: 26, pad: [8, 14, 8, 14], msgs: msgs, pass: 16000, grad: 6000, line: true }], info: { cat: cat, hour: h, n: msgs.length } };
+    body: [{ t: 'marq', h: 26, pad: [8, 8, 8, 9], msgs: msgs, pass: 16000, grad: 6000, line: true }], info: { cat: cat, hour: h, n: msgs.length } };
 }
 // \ub9e8 \uc704 \uac10\uc131 \ubb38\uad6c \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET|POST /screen/hdr (engine/hdr.js \uc758 hdrScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/hdr") return handleScreenHdr(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ucffc\ub9ac: tz(\ubd84, \ub3d9\ucabd +, \uae30\ubcf8 540) \u00b7 now(ms, \uc2dc\ud5d8\uc6a9). \uc800\uc7a5\ud558\ub294 \uac83\ub3c4 \uac1c\uc778 \uc815\ubcf4\ub3c4 \uc5c6\ub2e4.
