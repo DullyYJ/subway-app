@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-26s220";
+var ENGINE_VERSION = "route-v2-2026-10-26s221";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17179,12 +17179,12 @@ function homeBrief(o) {
       cs.slice(0, 10).forEach(function (sg) {
         if (!sg) return;
         var ln = sg.line || (sg.type === 2 ? '' : '\uc5f4\ucc28'), tl2 = [{ stn: [sg.from, sg.line] }, '\uc5d0\uc11c '];
-        if (sg.type === 2) { tl2.push({ ln: ln ? ln + '\ubc88' : '\ubc84\uc2a4' }); tl2.push(ln ? ' \ubc84\uc2a4\ub97c \ud0c0\uace0 ' : '\ub97c \ud0c0\uace0 '); }
-        else { tl2.push({ ln: ln }); tl2.push(hbJosEul(ln) + ' \ud0c0\uace0 '); }
-        tl2.push({ stn: [sg.to, sg.line] }); tl2.push('\uc5d0\uc11c \ub0b4\ub824\uc694.');
+        if (sg.type === 2) { tl2.push({ ln: ln ? ln + '\ubc88' : '\ubc84\uc2a4' }); tl2.push(ln ? ' \ubc84\uc2a4 \ud0d1\uc2b9 \ud6c4 ' : ' \ud0d1\uc2b9 \ud6c4 '); }
+        else { tl2.push({ ln: ln }); tl2.push(' \ud0d1\uc2b9 \ud6c4 '); }
+        tl2.push({ stn: [sg.to, sg.line] }); tl2.push(' \ud558\ucc28.');                 // s221: '\ud14c\ud06c\ub178\ud30c\ud06c\uc5d0\uc11c \uc778\ucc9c1\ud638\uc120 \ud0d1\uc2b9 \ud6c4 \uc6d0\uc778\uc7ac \ud558\ucc28. (00\ubd84 \uc18c\uc694)'
         var sm = hbNum(sg.min, 0);
         if (sg.type === 4 && sg.depClock && sg.arrClock) { tl2.push(' ('); tl2.push({ b: sg.depClock }); tl2.push(' \ucd9c\ubc1c, '); tl2.push({ b: sg.arrClock }); tl2.push(' \ub3c4\ucc29' + (sm > 0 ? ', ' + durTxt(sm) + ' \uc18c\uc694' : '') + ')'); }
-        else if (sm > 0) tl2.push(' (' + durTxt(sm) + ' \uc18c\uc694)');             // s220: \uad6c\uac04\ub9c8\ub2e4 \uc18c\uc694\uc2dc\uac04
+        else if (sm > 0) tl2.push(' (' + durTxt(sm) + ' \uc18c\uc694)');
         P(tl2);
       });
       if (cld >= 0) P(['\uc2b9\ucc28\uad8c\uacfc \ucd9c\ubc1c \uc2dc\uac01\uc740 \ud55c \ubc88 \ub354 \ud655\uc778\ud574 \uc8fc\uc138\uc694.']);
