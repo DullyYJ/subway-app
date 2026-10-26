@@ -316,6 +316,7 @@ public class ScreenView extends View {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
         lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
+        if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; }
         if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
         else if (!lay.bandSig.equals(bandSig)) { bandSig = lay.bandSig; bandX = lay.mkBody && lay.mk != null ? ScreenCore.clamp(lay.mk.x(lay.mk.r) - lay.bandL - lay.bandView / 2f, lay.bandMax()) : 0f; }      // 새 경로면 내 위치(없으면 처음)가 보이게
         if (lay.ctrSig.length() == 0) ctrDone = null;
@@ -417,6 +418,7 @@ public class ScreenView extends View {
                 if (pressed != null && pressed.kind == ScreenCore.K_BCARD && "near".equals(pressed.value) && !inHead && !inFoot && roEnabled()) ui.postDelayed(lpRun, RO_LP_MS);       // 꾹 누르면 순서 바꾸기
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
+                pgHit = pagerAt(x, y);
                 swX0 = x; swY0 = y; swT0 = downT; swOff = false;
                 swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || (pressed != null && (pressed.kind == ScreenCore.K_BUTTON || pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
                 invalidate();
@@ -437,12 +439,17 @@ public class ScreenView extends View {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         float adx = Math.abs(x - downX), ady = Math.abs(y - downY);
+                        if (pgHit != null && adx > ady * SW_LOCK && ((x - downX < 0f && pgPage == 0) || (x - downX > 0f && pgPage == 1))) { mode = 10; pgDragOn = true; pgDownPos = pgPos; pgLast = SystemClock.uptimeMillis(); lastX = x; blurInput(); invalidate(); return true; }          // 두 쪽 카드를 가로로 밀기 시작
                         if (swipeHost != null && !swBlock && !swOff && !inHead && !inFoot && !inBand && adx > ady * SW_LOCK && swipeHost.canSwipe()) { mode = 9; swShift = 0f; swRelT = 0L; lastX = x; blurInput(); invalidate(); return true; }          // 가로로 밀기 시작 — 가로로 잠가 세로 스크롤을 멈춘다(비스듬히 밀어도 목록이 흔들리지 않게)
                         mode = inHead ? (inChips ? 2 : 0) : (inFoot ? 0 : 1);   // 머리는 칩 줄만 가로로 민다(안내 상자·검색줄은 고정) · 아래 고정 줄은 안 밀린다
                         if (inHead && Math.abs(y - downY) > Math.abs(x - downX) * 2f) mode = 0;     // 머리를 위아래로 쓸면 무시
                         if (mode == 1 && inBand && Math.abs(x - downX) > Math.abs(y - downY)) mode = 8;          // 타임라인 줄은 가로로 밀면 그 줄만 민다(세로로 쓸면 목록)
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
                     } else return true;
+                }
+                if (mode == 10) {                                                                 // 두 쪽 카드를 손가락 따라 민다
+                    if (pgHit != null) pgPos = ScreenCore.clamp(pgDownPos - (x - downX) / dpr / Math.max(1f, pgHit.w), 1f);
+                    lastX = x; invalidate(); return true;
                 }
                 if (mode == 9) {                                                                  // 가로로 잠긴 몸짓: 본문은 손가락을 반쯤 따라 움직이기만 한다(세로 스크롤 없음)
                     float ax9 = Math.abs(x - swX0), ay9 = Math.abs(y - swY0);
@@ -458,6 +465,12 @@ public class ScreenView extends View {
             case MotionEvent.ACTION_UP: {
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
+                if (mode == 10) {                                                                 // 놓았다: 빠르게 쓸었거나 절반 넘게 밀렸으면 그 쪽으로
+                    vt.computeCurrentVelocity(1000, maxFling);
+                    float vx = vt.getXVelocity();
+                    pgPage = vx < -PG_FLING * dpr ? 1 : vx > PG_FLING * dpr ? 0 : (pgPos > 0.5f ? 1 : 0);
+                    pgDragOn = false; pgHit = null; pgLast = SystemClock.uptimeMillis(); finishTouch(); invalidate(); return true;
+                }
                 if (mode == 9) {                                                                  // 가로로 민 몸짓을 놓았다: 32dp 넘게 밀었으면 칸을 넘기고(손가락 오른쪽 = 왼쪽 칸 · 왼쪽 = 오른쪽 칸) 아니면 제자리로
                     float sdx = x - swX0;
                     boolean fire = Math.abs(sdx) >= SW_MIN_DP * dpr;
@@ -500,11 +513,12 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = pgPos > 0.5f ? 1 : 0; } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
     private boolean pressInFoot;
+    private static final float PG_FLING = 500f;
     /** 분류 칩을 누르면 새 화면이 오기 전에 먼저 그 칩을 켜 보인다(같은 줄의 다른 칩은 끈다) — 엔진 화면이 오면 그것으로 덮어쓴다. */
     private void pickChip(ScreenCore.Item pi) {
         if (lay == null) return;
@@ -574,6 +588,59 @@ public class ScreenView extends View {
     }
 
     // ───────────── 캐릭터 장면(혼잡도 카드) — 엔진이 정한 값을 SceneCore 가 그린다. 여기는 크기·시계·손가락만 이어 준다 ─────────────
+    // ───────────── 두 쪽 카드(혼잡도 ↔ 지하철 객실 장면): 앱은 두 쪽을 가로로 밀어 넘기기만 한다. 두 번째 쪽 글·열차 위치(시각표)는 엔진이 준다 ─────────────
+    private int pgPage; private float pgPos, pgDownPos; private long pgLast; private boolean pgDragOn, pgAnim;
+    private ScreenCore.Item pgHit; private String trainPosCache = "";
+    private final ScreenCore.Item pgSc = new ScreenCore.Item();
+    private final RectF pgRect = new RectF();
+    private static boolean isPager(ScreenCore.Item it) { return it.kind == ScreenCore.K_PANEL && it.pgN > 0 && it.sc2.length() > 0; }
+    private ScreenCore.Item pagerAt(float px, float py) {
+        if (lay == null || sceneFailed) return null;
+        float x = px / dpr, y = py / dpr;
+        if (y < lay.headH || (lay.footH > 0f && y >= footTop())) return null;
+        float by = y - lay.headH + scrollY;
+        for (ScreenCore.Item it : lay.body) if (isPager(it) && x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return it;
+        return null;
+    }
+    private boolean hasPager() { if (lay == null) return false; for (ScreenCore.Item it : lay.body) if (isPager(it)) return true; return false; }
+    /** 넘기는 중이 아니면 목표 쪽으로 부드럽게 다가간다(0=혼잡도 · 1=객실). */
+    private float pgStep(long now) {
+        long dt = pgLast == 0L ? 16L : Math.min(50L, now - pgLast); pgLast = now;
+        if (pgDragOn) return pgPos;
+        float tgt = pgPage;
+        if (pgPos != tgt) { pgPos += (tgt - pgPos) * Math.min(1f, dt / 70f); if (Math.abs(tgt - pgPos) < 0.004f) pgPos = tgt; pgAnim = pgPos != tgt; }
+        return pgPos;
+    }
+    /** 두 쪽 카드 그리기: 틀(둥근 카드)은 그대로 두고 안쪽만 가로로 민다. 첫 쪽은 원래 칸들, 두 번째 쪽은 객실 장면. 반환: 건너뛸 칸 수. */
+    private int drawPager(Canvas cv, ScreenCore.Item pn, int i, long now) {
+        float o = pgStep(now);
+        drawItem(cv, pn);
+        cv.save();
+        cv.clipRect(pn.x + 1f, pn.y + 1f, pn.x + pn.w - 1f, pn.y + pn.h - 1f);
+        if (o < 1f) {
+            cv.save(); cv.translate(-o * pn.w, 0f);
+            for (int k = 1; k <= pn.pgN && i + k < lay.body.length; k++) drawItem(cv, lay.body[i + k]);
+            cv.restore();
+        }
+        if (o > 0f) {
+            float in = 7f;
+            pgSc.kind = ScreenCore.K_SCENE; pgSc.value = pn.sc2; pgSc.x = pn.x + in; pgSc.y = pn.y + in; pgSc.w = pn.w - in * 2f; pgSc.h = pn.h - in * 2f; pgSc.radius = 10f;
+            cv.save(); cv.translate((1f - o) * pn.w, 0f);
+            drawScene(cv, pgSc);
+            cv.restore();
+        }
+        cv.restore();
+        // 쪽 표시 점 둘(가운데 아래)
+        float cx = pn.x + pn.w / 2f, cy = pn.y + pn.h - 6f;
+        p.setStyle(Paint.Style.FILL);
+        for (int d = 0; d < 2; d++) {
+            float on = d == 0 ? 1f - o : o;
+            p.setColor(alpha(o > 0.5f ? 0xFFFFFFFF : pal[R_SUB], 0.35f + 0.55f * on));
+            cv.drawCircle(cx + (d == 0 ? -5f : 5f), cy, 2.2f + 0.8f * on, p);
+        }
+        return pn.pgN;
+    }
+
     private SceneDriver scene;
     private String sceneJson = "";
     private boolean sceneFailed, sceneDrawn, sceneTouch;
@@ -597,7 +664,12 @@ public class ScreenView extends View {
             scene.load();
         }
         scene.layout(it.w, it.h, dpr, darkNow());
-        if (!it.value.equals(sceneJson)) { sceneJson = it.value; scene.apply(sceneJson); }
+        if (!it.value.equals(sceneJson)) { sceneJson = it.value; scene.apply(sceneJson); trainPosCache = null; }
+        if ("train".equals(scene.mode())) {                                                  // 객실 장면: 탑승 엔진의 시각표(pos.segs)와 지금 시각만 건네 준다 — 달림/섬은 그 시각의 함수
+            String pj = RideService.running ? RideService.livePos : "";
+            if (!pj.equals(trainPosCache)) { trainPosCache = pj; scene.core().trainPos(pj); }
+            scene.core().trainClock(System.currentTimeMillis());
+        }
         sceneDrawn = true; sceneL = it.x; sceneW = it.w; sceneH = it.h;
         sceneT = it.y + lay.headH - scrollY;
         if (!scene.isLoaded()) return;
@@ -1761,7 +1833,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1798,6 +1870,7 @@ public class ScreenView extends View {
         for (int i = r[0]; i < r[1]; i++) {
             ScreenCore.Item bit = lay.body[i];
             if (bit.kind == ScreenCore.K_SWAP) continue;
+            if (!sceneFailed && isPager(bit)) { i += drawPager(cv, bit, i, now); continue; }
             if (bit.band) { cv.save(); cv.clipRect(bit.cl, bit.y - 4f, bit.cr, bit.y + bit.h + 4f); cv.translate(-bandX, 0f); drawItem(cv, bit); cv.restore(); }      // 카드 안 타임라인: 틀 안에서 가로로 밀린다
             else drawItem(cv, bit);
         }
@@ -1855,7 +1928,7 @@ public class ScreenView extends View {
         if (glowDrawn && isShown()) { float goy = lay.headH - scrollY; postInvalidateOnAnimation(Math.round(glX0 * dpr), Math.round((glY0 + goy) * dpr), Math.round(glX1 * dpr), Math.round((glY1 + goy) * dpr)); }   // 무지개 카드가 보이는 동안만, 그 카드 자리만
         if (tdAct || tdAnim) postInvalidateOnAnimation(); else if (tdDrawn) postInvalidateDelayed(2000L);                          // 세부경로: 지금 가는 구간이 보이면 현재위치 점이 맥박 치도록 화면 박자로, 아니면 웹처럼 2초마다 진행만 갱신
         if (cdDrawn) postInvalidateDelayed(1000L - (System.currentTimeMillis() % 1000L) + 5L);       // 버스 도착 카운트다운이 보이는 동안 초가 바뀔 때마다 한 번씩
-        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 9 || mode == 5 || bcAnim || arAnim || spAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
+        if (moving || mode == 1 || mode == 2 || mode == 8 || mode == 9 || mode == 10 || pgAnim || mode == 5 || bcAnim || arAnim || spAnim || tmAnimOn || msgAnimOn || rtAnim || roAnim) postInvalidateOnAnimation();
         else if (tmDrawn) postInvalidateDelayed(50L);                                             // 내 위치 점 뒤로 퍼지는 고리(웹 1.6초 주기)
         else if (pulsing || hrDrawn) postInvalidateDelayed(mkMs > 0f && now - mkT0 < mkMs ? 16L : 66L);      // 마커 맥박·고리(마커가 있을 때만; 가만히 있으면 초당 15번)
     }
