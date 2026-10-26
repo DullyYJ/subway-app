@@ -333,8 +333,21 @@ public class RideService extends Service {
     private void fireReco(final String body) {
         final Context app = getApplicationContext();
         boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core, jnum(body, "arrMs"), jnum(body, "nowMs"));
-        recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름"; recoStageAt = System.currentTimeMillis();
+        recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름 — 바로 받는 중"; recoStageAt = System.currentTimeMillis();
+        if (ok || recoLive) return;
+        // s237(YJ: 도착 전 맛집·카페·쿠팡이 안 나온다): 받아 둔 글이 없거나 시간대가 달라졌어도 추천은 한 여정에 한 번뿐이라 다시 안 온다 → 지금 서버에서 바로 받아 알림과 오버레이 추천 줄에 쓴다.
+        recoLive = true;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                boolean sent = false;
+                try { sent = RecoNotify.send(app, body, core); } catch (Throwable ignored) { }
+                recoStage = sent ? "바로 받아 알림 보냄" : "바로 받기 실패/보낼 시간대 아님"; recoStageAt = System.currentTimeMillis();
+                recoLive = false;
+                if (sent && h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } });
+            }
+        }, "ride-reco-live").start();
     }
+    private volatile boolean recoLive = false;
     /** 추천 본문(JSON 글)에서 정수 값 하나 — 없으면 0. */
     private static long jnum(String body, String key) {
         try {
