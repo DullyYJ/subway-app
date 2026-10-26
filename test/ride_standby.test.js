@@ -88,11 +88,11 @@ t('상주 알림 문구: 다음 역·도착 시각·목적지까지 남은 정�
   assert.ok(/^다음 S\d \d\d:\d\d · S4까지 \d정거장$/.test(txt), txt);
 });
 
-t('도착 알림 3분 뒤 done, 그 전에는 done 이 아니다', () => {
+t('도착 5분 뒤 done, 그 전에는 done 이 아니다(s237: 3분 → 5분)', () => {
   let arrAt = null, doneAt = null;
   ride(mkState(), at(12, 53, 0), at(13, 10, 0), 0, (ms, l) => { if (l.alert && l.alert.type === 'arrive') arrAt = ms; if (l.done && !doneAt) doneAt = ms; });
   assert.ok(arrAt && doneAt, '도착과 종료가 있어야 한다');
-  assert.ok(doneAt - arrAt >= 180000 && doneAt - arrAt <= 190000, '도착 ' + arrAt + ' 종료 ' + doneAt);
+  assert.ok(doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000, '도착 ' + arrAt + ' 종료 ' + doneAt);
 });
 
 t('열차가 빨리 가면 GPS 통과 시각으로 영점이 잡혀 뒤 도착 시각이 당겨진다(밀고 당기기)', () => {
@@ -355,23 +355,35 @@ t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5�
   far.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 5000, 'far '+new Date(ms).toISOString() + ' ' + r.nextMs); });
   const s2 = mkState(); s2.eta.notDeparted = true;
   assert.strictEqual(rideStandby({ nowMs: at(12, 56, 0), fixes: [], state: s2 }).nextMs, 5000, '승차 전');
-  { const q = rideStandby({ nowMs: at(12, 53, 0), fixes: [], state: Object.assign(mkState(), { arrivedAt: at(12, 49, 0) }) }); assert.ok(q.done && q.nextMs === 5000, '끝나면 기본 간격 ' + q.nextMs); }
+  { const q = rideStandby({ nowMs: at(12, 53, 0), fixes: [], state: Object.assign(mkState(), { arrivedAt: at(12, 47, 0) }) }); assert.ok(q.done && q.nextMs === 5000, '끝나면 기본 간격 ' + q.nextMs); }
 });
 
 
 // ── 오버레이 하단 줄 · 탑승 줄 · 앱 종료 (s109) ─────────────────────────────────────
 const stepO = (st, ms, extra, fix) => rideStandby(Object.assign({ nowMs: ms, fixes: fix === false ? [] : [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
-t('내릴 준비 줄: 목적지 한 정거장 전에만 나오고(앱 종료 버튼 · 응원 문구), 추천 줄은 그때 내려간다', () => {
-  let st = withOvl(mkState()), seen = [], rcSent = false;
-  for (let ms = at(12, 53, 0); ms <= at(13, 1, 0); ms += 5000) {
-    const r = stepO(st, ms, rcSent ? null : { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); rcSent = true; st = r.state;
+t('추천 줄은 한 정거장 전에도 그대로 나오고(s237: 내릴 준비 줄이 덮지 않는다), 앱 종료 줄은 도착 3분 뒤에야 나온다', () => {
+  let st = withOvl(mkState()), pre = [], post = [], rcSent = false, arr = null;
+  for (let ms = at(12, 53, 0); ms <= at(13, 10, 0); ms += 5000) {
+    const r = stepO(st, ms, rcSent ? null : { rc: { a: '맛있는집', b: '점심 한 끼', m: '눌러서 위치 확인', go: '메뉴 보러가기' } }); rcSent = true; st = r.state;
     if (r.done) break;
-    const o = r.overlay; if (o && o.getoff && o.getoff.on) seen.push({ ms: ms, g: o.getoff, alert: o.alert, reco: o.reco.on });
+    if (st.arrivedAt && !arr) arr = st.arrivedAt;
+    const o = r.overlay; if (!o) continue;
+    if (!arr && o.alert === 1) pre.push({ ms: ms, reco: o.reco, getoff: o.getoff.on });
+    if (o.getoff && o.getoff.on) post.push({ ms: ms, g: o.getoff });
   }
-  assert.ok(seen.length > 3, '내릴 준비 줄이 나온다 ' + seen.length);
-  assert.ok(seen.every(x => x.g.a === '내릴 준비를 해주세요' && x.g.end === '앱 종료' && x.g.b.length > 0 && x.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(x.g.ch)));
-  assert.ok(seen.slice(0, 5).every(x => x.alert === 1 && x.reco === false), '한 정거장 전에는 추천 대신 내릴 준비');
-  assert.ok(new Set(seen.map(x => x.g.ch)).size === 1, '같은 경고 동안 캐릭터는 그대로');
+  assert.ok(pre.length > 3, '한 정거장 전 구간이 있다');
+  assert.ok(pre.every(x => x.getoff === false), '도착 전에는 앱 종료 줄이 없다');
+  assert.ok(pre.some(x => x.reco.on && x.reco.go === '메뉴 보러가기' && x.reco.m === '눌러서 위치 확인'), '한 정거장 전에도 추천 줄(아이템에 맞춘 버튼 글 · 셋째 줄)이 나온다');
+  assert.ok(arr && post.length > 3 && post[0].ms - arr >= 180000 && post[0].ms - arr <= 190000, '앱 종료 줄은 도착 3분 뒤: ' + (post.length ? post[0].ms - arr : 'none'));
+  assert.ok(post.every(x => x.g.a === '도착했어요' && x.g.end === '앱 종료' && x.g.b.length > 0 && x.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(x.g.ch)));
+  assert.ok(new Set(post.map(x => x.g.ch)).size === 1, '같은 도착 동안 캐릭터는 그대로');
+});
+t('추천 줄 버튼 글(go)은 엔진이 정한 대로 7~8자 안에서 그대로 전달된다(없으면 맛집 보기)', () => {
+  const g = (rc) => stepO(withOvl(mkState()), at(12, 50, 0), { rc: rc }).state.rcAd.go;
+  assert.strictEqual(g({ a: 'x', b: 'y', go: '비 피할 맛집' }), '비 피할 맛집');
+  assert.strictEqual(g({ a: 'x', b: 'y', go: '쿠팡 보기' }), '쿠팡 보기');
+  assert.strictEqual(g({ a: 'x', b: 'y' }), '맛집 보기');
+  assert.strictEqual(g({ a: 'x', b: 'y', go: '아주아주 길고 긴 버튼 이름' }).length, 8);
 });
 t('추천 줄: /reco-text 의 ad 를 req.rc 로 알려 주면 도착 7분 안에 [보기][확인] 줄로 나오고, rcDis 로 닫으면 사라진다', () => {
   let st = withOvl(mkState());
@@ -433,7 +445,7 @@ t('오버레이 탑승 줄: 대기 알약 → (알약 누름 · 출발 2분 전)
   const n = stepO(r.state, at(12, 51, 15), { act: 'undo' }, false);
   assert.ok(!n.state.wait, '시간이 지난 뒤 되돌리기는 무시');
 });
-t('도착 3분 뒤 done 과 함께 quit:true(앱도 끝낸다), 오래 갱신 안 된 상태는 quit 아님', () => {
+t('도착 5분 뒤 done 과 함께 quit:true(앱도 끝낸다), 오래 갱신 안 된 상태는 quit 아님', () => {
   let st = withOvl(mkState()), q = null, done = null;
   for (let ms = at(12, 53, 0); ms <= at(13, 10, 0); ms += 5000) {
     const r = stepO(st, ms); st = r.state;
