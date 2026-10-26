@@ -251,12 +251,11 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const k25 = o25.body[0].kids, k24 = o24.body[0].kids;
   ok(o25.ok && !k25.some(n => n.t === 'box' && /^환승 2번/.test(n.s)), '통합 카드: 환승 1~N번 긴 상자가 홈 카드에서 빠졌다');
   ok(k24.some(n => n.t === 'box' && /^환승 2번/.test(n.s)) && !k24.some(n => n.t === 'tags' || n.slot), '옛 앱(규격 24)은 예전 모양 그대로(상자 · 칩 줄 없음 · 자리 없음)');
-  const ti = k25.findIndex(n => n.t === 'tags'), ki = k25.findIndex(n => n.t === 'trk'), si = k25.findIndex(n => n.slot === 'ai'), bi = k25.length - 1;
-  ok(ti >= 0 && ki === ti + 1, '칩 줄이 노선 타임라인 바로 위에 있다');
+  const ki = k25.findIndex(n => n.t === 'trk'), si = k25.findIndex(n => n.slot === 'ai'), bi = k25.length - 1;
+  ok(!k25.some(n => n.t === 'tags') && ki > 0, 's218: 홈 카드에 요약 칩 줄이 없다(YJ 요청 — 환승 횟수는 AI 브리핑 첫 문장이 말로)');
   ok(si > ki && bi === si + 1 && k25[si].t === 'spacer' && k25[si].h === 0, 'AI 승무원 자리(slot)는 타임라인 아래 · 버튼 줄 위');
-  const items = k25[ti].items.map(i => i.s);
-  ok(items[0] === '환승 2회 \u00b7 40분' && items.some(x => x === 'KTX + 지하철 + 버스') && items.indexOf('광명') > 0 && items.indexOf('구로') > 0, '칩: 환승 횟수·분 / 이동 수단 / 거점 — ' + items.join('|'));
-  ok(!items.some(x => /_/.test(x)) && o25.body[0].kids[0].s !== '부산_부산 \u2192 부산_부산', "'광명_광명' 같은 겹친 이름은 한 번만");
+  const tf = E.resTagFacts ? E.resTagFacts : null;
+  ok(!/_/.test(JSON.stringify(o25.body)), "'광명_광명' 같은 겹친 이름이 화면 어디에도 없다");
   ok(/부산 \u2192 두정/.test(k25[0].s) && !/부산_부산/.test(JSON.stringify(o25.body)), "머리줄·타임라인 어디에도 '부산_부산' 이 남지 않는다");
   const det = xc(25, { view: 'detail' });
   ok(det.ok && det.body[0].t === 'box' && /^환승 2번\n1\. 광명에서/.test(det.body[0].s) && det.body[0].s.indexOf('2. 구로에서') > 0, '세부경로 시트 맨 위에 환승 1~N번 순서');
