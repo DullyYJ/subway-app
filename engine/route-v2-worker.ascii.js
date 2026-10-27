@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s246";
+var ENGINE_VERSION = "route-v2-2026-10-27s248";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -360,6 +360,7 @@ var BUS_HIGHWAY_MPS = 19.4;
 var NEAR_EXTRA = 350;
 var NEAR_RATIO = 0.5;
 var NEAR_KEEP = 4;
+var BOARD_NEAR_EXTRA = 150;
 function busSegSec(dist, rt) {
   rt = rt || "";
   var v = BUS_CRUISE_MPS;
@@ -1336,7 +1337,17 @@ function accessNodes(G, busCoord, lat, lng, allowBus, stat) {
     }
     const inList = o.filter((x) => x[3]);
     const useList = !!(allowBus && allowBus.length && inList.length >= 1);
-    const kept = useList ? inList : o.filter((x, i) => x[3] || i < NEAR_KEEP || x[2] <= cut);
+    let kept = useList ? inList : o.filter((x, i) => x[3] || i < NEAR_KEEP || x[2] <= cut);
+    {
+      let dB = Infinity;
+      for (const x of kept) if (x[0].charCodeAt(0) === 66 && x[2] < dB) dB = x[2];
+      if (isFinite(dB)) {
+        const nearB = dB + Math.max(BOARD_NEAR_EXTRA, dB * 0.5);
+        const k2 = kept.filter((x) => x[0].charCodeAt(0) !== 66 || x[2] <= nearB);
+        if (stat && k2.length < kept.length) stat.farBusDropped = kept.length - k2.length;
+        kept = k2;
+      }
+    }
     if (stat) {
       stat.candListOnly = useList;
       stat.candInList = inList.length;
@@ -3062,6 +3073,7 @@ function shiftBoard(legs, G, SY, SX, accessSec) {
     break;
   }
   if (!bs || !bs.coordList || bs.coordList.length < 3) return null;
+  { const c00 = bs.coordList[0]; if (c00 && hav(SY, SX, c00[0], c00[1]) <= LOOP_BACK_M) return null; }
   const arr = G.routeStops[bs.line];
   if (!arr || arr.length < 2) return null;
   const last = bs.coordList.length - 1;
@@ -22162,7 +22174,8 @@ async function handleScreenMap(request, env) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
-  var out, cap = Number(body.cap) || 0;
+  var out, cap = Number(body.cap) || 0, ttFill = null;
+  try { if (body.f && body.f.part === 'tt') ttFill = await mapTtFill(env, body.f); } catch (eT) { ttFill = null; }          // s248: \uc2dc\uac04\ud45c\ub294 \uc11c\ubc84\uac00 \uc9c1\uc811 \ucc44\uc6b4\ub2e4(\uae30\uae30\ub294 \ud55c \ubc88\ub9cc \ubb3b\ub294\ub2e4) \u2014 \ubabb \ucc44\uc6b0\uba74 \uc608\uc804\ucc98\ub7fc need \uac00 \ub0a8\uc544 \uae30\uae30\uac00 /next-train \uc73c\ub85c \ubc1b\ub294\ub2e4
   try { out = mapScreen({ cap: cap }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   try {
@@ -22172,8 +22185,32 @@ async function handleScreenMap(request, env) {
       if (o2 && o2.ok) out = o2;
     }
   } catch (e3) { /* \uc11c\ubc84\uac00 \ubabb \ubc1b\uc73c\uba74 need \uac00 \ub0a8\uc740 \uccab \ud654\uba74 \uadf8\ub300\ub85c \u2014 \uae30\uae30\uac00 \uc774\uc5b4 \uac04\ub2e4 */ }
+  if (ttFill && out.info) { for (var kf in ttFill) { out.info.fill = ttFill; break; } }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
+}
+// \u2550\u2550\u2550 s248 \uc5ed \uc2dc\uac04\ud45c \uc11c\ubc84 \ucc44\uc6b0\uae30 \u2014 (YJ: "\uc2dc\uac04\ud45c\uac00 \uc548 \ub098\uc640. \ubbf8\ub9ac \ub2e4 \ubc1b\uc544\ub194\uc57c \ud574") \u2550\u2550\u2550
+//   f.tt.sv === 1 \uc774\uba74 \uc774 \uc5ed\uc758 \ubaa8\ub4e0 \ub178\uc120(\uc694\uc77c \ubbf8\uc815)\uacfc \uace0\ub978 \ub178\uc120\u00b7\uc694\uc77c\uc758 \uc2dc\uac04\ud45c\ub97c \uc11c\ubc84(\ub2e4\uc74c \uc5f4\ucc28 \uc5d4\uc9c4)\uac00 \ubc14\ub85c \ucc44\uc6cc \ud55c \ubc88\uc5d0 \uc644\uc131\ub41c \ud654\uba74\uc744 \uc900\ub2e4.
+//   \ucc44\uc6b4 \uac83\uc740 info.fill({ '\ub178\uc120|-' \ub610\ub294 '\ub178\uc120|\uc694\uc77c': \uc2dc\uac04\ud45c }) \ub85c\ub3c4 \ub3cc\ub824\uc918 \uae30\uae30\uac00 \ubaa8\uc544 \ub450\uace0, \ub2e4\uc74c \uc694\uccad\uc5d0\ub294 res \ub85c \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4(\uadf8\ub7ec\uba74 \ub2e4\uc2dc \ucc44\uc6b0\uc9c0 \uc54a\ub294\ub2e4).
+async function mapTtFill(env, f) {
+  var T = f && f.tt;
+  if (!T || T.sv !== 1 || typeof ntEnsure !== 'function') return null;
+  var name = f.stn;
+  if (!mapIsStationLabel(name)) return null;
+  var nt = await ntEnsure(env);
+  if (!nt || typeof nt.timetable !== 'function') return null;
+  var lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20);
+  if (!T.res || typeof T.res !== 'object') T.res = {};
+  var res = T.res, fill = {}, baseMs = Date.now();
+  var put = function (key, line, day) {
+    if (res[key]) return;
+    var a = nt.timetable({ line: line, from: name, baseMs: baseMs, day: day });
+    if (a && typeof a === 'object' && !a.error) { res[key] = a; fill[key] = a; }
+  };
+  for (var i = 0; i < lines.length; i++) put(lines[i] + '|-', lines[i], undefined);
+  var sel = (T.sel && typeof T.sel === 'object') ? T.sel : {};
+  if (sel.line && lines.indexOf(sel.line) >= 0 && /^(DAY|SAT|SUN)$/.test(String(sel.day || ''))) put(sel.line + '|' + sel.day, sel.line, sel.day);
+  return fill;
 }
 // \ub3c4\ucc29\uc815\ubcf4 \ubd84\uc0b0 \ud638\ucd9c \uc2e4\uce21(GET /bus-split-test?n=8&mode=single|split): \uac19\uc740 \uc815\ub958\uc7a5\ub4e4\uc744 \ub3d9\uc2dc\uc5d0 n\ubc88 \ubd88\ub7ec \ud0a4 \ud558\ub098\ub85c\ub9cc vs \ud0a4 \ub458\ub85c \ubc18\ubc18 \ub098\ub234\uc744 \ub54c \uc624\ub958(HTTP_ERROR)\u00b7\uc2dc\uac04\uc744 \ube44\uad50\ud55c\ub2e4. \ud0a4 \uac12\uc740 \ub098\uc624\uc9c0 \uc54a\ub294\ub2e4.
 async function handleBusSplitTest(request, env) {

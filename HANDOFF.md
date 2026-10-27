@@ -2905,3 +2905,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 고침: 엔진 `chatScreens` 의 `alts`(기존) 로 모든 방의 '불러오는 중' 화면(칩 줄 유지 · 고른 칩만 바뀜)을 한 요청으로 받아 `chatLoad` 에 둔다(`ChatCore.loadingBatchRequest/parseLoadingBatch`, `ShellActivity.chatLoadBuild`). 못 받은 방은 이 화면을 먼저 보인다. `chatBgSweep` 은 지금 방에서 가까운 방부터.
 - 엔진·워커 변경 없음 → 워커 재배포 불필요.
 - 기기에서 확인 못 한 것: 앱을 처음 켠 직후 배치가 오기 전 첫 진입은 예전 뼈대로 폴백. 뉴스/쇼핑/맛집 분류 넘김은 아직 범용 뼈대.
+
+## s248 — 시간표 '아직 받지 못했어요' 없애기(서버가 채움 + 미리 받기) · 가까운 정류장 두고 다음 정류장에서 태우지 않기
+- **시간표**: 시트를 열 때 '화면 요청'과 '시간표 요청'이 동시에 나가 노선 목록이 비었거나 응답이 엇갈리면 빈 res 로 '자료를 아직 받지 못했어요'가 나왔다. 이제 `f.tt.sv=1` 이면 `/screen/map`(map-worker `mapTtFill`)이 `ntEnsure` 의 시각표로 이 역의 모든 노선(+고른 노선·요일)을 직접 채워 **한 번에 완성된 화면**을 준다. 채운 것은 `info.fill` 로도 돌려주고 앱(`MapCore.onTt`)이 모아 다음 요청에 res 로 보낸다. 못 채우면(`need` 가 남음) 예전 길(`ttWantFetch` → `/next-train`)로 한 번만 잇는다.
+- **미리 받기**: 역 팝업이 뜬 직후 `ttWarm()` 이 첫 시간표 요청(`ttInitRequest`)을 보내 두고(150초 유효), 시간표 단추는 그 화면을 바로 쓴다. 열 때 `ttFetch` 를 따로 부르지 않는다.
+- **승차 정류장**: `accessNodes` — 버스 정류장은 가장 가까운 곳 + max(150m, 그 거리의 절반) 안만 후보(반대편 길 포함). 앱이 준 주변 목록(allowBus)이 있어도 같다. 지하철역·즐겨찾기 승차(prefBoard)는 그대로. `shiftBoard`(순환선 뒤쪽 정류장으로 옮겨 타기)는 첫 정류장이 사용자에서 500m 안이면 하지 않는다.
+- 시험: `test/access_near_bus.test.js`(신규), `map_server_fetch`(시간표 서버 채우기), ShellJvmTest(첫 요청 = 미리 받기 요청 · fill 모으기 · need 한 번만), shell_native(미리 받기 연결).
+- 엔진 변경 → 워커 `route-v2-2026-10-27s248` 재배포 필요. 앱만 먼저 받으면 옛 워커는 sv 를 무시해 예전처럼 동작(need 가 남아 기기가 받음).

@@ -29,6 +29,13 @@ function findAndroidJar() {
     assert.ok(/ChatCore\.parseLoadingBatch\(r\.body\)/.test(a) && /loadingBatchRequest\(sels/.test(a) && /chatLoadBuild\(sels\)/.test(a), '한 번의 요청으로 모든 방 로딩 화면을 받는다');
     assert.ok(/Math\.min\(da, nn - da\)/.test(a), '미리 받기는 지금 방에서 가까운 방부터');
   });
+  await t('시간표 미리 받기(s248): 역 팝업이 뜨면 모든 노선 시간표를 미리 받아 두고 · 시간표 단추는 이미 받은 화면을 쓰고 · 서버가 못 채웠을 때만 예전 길', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/ttWarm\(\);\s*\/\/ 시간표\(모든 노선\)를 미리/.test(a) && /private void ttWarm\(\)[^]*?ttInitRequest\([^]*?ttCachePut\(json, txt\)/.test(a), '역 팝업 뒤 첫 시간표 요청을 미리 보낸다');
+    assert.ok(/String hit = json\.equals\(map\.ttInitRequest\([^]*?ttCacheHit\(json\)[^]*?if \(hit != null\) \{ ttApply\(hit\); return; \}/.test(a), '시간표 단추: 받아 둔 첫 화면을 바로');
+    assert.ok(/private void ttApply\(String txt\)[^]*?if \(map\.ttWantFetch\(\)\) ttFetch\(\);/.test(a), '서버가 못 채운 경우에만 기기가 /next-train 으로 받는다');
+    assert.ok(!/sheetName = ShellCore\.S_MAPTT;\s*ttRender\(\);\s*ttFetch\(\);/.test(a) && /case MapCore\.R_TT_LOAD: ttRender\(\)/.test(a), '열 때 두 번 묻지 않는다(화면 요청과 시간표 요청 경합 없음)');
+  });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });

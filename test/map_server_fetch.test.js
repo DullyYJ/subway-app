@@ -183,6 +183,33 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     const op = await c.T(new Request('https://x/bus-tago', { method: 'OPTIONS' }), env);
     ok(op.status === 204, 'OPTIONS 204');
   }
+  // ⓪-3 s248: 역 시간표 — f.tt.sv=1 이면 서버(다음 열차 엔진)가 모든 노선 시간표를 직접 채워 한 번에 완성된 화면 · info.fill 로도 돌려준다
+  {
+    const calls = [];
+    const nt = { timetable: (q) => { calls.push(q.line + '|' + (q.day || '-')); return { line: q.line, stn: q.from, dayCode: q.day || 'DAY', today: 'DAY', days: [{ code: 'DAY', label: '평일' }, { code: 'SUN', label: '토·일·공휴일' }], nowMin: 780, dirs: [{ dk: '상', toward: '소요산', times: [330, 340, 790, 800], first: 330, last: 800, nextMin: 790, tomorrow: false }, { dk: '하', toward: '인천', times: [335, 350, 795], first: 335, last: 795, nextMin: 795, tomorrow: false }], noData: false }; } };
+    const ttBody = (extra) => ({ cap: 23, f: { part: 'tt', stn: '영등포', reg: '수도권', th: 'dark', tt: Object.assign({ st: 'loading', sel: { line: '', day: '', dk: '' }, res: {} }, extra || {}) } });
+    const HS = require('../engine/home-stations').HOME_STNS;
+    let c = load({ ntEnsure: async () => nt, HOME_STNS: HS });
+    let r = await post(c.H, {}, ttBody({ sv: 1 }));
+    const txt = JSON.stringify(r.j.body || []) + JSON.stringify(r.j.head || []);
+    ok(r.status === 200 && r.j.info.need === null && r.j.info.fill && r.j.info.fill['1호선|-'] && /첫차/.test(txt) && !/불러오는 중/.test(txt), '서버가 채워 한 번에: 시간표가 그려지고 need 없음 · info.fill 에 노선별 시간표');
+    ok(calls.every(x => /\|-$/.test(x)), '요일을 안 골랐으면 노선마다 한 번씩(요일 미정): ' + calls.join());
+    const pre = nt.timetable({ line: '1호선', from: '영등포' });
+    calls.length = 0;
+    r = await post(c.H, {}, ttBody({ sv: 1, sel: { line: '1호선', day: 'SUN', dk: '' }, res: { '1호선|-': pre } }));
+    ok(r.j.info.need === null && r.j.info.fill && Object.keys(r.j.info.fill).join() === '1호선|SUN' && calls.join() === '1호선|SUN', '요일을 고르면 그 노선·요일만 새로 채운다(이미 있는 것은 다시 계산 안 함): ' + calls.join());
+    calls.length = 0;
+    r = await post(c.H, {}, ttBody({ sv: 1, res: { '1호선|-': pre } }));
+    ok(!r.j.info.fill && r.j.info.need === null, '이미 다 있으면 채우지 않는다(fill 없음)');
+    r = await post(c.H, {}, ttBody());
+    ok(!r.j.info.fill && r.j.info.need && r.j.info.need.line === '1호선', 'sv 가 없으면(옛 앱) 예전처럼 need 를 남긴다');
+    c = load({ ntEnsure: async () => null, HOME_STNS: HS });
+    r = await post(c.H, {}, ttBody({ sv: 1 }));
+    ok(r.status === 200 && !r.j.info.fill && r.j.info.need, '시각표를 못 불러오면 need 가 남아 기기가 예전 길로 받는다');
+    c = load({ ntEnsure: async () => { throw new Error('boom'); }, HOME_STNS: HS });
+    r = await post(c.H, {}, ttBody({ sv: 1 }));
+    ok(r.status === 200 && r.j.info.need, '시각표 엔진이 예외를 던져도 화면은 나간다');
+  }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
 })();

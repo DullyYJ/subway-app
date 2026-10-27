@@ -2793,6 +2793,7 @@ public class ShellActivity extends Activity {
         boolean filled = false;
         if (cached != null) {
             try { map.onStn(cached); map.setLinesFromStn(cached); sv.setScreen(parsedGet(cached), false); filled = true; } catch (Throwable e) { filled = false; }
+            ttWarm();
         }
         final boolean wasFilled = filled;
         final boolean[] slid = new boolean[1];
@@ -2827,6 +2828,7 @@ public class ShellActivity extends Activity {
                     startSlide.run();
                     playPlace();
                     if (mapView != null) mapView.ensureVisible(map.stn);
+                    ttWarm();                                                           // 시간표(모든 노선)를 미리 받아 둔다
                 } });
             }
         }, "shell-mapstn").start();
@@ -2977,7 +2979,7 @@ public class ShellActivity extends Activity {
                 } else toastTx(MapCore.fill(map.msgE2, map.pickName));
                 break;
             case MapCore.R_TT: openTimetable(); break;
-            case MapCore.R_TT_LOAD: ttFetch(); break;
+            case MapCore.R_TT_LOAD: ttRender(); break;                     // 서버가 시간표를 직접 채워 한 번에 그려 준다 — 못 채우면 ttRender 가 예전 길(ttFetch)로 잇는다
             case MapCore.R_TT_RENDER: ttRender(); break;
             default: break;
         }
@@ -2993,7 +2995,6 @@ public class ShellActivity extends Activity {
         if (mapView != null) { mapView.setCover(to); mapView.ensureVisible(map.stn); }          // 시간표가 더 높이 덮으니 역이 그 위 영역 안에 오게(웹은 지도 사각형을 시트 끝까지로 줄인다)                    // 남은 거리에 비례(전부 남았으면 .3초 — 웹 시트 올라오기)
         sheetName = ShellCore.S_MAPTT;
         ttRender();
-        ttFetch();
     }
     /** 시트 창 높이를 부드럽게 바꾼다(웹 시트 곡선). 창이 바뀌었거나 닫혔으면 조용히 멈춘다. */
     private void animSheetH(int a, int b, long ms, final Runnable done) {
@@ -3008,18 +3009,51 @@ public class ShellActivity extends Activity {
             va.start();
         } catch (Throwable ignored) { if (done != null) done.run(); }
     }
-    private void ttRender() {
-        final String json = map.ttRequest(ShellCore.CAP, ShellCore.theme(store));
+    // 시간표: 서버(엔진)가 모든 노선 시간표를 직접 채워 한 번에 완성된 화면을 준다(f.tt.sv=1). 역 팝업이 뜨는 순간 첫 요청을 미리 보내 두어, 시간표 단추를 누르면 이미 받은 화면이 바로 올라온다.
+    private final java.util.LinkedHashMap<String, String> ttCache = new java.util.LinkedHashMap<String, String>();
+    private final java.util.HashMap<String, Long> ttCacheAt = new java.util.HashMap<String, Long>();
+    private final java.util.HashSet<String> ttWarming = new java.util.HashSet<String>();
+    private static final long TT_WARM_MS = 150000L;
+    private String ttCacheHit(String json) {
+        String c = ttCache.get(json); Long at = ttCacheAt.get(json);
+        return c != null && at != null && System.currentTimeMillis() - at < TT_WARM_MS ? c : null;       // 다음 열차 시각이 들어 있어 오래된 화면은 쓰지 않는다
+    }
+    private void ttCachePut(String json, String txt) {
+        ttCache.put(json, txt); ttCacheAt.put(json, System.currentTimeMillis());
+        while (ttCache.size() > 6) { String k = ttCache.keySet().iterator().next(); ttCache.remove(k); ttCacheAt.remove(k); }
+    }
+    /** 역 팝업이 뜬 순간: 이 역의 시간표(모든 노선)를 미리 받아 둔다. */
+    private void ttWarm() {
+        if (map.stn.length() == 0) return;
+        final String json = map.ttInitRequest(ShellCore.CAP, ShellCore.theme(store));
+        if (ttCacheHit(json) != null || !ttWarming.add(json)) return;
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
-                    if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPTT.equals(sheetName) || txt.length() == 0) return;
-                    map.onTt(txt);
-                    present(sheetView, txt, true);
-                    playPlace();
+                    ttWarming.remove(json);
+                    if (txt.length() > 0 && txt.indexOf("\"need\":{") < 0) ttCachePut(json, txt);               // 서버가 다 채운 화면만 둔다
                 } });
+            }
+        }, "shell-ttwarm").start();
+    }
+    private void ttApply(String txt) {
+        if (sheet == null || !sheet.isShowing() || !ShellCore.S_MAPTT.equals(sheetName) || txt.length() == 0) return;
+        map.onTt(txt);
+        present(sheetView, txt, true);
+        playPlace();
+        if (map.ttWantFetch()) ttFetch();                                                // 서버가 못 채웠을 때만 — 예전처럼 기기가 한 번 받아 다시 그린다
+    }
+    private void ttRender() {
+        final String json = map.ttRequest(ShellCore.CAP, ShellCore.theme(store));
+        final String hit = json.equals(map.ttInitRequest(ShellCore.CAP, ShellCore.theme(store))) ? ttCacheHit(json) : null;
+        if (hit != null) { ttApply(hit); return; }                                       // 미리 받아 둔 첫 화면 — 기다림 없이
+        new Thread(new Runnable() {
+            @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
+                final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                main.post(new Runnable() { @Override public void run() { ttApply(txt); } });
             }
         }, "shell-maptt").start();
     }

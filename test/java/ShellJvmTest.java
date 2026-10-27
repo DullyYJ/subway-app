@@ -778,6 +778,16 @@ public class ShellJvmTest {
         ok(mc.sheetAct("mp.start") == MapCore.R_START && mc.sheetAct("mp.dest") == MapCore.R_DEST && mc.sheetAct("mp.close") == MapCore.R_CLOSE && mc.sheetAct("zz") == MapCore.R_NONE, "팝업 단추");
         int sq0 = mc.ttSeq;
         ok(mc.sheetAct("mp.tt") == MapCore.R_TT && mc.ttSeq == sq0 + 1 && "loading".equals(mc.ttState), "시간표 열기");
+        {   // s248: 시간표는 서버(엔진)가 채운다 — 요청에 sv=1 · 팝업에서 미리 받는 첫 요청과 같은 글 · 채워 준 것(info.fill)을 모아 두고 · 못 채웠을 때만 한 번 기기가 받는다
+            String tq0 = mc.ttRequest(18, "dark");
+            ok(tq0.contains("\"sv\":1") && tq0.equals(mc.ttInitRequest(18, "dark")), "시간표 첫 요청 = 미리 받는 요청(같은 글)");
+            mc.onTt("{\"info\":{\"lines\":[\"2호선\",\"신분당선\"],\"line\":\"2호선\",\"day\":\"\",\"need\":{\"line\":\"2호선\",\"day\":\"\"}}}");
+            ok(mc.ttWantFetch() && !mc.ttWantFetch(), "서버가 못 채우면(need) 한 번만 예전 길로 받는다 — 같은 요청을 두 번 묻지 않는다");
+            mc.onTt("{\"info\":{\"lines\":[\"2호선\",\"신분당선\"],\"line\":\"2호선\",\"day\":\"DAY\",\"fill\":{\"2호선|-\":{\"dayCode\":\"DAY\",\"dirs\":[]},\"신분당선|-\":{\"noData\":true}},\"need\":null}}");
+            String tq1 = mc.ttRequest(18, "dark");
+            ok(tq1.contains("\"2호선|-\":{") && tq1.contains("\"신분당선|-\":{") && "ok".equals(mc.ttState) && !mc.ttWantFetch() && !tq1.equals(tq0), "서버가 채워 준 시간표(info.fill)를 모아 다음 요청에 그대로 보낸다 · 더 받을 것 없음");
+            mc.sheetAct("mp.tt");
+        }
         String ab = mc.ttAskBody(1000L);
         ok(ab.contains("\"line\":\"2호선\"") && ab.contains("\"line\":\"신분당선\"") && ab.contains("\"op\":\"timetable\"") && ab.contains("\"from\":\"강남\"") && ab.contains("\"baseMs\":1000") && !ab.contains("\"day\""), "처음엔 모든 노선을 한 번에 묻는다");
         ok(!mc.addTt("{\"items\":[]}", mc.ttSeq - 1), "늦게 온 응답은 버린다");

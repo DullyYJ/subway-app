@@ -338,11 +338,14 @@ public final class MapCore {
     public String stnRequest(int cap, String theme) {
         return "{\"cap\":" + cap + ",\"f\":{\"part\":\"stn\",\"stn\":" + ShellCore.q(stn) + ",\"sl\":" + ShellCore.q(stnLine) + ",\"reg\":" + ShellCore.q(reg()) + ",\"th\":" + ShellCore.q(theme(theme)) + "}}";
     }
-    public String ttRequest(int cap, String theme) {
+    public String ttRequest(int cap, String theme) { return ttReq(cap, theme, ttState, ttLine, ttDay, ttDk, ttRes); }
+    /** 역 팝업이 뜨자마자 미리 받아 둘 첫 시간표 요청(시간표 단추를 누르면 곧바로 같은 요청이 나간다 — 그때는 이미 받아 둔 화면이 바로 쓰인다). */
+    public String ttInitRequest(int cap, String theme) { return ttReq(cap, theme, "loading", "", "", "", new LinkedHashMap<String, String>()); }
+    private String ttReq(int cap, String theme, String state, String line, String day, String dk, Map<String, String> res) {
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"part\":\"tt\",\"stn\":").append(ShellCore.q(stn)).append(",\"sl\":").append(ShellCore.q(stnLine)).append(",\"reg\":").append(ShellCore.q(reg())).append(",\"th\":").append(ShellCore.q(theme(theme)));
-        b.append(",\"tt\":{\"st\":").append(ShellCore.q(ttState)).append(",\"sel\":{\"line\":").append(ShellCore.q(ttLine)).append(",\"day\":").append(ShellCore.q(ttDay)).append(",\"dk\":").append(ShellCore.q(ttDk)).append("},\"res\":{");
+        b.append(",\"tt\":{\"sv\":1,\"st\":").append(ShellCore.q(state)).append(",\"sel\":{\"line\":").append(ShellCore.q(line)).append(",\"day\":").append(ShellCore.q(day)).append(",\"dk\":").append(ShellCore.q(dk)).append("},\"res\":{");
         boolean first = true;
-        for (Map.Entry<String, String> e : ttRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(e.getValue()); }
+        for (Map.Entry<String, String> e : res.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(e.getValue()); }
         b.append("}}}}");
         return b.toString();
     }
@@ -447,7 +450,7 @@ public final class MapCore {
     }
     @SuppressWarnings("unchecked")
     public void onTt(String json) {
-        needLine = ""; needDay = "";
+        needLine = ""; needDay = ""; ttNeed = false;
         try {
             Object o = ScreenCore.parse(json);
             Object i = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
@@ -455,10 +458,23 @@ public final class MapCore {
             Map<String, Object> im = (Map<String, Object>) i;
             ttLines.clear(); ttDks.clear(); ttDays.clear();
             for (String k : new String[] { "lines", "dks", "days" }) if (im.get(k) instanceof List) for (Object x : (List<Object>) im.get(k)) ("lines".equals(k) ? ttLines : "dks".equals(k) ? ttDks : ttDays).add(BoardCore.s(x, 40));
+            if (im.get("fill") instanceof Map) {                                                        // 서버(엔진)가 직접 채운 시간표 — 모아 두고 다음 요청에 그대로 다시 보낸다
+                for (Map.Entry<String, Object> fe : ((Map<String, Object>) im.get("fill")).entrySet()) if (fe.getKey() != null && fe.getKey().length() <= 40 && fe.getValue() instanceof Map) ttRes.put(fe.getKey(), HomeSearchCore.toJson(fe.getValue()));
+                ttState = "ok";
+            }
             ttLine = BoardCore.s(im.get("line"), 30); ttDay = BoardCore.s(im.get("day"), 6); ttDk = BoardCore.s(im.get("dk"), 4);
-            if (im.get("need") instanceof Map) { Map<String, Object> nd = (Map<String, Object>) im.get("need"); needLine = BoardCore.s(nd.get("line"), 30); needDay = BoardCore.s(nd.get("day"), 6); }
+            if (im.get("need") instanceof Map) { ttNeed = true; Map<String, Object> nd = (Map<String, Object>) im.get("need"); needLine = BoardCore.s(nd.get("line"), 30); needDay = BoardCore.s(nd.get("day"), 6); }
         } catch (Exception e) { /* 비움 */ }
     }
+    private String ttAsked = "";
+    /** 서버가 못 채워 시간표가 비어 있으면(엔진이 info.need 를 남김) 예전처럼 기기가 /next-train 으로 한 번 받는다. 같은 요청을 두 번 묻지 않는다. */
+    public boolean ttWantFetch() {
+        if (ttState.equals("fail") || !ttNeed) return false;
+        String k = ttSeq + "|" + needLine + "|" + needDay;
+        if (k.equals(ttAsked)) return false;
+        ttAsked = k; return true;
+    }
+    private boolean ttNeed;
     /** 시간표를 처음 열 때(노선이 정해지기 전) 쓸 노선 목록은 팝업 화면 info.lines 에서. */
     @SuppressWarnings("unchecked")
     public void setLinesFromStn(String json) {

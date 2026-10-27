@@ -136,7 +136,8 @@ async function handleScreenMap(request, env) {
   var body;
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
-  var out, cap = Number(body.cap) || 0;
+  var out, cap = Number(body.cap) || 0, ttFill = null;
+  try { if (body.f && body.f.part === 'tt') ttFill = await mapTtFill(env, body.f); } catch (eT) { ttFill = null; }          // s248: 시간표는 서버가 직접 채운다(기기는 한 번만 묻는다) — 못 채우면 예전처럼 need 가 남아 기기가 /next-train 으로 받는다
   try { out = mapScreen({ cap: cap }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   try {
@@ -146,8 +147,32 @@ async function handleScreenMap(request, env) {
       if (o2 && o2.ok) out = o2;
     }
   } catch (e3) { /* 서버가 못 받으면 need 가 남은 첫 화면 그대로 — 기기가 이어 간다 */ }
+  if (ttFill && out.info) { for (var kf in ttFill) { out.info.fill = ttFill; break; } }
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
+}
+// ═══ s248 역 시간표 서버 채우기 — (YJ: "시간표가 안 나와. 미리 다 받아놔야 해") ═══
+//   f.tt.sv === 1 이면 이 역의 모든 노선(요일 미정)과 고른 노선·요일의 시간표를 서버(다음 열차 엔진)가 바로 채워 한 번에 완성된 화면을 준다.
+//   채운 것은 info.fill({ '노선|-' 또는 '노선|요일': 시간표 }) 로도 돌려줘 기기가 모아 두고, 다음 요청에는 res 로 다시 보낸다(그러면 다시 채우지 않는다).
+async function mapTtFill(env, f) {
+  var T = f && f.tt;
+  if (!T || T.sv !== 1 || typeof ntEnsure !== 'function') return null;
+  var name = f.stn;
+  if (!mapIsStationLabel(name)) return null;
+  var nt = await ntEnsure(env);
+  if (!nt || typeof nt.timetable !== 'function') return null;
+  var lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20);
+  if (!T.res || typeof T.res !== 'object') T.res = {};
+  var res = T.res, fill = {}, baseMs = Date.now();
+  var put = function (key, line, day) {
+    if (res[key]) return;
+    var a = nt.timetable({ line: line, from: name, baseMs: baseMs, day: day });
+    if (a && typeof a === 'object' && !a.error) { res[key] = a; fill[key] = a; }
+  };
+  for (var i = 0; i < lines.length; i++) put(lines[i] + '|-', lines[i], undefined);
+  var sel = (T.sel && typeof T.sel === 'object') ? T.sel : {};
+  if (sel.line && lines.indexOf(sel.line) >= 0 && /^(DAY|SAT|SUN)$/.test(String(sel.day || ''))) put(sel.line + '|' + sel.day, sel.line, sel.day);
+  return fill;
 }
 // 도착정보 분산 호출 실측(GET /bus-split-test?n=8&mode=single|split): 같은 정류장들을 동시에 n번 불러 키 하나로만 vs 키 둘로 반반 나눴을 때 오류(HTTP_ERROR)·시간을 비교한다. 키 값은 나오지 않는다.
 async function handleBusSplitTest(request, env) {
