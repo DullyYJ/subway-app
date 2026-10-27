@@ -566,6 +566,9 @@ public class ShellJvmTest {
             List<String> cv = ShellCore.catValues("{\"body\":[{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"식품\"}},{\"t\":\"chip\",\"act\":{\"a\":\"cat\",\"v\":\"패션\"}},{\"t\":\"b\",\"act\":{\"a\":\"call\",\"v\":\"x\"}}]}");
             ok(cv.size() == 2 && "패션".equals(cv.get(0)) && "식품".equals(cv.get(1)) && ShellCore.catValues("zzz").isEmpty(), "화면에서 분류 칩 값만 읽는다(중복 · 다른 행동 제외)");
             ok(ShellCore.shopUrl("").endsWith("/screen/shop?cap=" + ShellCore.CAP) && ShellCore.shopUrl("패션").contains("&cat=") && ShellCore.shopUrl(null).indexOf("cat=") < 0, "쇼핑 주소");
+            ok(ShellCore.shopUrl("패션", true, null).endsWith("&alts=1") && !ShellCore.shopUrl("패션", false, null).contains("alts"), "쇼핑 주소: 모든 카테고리 한 번에(alts=1)");
+            ok(ShellCore.shopUrl("", false, new double[] { 37.4979, 127.0276 }).endsWith("&lat=37.5&lng=127.0") && ShellCore.shopUrl("", false, new double[] { 37.52, 127.04 }).equals(ShellCore.shopUrl("", false, new double[] { 37.5, 127.0 })), "쇼핑 주소: 날씨용 위치는 0.1° 단위로 뭉친다(같은 동네면 주소가 같다)");
+            ok(ShellCore.shopWx(null).isEmpty() && ShellCore.shopWx(new double[] { Double.NaN, 1 }).isEmpty() && ShellCore.shopWx(new double[] { 99, 1 }).isEmpty() && ShellCore.shopUrl("x", true, new double[] { 37.5, 127.0 }).contains("&alts=1&lat="), "쇼핑 주소: 위치가 없거나 이상하면 싣지 않는다");
             ShellCore.MemStore ms9 = new ShellCore.MemStore();
             ok(ShellCore.mapKey("mapb", "subway", ms9).equals("mapb|subway|seoul|ALL") && ShellCore.newsBody(ms9, new ShellCore.NewsRows(), true).contains("\"alts\":\"chips\"") && !ShellCore.newsBody(ms9, new ShellCore.NewsRows(), false).contains("alts"), "노선도 열쇠 · 소식 본문(모든 분류 요청)");
             MapCore mc9 = new MapCore(ms9); mc9.modeOverride = "subway";

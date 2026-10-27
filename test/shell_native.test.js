@@ -761,7 +761,7 @@ function findAndroidJar() {
     assert.ok(/hc\.dongLoad\(store\.get\(HcardsCore\.K_DONG, ""\)\)/.test(a) && /store\.put\(HcardsCore\.K_DONG, hc\.dongSaved\(\)\)/.test(a), '동 이름을 저장해 다음 실행에서 바로 쓴다');
     assert.ok(/pollRide\(\);\s*hcEnsureDong\(\);/.test(a) && /hcFixFrom[\s\S]{0,600}hcEnsureDong\(\)/.test(a), '홈이 보이는 동안 5초마다 · 위치가 잡힐 때마다 확인(30초에 한 번만 묻는다)');
     assert.ok(/lastLocFresh\(store, 24L \* 3600000L, now\)/.test(a), '마지막 위치(하루 안)로 먼저 브리핑을 채운다');
-    assert.ok(/private String shopCall\(String ck, String cat\) \{\s*String t = shopCall0\(ck, cat\);\s*shopWarm\(t\);/.test(a) && /ScreenView\.ImageBank\.warm\(this, ScreenCore\.imageUrls\(txt, 240\)\)/.test(a) && /shopWarm\(src\);/.test(a), '쇼핑 화면을 받을 때마다 상품 그림도 뒤에서 받아 둔다');
+    assert.ok(/private String shopCall\(String ck, String cat\) \{\s*String t = shopCall0\(ck, cat, false\);\s*shopWarm\(t\);/.test(a) && /ScreenView\.ImageBank\.warm\(this, ScreenCore\.imageUrls\(txt, 240\)\)/.test(a) && /shopWarm\(src\);/.test(a), '쇼핑 화면을 받을 때마다 상품 그림도 뒤에서 받아 둔다');
     assert.ok(/static void warm\(Context c, java\.util\.List<String> urls\)/.test(sv) && /private static File fetch\(String url\)/.test(sv) && /newFixedThreadPool\(2,/.test(sv) && /MIN_PRIORITY \+ 1/.test(sv), '그림 미리 받기: 파일만 · 동시 2개 · 낮은 우선순위');
   });
   await t('s217: 경로 통합 카드 — 알약 줄(tags, 규격 25) · AI 승무원이 경로 카드 안으로 합쳐짐(fuseAi) · 엔진은 규격 25부터만 쓴다', () => {
@@ -793,6 +793,16 @@ function findAndroidJar() {
     assert.ok(/body = withRecent\(c, body\);[\s\S]{0,200}NetPost\.post\(ShellCore\.BASE \+ "\/reco-text", body/.test(rn), '바로 받기: 보내기 전에 최근 상품을 실어 보낸다');
     assert.ok(/deliver\(c, t\[0\], t\[1\], ad, core\);\s*remember\(c, r\.body\);/.test(rn) && /deliver\(c, t\[0\], t\[1\], ad, core\);\s*remember\(c, resp\);/.test(rn), '띄운 뒤에만 기억(받아 둔 글 · 바로 받은 글 둘 다)');
     assert.ok(/RecoNotify\.withRecent\(getApplicationContext\(\), RideLocal\.prefetchBody\(reqBody, resp\)\)/.test(rs), '미리 받기도 최근 상품을 실어 보낸다');
+  });
+  await t('s263: 탭 안 카테고리 미리 받기 — 쇼핑은 엔진이 모든 카테고리를 한 번에(alts) · 노선도 호선 칩은 묶음으로 · 날씨용 위치를 싣는다', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/private String shopCallAll\(String ck, String cat\)[\s\S]{0,200}shopCall0\(ck, cat, true\)/.test(a), '쇼핑 미리 받기는 alts 로 한 번에 받는다');
+    assert.ok(/String base = shopCallAll\(key, store\.get\(ShellCore\.K_SHOP_CAT, ""\)\);[\s\S]{0,200}if \(shopAltsOk\) return net;/.test(a), 'alts 가 오면 끝 · 아니면(옛 워커) 아래에서 하나씩');
+    assert.ok(/m\.remove\("alts"\)[\s\S]{0,600}prefetchPut\(k, js, false\)/.test(a) && /prefetchPut\(ck, cur, false\);/.test(a), 'alts 를 떼어 카테고리별 캐시에 넣고 지금 화면은 뗀 글로 덮는다');
+    assert.ok(/ShellCore\.shopUrl\(cat, all, pfLL\(\)\)/.test(a) && /\\"alts\\":1/.test(a), '주소·본문에 alts 와 날씨용 위치');
+    assert.ok(/startsWith\("f:"\)[\s\S]{0,700}pfBatch\(fe\)/.test(a), '노선도 지하철 호선 칩(f:)마다 머리·본문을 묶음으로 미리 받는다');
+    const w = fs.readFileSync(path.join(ROOT, 'engine/shop-worker.js'), 'utf8');
+    assert.ok(/alts: q\.get\("alts"\) === "1"/.test(w) && /setTimeout\(function \(\) \{ res\(null\); \}, 2500\)/.test(w), '워커: alts 를 받고 날씨는 2.5초 안에');
   });
   await t('s236: 좌우 밀기가 막히지 않고 부드럽게(손가락 1:1 · 빠른 쓸기 · 비스듬히 시작해도 가로로 전환 · 스프링 복귀) · 아래로 당겨 새로고침(스프링)', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');

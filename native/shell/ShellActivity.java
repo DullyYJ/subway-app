@@ -742,29 +742,60 @@ public class ShellActivity extends Activity {
     }
     /** 쇼핑 화면 한 번 받기: 엔진에 묻고(상품 서버는 엔진이 받는다), 엔진이 상품 서버를 못 받았다고 하면 앱이 직접 받아 실어 보낸다. */
     private String shopCall(String ck, String cat) {
-        String t = shopCall0(ck, cat);
+        String t = shopCall0(ck, cat, false);
         shopWarm(t);
         return t;
+    }
+    /** 미리 받기용: 엔진이 모든 카테고리 화면을 한 번에 계산해 주므로(alts) 카테고리마다 서버를 따로 부르지 않는다. 받은 alts 는 떼어 카테고리별 캐시에 넣고, 지금 화면(alts 뺀 것)을 돌려준다. */
+    private volatile boolean shopAltsOk;
+    private String shopCallAll(String ck, String cat) {
+        shopAltsOk = false;
+        return shopSplitAlts(ck, shopCall0(ck, cat, true));
+    }
+    @SuppressWarnings("unchecked")
+    private String shopSplitAlts(String ck, String t) {
+        if (t == null || t.length() < 3 || !t.contains("\"alts\"")) { shopWarm(t); return t; }
+        try {
+            Object o = ScreenCore.parse(t);
+            if (!(o instanceof java.util.Map)) return t;
+            java.util.Map<String, Object> m = (java.util.Map<String, Object>) o;
+            Object alts = m.remove("alts");
+            String cur = HomeSearchCore.toJson(m);
+            if (alts instanceof java.util.Map) {
+                for (java.util.Map.Entry<String, Object> e : ((java.util.Map<String, Object>) alts).entrySet()) {
+                    String k = ShellCore.S_SHOP + "|" + e.getKey();
+                    if (k.equals(ck)) continue;
+                    String js = HomeSearchCore.toJson(e.getValue());
+                    prefetchPut(k, js, false); shopWarm(js);
+                }
+                shopAltsOk = !((java.util.Map<String, Object>) alts).isEmpty();
+            }
+            Object cn = m.get("cat");
+            if (cn instanceof String && ((String) cn).length() > 0 && !(ShellCore.S_SHOP + "|" + cn).equals(ck)) prefetchPut(ShellCore.S_SHOP + "|" + cn, cur, false);          // 처음엔 분류 이름이 비어 있다(= 추천) — 추천 칩을 눌렀을 때 열쇠도 채운다
+            prefetchPut(ck, cur, false);                      // 받는 길에서 alts 가 붙은 채 캐시에 들어갔을 수 있어 뗀 글로 덮는다
+            shopWarm(cur);
+            return cur;
+        } catch (Throwable e) { return t; }
     }
     /** 쇼핑 화면 글 안의 상품 그림 주소를 뒤에서 받아 파일 캐시에 둔다 — 탭을 열었을 때 그림이 곰돌이 자리표시자로 한참 보이지 않게(s216). */
     private void shopWarm(String txt) {
         if (txt == null || txt.length() < 3) return;
         try { ScreenView.ImageBank.warm(this, ScreenCore.imageUrls(txt, 240)); } catch (Throwable ignored) { }
     }
-    private String shopCall0(String ck, String cat) {
+    private String shopCall0(String ck, String cat, boolean all) {
         if ("1".equals(store.get("shop_direct", ""))) {                    // 엔진이 상품 서버를 못 받는 것으로 확인됐다 — 처음부터 앱이 받아 실어 보낸다(엔진이 헛되이 13초 기다리지 않게)
-            String d = shopDirect(ck, cat);
+            String d = shopDirect(ck, cat, all);
             if (d.length() > 0) return d;
         }
-        String t = screenCall(ck, true, ShellCore.shopUrl(cat), null, null, 16000);
+        String t = screenCall(ck, true, ShellCore.shopUrl(cat, all, pfLL()), null, null, 16000);
         if (t.length() == 0 && delayBodies.containsKey(ck)) {
-            String d = shopDirect(ck, cat);
+            String d = shopDirect(ck, cat, all);
             if (d.length() > 0) { main.post(new Runnable() { @Override public void run() { store.put("shop_direct", "1"); } }); return d; }
         }
         return t;
     }
     /** 쇼핑: 상품 서버(gildongmu-shop)와 운영 설정(gildongmu-food)을 앱이 동시에 직접 받아 POST /screen/shop 에 실어 보낸다. 못 받으면 "". */
-    private String shopDirect(String ck, String cat) {
+    private String shopDirect(String ck, String cat, boolean all) {
         final String[] raw = new String[] { "", "" };
         Thread a = new Thread(new Runnable() { @Override public void run() { NetPost.Res r = NetPost.get(ShellCore.SHOP_BASE + "/shop", 9000); if (r.status == 200 && r.body != null) raw[0] = r.body; } }, "shell-shopsrc");
         Thread b = new Thread(new Runnable() { @Override public void run() { NetPost.Res r = NetPost.get(FoodCore.FOOD_BASE + "/app-config?k=shop", 4000); if (r.status == 200 && r.body != null) raw[1] = r.body; } }, "shell-shopcfg");
@@ -773,7 +804,8 @@ public class ShellActivity extends Activity {
         try { if (!(ScreenCore.parse(raw[0]) instanceof java.util.Map)) return ""; } catch (Throwable e) { return ""; }
         boolean cfgOk = false;
         try { cfgOk = ScreenCore.parse(raw[1]) instanceof java.util.Map; } catch (Throwable e) { cfgOk = false; }
-        String body = "{\"cap\":" + ShellCore.CAP + ",\"cat\":" + ShellCore.q(cat == null ? "" : cat) + ",\"shop\":" + raw[0] + (cfgOk ? ",\"cfg\":" + raw[1] : "") + "}";
+        double[] wl = pfLL();
+        String body = "{\"cap\":" + ShellCore.CAP + ",\"cat\":" + ShellCore.q(cat == null ? "" : cat) + (all ? ",\"alts\":1" : "") + (wl != null ? ",\"lat\":" + (Math.round(wl[0] * 10) / 10.0) + ",\"lng\":" + (Math.round(wl[1] * 10) / 10.0) : "") + ",\"shop\":" + raw[0] + (cfgOk ? ",\"cfg\":" + raw[1] : "") + "}";
         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/shop", body, 12000);
         if (r.status != 200 || r.body == null) { netDiag.put(ck, r.status > 0 ? "shop POST HTTP " + r.status : "shop POST " + r.err); return ""; }
         delayBodies.remove(ck); netDiag.remove(ck);
@@ -1091,16 +1123,45 @@ public class ShellActivity extends Activity {
         } });
         if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception { return pfNearStnRun(ll, theme); } });                                // 가까운 지하철역 팝업(위치 → 서버가 고른 가까운 역 → 팝업): 도착지 또는 현위치(고스트 상태기)
-        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 지금 분류 → 나머지 분류(서버가 느려서 차례로 · 연달아 두 번 못 받으면 멈춘다)
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 지하철의 호선 칩(전체·1~9호선·공항·경의중앙·수인분당·신분당) — 눌렀을 때 뼈대 없이 바로 뜨게 칩마다 머리·본문을 한 묶음으로 미리 받는다
+            final String reg = store.get(MapCore.K_REG, "seoul");
+            if (!"seoul".equals(reg)) return false;                                                  // 호선 칩은 서울에만 있다
+            String hsrc = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.mapKey(ShellCore.S_MAPH, "subway", store), true); } });
+            boolean net = false;
+            if (hsrc == null || hsrc.length() == 0) {                                                // 머리 글이 아직 없으면(처음 켬) 한 번 받아 칩 목록을 안다 — 칩 목록은 엔진이 정한다
+                ShellCore.MemStore g0 = new ShellCore.MemStore(); g0.put(MapCore.K_REG, reg);
+                MapCore m0 = new MapCore(g0); m0.modeOverride = "subway";
+                NetPost.Res hr = NetPost.post(ShellCore.BASE + "/screen/map", m0.headRequest(ShellCore.CAP, theme, ""), 8000);
+                net = true;
+                if (hr.status != 200 || hr.body == null) return net;
+                hsrc = hr.body;
+            }
+            final java.util.ArrayList<String[]> fe = new java.util.ArrayList<String[]>();
+            for (String c : ShellCore.catValues(hsrc)) {
+                if (!c.startsWith("f:")) continue;
+                ShellCore.MemStore gs = new ShellCore.MemStore(); gs.put(MapCore.K_REG, reg); gs.put(MapCore.K_FLT, c.substring(2));
+                MapCore gm = new MapCore(gs); gm.modeOverride = "subway";
+                fe.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPH, "subway", gs), "/screen/map", "POST", gm.headRequest(ShellCore.CAP, theme, "") });
+                fe.add(new String[] { ShellCore.mapKey(ShellCore.S_MAPB, "subway", gs), "/screen/map", "POST", gm.bodyRequest(ShellCore.CAP, theme) });
+            }
+            if (fe.isEmpty()) return net;
+            return pfBatch(fe) || net;
+        } });
+        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 엔진이 모든 분류 화면을 한 번에(alts) — 분류마다 서버를 따로 부르지 않는다(옛 워커면 아래에서 하나씩)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
-            String base = pfNeeds(key) ? shopCall(key, store.get(ShellCore.K_SHOP_CAT, "")) : "";
+            String cached = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
+            boolean missing = pfNeeds(key);
+            if (!missing && cached != null) for (String c : ShellCore.catValues(cached)) if (pfNeeds("shop|" + c)) { missing = true; break; }
+            if (!missing && cached != null) { shopWarm(cached); return false; }
+            String base = shopCallAll(key, store.get(ShellCore.K_SHOP_CAT, ""));
             if (base.length() > 0) net = true;
-            String src = base.length() > 0 && !isNotMod(base) ? base : onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
+            if (shopAltsOk) return net;                                   // 엔진이 모든 분류를 줬다 — 끝
+            String src = base.length() > 0 && !isNotMod(base) ? base : cached;
             if (src == null || src.length() == 0) return net;
             shopWarm(src);
             int fails = 0;
-            for (String c : ShellCore.catValues(src)) {
+            for (String c : ShellCore.catValues(src)) {                   // 옛 워커(alts 없음) 대비: 분류별로 하나씩
                 String ck = "shop|" + c;
                 if (ck.equals(key) || !pfNeeds(ck)) continue;
                 pfGap();

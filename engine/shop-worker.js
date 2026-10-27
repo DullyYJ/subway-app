@@ -2,7 +2,7 @@
 //   · 상품: 쇼핑 서버(gildongmu-shop) /shop 의 data 를 60초 메모리에 둔다. 서버가 잠깐 안 되면 마지막으로 받은 것을 쓴다(없으면 503 — 앱은 저장해 둔 화면 또는 예전 웹 쇼핑으로 간다).
 //   · 운영 설정: gildongmu-food /app-config?k=shop (계절 규칙) 10분. 못 받으면 null → 내장 규칙.
 //   · 날씨: 장면 엔진과 같은 sceneWeather(lat,lng) (subway-api /weather, 10분 캐시). 위치를 안 주면 날씨 없이 계산한다.
-//   쿼리: cat(카테고리, 기본 추천) · lat · lng · now(ms, 시험용) · tz(분, 기본 540) · cap(앱이 그릴 수 있는 화면 규격 수준, 2 이상이면 안내 상자·검색줄 포함)
+//   쿼리: cat(카테고리, 기본 추천) · lat · lng · now(ms, 시험용) · tz(분, 기본 540) · cap(앱이 그릴 수 있는 화면 규격 수준, 2 이상이면 안내 상자·검색줄 포함) · alts=1(모든 카테고리 화면을 out.alts 로 같이 — 앱 미리 받기용)
 var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
@@ -39,7 +39,7 @@ async function handleScreenShop(request) {
     var pb = null;
     try { pb = JSON.parse(await request.text()); } catch (eP) { pb = null; }
     if (!pb || typeof pb !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H });
-    ["cat", "lat", "lng", "tz", "now", "cap"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
+    ["cat", "lat", "lng", "tz", "now", "cap", "alts"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
     if (shopPostedOk(pb.shop)) {
       SHOP_MEM.data = pb.shop.data; SHOP_MEM.ver = String(pb.shop.version || ""); SHOP_MEM.ts = Date.now();
       if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
@@ -48,8 +48,8 @@ async function handleScreenShop(request) {
   var mem = await shopLoad();
   if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // 안내 화면(서버 연결 지연) + 재시도 간격 — 앱은 이것을 그리고 뒤에서 다시 받는다
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
-  if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
-  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
+  if (q.get("lat") != null && q.get("lng") != null) { try { wx = await Promise.race([sceneWeather(lat, lng), new Promise(function (res) { setTimeout(function () { res(null); }, 2500); })]); } catch (e) { wx = null; } }          // 날씨가 늦어도 쇼핑 화면은 2.5초 안에(못 받으면 날씨 없이)
+  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0, alts: q.get("alts") === "1" };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY || 'screen')), { status: 503, headers: H });

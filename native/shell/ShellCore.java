@@ -414,6 +414,19 @@ public final class ShellCore {
         }
     }
     public static String shopUrl(String cat) { return BASE + "/screen/shop?cap=" + CAP + (cat != null && cat.length() > 0 ? "&cat=" + enc(cat) : ""); }
+    /** 쇼핑 화면 주소 + (all) 모든 카테고리 화면을 한 번에(alts=1 — 엔진이 계산) + (ll) 날씨용 위치(0.1° ≈ 11km 로 뭉쳐 같은 동네면 주소가 같다). 날씨는 엔진이 받아 비 올 때만 우산류를 올린다. */
+    public static String shopUrl(String cat, boolean all, double[] ll) {
+        StringBuilder b = new StringBuilder(shopUrl(cat));
+        if (all) b.append("&alts=1");
+        String w = shopWx(ll);
+        if (w.length() > 0) b.append("&").append(w);
+        return b.toString();
+    }
+    /** 위치 → "lat=37.5&lng=127.0" (0.1° 단위). 위치가 없거나 이상하면 "". */
+    public static String shopWx(double[] ll) {
+        if (ll == null || ll.length < 2 || Double.isNaN(ll[0]) || Double.isNaN(ll[1]) || Math.abs(ll[0]) > 90 || Math.abs(ll[1]) > 180) return "";
+        return "lat=" + (Math.round(ll[0] * 10) / 10.0) + "&lng=" + (Math.round(ll[1] * 10) / 10.0);
+    }
     /** 노선도 화면 열쇠(방식 · 지역 · 필터를 직접 줘서 — 지금 고른 방식이 아닌 쪽도 미리 받아 두려고). */
     public static String mapKey(String screen, String mode, Store st) { return mapKey(screen, mode, st, st.get(K_BUSCELL, "")); }
     /** 버스 '주변' 화면은 위치 칸(약 110m)마다 따로 둔다 — 다른 동네의 정류장이 캐시에서 먼저 뜨지 않게(s179). cell 을 직접 줘서 지금 위치가 아닌 칸의 것도 미리 받아 둘 수 있다. */

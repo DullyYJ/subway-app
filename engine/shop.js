@@ -248,14 +248,8 @@ function shopPick(data, ck, wx, cfg) {
 
 // ── 화면 구성 JSON ──
 function shopOk(u) { return typeof u === 'string' && /^https?:\/\//i.test(u); }
-function shopScreen(inp, data, cfg, wx) {
-  inp = inp || {};
-  if (!data || !data.CATS || !data.CATS.length || !data.WEEKDAY || !data.WEEKDAY.length) return { ok: false, error: 'no-data' };
-  var nowMs = isFinite(inp.nowMs) ? Number(inp.nowMs) : Date.now();
-  var ck = shopClock(nowMs, inp.tzOffsetMin);
-  var pick = shopPick(data, ck, wx, cfg);
-  var cat = String(inp.cat || SHOP_REC_CAT);
-  if (cat !== SHOP_REC_CAT && !pick.byCat[cat]) cat = SHOP_REC_CAT;
+// 한 카테고리의 화면(pick 은 이미 계산한 추천·분류 결과 — 카테고리 여러 개를 만들 때 한 번만 계산해 같이 쓴다)
+function shopScreenOf(inp, pick, cat) {
   var items = cat === SHOP_REC_CAT ? pick.rec : (pick.byCat[cat] || []);
   var tabs = [{ c: SHOP_REC_CAT, n: pick.rec.length }].concat(pick.order.map(function (cn) { return { c: cn, n: (pick.byCat[cn] || []).length }; }));
   var chips = tabs.map(function (o) {
@@ -299,6 +293,24 @@ function shopScreen(inp, data, cfg, wx) {
         act: { a: 'search', tpl: SHOP_SEARCH_TPL, empty: SHOP_PARTNER_URL } },
       chipsNode
     ];
+  }
+  return out;
+}
+// 쇼핑 화면. inp.alts 가 있으면(앱이 켤 때 미리 받으려고) 모든 카테고리 화면을 한 번에 계산해 out.alts[카테고리] 로 같이 준다 —
+//   각 alts[카테고리] 는 그 카테고리로 따로 요청했을 때와 같은 화면이다(시험이 대조). 카테고리마다 서버를 따로 부르지 않아도 된다.
+function shopScreen(inp, data, cfg, wx) {
+  inp = inp || {};
+  if (!data || !data.CATS || !data.CATS.length || !data.WEEKDAY || !data.WEEKDAY.length) return { ok: false, error: 'no-data' };
+  var nowMs = isFinite(inp.nowMs) ? Number(inp.nowMs) : Date.now();
+  var ck = shopClock(nowMs, inp.tzOffsetMin);
+  var pick = shopPick(data, ck, wx, cfg);
+  var cat = String(inp.cat || SHOP_REC_CAT);
+  if (cat !== SHOP_REC_CAT && !pick.byCat[cat]) cat = SHOP_REC_CAT;
+  var out = shopScreenOf(inp, pick, cat);
+  if (inp.alts) {
+    var alts = {};
+    [SHOP_REC_CAT].concat(pick.order).forEach(function (c) { if (c !== cat && !alts[c]) alts[c] = shopScreenOf(inp, pick, c); });
+    out.alts = alts;
   }
   return out;
 }

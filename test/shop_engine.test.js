@@ -60,6 +60,27 @@ const urls = l => l.map(x => x.u).join('|');
   ok(urls(sameDay.rec) === urls(sameDay2.rec), '같은 날 같은 조건이면 같은 결과(결정적)');
 }
 
+
+// ── alts: 모든 카테고리 화면을 한 번에 — 각각 따로 요청한 것과 글자 하나까지 같다 ──
+{
+  const mk = (c, n) => ({ c, items: Array.from({ length: n }, (_, i) => ({ n: c + ' 상품' + i, u: 'https://shop.test/' + c + i, i: 'https://img.test/' + c + i })) });
+  const D = { CATS: [mk('식사', 12), mk('패션', 12), mk('생활', 12)], WEEKDAY: [{ h1: 0, h2: 24, items: [{ t: '야식', u: 'https://shop.test/식사0' }] }], WEEKEND: [{ h1: 0, h2: 24, items: [] }] };
+  const now = Date.UTC(2026, 9, 27, 13, 0), wx = { temp: 12, rain: 10, txt: '맑음' };
+  for (const cap of [0, 2]) for (const cat of ['', '식사', '패션', '없는분류']) {
+    const all = E.shopScreen({ nowMs: now, cat, cap, alts: true }, D, null, wx);
+    ok(all.ok && all.alts && typeof all.alts === 'object', `alts 가 온다 cap${cap} cat[${cat}]`);
+    const names = Object.keys(all.alts);
+    ok(!names.includes(all.cat) && names.length === 3, `alts 는 지금 카테고리를 뺀 나머지 전부 ${names}`);
+    for (const c of names) {
+      const one = E.shopScreen({ nowMs: now, cat: c, cap }, D, null, wx);
+      ok(JSON.stringify(one) === JSON.stringify(all.alts[c]), `alts[${c}] = 따로 요청한 화면 cap${cap}`);
+    }
+    const base = E.shopScreen({ nowMs: now, cat, cap }, D, null, wx), cp = Object.assign({}, all); delete cp.alts;
+    ok(JSON.stringify(base) === JSON.stringify(cp), 'alts 를 빼면 지금 카테고리 화면은 그대로');
+    ok(!('alts' in base), 'alts 를 안 묻으면 안 준다');
+  }
+}
+
 const cases = [];
 const tsList = [
   Date.UTC(2026, 9, 18, 3, 10), Date.UTC(2026, 9, 18, 13, 0), Date.UTC(2026, 0, 14, 23, 30), Date.UTC(2026, 6, 4, 6, 5),

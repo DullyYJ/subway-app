@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s261";
+var ENGINE_VERSION = "route-v2-2026-10-27s263";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13125,14 +13125,8 @@ function shopPick(data, ck, wx, cfg) {
 
 // \u2500\u2500 \ud654\uba74 \uad6c\uc131 JSON \u2500\u2500
 function shopOk(u) { return typeof u === 'string' && /^https?:\/\//i.test(u); }
-function shopScreen(inp, data, cfg, wx) {
-  inp = inp || {};
-  if (!data || !data.CATS || !data.CATS.length || !data.WEEKDAY || !data.WEEKDAY.length) return { ok: false, error: 'no-data' };
-  var nowMs = isFinite(inp.nowMs) ? Number(inp.nowMs) : Date.now();
-  var ck = shopClock(nowMs, inp.tzOffsetMin);
-  var pick = shopPick(data, ck, wx, cfg);
-  var cat = String(inp.cat || SHOP_REC_CAT);
-  if (cat !== SHOP_REC_CAT && !pick.byCat[cat]) cat = SHOP_REC_CAT;
+// \ud55c \uce74\ud14c\uace0\ub9ac\uc758 \ud654\uba74(pick \uc740 \uc774\ubbf8 \uacc4\uc0b0\ud55c \ucd94\ucc9c\u00b7\ubd84\ub958 \uacb0\uacfc \u2014 \uce74\ud14c\uace0\ub9ac \uc5ec\ub7ec \uac1c\ub97c \ub9cc\ub4e4 \ub54c \ud55c \ubc88\ub9cc \uacc4\uc0b0\ud574 \uac19\uc774 \uc4f4\ub2e4)
+function shopScreenOf(inp, pick, cat) {
   var items = cat === SHOP_REC_CAT ? pick.rec : (pick.byCat[cat] || []);
   var tabs = [{ c: SHOP_REC_CAT, n: pick.rec.length }].concat(pick.order.map(function (cn) { return { c: cn, n: (pick.byCat[cn] || []).length }; }));
   var chips = tabs.map(function (o) {
@@ -13179,6 +13173,24 @@ function shopScreen(inp, data, cfg, wx) {
   }
   return out;
 }
+// \uc1fc\ud551 \ud654\uba74. inp.alts \uac00 \uc788\uc73c\uba74(\uc571\uc774 \ucf24 \ub54c \ubbf8\ub9ac \ubc1b\uc73c\ub824\uace0) \ubaa8\ub4e0 \uce74\ud14c\uace0\ub9ac \ud654\uba74\uc744 \ud55c \ubc88\uc5d0 \uacc4\uc0b0\ud574 out.alts[\uce74\ud14c\uace0\ub9ac] \ub85c \uac19\uc774 \uc900\ub2e4 \u2014
+//   \uac01 alts[\uce74\ud14c\uace0\ub9ac] \ub294 \uadf8 \uce74\ud14c\uace0\ub9ac\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uac19\uc740 \ud654\uba74\uc774\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870). \uce74\ud14c\uace0\ub9ac\ub9c8\ub2e4 \uc11c\ubc84\ub97c \ub530\ub85c \ubd80\ub974\uc9c0 \uc54a\uc544\ub3c4 \ub41c\ub2e4.
+function shopScreen(inp, data, cfg, wx) {
+  inp = inp || {};
+  if (!data || !data.CATS || !data.CATS.length || !data.WEEKDAY || !data.WEEKDAY.length) return { ok: false, error: 'no-data' };
+  var nowMs = isFinite(inp.nowMs) ? Number(inp.nowMs) : Date.now();
+  var ck = shopClock(nowMs, inp.tzOffsetMin);
+  var pick = shopPick(data, ck, wx, cfg);
+  var cat = String(inp.cat || SHOP_REC_CAT);
+  if (cat !== SHOP_REC_CAT && !pick.byCat[cat]) cat = SHOP_REC_CAT;
+  var out = shopScreenOf(inp, pick, cat);
+  if (inp.alts) {
+    var alts = {};
+    [SHOP_REC_CAT].concat(pick.order).forEach(function (c) { if (c !== cat && !alts[c]) alts[c] = shopScreenOf(inp, pick, c); });
+    out.alts = alts;
+  }
+  return out;
+}
 // \uc1fc\ud551 \uc11c\ubc84\uac00 \ub2a6\uac70\ub098 \uc548 \ub420 \ub54c \uc5d4\uc9c4\uc774 \uc8fc\ub294 \uc548\ub0b4 \ud654\uba74(HTTP 503 \uacfc \ud568\uaed8). \uc571\uc740 \uc774 \ud654\uba74\uc744 \uadf8\ub9ac\uace0, \uce90\uc2dc\uc5d0\ub294 \ub450\uc9c0 \uc54a\uc73c\uba70,
 // retry(\ucd08 \ubaa9\ub85d)\ub9c8\ub2e4 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4. \ubb38\uad6c \u00b7 \uac04\uaca9\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4(\uc571\uc5d0 \uae00 \u00b7 \uc22b\uc790\uac00 \uc5c6\ub2e4). \ub2e8\ucd94 act 'gdm_retry' \ub294 \uc571\uc774 \uc54c\uace0 \uc788\ub294 "\uc9c0\uae08 \ub2e4\uc2dc \ubc1b\uae30".
 function shopDelayScreen(why) {
@@ -13204,7 +13216,7 @@ function shopRich(parts) {
 //   \u00b7 \uc0c1\ud488: \uc1fc\ud551 \uc11c\ubc84(gildongmu-shop) /shop \uc758 data \ub97c 60\ucd08 \uba54\ubaa8\ub9ac\uc5d0 \ub454\ub2e4. \uc11c\ubc84\uac00 \uc7a0\uae50 \uc548 \ub418\uba74 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubc1b\uc740 \uac83\uc744 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 503 \u2014 \uc571\uc740 \uc800\uc7a5\ud574 \ub454 \ud654\uba74 \ub610\ub294 \uc608\uc804 \uc6f9 \uc1fc\ud551\uc73c\ub85c \uac04\ub2e4).
 //   \u00b7 \uc6b4\uc601 \uc124\uc815: gildongmu-food /app-config?k=shop (\uacc4\uc808 \uaddc\uce59) 10\ubd84. \ubabb \ubc1b\uc73c\uba74 null \u2192 \ub0b4\uc7a5 \uaddc\uce59.
 //   \u00b7 \ub0a0\uc528: \uc7a5\uba74 \uc5d4\uc9c4\uacfc \uac19\uc740 sceneWeather(lat,lng) (subway-api /weather, 10\ubd84 \uce90\uc2dc). \uc704\uce58\ub97c \uc548 \uc8fc\uba74 \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0\ud55c\ub2e4.
-//   \ucffc\ub9ac: cat(\uce74\ud14c\uace0\ub9ac, \uae30\ubcf8 \ucd94\ucc9c) \u00b7 lat \u00b7 lng \u00b7 now(ms, \uc2dc\ud5d8\uc6a9) \u00b7 tz(\ubd84, \uae30\ubcf8 540) \u00b7 cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 2 \uc774\uc0c1\uc774\uba74 \uc548\ub0b4 \uc0c1\uc790\u00b7\uac80\uc0c9\uc904 \ud3ec\ud568)
+//   \ucffc\ub9ac: cat(\uce74\ud14c\uace0\ub9ac, \uae30\ubcf8 \ucd94\ucc9c) \u00b7 lat \u00b7 lng \u00b7 now(ms, \uc2dc\ud5d8\uc6a9) \u00b7 tz(\ubd84, \uae30\ubcf8 540) \u00b7 cap(\uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900, 2 \uc774\uc0c1\uc774\uba74 \uc548\ub0b4 \uc0c1\uc790\u00b7\uac80\uc0c9\uc904 \ud3ec\ud568) \u00b7 alts=1(\ubaa8\ub4e0 \uce74\ud14c\uace0\ub9ac \ud654\uba74\uc744 out.alts \ub85c \uac19\uc774 \u2014 \uc571 \ubbf8\ub9ac \ubc1b\uae30\uc6a9)
 var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
@@ -13241,7 +13253,7 @@ async function handleScreenShop(request) {
     var pb = null;
     try { pb = JSON.parse(await request.text()); } catch (eP) { pb = null; }
     if (!pb || typeof pb !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H });
-    ["cat", "lat", "lng", "tz", "now", "cap"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
+    ["cat", "lat", "lng", "tz", "now", "cap", "alts"].forEach(function (k) { if (pb[k] != null) q.set(k, String(pb[k])); });
     if (shopPostedOk(pb.shop)) {
       SHOP_MEM.data = pb.shop.data; SHOP_MEM.ver = String(pb.shop.version || ""); SHOP_MEM.ts = Date.now();
       if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
@@ -13250,8 +13262,8 @@ async function handleScreenShop(request) {
   var mem = await shopLoad();
   if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // \uc548\ub0b4 \ud654\uba74(\uc11c\ubc84 \uc5f0\uacb0 \uc9c0\uc5f0) + \uc7ac\uc2dc\ub3c4 \uac04\uaca9 \u2014 \uc571\uc740 \uc774\uac83\uc744 \uadf8\ub9ac\uace0 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
-  if (q.get("lat") != null && q.get("lng") != null) { try { wx = await sceneWeather(lat, lng); } catch (e) { wx = null; } }
-  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0 };
+  if (q.get("lat") != null && q.get("lng") != null) { try { wx = await Promise.race([sceneWeather(lat, lng), new Promise(function (res) { setTimeout(function () { res(null); }, 2500); })]); } catch (e) { wx = null; } }          // \ub0a0\uc528\uac00 \ub2a6\uc5b4\ub3c4 \uc1fc\ud551 \ud654\uba74\uc740 2.5\ucd08 \uc548\uc5d0(\ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc5c6\uc774)
+  var inp = { nowMs: q.get("now") ? Number(q.get("now")) : Date.now(), tzOffsetMin: q.get("tz") ? Number(q.get("tz")) : 540, cat: q.get("cat") || "", cap: Number(q.get("cap")) || 0, alts: q.get("alts") === "1" };
   var out;
   try { out = shopScreen(inp, mem.data, mem.cfg, wx); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY || 'screen')), { status: 503, headers: H });
