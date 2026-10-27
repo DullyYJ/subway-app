@@ -265,8 +265,10 @@ function shopScreenOf(inp, pick, cat) {
   var chipsNode = { t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips };
   var si = -1; chips.forEach(function (c, k) { if (c.on) si = k; });
   var sw = {};
-  if (si >= 0 && si + 1 < chips.length) sw.l = chips[si + 1].act;           // 좌우 밀기: 카테고리를 한 칸씩(양 끝에서 멈춘다)
-  if (si > 0) sw.r = chips[si - 1].act;
+  if (si >= 0 && chips.length > 1) {                                       // 좌우 밀기: 카테고리를 끝없이 돈다(맨 끝에서 처음으로 · 처음에서 맨 끝으로 — 맛집·소식과 같다)
+    sw.l = chips[(si + 1) % chips.length].act;
+    sw.r = chips[(si - 1 + chips.length) % chips.length].act;
+  }
   var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
     rev: pick.seed + ':' + cat + ':' + cards.length + ':s',

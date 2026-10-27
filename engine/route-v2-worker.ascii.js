@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s263";
+var ENGINE_VERSION = "route-v2-2026-10-28s264";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13142,8 +13142,10 @@ function shopScreenOf(inp, pick, cat) {
   var chipsNode = { t: 'chips', pad: [14, 4, 14, 4], gap: 6, h: 30, items: chips };
   var si = -1; chips.forEach(function (c, k) { if (c.on) si = k; });
   var sw = {};
-  if (si >= 0 && si + 1 < chips.length) sw.l = chips[si + 1].act;           // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ud55c \uce78\uc529(\uc591 \ub05d\uc5d0\uc11c \uba48\ucd98\ub2e4)
-  if (si > 0) sw.r = chips[si - 1].act;
+  if (si >= 0 && chips.length > 1) {                                       // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4(\ub9e8 \ub05d\uc5d0\uc11c \ucc98\uc74c\uc73c\ub85c \u00b7 \ucc98\uc74c\uc5d0\uc11c \ub9e8 \ub05d\uc73c\ub85c \u2014 \ub9db\uc9d1\u00b7\uc18c\uc2dd\uacfc \uac19\ub2e4)
+    sw.l = chips[(si + 1) % chips.length].act;
+    sw.r = chips[(si - 1 + chips.length) % chips.length].act;
+  }
   var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
     rev: pick.seed + ':' + cat + ':' + cards.length + ':s',
