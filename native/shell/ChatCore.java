@@ -127,6 +127,42 @@ public final class ChatCore {
         return b.toString();
     }
 
+    // ── '불러오는 중' 화면 한꺼번에(s247, YJ: 화면 넘길 때 빈 화면): 아직 못 받은 방으로 넘길 때 회색 뼈대 대신, 칩 줄은 그대로 두고(고른 칩이 바뀐 채) 본문만 '불러오는 중…' 인 엔진 화면을 바로 올린다.
+    //   그 화면도 엔진이 만든다(st:'loading') — 한 번의 요청에 모든 방을 alts 로 실어 받아 방마다 기억한다. 앱은 그리기만 한다. ──
+    private String factsFor(String sel, String theme, int tzoMin, String me) {
+        StringBuilder b = new StringBuilder("{\"sel\":").append(ShellCore.q(sel));
+        b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
+        b.append(",\"my\":").append(st.get(K_MY, "[]"));
+        b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
+        b.append(",\"st\":\"loading\",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append('}');
+        return b.toString();
+    }
+    private static final String EMPTY_D = "{\"g\":[],\"r\":[],\"off\":null,\"offOk\":0,\"offAt\":0,\"al\":null}";
+    /** 모든 방(sels, 엔진이 칩으로 준 순서)의 '불러오는 중' 화면을 한 번에 받는 요청 본문. */
+    public String loadingBatchRequest(List<String> sels, int cap, String theme, int tzoMin, String me) {
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":").append(factsFor("all", theme, tzoMin, me)).append(",\"d\":").append(EMPTY_D).append(",\"alts\":{");
+        int n = 0;
+        for (String sel : sels) {
+            if (n >= 24) break;
+            if (n++ > 0) b.append(',');
+            b.append(ShellCore.q(sel)).append(":{\"f\":").append(factsFor(sel, theme, tzoMin, me)).append(",\"d\":").append(EMPTY_D).append('}');
+        }
+        return b.append("}}").toString();
+    }
+    /** 위 요청의 답에서 방마다의 화면 글(alts). 못 읽으면 빈 표. */
+    @SuppressWarnings("unchecked")
+    public static Map<String, String> parseLoadingBatch(String json) {
+        Map<String, String> out = new LinkedHashMap<String, String>();
+        if (json == null || json.length() < 10) return out;
+        try {
+            Object o = ScreenCore.parse(json);
+            if (!(o instanceof Map) || !(((Map<String, Object>) o).get("alts") instanceof Map)) return out;
+            for (Map.Entry<String, Object> e : ((Map<String, Object>) ((Map<String, Object>) o).get("alts")).entrySet())
+                if (e.getValue() instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) e.getValue()).get("ok"))) out.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
+        } catch (Exception ignored) { }
+        return out;
+    }
+
     // ── 주소 ──
     public static String talksUrl(long since) { return ShellCore.BOARD_BASE + "/talks" + (since > 0 ? "?since=" + since + "&limit=40" : "?limit=30"); }
     public String talksUrlNow() { return talksUrl(sinceG); }

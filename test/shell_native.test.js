@@ -23,6 +23,12 @@ function findAndroidJar() {
 }
 (async () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'shjvm-'));
+  await t('실시간소통 빈 화면 없애기(s247): 못 받은 방으로 넘길 땐 회색 뼈대 대신 엔진이 만든 로딩 화면(칩 줄 유지) · 모든 방 로딩 화면은 한 번에 받는다 · 가까운 방부터 미리 받는다', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/ShellCore\.S_CHAT\.equals\(screen\)\) \{[^]*?chatLoad\.get\(chat\.sel\(\)\)[^]*?skelViews\.add\(v\); return;/.test(a.slice(a.indexOf('private void showSkeleton('), a.indexOf('private void showSkeleton(') + 1800)), '뼈대 자리에 방별 로딩 화면');
+    assert.ok(/ChatCore\.parseLoadingBatch\(r\.body\)/.test(a) && /loadingBatchRequest\(sels/.test(a) && /chatLoadBuild\(sels\)/.test(a), '한 번의 요청으로 모든 방 로딩 화면을 받는다');
+    assert.ok(/Math\.min\(da, nn - da\)/.test(a), '미리 받기는 지금 방에서 가까운 방부터');
+  });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });

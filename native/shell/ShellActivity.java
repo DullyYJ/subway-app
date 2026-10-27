@@ -673,6 +673,10 @@ public class ShellActivity extends Activity {
                 String cell = map.stopsCell(), sk = cell.length() > 0 && cell.equals(store.get("bsk_cell", "")) ? cacheGet(ShellCore.busSkelKey(store), true) : null;
                 if (sk != null) { v.setSourceAge(0L); v.setScreen(parsedGet(sk), false); shownJson.remove(v); skelViews.add(v); return; }
             }
+            if (v == body && ShellCore.S_CHAT.equals(screen)) {                              // 실시간소통: 회색 뼈대 대신 엔진이 만든 '불러오는 중' 화면(칩 줄 그대로 · 고른 칩만 바뀜) — 빈 화면 없이
+                String lj = chatLoad.get(chat.sel());
+                if (lj != null) { try { v.setScreen(parsedGet(lj), false); shownJson.remove(v); skelViews.add(v); return; } catch (Throwable ignored) { } }
+            }
             v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v);
         }
         catch (Throwable e) { v.clearScreen(); shownJson.remove(v); }
@@ -1507,16 +1511,46 @@ public class ShellActivity extends Activity {
         chatBgOn = true; main.postDelayed(this, CHAT_BG_MS);
     } };
     private void chatBgStart() { if (!chatBgOn) { chatBgOn = true; main.postDelayed(chatBg, 4000L); } }
+    /** 방마다 엔진이 만든 '불러오는 중' 화면(방 → 화면 글). 칩 줄·테마·탄 노선이 바뀌면(sig) 다시 받는다. */
+    private volatile java.util.Map<String, String> chatLoad = new java.util.HashMap<String, String>();
+    private String chatLoadSig = ""; private long chatLoadAt = 0L;
+    private void chatLoadBuild(final ArrayList<String> sels) {
+        final String theme = ShellCore.theme(store);
+        final String sig = theme + "|" + store.get(ChatCore.K_MY, "[]") + "|" + chat.routeSec + "|" + sels;
+        long now = System.currentTimeMillis();
+        if (sig.equals(chatLoadSig) && now - chatLoadAt < 10 * 60000L) return;
+        chatLoadSig = sig; chatLoadAt = now;
+        if (pfChatB == null) pfChatB = new ChatCore(store);
+        final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
+        final String me = ShellCore.commId(store);
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {
+            int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+            String req;
+            synchronized (pfChatB) { pfChatB.routeSec = new ArrayList<String>(sec); req = pfChatB.loadingBatchRequest(sels, ShellCore.CAP, theme, tzo, me); }
+            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", req, 12000);
+            java.util.Map<String, String> m = r.status == 200 ? ChatCore.parseLoadingBatch(r.body) : null;
+            if (m == null || m.isEmpty()) { main.post(new Runnable() { @Override public void run() { chatLoadSig = ""; } }); return true; }         // 못 받았으면 다음 순회에 다시
+            chatLoad = m;
+            return true;
+        } });
+    }
     private void chatBgSweep() {
         final ArrayList<String> sels = chatSels;
+        if (sels != null && sels.size() >= 2) chatLoadBuild(sels);
         if (sels == null || sels.size() < 2 || pfPending.get() > 4) return;
         final boolean chatShown = ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "");
         final String liveSel = chat.sel(), theme = ShellCore.theme(store);
         final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
         if (pfChatB == null) pfChatB = new ChatCore(store);          // 이 일만 쓰는 따로의 고스트 상태기(다른 미리 받기와 상태를 섞지 않는다)
+        final ArrayList<String> order = new ArrayList<String>(sels);  // 지금 보는 방에서 가까운(좌우로 밀면 닿을) 방부터 — 아직 못 받은 방이 빈 화면으로 뜨는 일을 줄인다
+        final int at = Math.max(0, order.indexOf(liveSel)), nn = order.size();
+        java.util.Collections.sort(order, new java.util.Comparator<String>() { @Override public int compare(String a, String b) {
+            int da = Math.abs(sels.indexOf(a) - at), db = Math.abs(sels.indexOf(b) - at);
+            return Integer.compare(Math.min(da, nn - da), Math.min(db, nn - db));
+        } });
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {
             boolean net = false;
-            for (String sel : sels) {
+            for (String sel : order) {
                 if (chatShown && sel.equals(liveSel)) continue;                              // 지금 보는 방은 6초 주기가 받는다
                 String key = ShellCore.S_CHAT + "|" + sel;
                 if (cacheAge(key) < CHAT_BG_FRESH_MS) continue;

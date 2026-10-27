@@ -638,6 +638,15 @@ public class ShellJvmTest {
         ok("all".equals(cc.sel()), "처음엔 전체 방");
         cc.select("2호선"); ok("2호선".equals(cc.sel()) && "2호선".equals(cs.get("chat_sel", "")), "방 고르기 저장");
         cc.select("all");
+        {   // s247: '불러오는 중' 화면 한꺼번에(엔진 alts) — 요청 모양 · 답 읽기
+            java.util.List<String> ls = new java.util.ArrayList<String>(); ls.add("all"); ls.add("1호선"); ls.add("2호선");
+            String lq = cc.loadingBatchRequest(ls, 18, "pastel", -540, "나");
+            Object lo = null; try { lo = ScreenCore.parse(lq); } catch (Exception le) { }
+            ok(lo instanceof java.util.Map && lq.contains("\"alts\":{\"all\":{\"f\":{\"sel\":\"all\"") && lq.contains("\"2호선\":{\"f\":{\"sel\":\"2호선\"") && lq.indexOf("\"st\":\"loading\"") > 0 && !lq.contains("\"st\":\"ready\""), "로딩 화면 요청: 모든 방을 alts 로, 사실은 loading");
+            java.util.Map<String, String> lm = ChatCore.parseLoadingBatch("{\"ok\":true,\"alts\":{\"all\":{\"ok\":true,\"screen\":\"chat\",\"head\":[],\"body\":[]},\"1호선\":{\"ok\":false},\"2호선\":{\"ok\":true,\"screen\":\"chat\",\"head\":[],\"body\":[]}}}");
+            ok(lm.size() == 2 && lm.containsKey("all") && lm.containsKey("2호선") && !lm.containsKey("1호선") && ChatCore.parseLoadingBatch("x").isEmpty() && ChatCore.parseLoadingBatch(null).isEmpty(), "로딩 화면 답 읽기: 성공한 방만, 엉터리는 빈 표");
+        }
+
         ok(!cc.addTalks("zzz", "나") && cc.failed && !cc.loaded, "엉터리 대화는 실패로 표시");
         ok(cc.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"2호선\"},{\"id\":2,\"nick\":\"나\",\"text\":\"반가워\",\"ts\":200}]}", "나") && cc.loaded && !cc.failed && cc.sinceG == 200, "전체 대화 받기");
         ok(cc.addTalks("{\"ok\":true,\"talks\":[{\"id\":2,\"nick\":\"나\",\"text\":\"반가워\",\"ts\":200}]}", "나"), "같은 줄은 한 번만");
