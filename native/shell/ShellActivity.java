@@ -2373,7 +2373,7 @@ public class ShellActivity extends Activity {
                 for (int i = 0; i < need.size(); i++) {
                     final int k = i;
                     ts[i] = new Thread(new Runnable() { @Override public void run() {
-                        NetPost.Res r = MapCore.busGet(need.get(k)[0], need.get(k)[1], 5000, 4000);          // 동시 4곳 · 공공 API 오류 봉투는 다시 묻는다(끝내 못 받으면 빈 본문 — 아래에서 '없음'으로 굳히지 않는다)
+                        NetPost.Res r = MapCore.busGet(need.get(k)[0], need.get(k)[1], 8000, 5000);          // s258 (YJ: 받는 시간이 너무 짧다) 5초/4초 → 8초/5초 — 먼저 온 정류장은 기다리지 않고 바로 그려서(partial) 늦은 곳만 오래 기다린다 // 동시 4곳 · 공공 API 오류 봉투는 다시 묻는다(끝내 못 받으면 빈 본문 — 아래에서 '없음'으로 굳히지 않는다)
                         String body = r != null && r.status == 200 && r.body != null ? r.body : "";
                         got[k] = body;
                         if (partial && body.length() > 0) main.post(new Runnable() { @Override public void run() {          // 먼저 온 정류장부터 바로 보인다
@@ -2384,7 +2384,7 @@ public class ShellActivity extends Activity {
                     } });
                     ts[i].start();
                 }
-                for (Thread t : ts) { try { t.join(12000); } catch (InterruptedException e) { /* 무시 */ } }
+                for (Thread t : ts) { try { t.join(20000); } catch (InterruptedException e) { /* 무시 */ } }
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (busRefreshing) {                                                          // 새로 받는 중인 도착정보가 하나라도 비면 이번 갱신은 버린다(옛 값을 섞지 않는다) — 화면은 1초 카운트다운으로 이어진다
