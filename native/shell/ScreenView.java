@@ -82,7 +82,7 @@ public class ScreenView extends View {
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
-    private float bandX; private boolean flingBand, inBand; private String bandSig = "";   // 본문 안 타임라인 줄(경로 결과 카드)의 가로 위치 · 그 줄을 놓고 미는 중 · 손가락이 그 줄 위에서 시작했다
+    private long bandUserT; private float bandX; private boolean flingBand, inBand; private String bandSig = "";   // 본문 안 타임라인 줄(경로 결과 카드)의 가로 위치 · 그 줄을 놓고 미는 중 · 손가락이 그 줄 위에서 시작했다
     private String ctrDone = null;                      // 24시간 차트: 지금 시각 막대를 가운데로 맞춘 막대 내용 표시(내용이 바뀔 때만 다시 맞춘다)
     private final OverScroller flingY, flingX;
     private VelocityTracker vt;
@@ -498,7 +498,7 @@ public class ScreenView extends View {
                     lastY = y; invalidate();
                 }
                 else if (mode == 2) { scrollX = ScreenCore.clamp(scrollX - dx / dpr, lay.headMaxScroll()); lastX = x; invalidate(); }
-                else if (mode == 8) { bandX = ScreenCore.clamp(bandX - dx / dpr, lay.bandMax()); lastX = x; invalidate(); }
+                else if (mode == 8) { bandX = ScreenCore.clamp(bandX - dx / dpr, lay.bandMax()); lastX = x; bandUserT = SystemClock.uptimeMillis(); invalidate(); }
                 return true;
             }
             case MotionEvent.ACTION_UP: {
@@ -546,7 +546,7 @@ public class ScreenView extends View {
                         if (Math.abs(v) > minFling) { flingY.fling(0, Math.round(scrollY * dpr), 0, Math.round(-v), 0, 0, 0, Math.round(lay.bodyMaxScroll(bodyViewH()) * dpr)); }
                     } else if (mode == 8) {
                         float v = vt.getXVelocity();
-                        flingBand = true;
+                        flingBand = true; bandUserT = SystemClock.uptimeMillis();
                         if (Math.abs(v) > minFling) { flingX.fling(Math.round(bandX * dpr), 0, Math.round(-v), 0, 0, Math.round(lay.bandMax() * dpr), 0, 0); }
                     } else {
                         float v = vt.getXVelocity(); flingBand = false;
@@ -1913,6 +1913,10 @@ public class ScreenView extends View {
         }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { if (flingBand) bandX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.bandMax()); else scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
+        if (lay.bandTop >= 0f && lay.mkBody && lay.mk != null && mkHas && mode != 8 && !(flingBand && !flingX.isFinished()) && now - bandUserT > 6000L) {      // s257 (YJ: "내 위치(마커)를 가운데로"): 마커가 가운데 오도록 줄이 따라간다(손가락으로 밀었으면 6초 쉰다 · 양 끝에서는 끝까지만)
+            float tgt = ScreenCore.clamp(mkCurX(now) - lay.bandL - lay.bandView / 2f, lay.bandMax()), dlt = tgt - bandX;
+            if (Math.abs(dlt) > 0.3f) { bandX = Math.abs(dlt) < 1.2f ? tgt : bandX + dlt * 0.14f; moving = true; }
+        }
         roStep(now);                                                                      // 카드를 끄는 중이면 가장자리 자동 스크롤 · 비키는 카드 이동
 
         cv.save();
@@ -2886,11 +2890,20 @@ public class ScreenView extends View {
     /** 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명(같은 글자 밑선) + 오른쪽 즐겨찾기 알약 + 닫기 ×. */
     /** 구간 타임라인 칸: 이름(아래 맞춤, 두 줄까지) · 배지 · 선+점 · 시각. 무엇을 어떤 색·크기로 쓸지는 전부 엔진이 정했다. */
     private void drawTrk(Canvas cv, ScreenCore.Item it) {
+        // s257 (YJ: "마커가 2개 나온다"): 금색 '지금 칸'과 회색 '지난 칸'은 엔진이 화면 값을 줄 때 정해 둔 것이라, 마커는 부드럽게 움직이는데 이쪽은 옛 값에 멈춰 둘이 갈라졌다.
+        //   마커가 있으면 화면에 실제로 보이는 마커 자리(mkCurX)에서 다시 정한다 — 마커가 hh(엔진 값) 이상 가면 그 칸이 '지금'이고 그 앞은 지난 칸(회색). 마커가 곧 유일한 위치 표시.
+        boolean liveHr = it.hr, livePs = it.ps;
+        if (lay != null && lay.mk != null && mkHas && it.ci >= 0) {
+            ScreenCore.Mark k = lay.mk; float span = k.x1 - k.x0, rr = span > 0.5f ? ScreenCore.clamp((mkCurX(SystemClock.uptimeMillis()) - k.x0) / span, 1f) : 0f;
+            int here = rr >= k.hh ? k.t : k.f;
+            liveHr = here > 0 && it.ci == here; livePs = here > 0 && it.ci >= 0 && it.ci < here;
+        }
+        final boolean hrNow = liveHr, psNow = livePs;
         float cx = it.x + it.w / 2f, axisTop = it.y + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H;
         float ly = axisTop + ScreenCore.TRK_LINE_Y, cy = axisTop + ScreenCore.TRK_DOT_Y;
         // 이름: 마지막 줄의 아래가 nameBot
         if (it.lines.length > 0) {
-            setText(it.size, it.bold || it.hr, it.hr ? 0xFFFFD60A : it.ps ? alpha(cc(it.nc, pal[R_TEXT]), 0.35f) : cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);      // 지금 칸: 금색 굵게 · 지나간 칸: 흐리게(웹 htl-gps-here · htl-passed)
+            setText(it.size, it.bold || hrNow, hrNow ? 0xFFFFD60A : psNow ? alpha(cc(it.nc, pal[R_TEXT]), 0.35f) : cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);      // 지금 칸: 금색 굵게 · 지나간 칸: 흐리게(웹 htl-gps-here · htl-passed)
             for (int i = 0; i < it.lines.length; i++) {
                 float top = it.y + it.nameBot - (it.lines.length - i) * it.lineH;
                 cv.drawText(it.lines[i], cx, base(top, it.lineH, 0), tp);
@@ -2915,15 +2928,15 @@ public class ScreenView extends View {
         }
         // 선(앞뒤 칸과 이어지게 겹쳐 그린다)
         p.setStyle(Paint.Style.FILL);
-        if (it.lc != null) { p.setColor(it.ps ? alpha(cc(it.lc, 0), 0.3f) : cc(it.lc, 0)); cv.drawRect(it.x - 0.5f, ly, cx, ly + ScreenCore.TRK_LINE_H, p); }
-        if (it.rc != null) { p.setColor(it.ps ? alpha(cc(it.rc, 0), 0.3f) : cc(it.rc, 0)); cv.drawRect(cx, ly, it.x + it.w + 0.5f, ly + ScreenCore.TRK_LINE_H, p); }
+        if (it.lc != null) { p.setColor(psNow ? alpha(cc(it.lc, 0), 0.3f) : cc(it.lc, 0)); cv.drawRect(it.x - 0.5f, ly, cx, ly + ScreenCore.TRK_LINE_H, p); }
+        if (it.rc != null) { p.setColor(psNow ? alpha(cc(it.rc, 0), 0.3f) : cc(it.rc, 0)); cv.drawRect(cx, ly, it.x + it.w + 0.5f, ly + ScreenCore.TRK_LINE_H, p); }
         // 점
-        if (it.hr) {                                                                   // 지금 칸: 금색 점(14) + 파란 고리가 3→8 로 커졌다 작아졌다(웹 gps-pulse 1.5초)
+        if (hrNow) {                                                                   // 지금 칸: 금색 점(14) + 파란 고리가 3→8 로 커졌다 작아졌다(웹 gps-pulse 1.5초)
             final float ph = (SystemClock.uptimeMillis() % 1500L) / 1500f, tri = ph < 0.5f ? ph * 2f : (1f - ph) * 2f, e = tri * tri * (3f - 2f * tri);
             p.setColor(0xFF0A84FF); p.setAlpha(Math.round(255f * (0.4f - 0.32f * e))); cv.drawCircle(cx, cy, 7f + 3f + 5f * e, p);
             p.setColor(0xFFFFD60A); cv.drawCircle(cx, cy, 7f, p);
             hrDrawn = true;
-        } else if (it.ps) { p.setColor(0x4D555555); cv.drawCircle(cx, cy, "e".equals(it.dk) ? ScreenCore.TRK_E_R : "m".equals(it.dk) ? ScreenCore.TRK_M_R : ScreenCore.TRK_R_R, p); if ("r".equals(it.dk)) { p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); } }
+        } else if (psNow) { p.setColor(0x4D555555); cv.drawCircle(cx, cy, "e".equals(it.dk) ? ScreenCore.TRK_E_R : "m".equals(it.dk) ? ScreenCore.TRK_M_R : ScreenCore.TRK_R_R, p); if ("r".equals(it.dk)) { p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); } }
         else if ("e".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_E_R, p); }
         else if ("r".equals(it.dk)) { p.setColor(cc(it.dc, 0)); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R, p); p.setColor(pal[R_CARD]); cv.drawCircle(cx, cy, ScreenCore.TRK_R_R - 3f, p); }
         else if ("m".equals(it.dk)) {
@@ -2934,7 +2947,7 @@ public class ScreenView extends View {
         }
         // 시각(또는 도보 분)
         if (it.time.length() > 0) {
-            setText(it.tsz, it.tb, it.ps ? alpha(cc(it.timec, pal[R_SUB]), 0.35f) : cc(it.timec, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
+            setText(it.tsz, it.tb, psNow ? alpha(cc(it.timec, pal[R_SUB]), 0.35f) : cc(it.timec, pal[R_SUB])); tp.setTextAlign(Paint.Align.CENTER);
             cv.drawText(it.time, cx, base(axisTop + ScreenCore.TRK_AXIS_H + ScreenCore.TRK_TIME_GAP, ScreenCore.TRK_TIME_H, 0), tp);
             tp.setTextAlign(Paint.Align.LEFT);
         }

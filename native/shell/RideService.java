@@ -177,6 +177,32 @@ public class RideService extends Service {
         try { if (why.equals(diagLast)) return; diagLast = why; ErrLog.record(this, new IllegalStateException(why), false); } catch (Throwable ignored) { }
     }
 
+    /** s257 (YJ: "영점 조정이 안 되는 것 같다" — 기기 안 사정을 볼 길이 없었다): 엔진이 알려 주는 역별 영점 판정(state·표본 수·가까움/멂·최단 거리)과 '영점/마커/도착 확정' 메모가 바뀔 때만 오류 기록에 남긴다.
+     *  같은 내용은 한 번만, 한 번의 탑승에 최대 60줄. 판단·계산은 엔진이 한 것을 적기만 한다(다음에 원인을 기록으로 본다). */
+    private final java.util.HashSet<String> zeroSeen = new java.util.HashSet<>();
+    private void zeroDiag(String resp) {
+        try {
+            if (resp == null || zeroSeen.size() >= 60 || (resp.indexOf("\"zero\"") < 0 && resp.indexOf("영점") < 0 && resp.indexOf("마커 되돌아감") < 0)) return;
+            org.json.JSONObject o = new org.json.JSONObject(resp);
+            org.json.JSONObject z = o.optJSONObject("zero");
+            org.json.JSONArray st = z == null ? null : z.optJSONArray("stops");
+            for (int i = 0; st != null && i < st.length(); i++) {
+                org.json.JSONObject q = st.optJSONObject(i); if (q == null) continue;
+                String msg = "RIDE_ZERO 역#" + q.optInt("i", -1) + " 상태=" + q.optString("state", "?") + " 표본=" + q.optInt("n", 0) + " 가까움=" + q.optInt("near", 0) + " 멂=" + q.optInt("far", 0)
+                    + " 최단=" + (q.isNull("distM") ? "없음" : q.optInt("distM") + "m") + (q.has("passMs") ? " 통과확정" : "") + (q.optBoolean("notYet") ? " 아직안옴" : "") + (q.optBoolean("apply") ? " 반영" : "");
+                if (zeroSeen.add(msg)) ErrLog.record(this, new IllegalStateException(msg), false);
+            }
+            org.json.JSONArray ns = o.optJSONArray("notes");
+            for (int i = 0; ns != null && i < ns.length(); i++) {
+                String n = ns.optString(i, "");
+                if (n.indexOf("영점") >= 0 || n.indexOf("마커 되돌아감") >= 0 || n.indexOf("도착 확정") >= 0 || n.indexOf("GPS 탐색") >= 0) {
+                    String msg = "RIDE_NOTE " + n;
+                    if (zeroSeen.add(msg)) ErrLog.record(this, new IllegalStateException(msg), false);
+                }
+            }
+        } catch (Throwable ignored) { }
+    }
+
     // ── 5초마다 엔진 ──
     private final Runnable stepRunnable = new Runnable() {
         @Override public void run() {
@@ -193,6 +219,7 @@ public class RideService extends Service {
                 if (resp == null) resp = RideLocal.step(body);
                 if (resp == null) diagOnce("RIDE_STEP resp=null (폰 안 엔진이 값을 못 냈다)");
                 if (resp != null) {
+                    zeroDiag(resp);
                     RideCore.Step s = core.onStep(resp);
                     if (!s.ok) diagOnce("RIDE_STEP onStep ok=false");
                     if (s.ok) {

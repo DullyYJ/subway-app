@@ -10399,7 +10399,7 @@ function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
   var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
-  if (!segs || !segs.length) { st.mk = null; return; }
+  if (!segs || !segs.length) { delete st.mk; return; }
   var prevP = null;
   if (mk && mk.s && mk.s.length) {
     prevP = mk.s[mk.s.length - 1][1];
@@ -19166,7 +19166,7 @@ function rheadTrkCells(pts, th, ea) {
   return cells;
 }
 // \ub0b4 \uc704\uce58 \ub9c8\ucee4: \uc6f9\uc774 \uc54c\ub824 \uc900 '\uba87 \ubc88\uc9f8 \uce78 \u2192 \uba87 \ubc88\uc9f8 \uce78, \uad6c\uac04 \ube44\uc728' \uacfc \ub300\uae30 \uac70\ub9ac \uc6d0\uc790\ub8cc\ub85c \uc5b4\ub514\uc5d0\u00b7\ubb34\uc2a8 \uc0c9\uc73c\ub85c\u00b7\uc5b4\ub5a4 \uae00\ub85c \uadf8\ub9b4\uc9c0 \uc815\ud55c\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
-var RTRK_MK = { ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+var RTRK_MK = { hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
 function rheadTrkMark(lv, cells) {
   var p = lv && lv.p;
   if (!p || typeof p !== 'object') return null;
@@ -19177,7 +19177,7 @@ function rheadTrkMark(lv, cells) {
   if (tj < 0 || tj === fi) { tj = fi; r = 0; }
   r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
   var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
-  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, hh: K.hh, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
   if (w) {
     mk.bt = d == null ? '\ub300\uae30 \uc911' : (d >= 1000 ? '\ub300\uae30 \uc911 \u00b7 ' + (d / 1000).toFixed(1) + 'km' : '\ub300\uae30 \uc911 \u00b7 ' + Math.round(d) + 'm');
     mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
@@ -19251,8 +19251,8 @@ function rheadTrackScreen(inp) {
   var mk = rheadTrkMark(lv, cells);
   if (mk) {
     node.mk = mk;
-    var here = mk.r >= 0.9 ? mk.t : mk.f;                    // \uc6f9 htl-passed \u00b7 htl-gps-here: \uc2dc\uac04 \uae30\uc900\uc740 \uc5ed\uc5d0 90% \ub2e4\uac00\uac00\uc57c \ub2e4\uc74c \uce78\uc73c\ub85c \ub118\uc5b4\uac04\ub2e4(\ucd9c\ubc1c \uce78\uc740 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
-    if (here > 0 && here < cells.length) { for (var pi2 = 1; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }
+    var here = mk.r >= mk.hh ? mk.t : mk.f;                    // \uc6f9 htl-passed \u00b7 htl-gps-here: \uc2dc\uac04 \uae30\uc900\uc740 \uc5ed\uc5d0 90% \ub2e4\uac00\uac00\uc57c \ub2e4\uc74c \uce78\uc73c\ub85c \ub118\uc5b4\uac04\ub2e4(\ucd9c\ubc1c \uce78\uc740 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    if (here > 0 && here < cells.length) { for (var pi2 = 0; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }      // s257 (YJ: \uccab \uc5ed\u00b7\uc815\ub958\uc7a5\ub3c4 \uc9c0\ub098\uac00\uba74 \ud68c\uc0c9) \u2014 \ucd9c\ubc1c \uce78\ub3c4 \ub9c8\ucee4\uac00 \uc9c0\ub098\uac00\uba74 \ud68c\uc0c9
   }
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
   out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));

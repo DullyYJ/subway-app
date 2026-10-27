@@ -510,7 +510,7 @@ function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
   var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
-  if (!segs || !segs.length) { st.mk = null; return; }
+  if (!segs || !segs.length) { delete st.mk; return; }
   var prevP = null;
   if (mk && mk.s && mk.s.length) {
     prevP = mk.s[mk.s.length - 1][1];

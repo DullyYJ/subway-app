@@ -381,7 +381,7 @@ public final class ScreenCore {
         if (k.f >= cells || k.t >= cells) throw new ParseError("mk: 칸 번호가 범위를 벗어났다");
         k.r = optNum(m, "r", 0f, 0f, 1f); k.ms = optNum(m, "ms", 0f, 0f, 10000f);
         k.d = optNum(m, "d", 14f, 6f, 30f); k.bw = optNum(m, "bw", 2f, 0f, 6f); k.hw = optNum(m, "hw", 6f, 0f, 16f);
-        k.pms = optNum(m, "pms", 1300f, 300f, 6000f); k.rms = optNum(m, "rms", 1400f, 300f, 6000f); k.bz = optNum(m, "bz", 9f, 6f, 14f);
+        k.hh = optNum(m, "hh", .9f, .5f, 1f); k.pms = optNum(m, "pms", 1300f, 300f, 6000f); k.rms = optNum(m, "rms", 1400f, 300f, 6000f); k.bz = optNum(m, "bz", 9f, 6f, 14f);
         k.pu = optStr(m, "pu", "b", 2); if (!"b".equals(k.pu) && !"w".equals(k.pu)) throw new ParseError("mk: pu 는 b 또는 w");
         k.c = roleOrCss(m, "c", "#0a84ff"); k.bc = roleOrCss(m, "bc", "#ffffff"); k.hc = roleOrCss(m, "hc", ""); k.ring = roleOrCss(m, "ring", "");
         k.bt = optStr(m, "bt", "", 24); k.bg = roleOrCss(m, "bg", "#ff9f0a"); k.btc = roleOrCss(m, "btc", "#ffffff");
@@ -1167,6 +1167,7 @@ public final class ScreenCore {
         public boolean tb;
         public boolean ps, hr;                       // 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public int ti = -1;                          // 칸: 위치 추적 번호(-1 은 추적 안 함)
+        public int ci = -1;                          // 칸: 타임라인 줄 안에서의 자리(마커의 f·t 와 같은 번호)
         public Act act;
         public Act[] ra = new Act[0];                // 정류장 카드: 노선 줄마다 누르면 가는 행동(없으면 null)
         public String sig = "";                      // 노선 상세 줄: 바뀐 줄만 다시 그리려고 붙인 지문(내용이 같으면 같다)
@@ -1199,6 +1200,7 @@ public final class ScreenCore {
     /** 구간 타임라인 위의 내 위치 마커. 어느 칸에서 어느 칸으로 얼마나 갔는지·색·크기·맥박·대기 배지 글은 전부 엔진이 정했다 — 앱은 칸 가운데 사이를 이어 그리기만 한다. */
     public static final class Mark {
         public int f, t;                                   // 칸 번호(trk.cells 안)
+        public float hh = .9f;                              // 마커가 이 비율 이상 가면 도착한 칸(금색 · 앞 칸은 회색) — 엔진이 정한 값을 앱이 화면에 보이는 마커 자리에 대 본다
         public float r, ms, d, bw, hw, pms, rms, bz;       // 구간 비율 · 옮겨 가는 ms(0 이면 곧바로) · 점 지름 · 흰 테두리 · 번쩍임 두께 · 번쩍임·퍼지는 고리 주기 ms · 배지 글자
         public String pu = "b", c = "", bc = "", hc = "", ring = "", bt = "", bg = "", btc = "";      // pu b=깜박임 w=승차 대기 맥박 · 점·테두리·번쩍임·고리·배지 글·배지 바탕·배지 글자 색
         // 배치 뒤(dp)
@@ -1397,7 +1399,7 @@ public final class ScreenCore {
                 L.chipsTop = y - n.padT; L.chipsBot = y + TRK_H + n.padB;      // 이 줄이 가로로 밀린다
                 int rowFrom = hi.size(); float rowY = y;
                 for (Node c : n.items) {
-                    Item it = new Item(); it.kind = K_TRK; it.x = x; it.y = y; it.w = c.max; it.h = TRK_H;
+                    Item it = new Item(); it.kind = K_TRK; it.x = x; it.y = y; it.w = c.max; it.h = TRK_H; it.ci = hi.size() - rowFrom;
                     List<String> nl = new ArrayList<String>(); if (c.name != null && c.name.length() > 0) nl.add(ellipsize(c.name.replace('\n', ' '), Math.max(10f, c.max - 4f), c.size, c.bold, m));          // 웹 #transitHtlTrack .htl-name: 한 줄(nowrap) · 넘치면 …
                     it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
                     it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;          // 웹 row1: 30px 칸 아래 정렬(align-items:flex-end) · 한 줄
@@ -1717,10 +1719,15 @@ public final class ScreenCore {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다
-            float tx = ox, ty = y + n.padT;
+            float lead = 0f, lastW = 0f;
+            if (n.mk != null && !n.items.isEmpty()) {                                  // s257 (YJ: 내 위치를 가운데로): 처음·끝 칸의 마커도 가운데 올 수 있게 양 끝에 여백을 둔다
+                lead = Math.max(0f, width / 2f - n.items.get(0).max / 2f - n.padL);
+                lastW = n.items.get(n.items.size() - 1).max;
+            }
+            float tx = ox + lead, ty = y + n.padT;
             int rowFrom = out.size();
             for (Node c : n.items) {
-                Item it = new Item(); it.kind = K_TRK; it.x = tx; it.y = ty; it.w = c.max; it.h = TRK_H;
+                Item it = new Item(); it.kind = K_TRK; it.x = tx; it.y = ty; it.w = c.max; it.h = TRK_H; it.ci = out.size() - rowFrom;
                 List<String> nl = new ArrayList<String>(); if (c.name != null && c.name.length() > 0) nl.add(ellipsize(c.name.replace('\n', ' '), Math.max(10f, c.max - 4f), c.size, c.bold, m));          // 웹 #transitHtlTrack .htl-name: 한 줄(nowrap) · 넘치면 …
                 it.lines = nl.toArray(new String[0]); it.size = c.size; it.bold = c.bold; it.nc = col(c.tc, new Col("text", 0));
                 it.lineH = c.size * 1.25f; it.nameBot = TRK_NAME_H - c.ipB;          // 웹 row1: 30px 칸 아래 정렬(align-items:flex-end) · 한 줄
@@ -1735,7 +1742,8 @@ public final class ScreenCore {
                 it.band = true; it.cl = x0; it.cr = x0 + width;
                 out.add(it); tx += c.max;
             }
-            for (int q = rowFrom; q < out.size(); q++) out.get(q).cr2 = tx + n.padR;
+            float endX = Math.max(tx + n.padR, lastW > 0f ? tx - lastW / 2f + width / 2f : 0f);
+            for (int q = rowFrom; q < out.size(); q++) out.get(q).cr2 = endX;
             if (n.mk != null && rowFrom < out.size() && n.mk.f < out.size() - rowFrom && n.mk.t < out.size() - rowFrom) {
                 Mark k = n.mk; Item a = out.get(rowFrom + k.f), b = out.get(rowFrom + k.t);
                 k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null);

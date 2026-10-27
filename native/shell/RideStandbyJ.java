@@ -367,8 +367,52 @@ final class RideStandbyJ {
             pressVerify(st, num(w.get("i")), now, notes);
         } else if ("undo".equals(a) && st.get("rsUndo") != null && now < num(mm(st.get("rsUndo")).get("until")) && !truthy(mm(st.get("rsUndo")).get("x"))) doUndo(st, now, notes);
     }
+    // ★ 2026-10-27 s257 (JS rsMonoPos 와 같은 계산): 새 시각표가 지난번 마커 자리보다 뒤로 가면 그 구간의 출발 시각만 당겨 자리를 유지한다(도착 시각 t1 은 그대로).
+    static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
+        Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
+        Map<String, Object> eta = mm(st.get("eta")); List<Object> nd = eta == null ? null : l(eta.get("nodes")); if (nd == null) nd = new ArrayList<Object>();
+        String n0 = nd.size() > 0 && mm(nd.get(0)) != null ? or(mm(nd.get(0)).get("name"), "") : "", n1 = nd.size() > 0 && mm(nd.get(nd.size() - 1)) != null ? or(mm(nd.get(nd.size() - 1)).get("name"), "") : "";
+        String key = nd.size() + "|" + n0 + "|" + n1;
+        Map<String, Object> mk = mm(st.get("mk")); if (mk != null && !key.equals(mk.get("key"))) mk = null;
+        List<Object> segs = l(pos.get("segs")); int i;
+        if (segs == null || segs.isEmpty()) { st.remove("mk"); return; }
+        double prevP = Double.NaN; List<Object> ms = mk == null ? null : l(mk.get("s"));
+        if (ms != null && !ms.isEmpty()) {
+            prevP = num(at(l(ms.get(ms.size() - 1)), 1));
+            for (i = 0; i < ms.size(); i++) {
+                List<Object> q = l(ms.get(i));
+                if (now < num(q.get(3))) { double q0 = num(q.get(0)), q1 = num(q.get(1)), q2 = num(q.get(2)), q3 = num(q.get(3)); prevP = now < q2 ? q0 : q0 + Math.max(0, Math.min(1, (now - q2) / (q3 - q2))) * (q1 - q0); break; }
+            }
+        }
+        int cur = -1;
+        for (i = 0; i < segs.size(); i++) if (now < num(mm(segs.get(i)).get("t1"))) { cur = i; break; }
+        double newP;
+        if (cur < 0) newP = num(mm(segs.get(segs.size() - 1)).get("to"));
+        else { Map<String, Object> c = mm(segs.get(cur)); double f = num(c.get("from")), t = num(c.get("to")), t0 = num(c.get("t0")), t1 = num(c.get("t1")); newP = now < t0 ? f : f + Math.max(0, Math.min(1, (now - t0) / (t1 - t0))) * (t - f); }
+        if (fin(prevP) && newP < prevP - 0.002) {
+            int k = -1;
+            for (i = 0; i < segs.size(); i++) { Map<String, Object> g = mm(segs.get(i)); if (prevP >= num(g.get("from")) && prevP < num(g.get("to"))) { k = i; break; } }
+            if (k >= 0 && num(mm(segs.get(k)).get("t1")) > now) {
+                Map<String, Object> g = mm(segs.get(k)); double gf = num(g.get("from")), gt = num(g.get("to")), span = gt - gf, rp = Math.max(0, Math.min(0.98, span > 0 ? (prevP - gf) / span : 0));
+                double g0 = num(g.get("t0")), g1 = num(g.get("t1"));
+                if (rp > 0) {
+                    double t0n = (now - rp * g1) / (1 - rp);
+                    if (t0n < g0) { g.put("t0", t0n); g0 = t0n; if (num(g.get("a")) > t0n) g.put("a", t0n); }
+                }
+                if (pos.get("ttFrom") == null) pos.put("ttFrom", pos.get("from"));
+                List<Object> ns2 = new ArrayList<Object>(segs.subList(k, segs.size())); pos.put("segs", ns2); segs = ns2;
+                double rt = g1 > g0 ? Math.max(0, Math.min(1, (now - g0) / (g1 - g0))) : 0;
+                pos.put("from", gf); pos.put("to", gt); pos.put("t0", g0); pos.put("t1", g1); pos.put("ratio", Math.floor(rt * 1000 + 0.5) / 1000); pos.put("moving", rt > 0 && rt < 1);
+                notes.add("마커 되돌아감 방지: " + ns(Math.floor(newP * 100 + 0.5) / 100) + " → " + ns(Math.floor(prevP * 100 + 0.5) / 100) + " 자리 유지");
+            }
+        }
+        List<Object> keep = new ArrayList<Object>();
+        for (i = 0; i < segs.size() && i < 6; i++) { Map<String, Object> x = mm(segs.get(i)); keep.add(list(num(x.get("from")), num(x.get("to")), num(x.get("t0")), num(x.get("t1")))); }
+        st.put("mk", obj("key", key, "s", keep));
+    }
     static void doUndo(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")), ux = mm(st.get("rsUndo"));
+        st.remove("mk");                                   // 되돌리면 마커도 되돌아갈 수 있다
         List<Object> pxs = l(eta.get("passes")); if (pxs == null) pxs = new ArrayList<Object>();
         if (ux == null) return;
         double wi = num(mm(ux.get("w")).get("i")); int ki;
@@ -1150,6 +1194,7 @@ final class RideStandbyJ {
         Map<String, Object> r = RideEtaJ.rideEta(ein);
         if (r == null || r.get("etaMs") == null) return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", ""), "alert", null, "done", Boolean.FALSE, "nextMs", stepMs, "notes", list("도착 시각 계산 실패"));
         st.put("etaMs", r.get("etaMs"));
+        try { monoPos(st, r, now, notes); } catch (RuntimeException eMk) { notes.add("마커 보정 실패: " + eMk.getMessage()); }
         { Map<String, Object> wq = mm(st.get("wait")); if (wq != null && eta.get("boardNext") != null) { Object bv = at(r.get("etaMs"), (int) num(wq.get("i"))); if (bv != null && fin(bv)) wq.put("arrMs", num(bv)); } }
         if (r.get("delayMin") != null) { eta.put("prevLevelMin", r.get("delayMin")); eta.put("prevAnchorIdx", r.get("anchorIdx")); }
         // 4) 지금 어느 역까지 왔나

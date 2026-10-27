@@ -551,7 +551,7 @@ function rheadTrkCells(pts, th, ea) {
   return cells;
 }
 // 내 위치 마커: 웹이 알려 준 '몇 번째 칸 → 몇 번째 칸, 구간 비율' 과 대기 거리 원자료로 어디에·무슨 색으로·어떤 글로 그릴지 정한다(앱은 그리기만)
-var RTRK_MK = { ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+var RTRK_MK = { hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
 function rheadTrkMark(lv, cells) {
   var p = lv && lv.p;
   if (!p || typeof p !== 'object') return null;
@@ -562,7 +562,7 @@ function rheadTrkMark(lv, cells) {
   if (tj < 0 || tj === fi) { tj = fi; r = 0; }
   r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
   var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
-  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, hh: K.hh, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
   if (w) {
     mk.bt = d == null ? '대기 중' : (d >= 1000 ? '대기 중 · ' + (d / 1000).toFixed(1) + 'km' : '대기 중 · ' + Math.round(d) + 'm');
     mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
@@ -636,8 +636,8 @@ function rheadTrackScreen(inp) {
   var mk = rheadTrkMark(lv, cells);
   if (mk) {
     node.mk = mk;
-    var here = mk.r >= 0.9 ? mk.t : mk.f;                    // 웹 htl-passed · htl-gps-here: 시간 기준은 역에 90% 다가가야 다음 칸으로 넘어간다(출발 칸은 건드리지 않는다)
-    if (here > 0 && here < cells.length) { for (var pi2 = 1; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }
+    var here = mk.r >= mk.hh ? mk.t : mk.f;                    // 웹 htl-passed · htl-gps-here: 시간 기준은 역에 90% 다가가야 다음 칸으로 넘어간다(출발 칸은 건드리지 않는다)
+    if (here > 0 && here < cells.length) { for (var pi2 = 0; pi2 < here; pi2++) cells[pi2].ps = true; cells[here].hr = true; }      // s257 (YJ: 첫 역·정류장도 지나가면 회색) — 출발 칸도 마커가 지나가면 회색
   }
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [node], body: [{ t: 'spacer', h: 0 }], info: { part: 'k', n: cells.length, w: w } };
   out.rev = 'r' + RHEAD_SCREEN_V + 'k:' + rheadHash(JSON.stringify(cells) + (mk ? JSON.stringify(mk) : ''));

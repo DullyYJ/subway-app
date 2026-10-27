@@ -297,7 +297,7 @@ const web = new Function(
   ok(K({ p: { f: 1, t: 2, r: -3 } }).mk.r === 0 && K({ p: { f: 1, t: 2, r: 9 } }).mk.r === 1, '비율은 0~1 로 자른다');
   // 지나간 칸 흐리게(ps) · 지금 칸 강조(hr) — 웹 htl-passed · htl-gps-here (역에 90% 다가가야 다음 칸으로)
   const ph1 = K({ p: { f: 3, t: 4, r: 0.5 } }).cells, ph2 = K({ p: { f: 3, t: 4, r: 0.9 } }).cells;
-  ok(ph1.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('') .startsWith('-pph-') && ph2.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('').startsWith('-pppph'), 'ps/hr: 출발 칸은 그대로 · 지나간 칸 ps · 지금 칸 hr(비율 0.9 부터 다음 칸)');
+  ok(ph1.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('') .startsWith('ppph-') && ph2.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('').startsWith('ppppph') && K({ p: { f: 3, t: 4, r: 0.5 } }).mk.hh === 0.9, 'ps/hr(s257): 출발 칸도 지나가면 회색 · 지나간 칸 ps · 지금 칸 hr(비율 hh=0.9 부터 다음 칸 — 앱이 화면에 보이는 마커 자리에서 다시 정한다)');
   ok(!K(null).cells.some(c => c.ps || c.hr) && !K({ p: { f: 0, t: 0, r: 0 } }).cells.some(c => c.ps || c.hr), '위치가 없거나 출발 칸이면 흐림·강조 없음');
   // 시각 덮어쓰기: 웹이 지금 보여 주는 시각(칸 수가 맞을 때만)
   const e1 = K({ ea: ['', '12:09', '12:12', '12:21', '12:23', '12:24', '12:30', '12:41', ''] }).cells;

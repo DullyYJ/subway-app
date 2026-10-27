@@ -275,7 +275,7 @@ function findAndroidJar() {
   });
   await t('타임라인 지나간 칸 흐림 · 지금 칸 강조(s137): 칸 그리기에서 알파만 바꾸고 · 지금 칸 점의 고리가 숨 쉰다 · 그릴 때 새 객체 없음', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), d = sv.slice(sv.indexOf('private void drawTrk('), sv.indexOf('// ───────────── 혼잡도 카드'));
-    assert.ok(/it\.ps \? alpha\(cc\(it\.nc/.test(d) && /it\.ps \? alpha\(cc\(it\.lc, 0\), 0\.3f\)/.test(d) && /it\.hr/.test(d) && /% 1500L/.test(d) && /hrDrawn = true/.test(d), '그리기 · 1.5초 고리');
+    assert.ok(/psNow \? alpha\(cc\(it\.nc/.test(d) && /psNow \? alpha\(cc\(it\.lc, 0\), 0\.3f\)/.test(d) && /it\.hr/.test(d) && /mkCurX\(SystemClock\.uptimeMillis\(\)\)/.test(d) && /k\.hh/.test(d) && /% 1500L/.test(d) && /hrDrawn = true/.test(d), '그리기 · 1.5초 고리');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new int\[|new String/.test(d), '그릴 때 새 객체 없음');
     assert.ok(/else if \(pulsing \|\| hrDrawn\) postInvalidateDelayed/.test(sv), '보이는 동안만 다시 그린다');
   });
@@ -386,7 +386,7 @@ function findAndroidJar() {
   });
   await t('실기기 4건(s157): 경로 카드 안 타임라인(가로 밀림 · 내 위치 점) · 시간표를 내리면 그 높이에서 역 팝업 재생성 · 정류장 도착정보 병렬 · 먼저 온 곳부터', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
-    assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n\s*float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
+    assert.ok(/if \("trk"\.equals\(n\.t\)\) \{\s*\/\/[^\n]*\n[\s\S]{0,700}?float tx = ox/.test(sc) && /it\.band = true; it\.cl = x0; it\.cr = x0 \+ width/.test(sc) && /L\.mkBody = true/.test(sc), '본문(카드) 안 타임라인 칸을 배치한다(예전엔 통째로 빠졌다)');
     assert.ok(/mode = 8/.test(sv) && /bandX = ScreenCore\.clamp\(bandX - dx \/ dpr, lay\.bandMax\(\)\)/.test(sv) && /cv\.clipRect\(bit\.cl, bit\.y - 4f, bit\.cr/.test(sv) && /pulsing = lay\.mkBody \? pulsingB : drawMk/.test(sv), '그 줄만 가로로 밀고(세로로 쓸면 목록) 틀 안에 자르고 마커도 같이 민다');
     assert.ok(!/private boolean stationNow\(/.test(a), 's208: 끄는 도중 역 팝업으로 바꿔치기하지 않는다(손가락 따라 내려가다 놓으면 닫힘)');
     assert.ok(/private void busPaint\(/.test(a) && /fetchBusNeed\(v, keep, round, my, shownNow && !busRefreshing\)/.test(a) && /if \(partial && body\.length\(\) > 0\) main\.post/.test(a) && /MapCore\.busGet\(need\.get\(k\)\[0\], need\.get\(k\)\[1\], 5000, 4000\)/.test(a), '정류장 도착정보는 병렬로 받아 먼저 온 곳부터 그리고 빈 응답은 0.3초 뒤 다시');
