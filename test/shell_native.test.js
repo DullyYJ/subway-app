@@ -508,7 +508,7 @@ function findAndroidJar() {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), oc = fs.readFileSync(N('OvCore.java'), 'utf8');
     assert.ok(/userPill && !wantOpen\(\)/.test(o) && /cur\.alert == 1 && cur\.alertAt != dismissedAlertAt\) \|\| \(cur\.row\.kind > 0 && cur\.row\.at != dismissedRecoAt/.test(o) && /dismissedRecoAt = cur\.row\.at/.test(o) && /dismissedAlertAt = cur\.alertAt/.test(o), '펼침 규칙(1정거장 전 · 새 추천, 접은 경고·추천은 다시 안 펼침)');
     assert.ok(/restoreX = lp\.x; restoreY = lp\.y; movedForAlert = true; lp\.x = 0; lp\.y = 0/.test(o) && /lp\.x = restoreX; lp\.y = restoreY; movedForAlert = false/.test(o), '펼쳐지면 맨 위로, 끝나면 원래 자리(가로·세로)');
-    assert.ok(/border\.setMode\(pill \? \(v\.alert == 2 \? 2 : 0\) : v\.alert\)/.test(o) && /alert == 2 \? 6000L/.test(oc) && /alert == 1 \? 1100L/.test(oc) && /dp\(pill \? 15 : 14\)/.test(o), '알약 둘레 무지개 6초 · 반지름 15');
+    assert.ok(/border\.setMode\(v\.alert\);/.test(o) && /alert == 2 \? 6000L/.test(oc) && /alert == 1 \? 1100L/.test(oc) && /dp\(pill \? 15 : 14\)/.test(o), '알약 둘레 무지개 6초 · 반지름 15');
     assert.ok(/IN_MS = 1150L, TURN_MS = 300L/.test(o) && /cv\.translate\(\(1f - slide\) \* getWidth\(\), 0f\)/.test(o) && /cv\.scale\(-1f, 1f/.test(o) && /\? 183L : 110L/.test(o), '추천 줄 입장: 오른쪽에서 1.15초 감속 · 좌우 반전 · 5° · 0.3초 뒤 돌아섬 · 0.6배속');
   });
   await t('s198: 오버레이 웹 맞춤 — 엔진이 정한 진동(alertAt 새 경고에 한 번) · 위치·접힘 저장 · 알약 가로 이동 · 스프링 · 관성 스크롤 · 알약 글은 엔진 값', () => {

@@ -154,7 +154,7 @@ final class RideOverlay {
         if (showRow) rowView.set(v.row, fg, sub);
         if (!userScrolling) scrollPos = OvCore.centerPos(v.cur, v.base, v.cells.length);
         strip.invalidate();
-        border.setMode(pill ? (v.alert == 2 ? 2 : 0) : v.alert);          // 접힌 알약도 2정거장 전엔 둘레 무지개(6초에 한 바퀴)
+        border.setMode(v.alert);          // s258 (YJ: 펴진 오버레이를 사용자가 다시 알약으로 접어도 알약 테두리가 똑같이 하이라이트) — 접혔든 펴졌든 2정거장 전(느리게 6초)·1정거장 전(빠르게 1.1초)은 같은 무지개
         startAnims();
         try { wm.updateViewLayout(box, lp); } catch (Throwable ignored) { }
         if (changed && popReady) popIn();
