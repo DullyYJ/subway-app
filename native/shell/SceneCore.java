@@ -76,7 +76,7 @@ public final class SceneCore {
         double ph, bubUntil, sx = 1, sy = 1, ox, pvx, pvy, cut = Double.NaN, spd; int pose = -1;     // pose: 자세 시트(<id>_pose) 칸 0 앉기·1 잠·2 웃음·3 덜덜·4 헥헥·5 찡그림, -1 이면 걷기 시트
         String bub = ""; List<Prop> pr; Stk stk; int ai; AS act; Arrive onArrive;
         Integer lastCyc; double dirT; String afterEmerge, prevSt, landK = "";
-        double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil;
+        double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil, boost;
     }
 
     // ═══ 상태 ═══
@@ -93,6 +93,10 @@ public final class SceneCore {
     SceneTrain.St tr;
     double dtLast; Drag DRAG; Pend PEND; boolean rideBell;
     P wxP;
+    // 장소가 바뀔 때(s246): 캐릭터가 모두 한쪽으로 걸어 나가는 동안 옛 배경은 반대쪽으로 밀려 나가고 새 배경이 이어 붙어 들어온다. 어느 쪽인지(look.pdir)는 엔진이 정했다.
+    List<Traffic> oldTraffic = new ArrayList<>(); double pan = -1, panDur = 2.6; int panDir = 1; SceneArt.Bg panBg; SceneArt.Pal panL; P panWx; String bgTail = "";
+    // 날씨·시간대·계절만 바뀔 때는 옛 장면 한 장이 새 장면 위에서 서서히 사라진다
+    double xf = -1; static final double XF_T = 1.1, PAN_MIN = 2.4, PAN_MAX = 4.6;
     final Map<String, Act> ACT = new HashMap<>();
     String error;
 
@@ -242,14 +246,17 @@ public final class SceneCore {
             if (t >= a.until) { a.intro = false; if (a.afterEmerge != null) { String af = a.afterEmerge; a.afterEmerge = null; startAct(a, af); } else endAct(a); }
             return;
         }
-        if (st.equals("walk")) {
+        if (st.equals("pan")) {                                    // 장소 이동 중: 땅이 흐르는 만큼 제자리에서 걸으며 서서히 모여 선다
+            a.dir = panDir; a.fr += dt * D.fps * (a.kind.equals("eagle") ? .5 : 1) * Math.max(1, a.boost);
+            double dx2 = a.tx - a.x; a.x += clamp(dx2, -1, 1) * Math.min(Math.abs(dx2), 14 * dt);
+        } else if (st.equals("walk")) {
             double dx = a.tx - a.x, dz = a.tz - a.z;
             if (Math.abs(dx) < 3 && Math.abs(dz) < .03) {
                 if (a.leaving) { a.dead = true; return; }
                 if (a.onArrive != null) { Arrive f = a.onArrive; a.onArrive = null; f.f(a); return; }
                 endAct(a);
             } else {
-                if (Math.abs(dx) >= 3) { a.dir = dx > 0 ? 1 : -1; a.x += a.dir * Math.min(Math.abs(dx), a.spd * (a.leaving ? 1.25 : 1) * dt); }
+                if (Math.abs(dx) >= 3) { a.dir = dx > 0 ? 1 : -1; a.x += a.dir * Math.min(Math.abs(dx), a.spd * (a.leaving ? 1.25 : 1) * (a.boost > 1 ? a.boost : 1) * dt); }
                 a.z += (dz > 0 ? 1 : dz < 0 ? -1 : 0) * Math.min(Math.abs(dz), .28 * dt);
                 a.fr += dt * D.fps * (a.kind.equals("eagle") ? .5 : 1);
             }
@@ -286,7 +293,7 @@ public final class SceneCore {
     /** 찻길이 있는 장소인가(거리만 — 공원·강변·바닷가 등엔 차가 지나가지 않는다). 장소는 엔진이 정한다(look.place). */
     boolean streetPlace() { return L == null || L.place == null || "street".equals(L.place); }
     void stepTraffic(double dt) {
-        if (!"ride".equals(mode) && streetPlace() && t >= nextCar && traffic.size() < 3) {
+        if (!"ride".equals(mode) && pan < 0 && streetPlace() && t >= nextCar && traffic.size() < 3) {
             Traffic v = spawnTraffic(); nextCar = t + rnd(4.5, 9);
             if ("wait".equals(mode) && venue.equals("bus") && v.bus && v.lane == 1 && hero != null) { hero.bub = "!"; hero.bubUntil = t + 1.3; hero.dir = -1; hero.lookUntil = t + 1.6; }
         }
@@ -317,6 +324,7 @@ public final class SceneCore {
         }
     }
     void idleManage() {
+        if (pan >= 0) return;                                      // 장소 이동 중에는 친구들이 함께 걷는다(내보내거나 새로 부르지 않는다)
         int want = W < 260 ? 2 : 3, alive = 0;
         for (Actor o : actors) {
             if (!o.hero && !o.leaving && !o.held && !o.st.equals("fall") && t - o.born > o.life) { o.leaving = true; o.st = "walk"; o.tx = o.x < W / 2 ? -o.w * 1.1 : W + o.w * 1.1; o.tz = o.z; o.onArrive = null; }
@@ -736,13 +744,17 @@ public final class SceneCore {
     }
     void drawStreet(SceneCv c, double dt) {
         int tw = bg.tw;
-        c.drawImage(bg.sky, 0, 0, W, H); drawSkyFx(c, t);
-        c.drawImage(bg.far, 0, 0, tw, H); SceneFx.drawMid(this, c, bg.mid, tw); c.drawImage(bg.gnd, 0, 0, W, H);
-        SceneFx.ambient(this, c, t);
-        drawTraffic(c, 0);
+        if (pan >= 0 && panBg != null) {                      // 장소 이동 중: 캐릭터와 함께 옛 배경이 새 배경으로 겹쳐 이어진다
+            drawPanBack(c);
+        } else {
+            c.drawImage(bg.sky, 0, 0, W, H); drawSkyFx(c, t);
+            c.drawImage(bg.far, 0, 0, tw, H); SceneFx.drawMid(this, c, bg.mid, tw); c.drawImage(bg.gnd, 0, 0, W, H);
+            SceneFx.ambient(this, c, t);
+        }
+        drawTrafficPan(c, 0); drawTraffic(c, 0);
         Seq q = seq;
         if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busNo; o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
-        drawTraffic(c, 1);
+        drawTrafficPan(c, 1); drawTraffic(c, 1);
         if ("wait".equals(mode) || "alight".equals(mode)) { if (venue.equals("sub")) SceneArt.drawEntrance(c, g, entX, L, res.line); else SceneArt.drawStop(c, g, stopX, L); }
         drawGfx(c, false);
         List<Actor> arr = new ArrayList<>(); for (Actor a : actors) if (a.vis) arr.add(a);
@@ -755,7 +767,7 @@ public final class SceneCore {
         }
         for (Actor a : arr) if (!a.bub.isEmpty()) { double y = zy(a.z) - TH * zs(a.z) - 6 + a.y, x = a.x + a.dir * a.w * .2; SceneArt.drawBubble(c, x, y, a.bub); }
         drawParts(c, dt);
-        drawWxFront(c, t);
+        if (pan >= 0 && panBg != null) drawPanFront(c); else drawWxFront(c, t);
         SceneFx.cold(this, c); SceneFx.sun(this, c, t); SceneFx.heat(this, c, t); SceneFx.wind(this, c, t);
     }
     void drawRide(SceneCv c) {
@@ -844,13 +856,13 @@ public final class SceneCore {
     }
     void resetBG() {
         bg = SceneArt.buildBG(factory, L, g, dpr, L.season, dark);
-        bgKey = L.slot + "|" + L.wk + "|" + L.season + "|" + L.place + "|w" + L.wind + "|" + dark + "|" + W + "|" + H; wxP = mkWxParts(L.wk);
+        bgKey = L.slot + "|" + L.wk + "|" + L.season + "|" + L.place + "|w" + L.wind + "|" + dark + "|" + W + "|" + H; wxP = mkWxParts(L.wk); bgTail = dark + "|" + W + "|" + H;
     }
     void boot(boolean keepBus) {
         int bc = css(pickOf(BUS_COLORS)); String bn = pickOf(BUS_NOS); if (!keepBus || busNo == null) { busColor = bc; busNo = bn; }
         double kk = PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
         k = kk; W = PW / kk; H = PH / kk; dpr = dens * kk; g = SceneArt.geom(W, H);
-        fade = 0; tv = -1; frames = 0; error = null; prev = null; running = true;
+        fade = 0; tv = -1; xf = -1; pan = -1; panBg = null; panL = null; panWx = null; oldTraffic = new ArrayList<>(); frames = 0; error = null; prev = null; running = true;
     }
     /** 칸 크기(dp)·화면 밀도·테마를 알려 준다. 바뀌었으면 같은 장면을 새 크기로 다시 만든다. */
     public void layout(double pwDp, double phDp, double density, boolean isDark) {
@@ -870,20 +882,106 @@ public final class SceneCore {
         if (!running) { boot(false); res = r; L = SceneArt.paint(r.look); resetBG(); setup(r.mode); }
         else {
             boolean modeChanged = !mode.equals(r.mode); res = r;
-            SceneArt.Pal L2 = SceneArt.paint(r.look); L = L2;
-            if (!(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + L2.place + "|w" + L2.wind + "|" + dark + "|" + W + "|" + H).equals(bgKey)) resetBG();
+            SceneArt.Pal L1 = L, L2 = SceneArt.paint(r.look);
+            boolean keyCh = !(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + L2.place + "|w" + L2.wind + "|" + dark + "|" + W + "|" + H).equals(bgKey);
+            if (keyCh && !modeChanged && "idle".equals(mode) && !reduce && bg != null && pan < 0 && tv < 0 && (dark + "|" + W + "|" + H).equals(bgTail)) {
+                if (!L2.place.equals(L1.place)) startPan(L1, L2);                                   // 장소가 바뀐다 → 걸어 나가며 배경이 이어 바뀐다
+                else { snapshotFade(); L = L2; resetBG(); }                                           // 날씨·시간대만 바뀐다 → 서서히 바뀐다
+            } else { L = L2; if (keyCh) resetBG(); }
             if (modeChanged) { snapshot(); setup(r.mode); }
             else if ("train".equals(mode)) SceneTrain.refresh(this);
             if ("wait".equals(mode) || "alight".equals(mode)) { boolean um = L.wk.equals("rain") || L.wk.equals("snow"); if (hero != null) hero.umb = um; }
         }
         return true;
     }
+    static double easeIO(double u) { u = clamp(u, 0, 1); return u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; }
+    /** 날씨·시간대가 바뀔 때: 옛 장면 한 장을 찍어 두고 새 장면 위에서 서서히 지운다. */
+    void snapshotFade() {
+        try { prev = factory.newLayer(W, H, dpr); paintAll(prev.cv(), 0); xf = 0; } catch (RuntimeException e) { prev = null; xf = -1; }
+    }
+    /** 장소가 바뀐다: 캐릭터들은 엔진이 정한 쪽(look.pdir)으로 함께 걸어가고(제자리 걸음 + 느슨하게 모여서), 배경은 반대쪽으로 흘러 옛 배경이 새 배경으로 겹쳐 이어진다 — 걸어서 새 장소로 들어가는 느낌. 발걸음은 땅이 흐르는 속도에 맞춘다. */
+    void startPan(SceneArt.Pal oldL, SceneArt.Pal newL) {
+        dragReset();
+        panBg = bg; panL = oldL; panWx = wxP; L = newL; resetBG();
+        oldTraffic = traffic; traffic = new ArrayList<>();                                  // 옛 거리의 차는 옛 배경과 함께 흘러 나간다(새 장소로 넘어오지 않는다)
+        panDir = newL.pdir < 0 ? -1 : 1;
+        List<Actor> in = new ArrayList<>(); double sp = 0;
+        for (Actor a : actors) if (!a.dead && !a.hero && !a.leaving) { in.add(a); sp += Math.max(10, a.spd); }
+        sp = in.isEmpty() ? 36 : sp / in.size();
+        panDur = clamp((W - panF()) / (sp * 1.5), PAN_MIN, PAN_MAX);
+        Collections.sort(in, new Comparator<Actor>() { public int compare(Actor p, Actor q) { return Double.compare(p.x, q.x); } });
+        for (int i = 0; i < in.size(); i++) {                                                  // 모여서 함께 걷는다: 왼쪽부터 순서대로 칸을 나눠 서서히 제자리로
+            Actor a = in.get(i);
+            a.held = false; a.leaving = false; a.st = "pan"; a.act = null; a.onArrive = null; a.bub = ""; a.stk = null; a.vis = true; a.hidden = false; a.intro = false; a.y = 0; a.cut = Double.NaN;
+            double want = in.size() == 1 ? W * .5 : W * (.2 + .6 * i / (in.size() - 1));
+            a.tx = clamp(want, a.w * .6, W - a.w * .6); a.tz = a.z; a.dir = panDir;
+            a.boost = clamp(((W - panF()) / panDur) / Math.max(10, a.spd), 1, 2.4);            // 발걸음이 땅 흐르는 속도와 맞는다
+        }
+        spawnAt = t + 1e9; pan = 0;
+    }
+    double panF() { return Math.min(64, W * .2); }                                             // 두 배경이 겹쳐 섞이는 폭
+    void panStep(double dt) {
+        pan += dt;
+        for (Traffic v : oldTraffic) { v.x += v.dir * v.v * dt; v.rot += v.dir * v.v * dt * .1; }
+        if (pan >= panDur) {
+            pan = -1; panBg = null; panL = null; panWx = null; oldTraffic = new ArrayList<>(); spawnAt = t + rnd(.9, 2.0);
+            for (Actor a : actors) if ("pan".equals(a.st)) { a.st = "walk"; a.boost = 0; a.tx = a.x; a.tz = a.z; }     // 새 장소에서 평소처럼 이어서 논다
+        }
+    }
+    /** 한 겹 묶음(하늘·먼 건물·가로수·땅)을 ox 만큼 옮겨, 화면 가로 [cx0,cx1] 안에만 alpha 로 그린다. fx 가 참이면 하늘 효과·장소 소품도 함께. */
+    void drawBgSet(SceneCv c, SceneArt.Bg b, SceneArt.Pal pal, P wp, double ox, double cx0, double cx1, double alpha, boolean fx) {
+        if (cx1 - cx0 < .5 || alpha <= 0) return;
+        SceneArt.Bg sb = bg; SceneArt.Pal sl = L; P sw = wxP;
+        bg = b; L = pal; wxP = wp;
+        try {
+            c.save(); c.beginPath(); c.rect(cx0, 0, cx1 - cx0, H); c.clip(); c.translate(ox, 0);
+            if (alpha < 1) c.globalAlpha(alpha);
+            int tw = b.tw;
+            c.drawImage(b.sky, 0, 0, W, H); if (fx) drawSkyFx(c, t);
+            c.drawImage(b.far, 0, 0, tw, H); if (fx) SceneFx.drawMid(this, c, b.mid, tw); else c.drawImage(b.mid, 0, 0, tw, H); c.drawImage(b.gnd, 0, 0, W, H);
+            if (fx) SceneFx.ambient(this, c, t);
+            c.globalAlpha(1); c.restore();
+        } finally { bg = sb; L = sl; wxP = sw; }
+    }
+    /** 이동 중 배경: 옛 배경(전체) 위에 새 배경이 옆에서 겹쳐 들어온다(맞닿는 F 폭은 점점 진하게 섞인다). */
+    void drawPanBack(SceneCv c) {
+        double s = easeIO(pan / panDur), F = panF(), d = panDir, ox0 = panOldX(), ox1 = panNewX(), kk = 2 * s - 1;
+        drawBgSet(c, panBg, panL, panWx, ox0, 0, W, 1, true);
+        int N = 10;
+        for (int i = 0; i < N; i++) {
+            double xm = (i + .5) / N, al = clamp(xm + kk, 0, 1), a0 = i * F / N, a1 = (i + 1) * F / N;
+            if (al <= 0) continue;
+            if (d > 0) drawBgSet(c, bg, L, wxP, ox1, ox1 + a0, ox1 + a1, al, false);
+            else drawBgSet(c, bg, L, wxP, ox1, ox1 + W - a1, ox1 + W - a0, al, false);
+        }
+        if (d > 0) drawBgSet(c, bg, L, wxP, ox1, ox1 + F, ox1 + W, 1, true); else drawBgSet(c, bg, L, wxP, ox1, ox1, ox1 + W - F, 1, true);
+    }
+    void drawPanFront(SceneCv c) {
+        double F = panF(), d = panDir, ox0 = panOldX(), ox1 = panNewX();
+        double nA = d > 0 ? ox1 + F : ox1, nB = d > 0 ? ox1 + W : ox1 + W - F;
+        panFrontSeg(c, ox0, panL, panWx, Math.max(0, d > 0 ? ox0 : ox1 + W - F), Math.min(W, d > 0 ? ox1 + F : ox0 + W));
+        panFrontSeg(c, ox1, L, wxP, Math.max(0, nA), Math.min(W, nB));
+    }
+    void panFrontSeg(SceneCv c, double ox, SceneArt.Pal pal, P wp, double x0, double x1) {
+        if (x1 - x0 < .5) return;
+        SceneArt.Pal sl = L; P sw = wxP; L = pal; wxP = wp;
+        try { c.save(); c.beginPath(); c.rect(x0, 0, x1 - x0, H); c.clip(); c.translate(ox, 0); drawWxFront(c, t); c.restore(); }
+        finally { L = sl; wxP = sw; }
+    }
+    double panOldX() { return -panDir * (W - panF()) * easeIO(pan / panDur); }
+    double panNewX() { return panOldX() + panDir * (W - panF()); }
+    void drawTrafficPan(SceneCv c, int lane) {
+        if (pan < 0 || oldTraffic.isEmpty()) return;
+        List<Traffic> keep = traffic; traffic = oldTraffic;
+        try { c.save(); c.translate(panOldX(), 0); drawTraffic(c, lane); c.restore(); } finally { traffic = keep; }
+    }
+
     /** 장면이 바뀔 때 옛 장면을 한 장 찍어 두고 서서히 사라지게 한다 */
     void snapshot() {
-        if (reduce) { prev = null; tv = -1; return; }                                  // 움직임 줄이기: 전환 연출 없이 바로 바뀐다
+        xf = -1; if (reduce) { prev = null; tv = -1; return; }                                  // 움직임 줄이기: 전환 연출 없이 바로 바뀐다
         try { prev = factory.newLayer(W, H, dpr); SceneCv pc = prev.cv(); paintAll(pc, 0); tv = 0; } catch (RuntimeException e) { prev = null; tv = -1; }
     }
-    public void stop() { dragReset(); hotUntil = 0; running = false; actors = new ArrayList<>(); prev = null; fade = 0; tv = -1; }
+    public void stop() { dragReset(); hotUntil = 0; running = false; actors = new ArrayList<>(); prev = null; fade = 0; tv = -1; xf = -1; pan = -1; panBg = null; panL = null; panWx = null; oldTraffic = new ArrayList<>(); }
     public boolean isRunning() { return running; }
     public SceneModel.Res last() { return LAST; }
     public String tag() { return running && res != null && res.tag != null ? res.tag : ""; }
@@ -904,6 +1002,8 @@ public final class SceneCore {
         if (reduce) dt = 0;
         dt = Math.min(.1, Math.max(0, dt)); dtLast = dt; t += dt; frames++;
         if (tv >= 0) { tv += dt; if (tv >= TV_T) { tv = -1; prev = null; } }
+        if (xf >= 0) { xf += dt; if (xf >= XF_T) { xf = -1; if (tv < 0) prev = null; } }
+        if (pan >= 0) panStep(dt);
         // 꾹 누르기: 정해진 시간이 지나면 잡힌다
         if (PEND != null && t - PEND.t0 >= LONGPRESS) grab();
         try {
@@ -977,6 +1077,7 @@ public final class SceneCore {
         } else {
             c.fillStyle(HOST_BG); c.fillRect(0, 0, W, H);
             try { paintAll(c, dtLast); dtLast = 0; } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
+            if (xf >= 0 && prev != null) { try { c.globalAlpha(clamp(1 - xf / XF_T, 0, 1)); c.drawImage(prev, 0, 0, W, H); c.globalAlpha(1); } catch (RuntimeException e) { c.globalAlpha(1); } }
         }
         c.restore();
     }

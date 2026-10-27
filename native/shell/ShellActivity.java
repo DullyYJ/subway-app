@@ -3509,7 +3509,11 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     dongBusy = false;
                     if (name.length() == 0) return;
-                    if (hc.setDong(name, la, lo)) { store.put(HcardsCore.K_DONG, hc.dongSaved()); if (homeVisible()) reloadHome(); }
+                    if (hc.setDong(name, la, lo)) {
+                        store.put(HcardsCore.K_DONG, hc.dongSaved());
+                        if (home.relabelGps(hc.dongNow())) setHomeFields();                // 출발칸 "내 위치" → 동 이름(AI 승무원 카드와 같은 이름)
+                        if (homeVisible()) reloadHome();
+                    }
                 } });
             }
         }, "shell-dong").start();
@@ -3621,7 +3625,8 @@ public class ShellActivity extends Activity {
         if (!home.gps) {                                                               // 이미 내 위치로 잡혀 있다 — 더 정확한 위치가 90m 넘게 다를 때만 다시 잡는다
             if (cur == null || !"gps".equals(cur.type) || (Math.abs(cur.lat - l.getLatitude()) < 0.0008 && Math.abs(cur.lng - l.getLongitude()) < 0.0008)) return;
         }
-        home.setGpsStart(l.getLatitude(), l.getLongitude());
+        hcFixFrom(l.getLatitude(), l.getLongitude());                                 // 이 위치의 동 이름도 같이 알아 둔다(AI 승무원 카드와 같은 이름)
+        home.setGpsStart(l.getLatitude(), l.getLongitude(), hc.dongNow());
         setHomeFields(); reloadHome();
     }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
@@ -3849,7 +3854,7 @@ public class ShellActivity extends Activity {
         final long base = picked ? home.baseMs : System.currentTimeMillis();
         final String qs = HomeCore.routeQuery(home.loc[HomeCore.START], home.loc[HomeCore.DEST], base, picked);
         if (qs == null) { toast("출발지와 도착지를 목록에서 골라 주세요"); return; }
-        final String url = HomeCore.routeUrl(qs), a = home.text[HomeCore.START], b = home.text[HomeCore.DEST];
+        final String url = HomeCore.routeUrl(qs), a = home.sendName(HomeCore.START), b = home.sendName(HomeCore.DEST);
         final long bt = picked ? base : -1, rb = System.currentTimeMillis();
         if (!deb.gate("route", 800L)) return;                                       // 검색 버튼 연타 — 한 번만
         final String sk = HomeCore.routeSwrKey(qs, picked, base);
@@ -4187,7 +4192,7 @@ public class ShellActivity extends Activity {
                 store.put(ShellCore.K_RIDESNAP, "");
                 RideService.stop(ShellActivity.this); rideGraceUntil = 0L;                    // 사용자가 새로 찾기를 골랐다 — 지난 안내를 조용히 끝낸다(도보 안내 시트 · 토스트 없이)
                 home.setRide("", "");
-                home.setGpsStart(l.getLatitude(), l.getLongitude());
+                home.setGpsStart(l.getLatitude(), l.getLongitude(), hc.dongNow());
                 home.baseMs = -1; home.clearRoute();
                 setHomeFields();
                 store.put(ShellCore.K_TAB, "home"); showTab("home");

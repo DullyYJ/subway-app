@@ -27,7 +27,7 @@ public final class SceneArt {
     }
     /** 그릴 때 쓰는 값 */
     public static final class Pal {
-        public String slot, wk, season, place = "street"; public int[] c = new int[3]; public double lum, sunX, sunY; public boolean moon, night, lit, hidesSun, hot, cold, sun, bright; public int wind;
+        public String slot, wk, season, place = "street"; public int[] c = new int[3]; public double lum, sunX, sunY; public boolean moon, night, lit, hidesSun, hot, cold, sun, bright; public int wind, pdir = 1;
     }
     public static Pal paint(SceneModel.Look lk) {
         Sky S = sky(lk.slot); String wk = lk.wk == null || lk.wk.isEmpty() ? "clear" : lk.wk;
@@ -37,7 +37,7 @@ public final class SceneArt {
         p.slot = lk.slot; p.wk = wk; p.season = lk.season == null || lk.season.isEmpty() ? "autumn" : lk.season;
         for (int i = 0; i < 3; i++) p.c[i] = mix(S.c[i], gray, m);
         p.lum = S.lum; p.sunX = S.sx; p.sunY = S.sy; p.moon = S.moon; p.night = lk.night; p.lit = lk.lit; p.hidesSun = lk.hidesSun;
-        p.place = lk.place == null || lk.place.isEmpty() ? "street" : lk.place; p.hot = lk.hot; p.cold = lk.cold; p.sun = lk.sun; p.bright = lk.bright; p.wind = lk.wind;
+        p.place = lk.place == null || lk.place.isEmpty() ? "street" : lk.place; p.hot = lk.hot; p.cold = lk.cold; p.sun = lk.sun; p.bright = lk.bright; p.wind = lk.wind; p.pdir = lk.pdir;
         return p;
     }
 

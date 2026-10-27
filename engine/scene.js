@@ -67,7 +67,7 @@ function sceneLook(nowMs, tz, wx) {
   var known = !!wx;
   var temp = wx && typeof wx.temp === "number" ? wx.temp : null, feel = wx && typeof wx.feel === "number" ? wx.feel : temp;
   var wsp = wx && typeof wx.wind === "number" ? wx.wind : -1, txt = String((wx && wx.txt) || "");
-  var wind = /강풍|태풍/.test(txt) || wsp >= 28 ? 2 : wsp >= 14 ? 1 : 0;                  // 바람: 0 없음 · 1 산들 · 2 센 바람(km/h, 웹 '바람 강해요' 기준 30 과 같은 눈금)
+  var wind = /강풍|태풍/.test(txt) || wsp >= 28 ? 2 : wsp >= 14 ? 1 : 0;                  // 바람: 0 없음 · 1 산들 · 2 센 바람 — wx.wind 는 km/h (s246: 날씨 받는 쪽이 m/s 로 주고 있어 바람 효과가 거의 안 났다 → 받는 쪽을 km/h 로 맞췄다)
   var day = slot === "morning" || slot === "noon" || slot === "afternoon";
   return { slot: slot, slotKo: SCENE_SLOT_KO[slot], wk: wk, wxKo: known ? SCENE_WX_KO[wk] : "", wxKnown: known, temp: temp != null ? Math.round(temp) : null, season: season, night: slot === "night", lit: slot === "night" || slot === "evening" || slot === "dawn", hidesSun: wk === "overcast" || wk === "rain" || wk === "snow" || wk === "fog", emo: emo,
     place: "street", placeKo: SCENE_PLACE_KO.street, wind: wind,
@@ -114,6 +114,8 @@ function scenePlace(look, seedStr, nowMs) {
   var pool = SCENE_PLACES.filter(function (p) { return !(p === "beach" && (look.season === "winter" || look.cold)); });
   return pool[sceneHash(seedStr + "/P/" + Math.floor(nowMs / 12e5)) % pool.length];
 }
+// s246 (YJ: 배경이 바뀔 때 캐릭터들이 좌우로 걸어 나가며 배경이 이어져 바뀌게): 장소가 바뀔 때 어느 쪽으로 걸어 나갈지는 엔진이 정한다(+1 오른쪽 · -1 왼쪽, 장소 칸마다 고정).
+function scenePanDir(seedStr, nowMs) { return sceneHash(seedStr + "/D/" + Math.floor(nowMs / 12e5)) % 2 ? 1 : -1; }
 function sceneIsTr(n) { return !!(n && (n.isSub || n.isBus) && n.name); }
 // 지금 위치(here)에서 '타고 있거나 곧 탈' 구간의 노드: here 가 탈것이면 그것, 도보·출발이면 다음 탈것, 없으면 마지막으로 지난 탈것
 function sceneLegNode(nodes, here) {
@@ -182,7 +184,7 @@ function sceneDecide(inp, wx) {
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
   var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
   // fill: 경로가 없고(경로 결과도 안 나온 때) 홈 화면을 한 화면에 꽉 채워 보일 때만 true. 경로 결과가 나오기 시작하면(확정 전이라도) false → 앱은 평소 크기로 돌린다
-  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;

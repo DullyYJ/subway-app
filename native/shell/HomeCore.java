@@ -17,6 +17,7 @@ public final class HomeCore {
     /** 고른 장소(웹 _fmapStart/_fmapDest 와 같은 모양). */
     public static final class Loc {
         public String type = "", name = "", line = "", nodeId = "", cityCode = "";
+        public String qname = "";                    // 경로 서버에 보내는 이름(비어 있으면 name). 내 위치는 입력칸엔 동 이름을 보여도 서버엔 "내 위치"로 보낸다(엔진이 출발=내 위치를 알아본다)
         public double lat, lng;
         public boolean ok() { return lat != 0 && lng != 0 && name.length() > 0; }
     }
@@ -445,13 +446,29 @@ public final class HomeCore {
     /** 출발·도착이 모두 정해졌는가. */
     public boolean bothSet() { return loc[START] != null && loc[START].ok() && loc[DEST] != null && loc[DEST].ok(); }
 
-    public void setGpsStart(double lat, double lng) {
+    public static final String GPS_NAME = "내 위치";
+    public void setGpsStart(double lat, double lng) { setGpsStart(lat, lng, ""); }
+    /** 내 위치를 출발지로: 입력칸에는 AI 승무원 카드와 같은 동 이름(모르면 "내 위치")을 보여 준다. */
+    public void setGpsStart(double lat, double lng, String dong) {
         Loc l = new Loc();
-        l.type = "gps"; l.name = "내 위치"; l.lat = lat; l.lng = lng;
-        text[START] = l.name; loc[START] = l;
+        l.type = "gps"; l.name = GPS_NAME; l.qname = GPS_NAME; l.lat = lat; l.lng = lng;
+        text[START] = gpsLabel(dong); loc[START] = l;
         cand[START].clear(); pkU.clear();
         if (active == START) active = -1;
         gps = false;
+    }
+
+    /** 엔진에 보내는 칸 이름: 내 위치는 입력칸에 동 이름이 보여도 "내 위치"(엔진이 출발=내 위치를 알아본다). */
+    public String sendName(int f) { Loc l = loc[f]; return l != null && l.qname.length() > 0 ? l.qname : text[f]; }
+    public static String gpsLabel(String dong) { return dong == null || dong.trim().length() == 0 ? GPS_NAME : dong.trim(); }
+    /** 출발지가 내 위치로 잡혀 있고 사용자가 글을 고치는 중이 아니면, 늦게 알아낸(또는 바뀐) 동 이름으로 입력칸 글자를 바꾼다. 바뀌면 true. */
+    public boolean relabelGps(String dong) {
+        Loc l = loc[START];
+        if (l == null || !"gps".equals(l.type) || active == START) return false;
+        String t = gpsLabel(dong);
+        if (t.equals(text[START])) return false;
+        text[START] = t; cand[START].clear(); pkU.clear();
+        return true;
     }
 
     // ═════════════ 경로 요청 ═════════════
@@ -460,7 +477,7 @@ public final class HomeCore {
         if (s == null || d == null || s.lat == 0 || s.lng == 0 || d.lat == 0 || d.lng == 0) return null;
         return "SX=" + num(s.lng) + "&SY=" + num(s.lat) + "&EX=" + num(d.lng) + "&EY=" + num(d.lat)
             + "&baseMs=" + baseMs + (pickedBase ? "&bf=1" : "")
-            + "&SN=" + HomeSearchCore.enc(cut(s.name, 60)) + "&EN=" + HomeSearchCore.enc(cut(d.name, 60));
+            + "&SN=" + HomeSearchCore.enc(cut(s.qname.length() > 0 ? s.qname : s.name, 60)) + "&EN=" + HomeSearchCore.enc(cut(d.qname.length() > 0 ? d.qname : d.name, 60));
     }
     public static String routeUrl(String qs) { return ShellCore.BASE + "/route-v2-app?" + qs; }
     /** 같은 출발·도착(고른 시각이면 같은 시각)을 다시 찾을 때 지난 결과를 먼저 보이기 위한 열쇠 — "지금 시각"(baseMs)은 빼고 만든다(안 빼면 매번 달라 못 쓴다). */

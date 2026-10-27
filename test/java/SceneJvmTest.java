@@ -48,6 +48,7 @@ public class SceneJvmTest {
         if (a.length > 0 && a[0].equals("render")) { render(a); return; }
         if (a.length > 0 && a[0].equals("tvframes")) { tvFrames(a); return; }
         if (a.length > 0 && a[0].equals("trainframes")) { trainFrames(a); return; }
+        if (a.length > 0 && a[0].equals("panframes")) { panFrames(a); return; }
         check(new File(a.length > 1 ? a[1] : "."));
         System.out.println(fails == 0 ? "ALL OK" : ("FAILED " + fails));
         System.exit(fails == 0 ? 0 : 1);
@@ -71,6 +72,23 @@ public class SceneJvmTest {
         }
     }
 
+
+    // ═══ 장소 이동 전환 눈으로 보기(s246): java SceneJvmTest panframes <시트폴더> <출력접두> <idle.json> <옛장소> <새장소> <+1|-1> ═══
+    static void panFrames(String[] a) throws Exception {
+        File sheets = new File(a[1]); int W = 340, H = 190; double dens = 1.5;
+        TestHost h = new TestHost();
+        for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        SceneModel.Res r = SceneModel.parse(read(new File(a[3]))); r.look.place = a[4]; r.look.pdir = Integer.parseInt(a[6]);
+        SceneCore c = core(h, 7); c.layout(W, H, dens, false); c.apply(r); c.debugTick(6);
+        r.look.place = a[5]; c.apply(r);
+        double at = 0;
+        for (double f : new double[]{0, .15, .3, .45, .6, .75, .9, 1.05}) {
+            double tt = f * c.panDur, d = tt - at; at = tt; int n = (int) Math.round(d * 30); for (int i = 0; i < n; i++) c.update(1.0 / 30);
+            BufferedImage im = canvasImg((int) (W * dens), (int) (H * dens)); draw(c, im);
+            ImageIO.write(im, "png", new File(a[2] + String.format("%03d", Math.round(f * 100)) + ".png"));
+            System.out.println("pan=" + String.format("%.2f", c.pan) + "/" + String.format("%.2f", c.panDur));
+        }
+    }
 
     // ═══ 지하철 객실(두 번째 쪽) 눈으로 보기: java SceneJvmTest trainframes <시트폴더> <출력접두> <train.json> <W> <H> <dark|light> <초…> ═══
     //   시각표: 첫 역에서 25초 서 있다가 출발(120초 달림) → 둘째 역 25초 정차 → … (탑승 엔진 pos.segs 와 같은 모양)
@@ -277,6 +295,45 @@ public class SceneJvmTest {
             // 장면 없음 → 멈춤은 전환 없이
             c.apply(scn.get("scn_idle_noon_clear")); ok(c.tv() == 0, "다른 장면으로 바뀌면 다시 전환");
             c.apply(SceneModel.parse("{\"ok\":true,\"mode\":null,\"look\":{\"slot\":\"noon\"}}")); ok(c.tv() < 0 && !c.isRunning(), "장면 없음으로 멈추면 전환 상태도 정리");
+        }
+        // 7b) 장소가 바뀔 때(s246): 캐릭터들은 엔진이 정한 쪽(look.pdir)으로 함께 걸으며(화면 안에 머문다) · 배경은 반대로 흘러 옛 배경이 새 배경으로 겹쳐 이어지고 · 끝나면 새 장소에서 평소처럼 논다
+        for (int pd : new int[]{1, -1}) {
+            TestHost h = fakeHost(); SceneCore c = core(h, 7); c.layout(340, 190, 2.75, true);
+            SceneModel.Res r = SceneModel.parse(read(new File(dir, "scn_idle_noon_clear.json")));
+            r.look.place = "street"; r.look.pdir = pd; c.apply(r); adv(c, 9);
+            int n0 = c.actors.size();
+            ok(c.pan < 0 && c.panBg == null && n0 > 0, "장소 전환 전: 전환 상태 없음, 친구들이 돌아다닌다 n=" + n0);
+            SceneModel.Res r2 = SceneModel.parse(read(new File(dir, "scn_idle_noon_clear.json")));
+            r2.look.place = "park"; r2.look.pdir = pd; c.apply(r2);
+            ok(c.pan == 0 && c.panBg != null && c.panDir == pd && c.L.place.equals("park") && c.panL.place.equals("street"), "장소가 바뀌면 옛 배경을 쥐고 이동 전환이 시작된다 dir=" + pd);
+            boolean allPan = true; for (SceneCore.Actor ac : c.actors) if (!ac.dead && !ac.hero) allPan &= "pan".equals(ac.st);
+            ok(allPan && c.actors.size() == n0, "모든 캐릭터가 함께 걷기 상태로 바뀐다(내보내지 않는다)");
+            ok(c.panDur >= SceneCore.PAN_MIN && c.panDur <= SceneCore.PAN_MAX, "전환 시간은 정해진 범위 panDur=" + c.panDur);
+            BufferedImage im = canvasImg((int) (340 * 2.75), (int) (190 * 2.75));
+            double tot = 0;
+            while (tot < c.panDur - .3) {
+                adv(c, .4); tot += .4; draw(c, im);
+                boolean inside = true; for (SceneCore.Actor ac : c.actors) if (!ac.dead && "pan".equals(ac.st) && (ac.x < 0 || ac.x > c.W)) inside = false;
+                ok(inside && c.error == null, "걷는 동안 캐릭터는 화면 안에 머문다 pan=" + c.pan);
+                ok(Math.abs(Math.abs(c.panNewX() - c.panOldX()) - (c.W - c.panF())) < 1e-6, "두 배경은 겹침 폭만큼 항상 겹쳐 이어진다");
+            }
+            adv(c, .6); ok(c.pan < 0 && c.panBg == null && c.panL == null && c.oldTraffic.isEmpty(), "전환이 끝나면 옛 배경을 놓는다");
+            boolean stillPan = false; for (SceneCore.Actor ac : c.actors) if ("pan".equals(ac.st)) stillPan = true;
+            ok(!stillPan, "끝나면 친구들이 평소 놀이로 돌아간다");
+            adv(c, 8); draw(c, im);
+            boolean bad = false; for (SceneCore.Actor ac : c.actors) if (Double.isNaN(ac.x) || ac.x < -ac.w * 1.3 - 2 || ac.x > c.W + ac.w * 1.3 + 2) bad = true;
+            ok(!bad && c.error == null && !c.actors.isEmpty(), "전환 뒤 새 장소에서 친구들이 다시 돌아다닌다 n=" + c.actors.size());
+        }
+        {   // 날씨·시간대만 바뀌면 이동 없이 서서히(크로스페이드), 움직임 줄이기면 전환 없이 바로
+            TestHost h = fakeHost(); SceneCore c = core(h, 7); c.layout(340, 190, 2.75, true);
+            SceneModel.Res r = SceneModel.parse(read(new File(dir, "scn_idle_noon_clear.json"))); r.look.place = "park"; c.apply(r); adv(c, 3);
+            r.look.wk = "rain"; c.apply(r);
+            ok(c.pan < 0 && c.xf == 0 && c.prevLayer() != null && c.L.wk.equals("rain"), "같은 장소에서 날씨만 바뀌면 이동 없이 서서히 바뀐다");
+            BufferedImage im = canvasImg((int) (340 * 2.75), (int) (190 * 2.75)); adv(c, .5); draw(c, im); ok(c.error == null, "크로스페이드 중 그려도 오류 없음");
+            adv(c, 1.2); ok(c.xf < 0 && c.prevLayer() == null, "1초 남짓 뒤 끝난다");
+            TestHost h2 = fakeHost(); SceneCore c2 = core(h2, 7); c2.layout(340, 190, 2.75, true); c2.reduce = true;
+            SceneModel.Res q = SceneModel.parse(read(new File(dir, "scn_idle_noon_clear.json"))); q.look.place = "park"; c2.apply(q); adv(c2, 1);
+            q.look.place = "river"; c2.apply(q); ok(c2.pan < 0 && c2.xf < 0 && c2.L.place.equals("river"), "움직임 줄이기: 전환 없이 바로 바뀐다");
         }
         // 8) 진동 무늬표: 코어가 알리는 이름마다 무늬가 있고 모양이 올바르다
         for (String n : SceneHaptics.names()) { String e = SceneHaptics.check(n); ok(e == null, "진동 무늬 " + n + (e == null ? "" : " — " + e)); }

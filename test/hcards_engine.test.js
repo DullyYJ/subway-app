@@ -80,11 +80,17 @@ ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
 // 캐릭터 장면: 혼잡도 카드 맨 위에 엔진이 정한 장면(JSON 글)이 실린다
 {
-  const sc = call(base({ wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
+  const sc = call(base({ gps: [37.5, 127.0], wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
   const v = sc && sc.t === 'scene' ? JSON.parse(sc.sc) : null;
   ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 6 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
   const a = JSON.stringify(call(base()).body[1].kids[0]), b = JSON.stringify(call(base()).body[1].kids[0]);
   ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
+  // s246 (YJ: 배경 날씨는 사용자가 있는 곳 날씨): 장면 날씨는 기기 위치(gps) 날씨만 — 위치를 모르면 경로 출발역 날씨로 대신하지 않는다
+  const sw = g => { const k = call(base({ gps: g, wx: { wF: { temp: 12, txt: '비', rain: 90 } } })).body[1].kids[0]; return k && k.t === 'scene' ? JSON.parse(k.sc) : null; };
+  const wg = sw([37.5, 127.0]), wn = sw(null);
+  ok(wg && wg.look.wk === 'rain' && wg.look.wxKnown === true, '내 위치를 알면 그 곳 날씨(비)로 배경이 정해진다');
+  ok(wn && wn.look.wk === 'clear' && wn.look.wxKnown === false, '위치를 모르면 경로 출발역 날씨로 대신하지 않는다(날씨 모름)');
+  ok(wg.look.pdir === 1 || wg.look.pdir === -1, '장소가 바뀔 때 걸어 나갈 쪽(pdir)을 엔진이 보낸다: ' + wg.look.pdir);
   ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
 }
 // 탑승 중 장면: 앱이 보낸 탑승 재료(rd)로 기다림 · 버스 타고 가는 중 · 내림, 지하철 타고 가는 동안은 장면 없음(혼잡도 카드)

@@ -190,7 +190,8 @@ function hcardsScreen(inp, f) {
   // 어느 역/정류장의 혼잡도를 보일지: 보던 경로의 처음 대중교통 > 가까운 역
   var cs = { mode: 'none', now: now, tz: tz, th: th, stn: '', line: '', ld: 0, live: null, bus: {} }, stn = '';
   var wxF = hcWx(f.wx && typeof f.wx === 'object' ? f.wx.wF : null), rn = hcRideNodes(f.rd), sc0 = null;
-  if (rn && hcScene) { try { sc0 = hcScene({ nowMs: now, tzOffsetMin: tz, locked: true, here: rn.here, boarded: rn.boarded, key: rn.key, nodes: rn.nodes, routeShown: true }, wxF || null); } catch (e) { sc0 = null; } }
+  var wxS = gps ? wxF : null;                    // s246 (YJ: 배경 날씨는 사용자가 있는 곳 날씨): 장면 날씨는 기기 위치(gps) 날씨만 쓴다 — 위치를 모르면 경로 출발역 날씨로 대신하지 않고 날씨 없이(맑음) 그린다
+  if (rn && hcScene) { try { sc0 = hcScene({ nowMs: now, tzOffsetMin: tz, locked: true, here: rn.here, boarded: rn.boarded, key: rn.key, nodes: rn.nodes, routeShown: true }, wxS || null); } catch (e) { sc0 = null; } }
   if (rt) {
     var first = rt.segs[0];
     if (first.type === 1 && first.from) { cs.mode = 'sub'; cs.stn = first.from; cs.line = first.line; }
@@ -231,7 +232,7 @@ function hcardsScreen(inp, f) {
   var body = [];
   // 순서는 웹 홈과 같다: 혼잡도(제목줄 + 캐릭터 장면 카드) → AI 승무원 → 실시간 대화
   if (congS && congS.ok) {
-    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, wxF, stn, f.rd);
+    var ck = hcKids(congS), scn = hcSceneNode(now, tz, !!rt, wxS, stn, f.rd);
     var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';

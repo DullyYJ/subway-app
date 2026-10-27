@@ -47,6 +47,7 @@ public final class SceneModel {
     public static final class Look {
         public String slot = "noon", slotKo = "", wk = "clear", wxKo = "", season = "autumn", emo = "", place = "street", placeKo = "";
         public boolean wxKnown, night, lit, hidesSun, hot, cold, sun, bright; public double temp; public int wind;
+        public int pdir = 1;                    // 장소가 바뀔 때 캐릭터가 걸어 나가는 쪽(엔진이 정한다): +1 오른쪽 · -1 왼쪽
     }
     /** say: 날씨 반응 동작 이름 → 말풍선 글(엔진이 정한 글. 없으면 말풍선 없이 몸짓만) */
     public static final class Traits { public String land = ""; public List<String> acts = new ArrayList<>(); public Map<String, String> say = new HashMap<>(); }
@@ -84,6 +85,7 @@ public final class SceneModel {
             k.place = Json.strOr(l.get("place"), "street"); k.placeKo = Json.strOr(l.get("placeKo"), "");
             k.hot = Json.bool(l.get("hot")); k.cold = Json.bool(l.get("cold")); k.sun = Json.bool(l.get("sun")); k.bright = Json.bool(l.get("bright"));
             Object wd = l.get("wind"); k.wind = wd instanceof Number ? Math.max(0, Math.min(2, ((Number) wd).intValue())) : 0;
+            Object pd = l.get("pdir"); k.pdir = pd instanceof Number && ((Number) pd).intValue() < 0 ? -1 : 1;
         }
         Object tro = m.get("train");
         if (tro instanceof Map) {

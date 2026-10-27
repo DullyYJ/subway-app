@@ -548,7 +548,7 @@ function findAndroidJar() {
         const ra = a.slice(a.indexOf('private void rerouteAsk()'), a.indexOf('private void rerouteFromHere()'));
         assert.ok(/!home\.riding\(\) \|\| !RideService\.running\) return;/.test(ra) && /at == offAskedAt/.test(ra) && /setPositiveButton\("다시 찾기"/.test(ra) && /setNegativeButton\("계속 안내", null\)/.test(ra), '확정 중에만 · 같은 이탈엔 한 번만 · [다시 찾기] / [계속 안내]');
         const rf2 = a.slice(a.indexOf('private void rerouteFromHere()'), a.indexOf('// ───────────── 도보 안내 시트'));
-        assert.ok(/locateNow\(/.test(rf2) && /home\.setGpsStart\(l\.getLatitude\(\), l\.getLongitude\(\)\)/.test(rf2) && /RideService\.stop\(ShellActivity\.this\)/.test(rf2) && /goRoute\(\);/.test(rf2) && !/startRide\(/.test(rf2), '지금 위치를 출발지로 새로 찾는다(자동 확정은 안 한다)');
+        assert.ok(/locateNow\(/.test(rf2) && /home\.setGpsStart\(l\.getLatitude\(\), l\.getLongitude\(\), hc\.dongNow\(\)\)/.test(rf2) && /RideService\.stop\(ShellActivity\.this\)/.test(rf2) && /goRoute\(\);/.test(rf2) && !/startRide\(/.test(rf2), '지금 위치를 출발지로 새로 찾는다(자동 확정은 안 한다)');
         assert.ok(/fail\(boolean noperm\) \{ if \(!once\[0\]\) toast\(/.test(rf2), '위치를 못 잡으면 안내를 그대로 둔다');
         assert.ok(/rsApply = new Runnable\(\) \{ @Override public void run\(\) \{ rerouteAsk\(\);/.test(a) && /rerouteAsk\(\); \}\s*\}, 1500L\)/.test(a) && /home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) reloadHome\(\);\s*rerouteAsk\(\);/.test(a), '서비스가 알릴 때 · 앱을 다시 열 때 · 홈 5초 틱에서 확인');
     }

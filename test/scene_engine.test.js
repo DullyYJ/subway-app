@@ -130,6 +130,16 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert.strictEqual(decide({ nowMs: ms('2026-10-15T10:00:00'), locked: true, key: 'k', here: 1, nodes: BUS }, wxC).look.place, 'street', '정류장 장면은 거리');
     for (let i = 0; i < 80; i++) assert.notStrictEqual(decide({ nowMs: ms('2026-01-15T10:00:00') + i * 21 * 6e4, locked: false, key: 'w' }, { temp: -3, feel: -6, txt: '맑음', rain: 0, wind: 5, uv: 1 }).look.place, 'beach', '겨울·추위엔 바닷가 없음');
   });
+  await t('장소가 바뀔 때 걸어 나갈 쪽(s246): 엔진이 +1/-1 로 정하고(20분 칸마다 고정) 양쪽이 다 나온다 · 바람은 km/h 눈금', () => {
+    const wxC = { temp: 20, feel: 20, txt: '맑음', rain: 0, wind: 5, uv: 3 }, got = new Set();
+    for (let i = 0; i < 40; i++) { const r = decide({ nowMs: ms('2026-10-15T10:00:00') + i * 21 * 6e4, locked: false, key: 'k' }, wxC); assert(r.look.pdir === 1 || r.look.pdir === -1); got.add(r.look.pdir); }
+    assert(got.has(1) && got.has(-1), '양쪽 방향이 다 나온다');
+    const a = decide({ nowMs: ms('2026-10-15T10:01:00'), locked: false, key: 'k' }, wxC), b = decide({ nowMs: ms('2026-10-15T10:03:00'), locked: false, key: 'k' }, wxC);
+    assert.strictEqual(a.look.pdir, b.look.pdir, '같은 20분 칸이면 같은 방향');
+    assert.strictEqual(decide({ nowMs: ms('2026-10-15T10:00:00'), locked: true, key: 'k', here: 1, nodes: BUS }, wxC).look.pdir, undefined, '정류장 장면은 장소가 안 바뀌니 방향 없음');
+    assert.strictEqual(decide({ nowMs: ms('2026-10-15T09:00:00'), locked: false, key: 'w' }, { temp: 15, feel: 15, txt: '맑음', rain: 0, wind: 16, uv: 2 }).look.wind, 1, '시속 16km = 산들바람');
+    assert.strictEqual(decide({ nowMs: ms('2026-10-15T09:00:00'), locked: false, key: 'w' }, { temp: 15, feel: 15, txt: '맑음', rain: 0, wind: 4, uv: 2 }).look.wind, 0, '시속 4km = 잔잔');
+  });
   await t('날씨 반응(YJ 10-25): 추위·더위·햇빛·바람·비·눈·안개마다 반응 동작과 말이 있고, 날씨를 모르면 없다', () => {
     const run = (wx, when) => decide({ nowMs: ms(when || '2026-10-15T13:00:00'), locked: false, key: 'r' }, wx);
     const has = (r, name) => SCENE_IDS.every(id => !r.traits[id].acts.includes(name)) ? false : SCENE_IDS.every(id => r.traits[id].acts.includes(name) && typeof r.traits[id].say[name] === 'string' && r.traits[id].say[name]);

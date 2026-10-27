@@ -443,6 +443,20 @@ public class ShellJvmTest {
         ok(h.act("sg.b.9", null) == HomeCore.R_NONE, "엉터리 후보 번호 무시");
         h.setGpsStart(37.55, 126.97);
         ok("내 위치".equals(h.text[0]) && h.loc[0].ok() && !h.gps, "위치 감지 결과");
+        // s246: 동 이름을 알면 출발칸에 동 이름(AI 승무원 카드와 같은 이름) · 엔진에는 계속 "내 위치"
+        h.setGpsStart(37.55, 126.97, "송도3동");
+        ok("송도3동".equals(h.text[0]) && "gps".equals(h.loc[0].type) && "내 위치".equals(h.sendName(0)), "내 위치 → 동 이름 표시, 서버 이름은 내 위치");
+        ok(!h.relabelGps("송도3동") && h.relabelGps("송도1동") && "송도1동".equals(h.text[0]) && h.relabelGps("") && "내 위치".equals(h.text[0]), "늦게 알아낸 동 이름으로 바꾸기 · 모르면 내 위치");
+        h.onText("start", "송도1동", "focus");
+        ok(!h.relabelGps("송도9동") && "송도1동".equals(h.text[0]), "입력 중에는 건드리지 않는다");
+        h.endActive(0);
+        h.setGpsStart(37.55, 126.97, "송도3동");
+        String dq = HomeCore.routeQuery(h.loc[0], new HomeCore.Loc(), 1L, false);
+        ok(dq == null, "도착 좌표 없으면 질의 없음(동 이름 출발)");
+        HomeCore.Loc dd = new HomeCore.Loc(); dd.name = "서울역"; dd.lat = 37.5547; dd.lng = 126.9707;
+        dq = HomeCore.routeQuery(h.loc[0], dd, 1L, false);
+        ok(dq != null && dq.contains("SN=%EB%82%B4+%EC%9C%84%EC%B9%98") || dq != null && dq.contains("SN=%EB%82%B4%20%EC%9C%84%EC%B9%98"), "경로 질의 SN 은 '내 위치': " + dq);
+        h.setGpsStart(37.55, 126.97);
         ok(h.act("rt.gps", null) == HomeCore.R_GPS, "위치 단추");
         ok(h.act("bt.pick", null) == HomeCore.R_PICK_TIME && (h.baseMs = 5) == 5 && h.act("bt.now", null) == HomeCore.R_RENDER && h.baseMs == -1, "기준시각 열기·현재로");
         String hqs = HomeCore.routeQuery(h.loc[0], null, 1000L, false);
