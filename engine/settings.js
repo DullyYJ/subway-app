@@ -402,12 +402,20 @@ function settingsEveHint(f) {                                       // 예전 _c
   }
   return '퇴근은 따로 설정한 곳으로 보내요.' + (ef && et ? '' : ' (한쪽만 채우면 나머지는 출근의 반대편을 써요)');
 }
+// 웹 입력칸 두 개(왼쪽 출발 · 오른쪽 도착): 위에 작은 이름, 아래에 입력 상자 모양 단추. 값이 없으면 웹과 같은 흐린 안내 글(placeholder). 누르면 장소 고르기.
+function settingsFieldPair(k, a, b, f, mt) {
+  k.push({ t: 'row', gap: 10, pad: [0, mt, 0, 5], kids: [settingsLabelN(SETTINGS_PICK[a][0], 0), settingsLabelN(SETTINGS_PICK[b][0], 0)] });
+  k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 8], kids: [a, b].map(function (x) {
+    var v = (f[x] || '').trim();
+    return { t: 'button', s: v || SETTINGS_PICK[x][1], size: 14, h: 42, r: 9, bold: false, al: 'left', fill: 'bg', line: 'border2', tc: v ? 'text' : 'sub', act: settingsCall('cm.pick.' + x) };
+  }) });
+}
 function settingsPageCm(f) {
   var d = f.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
   var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
-  ['from', 'to'].forEach(function (x, i) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '비어 있음', settingsCall('cm.pick.' + x), true)); });
+  settingsFieldPair(k, 'from', 'to', f, 8);
   k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 8, 10));
-  ['eFrom', 'eTo'].forEach(function (x) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '비어 있음', settingsCall('cm.pick.' + x), true)); });
+  settingsFieldPair(k, 'eFrom', 'eTo', f, 2);
   k.push(settingsSmallN(settingsEveHint(f), 8, 12));
   k.push(settingsLabelN('보낼 요일', 6));
   var dayKids = SETTINGS_DAY_NM.map(function (nm, di) {

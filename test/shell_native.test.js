@@ -43,6 +43,15 @@ function findAndroidJar() {
     assert.ok(/case ShellCore\.E_TAB: if \(sheet != null && ShellCore\.S_DETAIL\.equals\(sheetName\)\) closeSheet\(\); showTab/.test(v), '세부경로가 떠 있을 때 탭을 누르면 시트를 닫고 그 탭으로');
     assert.ok(/if \(!ask && autoMs > 0L\) \{ rideStartPicked\(RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, autoMs\), rid\); return; \}/.test(v), '엔진이 auto.ms 만 주면(버스 하나) 묻지 않고 그 버스로 시작');
   });
+  await t('s252: 하차 추천 — 앱을 보는 중이면 팝업 하나 · 오버레이면 오버레이 줄(알림 없음) · 그 밖이면 알림', () => {
+    const rn = fs.readFileSync(N('RecoNotify.java'), 'utf8'), v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
+    assert.ok(/static int route\(boolean appFront, boolean hasPopup, boolean ovlReady, boolean hasAd\) \{\s*if \(appFront && hasPopup\) return 0;\s*if \(!appFront && ovlReady && hasAd\) return 1;\s*return 2;/.test(rn), '앱 보는 중 → 팝업 · 앱 밖 + 오버레이 + 추천 줄 → 오버레이만 · 나머지 알림');
+    assert.ok(/deliver\(c, t\[0\], t\[1\], ad, core\)/.test(rn) && (rn.match(/deliver\(c, t\[0\]/g) || []).length === 2 && !/send\(Context[\s\S]{0,400}show\(c, t\[0\]/.test(rn), '실시간 · 받아 둔 글 두 길 모두 deliver 를 지난다');
+    assert.ok(/boolean recoPop\(final String title[\s\S]{0,200}if \(!resumed \|\| isFinishing\(\) \|\| dlgD != null\) return false;/.test(v) && /"kind\\":\\"reco\\"/.test(v) && /RecoNotify\.show\(app, title, text\)/.test(v), '팝업은 엔진 카드(kind:reco) · 못 띄우면 알림으로 대신');
+    assert.ok(/static boolean recoPopup\(String title[\s\S]{0,120}live;/.test(v) && /ShellActivity\.recoPopup\(title, text, ad,/.test(rn), '앱이 보이는 동안(appFront)에만 팝업 길을 탄다');
+    assert.ok(/"dl\.go"\.equals\(v\)\) v = "dl\.ok"/.test(v), 'dl.go 는 확인 쪽(맛집·쿠팡 열기)');
+    assert.ok(/static boolean overlayReady\(Context c\)/.test(rs) && /RideOverlay\.allowed\(c\)/.test(rs), '오버레이를 쓸 수 있는지는 서비스가 안다');
+  });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });

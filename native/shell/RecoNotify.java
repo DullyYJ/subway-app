@@ -26,8 +26,9 @@ final class RecoNotify {
                 if (r.status != 200) continue;
                 String[] t = RideCore.recoText(r.body);
                 if (t == null) return false;
-                if (core != null) core.setRecoAd(RideCore.recoAd(r.body));
-                show(c, t[0], t[1]);
+                RideCore.RecoAd ad = RideCore.recoAd(r.body);
+                if (core != null) core.setRecoAd(ad);
+                deliver(c, t[0], t[1], ad, core);
                 return true;
             } catch (Throwable ignored) { }
         }
@@ -41,13 +42,28 @@ final class RecoNotify {
         try {
             String[] t = RideCore.freshenReco(RideCore.recoText(resp), arrMs, nowMs);
             if (t == null) return false;
-            if (core != null) core.setRecoAd(RideCore.recoAd(resp));
-            show(c, t[0], t[1]);
+            RideCore.RecoAd ad = RideCore.recoAd(resp);
+            if (core != null) core.setRecoAd(ad);
+            deliver(c, t[0], t[1], ad, core);
             return true;
         } catch (Throwable ignored) { return false; }
     }
 
-    private static void show(Context c, String title, String text) {
+    /** s252 (YJ: 앱을 켜 두면 팝업 · 오버레이면 오버레이가 펼쳐지며 추천 — 웹과 같다): 보는 곳에 하나만 보인다. 앱 화면을 보는 중이면 팝업 · 다른 앱 위에서 오버레이가 추천 줄을 그릴 수 있으면 오버레이 줄(알림 없음) · 그 밖이면 알림. */
+    /** 순수 판단 — 시험이 쓴다. 0 = 팝업 · 1 = 오버레이 줄 · 2 = 알림. */
+    static int route(boolean appFront, boolean hasPopup, boolean ovlReady, boolean hasAd) {
+        if (appFront && hasPopup) return 0;
+        if (!appFront && ovlReady && hasAd) return 1;
+        return 2;
+    }
+    private static void deliver(Context c, String title, String text, RideCore.RecoAd ad, RideCore core) {
+        int r = route(RideService.appFront, true, RideService.overlayReady(c), ad != null && ad.a.length() > 0);
+        if (r == 0) { try { if (ShellActivity.recoPopup(title, text, ad, core == null ? null : core.recoLoc)) return; } catch (Throwable ignored) { } }
+        else if (r == 1) return;
+        show(c, title, text);
+    }
+
+    static void show(Context c, String title, String text) {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         if (Build.VERSION.SDK_INT >= 26) {

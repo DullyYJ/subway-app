@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s251";
+var ENGINE_VERSION = "route-v2-2026-10-27s252";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13596,12 +13596,20 @@ function settingsEveHint(f) {                                       // \uc608\uc
   }
   return '\ud1f4\uadfc\uc740 \ub530\ub85c \uc124\uc815\ud55c \uacf3\uc73c\ub85c \ubcf4\ub0b4\uc694.' + (ef && et ? '' : ' (\ud55c\ucabd\ub9cc \ucc44\uc6b0\uba74 \ub098\uba38\uc9c0\ub294 \ucd9c\uadfc\uc758 \ubc18\ub300\ud3b8\uc744 \uc368\uc694)');
 }
+// \uc6f9 \uc785\ub825\uce78 \ub450 \uac1c(\uc67c\ucabd \ucd9c\ubc1c \u00b7 \uc624\ub978\ucabd \ub3c4\ucc29): \uc704\uc5d0 \uc791\uc740 \uc774\ub984, \uc544\ub798\uc5d0 \uc785\ub825 \uc0c1\uc790 \ubaa8\uc591 \ub2e8\ucd94. \uac12\uc774 \uc5c6\uc73c\uba74 \uc6f9\uacfc \uac19\uc740 \ud750\ub9b0 \uc548\ub0b4 \uae00(placeholder). \ub204\ub974\uba74 \uc7a5\uc18c \uace0\ub974\uae30.
+function settingsFieldPair(k, a, b, f, mt) {
+  k.push({ t: 'row', gap: 10, pad: [0, mt, 0, 5], kids: [settingsLabelN(SETTINGS_PICK[a][0], 0), settingsLabelN(SETTINGS_PICK[b][0], 0)] });
+  k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 8], kids: [a, b].map(function (x) {
+    var v = (f[x] || '').trim();
+    return { t: 'button', s: v || SETTINGS_PICK[x][1], size: 14, h: 42, r: 9, bold: false, al: 'left', fill: 'bg', line: 'border2', tc: v ? 'text' : 'sub', act: settingsCall('cm.pick.' + x) };
+  }) });
+}
 function settingsPageCm(f) {
   var d = f.nv ? settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + \ud63c\uc7a1\ub3c4 + \uc900\ube44\ubb3c \ud55c\ub9c8\ub514', 1], ['\ub97c \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]) : settingsBoldN([['\uc124\uc815\ud55c \uc2dc\uac01\uc5d0 ', 0], ['\ub0a0\uc528 + AI \uc5ed\ubb34\uc6d0 \uc694\uc57d', 1], ['\uc744 \uc54c\ub9bc\uc73c\ub85c \ubcf4\ub0b4\ub4dc\ub824\uc694.', 0]]);
   var k = [{ t: 'toggle', key: 'cm', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
-  ['from', 'to'].forEach(function (x, i) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '\ube44\uc5b4 \uc788\uc74c', settingsCall('cm.pick.' + x), true)); });
+  settingsFieldPair(k, 'from', 'to', f, 8);
   k.push(settingsSmallN('\uc9c0\ud558\ucca0\uc5ed\uacfc \ubc84\uc2a4\uc815\ub958\uc7a5 \ubaa8\ub450 \uc785\ub825\ud560 \uc218 \uc788\uc5b4\uc694. \uac80\uc0c9 \ubaa9\ub85d\uc758 \uc9c0\ud558\ucca0/\ubc84\uc2a4 \ud45c\uc2dc\ub85c \uad6c\ubd84\ub3fc\uc694. \ube44\uc6cc\ub450\uba74 \ud604\uc7ac \uc704\uce58 \uae30\uc900\uc774\uc5d0\uc694.', 8, 10));
-  ['eFrom', 'eTo'].forEach(function (x) { k.push(settingsNavN(SETTINGS_PICK[x][0], f[x] || '\ube44\uc5b4 \uc788\uc74c', settingsCall('cm.pick.' + x), true)); });
+  settingsFieldPair(k, 'eFrom', 'eTo', f, 2);
   k.push(settingsSmallN(settingsEveHint(f), 8, 12));
   k.push(settingsLabelN('\ubcf4\ub0bc \uc694\uc77c', 6));
   var dayKids = SETTINGS_DAY_NM.map(function (nm, di) {
@@ -19769,7 +19777,7 @@ async function handleScreenTalk(request) {
 //        \ud589\ub3d9 \uc774\ub984: dl.ok \u00b7 dl.no(perm \u00b7 exit \u00b7 report) \u00b7 dl.copy \u00b7 dl.clear \u00b7 dl.close(diag). \ud750\ub9b0 \uacf3\uc744 \ub204\ub974\uba74 dlg.tap(perm \ub9cc dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(\uacbd\ub85c \ud0d0\uc0c9 \ub85c\ub529)\ub294 runner \ub178\ub4dc\ub97c \uc544\ub294 \uc571(CAP 19)\ubd80\ud130 \u2014 \uc61b \uc571\uc740 kind \ub97c \ubab0\ub77c \uadf8\ub0e5 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[\u2600-\u27bf\u2b00-\u2bff\ufe0f\u200d]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -19840,6 +19848,19 @@ function dlgBpick(f) {
   ] });
   return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
     info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
+}
+
+// \u2605 s252 (YJ: "\ud558\ucc28\ucd94\ucc9c\ub3c4 \uc571\uc744 \ud0a4\uace0\uc788\uc73c\uba74 \ud31d\uc5c5\uc774 \ub728\uace0"): \uc571 \ud654\uba74\uc744 \ubcf4\ub294 \uc911\uc5d0 \ud558\ucc28 7\ubd84 \uc804 \ucd94\ucc9c\uc774 \uc624\uba74 \uc54c\ub9bc \ub300\uc2e0 \ub728\ub294 \uce74\ub4dc(\uc6f9 _showBriefingModal \uacfc \uac19\ub2e4).
+//   f = { title, body(\uc5ec\ub7ec \uc904), go(\uac00\uac8c\u00b7\uc0c1\ud488 \ubcf4\uae30 \ub2e8\ucd94 \uc774\ub984 \u2014 \uc5c6\uc73c\uba74 \ub2e8\ucd94 \uc5c6\uc74c), ok(\ub2eb\uae30 \ub2e8\ucd94 \uc774\ub984) }. \ub2e8\ucd94: dl.go(\uac00\uac8c\u00b7\uc0c1\ud488 \uc5f4\uae30) \u00b7 dl.no(\ub2eb\uae30, \ud750\ub9b0 \uacf3 \ub20c\ub7ec\ub3c4 \uac19\ub2e4). \uae00\uc740 \uc5d4\uc9c4(/reco-text)\uc774 \ub9cc\ub4e0 \uadf8\ub300\ub85c\ub2e4.
+function dlgReco(f) {
+  var title = dlgClean(f.title, 60), body = dlgClean(f.body, 500), go = dlgClean(f.go, 10), ok = dlgClean(f.ok, 10) || '\ud655\uc778', no = { a: 'call', v: 'dl.no' };
+  var items = [];
+  if (go) items.push({ label: go, fill: 'gold', line: 'gold', tc: '#121214', act: { a: 'call', v: 'dl.go' } });
+  items.push({ label: ok, fill: 'card2', line: 'border', tc: 'sub', act: no });
+  var head = [{ t: 'text', pad: [22, 24, 22, body ? 10 : 18], s: title || '\ud558\ucc28 \ucd94\ucc9c', size: 17, bold: true, lh: 1.4, color: 'text' }];
+  if (body) head.push({ t: 'text', pad: [22, 0, 22, 18], s: body, size: 14, lh: 1.65, color: 'text' });
+  head.push({ t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: items });
+  return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null, info: { go: go ? 1 : 0 } };
 }
 
 function dlgExit() {
@@ -19969,7 +19990,7 @@ function dialogScreen(inp, f) {
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : dlgPop(f))))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : dlgPop(f)))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;

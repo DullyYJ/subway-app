@@ -2535,8 +2535,8 @@ public class ScreenView extends View {
             cv.drawRoundRect(rf2, it.radius - hb, it.radius - hb, p);
         }
         p.setStyle(Paint.Style.FILL);
-        setText(it.size, it.bold, rtColor(it, 2, cc(it.tc, pal[R_SUB]))); tp.setTextAlign(Paint.Align.CENTER);
-        cv.drawText(it.lines.length > 0 ? it.lines[0] : it.label, it.x + it.w / 2f, base(it.y, it.h, 0), tp);
+        setText(it.size, it.bold, rtColor(it, 2, cc(it.tc, pal[R_SUB]))); tp.setTextAlign(it.left ? Paint.Align.LEFT : Paint.Align.CENTER);
+        cv.drawText(it.lines.length > 0 ? it.lines[0] : it.label, it.left ? it.x + 11f : it.x + it.w / 2f, base(it.y, it.h, 0), tp);
         tp.setTextAlign(Paint.Align.LEFT);
     }
 

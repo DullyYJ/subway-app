@@ -255,8 +255,11 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(E.settingsPageFacts({ days: [0, 6] }).days.join() === '0,6' && flat(PG('cm', { days: [0, 6] }).body).find(r => r.t === 'row' && r.kids[0].s === '평일').kids.map(k => k.fill === 'gold' ? 1 : 0).join('') === '010', '출퇴근: 주말 묶음');
   ok(texts(PG('cm', { days: [] })).includes('요일을 하나도 고르지 않아 매일 보내요.') && flat(PG('cm', {}).body).find(r => r.t === 'row' && r.kids[0].s === '평일').kids.every(k => k.fill !== 'gold'), '출퇴근: 요일이 없으면 매일 안내 · 묶음 선택 없음');
   ok(E.settingsEveHint({ eFrom: '', eTo: '', from: '', to: '' }) === '비워 두면 출근의 반대 방향으로 보내요.' && E.settingsEveHint({ eFrom: '회사', eTo: '', from: '', to: '' }) === '퇴근은 따로 설정한 곳으로 보내요. (한쪽만 채우면 나머지는 출근의 반대편을 써요)' && E.settingsEveHint({ eFrom: '회사', eTo: '집', from: '', to: '' }) === '퇴근은 따로 설정한 곳으로 보내요.', '출퇴근: 퇴근 힌트 3가지');
-  const pn = flat(sc.body).filter(n => n.t === 'navrow');
-  ok(pn.map(n => n.act.v).join() === 'cm.pick.from,cm.pick.to,cm.pick.eFrom,cm.pick.eTo' && pn[0].sub === '아라' && pn[2].sub === '비어 있음', '출퇴근: 장소 4칸(값 또는 비어 있음)');
+  const pn = flat(sc.body).filter(n => n.t === 'button' && n.al === 'left');
+  ok(pn.map(n => n.act.v).join() === 'cm.pick.from,cm.pick.to,cm.pick.eFrom,cm.pick.eTo' && pn[0].s === '아라' && pn[0].tc === 'text' && pn[2].s === '비우면 회사 근처 역' && pn[2].tc === 'sub' && pn[1].s.length > 0, '출퇴근: 장소 4칸은 웹 입력칸 모양(값 또는 흐린 안내 글)');
+  const lr = flat(sc.body).filter(n => n.t === 'row' && n.kids.length === 2 && n.kids[0].t === 'text');
+  ok(lr.length >= 2 && lr[0].kids.map(k => k.s).join('|') === '출근 출발지 (집 근처)|출근 도착지 (회사 근처)' && lr[1].kids.map(k => k.s).join('|') === '퇴근 출발지|퇴근 도착지', '출퇴근: 출발·도착이 두 칸씩 나란히(이름이 위)');
+  ok(!flat(sc.body).some(n => n.t === 'navrow'), '출퇴근: 목록 화살표 줄 없음');
   ok(E.settingsFmtTime('00:05') === '오전 12:05' && E.settingsFmtTime('12:00') === '오후 12:00' && E.settingsFmtTime('23:59') === '오후 11:59', '출퇴근: 시각 글 경계(자정·정오)');
   ok(E.settingsPageFacts({ morn: '25:00', eve: 'x' }).morn === '07:30' && E.settingsPageFacts({ eve: '9:05' }).eve === '09:05', '출퇴근: 이상한 시각은 기본값 · 한 자리 시는 두 자리로');
   // 시각 고르기

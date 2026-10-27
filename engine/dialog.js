@@ -16,7 +16,7 @@
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(경로 탐색 로딩)는 runner 노드를 아는 앱(CAP 19)부터 — 옛 앱은 kind 를 몰라 그냥 쓰지 않는다
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -87,6 +87,19 @@ function dlgBpick(f) {
   ] });
   return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
     info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
+}
+
+// ★ s252 (YJ: "하차추천도 앱을 키고있으면 팝업이 뜨고"): 앱 화면을 보는 중에 하차 7분 전 추천이 오면 알림 대신 뜨는 카드(웹 _showBriefingModal 과 같다).
+//   f = { title, body(여러 줄), go(가게·상품 보기 단추 이름 — 없으면 단추 없음), ok(닫기 단추 이름) }. 단추: dl.go(가게·상품 열기) · dl.no(닫기, 흐린 곳 눌러도 같다). 글은 엔진(/reco-text)이 만든 그대로다.
+function dlgReco(f) {
+  var title = dlgClean(f.title, 60), body = dlgClean(f.body, 500), go = dlgClean(f.go, 10), ok = dlgClean(f.ok, 10) || '확인', no = { a: 'call', v: 'dl.no' };
+  var items = [];
+  if (go) items.push({ label: go, fill: 'gold', line: 'gold', tc: '#121214', act: { a: 'call', v: 'dl.go' } });
+  items.push({ label: ok, fill: 'card2', line: 'border', tc: 'sub', act: no });
+  var head = [{ t: 'text', pad: [22, 24, 22, body ? 10 : 18], s: title || '하차 추천', size: 17, bold: true, lh: 1.4, color: 'text' }];
+  if (body) head.push({ t: 'text', pad: [22, 0, 22, 18], s: body, size: 14, lh: 1.65, color: 'text' });
+  head.push({ t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: items });
+  return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null, info: { go: go ? 1 : 0 } };
 }
 
 function dlgExit() {
@@ -216,7 +229,7 @@ function dialogScreen(inp, f) {
   var kind = dlgStr(f.kind, 8);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : dlgPop(f))))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : dlgPop(f)))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;

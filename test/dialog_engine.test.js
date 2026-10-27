@@ -98,6 +98,16 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   ok(/'kakaomap:\/\/route\?'/.test(html) && /by=FOOT/.test(html) && /nmap:\/\/route\/walk\?/.test(html) && /appname=com\.dullyyj\.subway/.test(html) && /Math\.round\(dist \/ 67\)/.test(html) && /setInterval\(_walkRefresh, 30000\)/.test(html) && /1분 미만/.test(html), '도보: 계산식이 웹 walkModal 과 같다(67m/분 · 30초 · FOOT)');
 }
 
+// ④-3 s252: 하차 추천 팝업(앱 화면을 보는 중)
+{
+  const o = G({ kind: 'reco', title: '🍗 하차 7분 전 · 강남', body: '강남역 도착 예정 12:30\n근처에서 한 끼 어때요?', go: '맛집 보기', ok: '확인' }), b = btns(o);
+  ok(o.ok && o.screen === 'dlg' && o.dlg.tap.v === 'dl.no' && o.dlg.dim === 0.5 && o.info.kind === 'reco' && o.info.go === 1, 'reco: 카드 모양 · 흐린 곳 누르면 닫기');
+  ok(b.length === 2 && b[0].label === '맛집 보기' && b[0].act.v === 'dl.go' && b[0].fill === 'gold' && b[1].label === '확인' && b[1].act.v === 'dl.no', 'reco: [맛집 보기] [확인]');
+  ok(JSON.stringify(o).includes('하차 7분 전 · 강남') && JSON.stringify(o).includes('근처에서 한 끼 어때요?') && !EMOJI.test(JSON.stringify(o)), 'reco: 제목 · 본문 · 이모지 없음');
+  const n = G({ kind: 'reco', title: '하차 추천', body: '' }), nb = btns(n);
+  ok(n.ok && nb.length === 1 && nb[0].label === '확인' && n.info.go === 0 && G({ kind: 'reco' }, 15).error === 'cap', 'reco: 가게 단추 이름이 없으면 [확인]만');
+}
+
 // ④-2 s200: 탈 버스 고르기(첫 구간이 버스일 때 10분 안에 오는 버스)
 {
   const it = [{ sec: 45, ms: 1000045 }, { sec: 200, ms: 1000200 }, { sec: 0, ms: 5 }, { sec: 'x', ms: 6 }, { sec: 590, ms: 1000590 }];

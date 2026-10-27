@@ -2923,3 +2923,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `wxMeteo`(scene-worker.js)가 429 를 받으면 `WX_COOL_UNTIL` = 지금+10분: 그동안 API 를 부르지 않고 `sceneWeather`·`cbWeather`·위젯 한마디 모두 날씨를 내지 않는다(옛 캐시 포함). 장면·브리핑은 날씨 없이(wxKnown=false) 그린다.
 - 게시판 워커(`workers/src/board-writer.js` → `guarded/`, **별도 워커**)의 `getWeather` 도 429 면 10분 쉬고 null(옛 값 3시간 사용 규칙은 429 일 때만 끈다). 다른 실패는 예전대로.
 - 워커 `route-v2-2026-10-27s251` + 게시판 워커(guarded/board-writer.js) 재배포 필요.
+
+## s252 — 출퇴근 브리핑 설정창을 웹처럼 · 하차 추천 팝업 (YJ)
+- 출퇴근 알람 설정(`settingsPageCm`): 예전 목록 줄(navrow) 4개를 없애고 웹 #cmCard 처럼 두 칸씩 나란히 — 위에 이름(출근 출발지/도착지, 퇴근 출발지/도착지), 아래에 입력 상자 모양 칸(`settingsFieldPair`). 값이 없으면 웹과 같은 흐린 안내 글(placeholder), 누르면 장소 고르기(cm.pick.*). 이를 위해 button 노드에 `al:'left'`(글을 왼쪽에 붙임) 추가 — ScreenCore 파싱/배치(`Item.left`), ScreenView.drawButton.
+- 하차 7분 전 추천 전달 규칙(웹 `_arrFireAlertNow` 와 같다): 앱 화면을 보는 중 → 팝업 하나만(엔진 `/screen/dlg` kind:`reco`, [맛집·쿠팡 보기] [확인]) · 다른 앱 위이고 오버레이를 쓸 수 있고 추천 줄이 있으면 → 오버레이가 펼쳐지며 추천 줄(알림 없음, 기존 `wantOpen`) · 그 밖 → 알림. 판단은 `RecoNotify.route`, 팝업은 `ShellActivity.recoPopup`(못 띄우면 알림으로 대신).
+- 워커 `route-v2-2026-10-27s252`(s251 포함) 재배포 필요.

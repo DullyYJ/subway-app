@@ -3824,6 +3824,7 @@ public class ShellActivity extends Activity {
     /** 카드의 단추: dl.ok → 확인 쪽 · 그 밖(dl.no · dl.close · 바깥 · 뒤로)은 취소 쪽. 한 번만 처리한다. */
     private void dlgAct(String v, android.app.Dialog d) {
         if (d != dlgD) return;
+        if ("dl.go".equals(v)) v = "dl.ok";                                       // 하차 추천 팝업의 [맛집·쿠팡 보기] → 확인 쪽(열 곳은 그 팝업이 들고 있다)
         if (v != null && v.startsWith("dl.bp.")) {                                 // 탈 버스 고르기: N 번째 버스 → 확인 쪽으로 처리하고 번호는 따로 남긴다
             try { dlgPick = Integer.parseInt(v.substring(6)); } catch (NumberFormatException e) { dlgPick = -1; }
             v = "dl.ok";
@@ -3834,6 +3835,26 @@ public class ShellActivity extends Activity {
         try { d.dismiss(); } catch (Throwable ignored) { }
         if (ok != null) ok.run(); else if (no != null) no.run();
     }
+    /** s252 (YJ: 하차 추천도 앱을 켜 두면 팝업): 엔진(/screen/dlg kind:reco)이 만든 카드를 띄운다. 알림 대신 이것 하나만 보인다 — 못 띄우면 false(부르는 쪽이 알림으로 대신). */
+    static boolean recoPopup(String title, String text, RideCore.RecoAd ad, double[] loc) { ShellActivity a = live; return a != null && a.recoPop(title, text, ad, loc); }
+    private boolean recoPop(final String title, final String text, final RideCore.RecoAd ad, final double[] loc) {
+        {
+            if (!resumed || isFinishing() || dlgD != null) return false;
+            final android.content.Context app = getApplicationContext();
+            final String body = "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":\"reco\",\"title\":" + ShellCore.q(title) + ",\"body\":" + ShellCore.q(text) + ",\"go\":" + ShellCore.q(ad != null && ad.a.length() > 0 ? ad.go : "") + ",\"ok\":\"확인\"}}";
+            new Thread(new Runnable() { @Override public void run() {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", body, 6000);
+                final String txt = r.status == 200 && r.body != null ? r.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    Runnable go = new Runnable() { @Override public void run() { OvCore.Row row = new OvCore.Row(); row.a = ad == null ? "" : ad.a; RecoGo.open(ShellActivity.this, ad, loc, row); } };
+                    if (resumed && txt.length() > 2 && dlgOpen(txt, go, null, 0L)) return;
+                    RecoNotify.show(app, title, text);                                // 팝업을 못 띄웠다 — 추천은 한 여정에 한 번뿐이라 알림으로라도 보낸다
+                } });
+            } }, "shell-reco-pop").start();
+            return true;
+        }
+    }
+
     /** 값이 정해진 작은 알림(웹 _pickPop · 이 기능은 글만 바뀐다): 엔진에서 받아 잠깐 띄우고, 못 받으면 시스템 확인창. */
     private void dlgPopSh(final String msg, final String sub) {
         new Thread(new Runnable() { @Override public void run() {

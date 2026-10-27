@@ -16,7 +16,7 @@ import java.util.Map;
  *     chips  { pad:[l,t,r,b], gap, h, items:[{label, badge, on, act}] }          가로로 밀리는 칩 줄
  *     grid   { pad, cols, gap, items:[{t:'card', name, tag, img, fb, act}] }      칸 격자(각 줄 높이는 그 줄에서 가장 큰 카드)
  *     text   { pad, s, size, bold, color, alpha, lh, align, lines }               줄바꿈 글
- *     button { pad, s, size, h, act }                                             넓은 단추
+ *     button { pad, s, size, h, act, al }                                         넓은 단추(al:"left" 면 글을 왼쪽에 붙여 입력칸 모양)
  *     spacer { h }
  *     box    { pad, ip, s, hl:[[시작,끝]…], size, lh, color, fill, line, r }       테두리·바탕이 있는 안내 상자(hl = 굵은 글자 구간). fill/line = 색 역할 이름 또는 CSS 색
  *     search { pad, max, hint, badge, accent, maxlen, act:{a:'search',tpl,empty} } 검색줄(알약). 입력은 기기의 진짜 입력칸(EditText)이 받는다
@@ -493,6 +493,7 @@ public final class ScreenCore {
             n.size = optNum(m, "size", 12f, 6f, 40f); n.h = optNum(m, "h", 40f, 20f, 120f); n.act = act(m.get("act"), true);
             n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", ""); n.tc = roleOrCss(m, "tc", ""); n.bold = optBool(m, "bold", false);
             n.r = optNum(m, "r", 12f, 0f, 40f);
+            n.align = optStr(m, "al", "center", 8); if (!"left".equals(n.align) && !"center".equals(n.align)) throw new ParseError("button.al");      // 입력칸처럼 왼쪽에 붙여 쓰는 단추(웹 입력 상자)
         } else if ("panel".equals(t)) {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border"); n.r = optNum(m, "r", 14f, 0f, 40f);
@@ -1118,6 +1119,7 @@ public final class ScreenCore {
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
+        public boolean left;                         // 단추 글을 왼쪽에 붙임(입력칸 모양)
         public boolean bold, on, spin;               // spin: inbar 단추에 도는 점(Node.spin 에서)
         public String color = "text", bg = "", align = "left";
         public float alpha = 1f;
@@ -1703,7 +1705,7 @@ public final class ScreenCore {
     /** 전환 연출용 단추 조각: 단추 한 개의 겉모양(색·글자)만 복사한다. */
     private static Item btnCopy(Item b) {
         Item c = new Item(); c.kind = K_BUTTON; c.x = b.x; c.y = b.y; c.w = b.w; c.h = b.h; c.label = b.label; c.size = b.size; c.bold = b.bold; c.radius = b.radius;
-        c.lines = b.lines; c.fill = b.fill; c.line = b.line; c.tc = b.tc;
+        c.lines = b.lines; c.fill = b.fill; c.line = b.line; c.tc = b.tc; c.left = b.left;
         return c;
     }
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
@@ -1974,7 +1976,8 @@ public final class ScreenCore {
         if ("button".equals(n.t)) {
             Item it = new Item(); it.kind = K_BUTTON; it.x = ox; it.y = y; it.w = innerW; it.h = n.h;
             it.label = n.s; it.size = n.size; it.act = n.act; it.bold = n.bold; it.radius = n.r;
-            it.lines = new String[] { ellipsize(n.s, innerW - 16f, n.size, n.bold, m) };
+            it.left = "left".equals(n.align);
+            it.lines = new String[] { ellipsize(n.s, innerW - (it.left ? 22f : 16f), n.size, n.bold, m) };
             it.fill = col(n.fill, new Col("card", 0)); it.line = col(n.line, new Col("border", 0)); it.tc = col(n.tc, new Col("sub", 0));
             out.add(it);
             return y + n.h + n.padB;

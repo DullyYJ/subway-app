@@ -281,6 +281,14 @@ public class ScreenJvmTest {
         ScreenCore.Item rwPn = null;
         for (ScreenCore.Item it : rwL.body) { if (it.kind == ScreenCore.K_BUTTON) rwB.add(it); else if (it.kind == ScreenCore.K_PANEL) rwPn = it; }
         ok(rwB.size() == 4 && rwPn != null, "row: 안의 단추 3개 + 아래 단추가 배치된다");
+        String alJ = "{\"ok\":true,\"v\":1,\"screen\":\"settings\",\"rev\":\"r\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"row\",\"gap\":10,\"kids\":["
+            + "{\"t\":\"button\",\"s\":\"아라\",\"al\":\"left\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"cm.pick.from\"}},"
+            + "{\"t\":\"button\",\"s\":\"가운데\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"cm.pick.to\"}}]}]}";
+        ScreenCore.Layout alL = ScreenCore.layout(ScreenCore.load(alJ), 360f, M);
+        java.util.List<ScreenCore.Item> alB = new java.util.ArrayList<ScreenCore.Item>();
+        for (ScreenCore.Item it : alL.body) if (it.kind == ScreenCore.K_BUTTON) alB.add(it);
+        ok(alB.size() == 2 && alB.get(0).left && !alB.get(1).left, "button al:left — 입력칸처럼 글을 왼쪽에 붙이고 al 없으면 가운데");
+        ok(bad(wrapBody("{\"t\":\"button\",\"s\":\"x\",\"al\":\"right\",\"act\":{\"a\":\"refresh\"}}")), "button al 이 left·center 가 아니면 거절");
         float rwIn = rwPn.w - 2f - 20f, rwCol = (rwIn - 12f) / 3f;
         ok(near(rwB.get(0).y, rwB.get(1).y) && near(rwB.get(1).y, rwB.get(2).y), "row: 같은 높이(y)에 놓인다");
         ok(near(rwB.get(0).w, rwCol) && near(rwB.get(1).w, rwCol) && near(rwB.get(2).w, rwCol), "row: 칸 폭이 모두 같다 (" + rwB.get(0).w + " vs " + rwCol + ")");
