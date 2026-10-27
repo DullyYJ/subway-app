@@ -105,14 +105,14 @@ function aiPara(toks, last, sub) {
 function aiTitle(f, tz) {
   var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
   var base = aiNum(f.base, aiNum(f.now, 0)), timeStr = aiClock(base, tz);
-  if (f.fz === true) return f.tk === 'preview' ? 'AI 승무원 브리핑 · 예상 ' + timeStr : 'AI 승무원 브리핑';      // 경로 통합 카드(s217): 출발·도착 이름은 위 머리줄에 이미 있다
+  if (f.fz === true) return f.tk === 'preview' ? '길동무 브리핑 · 예상 ' + timeStr : '길동무 브리핑';      // 경로 통합 카드(s217): 출발·도착 이름은 위 머리줄에 이미 있다
   if (f.tk === 'preview') return (hasRoute ? from + ' → ' + to : from) + ' · 예상 · ' + timeStr;
   if (f.tk === 'brief') {
     var rem = aiNum(f.rem, 0);
     var remT = (hasRoute && rem > 0) ? ((f.metro === true ? '소요시간: ' : '남은시간: ') + rem + '분') : timeStr;
     return hasRoute ? from + ' → ' + to + ' · ' + remT : from + ' · ' + timeStr + ' 기준';
   }
-  return 'AI 승무원 브리핑';
+  return '길동무 브리핑';
 }
 
 // 소요 분: 경로에서 받은 값 > 좌표 거리로 어림(웹과 같은 식)

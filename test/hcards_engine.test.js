@@ -17,7 +17,7 @@ const txt = ns => flat(ns).map(n => n.s || '').join('\n');
 ok(E.hcardsScreen({ cap: 17 }, base()).ok === false && call({}).ok === false, 'cap 18 미만 · now 없으면 만들지 않는다');
 let o = call(base());
 ok(o.ok && o.screen === 'hcards' && o.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && /^h1:/.test(o.rev), '카드 세 장 + 제목줄 둘(혼잡도 · AI 승무원 · 대화 — 웹 홈과 같은 순서)');
-ok(o.body[0].s === '혼잡도' && o.body[0].btn === '\uD83D\uDCCD 위치 공유' && o.body[0].act.v === 'share.loc' && o.body[0].pad.join() === '14,0,14,6' && o.body[2].s === 'AI 승무원' && o.body[2].pad.join() === '14,0,14,6', '제목줄: 혼잡도(+위치 공유 단추) · AI 승무원');
+ok(o.body[0].s === '혼잡도' && o.body[0].btn === '\uD83D\uDCCD 위치 공유' && o.body[0].act.v === 'share.loc' && o.body[0].pad.join() === '14,0,14,6' && o.body[2].s === '길동무 브리핑' && o.body[2].pad.join() === '14,0,14,6', '제목줄: 혼잡도(+위치 공유 단추) · 길동무 브리핑');
 ok(o.body[1].lb === 4 && o.body[1].pad.join() === '14,0,14,14' && o.body[3].ip.join() === '16,14,16,14' && o.body[3].r === 16 && o.body[4].ip.join() === '12,10,12,10' && o.body[4].r === 14 && o.body[4].pad.join() === '14,0,14,22', '카드 치수: 혼잡도 왼쪽 4px 띠 · AI 14/16 · 대화 10/12 모서리 14 · 맨 아래 22');
 const nodes = flat(o.body);
 const RD_SUB = { here: 1, boarded: true, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '부평', isSub: true, lineName: '1호선' }, { name: '강남', isSub: true, lineName: '1호선' }] };      // 지하철 타고 가는 중: 웹은 이때만 장면을 접고 혼잡도 본문을 보인다
@@ -32,13 +32,13 @@ ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t 
 // s217 경로 통합 카드: 규격 25 + 보던 경로가 있으면 AI 승무원은 제목줄 없이 into:'ai' 카드 하나로 맨 앞에 오고, 브리핑이 짧아지며, 규격 24 이하는 예전 그대로
 {
   const f25 = E.hcardsScreen({ cap: 25 }, base()), f24 = E.hcardsScreen({ cap: 24 }, base());
-  ok(f25.ok && f25.body.map(n => n.t).join() === 'panel,sec,panel,panel' && f25.body[0].into === 'ai' && !f25.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '통합: AI 카드가 맨 앞 · into:ai · 제목줄 없음');
+  ok(f25.ok && f25.body.map(n => n.t).join() === 'panel,sec,panel,panel' && f25.body[0].into === 'ai' && !f25.body.some(n => n.t === 'sec' && n.s === '길동무 브리핑'), '통합: AI 카드가 맨 앞 · into:ai · 제목줄 없음');
   ok(!flat(f25.body[0].kids).some(n => n.t === 'aih'), 's218: 통합 카드의 AI 부분에는 제목줄(브리핑 · 카운트다운 · 새로고침)이 없다');
   const t25 = txt(f25.body[0].kids);
   ok(/^환승은 없고 도착은 \d\d:\d\d경 예정이에요\. 총 24분 걸려요\./.test(t25) && /부평에서 .*1호선 탑승 후 강남 하차\./.test(t25) && !/5분마다/.test(t25), '통합: 환승 · 도착 · 총 시간 한 문장 + 경로를 말로(맺음말 없음) — ' + t25.replace(/\n/g, ' / '));
   ok(f24.body.map(n => n.t).join() === 'sec,panel,sec,panel,panel' && !f24.body.some(n => n.into) && /부평 → 강남 · 남은시간: 24분/.test(flat(f24.body).find(n => n.t === 'aih').s), '규격 24 이하는 예전 모양 그대로');
   const noRoute = E.hcardsScreen({ cap: 25 }, base({ r: null, gps: [37.5, 127.0] }));
-  ok(noRoute.ok && !noRoute.body.some(n => n.into) && noRoute.body.some(n => n.t === 'sec' && n.s === 'AI 승무원'), '경로가 없으면 합칠 곳이 없어 예전 모양');
+  ok(noRoute.ok && !noRoute.body.some(n => n.into) && noRoute.body.some(n => n.t === 'sec' && n.s === '길동무 브리핑'), '경로가 없으면 합칠 곳이 없어 예전 모양');
   const dup = E.hcardsScreen({ cap: 25 }, base({ r: { data: mk([walk(3), sub('부산_부산', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부산_부산', b: '강남', bt: null, rb: now } }));
   ok(!/부산_부산/.test(JSON.stringify(dup.body)), "'부산_부산' 이 브리핑에 안 나온다");
   const c = screenCheck([f25, f24]);
@@ -75,7 +75,7 @@ ok(flat(o.body).some(n => n.t === 'aih' && /강남/.test(n.s)), '동 이름이 �
 o = call(base({ r: { data: mk([walk(3), sub('부평', '강남', '수도권 1호선', 18), walk(3)]), tab: 'fast', a: '부평', b: '강남', bt: null, rb: now }, gps: [37.4979, 127.0276], dong: '역삼동' }));
 ok(flat(o.body).some(n => n.t === 'aih' && /부평/.test(n.s) && !/역삼동/.test(n.s)), '경로가 있으면 동 이름은 쓰지 않는다');
 o = call(base({ r: null, gps: null }));
-ok(!JSON.stringify(o.body[1]).includes('AI 승무원') && o.body[2].s === 'AI 승무원' && JSON.stringify(o.body[4]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
+ok(!JSON.stringify(o.body[1]).includes('길동무 브리핑') && o.body[2].s === '길동무 브리핑' && JSON.stringify(o.body[4]).includes('실시간'), '순서: 혼잡도 장면 → AI 승무원 → 실시간 대화(웹 홈과 같다)');
 ok(o.ok && o.info.ai === 'empty' && o.info.cong === 'none' && o.body.length === 5, '아무것도 없으면 안내 문구');
 ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남', '가까운 역 3km 안');
 // 캐릭터 장면: 혼잡도 카드 맨 위에 엔진이 정한 장면(JSON 글)이 실린다

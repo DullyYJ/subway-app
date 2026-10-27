@@ -182,9 +182,8 @@ function sceneDecide(inp, wx) {
   var sigBase = nodes.map(function (n) { return (n.isBus ? "b" : n.isSub ? "s" : n.isWalk ? "w" : "o") + (n.lineName || "") + "|" + (n.name || ""); }).join(">");
   var day = Math.floor((nowMs + tz * 6e4) / 864e5), seedStr = String(inp.key || sigBase) + "#" + day;
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
-  var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
   // fill: 경로가 없고(경로 결과도 안 나온 때) 홈 화면을 한 화면에 꽉 채워 보일 때만 true. 경로 결과가 나오기 시작하면(확정 전이라도) false → 앱은 평소 크기로 돌린다
-  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;

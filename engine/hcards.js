@@ -248,7 +248,7 @@ function hcardsScreen(inp, f) {
   }
   if (aiS && aiS.ok) {
     if (fuse) { var fp = hcPanel(hcKids(aiS).filter(function (n) { return n.t !== 'aih'; }), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // s218: 제목줄(AI 승무원 브리핑 · 카운트다운 · 새로고침)도 뺀다 — 앱이 경로 결과 카드의 'slot:ai' 자리로 옮긴다
-    else { body.push(hcSec('AI 승무원')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+    else { body.push(hcSec('길동무 브리핑')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };

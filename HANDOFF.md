@@ -2928,3 +2928,7 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 출퇴근 알람 설정(`settingsPageCm`): 예전 목록 줄(navrow) 4개를 없애고 웹 #cmCard 처럼 두 칸씩 나란히 — 위에 이름(출근 출발지/도착지, 퇴근 출발지/도착지), 아래에 입력 상자 모양 칸(`settingsFieldPair`). 값이 없으면 웹과 같은 흐린 안내 글(placeholder), 누르면 장소 고르기(cm.pick.*). 이를 위해 button 노드에 `al:'left'`(글을 왼쪽에 붙임) 추가 — ScreenCore 파싱/배치(`Item.left`), ScreenView.drawButton.
 - 하차 7분 전 추천 전달 규칙(웹 `_arrFireAlertNow` 와 같다): 앱 화면을 보는 중 → 팝업 하나만(엔진 `/screen/dlg` kind:`reco`, [맛집·쿠팡 보기] [확인]) · 다른 앱 위이고 오버레이를 쓸 수 있고 추천 줄이 있으면 → 오버레이가 펼쳐지며 추천 줄(알림 없음, 기존 `wantOpen`) · 그 밖 → 알림. 판단은 `RecoNotify.route`, 팝업은 `ShellActivity.recoPopup`(못 띄우면 알림으로 대신).
 - 워커 `route-v2-2026-10-27s252`(s251 포함) 재배포 필요.
+
+## s253 — 홈 장면 날씨 알약 삭제 · 'AI 승무원' → '길동무 브리핑' (YJ)
+- 홈 혼잡도 장면 왼쪽 위 '저녁 · 맑음 12°' 알약(idle tag)을 없앴다 — 바로 아래 브리핑 카드의 날씨 문장과 겹침. 시간대·날씨는 장면 그림(look)에 그대로 반영. 탑승 중 알약(타고 가는 중 등)은 그대로.
+- 홈 카드 제목 'AI 승무원'(hcards) · 카드 제목 'AI 승무원 브리핑'(aicard) → '길동무 브리핑'. 워커 `route-v2-2026-10-27s253` 재배포 필요.

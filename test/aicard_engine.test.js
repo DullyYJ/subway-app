@@ -43,7 +43,7 @@ ok(G(base({ mode: 'zzz' })).error === 'mode', '모르는 모드는 거절');
   ok(T({ rem: 0 }) === '부평 → 두정 · ' + clk, '제목: 남은 분을 모르면 시각 ' + T({ rem: 0 }));
   ok(T({ to: '' }) === '부평 · ' + clk + ' 기준' && T({ to: '부평' }) === '부평 · ' + clk + ' 기준', '제목: 목적지 없음/같음');
   ok(T({ mode: 'preview', tk: 'preview' }) === '부평 → 두정 · 예상 · ' + clk && T({ mode: 'preview', tk: 'preview', to: '' }) === '부평 · 예상 · ' + clk, '제목: 미리보기 ' + T({ mode: 'preview', tk: 'preview' }));
-  ok(T({ mode: 'empty', tk: '' }) === 'AI 승무원 브리핑', '제목: 기본');
+  ok(T({ mode: 'empty', tk: '' }) === '길동무 브리핑', '제목: 기본');
   ok(T({ mode: 'loading' }) === '부평 → 두정 · 남은시간: 50분', '제목: 생성 중에도 이전 제목을 따른다');
 }
 
@@ -138,11 +138,11 @@ ok(G(base({ mode: 'zzz' })).error === 'mode', '모르는 모드는 거절');
 {
   const fz = { now: Date.UTC(2026, 9, 20, 3, 0, 0), tz: 540, mode: 'brief', tk: 'brief', from: '부평', to: '강남', mins: 24, rem: 24, base: Date.UTC(2026, 9, 20, 3, 0, 0), hour: 12, cong: 30, segs: [{ type: 1, line: '1호선', from: '부평', to: '강남', min: 24 }], fz: true, cp: true };
   const a = G(fz), h = a.head.find(n => n.t === 'aih'), tx = a.head.filter(n => n.t === 'text').map(n => n.s).join('\n');
-  ok(h.s === 'AI 승무원 브리핑' && /도착은 \d\d:\d\d경 예정이에요/.test(tx) && !/에서 .*까지는 약/.test(tx), 'fz · cp: 제목은 짧게, 본문은 핵심 시각 위주');
+  ok(h.s === '길동무 브리핑' && /도착은 \d\d:\d\d경 예정이에요/.test(tx) && !/에서 .*까지는 약/.test(tx), 'fz · cp: 제목은 짧게, 본문은 핵심 시각 위주');
   const b = G(Object.assign({}, fz, { fz: false, cp: false })), hb = b.head.find(n => n.t === 'aih');
   ok(/부평 → 강남 · 남은시간: 24분/.test(hb.s), 'fz 가 없으면 예전 제목');
   const pv = G(Object.assign({}, fz, { tk: 'preview', mode: 'preview' })).head.find(n => n.t === 'aih');
-  ok(/^AI 승무원 브리핑 · 예상 /.test(pv.s), '예상 모드 제목');
+  ok(/^길동무 브리핑 · 예상 /.test(pv.s), '예상 모드 제목');
 }
 function done() {
   // ⑦ 웹 연결 글

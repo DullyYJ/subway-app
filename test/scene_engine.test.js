@@ -23,11 +23,11 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
   await t('경로 없음 → idle(혼잡도 없음), 시간(한국 시각)·날씨·문구', () => {
     const a = decide({ nowMs: ms('2026-10-15T12:30:00'), locked: false }, { temp: 12.4, rain: 5, txt: '맑음' });
     assert.strictEqual(a.mode, 'idle'); assert.strictEqual(a.look.slot, 'noon'); assert.strictEqual(a.look.wk, 'clear'); assert.strictEqual(a.look.season, 'autumn'); assert.strictEqual(a.cong.kind, null); assert.strictEqual(a.hint, hint);
-    assert(/점심/.test(a.tag) && /맑음/.test(a.tag) && /12°/.test(a.tag), a.tag);
+    assert.strictEqual(a.tag, '', 's253: 홈 장면 왼쪽 위 날씨 알약은 없다(길동무 브리핑과 겹침)'); assert(a.look.slotKo === '점심' && a.look.wxKo === '맑음' && a.look.temp === 12, '시간대·날씨는 장면 look 에 그대로');
     const b = decide({ nowMs: ms('2026-12-20T05:10:00'), locked: false }, { temp: -3, rain: 90, txt: '눈' });
     assert.strictEqual(b.look.slot, 'dawn'); assert.strictEqual(b.look.wk, 'snow'); assert.strictEqual(b.look.season, 'winter'); assert(b.look.hidesSun && b.look.lit);
     const c = decide({ nowMs: ms('2026-10-15T22:00:00'), locked: false }, null);
-    assert.strictEqual(c.look.wxKnown, false); assert.strictEqual(c.look.wxKo, ''); assert(!/맑|흐|비|눈/.test(c.tag), '날씨를 못 받으면 날씨를 지어내지 않는다: ' + c.tag); assert(c.look.night);
+    assert.strictEqual(c.look.wxKnown, false); assert.strictEqual(c.look.wxKo, ''); assert.strictEqual(c.look.wxKnown, false); assert.strictEqual(c.tag, ''); assert(c.look.night);
   });
   await t('(07:43 YJ) fill: 경로도 경로 결과도 없을 때만 true — 경로 결과가 나오기 시작하면(확정 전) false, 확정 후에도 false', () => {
     const base = { nowMs: ms('2026-10-16T07:40:00') };

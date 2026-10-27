@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s252";
+var ENGINE_VERSION = "route-v2-2026-10-27s253";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12750,9 +12750,8 @@ function sceneDecide(inp, wx) {
   var sigBase = nodes.map(function (n) { return (n.isBus ? "b" : n.isSub ? "s" : n.isWalk ? "w" : "o") + (n.lineName || "") + "|" + (n.name || ""); }).join(">");
   var day = Math.floor((nowMs + tz * 6e4) / 864e5), seedStr = String(inp.key || sigBase) + "#" + day;
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
-  var idleTag = look.emo + " " + look.slotKo + (look.wxKnown ? " \u00B7 " + look.wxKo + (look.temp != null ? " " + look.temp + "\u00B0" : "") : "");
   // fill: \uacbd\ub85c\uac00 \uc5c6\uace0(\uacbd\ub85c \uacb0\uacfc\ub3c4 \uc548 \ub098\uc628 \ub54c) \ud648 \ud654\uba74\uc744 \ud55c \ud654\uba74\uc5d0 \uaf49 \ucc44\uc6cc \ubcf4\uc77c \ub54c\ub9cc true. \uacbd\ub85c \uacb0\uacfc\uac00 \ub098\uc624\uae30 \uc2dc\uc791\ud558\uba74(\ud655\uc815 \uc804\uc774\ub77c\ub3c4) false \u2192 \uc571\uc740 \ud3c9\uc18c \ud06c\uae30\ub85c \ub3cc\ub9b0\ub2e4
-  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = idleTag; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;
@@ -12781,6 +12780,7 @@ function sceneDecide(inp, wx) {
   out.tag = phase === "wait" ? who + " \uAE30\uB2E4\uB9AC\uB294 \uC911" : phase === "ride" ? (out.nearEnd ? "\uD83D\uDD14 \uACE7 \uB0B4\uB824\uC694!" : "\uD83D\uDE8C \uBC84\uC2A4 \uD0C0\uACE0 \uAC00\uB294 \uC911") : "\uD83D\uDC4B \uB0B4\uB838\uC5B4\uC694, \uCE5C\uAD6C\uB4E4\uACFC \uB180\uC544\uC694";
   return out;
 }
+
 
 // \uc7a5\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /scene (engine/scene.js \uc758 sceneDecide \ub97c \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/scene") return handleScene(request);` \ub97c \ub123\ub294\ub2e4.
 // \ub0a0\uc528\ub294 Open-Meteo \uc5d0\uc11c \uc5d4\uc9c4\uc774 \uc9c1\uc811 \ubc1b\ub294\ub2e4(wxMeteo, s218 \u2014 \uc608\uc804 subway-api /weather \ub294 \ubc30\ud3ec\ubcf8\uc5d0 \uc5c6\uc5c8\ub2e4). 10\ubd84 \uce90\uc2dc.
@@ -19573,14 +19573,14 @@ function aiPara(toks, last, sub) {
 function aiTitle(f, tz) {
   var from = aiStr(f.from), to = aiStr(f.to), hasRoute = !!to && to !== from;
   var base = aiNum(f.base, aiNum(f.now, 0)), timeStr = aiClock(base, tz);
-  if (f.fz === true) return f.tk === 'preview' ? 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551 \u00b7 \uc608\uc0c1 ' + timeStr : 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551';      // \uacbd\ub85c \ud1b5\ud569 \uce74\ub4dc(s217): \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc774\ub984\uc740 \uc704 \uba38\ub9ac\uc904\uc5d0 \uc774\ubbf8 \uc788\ub2e4
+  if (f.fz === true) return f.tk === 'preview' ? '\uae38\ub3d9\ubb34 \ube0c\ub9ac\ud551 \u00b7 \uc608\uc0c1 ' + timeStr : '\uae38\ub3d9\ubb34 \ube0c\ub9ac\ud551';      // \uacbd\ub85c \ud1b5\ud569 \uce74\ub4dc(s217): \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc774\ub984\uc740 \uc704 \uba38\ub9ac\uc904\uc5d0 \uc774\ubbf8 \uc788\ub2e4
   if (f.tk === 'preview') return (hasRoute ? from + ' \u2192 ' + to : from) + ' \u00b7 \uc608\uc0c1 \u00b7 ' + timeStr;
   if (f.tk === 'brief') {
     var rem = aiNum(f.rem, 0);
     var remT = (hasRoute && rem > 0) ? ((f.metro === true ? '\uc18c\uc694\uc2dc\uac04: ' : '\ub0a8\uc740\uc2dc\uac04: ') + rem + '\ubd84') : timeStr;
     return hasRoute ? from + ' \u2192 ' + to + ' \u00b7 ' + remT : from + ' \u00b7 ' + timeStr + ' \uae30\uc900';
   }
-  return 'AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551';
+  return '\uae38\ub3d9\ubb34 \ube0c\ub9ac\ud551';
 }
 
 // \uc18c\uc694 \ubd84: \uacbd\ub85c\uc5d0\uc11c \ubc1b\uc740 \uac12 > \uc88c\ud45c \uac70\ub9ac\ub85c \uc5b4\ub9bc(\uc6f9\uacfc \uac19\uc740 \uc2dd)
@@ -22737,7 +22737,7 @@ function hcardsScreen(inp, f) {
   }
   if (aiS && aiS.ok) {
     if (fuse) { var fp = hcPanel(hcKids(aiS).filter(function (n) { return n.t !== 'aih'; }), { ip: [16, 14, 16, 14] }); fp.into = 'ai'; body.unshift(fp); }      // s218: \uc81c\ubaa9\uc904(AI \uc2b9\ubb34\uc6d0 \ube0c\ub9ac\ud551 \u00b7 \uce74\uc6b4\ud2b8\ub2e4\uc6b4 \u00b7 \uc0c8\ub85c\uace0\uce68)\ub3c4 \ube80\ub2e4 \u2014 \uc571\uc774 \uacbd\ub85c \uacb0\uacfc \uce74\ub4dc\uc758 'slot:ai' \uc790\ub9ac\ub85c \uc62e\uae34\ub2e4
-    else { body.push(hcSec('AI \uc2b9\ubb34\uc6d0')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
+    else { body.push(hcSec('\uae38\ub3d9\ubb34 \ube0c\ub9ac\ud551')); body.push(hcPanel(hcKids(aiS), { ip: [16, 14, 16, 14], pv: hcPvl ? hcPvl('ai', f.r && f.r.bt != null ? hcNum(f.r.bt, null) : null, !!(f.r && f.r.metro === true), now, tz) : null })); }
   }
   if (talkS && talkS.ok) body.push(hcPanel(hcKids(talkS), { ip: [12, 10, 12, 10], r: 14, pb: HC_BOTTOM }));
   var out = { ok: true, v: HC_V, screen: 'hcards', cover: 'chips', head: [], body: body, info: { ai: aiS && aiS.ok ? aiS.info.mode : '', cong: cs.mode, stn: stn, near: near ? near[0] : '' } };
