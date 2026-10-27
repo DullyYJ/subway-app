@@ -294,9 +294,10 @@ const web = new Function(
   ok(mw.f === mw.t && mw.r === 0 && mw.ms === 0 && mw.pu === 'w' && mw.c === '#ff9f0a' && mw.bt === '대기 중 · 350m' && mw.bg === '#ff9f0a' && mw.btc === '#ffffff' && mw.bz === 9 && mw.pms === 1600, '대기: 주황 맥박 · 배지 글(미터) · 같은 칸이면 비율 0 · 점프(sn)면 즉시');
   ok(K({ p: { f: 0, t: 0, r: 0 }, w: { d: 1520 } }).mk.bt === '대기 중 · 1.5km' && K({ p: { f: 0, t: 0, r: 0 }, w: { d: null } }).mk.bt === '대기 중' && K({ p: { f: 0, t: 0, r: 0 }, w: { d: 999.6 } }).mk.bt === '대기 중 · 1000m', '대기 배지: 1km 이상은 km · 거리 모르면 글만');
   ok(K({ p: { f: 99, t: 0, r: 0 } }).mk === undefined && K({ p: { f: 'x' } }).mk === undefined && K({ p: { f: 1, t: 77, r: 0.4 } }).mk.t === K({ p: { f: 1, t: 77, r: 0.4 } }).mk.f, '없는 칸 번호는 마커를 그리지 않거나 제자리');
-  ok(K({ p: { f: 1, t: 2, r: -3 } }).mk.r === 0 && K({ p: { f: 1, t: 2, r: 9 } }).mk.r === 1, '비율은 0~1 로 자른다');
+  ok(K({ p: { f: 1, t: 2, r: -3 } }).mk.r === 0 && K({ p: { f: 1, t: 2, r: 9 } }).mk.r === 0.7 && K({ p: { f: 1, t: 2, r: 9, sn: 1 } }).mk.r === 1, '비율은 0~1 로 자르고, 이동 중엔 70%(cap)까지만 — 그 뒤는 도착 확정까지 대기(s258 YJ 선택 1번)');
+  ok(K({ p: { f: 1, t: 2, r: 0.5 } }).mk.r === 0.5 && K({ p: { f: 1, t: 2, r: 0.7 } }).mk.r === 0.7 && K({ p: { f: 1, t: 2, r: 0.95 } }).mk.r === 0.7 && K({ p: { f: 1, t: 1, r: 0.95 } }).mk.r === 0, 's258 cap: 70% 아래는 그대로 · 넘으면 70% 에서 대기 · 같은 칸이면 0');
   // 지나간 칸 흐리게(ps) · 지금 칸 강조(hr) — 웹 htl-passed · htl-gps-here (역에 90% 다가가야 다음 칸으로)
-  const ph1 = K({ p: { f: 3, t: 4, r: 0.5 } }).cells, ph2 = K({ p: { f: 3, t: 4, r: 0.9 } }).cells;
+  const ph1 = K({ p: { f: 3, t: 4, r: 0.5 } }).cells, ph2 = K({ p: { f: 3, t: 4, r: 0.9, sn: 1 } }).cells;
   ok(ph1.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('') .startsWith('ppph-') && ph2.map(c => c.ps ? 'p' : c.hr ? 'h' : '-').join('').startsWith('ppppph') && K({ p: { f: 3, t: 4, r: 0.5 } }).mk.hh === 0.9, 'ps/hr(s257): 출발 칸도 지나가면 회색 · 지나간 칸 ps · 지금 칸 hr(비율 hh=0.9 부터 다음 칸 — 앱이 화면에 보이는 마커 자리에서 다시 정한다)');
   ok(!K(null).cells.some(c => c.ps || c.hr) && !K({ p: { f: 0, t: 0, r: 0 } }).cells.some(c => c.ps || c.hr), '위치가 없거나 출발 칸이면 흐림·강조 없음');
   // 시각 덮어쓰기: 웹이 지금 보여 주는 시각(칸 수가 맞을 때만)

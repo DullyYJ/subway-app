@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s257";
+var ENGINE_VERSION = "route-v2-2026-10-27s258";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19166,7 +19166,7 @@ function rheadTrkCells(pts, th, ea) {
   return cells;
 }
 // \ub0b4 \uc704\uce58 \ub9c8\ucee4: \uc6f9\uc774 \uc54c\ub824 \uc900 '\uba87 \ubc88\uc9f8 \uce78 \u2192 \uba87 \ubc88\uc9f8 \uce78, \uad6c\uac04 \ube44\uc728' \uacfc \ub300\uae30 \uac70\ub9ac \uc6d0\uc790\ub8cc\ub85c \uc5b4\ub514\uc5d0\u00b7\ubb34\uc2a8 \uc0c9\uc73c\ub85c\u00b7\uc5b4\ub5a4 \uae00\ub85c \uadf8\ub9b4\uc9c0 \uc815\ud55c\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
-var RTRK_MK = { hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+var RTRK_MK = { cap: 0.7, hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
 function rheadTrkMark(lv, cells) {
   var p = lv && lv.p;
   if (!p || typeof p !== 'object') return null;
@@ -19177,6 +19177,7 @@ function rheadTrkMark(lv, cells) {
   if (tj < 0 || tj === fi) { tj = fi; r = 0; }
   r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
   var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
+  if (!w && tj !== fi && !p.sn && r > RTRK_MK.cap) r = RTRK_MK.cap;      // s258 (YJ \uc120\ud0dd 1\ubc88: \uad6c\uac04\uc758 70%\uae4c\uc9c0\ub9cc \ubd80\ub4dc\ub7fd\uac8c, \uadf8 \ub4a4\ub294 \ub2e4\uc74c \uc5ed \ub3c4\ucc29\uc774 \ud655\uc815(\ub610\ub294 \uc2dc\uac01\ud45c \ub3c4\ucc29 \uc2dc\uac01)\ub420 \ub54c\uae4c\uc9c0 \ub300\uae30 \u2014 \uc5f4\ucc28\uac00 \ub2a6\uc744 \ub54c \ub9c8\ucee4\uac00 \uc55e\uc11c\uac00\uc9c0 \uc54a\uac8c)
   var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, hh: K.hh, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
   if (w) {
     mk.bt = d == null ? '\ub300\uae30 \uc911' : (d >= 1000 ? '\ub300\uae30 \uc911 \u00b7 ' + (d / 1000).toFixed(1) + 'km' : '\ub300\uae30 \uc911 \u00b7 ' + Math.round(d) + 'm');
