@@ -2363,6 +2363,7 @@ public class ShellActivity extends Activity {
             }
         }, "shell-buspaint").start();
     }
+    private final java.util.HashSet<String> busDiagSeen = new java.util.HashSet<String>();
     private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my, final boolean partial) {
         final List<String[]> need = new ArrayList<String[]>(map.busNeed);
         new Thread(new Runnable() {
@@ -2394,6 +2395,15 @@ public class ShellActivity extends Activity {
                     int badN = 0;
                     for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) badN++;
                     busBadFetch = badN;
+                    try {                                                                         // s258 (YJ: 가장 가까운 정류장만 "도착정보 없음") — 어느 정류장이 '못 받음'인지 '받았는데 비었음'인지 오류 기록에 남긴다(같은 주소는 한 번)
+                        for (int i = 0; i < need.size() && busDiagSeen.size() < 30; i++) {
+                            String gb = got[i] == null ? "" : got[i], kk = need.get(i)[0], u = need.get(i)[1] != null && need.get(i)[1].length() > 0 ? need.get(i)[1] : kk;
+                            if (kk == null || !kk.matches("[afgh][0-9]{1,3}")) continue;          // 도착정보 주소만(경유노선 t·u, 좌표 보정 목록은 제외)
+                            if (gb.length() > 0 && !NetPost.busEmpty(gb)) continue;
+                            String dm = "BUS_ARR " + kk + " " + (gb.length() == 0 ? "못 받음" : "받았지만 빔") + " " + (u.length() > 140 ? u.substring(u.length() - 140) : u);
+                            if (busDiagSeen.add(dm)) ErrLog.record(ShellActivity.this, new IllegalStateException(dm), false);
+                        }
+                    } catch (Throwable ignored) { }
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
                     map.rememberNeed(need);                                                       // 다음 갱신은 이 주소들을 엔진에게 묻지 않고 곧장 받는다
                     map.busNeed.clear();
