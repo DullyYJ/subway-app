@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s242";
+var ENGINE_VERSION = "route-v2-2026-10-27s243";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13290,8 +13290,7 @@ function settingsScreen(inp, factsIn) {
   body.push({ t: 'spacer', h: 28 });
 
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
-  out.sw = { r: { a: 'call', v: 'cc.news' }, rh: true, rc: 'IT' };      // \uc88c\uc6b0 \ubc00\uae30: \uc624\ub978\ucabd = \ub274\uc2a4(\ub9c8\uc9c0\ub9c9 \uce74\ud14c\uace0\ub9ac IT \ubd80\ud130 \u2014 news.js NW_CATS \uc758 \ub05d) \u00b7 \uc67c\ucabd = \uc5c6\uc74c
-  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify([body, out.sw]));      // sw \ub3c4 \uc9c0\ubb38\uc5d0 \ub123\ub294\ub2e4 \u2014 \uc61b \ud654\uba74(sw \uc5c6\uc74c)\uc774 \uac19\uc740 rev \ub85c \ub0a8\uc9c0 \uc54a\uac8c
+  out.rev = 's' + SETTINGS_SCREEN_V + ':' + settingsHash(JSON.stringify(body));
   return out;
 }
 
