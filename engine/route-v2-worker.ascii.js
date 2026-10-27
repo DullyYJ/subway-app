@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s248";
+var ENGINE_VERSION = "route-v2-2026-10-27s249";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -361,6 +361,7 @@ var NEAR_EXTRA = 350;
 var NEAR_RATIO = 0.5;
 var NEAR_KEEP = 4;
 var BOARD_NEAR_EXTRA = 150;
+var BOARD_EXPAND_M = 720;
 function busSegSec(dist, rt) {
   rt = rt || "";
   var v = BUS_CRUISE_MPS;
@@ -1241,7 +1242,7 @@ function busAllowed(allow, y, x) {
 }
 __name(busAllowed, "busAllowed");
 __name2(busAllowed, "busAllowed");
-function accessNodes(G, busCoord, lat, lng, allowBus, stat) {
+function accessNodes(G, busCoord, lat, lng, allowBus, stat, nearFirst) {
   const radii = [ACCESS_WALK, 1600, 2500];
   const _cl = Math.max(Math.cos(lat * 0.017453292519943295), 0.01);
   for (const R of radii) {
@@ -1338,13 +1339,49 @@ function accessNodes(G, busCoord, lat, lng, allowBus, stat) {
     const inList = o.filter((x) => x[3]);
     const useList = !!(allowBus && allowBus.length && inList.length >= 1);
     let kept = useList ? inList : o.filter((x, i) => x[3] || i < NEAR_KEEP || x[2] <= cut);
-    {
+    const _rIdx = nearFirst && G && typeof buildStopRouteIdx === "function" ? buildStopRouteIdx(G) : null;
+    let _hasRIdx = false;
+    if (_rIdx) for (const _k in _rIdx) {
+      _hasRIdx = true;
+      break;
+    }
+    if (nearFirst && _hasRIdx) {
       let dB = Infinity;
       for (const x of kept) if (x[0].charCodeAt(0) === 66 && x[2] < dB) dB = x[2];
       if (isFinite(dB)) {
         const nearB = dB + Math.max(BOARD_NEAR_EXTRA, dB * 0.5);
-        const k2 = kept.filter((x) => x[0].charCodeAt(0) !== 66 || x[2] <= nearB);
-        if (stat && k2.length < kept.length) stat.farBusDropped = kept.length - k2.length;
+        const idx = _rIdx;
+        const rset = (id) => {
+          const e = idx && idx[id], r = /* @__PURE__ */ new Set();
+          if (e) for (const t of e) r.add(t[0]);
+          return r;
+        };
+        const have = /* @__PURE__ */ new Set();
+        const k2 = kept.filter((x) => {
+          if (x[0].charCodeAt(0) !== 66) return true;
+          if (x[2] > nearB) return false;
+          for (const r of rset(x[0].slice(2))) have.add(r);
+          return true;
+        });
+        let added = 0;
+        for (const x of o) {
+          if (x[0].charCodeAt(0) !== 66 || x[2] <= nearB || x[2] > BOARD_EXPAND_M) continue;
+          if (_listActive && !x[3]) continue;
+          if (k2.indexOf(x) >= 0) continue;
+          let fresh = false;
+          for (const r of rset(x[0].slice(2))) if (!have.has(r)) {
+            fresh = true;
+            break;
+          }
+          if (fresh) {
+            k2.push(x);
+            added++;
+          }
+        }
+        if (stat) {
+          if (k2.length - added < kept.length) stat.farBusDropped = kept.length - (k2.length - added);
+          if (added) stat.farBusExpanded = added;
+        }
         kept = k2;
       }
     }
@@ -1361,12 +1398,12 @@ function accessNodes(G, busCoord, lat, lng, allowBus, stat) {
 }
 __name(accessNodes, "accessNodes");
 __name2(accessNodes, "accessNodes");
-function accessNodesCached(G, busCoord, lat, lng, allowBus, stat) {
+function accessNodesCached(G, busCoord, lat, lng, allowBus, stat, nearFirst) {
   if (!G.__accCache) G.__accCache = /* @__PURE__ */ new Map();
-  const key = lat + "," + lng + "," + (allowBus ? allowBus.length : 0);
+  const key = lat + "," + lng + "," + (allowBus ? allowBus.length : 0) + (nearFirst ? "n" : "");
   const hit = G.__accCache.get(key);
   if (hit) return hit;
-  const res = accessNodes(G, busCoord, lat, lng, allowBus, stat);
+  const res = accessNodes(G, busCoord, lat, lng, allowBus, stat, nearFirst);
   G.__accCache.set(key, res);
   return res;
 }
@@ -1450,7 +1487,7 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
   const dec = /* @__PURE__ */ __name2((n) => mustS ? n.slice(0, n.length - 2) : n, "dec");
   const stOf = /* @__PURE__ */ __name2((n) => mustS ? n.charCodeAt(n.length - 1) - 48 : 0, "stOf");
   const isSub = /* @__PURE__ */ __name2((n) => n.charCodeAt(0) === 83, "isSub");
-  let starts = accessNodesCached(G, busCoord, sLat, sLng, G._allowBus, G.candStat);
+  let starts = accessNodesCached(G, busCoord, sLat, sLng, G._allowBus, G.candStat, true);
   const garr = accessNodesCached(G, busCoord, eLat, eLng);
   if (nearSubOnly) {
     let subs = [];
@@ -6437,7 +6474,7 @@ async function prefetchAccessLive(G, busCoord, SY, SX, EY, EX, env, stat, deadli
   G.callBudget = LIVE_BUDGET_REF;
   let nodes = [];
   try {
-    nodes = accessNodes(G, busCoord, SY, SX, G._allowBus, stat) || [];
+    nodes = accessNodes(G, busCoord, SY, SX, G._allowBus, stat, true) || [];
   } catch (e) {
     return;
   }
