@@ -723,7 +723,7 @@ function findAndroidJar() {
   await t('s206: 맛집 공공데이터 — 공유 저장소(/food-pub) 먼저, 실패하면 예전 3쪽 직접', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), f = fs.readFileSync(N('FoodCore.java'), 'utf8');
     assert.ok(/public String sharedUrl\(\) \{ return ShellCore\.BASE \+ "\/food-pub\?lat="/.test(f), '공유 저장소 주소');
-    assert.ok(/private List<String> foodPubPages\(String shared, String\[\] pu\)/.test(a) && /NetPost\.get\(shared, 9000\)/.test(a) && /FoodCore\.pageCount\(sr\.body\) >= 0\) \{ out\.add\(sr\.body\); return out; \}/.test(a), '공유 저장소에서 한 번 받고 읽히면 그것으로 끝');
+    assert.ok(/private List<String> foodPubPages\(String shared, String\[\] pu\)/.test(a) && /NetPost\.get\(shared, 9000\)/.test(a) && /FoodCore\.pageCount\(sr\.body\) > 0\) \{ out\.add\(sr\.body\); return out; \}/.test(a), '공유 저장소에서 한 번 받고 읽히면 그것으로 끝');
     assert.ok(/res\[ii\] = NetPost\.get\(pu\[ii\], 10000\)/.test(a), '못 받으면 예전처럼 공공 서버 3쪽을 동시에');
     assert.ok(/foodDataNow\(su, pfFood\.sharedUrl\(\), pu\)/.test(a) && /foodPubPages\(shared, pu\)/.test(a) && /final String shared = food\.sharedUrl\(\);/.test(a), '미리받기 · 맛집 탭 모두 공유 저장소를 먼저 쓴다');
     assert.ok(/if \(tp\.isAlive\(\) && sbody\.length\(\) > 0\) foodStage/.test(a), '서버 가게 먼저 그리는 1단계는 그대로');

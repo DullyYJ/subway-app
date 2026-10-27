@@ -690,6 +690,9 @@ public class ShellJvmTest {
         FoodCore.Data fdat = FoodCore.parseData("{\"items\":[{\"n\":\"가\",\"c\":\"음식 > 한식\",\"a\":\"서울 1\",\"d\":300,\"la\":37.5,\"lo\":127.0}]}", pgs);
         ok(fdat.srvOk && fdat.srv.size() == 1 && fdat.pub.size() == 1, "원자료 읽기(서버 1 · 공공 1)");
         ok(!FoodCore.parseData("zzz", new java.util.ArrayList<String>()).srvOk, "서버 응답이 깨지면 실패로 표시");
+        ok(!FoodCore.parseData("{\"error\":\"x\"}", new java.util.ArrayList<String>()).srvOk && FoodCore.parseData("{\"items\":[]}", new java.util.ArrayList<String>()).srvOk, "s255: items 가 없는 답(오류 봉투)은 못 받음 · 빈 목록은 정상");
+        { java.util.List<String> bad1 = new java.util.ArrayList<String>(); bad1.add(""); java.util.List<String> emp = new java.util.ArrayList<String>(); emp.add("{\"response\":{\"body\":{\"items\":[]}}}");
+          ok(!FoodCore.parseData("{\"items\":[]}", bad1).pubOk && FoodCore.parseData("{\"items\":[]}", emp).pubOk, "s255: 공공데이터 쪽이 안 읽히면 pubOk 거짓 · 빈 목록이라도 읽히면 참"); }
         fd.setData(fdat);
         fq = fd.request(18, true);
         ok(fd.loaded && !fd.failed && !fd.needData() && fq.contains("\"st\":\"done\"") && fq.contains("\"s\":[{") && fq.contains("\"n\":\"가\"") && fq.contains("\"u\":[[\"공공A\",\"한식\",\"국밥\",\"도로1\",\"지번1\",\"37.501\",\"127.002\"]]"), "받은 원자료를 그대로 엔진에 보낸다(고르는 것은 엔진)");

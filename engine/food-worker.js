@@ -33,7 +33,7 @@ async function handleScreenFood(request) {
 // 도착지(또는 내 위치) 근처 음식점(소상공인 상가 정보)을 칸(약 200m)으로 묶어 ROWS_KV 에 계속 저장해 두고, 다음에 같은 칸을 누르는 다른 사람에게 그대로 나눠 준다.
 // 저장한 지 30일이 지난 칸은 요청이 올 때 다시 받아 덮어쓴다(요청이 없으면 아무것도 안 한다). 새로 받다가 실패하면 묵은 것이라도 준다. 둘 다 없으면 502 — 앱이 예전 방식(직접 3쪽)으로 받는다.
 // 응답은 공공데이터 원래 모양({response:{body:{items:[…]}}}) 그대로라 앱의 FoodCore.rows 가 그대로 읽는다. 개인 식별 정보는 오가지 않는다(칸 번호만 저장).
-var FOODPUB_CELL = 0.002, FOODPUB_FRESH_MS = 30 * 86400000, FOODPUB_KEEP_S = 400 * 86400, FOODPUB_PAGE = 200, FOODPUB_PAGES = 3, FOODPUB_RADIUS = 1500;
+var FOODPUB_CELL = 0.002, FOODPUB_FRESH_MS = 30 * 86400000, FOODPUB_EMPTY_MS = 10 * 60000, FOODPUB_KEEP_S = 400 * 86400, FOODPUB_PAGE = 200, FOODPUB_PAGES = 3, FOODPUB_RADIUS = 1500;
 var FOODPUB_URL = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius";
 var FOODPUB_NEWS = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
 var FOODPUB_INFLIGHT = new Map();
@@ -92,14 +92,15 @@ async function handleFoodPub(request, env, ctx) {
   var cla = Number((li * FOODPUB_CELL).toFixed(6)), clo = Number((gi * FOODPUB_CELL).toFixed(6));
   var rec = null;
   try { rec = await env.ROWS_KV.get(key, "json"); } catch (e) { rec = null; }
-  var now = Date.now(), fresh = rec && Array.isArray(rec.items) && typeof rec.at === "number" && now - rec.at < FOODPUB_FRESH_MS;
+  // s255 (YJ: 식당 한가운데인데 등록 음식점 정보가 없어요): 공공데이터가 한 번 빈 답을 줬다고 그 칸을 30일 동안 식당 없음으로 굳히지 않는다 — 빈 칸은 10분만 믿고 다시 받는다(저장도 안 한다).
+  var now = Date.now(), ttl = rec && Array.isArray(rec.items) && rec.items.length === 0 ? FOODPUB_EMPTY_MS : FOODPUB_FRESH_MS, fresh = rec && Array.isArray(rec.items) && typeof rec.at === "number" && now - rec.at < ttl;
   var src = "hit";
   if (!fresh) {
     var job = FOODPUB_INFLIGHT.get(key);
     if (!job) {
       job = foodPubFetch(env, cla, clo).then(async function (items) {
         var nr = { at: Date.now(), n: items.length, items: items };
-        try { await env.ROWS_KV.put(key, JSON.stringify(nr), { expirationTtl: FOODPUB_KEEP_S }); } catch (ew) { /* 저장 실패해도 이번 응답은 준다 */ }
+        if (items.length > 0) { try { await env.ROWS_KV.put(key, JSON.stringify(nr), { expirationTtl: FOODPUB_KEEP_S }); } catch (ew) { /* 저장 실패해도 이번 응답은 준다 */ } }      // 빈 답은 저장하지 않는다
         return nr;
       });
       FOODPUB_INFLIGHT.set(key, job);

@@ -1790,7 +1790,7 @@ public class ShellActivity extends Activity {
     private List<String> foodPubPages(String shared, String[] pu) {
         List<String> out = new ArrayList<String>();
         NetPost.Res sr = NetPost.get(shared, 9000);
-        if (sr != null && sr.status == 200 && sr.body != null && FoodCore.pageCount(sr.body) >= 0) { out.add(sr.body); return out; }
+        if (sr != null && sr.status == 200 && sr.body != null && FoodCore.pageCount(sr.body) > 0) { out.add(sr.body); return out; }          // s255: 빈 답(0곳)은 믿지 않고 공공 서버에서 직접 받아 본다(식당 한가운데서 없어요가 나오던 일)
         final NetPost.Res[] res = new NetPost.Res[pu.length];
         Thread[] th = new Thread[res.length];
         for (int i = 0; i < res.length; i++) {

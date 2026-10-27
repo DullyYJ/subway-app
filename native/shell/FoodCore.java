@@ -78,7 +78,7 @@ public final class FoodCore {
     // ── 받은 글 합치기 ──
     /** 통신 스레드에서 읽어 두는 덩어리(기본 목록은 건드리지 않는다). */
     public static final class Data {
-        public boolean srvOk = false;
+        public boolean srvOk = false, pubOk = false;     // pubOk: 공공데이터 쪽이 한 쪽이라도 읽혔다(빈 목록 포함)
         public List<Object> srv = new ArrayList<Object>(), pub = new ArrayList<Object>();
         public String srvJ = "", pubJ = "";            // 엔진에 보낼 글(통신 스레드에서 미리 만들어 둔다 — 주 스레드에서 수천 줄을 글로 바꾸지 않게)
     }
@@ -90,10 +90,10 @@ public final class FoodCore {
             if (o instanceof Map) {
                 Object it = ((Map<String, Object>) o).get("items");
                 d.srv = it instanceof List ? new ArrayList<Object>((List<Object>) it) : new ArrayList<Object>();
-                d.srvOk = true;
+                d.srvOk = it instanceof List;                                    // s255: items 가 없는 답(오류 봉투 등)은 가게 없음이 아니라 못 받음
             }
         } catch (Exception e) { d.srvOk = false; }
-        for (String p : pubPages) rows(p, d.pub);
+        for (String p : pubPages) if (rows(p, d.pub) >= 0) d.pubOk = true;
         d.srvJ = HomeSearchCore.toJson(d.srv); d.pubJ = HomeSearchCore.toJson(d.pub);
         return d;
     }
@@ -124,7 +124,7 @@ public final class FoodCore {
         } catch (Exception e) { return -1; }
     }
     public void setData(Data d) {
-        srv = d.srv; pub = d.pub; srvJ = d.srvJ; pubJ = d.pubJ; failed = !d.srvOk;
+        srv = d.srv; pub = d.pub; srvJ = d.srvJ; pubJ = d.pubJ; failed = !d.srvOk || (d.pub.isEmpty() && !d.pubOk);          // s255: 두 쪽 다 비었는데 공공데이터 쪽이 아예 안 읽혔으면 '없다'가 아니라 '못 받았다'
         loaded = true; centerKey = ctr == null ? "" : key(ctr); loadedAt = System.currentTimeMillis();
     }
 

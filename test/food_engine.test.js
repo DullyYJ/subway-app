@@ -372,6 +372,17 @@ const FoodRowsOk = j => !!(j && j.response && j.response.body && Array.isArray(j
       const two = await Promise.all([g('?lat=36.7001&lng=128.7003'), g('?lat=36.7002&lng=128.7004')]);
       const [ja, jb2] = await Promise.all(two.map(x => x.json()));
       ok(ja.response.body.items.length === 250 && jb2.response.body.items.length === 250 && calls.length === 3, 's206: 같은 칸을 동시에 눌러도 공공 서버는 한 벌만 부른다 ' + calls.length);
+      // s255: 공공데이터가 빈 답을 줘도 그 칸을 굳히지 않는다
+      { const pd = { ...pageData }; pageData[1] = () => []; calls = []; const putsN = puts.length; tag = 'E';
+        const e1 = await (await g('?lat=37.3001&lng=126.6003')).json();
+        ok(e1.ok && e1.response.body.items.length === 0 && puts.length === putsN, 's255: 빈 답은 KV 에 저장하지 않는다');
+        pageData[1] = () => mk(200, 'F'); pageData[2] = () => [];
+        const e2 = await (await g('?lat=37.3001&lng=126.6003')).json();
+        ok(e2.src === 'fresh' && e2.response.body.items.length === 200 && puts.length === putsN + 1, 's255: 다음 요청에 다시 받아 식당을 준다');
+        const key9 = puts[puts.length - 1][0]; kvm.set(key9, JSON.stringify({ at: Date.now() - 20 * 60000, n: 0, items: [] })); calls = [];
+        const e3 = await (await g('?lat=37.3001&lng=126.6003')).json();
+        ok(e3.src === 'fresh' && e3.response.body.items.length === 200, 's255: 이미 저장돼 있던 빈 칸도 10분 뒤엔 다시 받는다');
+        pageData[1] = pd[1]; pageData[2] = pd[2]; }
       // 잘못된 입력
       ok((await g('?lat=abc&lng=127')).status === 400 && (await g('?lat=10&lng=127')).status === 400 && (await g('')).status === 400, 's206: 좌표가 없거나 한국 밖이면 400');
       ok((await g('?lat=37.5&lng=127', { method: 'POST', body: 'x' })).status === 405, 's206: GET 만');

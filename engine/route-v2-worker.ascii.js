@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s254";
+var ENGINE_VERSION = "route-v2-2026-10-27s255";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14243,7 +14243,7 @@ async function handleScreenFood(request) {
 // \ub3c4\ucc29\uc9c0(\ub610\ub294 \ub0b4 \uc704\uce58) \uadfc\ucc98 \uc74c\uc2dd\uc810(\uc18c\uc0c1\uacf5\uc778 \uc0c1\uac00 \uc815\ubcf4)\uc744 \uce78(\uc57d 200m)\uc73c\ub85c \ubb36\uc5b4 ROWS_KV \uc5d0 \uacc4\uc18d \uc800\uc7a5\ud574 \ub450\uace0, \ub2e4\uc74c\uc5d0 \uac19\uc740 \uce78\uc744 \ub204\ub974\ub294 \ub2e4\ub978 \uc0ac\ub78c\uc5d0\uac8c \uadf8\ub300\ub85c \ub098\ub220 \uc900\ub2e4.
 // \uc800\uc7a5\ud55c \uc9c0 30\uc77c\uc774 \uc9c0\ub09c \uce78\uc740 \uc694\uccad\uc774 \uc62c \ub54c \ub2e4\uc2dc \ubc1b\uc544 \ub36e\uc5b4\uc4f4\ub2e4(\uc694\uccad\uc774 \uc5c6\uc73c\uba74 \uc544\ubb34\uac83\ub3c4 \uc548 \ud55c\ub2e4). \uc0c8\ub85c \ubc1b\ub2e4\uac00 \uc2e4\ud328\ud558\uba74 \ubb35\uc740 \uac83\uc774\ub77c\ub3c4 \uc900\ub2e4. \ub458 \ub2e4 \uc5c6\uc73c\uba74 502 \u2014 \uc571\uc774 \uc608\uc804 \ubc29\uc2dd(\uc9c1\uc811 3\ucabd)\uc73c\ub85c \ubc1b\ub294\ub2e4.
 // \uc751\ub2f5\uc740 \uacf5\uacf5\ub370\uc774\ud130 \uc6d0\ub798 \ubaa8\uc591({response:{body:{items:[\u2026]}}}) \uadf8\ub300\ub85c\ub77c \uc571\uc758 FoodCore.rows \uac00 \uadf8\ub300\ub85c \uc77d\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4(\uce78 \ubc88\ud638\ub9cc \uc800\uc7a5).
-var FOODPUB_CELL = 0.002, FOODPUB_FRESH_MS = 30 * 86400000, FOODPUB_KEEP_S = 400 * 86400, FOODPUB_PAGE = 200, FOODPUB_PAGES = 3, FOODPUB_RADIUS = 1500;
+var FOODPUB_CELL = 0.002, FOODPUB_FRESH_MS = 30 * 86400000, FOODPUB_EMPTY_MS = 10 * 60000, FOODPUB_KEEP_S = 400 * 86400, FOODPUB_PAGE = 200, FOODPUB_PAGES = 3, FOODPUB_RADIUS = 1500;
 var FOODPUB_URL = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius";
 var FOODPUB_NEWS = "https://gentle-lab-7e47subway-api.phg0643.workers.dev";
 var FOODPUB_INFLIGHT = new Map();
@@ -14302,14 +14302,15 @@ async function handleFoodPub(request, env, ctx) {
   var cla = Number((li * FOODPUB_CELL).toFixed(6)), clo = Number((gi * FOODPUB_CELL).toFixed(6));
   var rec = null;
   try { rec = await env.ROWS_KV.get(key, "json"); } catch (e) { rec = null; }
-  var now = Date.now(), fresh = rec && Array.isArray(rec.items) && typeof rec.at === "number" && now - rec.at < FOODPUB_FRESH_MS;
+  // s255 (YJ: \uc2dd\ub2f9 \ud55c\uac00\uc6b4\ub370\uc778\ub370 \ub4f1\ub85d \uc74c\uc2dd\uc810 \uc815\ubcf4\uac00 \uc5c6\uc5b4\uc694): \uacf5\uacf5\ub370\uc774\ud130\uac00 \ud55c \ubc88 \ube48 \ub2f5\uc744 \uc92c\ub2e4\uace0 \uadf8 \uce78\uc744 30\uc77c \ub3d9\uc548 \uc2dd\ub2f9 \uc5c6\uc74c\uc73c\ub85c \uad73\ud788\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ube48 \uce78\uc740 10\ubd84\ub9cc \ubbff\uace0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4(\uc800\uc7a5\ub3c4 \uc548 \ud55c\ub2e4).
+  var now = Date.now(), ttl = rec && Array.isArray(rec.items) && rec.items.length === 0 ? FOODPUB_EMPTY_MS : FOODPUB_FRESH_MS, fresh = rec && Array.isArray(rec.items) && typeof rec.at === "number" && now - rec.at < ttl;
   var src = "hit";
   if (!fresh) {
     var job = FOODPUB_INFLIGHT.get(key);
     if (!job) {
       job = foodPubFetch(env, cla, clo).then(async function (items) {
         var nr = { at: Date.now(), n: items.length, items: items };
-        try { await env.ROWS_KV.put(key, JSON.stringify(nr), { expirationTtl: FOODPUB_KEEP_S }); } catch (ew) { /* \uc800\uc7a5 \uc2e4\ud328\ud574\ub3c4 \uc774\ubc88 \uc751\ub2f5\uc740 \uc900\ub2e4 */ }
+        if (items.length > 0) { try { await env.ROWS_KV.put(key, JSON.stringify(nr), { expirationTtl: FOODPUB_KEEP_S }); } catch (ew) { /* \uc800\uc7a5 \uc2e4\ud328\ud574\ub3c4 \uc774\ubc88 \uc751\ub2f5\uc740 \uc900\ub2e4 */ } }      // \ube48 \ub2f5\uc740 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4
         return nr;
       });
       FOODPUB_INFLIGHT.set(key, job);
