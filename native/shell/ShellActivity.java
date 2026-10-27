@@ -2387,10 +2387,10 @@ public class ShellActivity extends Activity {
                 for (Thread t : ts) { try { t.join(20000); } catch (InterruptedException e) { /* 무시 */ } }
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
-                    if (busRefreshing) {                                                          // 새로 받는 중인 도착정보가 하나라도 비면 이번 갱신은 버린다(옛 값을 섞지 않는다) — 화면은 1초 카운트다운으로 이어진다
-                        boolean bad = false;
-                        for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) bad = true;          // 이웃 · 바꾼 ID · 경유노선(덤)은 못 받아도 이번 갱신을 버리지 않는다
-                        if (bad) { busFail(); return; }
+                    if (busRefreshing) {                                                          // s258 (YJ: 하나라도 비면 온 데이터는 살리고 안 온 것만 다시 받아야지) — 예전엔 하나라도 비면 이번 갱신 전체를 버렸다.
+                        boolean bad = false;                                                      //   이제 온 것은 그대로 쓰고(아래 addBusRes), 빈 곳만 다음 바퀴에 다시 받는다(엔진이 없는 열쇠만 다시 부탁한다). 이웃 · 바꾼 ID · 경유노선(덤)은 원래 대로 갱신을 막지 않는다.
+                        for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) bad = true;
+                        if (bad) busKeepArrived = true;
                     }
                     int badN = 0;
                     for (int i = 0; i < need.size(); i++) if ((got[i] == null || got[i].length() == 0) && MapCore.coreKey(need.get(i)[0])) badN++;
@@ -2405,6 +2405,8 @@ public class ShellActivity extends Activity {
                         }
                     } catch (Throwable ignored) { }
                     for (int i = 0; i < need.size(); i++) map.addBusRes(need.get(i)[0], got[i] == null ? "" : got[i]);
+                    if (busRefreshing && busKeepArrived && round + 1 >= MapCore.BUS_ROUNDS) map.fillFromStash();          // 바퀴를 다 썼는데도 못 받은 곳만 갱신 전에 보던 값으로(비어 보이지 않게)
+                    busKeepArrived = false;
                     map.rememberNeed(need);                                                       // 다음 갱신은 이 주소들을 엔진에게 묻지 않고 곧장 받는다
                     map.busNeed.clear();
                     loadMapBodyRound(v, true, round + 1);
@@ -2462,6 +2464,7 @@ public class ShellActivity extends Activity {
     }
     private long busAt = 0L;
     private static final long BUS_POLL_MS = 30000L;                     // 위치 재확인 박자(탑승 중이 아니면 30초에 한 번) — 그 사이 초는 기기에서 줄어든다. 도착정보는 위치가 바뀔 때만 새로 받는다(YJ)
+    private boolean busKeepArrived;
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
     private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
