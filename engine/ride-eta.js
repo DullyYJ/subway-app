@@ -264,7 +264,7 @@ function rideEta(input) {
   if (input && input.op === 'arrive') return rideArrive(input);
   var r = _rideEtaCore(input);
   try { r.hold = _reHold(input, r); } catch (eH) { r.hold = null; }
-  try { if (input && input.timetableFirst === true && input.notDeparted !== true && r && r.etaMs) r.pos = _rePos(input, r); } catch (e) { r.pos = null; }
+  try { if (input && (input.timetableFirst === true || input.ttSub === true) && input.notDeparted !== true && r && r.etaMs) r.pos = _rePos(input, r); } catch (e) { r.pos = null; }
   return r;
 }
 // ★ 2026-10-13 (YJ: "계산은 엔진이, 그림은 앱이"): 시각표 기준 위치. 앱은 이 구간(from→to)과 t0·t1 시각만 받아 그 사이를 시간 흐름대로 그린다(위치 계산 없음).
@@ -288,7 +288,7 @@ function _rePos(input, r) {
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
   // s231: 도착 확정 없이 건너뛰지 않는다 — 승차 구간 3정거장 뒤부터는 통과 증거(gps·move·pf)가 없는 정류장에서 멈춰 기다린다
   var holdK = -1, cf = -1, ttF = f;
-  if (+O.holdAfterStops > 0) {
+  if (+O.holdAfterStops > 0 && input.ttSub !== true) {      // s267: ttSub(버스에서 환승한 지하철 · 보여 주기만)는 s231 '역 앞 대기'를 쓰지 않는다 — 도착 판정은 기존 GPS 규칙 그대로
     for (i = 0; i < ps.length; i++) { var sr0 = ps[i].src, pi0 = +ps[i].idx; if ((sr0 === 'gps' || sr0 === 'move' || sr0 === 'pf') && isFinite(pi0) && pi0 > cf) cf = pi0; }
     for (k = 1; k < idxs.length; k++) {
       var nI = idxs[k]; if (nI <= cf || _reLegPos(nodes, nI) < +O.holdAfterStops) continue;
@@ -615,7 +615,8 @@ function _rideEtaCore(input) {
   // (바) 연착: 앵커 뒤 첫 정차 노드의 예정 시각이 지났는데 도착 증거가 없다
   var nxO = -1;
   for (k = anchor.idx + 1; k < n; k++) if (valid[k] && _reIsTransit(nodes[k]) && out[k] != null) { nxO = k; break; }
-  // ★ 2026-10-13 (YJ: "탑승이 확정되면 시간표 기준으로 마커를 움직인다. 도착 때 GPS 로 영점만 본다"): input.timetableFirst === true 면 증거가 없다고 연착으로 밀지 않는다 — 시각표(+통과 증거로 배운 지연)가 기준이다.
+  // ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철의 '중간 이동'): input.ttSub === true 면 이 걸음은 구간 중간 위치(pos)만 그려 준다 — 도착 시각·연착·영점 규칙은 건드리지 않는다(GPS 우선 그대로).
+// ★ 2026-10-13 (YJ: "탑승이 확정되면 시간표 기준으로 마커를 움직인다. 도착 때 GPS 로 영점만 본다"): input.timetableFirst === true 면 증거가 없다고 연착으로 밀지 않는다 — 시각표(+통과 증거로 배운 지연)가 기준이다.
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정 — 늦으면 밀고 빠르면 당겨라"): '증거 없음'은 연착이 아니지만 GPS 가 '아직 안 닿았다'고 말하면(input.notYet:[idx] — ride-track zero 의 notYet) 그 정류장은 연착이다 → 바로 지금 + overdueExtraMin 으로 올리고 뒤를 민다.
   var nyHit = false;
   if (nxO >= 0 && input.timetableFirst === true) {

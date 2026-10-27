@@ -835,6 +835,16 @@ final class RideStandbyJ {
     }
 
     // ═════════════ 재동기 · 다음 호출 간격 · 승차 대기 ═════════════
+    /** s267: 지금 타고 있는 구간이 지하철이면 이 걸음은 구간 중간 위치(pos)만 더 받는다(ttSub) — 엔진 rsTtSub 와 같은 판정 */
+    static boolean ttSub(Map<String, Object> st, Map<String, Object> eta, List<Object> passes) {
+        if (eta == null || truthy(eta.get("timetableFirst")) || Boolean.FALSE.equals(eta.get("boarded")) || Boolean.TRUE.equals(eta.get("notDeparted")) || st.get("wait") != null) return false;
+        List<Object> nd = l(eta.get("nodes")); if (nd == null) nd = new ArrayList<Object>();
+        int prog = -1, i, j;
+        for (i = 0; i < passes.size(); i++) { double pi = gn(passes.get(i), "idx"); if (fin(pi) && pi > prog && pi < nd.size()) prog = (int) pi; }
+        if (prog < 0 || !truthy(nd.get(prog)) || !truthy(g(nd.get(prog), "isSub")) || truthy(g(nd.get(prog), "isWalk"))) return false;
+        for (j = prog + 1; j < nd.size(); j++) { Object n = nd.get(j); if (truthy(n) && !truthy(g(n, "isWalk")) && !truthy(g(n, "isOrigin")) && (truthy(g(n, "isSub")) || truthy(g(n, "isBus")))) break; }
+        return j < nd.size() && truthy(g(nd.get(j), "isSub")) && or(g(nd.get(j), "lineName"), "").equals(or(g(nd.get(prog), "lineName"), ""));
+    }
     static boolean resync(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")); List<Object> tr = trailOf(st), stops = l(st.get("stops")); if (stops == null) stops = new ArrayList<Object>();
         List<Object> passes = l(eta.get("passes")); if (passes == null) passes = new ArrayList<Object>();
@@ -1290,6 +1300,7 @@ final class RideStandbyJ {
         if (truthy(st.get("dr"))) ein.put("timetableFirst", Boolean.TRUE);
         ein.put("passes", passes);
         if (!nyList.isEmpty() && truthy(eta.get("timetableFirst"))) ein.put("notYet", nyList); else ein.remove("notYet");
+        if (ttSub(st, eta, passes)) ein.put("ttSub", Boolean.TRUE); else ein.remove("ttSub");      // s267
         Map<String, Object> fired = mm(st.get("fired")); if (fired == null) { fired = obj(); st.put("fired", fired); }
         Map<String, Object> r = RideEtaJ.rideEta(ein);
         if (r == null || r.get("etaMs") == null) return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", ""), "alert", null, "done", Boolean.FALSE, "nextMs", stepMs, "notes", list("도착 시각 계산 실패"));

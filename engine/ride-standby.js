@@ -882,6 +882,17 @@ function rsDistM(aLat, aLng, bLat, bLng) {
   var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(aLat * Math.PI / 180) * Math.cos(bLat * Math.PI / 180) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+// ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철에서 역 사이 이동이 안 그려지고 건너뜀 — 도착 판정은 잘 되니 건드리지 말고 중간 이동만 보여 줘):
+//   구간 중간 위치(pos)는 시각표 우선 경로(eta.timetableFirst)에서만 계산돼, 첫 구간이 버스인 경로는 지하철을 탄 뒤에도 마커가 역 위에서 역 위로 뛰었다.
+//   → 지금 타고 있는 구간이 지하철(가장 뒤 통과 노드가 지하철 · 다음 정차 노드가 같은 노선 지하철 · 승차 대기 아님)이면 이 걸음은 ein.ttSub 로 pos 만 더 받는다. 도착 시각·연착·영점·재동기 규칙은 그대로(GPS 우선).
+function rsTtSub(st, eta, passes) {
+  if (!eta || eta.timetableFirst === true || eta.boarded === false || eta.notDeparted === true || st.wait) return false;
+  var nd = eta.nodes || [], prog = -1, i, j;
+  for (i = 0; i < passes.length; i++) if (passes[i] && passes[i].idx > prog && passes[i].idx < nd.length) prog = passes[i].idx;
+  if (prog < 0 || !nd[prog] || !nd[prog].isSub || nd[prog].isWalk) return false;
+  for (j = prog + 1; j < nd.length; j++) { if (nd[j] && !nd[j].isWalk && !nd[j].isOrigin && (nd[j].isSub || nd[j].isBus)) break; }
+  return j < nd.length && !!nd[j].isSub && (nd[j].lineName || '') === (nd[prog].lineName || '');
+}
 // ★ 2026-10-14 (시뮬: 버스는 GPS 가 10분 넘게 끊겼다 돌아오면 영점이 영영 안 잡혔다): ride-track 영점은 '표시 도착 시각 앞 5분~뒤 7분' 창 안의 GPS 만 본다.
 //   시각표 기준이 아닌 여정(버스)에서 GPS 가 오래 끊겨 창이 밀렸다가 돌아오면, 지금 위치가 앞쪽 정류장 근처인데도 창 밖이라 무시됐다.
 //   → 신선한 정확한 좌표 두 점(5초 이상 간격)이 모두 앞쪽 정류장 150m 안이고, 마지막 통과 정류장에서 계획 소요의 40% 이상 지났으면 그 정류장 통과로 본다(정류장 건너뛰기 포함).
@@ -1322,6 +1333,7 @@ function rideStandby(req) {
     else if (st.dr && newPass) { st.dr = false; notes.push('GPS 통과 증거 복귀 — 시각표 이어가기 해제'); }
   } else st.dr = false;
   var ein = rsClone(eta); ein.nowMs = now; if (st.dr) ein.timetableFirst = true; ein.passes = passes; if (nyList.length && eta.timetableFirst) ein.notYet = nyList; else delete ein.notYet;
+  if (rsTtSub(st, eta, passes)) ein.ttSub = true; else delete ein.ttSub;      // s267: 지하철 구간 중간 위치만 더 받는다
   var fired = (st.fired = st.fired || {});
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['도착 시각 계산 실패'] };

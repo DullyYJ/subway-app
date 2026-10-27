@@ -911,6 +911,29 @@ t('s231 도착 확정 없이 3정거장 넘어가면 마커가 그 역 앞에서
   assert.strictEqual(later.r.pos.from, 3, '계속 기다린다(5정거장 뒤까지 가 있으면 안 된다) ' + JSON.stringify(later.r.pos));
   assert.ok(later.r.curIdx >= 4, '알림 위치는 시각표대로 ' + later.r.curIdx);
 });
+// ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철에서 임학·계산·경인교대 사이 이동이 안 그려지고 마커가 역에서 역으로 건너뜀 — 역 도착 판정은 그대로)
+function busSubState() {
+  const nd = [{ name: '출발', isOrigin: true }, { name: 'B1', isBus: true, lineName: '9701', planMin: 12 * 60 + 40 }, { name: 'B2', isBus: true, lineName: '9701', planMin: 12 * 60 + 46 }], stops = [];
+  for (let i = 3; i <= 9; i++) nd.push({ name: 'S' + (i - 3), isSub: true, lineName: '인천1호선', planMin: 12 * 60 + 50 + 2 * (i - 3) });
+  nd.forEach((n, i) => { if (i >= 1) stops.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + n.planMin * 60000, pass: i > 1, fin: i === nd.length - 1 }); });
+  return { v: 1, tripSig: 'T10', eta: { nodes: nd, passes: [{ idx: 1, ms: at(12, 40, 0), src: 'gps' }, { idx: 2, ms: at(12, 46, 0), src: 'gps' }, { idx: 3, ms: at(12, 50, 0), src: 'board' }], boarded: true, notDeparted: false, tzOffsetMin: 540 },
+    stops: stops, trail: [], cfg: { targets: [{ seqPos: 8, nodeIdx: 9, name: 'S6', kind: 'dest' }], seq: [1, 2, 3, 4, 5, 6, 7, 8, 9], allowed: {}, destName: 'S6' }, fired: {} };
+}
+t('s267 버스→지하철 환승 뒤에도 역 사이 중간 위치(pos)가 매 구간 나오고 마커가 되돌아가지 않는다 · 영점(GPS 통과)은 그대로 잡힌다', () => {
+  let st = busSubState(), prev = -1, seenMid = {}, maxJump = 0;
+  const stops = st.stops, posAt = ms => { if (ms <= stops[0].arrMs) return [stops[0].lat, stops[0].lng]; for (let i = 1; i < stops.length; i++) if (ms <= stops[i].arrMs) { const a = stops[i - 1], b = stops[i], f = (ms - a.arrMs) / (b.arrMs - a.arrMs); return [a.lat + (b.lat - a.lat) * f, a.lng + (b.lng - a.lng) * f]; } const e = stops[stops.length - 1]; return [e.lat, e.lng]; };
+  for (let ms = at(12, 50, 10); ms <= at(13, 4, 0); ms += 5000) {
+    const p = posAt(ms), r = stepL(st, ms, [[ms, p[0], p[1], 15]]); st = r.state;
+    if (st.eta.passes.some(q => q.idx === 9)) break;      // 목적지 도착 — 그 뒤는 구간 위치가 없다
+    assert.ok(r.pos && r.pos.from != null, '지하철 구간은 구간 중간 위치(pos)를 낸다 ' + ms);
+    const v = r.pos.from + r.pos.ratio; if (prev >= 0) { assert.ok(v >= prev - 0.003, '되돌아가지 않는다 ' + prev + ' → ' + v); maxJump = Math.max(maxJump, v - prev); } prev = v;
+    if (r.pos.ratio > 0.2 && r.pos.ratio < 0.8) seenMid[r.pos.from] = 1;
+    assert.ok(r.pos.hold == null, '역 앞 대기(s231)는 이 경로에 쓰지 않는다');
+  }
+  assert.ok(maxJump < 0.35, '한 걸음에 한 칸씩 건너뛰지 않는다: ' + maxJump);
+  assert.ok(Object.keys(seenMid).length >= 5, '역 사이 중간 위치가 구간마다 나온다: ' + Object.keys(seenMid));
+  assert.ok(st.eta.passes.filter(q => q.src === 'gps').length >= 6, 'GPS 영점은 기존대로 잡힌다');
+});
 t('s231 첫 정거장부터 2번째까지는 GPS 가 없어도 그대로 달린다(첫 승차 직후 3정거장은 보호하지 않는다)', () => {
   const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 57, 30), null);
   assert.ok(o.r.pos.hold == null && o.r.pos.from >= 2, JSON.stringify(o.r.pos));

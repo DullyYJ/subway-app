@@ -639,6 +639,19 @@ t('s231 hold — 승차 구간 3번째 정류장부터는 통과 증거(gps·mov
   const e = run(9, ps.concat([{ idx: 4, ms: base + 8 * 60000, src: 'cell' }])); assert.strictEqual(e.hold, 4, '기지국 선행(cell)은 도착 확정이 아니다');
   const f = rideEta({ nowMs: base + 9 * 60000, nodes, passes: ps, boarded: true, timetableFirst: true, opts: { planSecOffset: 0, holdAfterStops: 0 } }).pos; assert.strictEqual(f.hold, undefined, '0 이면 끈다');
 });
+// ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철에서 역 사이 이동이 안 그려진다 — 도착 판정은 건드리지 마)
+t('s267 ttSub — 첫 구간이 버스여도 지하철을 타고 있으면 구간 중간 위치(pos)만 더 준다(도착 시각·연착 규칙은 그대로 · 역 앞 대기 없음)', () => {
+  const base = Date.UTC(2026, 9, 26, 9, 0, 0);
+  const nodes = [{ name: '출발', isOrigin: true }, { name: '정류장A', isBus: true, lineName: '9701', planMin: 1080 }, { name: '정류장B', isBus: true, lineName: '9701', planMin: 1084 }]
+    .concat(Array.from({ length: 6 }, (_, i) => ({ name: '역' + i, isSub: true, lineName: '인천1호선', planMin: 1088 + i * 2 })));
+  const ps = [{ idx: 1, ms: base, src: 'gps' }, { idx: 2, ms: base + 4 * 60000, src: 'gps' }, { idx: 3, ms: base + 8 * 60000, src: 'gps' }];
+  const q = (min, extra) => rideEta(Object.assign({ nowMs: base + min * 60000, nodes, passes: ps, boarded: true, opts: { planSecOffset: 0 } }, extra || {}));
+  const no = q(9), yes = q(9, { ttSub: true });
+  assert.ok(!no.pos, 'ttSub 없으면 pos 없음(옛 동작)');
+  assert.ok(yes.pos && yes.pos.from === 3 && yes.pos.to === 4 && yes.pos.ratio > 0.2 && yes.pos.ratio < 0.8 && yes.pos.moving, JSON.stringify(yes.pos));
+  assert.deepStrictEqual(yes.etaMs, no.etaMs, '도착 시각은 ttSub 와 무관(그대로)');
+  const far = q(30, { ttSub: true }); assert.strictEqual(far.pos.hold, undefined, 'ttSub 는 s231 역 앞 대기를 쓰지 않는다');
+});
 t('s231 hold — 승차 구간이 짧거나 환승으로 구간이 바뀌면 그 구간의 승차역부터 다시 센다(버스도 같다)', () => {
   const base = Date.UTC(2026, 9, 26, 9, 0, 0);
   const nodes = [{ name: '출발', isOrigin: true }, { name: 'A', isSub: true, lineName: '1호선', planMin: 0 }, { name: 'B', isSub: true, lineName: '1호선', planMin: 2 }, { name: 'C', isSub: true, lineName: '2호선', planMin: 4 }, { name: 'D', isSub: true, lineName: '2호선', planMin: 6 }, { name: 'E', isSub: true, lineName: '2호선', planMin: 8 }];

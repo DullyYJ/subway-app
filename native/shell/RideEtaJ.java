@@ -122,7 +122,7 @@ final class RideEtaJ {
         if (input != null && "row".equals(input.get("op"))) return rideRow(input);
         Map<String, Object> r = core(input);
         try { r.put("hold", hold(input, r)); } catch (RuntimeException eH) { r.put("hold", null); }
-        try { if (input != null && Boolean.TRUE.equals(input.get("timetableFirst")) && !Boolean.TRUE.equals(input.get("notDeparted")) && r != null && r.get("etaMs") != null) r.put("pos", pos(input, r)); }
+        try { if (input != null && (Boolean.TRUE.equals(input.get("timetableFirst")) || Boolean.TRUE.equals(input.get("ttSub"))) && !Boolean.TRUE.equals(input.get("notDeparted")) && r != null && r.get("etaMs") != null) r.put("pos", pos(input, r)); }
         catch (RuntimeException e) { r.put("pos", null); }
         return r;
     }
@@ -163,7 +163,7 @@ final class RideEtaJ {
         }
         // s231: 도착 확정 없이 건너뛰지 않는다 — 승차 구간 3정거장 뒤부터는 통과 증거(gps·move·pf)가 없는 정류장에서 멈춰 기다린다
         int holdK = -1, cf = -1, ttF = f;
-        if (holdAfterStops > 0) {
+        if (holdAfterStops > 0 && !Boolean.TRUE.equals(input.get("ttSub"))) {      // s267: ttSub 는 보여 주기만 — '역 앞 대기' 없음
             for (i = 0; i < ps.size(); i++) {
                 Object P0 = ps.get(i); String sr0 = truthy(g(P0, "src")) ? str(g(P0, "src")) : ""; double pi0 = gn(P0, "idx");
                 if (("gps".equals(sr0) || "move".equals(sr0) || "pf".equals(sr0)) && fin(pi0) && pi0 > cf) cf = (int) pi0;
