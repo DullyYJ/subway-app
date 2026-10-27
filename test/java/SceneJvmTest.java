@@ -350,6 +350,29 @@ public class SceneJvmTest {
             c.up(); ok(c.interactive(), "놓은 직후(떨어짐·착륙 연출)도 interactive");
             adv(c, 8); ok(!c.interactive(), "착륙 연출이 끝나면 다시 평소(60Hz)");
         }
+        // 10-2) s257 지하철 대기 = 역 안 승강장(실내): 눈·강풍이 몰아쳐도 날씨 효과·차·우산이 없고, 간판에는 기다리는 역 이름이 뜬다
+        {
+            SceneModel.Res in = scn.get("scn_wait_sub_inside");
+            ok(in != null && in.inside && "강남".equals(in.sta) && "sub".equals(in.venue), "엔진이 역 안 대기(inside)와 역 이름을 준다");
+            for (double[] sz : new double[][]{{340, 190}, {300, 150}, {412, 260}}) {
+                TestHost h = fakeHost(); SceneCore c = core(h, 6); c.layout(sz[0], sz[1], 2.75, true); c.apply(in);
+                ok(c.inside && "강남".equals(c.sta) && "wait".equals(c.mode()), "승강장 장면이 켜진다 " + (int) sz[0] + "x" + (int) sz[1]);
+                BufferedImage im = canvasImg((int) (sz[0] * 2.75), (int) (sz[1] * 2.75)); boolean fine = true; String why = "";
+                for (int i = 0; i < 30 * 40; i++) {
+                    c.update(1.0 / 30);
+                    if (i % 20 == 0) { try { draw(c, im); } catch (RuntimeException e) { fine = false; why = String.valueOf(e); break; } }
+                    if (c.error != null) { fine = false; why = c.error; break; }
+                }
+                ok(fine, "승강장 장면 40초가 오류 없이 돈다 " + why);
+                ok(c.traffic.isEmpty() && c.ripples.isEmpty() && c.hero != null && !c.hero.umb, "실내: 차도 · 빗방울 파문도 · 우산도 없다");
+                ok(c.L.wk.equals("clear") && c.L.wind == 0 && !c.L.cold && !c.L.sun && !c.L.night, "실내 look: 날씨·바람·추위·햇빛·밤이 장면에 닿지 않는다");
+                ok(c.hero.x >= c.W * .18 && c.hero.x <= c.W * .78, "대표 캐릭터는 승강장 안에서 논다 x=" + c.hero.x);
+            }
+            SceneModel.Res bw = scn.get("scn_wait_bus_rain"); TestHost hb = fakeHost(); SceneCore cb = core(hb, 6); cb.layout(340, 190, 2.75, true); cb.apply(bw);
+            ok(!cb.inside && cb.venue.equals("bus"), "버스 대기는 그대로 정류장(바깥)");
+            cb.apply(in); ok(cb.inside && cb.venue.equals("sub") && cb.sta.equals("강남"), "같은 wait 에서 버스 → 지하철로 바뀌면 장면이 승강장으로 다시 만들어진다");
+            cb.apply(bw); ok(!cb.inside && cb.venue.equals("bus"), "지하철 → 버스로 돌아오면 정류장");
+        }
         // 11) 지하철 객실(혼잡도 카드 두 번째 쪽): 시각표(pos.segs)와 지금 시각만으로 달림/섬이 정해지고, 정차에서 친구들이 내리고 탄다
         {
             File tf = new File(dir, "train_ride.json");
@@ -404,6 +427,17 @@ public class SceneJvmTest {
                     TestHost hs = fakeHost(); SceneCore cs = core(hs, 5); cs.layout(340, 190, 2.75, true); cs.apply(tr); cs.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
                     for (int i = 0; i < 30 * 24; i++) { cs.trainClock(i * 1000L / 30 + 100); cs.update(1.0 / 30); }
                     ok(cs.tr.stop && cs.tr.epoch == 0, "정차 중(24초)엔 자리 바꿈이 시작되지 않는다 epoch=" + cs.tr.epoch);
+                }
+                {   // s257 YJ: 출발할 때 창밖 승강장 간판은 방금 떠난 역(전 역) · 곧 닿을 때는 다음 역 · 객실 안내는 달리는 동안 '다음 역', 곧 닿으면 '이번 역'
+                    TestHost hq = fakeHost(); SceneCore q = core(hq, 5); q.layout(340, 190, 2.75, true); q.apply(tr); q.trainPos(trainPos(tr.train.first, tr.train.names.size() - 1));
+                    q.trainClock(28000); q.update(1.0 / 30);
+                    ok(!q.tr.stop && q.tr.shift > 0 && SceneTrain.stationNameForSign(q.tr).equals(tr.train.names.get(0)) && !SceneTrain.arriving(q.tr), "막 출발(28초): 창밖 승강장 간판은 전 역 '" + SceneTrain.stationNameForSign(q.tr) + "' · 안내는 '다음 역'");
+                    q.trainClock(80000); q.update(1.0 / 30);
+                    ok(!q.tr.stop && !SceneTrain.arriving(q.tr), "한참 달리는 중엔 '다음 역'");
+                    q.trainClock(143000); q.update(1.0 / 30);
+                    ok(!q.tr.stop && q.tr.shift < 0 && SceneTrain.stationNameForSign(q.tr).equals(tr.train.names.get(1)) && SceneTrain.arriving(q.tr), "곧 닿음(143초): 창밖 승강장 간판은 도착할 역 '" + SceneTrain.stationNameForSign(q.tr) + "' · 안내는 '이번 역'");
+                    q.trainClock(150000); q.update(1.0 / 30);
+                    ok(q.tr.stop && SceneTrain.stationNameForSign(q.tr).equals(tr.train.names.get(1)), "서 있으면 그 역");
                 }
                 ok(!c.down(100, 100), "객실 장면은 캐릭터를 집지 않는다(손가락은 쪽 넘기기)");
             }

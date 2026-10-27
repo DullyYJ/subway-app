@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s256";
+var ENGINE_VERSION = "route-v2-2026-10-27s257";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10391,10 +10391,49 @@ function rsActs(st, req, now, notes) {
     rsPressVerify(st, w.i, now, notes);
   } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
 }
+// \u2605 2026-10-27 s257 (YJ: "\uc804\uc5ed \ub3c4\ucc29\uc774 GPS \ub85c \ud655\uc815\ub41c \ub4a4 \ub2e4\uc74c \uc5ed\uc73c\ub85c \uc774\ub3d9\ud560 \ub54c \ub9c8\ucee4\uac00 \ub2e4\uc2dc \ub4a4\ub3cc\uc544 \uac00\uba74 \uc548 \ub3fc"):
+//   \uc5d4\uc9c4\uc774 \uc2dc\uac01\ud45c\ub97c \ub2e4\uc2dc \ub9de\ucd94\uba74(GPS \ub3c4\ucc29 \ud655\uc815\u00b7\uc7ac\ub3d9\uae30\u00b7\ub300\uae30 \ud574\uc81c) \uc0c8 \uad6c\uac04 \uc2dc\uac01\uc774 '\uc9c0\uae08 \ub9c8\ucee4 \uc790\ub9ac'\ubcf4\ub2e4 \ub4a4\uc77c \uc218 \uc788\ub2e4 \u2192 \ub9c8\ucee4\uac00 \ub4a4\ub85c \ud284\ub2e4.
+//   \uc9c0\ub09c \ud638\ucd9c\uc5d0\uc11c \uc571\uc774 \uadf8\ub9ac\ub358 \uc704\uce58(\uc9c0\ub09c \uc2dc\uac01\ud45c\ub97c \uc9c0\uae08 \uc2dc\uac01\uc73c\ub85c \uc77d\uc740 \uac12)\ubcf4\ub2e4 \uc0c8 \uc704\uce58\uac00 \ub4a4\uba74, \uadf8 \uad6c\uac04\uc758 \ucd9c\ubc1c \uc2dc\uac01\ub9cc \ub2f9\uaca8 \uc9c0\uae08 \uc790\ub9ac\ub97c \uadf8\ub300\ub85c \uc774\uc5b4 \uac04\ub2e4(\ub3c4\ucc29 \uc2dc\uac01 t1 \uc740 \uadf8\ub300\ub85c \u2192 \ub0a8\uc740 \uac70\ub9ac\ub97c \uadf8 \uc2dc\uac04\uc5d0 \uac04\ub2e4).
+//   \ub9c8\ucee4\ub294 \uba48\ucd94\uac70\ub098 \ub290\ub824\uc9c8 \uc218\ub294 \uc788\uc5b4\ub3c4 \ub4a4\ub85c \uac00\uc9c0 \uc54a\ub294\ub2e4. \uc2b9\ucc28 \ub418\ub3cc\ub9ac\uae30\u00b7\ub2e4\ub978 \uc5ec\uc815\uc774\uba74 \ud480\ub9b0\ub2e4.
+function rsMonoPos(st, r, now, notes) {
+  var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
+  var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
+  var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
+  if (!segs || !segs.length) { st.mk = null; return; }
+  var prevP = null;
+  if (mk && mk.s && mk.s.length) {
+    prevP = mk.s[mk.s.length - 1][1];
+    for (i = 0; i < mk.s.length; i++) {
+      var q = mk.s[i];
+      if (now < q[3]) { prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]); break; }
+    }
+  }
+  var cur = null;
+  for (i = 0; i < segs.length; i++) if (now < segs[i].t1) { cur = i; break; }
+  var newP = cur == null ? +segs[segs.length - 1].to : (now < segs[cur].t0 ? +segs[cur].from : +segs[cur].from + Math.max(0, Math.min(1, (now - segs[cur].t0) / (segs[cur].t1 - segs[cur].t0))) * (segs[cur].to - segs[cur].from));
+  if (prevP != null && newP < prevP - 0.002) {
+    var k = -1;
+    for (i = 0; i < segs.length; i++) if (prevP >= segs[i].from && prevP < segs[i].to) { k = i; break; }
+    if (k >= 0 && segs[k].t1 > now) {
+      g = segs[k]; var span = g.to - g.from, rp = Math.max(0, Math.min(.98, span > 0 ? (prevP - g.from) / span : 0));
+      if (rp > 0) {
+        var t0n = (now - rp * g.t1) / (1 - rp);
+        if (t0n < g.t0) { g.t0 = t0n; if (g.a > t0n) g.a = t0n; }
+      }
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.segs = segs = segs.slice(k);
+      var rt = g.t1 > g.t0 ? Math.max(0, Math.min(1, (now - g.t0) / (g.t1 - g.t0))) : 0;
+      pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt * 1000) / 1000; pos.moving = rt > 0 && rt < 1;
+      notes.push('\ub9c8\ucee4 \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0: ' + (Math.round(newP * 100) / 100) + ' \u2192 ' + (Math.round(prevP * 100) / 100) + ' \uc790\ub9ac \uc720\uc9c0');
+    }
+  }
+  st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
+}
 // \ub418\ub3cc\ub9ac\uae30: \ud658\uc2b9 \ud655\uc815(\uc608\uc57d \ud3ec\ud568) \ub610\ub294 \uccab \uad6c\uac04 \ud0d1\uc2b9 \ud655\uc815\uc744 \uc774\uc804 \uae30\ub85d\uc73c\ub85c \ub3cc\ub9b0\ub2e4
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
+  delete st.mk;                                   // \ub418\ub3cc\ub9ac\uba74 \ub9c8\ucee4\ub3c4 \ub418\ub3cc\uc544\uac08 \uc218 \uc788\ub2e4
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {
@@ -11095,6 +11134,7 @@ function rideStandby(req) {
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['\ub3c4\ucc29 \uc2dc\uac01 \uacc4\uc0b0 \uc2e4\ud328'] };
   st.etaMs = r.etaMs;
+  try { rsMonoPos(st, r, now, notes); } catch (eMk) { notes.push('\ub9c8\ucee4 \ubcf4\uc815 \uc2e4\ud328: ' + (eMk && eMk.message)); }
   if (st.wait && eta.boardNext && r.etaMs[st.wait.i] != null && isFinite(r.etaMs[st.wait.i])) st.wait.arrMs = r.etaMs[st.wait.i];     // \ub2e4\uc74c \ucc28\uac00 \ubc00\ub9ac\uba74(\ub2f9\uaca8\uc9c0\uba74) \uac10\uc9c0 \uc720\uc608\ub3c4 \uadf8 \uc2dc\uac01 \uae30\uc900(s196)
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }
   // 4) \uc9c0\uae08 \uc5b4\ub290 \uc5ed\uae4c\uc9c0 \uc654\ub098 \u2192 \uc54c\ub9bc \ud310\uc815 \u00b7 \uc0c1\uc8fc \uc54c\ub9bc \ubb38\uad6c
@@ -12776,6 +12816,16 @@ function sceneDecide(inp, wx) {
     return out;
   }
   out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
+  // \u2605 2026-10-27 (YJ: "\ubc84\uc2a4 \uae30\ub2e4\ub9b4 \ub54c\ub294 \ubc84\uc2a4\uc815\ub958\uc7a5, \uc9c0\ud558\ucca0 \uae30\ub2e4\ub9b4 \ub54c\ub294 \uc5ed \uc548\uc5d0\uc11c \uc9c0\ud558\ucca0\uc744 \uae30\ub2e4\ub9ac\ub294 \uac78\ub85c \u00b7 \uc5ed \uc548\uc740 \ub0b4\ubd80\ub2c8\uae4c \ubc14\ub78c \ub4f1 \uae30\uc0c1\ud604\uc0c1\uc5d0 \uc601\ud5a5 \ubc1b\uc73c\uba74 \uc548 \ub3fc"):
+  //   \uc9c0\ud558\ucca0\uc744 \uae30\ub2e4\ub9ac\ub294 \uc7a5\uba74\uc740 '\uc5ed \uc548 \uc2b9\uac15\uc7a5'\uc774\ub2e4. inside:true \uba74 \uc571\uc740 \ud558\ub298\u00b7\ube44\u00b7\ub208\u00b7\ubc14\ub78c\u00b7\ub099\uc5fd\u00b7\ud587\ube5b \uac19\uc740 \ub0a0\uc528 \ud6a8\uacfc\ub97c \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(venue \ub294 \uc61b \uc571\uacfc \ub9de\ucd94\ub824\uace0 'sub' \uadf8\ub300\ub85c).
+  //   sta = \uae30\ub2e4\ub9ac\ub294 \uc5ed \uc774\ub984(\uc2b9\uac15\uc7a5 \uac04\ud310\uc5d0 \uc4f4\ub2e4)
+  if (!bus && phase === "wait") {
+    out.inside = true; out.sta = String(n.name || "").slice(0, 12);
+    var il = {}, lk; for (lk in look) il[lk] = look[lk];                                   // \uc2e4\ub0b4 look: \uc2dc\uac04\ub300\u00b7\ub0a0\uc528\u00b7\ubc14\ub78c\u00b7\uc628\ub3c4\u00b7\ud587\ube5b\uc5d0 \ub530\ub77c \ub2ec\ub77c\uc9c0\uc9c0 \uc54a\ub294\ub2e4(\ub0a0\uc528 \ubc18\uc751 \ub3d9\uc791\ub3c4 \uc5c6\ub2e4)
+    il.slot = "noon"; il.slotKo = SCENE_SLOT_KO.noon; il.wk = "clear"; il.wxKo = ""; il.wxKnown = false; il.temp = null; il.season = "spring";
+    il.night = false; il.lit = true; il.hidesSun = false; il.wind = 0; il.hot = false; il.cold = false; il.sun = false; il.bright = false;
+    out.look = il; out.traits = sceneTraits(il, seedStr, nowMs);
+  }
   out.nearEnd = bus && phase === "ride" && here === last - 1;
   var who = bus ? "\uD83D\uDE8C " + out.line + " \uBC84\uC2A4\uB97C" : "\uD83D\uDE87 " + (n.lineName || "\uC9C0\uD558\uCCA0") + " \uC5F4\uCC28\uB97C";
   out.tag = phase === "wait" ? who + " \uAE30\uB2E4\uB9AC\uB294 \uC911" : phase === "ride" ? (out.nearEnd ? "\uD83D\uDD14 \uACE7 \uB0B4\uB824\uC694!" : "\uD83D\uDE8C \uBC84\uC2A4 \uD0C0\uACE0 \uAC00\uB294 \uC911") : "\uD83D\uDC4B \uB0B4\uB838\uC5B4\uC694, \uCE5C\uAD6C\uB4E4\uACFC \uB180\uC544\uC694";

@@ -207,6 +207,16 @@ function sceneDecide(inp, wx) {
     return out;
   }
   out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
+  // ★ 2026-10-27 (YJ: "버스 기다릴 때는 버스정류장, 지하철 기다릴 때는 역 안에서 지하철을 기다리는 걸로 · 역 안은 내부니까 바람 등 기상현상에 영향 받으면 안 돼"):
+  //   지하철을 기다리는 장면은 '역 안 승강장'이다. inside:true 면 앱은 하늘·비·눈·바람·낙엽·햇빛 같은 날씨 효과를 그리지 않는다(venue 는 옛 앱과 맞추려고 'sub' 그대로).
+  //   sta = 기다리는 역 이름(승강장 간판에 쓴다)
+  if (!bus && phase === "wait") {
+    out.inside = true; out.sta = String(n.name || "").slice(0, 12);
+    var il = {}, lk; for (lk in look) il[lk] = look[lk];                                   // 실내 look: 시간대·날씨·바람·온도·햇빛에 따라 달라지지 않는다(날씨 반응 동작도 없다)
+    il.slot = "noon"; il.slotKo = SCENE_SLOT_KO.noon; il.wk = "clear"; il.wxKo = ""; il.wxKnown = false; il.temp = null; il.season = "spring";
+    il.night = false; il.lit = true; il.hidesSun = false; il.wind = 0; il.hot = false; il.cold = false; il.sun = false; il.bright = false;
+    out.look = il; out.traits = sceneTraits(il, seedStr, nowMs);
+  }
   out.nearEnd = bus && phase === "ride" && here === last - 1;
   var who = bus ? "\uD83D\uDE8C " + out.line + " \uBC84\uC2A4\uB97C" : "\uD83D\uDE87 " + (n.lineName || "\uC9C0\uD558\uCCA0") + " \uC5F4\uCC28\uB97C";
   out.tag = phase === "wait" ? who + " \uAE30\uB2E4\uB9AC\uB294 \uC911" : phase === "ride" ? (out.nearEnd ? "\uD83D\uDD14 \uACE7 \uB0B4\uB824\uC694!" : "\uD83D\uDE8C \uBC84\uC2A4 \uD0C0\uACE0 \uAC00\uB294 \uC911") : "\uD83D\uDC4B \uB0B4\uB838\uC5B4\uC694, \uCE5C\uAD6C\uB4E4\uACFC \uB180\uC544\uC694";

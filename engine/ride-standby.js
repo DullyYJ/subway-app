@@ -502,10 +502,49 @@ function rsActs(st, req, now, notes) {
     rsPressVerify(st, w.i, now, notes);
   } else if (a === 'undo' && st.rsUndo && now < st.rsUndo.until && !st.rsUndo.x) rsDoUndo(st, now, notes);
 }
+// ★ 2026-10-27 s257 (YJ: "전역 도착이 GPS 로 확정된 뒤 다음 역으로 이동할 때 마커가 다시 뒤돌아 가면 안 돼"):
+//   엔진이 시각표를 다시 맞추면(GPS 도착 확정·재동기·대기 해제) 새 구간 시각이 '지금 마커 자리'보다 뒤일 수 있다 → 마커가 뒤로 튄다.
+//   지난 호출에서 앱이 그리던 위치(지난 시각표를 지금 시각으로 읽은 값)보다 새 위치가 뒤면, 그 구간의 출발 시각만 당겨 지금 자리를 그대로 이어 간다(도착 시각 t1 은 그대로 → 남은 거리를 그 시간에 간다).
+//   마커는 멈추거나 느려질 수는 있어도 뒤로 가지 않는다. 승차 되돌리기·다른 여정이면 풀린다.
+function rsMonoPos(st, r, now, notes) {
+  var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
+  var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
+  var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
+  if (!segs || !segs.length) { st.mk = null; return; }
+  var prevP = null;
+  if (mk && mk.s && mk.s.length) {
+    prevP = mk.s[mk.s.length - 1][1];
+    for (i = 0; i < mk.s.length; i++) {
+      var q = mk.s[i];
+      if (now < q[3]) { prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]); break; }
+    }
+  }
+  var cur = null;
+  for (i = 0; i < segs.length; i++) if (now < segs[i].t1) { cur = i; break; }
+  var newP = cur == null ? +segs[segs.length - 1].to : (now < segs[cur].t0 ? +segs[cur].from : +segs[cur].from + Math.max(0, Math.min(1, (now - segs[cur].t0) / (segs[cur].t1 - segs[cur].t0))) * (segs[cur].to - segs[cur].from));
+  if (prevP != null && newP < prevP - 0.002) {
+    var k = -1;
+    for (i = 0; i < segs.length; i++) if (prevP >= segs[i].from && prevP < segs[i].to) { k = i; break; }
+    if (k >= 0 && segs[k].t1 > now) {
+      g = segs[k]; var span = g.to - g.from, rp = Math.max(0, Math.min(.98, span > 0 ? (prevP - g.from) / span : 0));
+      if (rp > 0) {
+        var t0n = (now - rp * g.t1) / (1 - rp);
+        if (t0n < g.t0) { g.t0 = t0n; if (g.a > t0n) g.a = t0n; }
+      }
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.segs = segs = segs.slice(k);
+      var rt = g.t1 > g.t0 ? Math.max(0, Math.min(1, (now - g.t0) / (g.t1 - g.t0))) : 0;
+      pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt * 1000) / 1000; pos.moving = rt > 0 && rt < 1;
+      notes.push('마커 되돌아감 방지: ' + (Math.round(newP * 100) / 100) + ' → ' + (Math.round(prevP * 100) / 100) + ' 자리 유지');
+    }
+  }
+  st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
+}
 // 되돌리기: 환승 확정(예약 포함) 또는 첫 구간 탑승 확정을 이전 기록으로 돌린다
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
+  delete st.mk;                                   // 되돌리면 마커도 되돌아갈 수 있다
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {
@@ -1206,6 +1245,7 @@ function rideStandby(req) {
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['도착 시각 계산 실패'] };
   st.etaMs = r.etaMs;
+  try { rsMonoPos(st, r, now, notes); } catch (eMk) { notes.push('마커 보정 실패: ' + (eMk && eMk.message)); }
   if (st.wait && eta.boardNext && r.etaMs[st.wait.i] != null && isFinite(r.etaMs[st.wait.i])) st.wait.arrMs = r.etaMs[st.wait.i];     // 다음 차가 밀리면(당겨지면) 감지 유예도 그 시각 기준(s196)
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }
   // 4) 지금 어느 역까지 왔나 → 알림 판정 · 상주 알림 문구
@@ -1314,4 +1354,4 @@ function handleRideStandby(request, env) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rsMonoPos: rsMonoPos, rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };

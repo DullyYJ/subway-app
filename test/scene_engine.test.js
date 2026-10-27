@@ -56,6 +56,17 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert.strictEqual(decide({ nowMs: Date.parse('2026-10-15T03:00:00Z'), tzOffsetMin: 0, locked: false }, null).look.slot, 'night');
   });
   const SUB = [O, W1, S('강남'), S('역삼'), S('선릉'), W1];
+  await t('s257 (YJ): 지하철 대기 = 역 안 승강장(inside) — 날씨·시간대·바람과 무관한 실내 look · 날씨 반응 동작 없음 · 버스 대기·내림은 그대로', () => {
+    const storm = { temp: -8, rain: 90, txt: '눈', wind: 40, uv: 9 };
+    const r = decide({ nowMs: ms('2026-12-20T23:10:00'), locked: true, here: 1, boarded: false, nodes: SUB }, storm);
+    assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'sub'); assert.strictEqual(r.inside, true); assert.strictEqual(r.sta, '강남', '기다리는 역 이름은 엔진이 준다');
+    const L = r.look; assert.strictEqual(L.wk, 'clear'); assert.strictEqual(L.wind, 0); assert.strictEqual(L.night, false); assert.strictEqual(L.cold, false); assert.strictEqual(L.hot, false); assert.strictEqual(L.sun, false); assert.strictEqual(L.hidesSun, false); assert.strictEqual(L.wxKnown, false);
+    const acts = JSON.stringify(r.traits); ['gust', 'shiver', 'pant', 'squint', 'splash', 'shakeoff', 'snowcatch', 'peer'].forEach(a => assert(!new RegExp('"' + a + '"').test(acts), '실내에서는 날씨 반응 동작이 없다: ' + a));
+    const out = decide({ nowMs: ms('2026-12-20T23:10:00'), locked: true, here: 1, boarded: false, nodes: SUB }, null); assert.strictEqual(out.look.slot, 'noon', '시간대에 따라 달라지지 않는다');
+    const al = decide({ locked: true, here: 5, boarded: true, nodes: SUB }, storm); assert.strictEqual(al.mode, 'alight'); assert(!al.inside, '내려서 나오는 장면은 거리(역 입구)'); assert.strictEqual(al.look.wk, 'snow');
+    const BN = [O, W1, { name: 'A', isBus: true, lineName: '43', hasLoc: true }, { name: 'B', isBus: true, lineName: '43', hasLoc: true }];
+    const bw = decide({ locked: true, here: 1, boarded: false, nodes: BN }, storm); assert.strictEqual(bw.venue, 'bus'); assert(!bw.inside, '버스 기다림은 정류장(바깥 날씨 그대로)'); assert.strictEqual(bw.look.wk, 'snow');
+  });
   await t('지하철: 타기 전(걷는 중·승강장 대기)은 장면(venue sub)만 · 탑승 확정 뒤에만 혼잡도(장면 없음)', () => {
     let r = decide({ locked: true, here: 1, boarded: false, nodes: SUB }, null);
     assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'sub'); assert.strictEqual(r.cong.kind, null); assert.strictEqual(r.line, '2'); assert(/2호선 열차를 기다리는/.test(r.tag), r.tag); assert.strictEqual(r.hint, hint);

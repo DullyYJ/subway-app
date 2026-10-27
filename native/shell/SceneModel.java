@@ -59,7 +59,7 @@ public final class SceneModel {
     public static final class Res {
         public Train train;
         public boolean ok; public String mode, venue = "", hero, hint = "", tag = "", line = "";
-        public boolean nearEnd; public Look look = new Look(); public List<String> cast = new ArrayList<>();
+        public boolean nearEnd, inside; public String sta = ""; public Look look = new Look(); public List<String> cast = new ArrayList<>();
         public Map<String, Traits> traits = new HashMap<>();
         public String raw;
     }
@@ -74,7 +74,7 @@ public final class SceneModel {
         r.ok = Json.bool(m.get("ok"));
         r.mode = Json.str(m.get("mode")); r.venue = Json.strOr(m.get("venue"), ""); r.hero = Json.str(m.get("hero"));
         r.hint = Json.strOr(m.get("hint"), ""); r.tag = Json.strOr(m.get("tag"), ""); r.line = Json.strOr(m.get("line"), "");
-        r.nearEnd = Json.bool(m.get("nearEnd"));
+        r.nearEnd = Json.bool(m.get("nearEnd")); r.inside = Json.bool(m.get("inside")); r.sta = Json.strOr(m.get("sta"), "");
         Object lo = m.get("look");
         if (lo instanceof Map) {
             Map<String, Object> l = (Map<String, Object>) lo; Look k = r.look;

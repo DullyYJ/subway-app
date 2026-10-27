@@ -24,6 +24,10 @@ const { sceneDecide } = require('../engine/scene.js');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 1, boarded: false, key: 'k', nodes: bus }, { temp: 12, rain: 80, txt: '비' }), 'scn_wait_bus_rain');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k', nodes: bus }, { temp: 12, rain: 0, txt: '맑음' }), 'scn_ride_bus');
     w(sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 0, boarded: false, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }, { name: '도착' }] }, null), 'scn_wait_sub');
+    {   // s257: 지하철 대기 = 역 안 승강장(실내) — 눈·강풍·한밤 날씨여도 날씨 효과 없이 승강장
+      const subw = [{ name: '출발', isOrigin: true }, { name: '강남', isSub: true, lineName: '2호선' }, { name: '역삼', isSub: true, lineName: '2호선' }, { name: '도착' }];
+      w(sceneDecide({ nowMs: Date.UTC(2026, 11, 20, 14, 0, 0), tzOffsetMin: 540, locked: true, here: 1, boarded: false, key: 'in1', nodes: subw }, { temp: -9, rain: 90, txt: '눈', wind: 40 }), 'scn_wait_sub_inside');
+    }
     {   // s232: 지하철을 타고 가는 동안 혼잡도 카드 옆 쪽에 붙는 객실 장면(엔진 sceneTrain → hcTrainJs)
       const sub = [{ name: '출발', isOrigin: true }].concat(['임학', '박촌', '귤현', '계양', '아시아드', '검단', '검암', '마곡나루'].map(n => ({ name: n, isSub: true, lineName: '인천1호선' }))).concat([{ name: '도착' }]);
       const sc = sceneDecide({ nowMs: noon, tzOffsetMin: 540, locked: true, here: 2, boarded: true, key: 'k1', nodes: sub }, { temp: 15, rain: 0, txt: '맑음' });
@@ -31,11 +35,11 @@ const { sceneDecide } = require('../engine/scene.js');
       assert.ok(js.length > 100 && js.length < 6000, '객실 장면 글');
       fs.writeFileSync(path.join(dir, 'train_ride.json'), js);
     }
-    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
+    const files = ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain', 'ScenePlatform'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls].concat(files), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr || r.stdout);
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', cls, 'com.dullyyj.subway.SceneJvmTest', 'check', dir], { env: ENV, encoding: 'utf8', timeout: 240000 });
-    if (process.env.VERBOSE) console.log((r.stdout || '').split('\n').filter(l => /객실|시각표|정차|달리|서 있|FAIL/.test(l)).join('\n'));
+    if (process.env.VERBOSE) console.log((r.stdout || '').split('\n').filter(l => /객실|시각표|정차|달리|서 있|승강장|간판|FAIL/.test(l)).join('\n'));
     assert.ok(/ALL OK/.test(r.stdout) && r.status === 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') + (r.stderr || ''));
   });
   await t('스프라이트 시트 7장이 앱 assets 에 있고 칸 배치가 맞다', async () => {

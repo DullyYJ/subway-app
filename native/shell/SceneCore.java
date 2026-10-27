@@ -89,7 +89,7 @@ public final class SceneCore {
     String mode; SceneModel.Res res, LAST; SceneArt.Pal L; SceneArt.Bg bg; SceneCv.Layer prev;
     List<Actor> actors = new ArrayList<>(); List<Traffic> traffic = new ArrayList<>(); List<Pt> pt = new ArrayList<>(); List<Gfx> gfx = new ArrayList<>(); List<Ripple> ripples = new ArrayList<>();
     Actor hero; Seq seq; Ride ride; double nextCar, spawnAt, waitNext, bellAt; int castI;
-    double stopX, entX; String venue = "bus"; int baseDir = -1; int busColor; String busNo; String bgKey = "";
+    double stopX, entX; boolean inside; String sta = "", vk = ""; String venue = "bus"; int baseDir = -1; int busColor; String busNo; String bgKey = "";
     SceneTrain.St tr;
     double dtLast; Drag DRAG; Pend PEND; boolean rideBell;
     P wxP;
@@ -170,6 +170,7 @@ public final class SceneCore {
         double lo = a.w * .55, hi = W - a.w * .55;
         if (a.hero && "wait".equals(mode)) {
             if (a.pinned && !Double.isNaN(a.pinX)) return new double[]{clamp(a.pinX - 34, lo, hi), clamp(a.pinX + 34, lo, hi)};
+            if (inside) return new double[]{clamp(W * .22, lo, hi), clamp(W * .72, lo, hi)};
             return venue.equals("sub") ? new double[]{entX - 40, entX + 30} : new double[]{W * .36, W * .62};
         }
         return new double[]{lo, hi};
@@ -293,7 +294,7 @@ public final class SceneCore {
     /** 찻길이 있는 장소인가(거리만 — 공원·강변·바닷가 등엔 차가 지나가지 않는다). 장소는 엔진이 정한다(look.place). */
     boolean streetPlace() { return L == null || L.place == null || "street".equals(L.place); }
     void stepTraffic(double dt) {
-        if (!"ride".equals(mode) && pan < 0 && streetPlace() && t >= nextCar && traffic.size() < 3) {
+        if (!"ride".equals(mode) && !inside && pan < 0 && streetPlace() && t >= nextCar && traffic.size() < 3) {
             Traffic v = spawnTraffic(); nextCar = t + rnd(4.5, 9);
             if ("wait".equals(mode) && venue.equals("bus") && v.bus && v.lane == 1 && hero != null) { hero.bub = "!"; hero.bubUntil = t + 1.3; hero.dir = -1; hero.lookUntil = t + 1.6; }
         }
@@ -305,15 +306,19 @@ public final class SceneCore {
         PEND = null;
         if (DRAG != null) { try { if (actors.contains(DRAG.a)) { DRAG.a.held = false; dropEnd(DRAG.a); } } catch (RuntimeException e) { /* 무시 */ } DRAG = null; }
     }
+    /** 장면의 '자리' 열쇠(정류장 · 역 입구 · 역 안 승강장). 같은 mode(wait)여도 버스 → 지하철처럼 자리가 바뀌면 장면을 다시 만든다. */
+    static String venueKey(SceneModel.Res r) { return (r.venue == null ? "" : r.venue) + (r.inside ? "/in" : ""); }
     void setup(String m) {
         dragReset(); mode = m; actors = new ArrayList<>(); traffic = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); hero = null; seq = null; nextCar = t + rnd(1.2, 3); spawnAt = t + .2; castI = 0; ripples = new ArrayList<>(); rideBell = false;
         stopX = Math.round(W * .3); entX = Math.round(W * .36); venue = "sub".equals(res.venue) ? "sub" : "bus"; baseDir = venue.equals("sub") ? 1 : -1;
+        inside = false; sta = ""; vk = venueKey(res);
         if (m.equals("train")) { venue = "sub"; SceneTrain.setup(this); return; }                  // 지하철 객실(혼잡도 카드의 두 번째 쪽): 친구·자리·승하차는 엔진(res.train)이 정한 값
         tr = null;
         String heroId = res.hero != null && SceneModel.D3.containsKey(res.hero) ? res.hero : null;       // 대표 캐릭터는 엔진이 정한다. 없으면 앱이 대신 고르지 않고 캐릭터 없이 배경만 그린다
         if (heroId == null && !m.equals("idle")) { m = "idle"; mode = "idle"; }
+        inside = m.equals("wait") && venue.equals("sub") && res.inside; sta = inside ? res.sta : "";           // 지하철 대기 = 역 안 승강장(실내: 날씨 효과 없음)
         if (m.equals("wait")) {
-            Actor h = mkActor(heroId, venue.equals("sub") ? entX + 6 : W * .48, venue.equals("sub") ? .62 : .66, baseDir); h.hero = true; h.k *= 1.12; h.w *= 1.12; h.spd *= 1.1; h.st = "stand"; h.ph = R.next() * 6; h.umb = L.wk.equals("rain") || L.wk.equals("snow"); h.life = 1e9; hero = h; actors.add(h); waitNext = t + rnd(1.5, 3);
+            Actor h = mkActor(heroId, inside ? W * .5 : venue.equals("sub") ? entX + 6 : W * .48, venue.equals("sub") ? .62 : .66, baseDir); h.hero = true; h.k *= 1.12; h.w *= 1.12; h.spd *= 1.1; h.st = "stand"; h.ph = R.next() * 6; h.umb = !inside && (L.wk.equals("rain") || L.wk.equals("snow")); h.life = 1e9; hero = h; actors.add(h); waitNext = t + rnd(1.5, 3);
             if (venue.equals("bus")) { Traffic v = new Traffic(); v.lane = 1; v.bus = true; v.L = laneL(1, true); v.dir = 1; v.x = -40; v.v = 52; v.color = css(pickOf(BUS_COLORS)); v.no = pickOf(BUS_NOS); traffic.add(v); }
         } else if (m.equals("alight")) {
             Actor h2 = mkActor(heroId, 0, -.12, -1); h2.hero = true; h2.k *= 1.1; h2.w *= 1.1; h2.vis = false; h2.life = 1e9; h2.umb = L.wk.equals("rain") || L.wk.equals("snow"); h2.st = "hidden"; hero = h2; actors.add(h2);
@@ -744,7 +749,9 @@ public final class SceneCore {
     }
     void drawStreet(SceneCv c, double dt) {
         int tw = bg.tw;
-        if (pan >= 0 && panBg != null) {                      // 장소 이동 중: 캐릭터와 함께 옛 배경이 새 배경으로 겹쳐 이어진다
+        if (inside) {                                           // 역 안 승강장: 실내라서 하늘·날씨·바람 효과 없이 승강장만 그린다
+            ScenePlatform.back(this, c);
+        } else if (pan >= 0 && panBg != null) {                      // 장소 이동 중: 캐릭터와 함께 옛 배경이 새 배경으로 겹쳐 이어진다
             drawPanBack(c);
         } else {
             c.drawImage(bg.sky, 0, 0, W, H); drawSkyFx(c, t);
@@ -755,7 +762,7 @@ public final class SceneCore {
         Seq q = seq;
         if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busNo; o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
         drawTrafficPan(c, 1); drawTraffic(c, 1);
-        if ("wait".equals(mode) || "alight".equals(mode)) { if (venue.equals("sub")) SceneArt.drawEntrance(c, g, entX, L, res.line); else SceneArt.drawStop(c, g, stopX, L); }
+        if (!inside && ("wait".equals(mode) || "alight".equals(mode))) { if (venue.equals("sub")) SceneArt.drawEntrance(c, g, entX, L, res.line); else SceneArt.drawStop(c, g, stopX, L); }
         drawGfx(c, false);
         List<Actor> arr = new ArrayList<>(); for (Actor a : actors) if (a.vis) arr.add(a);
         Collections.sort(arr, new Comparator<Actor>() { public int compare(Actor a, Actor b) { return Double.compare(a.held ? 9 : a.z, b.held ? 9 : b.z); } });
@@ -767,6 +774,7 @@ public final class SceneCore {
         }
         for (Actor a : arr) if (!a.bub.isEmpty()) { double y = zy(a.z) - TH * zs(a.z) - 6 + a.y, x = a.x + a.dir * a.w * .2; SceneArt.drawBubble(c, x, y, a.bub); }
         drawParts(c, dt);
+        if (inside) return;                                      // 실내: 비·눈·안개·바람·햇빛·더위·추위 효과는 그리지 않는다
         if (pan >= 0 && panBg != null) drawPanFront(c); else drawWxFront(c, t);
         SceneFx.cold(this, c); SceneFx.sun(this, c, t); SceneFx.heat(this, c, t); SceneFx.wind(this, c, t);
     }
@@ -881,7 +889,7 @@ public final class SceneCore {
         if (!laid || !host.ready()) return false;
         if (!running) { boot(false); res = r; L = SceneArt.paint(r.look); resetBG(); setup(r.mode); }
         else {
-            boolean modeChanged = !mode.equals(r.mode); res = r;
+            boolean modeChanged = !mode.equals(r.mode) || !vk.equals(venueKey(r)); res = r;
             SceneArt.Pal L1 = L, L2 = SceneArt.paint(r.look);
             boolean keyCh = !(L2.slot + "|" + L2.wk + "|" + L2.season + "|" + L2.place + "|w" + L2.wind + "|" + dark + "|" + W + "|" + H).equals(bgKey);
             if (keyCh && !modeChanged && "idle".equals(mode) && !reduce && bg != null && pan < 0 && tv < 0 && (dark + "|" + W + "|" + H).equals(bgTail)) {
@@ -890,7 +898,7 @@ public final class SceneCore {
             } else { L = L2; if (keyCh) resetBG(); }
             if (modeChanged) { snapshot(); setup(r.mode); }
             else if ("train".equals(mode)) SceneTrain.refresh(this);
-            if ("wait".equals(mode) || "alight".equals(mode)) { boolean um = L.wk.equals("rain") || L.wk.equals("snow"); if (hero != null) hero.umb = um; }
+            if ("wait".equals(mode) || "alight".equals(mode)) { boolean um = !inside && (L.wk.equals("rain") || L.wk.equals("snow")); if (hero != null) hero.umb = um; }
         }
         return true;
     }

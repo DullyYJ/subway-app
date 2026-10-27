@@ -4,7 +4,7 @@
 'use strict';
 const assert = require('assert');
 const path = require('path');
-const { rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const { rsMonoPos, rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
 
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
@@ -958,6 +958,26 @@ t('s231 rsRtPick: 내 방향으로 오는 가장 가까운 열차 — 이미 역
   assert.strictEqual(rsRtPick([L({ subwayId: '1002', barvlDt: '30' }), L({ bstatnNm: 'BAD', barvlDt: '40' })], q, nt), null);
   assert.strictEqual(rsRtPick([], q, nt), null);
   assert.strictEqual(rsRtPick([L({ barvlDt: '60' })], { line: '인천1호선', prev: 'A', from: 'B', nowMs: 0 }, nt), null, '실시간 위치를 모르는 노선');
+});
+
+// s257: 마커 되돌아감 방지 — 새 시각표가 지금 마커 자리보다 뒤여도 마커는 뒤로 가지 않고 그 자리에서 이어 간다
+t('s257 마커는 GPS 도착 확정 뒤 시각표가 늦게 맞춰져도 뒤로 가지 않는다', () => {
+  const N = at(12, 55, 0), st = { eta: { nodes: nodes } };
+  const mkPos = (t0, t1) => ({ from: 2, to: 3, t0: t0, t1: t1, ratio: 0, moving: false, segs: [{ from: 2, to: 3, a: t0 - 20000, t0: t0, t1: t1 }, { from: 3, to: 4, a: t1, t0: t1 + 20000, t1: t1 + 120000 }] });
+  const notes = [];
+  const r1 = { pos: mkPos(N - 40000, N + 80000) }; rsMonoPos(st, r1, N, notes);                  // 첫 호출: 구간의 1/3 지점
+  const p1 = (N - (N - 40000)) / 120000;
+  const N2 = N + 10000;
+  const r2 = { pos: mkPos(N2 - 5000, N2 + 115000) };                                              // 엔진이 시각표를 늦게 다시 맞췄다(마커가 0.03 으로 떨어질 상황)
+  rsMonoPos(st, r2, N2, notes);
+  const p2 = r2.pos.ratio, prev = (N2 - (N - 40000)) / 120000;
+  assert.ok(p2 >= prev - 0.01, '되돌아가지 않음 ' + p2 + ' vs ' + prev + ' ' + JSON.stringify(notes));
+  assert.ok(r2.pos.segs[0].t1 === N2 + 115000, '도착 시각 t1 은 그대로');
+  assert.ok(r2.pos.ttFrom === 2 && r2.pos.from === 2);
+  const N3 = N2 + 30000, r3 = { pos: mkPos(N3 - 5000, N3 + 90000) }; rsMonoPos(st, r3, N3, notes);   // 한참 뒤엔 앞으로 간다
+  assert.ok(r3.pos.ratio >= p2, '계속 앞으로');
+  const stB = { eta: { nodes: nodes } }, rb = { pos: mkPos(N - 5000, N + 115000) }; rsMonoPos(stB, rb, N, []);
+  assert.strictEqual(rb.pos.segs[0].t0, N - 5000, '뒤로 갈 일이 없으면 손대지 않는다');
 });
 
 const liveHttpTest = async () => {

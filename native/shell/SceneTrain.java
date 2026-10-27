@@ -336,8 +336,7 @@ final class SceneTrain {
         for (Pax p : inner) drawPax(s, c, p);
         for (Pax p : inner) if (!p.say.isEmpty()) SceneArt.drawBubble(c, p.x + p.dir * 4, p.y - 50 * p.z, p.say);
         s.drawParts(c, s.dtLast);
-        // 흔들림에 맞춘 조명 번쩍임(달리는 동안 가끔 불빛이 훑고 지나간다)
-        if (z.v > .5) { double q = (z.scroll / 160.0) % 1; if (q < .12) { c.fillStyle(rgba(255, 255, 230, .06 * (1 - q / .12))); c.fillRect(3, z.ceilB, W - 6, z.floorLine - z.ceilB); } }
+        // (s257 YJ: "지하철 이동 때 애니메이션이 살짝 하얗게 깜박여" — 달리는 동안 객실 전체를 훑던 번쩍임을 없앴다. 창밖 터널 등만 지나간다)
         // 바깥 틀(차체 테두리)
         c.strokeStyle("#2a2f3b"); c.lineWidth(3); rr(c, 1.5, 1.5, W - 3, H - 3, 9); c.stroke();
         if (night) { c.fillStyle("rgba(6,10,30,.05)"); c.fillRect(0, 0, W, H); }
@@ -450,10 +449,14 @@ final class SceneTrain {
             c.restore();
         }
     }
+    /** 창밖 승강장 간판의 역 이름. 서 있으면 그 역 · 달리는 중엔 지금 창밖으로 지나가는 승강장의 역 — 방금 떠난 역(shift ≥ 0)이면 전 역, 곧 닿을 역(shift < 0)이면 다음 역. */
     static String stationNameForSign(St z) {
-        int k = z.stop ? z.k : z.toK; if (k < 0 || k >= z.T.names.size()) return "";
+        int k = z.stop ? z.k : (z.shift >= 0 ? z.k : z.toK); if (k < 0 || k >= z.T.names.size()) return "";
         return z.T.names.get(k);
     }
+    /** 곧 닿는다(이번 역 안내로 바꾸는 시점): 달리는 중이고 도착까지 남은 시간이 이 안이면 */
+    static final double ARRIVING_SEC = 10;
+    static boolean arriving(St z) { return !z.stop && z.toK >= 0 && z.rem <= ARRIVING_SEC; }
 
     static void drawDoor(SceneCore s, St z, SceneCv c, double[] r, double open, int lineCol) {
         double lw = r[2] / 2, vis = lw * (1 - open * .9);
@@ -482,7 +485,7 @@ final class SceneTrain {
     }
     static void drawLed(SceneCore s, St z, SceneCv c, double W, int lineCol) {
         String nm = z.T.names.isEmpty() ? "" : "";
-        int k = z.stop ? z.k : z.toK; boolean here = z.stop;
+        boolean here = z.stop || arriving(z); int k = z.stop ? z.k : z.toK;       // 서 있거나 곧 닿으면 '이번 역' · 출발해서 달리는 동안은 '다음 역'
         if (k >= 0 && k < z.T.names.size()) nm = z.T.names.get(k);
         String lab = here ? z.T.lbHere : z.T.lbNext;
         if (nm.isEmpty() || lab == null) { return; }
