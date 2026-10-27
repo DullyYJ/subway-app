@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s255";
+var ENGINE_VERSION = "route-v2-2026-10-27s256";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9995,7 +9995,8 @@ function rsClampTxt(s, n) { s = String(s == null ? '' : s); return s.length > n 
 
 // \u2500\u2500 \ud0d1\uc2b9 \uc2dc\ud2b8(\uc571 \ud654\uba74 \u00b7 \uc624\ubc84\ub808\uc774 \uacf5\ud1b5): \ud658\uc2b9 \uad6c\uac04 \uc2b9\ucc28 \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 // \uc6f9 _rsLegs \u00b7 _rsNotDeparted \u00b7 _rsAlightGps \u00b7 _rsPress \uc758 \uacc4\uc0b0\uc744 \uc5d4\uc9c4\uc73c\ub85c \uc62e\uae34 \uac83. \uccab \uad6c\uac04\uc740 \uc704(rsWait)\uac00 \ub9e1\uace0, \ub458\uc9f8 \uad6c\uac04\ubd80\ud130\ub294 \uc5ec\uae30\uc11c '\ud658\uc2b9 \ub300\uae30'(st.xw)\ub97c \ub9cc\ub4e0\ub2e4.
-var RS_LEAD_MS = 120000;     // \ub3c4\ucc29 2\ubd84 \uc804\ubd80\ud130 \uc2dc\ud2b8\ub97c \uc62c\ub9b0\ub2e4
+var RS_LEAD_MS = 120000;     // \ub3c4\ucc29 2\ubd84 \uc804\ubd80\ud130 \uc2dc\ud2b8\ub97c \uc62c\ub9b0\ub2e4(\ud658\uc2b9 \ucc28\ub7c9)
+var RS_WAIT_LEAD_MS = 600000;   // s256 (YJ: \ud558\ub2e8 \ud0d1\uc2b9 \ubc84\ud2bc\uc774 \ub108\ubb34 \ub2a6\uac8c \ub098\uc628\ub2e4): \ucc98\uc74c \ud0c8 \ucc28\ub294 10\ubd84 \uc804\ubd80\ud130 [\ud0d1\uc2b9] \ubc84\ud2bc\uc774 \ubcf4\uc774\ub294 \uc2dc\ud2b8\ub85c \uc62c\ub9b0\ub2e4(\uc774\ub974\uac8c \ub204\ub974\uba74 \uc5d4\uc9c4\uc774 \uc608\uc57d\uc73c\ub85c \ucc98\ub9ac)
 var RS_EARLY_MS = 90000;     // \ub3c4\ucc29 1\ubd84 \ubc18\ubcf4\ub2e4 \uc77c\ucc0d \ub204\ub978 \uac83\uc740 '\uc608\uc57d'
 var RS_SHRINK_MS = 180000;   // \ucd9c\ubc1c 3\ubd84\uc774 \uc9c0\ub098\ub3c4 \uc548 \ub20c\ub800\uc73c\uba74 \uc54c\uc57d\uc73c\ub85c \uc904\uc778\ub2e4
 var RS_ALIGHT_M = 150;       // \uc55e \uad6c\uac04 \ud558\ucc28\ub97c \ubabb \uc7a1\uc558\uc5b4\ub3c4 \uc704\uce58\uac00 \ub2e4\uc74c \uc2b9\ucc28 \uc9c0\uc810 150m \uc548\uc5d0\uc11c \uba48\ucdb0 \uc788\uc73c\uba74 \ub0b4\ub9b0 \uac83\uc73c\ub85c \ubcf8\ub2e4
@@ -10362,8 +10363,8 @@ function rsActs(st, req, now, notes) {
   if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
   var a = req.act;
   if (a === 'detour') rsDtActStart(st, now, notes);
-  else if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; }
-  else if (a === 'close') { st.rsOpen = 0; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // \ub3c4\ucc29 2\ubd84 \uc548\uc5d0 \ub2eb\uc740 \ucc28\ub7c9\uc740 \ub300\uae30 \uc54c\uc57d\uc73c\ub85c(\ub2e4\uc2dc \uc62c\ub9ac\uc9c0 \uc54a\uc74c) \u00b7 2\ubd84\ubcf4\ub2e4 \uba3c \ub54c \ub2eb\uc740 \uac83\uc740 2\ubd84 \uc548\uc774 \ub418\uba74 \uc790\ub3d9\uc73c\ub85c \ub2e4\uc2dc \uc62c\ub77c\uc628\ub2e4
+  else if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; if (st.wait) st.wait.shr = false; }
+  else if (a === 'close') { st.rsOpen = 0; if (st.wait && st.wait.arrMs != null && st.wait.arrMs - now > RS_LEAD_MS) st.wait.shr = true; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // \ub3c4\ucc29 2\ubd84 \uc548\uc5d0 \ub2eb\uc740 \ucc28\ub7c9\uc740 \ub300\uae30 \uc54c\uc57d\uc73c\ub85c(\ub2e4\uc2dc \uc62c\ub9ac\uc9c0 \uc54a\uc74c) \u00b7 2\ubd84\ubcf4\ub2e4 \uba3c \ub54c \ub2eb\uc740 \uac83\uc740 2\ubd84 \uc548\uc774 \ub418\uba74 \uc790\ub3d9\uc73c\ub85c \ub2e4\uc2dc \uc62c\ub77c\uc628\ub2e4
   else if (a === 'press' && !st.wait && st.xw && !st.xPend) {
     var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
     var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // \ubc29\uae08 \ub5a0\ub09c \ucc28\uac00 \uc788\uc73c\uba74 \uc608\uc57d\ud558\uc9c0 \uc54a\uace0 \ubc14\ub85c \ud655\uc815
@@ -10476,7 +10477,7 @@ function rsRsState0(st, r, now) {
   }
   if (st.wait) {
     var w = st.wait, nm = (nodes[w.i] && nodes[w.i].name) || '', hm = r.arr && r.arr[w.i] ? r.arr[w.i] : '';
-    var open = now >= w.arrMs - RS_LEAD_MS || (st.rsOpen || 0) > now;
+    var open = now >= w.arrMs - RS_LEAD_MS || (!w.shr && now >= w.arrMs - RS_WAIT_LEAD_MS) || (st.rsOpen || 0) > now;      // 10\ubd84 \uc804\ubd80\ud130 \uc5f4\ub9ac\uc9c0\ub9cc \uc0ac\uc6a9\uc790\uac00 \uc811\uc5b4 \ub450\uba74 2\ubd84 \uc804\uae4c\uc9c0\ub294 \uc54c\uc57d
     var wo = mk(open ? 'board' : 'wait', nm + (hm ? ' ' + hm : '') + ' \ucd9c\ubc1c', nm, '\ud0d1\uc2b9');
     if (nodes[w.i]) rich(wo, w.i, w.arrMs, false, now - w.arrMs >= RS_SHRINK_MS);
     return wo;

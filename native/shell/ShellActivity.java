@@ -2212,11 +2212,15 @@ public class ShellActivity extends Activity {
         loadMapBodyRound(v, keep, 0);
     }
     // ── 네트워크 사전 연결: 버스 서버로 연결(DNS · TLS · HTTP/2)을 미리 맺어 둔다 — 실제 도착정보 요청이 그 연결을 이어 쓴다(NetPost 는 연결을 끊지 않는다) ──
-    private long preConnAt;
+    private long preConnAt, warmAt;
     private void preconnectBus() {
         long now = System.currentTimeMillis();
         if (now - preConnAt < 20000L) return;
         preConnAt = now;
+        if (now - warmAt >= 90000L) {                                                       // s256 (YJ: 경로 탐색 누르고 반응이 너무 늦다): 엔진의 첫 경로 계산(코드 예열 · 자료 읽기)을 켜자마자 뒤에서 미리 시킨다 — 누를 때 콜드 스타트를 기다리지 않게. 서버도 60초에 한 번만 실제로 돈다.
+            warmAt = now;
+            Thread tw = new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BASE + "/warm", 25000); } catch (Throwable ignored) { } } }, "shell-routewarm"); tw.setDaemon(true); tw.start();
+        }
         new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BUS_BASE + "/health", 4000); } catch (Throwable ignored) { } } }, "shell-preconn").start();
         new Thread(new Runnable() { @Override public void run() { try { NetPost.get(ShellCore.BASE + "/health", 4000); } catch (Throwable ignored) { } } }, "shell-preconn2").start();          // 엔진(route-v2) · 두 번째 길(/bus-tago)도 같은 곳 — 연결을 미리 맺어 둔다
     }

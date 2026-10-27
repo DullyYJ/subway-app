@@ -106,7 +106,8 @@ function rsClampTxt(s, n) { s = String(s == null ? '' : s); return s.length > n 
 
 // ── 탑승 시트(앱 화면 · 오버레이 공통): 환승 구간 승차 ───────────────────────────────────────────
 // 웹 _rsLegs · _rsNotDeparted · _rsAlightGps · _rsPress 의 계산을 엔진으로 옮긴 것. 첫 구간은 위(rsWait)가 맡고, 둘째 구간부터는 여기서 '환승 대기'(st.xw)를 만든다.
-var RS_LEAD_MS = 120000;     // 도착 2분 전부터 시트를 올린다
+var RS_LEAD_MS = 120000;     // 도착 2분 전부터 시트를 올린다(환승 차량)
+var RS_WAIT_LEAD_MS = 600000;   // s256 (YJ: 하단 탑승 버튼이 너무 늦게 나온다): 처음 탈 차는 10분 전부터 [탑승] 버튼이 보이는 시트로 올린다(이르게 누르면 엔진이 예약으로 처리)
 var RS_EARLY_MS = 90000;     // 도착 1분 반보다 일찍 누른 것은 '예약'
 var RS_SHRINK_MS = 180000;   // 출발 3분이 지나도 안 눌렀으면 알약으로 줄인다
 var RS_ALIGHT_M = 150;       // 앞 구간 하차를 못 잡았어도 위치가 다음 승차 지점 150m 안에서 멈춰 있으면 내린 것으로 본다
@@ -473,8 +474,8 @@ function rsActs(st, req, now, notes) {
   if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
   var a = req.act;
   if (a === 'detour') rsDtActStart(st, now, notes);
-  else if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; }
-  else if (a === 'close') { st.rsOpen = 0; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // 도착 2분 안에 닫은 차량은 대기 알약으로(다시 올리지 않음) · 2분보다 먼 때 닫은 것은 2분 안이 되면 자동으로 다시 올라온다
+  else if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; if (st.wait) st.wait.shr = false; }
+  else if (a === 'close') { st.rsOpen = 0; if (st.wait && st.wait.arrMs != null && st.wait.arrMs - now > RS_LEAD_MS) st.wait.shr = true; if (st.xw && st.xw.arrMs != null && st.xw.arrMs - now <= RS_LEAD_MS) st.xw.shr = true; }   // 도착 2분 안에 닫은 차량은 대기 알약으로(다시 올리지 않음) · 2분보다 먼 때 닫은 것은 2분 안이 되면 자동으로 다시 올라온다
   else if (a === 'press' && !st.wait && st.xw && !st.xPend) {
     var x = st.xw, tt = req.pressTT && req.pressTT.i === x.i ? req.pressTT : null, dN = rsDistToStop(st, st.trail || [], x.i);
     var lateHit = !!(tt && tt.late != null && !(dN != null && dN > RS_NEAR_M));      // 방금 떠난 차가 있으면 예약하지 않고 바로 확정
@@ -587,7 +588,7 @@ function rsRsState0(st, r, now) {
   }
   if (st.wait) {
     var w = st.wait, nm = (nodes[w.i] && nodes[w.i].name) || '', hm = r.arr && r.arr[w.i] ? r.arr[w.i] : '';
-    var open = now >= w.arrMs - RS_LEAD_MS || (st.rsOpen || 0) > now;
+    var open = now >= w.arrMs - RS_LEAD_MS || (!w.shr && now >= w.arrMs - RS_WAIT_LEAD_MS) || (st.rsOpen || 0) > now;      // 10분 전부터 열리지만 사용자가 접어 두면 2분 전까지는 알약
     var wo = mk(open ? 'board' : 'wait', nm + (hm ? ' ' + hm : '') + ' 출발', nm, '탑승');
     if (nodes[w.i]) rich(wo, w.i, w.arrMs, false, now - w.arrMs >= RS_SHRINK_MS);
     return wo;

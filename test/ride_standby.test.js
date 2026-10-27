@@ -429,10 +429,12 @@ t('탑승 전 대기: 역으로 걸어가느라 경로선에서 멀리 있어도
   assert.ok(!st.offOn, '대기 중엔 이탈 시각을 적지 않는다');
 });
 t('오버레이 탑승 줄: 대기 알약 → (알약 누름 · 출발 2분 전) 탑승 줄 → [탑승] → [되돌리기]', () => {
-  let r = stepO(waitState(), at(12, 47, 0), null, false);
-  assert.strictEqual(r.overlay.rs.st, 'wait');
-  r = stepO(r.state, at(12, 47, 5), { act: 'pill' }, false); assert.strictEqual(r.overlay.rs.st, 'board');
-  r = stepO(r.state, at(12, 47, 10), { act: 'close' }, false); assert.strictEqual(r.overlay.rs.st, 'wait');
+  let r = stepO(waitState(), at(12, 40, 0), null, false);
+  assert.strictEqual(r.overlay.rs.st, 'wait', '출발 12분 전: 아직 알약');
+  r = stepO(r.state, at(12, 40, 5), { act: 'pill' }, false); assert.strictEqual(r.overlay.rs.st, 'board');
+  r = stepO(r.state, at(12, 40, 10), { act: 'close' }, false); assert.strictEqual(r.overlay.rs.st, 'wait');
+  r = stepO(r.state, at(12, 42, 5), null, false); assert.strictEqual(r.overlay.rs.st, 'wait', 's256: 사용자가 접어 둔 건 2분 전까지 알약');
+  assert.strictEqual(stepO(waitState(), at(12, 42, 5), null, false).overlay.rs.st, 'board', 's256: 안 접었으면 출발 10분 전부터 [탑승] 버튼이 보이는 줄');
   r = stepO(r.state, at(12, 50, 30), null, false);
   assert.ok(r.overlay.rs.st === 'board' && r.overlay.rs.bt === '탑승' && /S0/.test(r.overlay.rs.k) && /승차 대기/.test(r.ongoing.text), JSON.stringify(r.overlay.rs));
   r = stepO(r.state, at(12, 50, 35), { act: 'press' }, false);

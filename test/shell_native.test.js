@@ -52,6 +52,10 @@ function findAndroidJar() {
     assert.ok(/"dl\.go"\.equals\(v\)\) v = "dl\.ok"/.test(v), 'dl.go 는 확인 쪽(맛집·쿠팡 열기)');
     assert.ok(/static boolean overlayReady\(Context c\)/.test(rs) && /RideOverlay\.allowed\(c\)/.test(rs), '오버레이를 쓸 수 있는지는 서비스가 안다');
   });
+  await t('s256: 켜자마자 엔진 경로 계산을 미리 예열(/warm — 뒤 스레드 · 90초 한 번) · 경로 탐색 눌렀을 때 콜드 스타트를 기다리지 않게', () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), pc = v.slice(v.indexOf('private void preconnectBus()'), v.indexOf('// ── 정류장 뼈대 저장'));
+    assert.ok(/now - warmAt >= 90000L/.test(pc) && /NetPost\.get\(ShellCore\.BASE \+ "\/warm", 25000\)/.test(pc) && /tw\.setDaemon\(true\)/.test(pc), '/warm 은 뒤 스레드에서 90초에 한 번');
+  });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
