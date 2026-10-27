@@ -58,7 +58,7 @@ function findAndroidJar() {
   });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), N('ShopRecent.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 1500));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', core, 'com.dullyyj.subway.ShellJvmTest'], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') || r.stderr);
@@ -787,6 +787,12 @@ function findAndroidJar() {
     assert.ok(/public static double glow\(/.test(ov) && /public static double ringAlpha\(/.test(ov));
     assert.ok(/BoardCore\.s\(ad\.get\("go"\), 8\)/.test(rc) && /length\(\) == 0\) r\.go = shop/.test(rc), '버튼 글은 엔진이 준 값(없으면 예전 이름)');
     assert.ok(/recoLive/.test(rs) && /RecoNotify\.send\(app, body, core\)/.test(rs), '추천: 받아 둔 글이 없으면 바로 받는다');
+  });
+  await t('s262: 쿠팡 추천 최근 상품 — 요청에 shopRecent 를 실어 보내고(바로 받기·미리 받기) 알림을 띄운 뒤에만 기억한다', async () => {
+    const rn = fs.readFileSync(N('RecoNotify.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
+    assert.ok(/body = withRecent\(c, body\);[\s\S]{0,200}NetPost\.post\(ShellCore\.BASE \+ "\/reco-text", body/.test(rn), '바로 받기: 보내기 전에 최근 상품을 실어 보낸다');
+    assert.ok(/deliver\(c, t\[0\], t\[1\], ad, core\);\s*remember\(c, r\.body\);/.test(rn) && /deliver\(c, t\[0\], t\[1\], ad, core\);\s*remember\(c, resp\);/.test(rn), '띄운 뒤에만 기억(받아 둔 글 · 바로 받은 글 둘 다)');
+    assert.ok(/RecoNotify\.withRecent\(getApplicationContext\(\), RideLocal\.prefetchBody\(reqBody, resp\)\)/.test(rs), '미리 받기도 최근 상품을 실어 보낸다');
   });
   await t('s236: 좌우 밀기가 막히지 않고 부드럽게(손가락 1:1 · 빠른 쓸기 · 비스듬히 시작해도 가로로 전환 · 스프링 복귀) · 아래로 당겨 새로고침(스프링)', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');

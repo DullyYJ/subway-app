@@ -354,7 +354,7 @@ public class RideService extends Service {
     private volatile boolean recoFetching = false;
     private void prefetchReco(String reqBody, String resp) {
         if (recoCacheResp.length() > 0 || recoFetching || recoTries >= 2) return;
-        final String pb = RideLocal.prefetchBody(reqBody, resp);
+        final String pb = RecoNotify.withRecent(getApplicationContext(), RideLocal.prefetchBody(reqBody, resp));
         if (pb.length() == 0) return;
         recoFetching = true; recoTries++;
         new Thread(new Runnable() {

@@ -2977,3 +2977,7 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **고침(`engine/shop.js`)**: `shopIsRainGear`(테마 우천대비 또는 이름 우산·레인·장화·우비·판초·빗물·방수) 이고 `ctx.wet`(강수 30%+ 또는 날씨 글에 비·소나기·눈)이 아니면 -400(사실상 제외, 날씨 못 받았을 때 포함). `shopThemeJitter`: 날짜·테마별 고정 흔들림 ±22(하루 안에선 결정적). `reco-text.js rtxPickShopItem` 도 마른 날 우산류를 한 번 더 걸러낸다. 웹 쌍둥이(`ios-reference/index.html _shopScore`)도 같은 규칙으로 맞춤(shop_engine 동등성 시험).
 - 시험: shop_engine(마른 날 위쪽 8개에 우산류 없음 · 비/소나기면 올라옴 · 14일간 윗줄 5가지+), reco_text(상품 고르기 마른 날 제외).
 - 한계: 앱이 최근 추천 상품 목록(`shopRecent`)을 보내지 않아 '어제 본 상품 피하기'는 없다(날짜 흔들림과 도착 시각 씨앗으로만 달라짐). **기기 미확인**.
+
+### s262 — 쿠팡 최근 추천 기억 (앱만 바뀜 · 워커 변경 없음)
+- `ShopRecent.java`(순수 자바): 보여 준 쿠팡 상품 이름을 최대 20개·5일 기억(`add/names/inject/itemName`). `RecoNotify.withRecent/remember`가 SharedPreferences(`shop_recent`)에 저장·읽기.
+- 요청(`/reco-text` 바로 받기 · 미리 받기)에 `"shopRecent":[…]` 를 실어 보내면 엔진 `rtxPickShopItem`이 그 이름을 뺀 나머지에서 고른다(전부 최근이면 다시 허용). 알림/팝업을 실제로 띄운 뒤에만 기억한다. 설정의 시험 알림도 기억에 남는다. **기기 미확인**.

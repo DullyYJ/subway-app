@@ -25,6 +25,23 @@ public class ShellJvmTest {
     public static void main(String[] a) throws Exception {
         ShellCore.MemStore st = new ShellCore.MemStore();
 
+        // ── 쿠팡 추천 최근 상품 기억(ShopRecent, s262) ──
+        {
+            long t0 = 1_000_000_000_000L;
+            String sv = "";
+            sv = ShopRecent.add(sv, "A 상품", t0); sv = ShopRecent.add(sv, "B\t상품\n2", t0 + 1000); sv = ShopRecent.add(sv, "A 상품", t0 + 2000);
+            java.util.List<String> nm = ShopRecent.names(sv, t0 + 3000);
+            ok(nm.size() == 2 && "A 상품".equals(nm.get(0)) && "B 상품 2".equals(nm.get(1)), "최근 상품: 같은 이름은 하나 · 최근 순 · 탭·줄바꿈 정리 " + nm);
+            ok(ShopRecent.names(sv, t0 + ShopRecent.TTL_MS + 5000).isEmpty(), "최근 상품: 5일이 지나면 잊는다");
+            String big = ""; for (int i = 0; i < 40; i++) big = ShopRecent.add(big, "P" + i, t0 + i);
+            ok(ShopRecent.names(big, t0 + 100).size() == ShopRecent.MAX && "P39".equals(ShopRecent.names(big, t0 + 100).get(0)), "최근 상품: 최대 " + ShopRecent.MAX + "개");
+            String b0 = "{\"arrMs\":1,\"pickShop\":1}";
+            String b1 = ShopRecent.inject(b0, nm);
+            ok(b1.equals("{\"arrMs\":1,\"pickShop\":1,\"shopRecent\":[\"A 상품\",\"B 상품 2\"]}"), "최근 상품: 요청 본문에 shopRecent 를 덧붙인다 " + b1);
+            ok(ShopRecent.inject(b0, new java.util.ArrayList<String>()).equals(b0) && ShopRecent.inject(b1, nm).equals(b1) && ShopRecent.inject("x", nm).equals("x"), "최근 상품: 기억이 없거나 이미 있으면 그대로");
+            ok(ShopRecent.itemName("{\"shopItem\":{\"n\":\"우산 \",\"u\":\"https://a\"}}").equals("우산") && ShopRecent.itemName("{\"ok\":true}").isEmpty() && ShopRecent.itemName("no json").isEmpty(), "최근 상품: 응답에서 상품 이름만 뽑는다");
+        }
+
         // ── 탭 ──
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");

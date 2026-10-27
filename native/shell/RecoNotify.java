@@ -16,10 +16,24 @@ final class RecoNotify {
     static final int RECO_ID = 7103;
     private static final String CH = RideService.CH_ALERT;
 
+    // s262: 최근 보여 준 쿠팡 상품 이름(ShopRecent)을 기기에 들고 있다가 요청에 실어 보낸다 — 실패해도 추천은 그대로 간다
+    static String withRecent(Context c, String body) {
+        try { return ShopRecent.inject(body, ShopRecent.names(c.getSharedPreferences(ShellActivity.PREFS, Context.MODE_PRIVATE).getString(ShopRecent.KEY, ""), System.currentTimeMillis())); } catch (Throwable t) { return body; }
+    }
+    static void remember(Context c, String resp) {
+        try {
+            String nm = ShopRecent.itemName(resp);
+            if (nm.length() == 0) return;
+            android.content.SharedPreferences p = c.getSharedPreferences(ShellActivity.PREFS, Context.MODE_PRIVATE);
+            p.edit().putString(ShopRecent.KEY, ShopRecent.add(p.getString(ShopRecent.KEY, ""), nm, System.currentTimeMillis())).apply();
+        } catch (Throwable ignored) { }
+    }
+
     /** @return 알림을 띄웠으면 true · 보낼 글이 없는 시간대면 false · 서버/네트워크 오류면 false(두 번까지 다시 받아 본다) */
     static boolean send(Context c, String body) { return send(c, body, null); }
     /** core 가 있으면 받은 추천 줄(ad)을 건네 둔다 — 엔진이 오버레이 하단 줄로 보여 준다. */
     static boolean send(Context c, String body, RideCore core) {
+        body = withRecent(c, body);                    // s262: 최근 보여 준 쿠팡 상품은 엔진이 피하게 같이 보낸다
         for (int i = 0; i < 2; i++) {
             try {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/reco-text", body, 9000);
@@ -29,6 +43,7 @@ final class RecoNotify {
                 RideCore.RecoAd ad = RideCore.recoAd(r.body);
                 if (core != null) core.setRecoAd(ad);
                 deliver(c, t[0], t[1], ad, core);
+                remember(c, r.body);
                 return true;
             } catch (Throwable ignored) { }
         }
@@ -45,6 +60,7 @@ final class RecoNotify {
             RideCore.RecoAd ad = RideCore.recoAd(resp);
             if (core != null) core.setRecoAd(ad);
             deliver(c, t[0], t[1], ad, core);
+            remember(c, resp);
             return true;
         } catch (Throwable ignored) { return false; }
     }
