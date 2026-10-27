@@ -28,11 +28,37 @@ t('같은 입력이면 같은 결과, 씨앗이 다르면 (메뉴·가게가) �
 });
 t('시간대별 모양: 아침 카페 · 점심 · 저녁 · 야식 · 쇼핑', () => {
   const m = ask(8); assert.strictEqual(m.slot, 'morning'); assert.strictEqual(m.kind, 'cafe'); assert.ok(/^☕ 오늘의 아침 · /m.test(m.body)); assert.ok(m.brunch); assert.ok(m.title.endsWith(' ☕'));
-  const l = ask(12); assert.strictEqual(l.kind, 'lunch'); assert.ok(/🍚 이 근처 한 끼/.test(l.body)); assert.ok(l.title.endsWith(' 🍚'));
+  const l = ask(12); assert.strictEqual(l.kind, 'lunch'); assert.ok(/🍚 오늘의 점심 · /.test(l.body)); assert.ok(l.title.endsWith(' 🍚'));
   const d = ask(18); assert.strictEqual(d.kind, 'dinner'); assert.strictEqual(d.dinner, true); assert.ok(/🍽 오늘의 저녁 · /.test(d.body));
   const n = ask(20); assert.strictEqual(n.kind, 'night'); assert.strictEqual(n.dinner, false); assert.ok(/🍗 오늘의 야식 · /.test(n.body));
   const s = ask(22); assert.strictEqual(s.kind, 'shop'); assert.ok(/🛍 우산/.test(s.body)); assert.strictEqual(s.shop, true); assert.ok(/생활 · /.test(s.body));
   const z = ask(3); assert.deepStrictEqual(z, { v: 1, slot: 'none' });
+});
+t('s259 날씨·요일에 따른 메뉴: 추운·비 오는 날은 국물 · 더운 날은 시원한 것 · 평일 점심은 빠른 한 끼 · 주말은 여유로운 한 끼', () => {
+  const FOODX = ['국밥','부대찌개','라멘','쌀국수','마라탕','초밥','회','덮밥','돈가스','파스타','피자','삼겹살','만두','햄버거','떡볶이','치킨','족발','곱창'].map((m, i) => ({ n: m + '집', c: '음식점 > ' + m, d: 100 + i * 20 }));
+  const tally = (hour, wx, day) => { const c = {}; for (let s = 1; s <= 300; s++) { const r = R.recoAlert({ arrMs: kst(hour, 5, day), nowMs: kst(hour, 0, day), dest: '강남', weather: wx, food: FOODX, recent: [], seed: s }); c[r.menu] = (c[r.menu] || 0) + 1; } return c; };
+  const sum = (c, ks) => ks.reduce((a, k) => a + (c[k] || 0), 0);
+  const SOUP = ['국밥','부대찌개','라멘','쌀국수','마라탕'], COOL = ['초밥','회','덮밥'];
+  const cold = tally(12, { temp: 2, feel: -1, tmin: -2, tmax: 6, rain: 10, txt: '맑음' }), hot = tally(12, { temp: 30, feel: 31, tmin: 24, tmax: 32, rain: 10, txt: '맑음' });
+  assert.ok(sum(cold, SOUP) > sum(hot, SOUP) * 1.6, '추운 날 국물이 더운 날보다 훨씬 많다 ' + sum(cold, SOUP) + ' vs ' + sum(hot, SOUP));
+  assert.ok(sum(hot, COOL) > sum(cold, COOL) * 1.3, '더운 날 시원한 메뉴가 더 많다');
+  const rain = tally(12, { temp: 14, feel: 13, tmin: 10, tmax: 16, rain: 80, txt: '비' }), dry = tally(12, { temp: 14, feel: 13, tmin: 10, tmax: 16, rain: 0, txt: '맑음' });
+  assert.ok(sum(rain, ['부대찌개','마라탕','떡볶이','국밥','라멘']) > sum(dry, ['부대찌개','마라탕','떡볶이','국밥','라멘']) * 1.3, '비 오는 날 따뜻한 메뉴가 더 많다');
+  const MILD = { temp: 18, feel: 18, tmin: 12, tmax: 22, rain: 0, txt: '맑음' };
+  const wkLunch = tally(12, MILD, 20), weLunch = tally(12, MILD, 24);                      // 10/20 화 · 10/24 토
+  assert.ok(sum(wkLunch, ['덮밥','국밥','돈가스','라멘','만두','햄버거','떡볶이']) > sum(weLunch, ['덮밥','국밥','돈가스','라멘','만두','햄버거','떡볶이']), '평일 점심은 빠른 한 끼가 더 많다');
+  assert.ok(sum(weLunch, ['파스타','피자','삼겹살','초밥','돈가스','쌀국수']) > sum(wkLunch, ['파스타','피자','삼겹살','초밥','돈가스','쌀국수']), '주말은 여유로운 한 끼가 더 많다');
+  const frDinner = tally(18, MILD, 23), tuDinner = tally(18, MILD, 20);                    // 10/23 금
+  assert.ok(sum(frDinner, ['삼겹살','곱창','족발','회','초밥']) > sum(tuDinner, ['삼겹살','곱창','족발','회','초밥']), '금요일 저녁엔 보상 메뉴가 더 많다');
+});
+t('s259 짝 맞추기: 메뉴를 추천하면 파는 식당도 · 식당만 있으면 그 식당의 메뉴도 같이 보여 준다', () => {
+  for (const h of [12, 18, 20]) {
+    const r = ask(h, { seed: 11 });
+    assert.ok(r.menu && /오늘의 (점심|저녁|야식) · /.test(r.body), '메뉴 줄 ' + h);
+    assert.ok(/근처에서 드실 거면 · /.test(r.body) || /· /.test(r.body.split('\n').filter(x => /^   /.test(x)).join('\n')), '식당 줄 ' + h);
+  }
+  const place = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: [{ n: '순대국집', c: '음식점 > 한식 > 순대국', d: 90 }], recent: [], seed: 5 });
+  assert.ok(/순대국집/.test(place.body) && /오늘의 점심 · /.test(place.body) && place.menu, '식당만 있어도 메뉴 줄이 같이 있다: ' + place.body);
 });
 t('본문 첫 줄·둘째 줄: 하차 N분 전 · 목적지 도착 예정 HH:MM (한국시간)', () => {
   const a = ask(12); const L = a.body.split('\n'); assert.strictEqual(L[0], '하차 5분 전이에요.'); assert.strictEqual(L[1], '강남 도착 예정 12:05'); assert.strictEqual(L[2], '');

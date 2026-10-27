@@ -610,6 +610,45 @@ function rtxMenusWithSpots(food, pool) {
   try { return (pool || RTX_NIGHT_MENU).filter(function (m) { return rtxSpotsFor(food, m, 'night', 1).length > 0; }); }
   catch (e) { return []; }
 }
+// ★ s259 (YJ: "그날의 날씨 · 요일(평일·주말)에 따라 추천 음식을 다르게"): 메뉴를 무작위가 아니라 날씨·요일·월급날 가중치로 고른다(씨앗 무작위라 같은 입력이면 같은 결과).
+//   추우면(체감 8도 이하·비·눈) 국물 · 더우면(27도 이상) 시원·가벼운 것 · 주말엔 여유로운 한 끼 · 평일 점심은 빠른 한 끼 · 금요일·월급날·주말 저녁엔 보상 메뉴 · 월요일엔 뜨끈한 것.
+var RTX_W_SOUP = ['국밥', '부대찌개', '라멘', '쌀국수', '마라탕'];
+var RTX_W_COOL = ['초밥', '회', '쌀국수', '덮밥'];
+var RTX_W_RAIN = ['부대찌개', '마라탕', '떡볶이', '국밥', '라멘', '치킨', '파스타'];
+var RTX_W_QUICK = ['덮밥', '국밥', '돈가스', '라멘', '만두', '햄버거', '떡볶이'];
+var RTX_W_RELAX = ['파스타', '피자', '삼겹살', '초밥', '돈가스', '쌀국수'];
+var RTX_W_TREAT = ['삼겹살', '곱창', '족발', '회', '치킨', '초밥'];
+function rtxMenuWeight(m, cx, slot) {
+  cx = cx || {};
+  var w = 1, has = function (arr) { return arr.indexOf(m) >= 0; };
+  var coldish = !!(cx.cold || cx.freezing || cx.rainy || cx.snowy);
+  if (coldish) { if (has(RTX_W_SOUP)) w += (cx.freezing || cx.cold) ? 3 : 2; if (cx.rainy && has(RTX_W_RAIN)) w += 3; }
+  if (cx.hot) { if (has(RTX_W_COOL)) w += 3; if (has(RTX_W_SOUP) && m !== '쌀국수') w -= 0.8; }
+  else if (cx.warm && !cx.rainy && has(RTX_W_COOL)) w += 1;
+  if (cx.weekend) { if (has(RTX_W_RELAX)) w += 2; if (slot !== 'lunch' && has(RTX_W_TREAT)) w += 1; }
+  else {
+    if (slot === 'lunch' && has(RTX_W_QUICK)) w += 2;
+    if ((cx.fri || cx.payday) && slot !== 'lunch' && has(RTX_W_TREAT)) w += 2.5;
+    if (cx.mon && has(RTX_W_SOUP)) w += 1;
+  }
+  return Math.max(0.2, w);
+}
+function rtxPickMenu(list, cx, slot) {
+  if (!list || !list.length) return '';
+  var ws = list.map(function (m) { return rtxMenuWeight(m, cx, slot); }), tot = 0, i;
+  for (i = 0; i < ws.length; i++) tot += ws[i];
+  var r = RTX_RND() * tot;
+  for (i = 0; i < list.length; i++) { r -= ws[i]; if (r < 0) return list[i]; }
+  return list[list.length - 1];
+}
+// 고른 가게의 분류(예: 음식점 > 한식 > 국밥)에서 메뉴 이름 — 가게만 있고 메뉴가 없을 때 '가게 · 메뉴'를 짝지어 보여 주려고
+function rtxMenuFromCat(cat, pool) {
+  var c = String(cat || ''), i, k, kws;
+  for (i = 0; i < (pool || []).length; i++) { kws = RTX_MENU_KW[pool[i]] || [pool[i]]; for (k = 0; k < kws.length; k++) if (kws[k].length >= 2 && c.indexOf(kws[k]) >= 0) return pool[i]; }
+  var tail = c.split('>').pop().trim();
+  return tail.slice(0, 12);
+}
+function rtxFindFood(food, name) { if (food) for (var i = 0; i < food.length; i++) if (food[i] && food[i].n === name) return food[i]; return null; }
 // 가게 하나 고르기(최근 추천한 곳은 피한다) → { idx, it } 또는 null — 예전 _arrPickPlace
 function rtxPickPlace(food, recent, kind) {
   try {
@@ -687,23 +726,32 @@ function rtxBuild(inp) {
   } else {
     var _menuPool = isLunch ? RTX_LUNCH_MENU : (isDinner ? RTX_DINNER_MENU : RTX_NIGHT_MENU);
     var _avail = rtxMenusWithSpots(food, _menuPool);
+    var _wslot = isLunch ? 'lunch' : (isDinner ? 'dinner' : 'night');
     if (_avail.length) {
-      menu = _avail[Math.floor(RTX_RND() * _avail.length)];
+      menu = rtxPickMenu(_avail, cx, _wslot);                                     // s259: 날씨·요일 가중치로(주변에서 실제로 파는 메뉴 중에서)
     } else {
       var cat = place ? String(place.c || '') : '';
       var matched = _menuPool.filter(function (m) { return cat.indexOf(m) >= 0; });
-      menu = matched.length ? matched[0] : _menuPool[Math.floor(RTX_RND() * _menuPool.length)];
+      menu = matched.length ? matched[0] : rtxPickMenu(_menuPool, cx, _wslot);
     }
   }
   var spots = rtxSpotsFor(food, menu, isMorn ? 'cafe' : 'night', isMorn ? 2 : 3);
+  if (!isMorn && !spots.length && place) {                                         // s259 (YJ: 식당을 추천하면 먹을 것도 같이): 메뉴를 파는 가게가 없어 가게만 고른 경우 — 그 가게의 분류에서 메뉴를 뽑아 짝을 맞춘다
+    var _pm = rtxMenuFromCat(place.c, isLunch ? RTX_LUNCH_MENU : (isDinner ? RTX_DINNER_MENU : RTX_NIGHT_MENU));
+    if (_pm) menu = _pm;
+  }
   var brunch = isMorn ? RTX_BRUNCH[Math.floor(RTX_RND() * RTX_BRUNCH.length)] : '';
 
   var hk = rtxHook(isMorn ? 'morning' : (isLunch ? 'lunch' : (isDinner ? 'dinner' : 'night')), cx, menu);
   lines.push(hk.t);
 
   if (isLunch) {
-    lines.push('🍚 이 근처 한 끼');
-    if (place) {
+    lines.push('🍚 오늘의 점심 · ' + menu);                                          // s259: 메뉴 + 파는 가게를 같이
+    var lp = spots.length ? rtxFindFood(food, spots[0]) : null;
+    if (spots.length) {
+      var d5 = (lp && lp.d != null) ? (' ' + lp.d + 'm') : '';
+      lines.push('   근처에서 드실 거면 · ' + spots.join(', ') + (spots.length === 1 ? d5 : ''));
+    } else if (place) {
       var d3 = (place.d != null) ? (place.d + 'm') : '가까운 곳';
       lines.push('   ' + place.n + ' · ' + d3 + (place.c ? ' · ' + place.c : ''));
     } else {

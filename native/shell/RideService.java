@@ -368,9 +368,12 @@ public class RideService extends Service {
         }, "ride-reco-pre").start();
     }
     /** 하차 7분 전 추천: 탑승 전에 받아 둔 글(맛집·커피·쇼핑 문구)을 띄운다(RecoNotify.sendCached) — 네트워크를 쓰지 않는다. */
+    private volatile boolean recoSentOk = false;                      // s259 (YJ: 세 번까지 시도하되 한 번이라도 성공하면 그다음은 보내지 않는다) — 한 여정에 한 번 성공하면 끝
     private void fireReco(final String body) {
+        if (recoSentOk) return;
         final Context app = getApplicationContext();
         boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core, jnum(body, "arrMs"), jnum(body, "nowMs"));
+        if (ok) recoSentOk = true;
         recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름 — 바로 받는 중"; recoStageAt = System.currentTimeMillis();
         if (ok || recoLive) return;
         // s237(YJ: 도착 전 맛집·카페·쿠팡이 안 나온다): 받아 둔 글이 없거나 시간대가 달라졌어도 추천은 한 여정에 한 번뿐이라 다시 안 온다 → 지금 서버에서 바로 받아 알림과 오버레이 추천 줄에 쓴다.
@@ -379,10 +382,11 @@ public class RideService extends Service {
             @Override public void run() {
                 boolean sent = false;
                 try { sent = RecoNotify.send(app, body, core); } catch (Throwable ignored) { }
+                if (sent) recoSentOk = true;
                 recoStage = sent ? "바로 받아 알림 보냄" : "바로 받기 실패/보낼 시간대 아님"; recoStageAt = System.currentTimeMillis();
                 recoLive = false;
-                if (!sent && recoRetryN < 3 && core != null) { recoRetryN++; core.retryReco(); }          // s258: 못 보냈으면(통신 실패) 도착 전 창이 열려 있는 동안 다시 판정한다(세 번까지)
-                try { if (!sent) ErrLog.record(RideService.this, new IllegalStateException("RIDE_RECO 보내기 실패(" + recoRetryN + "/3) 단계=" + recoStage + " 이유=" + (core == null ? "?" : core.recoWhy())), false); } catch (Throwable ignored) { }
+                if (!sent && !recoSentOk && recoRetryN < 2 && core != null) { recoRetryN++; core.retryReco(); }          // s258·s259: 못 보냈으면(통신 실패) 도착 전 창이 열려 있는 동안 다시 판정한다 — 처음 + 다시 2번 = 모두 3번까지, 한 번이라도 성공하면 그만
+                try { if (!sent) ErrLog.record(RideService.this, new IllegalStateException("RIDE_RECO 보내기 실패(시도 " + (recoRetryN + 1) + "/3) 단계=" + recoStage + " 이유=" + (core == null ? "?" : core.recoWhy())), false); } catch (Throwable ignored) { }
                 if (sent && h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } });
             }
         }, "ride-reco-live").start();

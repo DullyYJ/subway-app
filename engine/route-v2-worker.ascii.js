@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s259";
+var ENGINE_VERSION = "route-v2-2026-10-27s260";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17263,6 +17263,45 @@ function rtxMenusWithSpots(food, pool) {
   try { return (pool || RTX_NIGHT_MENU).filter(function (m) { return rtxSpotsFor(food, m, 'night', 1).length > 0; }); }
   catch (e) { return []; }
 }
+// \u2605 s259 (YJ: "\uadf8\ub0a0\uc758 \ub0a0\uc528 \u00b7 \uc694\uc77c(\ud3c9\uc77c\u00b7\uc8fc\ub9d0)\uc5d0 \ub530\ub77c \ucd94\ucc9c \uc74c\uc2dd\uc744 \ub2e4\ub974\uac8c"): \uba54\ub274\ub97c \ubb34\uc791\uc704\uac00 \uc544\ub2c8\ub77c \ub0a0\uc528\u00b7\uc694\uc77c\u00b7\uc6d4\uae09\ub0a0 \uac00\uc911\uce58\ub85c \uace0\ub978\ub2e4(\uc528\uc557 \ubb34\uc791\uc704\ub77c \uac19\uc740 \uc785\ub825\uc774\uba74 \uac19\uc740 \uacb0\uacfc).
+//   \ucd94\uc6b0\uba74(\uccb4\uac10 8\ub3c4 \uc774\ud558\u00b7\ube44\u00b7\ub208) \uad6d\ubb3c \u00b7 \ub354\uc6b0\uba74(27\ub3c4 \uc774\uc0c1) \uc2dc\uc6d0\u00b7\uac00\ubcbc\uc6b4 \uac83 \u00b7 \uc8fc\ub9d0\uc5d4 \uc5ec\uc720\ub85c\uc6b4 \ud55c \ub07c \u00b7 \ud3c9\uc77c \uc810\uc2ec\uc740 \ube60\ub978 \ud55c \ub07c \u00b7 \uae08\uc694\uc77c\u00b7\uc6d4\uae09\ub0a0\u00b7\uc8fc\ub9d0 \uc800\ub141\uc5d4 \ubcf4\uc0c1 \uba54\ub274 \u00b7 \uc6d4\uc694\uc77c\uc5d4 \ub728\ub048\ud55c \uac83.
+var RTX_W_SOUP = ['\uad6d\ubc25', '\ubd80\ub300\ucc0c\uac1c', '\ub77c\uba58', '\uc300\uad6d\uc218', '\ub9c8\ub77c\ud0d5'];
+var RTX_W_COOL = ['\ucd08\ubc25', '\ud68c', '\uc300\uad6d\uc218', '\ub36e\ubc25'];
+var RTX_W_RAIN = ['\ubd80\ub300\ucc0c\uac1c', '\ub9c8\ub77c\ud0d5', '\ub5a1\ubcf6\uc774', '\uad6d\ubc25', '\ub77c\uba58', '\uce58\ud0a8', '\ud30c\uc2a4\ud0c0'];
+var RTX_W_QUICK = ['\ub36e\ubc25', '\uad6d\ubc25', '\ub3c8\uac00\uc2a4', '\ub77c\uba58', '\ub9cc\ub450', '\ud584\ubc84\uac70', '\ub5a1\ubcf6\uc774'];
+var RTX_W_RELAX = ['\ud30c\uc2a4\ud0c0', '\ud53c\uc790', '\uc0bc\uacb9\uc0b4', '\ucd08\ubc25', '\ub3c8\uac00\uc2a4', '\uc300\uad6d\uc218'];
+var RTX_W_TREAT = ['\uc0bc\uacb9\uc0b4', '\uacf1\ucc3d', '\uc871\ubc1c', '\ud68c', '\uce58\ud0a8', '\ucd08\ubc25'];
+function rtxMenuWeight(m, cx, slot) {
+  cx = cx || {};
+  var w = 1, has = function (arr) { return arr.indexOf(m) >= 0; };
+  var coldish = !!(cx.cold || cx.freezing || cx.rainy || cx.snowy);
+  if (coldish) { if (has(RTX_W_SOUP)) w += (cx.freezing || cx.cold) ? 3 : 2; if (cx.rainy && has(RTX_W_RAIN)) w += 3; }
+  if (cx.hot) { if (has(RTX_W_COOL)) w += 3; if (has(RTX_W_SOUP) && m !== '\uc300\uad6d\uc218') w -= 0.8; }
+  else if (cx.warm && !cx.rainy && has(RTX_W_COOL)) w += 1;
+  if (cx.weekend) { if (has(RTX_W_RELAX)) w += 2; if (slot !== 'lunch' && has(RTX_W_TREAT)) w += 1; }
+  else {
+    if (slot === 'lunch' && has(RTX_W_QUICK)) w += 2;
+    if ((cx.fri || cx.payday) && slot !== 'lunch' && has(RTX_W_TREAT)) w += 2.5;
+    if (cx.mon && has(RTX_W_SOUP)) w += 1;
+  }
+  return Math.max(0.2, w);
+}
+function rtxPickMenu(list, cx, slot) {
+  if (!list || !list.length) return '';
+  var ws = list.map(function (m) { return rtxMenuWeight(m, cx, slot); }), tot = 0, i;
+  for (i = 0; i < ws.length; i++) tot += ws[i];
+  var r = RTX_RND() * tot;
+  for (i = 0; i < list.length; i++) { r -= ws[i]; if (r < 0) return list[i]; }
+  return list[list.length - 1];
+}
+// \uace0\ub978 \uac00\uac8c\uc758 \ubd84\ub958(\uc608: \uc74c\uc2dd\uc810 > \ud55c\uc2dd > \uad6d\ubc25)\uc5d0\uc11c \uba54\ub274 \uc774\ub984 \u2014 \uac00\uac8c\ub9cc \uc788\uace0 \uba54\ub274\uac00 \uc5c6\uc744 \ub54c '\uac00\uac8c \u00b7 \uba54\ub274'\ub97c \uc9dd\uc9c0\uc5b4 \ubcf4\uc5ec \uc8fc\ub824\uace0
+function rtxMenuFromCat(cat, pool) {
+  var c = String(cat || ''), i, k, kws;
+  for (i = 0; i < (pool || []).length; i++) { kws = RTX_MENU_KW[pool[i]] || [pool[i]]; for (k = 0; k < kws.length; k++) if (kws[k].length >= 2 && c.indexOf(kws[k]) >= 0) return pool[i]; }
+  var tail = c.split('>').pop().trim();
+  return tail.slice(0, 12);
+}
+function rtxFindFood(food, name) { if (food) for (var i = 0; i < food.length; i++) if (food[i] && food[i].n === name) return food[i]; return null; }
 // \uac00\uac8c \ud558\ub098 \uace0\ub974\uae30(\ucd5c\uadfc \ucd94\ucc9c\ud55c \uacf3\uc740 \ud53c\ud55c\ub2e4) \u2192 { idx, it } \ub610\ub294 null \u2014 \uc608\uc804 _arrPickPlace
 function rtxPickPlace(food, recent, kind) {
   try {
@@ -17340,23 +17379,32 @@ function rtxBuild(inp) {
   } else {
     var _menuPool = isLunch ? RTX_LUNCH_MENU : (isDinner ? RTX_DINNER_MENU : RTX_NIGHT_MENU);
     var _avail = rtxMenusWithSpots(food, _menuPool);
+    var _wslot = isLunch ? 'lunch' : (isDinner ? 'dinner' : 'night');
     if (_avail.length) {
-      menu = _avail[Math.floor(RTX_RND() * _avail.length)];
+      menu = rtxPickMenu(_avail, cx, _wslot);                                     // s259: \ub0a0\uc528\u00b7\uc694\uc77c \uac00\uc911\uce58\ub85c(\uc8fc\ubcc0\uc5d0\uc11c \uc2e4\uc81c\ub85c \ud30c\ub294 \uba54\ub274 \uc911\uc5d0\uc11c)
     } else {
       var cat = place ? String(place.c || '') : '';
       var matched = _menuPool.filter(function (m) { return cat.indexOf(m) >= 0; });
-      menu = matched.length ? matched[0] : _menuPool[Math.floor(RTX_RND() * _menuPool.length)];
+      menu = matched.length ? matched[0] : rtxPickMenu(_menuPool, cx, _wslot);
     }
   }
   var spots = rtxSpotsFor(food, menu, isMorn ? 'cafe' : 'night', isMorn ? 2 : 3);
+  if (!isMorn && !spots.length && place) {                                         // s259 (YJ: \uc2dd\ub2f9\uc744 \ucd94\ucc9c\ud558\uba74 \uba39\uc744 \uac83\ub3c4 \uac19\uc774): \uba54\ub274\ub97c \ud30c\ub294 \uac00\uac8c\uac00 \uc5c6\uc5b4 \uac00\uac8c\ub9cc \uace0\ub978 \uacbd\uc6b0 \u2014 \uadf8 \uac00\uac8c\uc758 \ubd84\ub958\uc5d0\uc11c \uba54\ub274\ub97c \ubf51\uc544 \uc9dd\uc744 \ub9de\ucd98\ub2e4
+    var _pm = rtxMenuFromCat(place.c, isLunch ? RTX_LUNCH_MENU : (isDinner ? RTX_DINNER_MENU : RTX_NIGHT_MENU));
+    if (_pm) menu = _pm;
+  }
   var brunch = isMorn ? RTX_BRUNCH[Math.floor(RTX_RND() * RTX_BRUNCH.length)] : '';
 
   var hk = rtxHook(isMorn ? 'morning' : (isLunch ? 'lunch' : (isDinner ? 'dinner' : 'night')), cx, menu);
   lines.push(hk.t);
 
   if (isLunch) {
-    lines.push('\ud83c\udf5a \uc774 \uadfc\ucc98 \ud55c \ub07c');
-    if (place) {
+    lines.push('\ud83c\udf5a \uc624\ub298\uc758 \uc810\uc2ec \u00b7 ' + menu);                                          // s259: \uba54\ub274 + \ud30c\ub294 \uac00\uac8c\ub97c \uac19\uc774
+    var lp = spots.length ? rtxFindFood(food, spots[0]) : null;
+    if (spots.length) {
+      var d5 = (lp && lp.d != null) ? (' ' + lp.d + 'm') : '';
+      lines.push('   \uadfc\ucc98\uc5d0\uc11c \ub4dc\uc2e4 \uac70\uba74 \u00b7 ' + spots.join(', ') + (spots.length === 1 ? d5 : ''));
+    } else if (place) {
       var d3 = (place.d != null) ? (place.d + 'm') : '\uac00\uae4c\uc6b4 \uacf3';
       lines.push('   ' + place.n + ' \u00b7 ' + d3 + (place.c ? ' \u00b7 ' + place.c : ''));
     } else {
