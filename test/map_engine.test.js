@@ -149,6 +149,10 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(t.info.need && t.info.need.day === 'SAT', '요일 고르면 그 응답이 없을 때 앱이 받아야 할 것을 알려 준다');
   t = call({ part: 'tt', stn: '강남', tt: { st: 'loading', res: {} } });
   ok(/불러오는 중/.test(strs(t.body)) && t.info.need && t.info.need.line && t.head.length >= 2 && t.head[0].t === 'bar', '불러오는 중(제목줄·칩은 머리에 고정)');
+  { const L = (st, res) => E.mapScreen({ cap: 26 }, { part: 'tt', stn: '강남', tt: { st, res } }).body.filter(n => n.t === 'lbar');
+    const l1 = L('loading', {}), l2 = L('ok', {}), l3 = L('fail', {}), l4 = L('ok', { [lines[0] + '|-']: { noData: true } });
+    ok(l1.length === 1 && /불러오는 중/.test(l1[0].ttl) && l2.length === 1 && l3.length === 0 && l4.length === 0, 's254: 자료를 아직 못 받았으면(받는 중 · 아직 요청 전) 불러오는 중 막대 · 실패/자료 없음 확정이면 아님');
+    ok(!JSON.stringify(E.mapScreen({ cap: 25 }, { part: 'tt', stn: '강남', tt: { st: 'loading', res: {} } }).body).includes('lbar'), 's254: 옛 앱(25)은 막대 노드 없이 글만'); }
   t = call({ part: 'tt', stn: '강남', tt: { st: 'fail', res: {} } });
   ok(/불러오지 못했어요/.test(strs(t.body)) && /mt.retry/.test(strs(t.body)), '실패 + 다시 시도');
   t = call({ part: 'tt', stn: '강남', tt: { st: 'ok', res: { [lines[0] + '|-']: { noData: true } } } });

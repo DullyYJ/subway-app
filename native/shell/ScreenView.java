@@ -832,6 +832,24 @@ public class ScreenView extends View {
     }
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
+    private boolean lbDrawn; private long lbT0;
+    /** 불러오는 중 막대: 제목 · 0→100% 로 차오르는 막대 · 퍼센트. 받는 시간은 알 수 없어 시간으로 천천히 차오르게 그린다(99% 에서 멈춰 기다리다, 받으면 이 줄이 내용으로 바뀐다). 새 객체 없이 그린다. */
+    private void drawLbar(Canvas cv, ScreenCore.Item it) {
+        long now = SystemClock.uptimeMillis();
+        if (lbT0 == 0L) lbT0 = now;
+        lbDrawn = true;
+        float pr = Math.min(0.99f, 1f - (float) Math.exp(-(now - lbT0) / 1800f));
+        float bw = Math.min(it.w - 56f, 260f), bx = it.x + (it.w - bw) / 2f, by = it.y + 38f;
+        p.setStyle(Paint.Style.FILL);
+        setText(14f, true, pal[R_TEXT]); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(it.label, it.x + it.w / 2f, base(it.y + 8f, 22f, 0), tp);
+        skr.set(bx, by, bx + bw, by + 8f); p.setColor(pal[R_BORDER]); cv.drawRoundRect(skr, 4f, 4f, p);
+        skr.set(bx, by, bx + Math.max(8f, bw * pr), by + 8f); p.setColor(pal[R_GOLD]); cv.drawRoundRect(skr, 4f, 4f, p);
+        setText(12f, true, pal[R_GOLD]); tp.setTextAlign(Paint.Align.CENTER);
+        cv.drawText(Math.round(pr * 100f) + "%", it.x + it.w / 2f, base(it.y + 52f, 18f, 0), tp);
+        if (it.value != null && it.value.length() > 0) { setText(11.5f, false, pal[R_SUB]); cv.drawText(it.value, it.x + it.w / 2f, base(it.y + 66f, 16f, 0), tp); }
+        tp.setTextAlign(Paint.Align.LEFT);
+    }
     private final RectF skr = new RectF();
     /** 스켈레톤: 카드 모양 자리표시가 숨 쉬듯 옅어졌다 짙어진다(1.3초). 새 객체 없이 그린다. */
     private void drawSkel(Canvas cv, ScreenCore.Item it) {
@@ -1887,7 +1905,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -1987,7 +2005,8 @@ public class ScreenView extends View {
 
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
-        if (marqDrawn || mqDrawn || skelDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (!lbDrawn) lbT0 = 0L;                                                                                                            // 불러오는 막대가 안 보이면 다음에 보일 때 0% 부터
+        if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -2126,6 +2145,7 @@ public class ScreenView extends View {
             case ScreenCore.K_TMAP: drawTmap(cv, it); break;
             case ScreenCore.K_MARQ: drawMarq(cv, it); break;
             case ScreenCore.K_SKEL: drawSkel(cv, it); break;
+            case ScreenCore.K_LBAR: drawLbar(cv, it); break;
             case ScreenCore.K_RUNNER: drawRunner(cv, it); break;
             case ScreenCore.K_TDROW: drawTdrow(cv, it); break;
             case ScreenCore.K_LPILL: drawLpill(cv, it); break;

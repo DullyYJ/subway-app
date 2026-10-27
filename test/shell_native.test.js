@@ -302,7 +302,7 @@ function findAndroidJar() {
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
     assert.ok(/if \(tdAnim\) postInvalidateOnAnimation\(\);\s*else if \(tdAct && isShown\(\)\)/.test(sv) && /else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '펼침 움직임은 화면 박자 · 지금 가는 구간 점은 33ms(s239: 점 자리만) · 아니면 2초마다');
-    assert.ok(/CAP = 2[45]/.test(fs.readFileSync(N("ShellCore.java"), "utf8")) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+    assert.ok(/CAP = 2[456]/.test(fs.readFileSync(N("ShellCore.java"), "utf8")) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
   });
   await t('세부경로 시트 웹 맞춤(s153): 머리(shd)·손잡이·× · 구간은 서버 없이 바로 펼침(▾ 0.2초) · 배경 0.82·탭바 위·끌어 닫기 120dp/.25초 · 확정 토스트·0.6초 뒤 닫힘·오버레이 안내 한 번', () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
@@ -764,7 +764,7 @@ function findAndroidJar() {
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), shc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/K_TAGS = 49/.test(sc) && /"tags"\.equals\(t\)/.test(sc) && /"tags"\.equals\(n\.t\)/.test(sc), 'tags 노드를 읽고 배치한다');
     assert.ok(/case ScreenCore\.K_TAGS: drawTags\(cv, it\)/.test(sv) && /private void drawTags\(Canvas cv, ScreenCore\.Item it\)/.test(sv) && !/drawTags[\s\S]{0,900}new (Paint|RectF|Path)/.test(sv), 'tags 를 그린다(그릴 때 새 객체 없음)');
-    assert.ok(/CAP = 25/.test(shc) && /static void fuseAi\(List<Object> body\)/.test(shc) && /"ai"\.equals\(\(\(Map<String, Object>\) o\)\.get\("into"\)\)/.test(shc) && /fuseAi\(body\);/.test(shc), '화면을 이어 붙일 때 AI 카드를 자리로 옮긴다');
+    assert.ok(/CAP = 26/.test(shc) && /static void fuseAi\(List<Object> body\)/.test(shc) && /"ai"\.equals\(\(\(Map<String, Object>\) o\)\.get\("into"\)\)/.test(shc) && /fuseAi\(body\);/.test(shc), '화면을 이어 붙일 때 AI 카드를 자리로 옮긴다');
     const hc = fs.readFileSync(path.join(ROOT, 'engine', 'hcards.js'), 'utf8'), rs = fs.readFileSync(path.join(ROOT, 'engine', 'result.js'), 'utf8'), rh = fs.readFileSync(path.join(ROOT, 'engine', 'rhead.js'), 'utf8');
     assert.ok(/HC_FUSE_CAP = 25/.test(hc) && /RES_TAGS_CAP = 25/.test(rs) && /Number\(inp\.cap\) < 25/.test(rh), '엔진은 규격 25부터만 합친다(옛 앱은 예전 모양)');
   });

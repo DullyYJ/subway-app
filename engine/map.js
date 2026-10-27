@@ -200,7 +200,8 @@ function mapStationSheet(f) {
 // ── 시간표(웹 nmTtRender) ──
 function mapClock(m) { var x = ((m % 1440) + 1440) % 1440; return (Math.floor(x / 60) < 10 ? '0' : '') + Math.floor(x / 60) + ':' + (x % 60 < 10 ? '0' : '') + (x % 60); }
 function mapP2(n) { return (n < 10 ? '0' : '') + n; }
-function mapTimetableSheet(f) {
+var MAP_LBAR_CAP = 26;                                                  // lbar(불러오는 중 막대) 노드를 아는 앱
+function mapTimetableSheet(f, cap) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
   var T = f.tt, lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
@@ -239,7 +240,8 @@ function mapTimetableSheet(f) {
   if (dayItems.length || dirItems.length) kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dayItems.concat(dirItems) });
   head = kids.map(mapSheetPad); kids = [];                                         // 여기까지(제목줄·칩)가 머리 — 고정
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
-  if (st === 'loading' && !d) kids.push(msg('시간표를 불러오는 중…'));
+  if (!d && st === 'loading' && !(cap >= MAP_LBAR_CAP)) kids.push(msg('시간표를 불러오는 중…'));
+  else if (!d && st !== 'fail') kids.push({ t: 'lbar', ttl: (line || '시간표') + ' 시간표를 불러오는 중이에요', sub: '잠시만 기다려 주세요', pad: [0, 36, 0, 0] });       // s254: 자료를 아직 못 받았을 땐 '받지 못했어요' 대신 불러오는 중 막대(없다고 말하는 건 서버가 '자료 없음'이라 한 때만)
   else if (st === 'fail' && !d) { kids.push(msg('시간표를 불러오지 못했어요.')); kids.push({ t: 'button', s: '다시 시도', size: 13, h: 40, r: 11, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mt.retry' } }); }
   else if (!d || d.noData || !dir) kids.push(msg((line || '이 노선') + '의 시간표 자료를\n아직 받지 못했어요.\n실시간 도착정보는 경로 탐색 화면에서 확인할 수 있어요.'));
   else {
@@ -281,7 +283,7 @@ function mapScreen(inp, factsIn, dataIn) {
   if (!(Number(inp.cap) >= 18)) return { ok: false, error: 'cap' };
   var f = mapFacts(factsIn), ctx = {};
   if (f.part === 'stn') return mapStationSheet(f);
-  if (f.part === 'tt') return mapTimetableSheet(f);
+  if (f.part === 'tt') return mapTimetableSheet(f, Number(inp.cap));
   if (f.part === 'br') return mapBusRouteSheet(f);
   var info = { mode: f.mode, reg: f.reg, flt: f.flt };
   if (f.q) { var fd = mapFind(f.q, f.reg); info.find = fd; }

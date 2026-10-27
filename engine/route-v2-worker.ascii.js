@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s253";
+var ENGINE_VERSION = "route-v2-2026-10-27s254";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -21162,7 +21162,8 @@ function mapStationSheet(f) {
 // \u2500\u2500 \uc2dc\uac04\ud45c(\uc6f9 nmTtRender) \u2500\u2500
 function mapClock(m) { var x = ((m % 1440) + 1440) % 1440; return (Math.floor(x / 60) < 10 ? '0' : '') + Math.floor(x / 60) + ':' + (x % 60 < 10 ? '0' : '') + (x % 60); }
 function mapP2(n) { return (n < 10 ? '0' : '') + n; }
-function mapTimetableSheet(f) {
+var MAP_LBAR_CAP = 26;                                                  // lbar(\ubd88\ub7ec\uc624\ub294 \uc911 \ub9c9\ub300) \ub178\ub4dc\ub97c \uc544\ub294 \uc571
+function mapTimetableSheet(f, cap) {
   var name = f.stn;
   if (!mapIsStationLabel(name)) return { ok: false, error: 'stn' };
   var T = f.tt, lines = mapLinesOf(name, mapRegOf(f)).slice(0, 20), sel = (T.sel && typeof T.sel === 'object') ? T.sel : {}, res = (T.res && typeof T.res === 'object') ? T.res : {};
@@ -21201,7 +21202,8 @@ function mapTimetableSheet(f) {
   if (dayItems.length || dirItems.length) kids.push({ t: 'chips', pad: [0, 0, 0, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', items: dayItems.concat(dirItems) });
   head = kids.map(mapSheetPad); kids = [];                                         // \uc5ec\uae30\uae4c\uc9c0(\uc81c\ubaa9\uc904\u00b7\uce69)\uac00 \uba38\ub9ac \u2014 \uace0\uc815
   var msg = function (s, sub) { return { t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [28, 12, 28, 12] }; };
-  if (st === 'loading' && !d) kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\u2026'));
+  if (!d && st === 'loading' && !(cap >= MAP_LBAR_CAP)) kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\u2026'));
+  else if (!d && st !== 'fail') kids.push({ t: 'lbar', ttl: (line || '\uc2dc\uac04\ud45c') + ' \uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\uc774\uc5d0\uc694', sub: '\uc7a0\uc2dc\ub9cc \uae30\ub2e4\ub824 \uc8fc\uc138\uc694', pad: [0, 36, 0, 0] });       // s254: \uc790\ub8cc\ub97c \uc544\uc9c1 \ubabb \ubc1b\uc558\uc744 \ub550 '\ubc1b\uc9c0 \ubabb\ud588\uc5b4\uc694' \ub300\uc2e0 \ubd88\ub7ec\uc624\ub294 \uc911 \ub9c9\ub300(\uc5c6\ub2e4\uace0 \ub9d0\ud558\ub294 \uac74 \uc11c\ubc84\uac00 '\uc790\ub8cc \uc5c6\uc74c'\uc774\ub77c \ud55c \ub54c\ub9cc)
   else if (st === 'fail' && !d) { kids.push(msg('\uc2dc\uac04\ud45c\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.')); kids.push({ t: 'button', s: '\ub2e4\uc2dc \uc2dc\ub3c4', size: 13, h: 40, r: 11, bold: true, fill: 'card2', line: 'border', tc: '', pad: [0, 0, 0, 0], act: { a: 'call', v: 'mt.retry' } }); }
   else if (!d || d.noData || !dir) kids.push(msg((line || '\uc774 \ub178\uc120') + '\uc758 \uc2dc\uac04\ud45c \uc790\ub8cc\ub97c\n\uc544\uc9c1 \ubc1b\uc9c0 \ubabb\ud588\uc5b4\uc694.\n\uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub294 \uacbd\ub85c \ud0d0\uc0c9 \ud654\uba74\uc5d0\uc11c \ud655\uc778\ud560 \uc218 \uc788\uc5b4\uc694.'));
   else {
@@ -21243,7 +21245,7 @@ function mapScreen(inp, factsIn, dataIn) {
   if (!(Number(inp.cap) >= 18)) return { ok: false, error: 'cap' };
   var f = mapFacts(factsIn), ctx = {};
   if (f.part === 'stn') return mapStationSheet(f);
-  if (f.part === 'tt') return mapTimetableSheet(f);
+  if (f.part === 'tt') return mapTimetableSheet(f, Number(inp.cap));
   if (f.part === 'br') return mapBusRouteSheet(f);
   var info = { mode: f.mode, reg: f.reg, flt: f.flt };
   if (f.q) { var fd = mapFind(f.q, f.reg); info.find = fd; }

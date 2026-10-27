@@ -288,6 +288,11 @@ public class ScreenJvmTest {
         java.util.List<ScreenCore.Item> alB = new java.util.ArrayList<ScreenCore.Item>();
         for (ScreenCore.Item it : alL.body) if (it.kind == ScreenCore.K_BUTTON) alB.add(it);
         ok(alB.size() == 2 && alB.get(0).left && !alB.get(1).left, "button al:left — 입력칸처럼 글을 왼쪽에 붙이고 al 없으면 가운데");
+        String lbJ = "{\"ok\":true,\"v\":1,\"screen\":\"mapstn\",\"rev\":\"r\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"lbar\",\"ttl\":\"3호선 시간표를 불러오는 중이에요\",\"sub\":\"잠시만 기다려 주세요\",\"pad\":[16,10,16,0]}]}";
+        ScreenCore.Layout lbL = ScreenCore.layout(ScreenCore.load(lbJ), 360f, M);
+        ScreenCore.Item lbI = null; for (ScreenCore.Item it : lbL.body) if (it.kind == ScreenCore.K_LBAR) lbI = it;
+        ok(lbI != null && lbI.h == ScreenCore.LBAR_H && lbI.label.startsWith("3호선") && lbI.value.startsWith("잠시만"), "lbar: 불러오는 중 막대 자리가 잡힌다(제목 · 안내)");
+        ok(bad(wrapBody("{\"t\":\"lbar\"}")), "lbar: 제목 없으면 거절");
         ok(bad(wrapBody("{\"t\":\"button\",\"s\":\"x\",\"al\":\"right\",\"act\":{\"a\":\"refresh\"}}")), "button al 이 left·center 가 아니면 거절");
         float rwIn = rwPn.w - 2f - 20f, rwCol = (rwIn - 12f) / 3f;
         ok(near(rwB.get(0).y, rwB.get(1).y) && near(rwB.get(1).y, rwB.get(2).y), "row: 같은 높이(y)에 놓인다");
