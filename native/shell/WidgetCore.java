@@ -46,7 +46,7 @@ import java.util.Random;
  *
  *  ■ 배터리 — 평소엔 아무것도 돌지 않는다.
  *    · 시계 글자는 시스템 TextClock(분이 바뀌어도 우리가 깨어 있을 필요 없음).
- *    · 캐릭터 그림은 화면이 켜져 있는 동안만 갈아 끼운다. 동물들은 평소엔 종류에 맞는 집(개집·바구니·굴·둥지·연못, 무작위 자리)에서 zzz 하며 자고 있고(그림 한 장, 루프·갱신 없음),
+ *    · 캐릭터 그림은 화면이 켜져 있는 동안만 갈아 끼운다. 동물들은 평소엔 캐릭터마다 소품과 함께 그린 자는 장면(고양이 캣타워 · 올챙이 물웅덩이 · 독수리 나뭇가지에 매달림 · 강아지 방석 · 두더지 흙집, 무작위 자리, `<id>_sleep.webp` 16프레임)에서 zzz 하며 자고 있고(잠든 뒤 30초만 숨 쉬는 모습을 움직이고 그 뒤는 멈춘 그림 한 장),
  *      깨울 수 있는 신호(화면 켜짐·잠금 해제·런처의 위젯 갱신·크기 변경·알람)를 받으면 마리마다 무작위로(0~3초) 일어나 나와 설정한 시간(기본 6분, 설정에서 2~10분) 돌아다니다가 다시 집으로 들어가 잔다.
  *      ROAM_EVERY_MIN(3분)마다 정확 알람(조용한 내부 타이머, 폰 알림 아님)이 앱 프로세스를 되살린다 — 앱 프로세스가 죽어 있으면 화면 켜짐을 들을 수 없으므로, 알람이 프로세스를 되살려 수신기를 다시 달아 둔다(알람마다 움직이진 않고, 마지막 움직임이 끝난 지 10분이 지났을 때만 움직인다).
  *      화면을 켤 때마다 캐릭터 셋은 바뀐다. 위젯 본체를 누르면 앱이 열려 커뮤니티 탭으로 간다(동물을 깨우는 용도가 아님). 출퇴근 장면은 자지 않고 BURST_MS(45초) 뒤 줄 선 자세로 멈춘다. 화면이 꺼지면 즉시 멈춘다.
@@ -63,7 +63,7 @@ public final class WidgetCore {
     public static final String ACTION_TICK = "com.dullyyj.subway.WIDGET_TICK";
     public static final String EXTRA_GO = "gdm_widget_go", EXTRA_TAB = "gdm_widget_tab";
     static final long BURST_MS = 45000L, FRAME_MS = 100L;                       // 출퇴근 장면: 켜진 뒤 45초
-    static final long BED_MS = 20000L, SLEEP_FRAME_MS = 200L;               // 집에 들어가는 데 최대 20초 · 모두 잠든 동안 그림 갱신 간격
+    static final long BED_MS = 20000L, SLEEP_FRAME_MS = 200L, SLEEP_SHOW_MS = 30000L;   // 집에 들어가는 데 최대 20초 · 모두 잠든 뒤 숨 쉬는 모습을 보여 주는 동안 그림 갱신 간격 · 그 시간(지나면 멈춘 그림 한 장으로 끝)
     static final float ROAM_SPREAD = 3f;                                     // 깨우면 마리마다 0~3초 사이 무작위로 집에서 나온다
     static final long ROAM_ALARM_COOLDOWN_MS = 600000L;                      // 알람은 프로세스만 되살린다: 마지막 움직임이 끝난 지 10분이 안 됐으면 알람으로는 또 움직이지 않는다
     static long lastRoamEnd;                                                 // 마지막 움직임이 끝난 시각(uptime)
@@ -523,7 +523,7 @@ public final class WidgetCore {
     }
 
     // ───────── 애니메이션(화면이 켜져 있는 동안 잠깐) ─────────
-    static boolean running; static long burstUntil, last, bedUntil; static int phase; static boolean bedding; static boolean rcvOn;   // phase 0 놀기(출퇴근 장면 포함) · 1 잠자리로 가는 중
+    static boolean running; static long burstUntil, last, bedUntil, sleepShowUntil; static int phase; static boolean bedding; static boolean rcvOn;   // phase 0 놀기(출퇴근 장면 포함) · 1 잠자리로 가는 중
     static boolean screenOn(Context c) {
         try { PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE); return pm == null || pm.isInteractive(); } catch (Exception e) { return true; }
     }
@@ -557,7 +557,7 @@ public final class WidgetCore {
             else if (commute) { phase = 0; bedding = false; burstUntil = now + BURST_MS; for (Inst n : INST.values()) n.sim.wakeAll(0f); }
             return;
         }
-        burstUntil = now + (commute ? BURST_MS : roamMs(a)); phase = 0; bedding = false;
+        burstUntil = now + (commute ? BURST_MS : roamMs(a)); phase = 0; bedding = false; sleepShowUntil = 0L;
         for (Inst n : INST.values()) n.sim.wakeAll(commute ? 0f : ROAM_SPREAD);
         running = true; last = SystemClock.uptimeMillis();
         handler().post(TICK);
@@ -577,7 +577,7 @@ public final class WidgetCore {
         boolean commute = anyCommute();
         if (commute && phase == 1 && bedding) { phase = 0; bedding = false; burstUntil = t0 + BURST_MS; }   // 자러 가는 중에 출퇴근 시간이 되면 깨어 줄을 선다
         if (phase == 0 && t0 >= burstUntil) {
-            phase = 1; bedUntil = t0 + BED_MS; bedding = !commute;
+            phase = 1; bedUntil = t0 + BED_MS; bedding = !commute; sleepShowUntil = 0L;
             if (!commute) { for (Inst n : INST.values()) n.sim.bed(true); }                      // 설정한 시간이 지났다: 집이 생기고 들어가 잔다(다음 신호가 올 때까지)
         }
         boolean settling = phase == 1 && commute, allDone = true, allBed = true;
@@ -598,10 +598,13 @@ public final class WidgetCore {
         if (phase == 1 && commute) {
             if (allDone || t0 >= burstUntil + 5000L) { stop(app, true); return; }            // 출퇴근 장면: 줄 선 자세로 멈춘다(자지 않는다)
         } else if (phase == 1) {
-            if (allBed || t0 >= bedUntil) { endAsleep(app); return; }                         // 모두 들어갔다: 자는 모습으로 멈춘다
+            if (allBed) {                                                                     // 모두 잠들었다: 잠깐(30초) 숨 쉬고 물결치는 모습을 보여 준 뒤 멈춘 그림 한 장으로 끝낸다
+                if (sleepShowUntil == 0L) sleepShowUntil = t0 + SLEEP_SHOW_MS;
+                if (t0 >= sleepShowUntil) { sleepShowUntil = 0L; endAsleep(app); return; }
+            } else if (t0 >= bedUntil) { sleepShowUntil = 0L; endAsleep(app); return; }       // 시간이 다 됐다: 억지로 재워 멈춘다
         }
         long spent = SystemClock.uptimeMillis() - t0;
-        handler().postDelayed(this, Math.max(10L, FRAME_MS - spent));
+        handler().postDelayed(this, Math.max(10L, (phase == 1 && allBed && !commute ? SLEEP_FRAME_MS : FRAME_MS) - spent));
     } };
     /** 모두 집에서 자는 모습(zzz)으로 한 번 그려 놓고 끝낸다. 다음 신호(화면 켜짐·알람 등)가 깨운다. */
     static void endAsleep(Context c) {

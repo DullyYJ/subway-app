@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8><body style="margin:0"><canvas id=c></canvas>
+<script src="three.min.js"></script><script src="tex_all.js"></script><script src="models.js"></script><script src="scenes.js"></script>
+<script>
+const S=512;const cv=document.getElementById('c');cv.width=cv.height=S;
+const r=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true,preserveDrawingBuffer:true});
+r.setSize(S,S,false);r.setClearColor(0,0);r.shadowMap.enabled=true;r.shadowMap.type=THREE.PCFSoftShadowMap;r.outputColorSpace=THREE.SRGBColorSpace;r.toneMapping=THREE.ACESFilmicToneMapping;r.toneMappingExposure=1.05;
+const scene=new THREE.Scene();
+const cam=new THREE.OrthographicCamera(-1,1,1,-1,0.1,80);
+scene.add(new THREE.HemisphereLight(0xffffff,0xd9c9b4,0.95));
+const key=new THREE.DirectionalLight(0xfff3e2,2.1);key.position.set(-2,8,3.5);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.camera.left=-4;key.shadow.camera.right=4;key.shadow.camera.top=5;key.shadow.camera.bottom=-3;key.shadow.bias=-0.0006;key.shadow.normalBias=0.03;key.shadow.radius=4;scene.add(key);
+const rim=new THREE.DirectionalLight(0xdfeaff,0.9);rim.position.set(4,3,-4);scene.add(rim);
+const fill=new THREE.DirectionalLight(0xffffff,0.5);fill.position.set(4,2,6);scene.add(fill);
+const gnd=new THREE.Mesh(new THREE.PlaneGeometry(14,14),new THREE.ShadowMaterial({opacity:0.16}));gnd.rotation.x=-Math.PI/2;gnd.receiveShadow=true;if(!window.NOGND)scene.add(gnd);
+window.noGround=function(){scene.remove(gnd);};let cur=null,curId=null,SC=null;
+window.setup=function(id){if(cur)scene.remove(cur);SC=SCENES[id];curId=id;cur=SC.build();scene.add(cur);
+  const v=window.OV||SC.view,el=SC.el||0.3,dist=20;cam.left=-v[0]/2;cam.right=v[0]/2;cam.top=v[0]/2;cam.bottom=-v[0]/2;cam.updateProjectionMatrix();const cx=v[2]||0;
+  // 화면 가운데가 (cx, cy) 에 오도록: 카메라는 y 방향으로 dist*sin(el) 만큼 올라가 내려다본다
+  cam.position.set(cx,v[1]+dist*Math.sin(el),dist*Math.cos(el));cam.lookAt(cx,v[1],0);window.EL=el;};
+window.anchor=function(){const a=SC.anchor;const v=new THREE.Vector3(a[0],a[1],a[2]);cur.updateMatrixWorld(true);cur.localToWorld(v);v.project(cam);return [(v.x*0.5+0.5)*256,(0.5-v.y*0.5)*256];};
+window.frame=function(ph){SC.frame(cur,ph);r.render(scene,cam);return cv.toDataURL('image/png');};
+window.TEXIMG={};Promise.all(Object.keys(window.TEX).map(k=>new Promise(res=>{const im=new Image();im.onload=()=>{window.TEXIMG[k]=im;res();};im.src=window.TEX[k];}))).then(()=>{window.ready=true;});
+</script>

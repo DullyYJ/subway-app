@@ -31,75 +31,20 @@ public final class WidgetArt {
     }
     /** 색(0xRRGGBB 면 불투명, 0xAARRGGBB 면 그 투명도)에 진하기 a(0~1)를 곱한다. */
     private static int al(int argb, float a) { int A0 = (argb >>> 24) & 255; if (A0 == 0) A0 = 255; int A = (int) (A0 * Math.max(0f, Math.min(1f, a))); return (A << 24) | (argb & 0xFFFFFF); }
-    /** 타원 둘레의 호(각도 t0~t1, 화면 y 가 아래로 늘어나므로 0~π 가 아랫반쪽). */
-    private static float[] arc(float cx, float cy, float rx, float ry, double t0, double t1, int n) {
-        float[] p = new float[(n + 1) * 2];
-        for (int i = 0; i <= n; i++) { double t = t0 + (t1 - t0) * i / n; p[i * 2] = cx + rx * (float) Math.cos(t); p[i * 2 + 1] = cy + ry * (float) Math.sin(t); }
-        return p;
-    }
-    /** 타원의 '앞벽': 높이 yc 보다 아래쪽 부분(몸 아래를 가려 안에 들어앉은 모습이 된다). */
-    private static float[] wall(float cx, float cy, float rx, float ry, float yc, int n) {
-        double k = Math.max(-1.0, Math.min(1.0, (yc - cy) / ry)), t0 = Math.asin(k), t1 = Math.PI - t0;
-        return arc(cx, cy, rx, ry, t1, t0 + 2 * Math.PI, n);
-    }
-    private static void fillGrad(Surface s, float[] xy, int c0, int c1, float a) {
-        float y0 = 1e9f, y1 = -1e9f; for (int i = 1; i < xy.length; i += 2) { y0 = Math.min(y0, xy[i]); y1 = Math.max(y1, xy[i]); }
-        s.polyGrad(xy, y0, y1, al(c0, a), al(c1, a));
-    }
-    private static float[] rect(float l, float t, float r, float b) { return new float[] { l, t, r, t, r, b, l, b }; }
-
-    /** 집 뒷면(캐릭터보다 먼저): 바닥 기준 중심에서 W×H. 서서히 나타나며(a) 조금씩 커진다. */
-    private static void houseBack(Surface s, WidgetSim.House h, float by) {
-        float a = h.a; if (a <= 0.01f) return;
-        float W = h.w, H = h.h, sc = 0.82f + 0.18f * a;
-        s.save(); s.translate(h.x, by); s.scale(sc, sc);
-        s.ellipse(0f, -0.5f, W * 0.56f, Math.max(1.2f, H * 0.07f), al(0x30000000, a));
-        if ("dog".equals(h.kind)) {
-            boolean white = "dolsom".equals(h.owner.id);
-            int w0 = white ? 0xFFF4DC : 0xE8B27E, w1 = white ? 0xE6C48C : 0xBF7C45, r0 = white ? 0x6A9BF5 : 0xE5645C, r1 = white ? 0x3E69CC : 0xA93A37;
-            fillGrad(s, rect(-0.43f * W, -0.56f * H, 0.43f * W, 0f), w0, w1, a);
-            fillGrad(s, new float[] { -0.56f * W, -0.50f * H, 0.56f * W, -0.50f * H, 0f, -H }, r0, r1, a);
-            s.poly(rect(-0.56f * W, -0.52f * H, 0.56f * W, -0.47f * H), al(0x40000000, a));
-            float[] door = arc(0f, -0.30f * H, 0.17f * W, 0.17f * H, Math.PI, 2 * Math.PI, 12);
-            float[] dp = new float[door.length + 4]; System.arraycopy(door, 0, dp, 0, door.length); dp[door.length] = 0.17f * W; dp[door.length + 1] = 0f; dp[door.length + 2] = -0.17f * W; dp[door.length + 3] = 0f;
-            fillGrad(s, dp, 0x45342A, 0x1B130E, a);
-        } else if ("cat".equals(h.kind)) {
-            fillGrad(s, arc(0f, -0.48f * H, 0.5f * W, 0.48f * H, 0, 2 * Math.PI, 20), 0xF7BCCB, 0xD98CA5, a);
-            fillGrad(s, arc(0f, -0.62f * H, 0.38f * W, 0.30f * H, 0, 2 * Math.PI, 20), 0xFFEBF0, 0xF8C9D5, a);
-        } else if ("mole".equals(h.kind)) {
-            float[] dome = arc(0f, 0f, 0.5f * W, H, Math.PI, 2 * Math.PI, 16);
-            fillGrad(s, dome, 0xBC8A55, 0x7A512D, a);
-            s.circle(-0.32f * W, -0.09f * H, 0.09f * H, al(0x8C5E36, a)); s.circle(0.34f * W, -0.07f * H, 0.07f * H, al(0x8C5E36, a)); s.circle(0.2f * W, -0.2f * H, 0.06f * H, al(0xA06E41, a));
-            s.ellipse(0f, -0.10f * H, 0.28f * W, 0.17f * H, al(0x5E3D22, a));
-            fillGrad(s, arc(0f, -0.10f * H, 0.22f * W, 0.12f * H, 0, 2 * Math.PI, 14), 0x35220F, 0x150C05, a);
-        } else if ("nest".equals(h.kind)) {
-            fillGrad(s, arc(0f, -0.5f * H, 0.5f * W, 0.5f * H, 0, 2 * Math.PI, 20), 0x4F361C, 0x7A5630, a);
-            fillGrad(s, arc(0f, -0.64f * H, 0.38f * W, 0.3f * H, 0, 2 * Math.PI, 20), 0xE6C67F, 0xC49A52, a);
-        } else {   // pond
-            s.ellipse(0f, -0.5f * H, 0.55f * W, 0.52f * H, al(0x4F8FB8, a));
-            fillGrad(s, arc(0f, -0.5f * H, 0.5f * W, 0.5f * H, 0, 2 * Math.PI, 20), 0xD2F1FF, 0x6DB8E6, a);
-            fillGrad(s, arc(0.28f * W, -0.58f * H, 0.14f * W, 0.17f * H, 0, 2 * Math.PI, 12), 0x7BD07F, 0x3E9648, a);
+    /** 자는 장면(캐릭터마다 소품과 함께 3D 로 그린 한 장): 시트 `<id>_sleep` 의 지금 프레임을 잠자리 자리에 그린다.
+     *  걷던 모습과 같은 자리에서 서서히 바뀐다(mix). 숨 쉬는 몸·살랑이는 꼬리·물결·방울 같은 움직임은 시트의 16프레임 반복이다. */
+    private static void sleepScene(Surface s, WidgetSim sim, WidgetSim.House h, int idx) {
+        WidgetSim.Ch c = h.owner; WidgetGeo g = sim.geo;
+        float mix = c.mix, goal = Math.min(1f, h.a * 0.55f);                    // 가려는 자리는 그림자만 옅게 미리 나타난다
+        float[] sc = WidgetSim.sleepCfg(c.id);
+        if (!"pond".equals(h.kind)) {
+            float sh = Math.max(mix, c.mix < 0.01f ? goal : 0f);
+            if (sh > 0.01f) s.ellipse(h.x, g.ground - 1f, h.w * ("nest".equals(h.kind) ? 0.3f : 0.46f), g.charH * 0.07f, al(0x2E000000, sh));
         }
-        s.restore();
-    }
-    /** 집 앞면(캐릭터 뒤에 덮어 그림): 바구니·둥지·연못은 웅크린 몸 아래쪽을 가려 '안에 들어가 있는' 모습이 된다. */
-    private static void houseFront(Surface s, WidgetSim.House h, float by) {
-        float a = h.a; if (a <= 0.01f || WidgetSim.hides(h.kind)) return;
-        float W = h.w, H = h.h, sc = 0.82f + 0.18f * a;
-        s.save(); s.translate(h.x, by); s.scale(sc, sc);
-        if ("cat".equals(h.kind)) {
-            fillGrad(s, wall(0f, -0.48f * H, 0.5f * W, 0.48f * H, -0.50f * H, 18), 0xF2A9BC, 0xD07C97, a);
-        } else if ("nest".equals(h.kind)) {
-            fillGrad(s, wall(0f, -0.5f * H, 0.5f * W, 0.5f * H, -0.55f * H, 18), 0xB88C54, 0x7B5832, a);
-            float[] tx = { -0.36f, -0.2f, -0.04f, 0.12f, 0.28f };
-            for (float f : tx) {
-                float x = f * W, yb = -0.5f * H + 0.5f * H * (float) Math.sqrt(Math.max(0f, 1f - (f / 0.5f) * (f / 0.5f))), t = 0.045f * H + 0.3f;
-                s.poly(new float[] { x - 0.13f * W, yb - 0.13f * H, x - 0.13f * W, yb - 0.13f * H + t * 2f, x + 0.13f * W, yb + 0.02f * H + t * 2f, x + 0.13f * W, yb + 0.02f * H }, al(0xCC5B3F22, a));
-            }
-        } else {
-            fillGrad(s, wall(0f, -0.5f * H, 0.5f * W, 0.5f * H, -0.45f * H, 18), 0xC8EAFF, 0x7CC3EE, a * 0.7f);
-        }
-        s.restore();
+        if (mix <= 0.01f) return;
+        float cell = sc[0] * g.charH, left = h.x - sc[1] * cell, top = g.ground - sc[2] * cell;
+        int fr = ((int) Math.floor(sim.time * sc[3] + idx * 5f) % 16 + 16) % 16;
+        s.cell(c.id + "_sleep", fr, left, top, left + cell, top + cell, mix);
     }
 
     public static void draw(WidgetSim sim, Surface s, boolean dark) {
@@ -118,7 +63,7 @@ public final class WidgetArt {
             s.ellipse(-1.4f, -3.9f, 0.9f, 0.5f, ((int) (al * 112f) << 24) | 0xFFFFFF);
             s.restore();
         }
-        for (WidgetSim.House h : sim.houses) houseBack(s, h, g.ground);
+        { int hi = 0; for (WidgetSim.House h : sim.houses) sleepScene(s, sim, h, hi++); }
         // 그림자 + 캐릭터: 발이 아래에 있는 것(앞)을 나중에 그린다
         List<WidgetSim.Ch> order = new ArrayList<WidgetSim.Ch>(sim.cs);
         Collections.sort(order, new Comparator<WidgetSim.Ch>() {
@@ -147,19 +92,20 @@ public final class WidgetArt {
             s.cell(c.id, ((c.frame % 16) + 16) % 16, left, top, left + sz, top + sz, c.alpha);
             s.restore();
         }
-        for (WidgetSim.House h : sim.houses) houseFront(s, h, g.ground);
-        // 쿨쿨: 잠자리 위로 Z 가 둥실 떠올랐다 사라진다(시각만으로 계산 — 멈춘 프레임에서도 보인다)
+        // 쿨쿨: 자는 장면 위로 Z 가 둥실 떠올랐다 사라진다(시각만으로 계산 — 멈춘 프레임에서도 보인다)
         {
             int i = 0;
             for (WidgetSim.Ch c : sim.cs) {
                 if (c.zz > 0.02f && c.home != null) {
-                    float charH = g.charH * c.cfg[5], topY = g.ground - c.home.h - charH * 0.12f;
+                    float[] sc = WidgetSim.sleepCfg(c.id);
+                    float cell = sc[0] * g.charH, ax = c.home.x - sc[1] * cell + sc[4] * cell, ay = g.ground - sc[2] * cell + sc[5] * cell, charH = g.charH;
                     for (int k = 0; k < 3; k++) {
                         float p = (sim.time * 0.42f + k / 3f + i * 0.29f) % 1f;
                         float za = c.zz * Math.min(1f, p / 0.18f) * Math.min(1f, (1f - p) / 0.4f);
                         float hh = (1.5f + 2.2f * p) * u;
-                        float zx = c.home.x + (charH * 0.18f + p * charH * 0.30f) + (float) Math.sin(p * 6.3f + k) * 0.8f * u, zy = topY - p * charH * 0.8f;
+                        float zx = ax + (charH * 0.06f + p * charH * 0.30f) + (float) Math.sin(p * 6.3f + k) * 0.8f * u, zy = ay - p * charH * 0.7f;
                         zx = Math.max(hh + 1f, Math.min(g.W - hh - 1f, zx));       // 위젯 가장자리에서 잘리지 않게
+                        zy = Math.max(hh + 1f, zy);
                         zed(s, zx + 0.5f * u, zy + 0.5f * u, hh, al(0x46000000, za));
                         zed(s, zx, zy, hh, al(0xFF8A96FF, za));
                     }

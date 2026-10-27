@@ -42,7 +42,8 @@ public final class WidgetSim {
         for (String x : a) { boolean f = false; for (String y : b) if (x.equals(y)) f = true; if (!f) return false; }
         return true;
     }
-    /** 잠자리 종류: 개집 · 고양이 쿠션 바구니 · 두더지 굴 · 독수리 둥지 · 올챙이 연못. */
+    /** 잠자리 종류(2026-10-27 개편): 개(돌솜·뽀푸) · 고양이 캣타워 · 두더지 흙집 · 독수리 매달린 나뭇가지(nest) · 올챙이 물웅덩이(pond).
+     *  자는 모습은 캐릭터마다 소품과 함께 3D 로 그린 한 장(`<id>_sleep.webp`, 16프레임 반복)이다. */
     public static String houseKind(String id) {
         if ("dolsom".equals(id) || "ppopu".equals(id)) return "dog";
         if ("lovel".equals(id)) return "cat";
@@ -50,15 +51,26 @@ public final class WidgetSim {
         if ("sul".equals(id)) return "nest";
         return "pond";
     }
-    /** 집 안으로 쏙 들어가 안 보이는 종류(개집·굴). 나머지는 바구니·둥지·연못에 웅크린 모습이 보인다. */
-    public static boolean hides(String kind) { return "dog".equals(kind) || "mole".equals(kind); }
-    /** 집 크기(캐릭터 키 대비): {가로, 세로} */
+    /** 걷는 모습은 자는 장면으로 바뀌면서 사라진다(예전엔 개집·굴만 몸이 안 보였다 — 이제 모든 종류가 장면 한 장으로 그려져 몸이 다 나오지 않는다). */
+    public static boolean hides(String kind) { return true; }
+    /** 잠자리 자리(캐릭터 키 대비): {가로, 세로} — 장면 그림이 실제로 차지하는 크기. 다른 잠자리와 겹치지 않게 자리를 나눌 때 쓴다. */
     public static float[] houseSize(String kind) {
-        if ("dog".equals(kind)) return new float[] { 1.1f, 1.0f };
-        if ("cat".equals(kind)) return new float[] { 1.05f, 0.6f };
-        if ("mole".equals(kind)) return new float[] { 1.15f, 0.62f };
-        if ("nest".equals(kind)) return new float[] { 1.05f, 0.55f };
-        return new float[] { 1.1f, 0.42f };
+        if ("dog".equals(kind)) return new float[] { 1.1f, 0.9f };
+        if ("cat".equals(kind)) return new float[] { 0.95f, 1.1f };
+        if ("mole".equals(kind)) return new float[] { 1.2f, 0.9f };
+        if ("nest".equals(kind)) return new float[] { 1.2f, 1.1f };
+        return new float[] { 1.2f, 0.6f };
+    }
+    /** 자는 장면 그림 값(시트 `<id>_sleep.webp`, 256px 칸 4×4 = 16프레임 반복): {칸 한 변이 캐릭터 키의 몇 배인지, 칸 안 바닥 기준점 x(0~1), 바닥 기준점 y(0~1), 초당 프레임, zzz 가 올라오는 자리 x, y(칸 비율)}.
+     *  3D 장면의 한 단위가 캐릭터 키의 k 배(고양이 .42 · 올챙이 .45 · 독수리 .41 · 비숑 .55 · 푸들 .55 · 두더지 .45)가 되도록 칸 크기를 정했다. */
+    public static float[] sleepCfg(String id) { float[] r = sleepCfg0(id); r[0] *= 1.1f; return r; }
+    private static float[] sleepCfg0(String id) {
+        if ("lovel".equals(id)) return new float[] { 2.822f * 0.42f, 137.2f / 256f, 220.2f / 256f, 5f, 154.4f / 256f, 87.2f / 256f };
+        if ("chaeng".equals(id)) return new float[] { 2.756f * 0.45f, 128.7f / 256f, 158.3f / 256f, 5f, 128.7f / 256f, 137.9f / 256f };
+        if ("sul".equals(id)) return new float[] { 3.577f * 0.41f, 136.4f / 256f, 226.1f / 256f, 5f, 172.2f / 256f, 149.0f / 256f };
+        if ("dolsom".equals(id)) return new float[] { 2.166f * 0.55f, 128.9f / 256f, 198.8f / 256f, 5f, 138.2f / 256f, 100.4f / 256f };
+        if ("ppopu".equals(id)) return new float[] { 2.723f * 0.55f, 128.7f / 256f, 181.4f / 256f, 5f, 151.6f / 256f, 128.7f / 256f };
+        return new float[] { 2.740f * 0.45f, 126.5f / 256f, 189.2f / 256f, 5f, 126.5f / 256f, 143.0f / 256f };
     }
     // ───────── 깨어나 돌아다니는 시간 ─────────
     /** 깨울 수 있는 신호(화면 켜짐·잠금 해제·런처 갱신·알람)를 받으면 일어나 ROAM_LEN_MS(기본 6분, 설정 2~10분)만 돌아다니고 다시 집에 들어가 잔다.
@@ -95,7 +107,8 @@ public final class WidgetSim {
         public int face0 = 1; public boolean pooped; public float lastPoop = -99f, lastTop = -99f;
         public int frame = 0;         // 그릴 프레임(0~15)
         public float alpha = 1f, zz = 0f;   // 집에 들어가 안 보이는 정도(1=보임) · 머리 위 zzz 의 진하기
-        public float a0, sq0, off0;          // 집에서 나올 때 시작 값
+        public float a0, sq0, off0, mix0;    // 집에서 나올 때 시작 값
+        public float mix = 0f;               // 자는 장면(소품과 함께 그린 잠든 모습)이 보이는 정도(0=깨어 있음 · 1=장면만) — 들어갈 때 서서히 바뀐다
         public House home;                   // 내 잠자리
         public float spd;             // 걷는 속도(dp/초)
         public float scale() { return 1f; }
@@ -150,7 +163,7 @@ public final class WidgetSim {
         if (m == mode && (mood_ == null || mood_.equals(mood))) return;
         mode = m; if (mood_ != null) mood = mood_;
         for (House h : houses) h.want = false;
-        for (Ch c : cs) { c.pooped = false; c.alpha = 1f; c.zz = 0f; c.home = null; c.sq = 0f; if (mode == COMMUTE) startGather(c); else { c.st = REST; c.t0 = time; c.until = time + 0.3f; } }
+        for (Ch c : cs) { c.pooped = false; c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; c.sq = 0f; if (mode == COMMUTE) startGather(c); else { c.st = REST; c.t0 = time; c.until = time + 0.3f; } }
     }
     /** 이제 멈출 것: 하던 동작을 마치고 바닥에서 가만히 선다(isSettled 가 true 가 되면 그림 갱신을 멈춰도 된다). */
     public void requestSettle() { settling = true; }
@@ -160,7 +173,7 @@ public final class WidgetSim {
     public void bed(boolean untilTapped) {
         if (mode == COMMUTE) return;
         forever = untilTapped; houses.clear();
-        float hwid = geo.charH * 1.15f, lo = hwid * 0.5f + 1f, hi = geo.W - hwid * 0.5f - 1f;
+        float hwid = geo.charH * 1.35f, lo = hwid * 0.5f + 1f, hi = geo.W - hwid * 0.5f - 1f;
         List<Ch> order = new ArrayList<Ch>(cs); java.util.Collections.shuffle(order, rnd);
         float[] xs = new float[order.size()]; int n = 0;
         for (Ch c : order) {
@@ -186,7 +199,7 @@ public final class WidgetSim {
     public boolean busy() { for (Ch c : cs) if (c.st != SLEEP) return true; for (House h : houses) if (h.a < 0.999f && h.want) return true; return false; }
     /** 제시간에 못 들어간 것도 억지로 침대로 보낸다. */
     public void snapBed() {
-        for (Ch c : cs) if (c.home != null && c.st != SLEEP) { c.x = c.home.x; c.zone = 0; c.y = geo.ground; c.rot = 0; c.st = SLEEP; c.t0 = time; c.until = forever ? 1e9f : time + rnd(20f, 60f); boolean hid = hides(c.home.kind); c.alpha = hid ? 0f : 1f; c.sq = hid ? 0f : 0.22f; c.off = hid ? 0f : c.home.h * 0.12f; c.frame = 0; }
+        for (Ch c : cs) if (c.home != null && c.st != SLEEP) { c.x = c.home.x; c.zone = 0; c.y = geo.ground; c.rot = 0; c.st = SLEEP; c.t0 = time; c.until = forever ? 1e9f : time + rnd(20f, 60f); c.alpha = 0f; c.sq = 0f; c.off = 0f; c.mix = 1f; c.frame = 0; }
         for (House h : houses) h.a = 1f;
     }
     /** 지금 당장 모두 집에서 자고 있는 모습으로 만든다(걸어 들어가는 장면 없이): 정해진 시간이 아닐 때 화면이 켜지면 이 모습이다. 출퇴근 중엔 안 한다. */
@@ -205,7 +218,7 @@ public final class WidgetSim {
             i++;
         }
     }
-    private void startExit(Ch c, float delay) { c.a0 = c.alpha; c.sq0 = c.sq; c.off0 = c.off; c.st = EXIT; c.t0 = time + delay; c.until = c.t0 + 0.7f; }
+    private void startExit(Ch c, float delay) { c.a0 = c.alpha; c.sq0 = c.sq; c.off0 = c.off; c.mix0 = c.mix; c.st = EXIT; c.t0 = time + delay; c.until = c.t0 + 0.7f; }
     public boolean isSettled() {
         for (Ch c : cs) { if (mode == COMMUTE) { if (c.st != CHEER) return false; } else if (c.zone != 0 || c.st != REST) return false; }
         return true;
@@ -213,7 +226,7 @@ public final class WidgetSim {
     /** 모든 것을 바닥의 쉬는 자세로 즉시 되돌린다(화면이 꺼질 때). */
     public void snapSettled() {
         houses.clear(); forever = false;
-        for (Ch c : cs) { if (mode == COMMUTE) { c.zone = 0; c.off = 0; c.rot = 0; c.frame = 0; continue; } c.zone = 0; c.y = geo.ground; c.off = 0; c.rot = 0; c.sq = 0; c.st = REST; c.t0 = time; c.until = time + 5f; c.x = clampX(c.x, 0); c.alpha = 1f; c.zz = 0f; c.home = null; }
+        for (Ch c : cs) { if (mode == COMMUTE) { c.zone = 0; c.off = 0; c.rot = 0; c.frame = 0; continue; } c.zone = 0; c.y = geo.ground; c.off = 0; c.rot = 0; c.sq = 0; c.st = REST; c.t0 = time; c.until = time + 5f; c.x = clampX(c.x, 0); c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; }
         poops.clear(); sparks.clear();
     }
 
@@ -417,23 +430,19 @@ public final class WidgetSim {
                 if (moveToward(c, c.tx, c.spd * dt) || time >= c.until) { c.x = c.tx; c.st = ENTER; c.t0 = time; c.until = time + 0.7f; }
                 break;
             case ENTER: {
-                float k = u * u * (3f - 2f * u); boolean hid = c.home != null && hides(c.home.kind);
-                c.y = geo.ground; c.frame = 0; c.alpha = hid ? 1f - k : 1f; c.sq = (hid ? 0f : 0.22f * k);
-                c.off = (c.home != null && !hid) ? c.home.h * 0.12f * k : 0f;
+                float k = u * u * (3f - 2f * u);                                         // 걷던 모습이 사라지고 자는 장면이 나타난다(같은 자리에서 서서히 바뀐다)
+                c.y = geo.ground; c.frame = 0; c.alpha = 1f - k; c.mix = k; c.sq = 0f; c.off = 0f;
                 if (time >= c.until) { c.st = SLEEP; c.t0 = time; c.until = forever ? 1e9f : time + rnd(20f, 60f); }
                 break; }
-            case SLEEP: {
-                boolean hid = c.home != null && hides(c.home.kind);
-                c.y = geo.ground; c.frame = 0; c.alpha = hid ? 0f : 1f;
-                c.sq = hid ? 0f : 0.22f + 0.03f * (float) Math.sin(time * 1.7f + cs.indexOf(c) * 1.3f);
-                c.off = (c.home != null && !hid) ? c.home.h * 0.12f : 0f;
+            case SLEEP:
+                c.y = geo.ground; c.frame = 0; c.alpha = 0f; c.mix = 1f; c.sq = 0f; c.off = 0f;
                 if (time >= c.until) startExit(c, 0f);
-                break; }
+                break;
             case EXIT: {
                 float e = Math.max(0f, Math.min(1f, (time - c.t0) / Math.max(0.05f, c.until - c.t0))), k = e * e * (3f - 2f * e);
-                c.y = geo.ground; c.frame = 0; c.alpha = c.a0 + (1f - c.a0) * k; c.sq = c.sq0 * (1f - k); c.off = c.off0 * (1f - k);
+                c.y = geo.ground; c.frame = 0; c.alpha = c.a0 + (1f - c.a0) * k; c.mix = c.mix0 * (1f - k); c.sq = c.sq0 * (1f - k); c.off = c.off0 * (1f - k);
                 if (c.home != null && time >= c.t0) c.home.want = false;                 // 나오기 시작하면 집이 서서히 사라진다
-                if (time >= c.until) { c.home = null; c.alpha = 1f; c.sq = 0f; c.off = 0f; go(c, REST, rnd(0.3f, 1.2f)); }
+                if (time >= c.until) { c.home = null; c.alpha = 1f; c.mix = 0f; c.sq = 0f; c.off = 0f; go(c, REST, rnd(0.3f, 1.2f)); }
                 break; }
             default: break;
         }

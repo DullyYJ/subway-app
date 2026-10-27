@@ -442,4 +442,5 @@
     dudung: { name: '두덩', build: () => buildMole(), pose: poseMoleWalk, poseX: poseMoleX, yaw: -0.85, frames: 16, view: [3.3, 1.05] },
   };
   window.dirt = dirt;
+  window.M3 = { mat, glossy, sh, ell, limb, setFace, setLeg, tubeGeo, fluff, rng, fur, tex, decal, furBump, eyeBlack, scales, plushLeg, poseDog, poseCat, poseEagle, poseMoleWalk, poseTadpole };
 })();
