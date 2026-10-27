@@ -201,6 +201,17 @@ async function call(method, body) {
     assert.deepStrictEqual(askShop({ seed: 5 }), askShop({ seed: 5 }));
     const set = new Set(); for (let sd = 1; sd < 60; sd++) set.add(askShop({ seed: sd }).shopItem.n); assert.ok(set.size > 8, set.size);
   });
+  t('상품 고르기: 비 안 오는 날엔 우산·레인부츠를 고르지 않는다(날씨 못 받았을 때도) · 비 오면 허용', () => {
+    const GEAR = /우산|레인|장화|우비|판초|빗물|방수/;
+    const gd = { CATS: [{ c: '패션', items: ['접이식 레인부츠', '3단 자동우산', '우비 판초', '니트 가디건', '맨투맨', '워커 부츠', '머플러'].map((n, i) => ({ n, u: 'https://shop.test/p' + i, i: '' })) }, mkCat('생활', 18)],
+      WEEKDAY: [{ h1: 0, h2: 24, items: [{ t: '우천대비', u: 'https://shop.test/p0' }, { t: '우천대비', u: 'https://shop.test/p1' }] }], WEEKEND: [{ h1: 0, h2: 24, items: [{ t: '우천대비', u: 'https://shop.test/p0' }] }] };
+    const gx = { shop: { data: gd, cfg: null } };
+    for (const wx of [{ temp: 12, feel: 11, tmin: 8, tmax: 15, rain: 10, txt: '맑음' }, null]) {
+      for (let sd = 1; sd < 80; sd++) { const r = askShop({ seed: sd, weather: wx }, gx); assert.ok(r.shopItem && !GEAR.test(r.shopItem.n), JSON.stringify(wx) + ' ' + sd + ' ' + (r.shopItem && r.shopItem.n)); }
+    }
+    const wet = new Set(); for (let sd = 1; sd < 80; sd++) wet.add(askShop({ seed: sd, weather: { temp: 12, feel: 11, tmin: 8, tmax: 15, rain: 80, txt: '비' } }, gx).shopItem.n);
+    assert.ok([...wet].some(n => GEAR.test(n)), '비 오는 날엔 우산류가 나온다');
+  });
   t('상품 고르기: 최근 추천한 상품은 피한다(전부 최근이면 다시 허용)', () => {
     const pool = top30(kst(22, 0), WX).map(x => x.n);
     for (let sd = 1; sd < 40; sd++) { const r = askShop({ seed: sd, shopRecent: pool.slice(0, 25) }); assert.ok(pool.slice(25).includes(r.shopItem.n), r.shopItem.n); }

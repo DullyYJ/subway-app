@@ -831,7 +831,8 @@ function rtxPickShopItem(inp) {
     var ex = inp.ext && inp.ext.shop;
     if (!ex || !ex.data) return null;
     var pick = rtxShopFn('pick')(ex.data, rtxShopFn('clock')(inp.nowMs, 540), inp.weather || null, ex.cfg || null);
-    var rec = (pick && pick.rec) ? pick.rec.slice(0, 30) : [];
+    var dry = !(pick && pick.ctx && pick.ctx.wet);
+    var rec = (pick && pick.rec) ? pick.rec.filter(function (x) { return !(dry && (x._t === '우천대비' || /우산|레인|장화|우비|판초|빗물|방수/.test(String(x.n || '')))); }).slice(0, 30) : [];     // 비 안 오는 날(날씨를 못 받은 때도)엔 우산·레인부츠 류를 고르지 않는다
     if (!rec.length) return null;
     var recent = inp.shopRecent || [];
     var pool = rec.filter(function (x) { return recent.indexOf(x.n) < 0; });

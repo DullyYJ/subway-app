@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s260";
+var ENGINE_VERSION = "route-v2-2026-10-27s261";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12947,7 +12947,8 @@ function shopCtx(data, ck, wx) {
   return {
     weekend: weekend, slotIdx: idx, slot: cur, now: now, adj: adj,
     rain: (wx && wx.rain != null) ? wx.rain : -1,
-    temp: (wx && wx.temp != null) ? wx.temp : null
+    temp: (wx && wx.temp != null) ? wx.temp : null,
+    wet: !!(wx && ((wx.rain != null && wx.rain >= 30) || /\ube44|\uc18c\ub098\uae30|\ub208/.test(String(wx.txt || ''))))     // \ube44\uac00 \uc624\uac70\ub098 \uc62c \uac83 \uac19\ub2e4(\ud655\ub960 30%+ \u00b7 \ub0a0\uc528 \uae00\uc5d0 \ube44/\ub208)
   };
 }
 
@@ -12959,6 +12960,18 @@ var SHOP_SEASON_KW = {
   summer: /\ubc18\ud314|\ubc18\ubc14\uc9c0|\ub0c9\uac10|\ucfe8\ub9c1|\ub0c9\uac01|\ub9b0\ub128|\uba54\uc26c|\uc36c\ud06c\ub9bc|\uc120\ud06c\ub9bc|\uc790\uc678\uc120|\uc120\uae00\ub77c\uc2a4|\ubaa8\uc790|\ucea1\ubaa8\uc790|\uc0cc\ub4e4|\uc2ac\ub9ac\ud37c|\uc544\ucfe0\uc544|\uc218\uc601|\ub798\uc2dc\uac00\ub4dc|\uc120\ud48d\uae30|\uc11c\ud058\ub808\uc774\ud130|\uc81c\uc2b5|\ubaa8\uae30|\uc544\uc774\uc2a4|\ucfe8\ub9e4\ud2b8|\ubd80\ucc44/,
   fall:   /\ud6c4\ub4dc|\ud6c4\ub514|\ub9e8\ud22c\ub9e8|\uac00\ub514\uac74|\uc790\ucf13|\uc7ac\ud0b7|\ub2c8\ud2b8(?!\ub9b4)|\uc2a4\uc6e8\ud130|\uc810\ud37c|\uc57c\uc0c1|\uae30\ubaa8|\ud2b8\ub80c\uce58|\uacbd\ub7c9\ud328\ub529|\uc870\ub07c|\ubca0\uc2a4\ud2b8|\uae34\ud314|\uc2a4\uce74\ud504|\ubd80\uce20|\uc6cc\ucee4/
 };
+// \ube44\u00b7\ub208 \uc62c \ub54c\ub9cc \uc4f8\ubaa8 \uc788\ub294 \ubb3c\uac74(\uc6b0\uc0b0\u00b7\ub808\uc778\ubd80\uce20\u00b7\uc6b0\ube44\u00b7\ubc29\uc218\ucee4\ubc84\u2026) \u2014 \uc774\ub984\uc774\ub098 \uc0c1\ud669 \ud14c\ub9c8(\uc6b0\ucc9c\ub300\ube44)\ub85c \uc54c\uc544\ubcf8\ub2e4.
+// \ube44\uac00 \uc548 \uc624\ub294 \ub0a0(\ud655\ub960 30% \ubbf8\ub9cc\uc774\uace0 \ub0a0\uc528 \uae00\uc5d0\ub3c4 \ube44\u00b7\ub208 \uc5c6\uc74c, \ub0a0\uc528\ub97c \ubabb \ubc1b\uc558\uc744 \ub54c\ub3c4)\uc5d4 \uc2dc\uac04\ub300\u00b7\uacc4\uc808 \uc810\uc218\uc640 \uc0c1\uad00\uc5c6\uc774 \ub9e8 \uc544\ub798\ub85c \ubcf4\ub0b8\ub2e4.
+var SHOP_RAINGEAR = /\uc6b0\uc0b0|\ub808\uc778|\uc7a5\ud654|\uc6b0\ube44|\ud310\ucd08|\ube57\ubb3c|\ubc29\uc218/;
+function shopIsRainGear(name, theme) { return theme === '\uc6b0\ucc9c\ub300\ube44' || SHOP_RAINGEAR.test(String(name || '')); }
+// \ub0a0\ub9c8\ub2e4\u00b7\ud14c\ub9c8\ub9c8\ub2e4 \ub2ec\ub77c\uc9c0\ub294 \uace0\uc815 \ud754\ub4e4\ub9bc(\u221222~+22) \u2014 \uac19\uc740 \uc694\uc77c\uc774\ub77c\ub3c4 \uc5b4\uc81c\uc640 \uc624\ub298 1\ub4f1 \ud14c\ub9c8\uac00 \uac19\uc9c0 \uc54a\uac8c(\ud558\ub8e8 \uc548\uc5d0\uc11c\ub294 \uac19\ub2e4)
+function shopThemeJitter(theme, ck) {
+  var h = (ck.y * 372 + ck.mo * 31 + ck.d) >>> 0;
+  var str = String(theme || '');
+  for (var i = 0; i < str.length; i++) h = (Math.imul(h ^ str.charCodeAt(i), 2654435761) + 0x9E3779B9) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+  return (h % 45) - 22;
+}
 function shopSeasonNow(ck) {
   var m = ck.mo, day = ck.d, cur, next;
   if (m === 12 || m === 1 || m === 2) { cur = 'winter'; next = 'spring'; }
@@ -13017,8 +13030,11 @@ function shopSeasonScore(name, ctx, cfg) {
 }
 // \uc0c1\ud488 1\uac1c \uc810\uc218 \u2014 \uc2dc\uac04\ub300(\ud604\uc7ac/\uc778\uc811 \uc2ac\ub86f) + \uc694\uc77c + \ub0a0\uc528(\uac15\uc218\u00b7\uae30\uc628)
 function shopScore(theme, ctx, rng, name, cfg) {
+  var gear = shopIsRainGear(name, theme);
+  if (gear && !ctx.wet) { rng(); return -400 + rng() * 12; }                       // \ube44 \uc548 \uc624\ub294 \ub0a0 \uc6b0\uc0b0\u00b7\ub808\uc778\ubd80\uce20 \ub958\ub294 \ud6c4\ubcf4\uc5d0\uc11c \uc0ac\uc2e4\uc0c1 \uc81c\uc678
   var sc = rng() * 12;
   sc += shopSeasonScore(name, ctx, cfg);
+  if (theme && ctx._ck) sc += shopThemeJitter(theme, ctx._ck);
   if (!theme) return sc - 12;
   if (ctx.now[theme]) sc += 100;
   else if (ctx.adj[theme]) sc += 45;
@@ -13074,6 +13090,7 @@ function shopPick(data, ck, wx, cfg) {
   var themes = shopThemeMap(data);
   var ctx = shopCtx(data, ck, wx);
   ctx._season = shopSeasonNow(ck);
+  ctx._ck = ck;
 
   var byCat = {}, scored = [];
   cats.forEach(function (c) {
@@ -17484,7 +17501,8 @@ function rtxPickShopItem(inp) {
     var ex = inp.ext && inp.ext.shop;
     if (!ex || !ex.data) return null;
     var pick = rtxShopFn('pick')(ex.data, rtxShopFn('clock')(inp.nowMs, 540), inp.weather || null, ex.cfg || null);
-    var rec = (pick && pick.rec) ? pick.rec.slice(0, 30) : [];
+    var dry = !(pick && pick.ctx && pick.ctx.wet);
+    var rec = (pick && pick.rec) ? pick.rec.filter(function (x) { return !(dry && (x._t === '\uc6b0\ucc9c\ub300\ube44' || /\uc6b0\uc0b0|\ub808\uc778|\uc7a5\ud654|\uc6b0\ube44|\ud310\ucd08|\ube57\ubb3c|\ubc29\uc218/.test(String(x.n || '')))); }).slice(0, 30) : [];     // \ube44 \uc548 \uc624\ub294 \ub0a0(\ub0a0\uc528\ub97c \ubabb \ubc1b\uc740 \ub54c\ub3c4)\uc5d4 \uc6b0\uc0b0\u00b7\ub808\uc778\ubd80\uce20 \ub958\ub97c \uace0\ub974\uc9c0 \uc54a\ub294\ub2e4
     if (!rec.length) return null;
     var recent = inp.shopRecent || [];
     var pool = rec.filter(function (x) { return recent.indexOf(x.n) < 0; });

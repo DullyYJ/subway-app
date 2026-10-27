@@ -32,6 +32,34 @@ function webRun(nowMs, wx, cfg) {
 }
 const urls = l => l.map(x => x.u).join('|');
 
+
+// ── 비 안 오는 날엔 우산·레인부츠 류를 추천하지 않는다 / 날마다 추천이 달라진다 ──
+{
+  const mk = (c, names) => ({ c, items: names.map((n, i) => ({ n, u: 'https://shop.test/' + c + i, i: 'https://img.test/' + c + i })) });
+  const D = {
+    CATS: [mk('패션', ['접이식 레인부츠', '3단 자동우산', '우비 판초', '방수 백팩커버', '신발 방수커버', '니트 가디건', '워커 부츠', '맨투맨']), mk('생활', ['에코백', '핸드크림', '텀블러', '보온병', '핫팩', '무릎담요', '가습기', '보조배터리'])],
+    WEEKDAY: [{ h1: 0, h2: 12, items: [{ t: '우천대비', u: 'https://shop.test/패션1' }, { t: '우천대비', u: 'https://shop.test/패션0' }] }, { h1: 12, h2: 24, items: [{ t: '셀프케어', u: 'https://shop.test/생활1' }] }],
+    WEEKEND: [{ h1: 0, h2: 24, items: [{ t: '우천대비', u: 'https://shop.test/패션1' }] }]
+  };
+  const GEAR = /우산|레인|장화|우비|판초|빗물|방수/;
+  const at = (mo, d, h) => Date.UTC(2026, mo - 1, d, h - 9, 0);                    // KST
+  for (const [label, wx] of [['맑음 20%', { temp: 14, rain: 20, txt: '맑음' }], ['비 0%', { temp: 14, rain: 0 }], ['날씨 못 받음', null]]) {
+    for (const [mo, d, h] of [[10, 27, 6], [10, 27, 22], [10, 24, 14], [10, 25, 8]]) {                      // 평일 아침·밤 · 토·일
+      const pk = E.shopPick(D, E.shopClock(at(mo, d, h), 540), wx, null);
+      ok(pk.rec.slice(0, 8).every(x => !GEAR.test(x.n) && x._t !== '우천대비'), `${label} ${mo}/${d} ${h}시: 추천 위쪽에 우산·레인부츠가 없다 → ` + pk.rec.slice(0, 8).map(x => x.n).join(','));
+    }
+  }
+  const wetPk = E.shopPick(D, E.shopClock(at(10, 27, 6), 540), { temp: 14, rain: 80, txt: '비' }, null);
+  ok(wetPk.rec.slice(0, 5).some(x => GEAR.test(x.n)), '비 올 땐(80%) 우산류가 위로 올라온다: ' + wetPk.rec.slice(0, 5).map(x => x.n).join(','));
+  const txtPk = E.shopPick(D, E.shopClock(at(10, 27, 6), 540), { temp: 14, rain: 10, txt: '소나기' }, null);
+  ok(txtPk.rec.slice(0, 5).some(x => GEAR.test(x.n)), '날씨 글에 소나기가 있으면 확률이 낮아도 우산류 허용');
+  // 날마다 1등이 같지 않다(같은 요일 같은 시각, 며칠에 걸쳐)
+  const tops = new Set(); for (let d = 1; d <= 14; d++) tops.add(E.shopPick(D, E.shopClock(at(10, d, 22), 540), { temp: 14, rain: 0 }, null).rec.slice(0, 3).map(x => x.n).join('|'));
+  ok(tops.size >= 5, '며칠에 걸쳐 추천 윗줄이 바뀐다: ' + tops.size + '가지');
+  const sameDay = E.shopPick(D, E.shopClock(at(10, 27, 22), 540), { temp: 14, rain: 0 }, null), sameDay2 = E.shopPick(D, E.shopClock(at(10, 27, 22), 540), { temp: 14, rain: 0 }, null);
+  ok(urls(sameDay.rec) === urls(sameDay2.rec), '같은 날 같은 조건이면 같은 결과(결정적)');
+}
+
 const cases = [];
 const tsList = [
   Date.UTC(2026, 9, 18, 3, 10), Date.UTC(2026, 9, 18, 13, 0), Date.UTC(2026, 0, 14, 23, 30), Date.UTC(2026, 6, 4, 6, 5),

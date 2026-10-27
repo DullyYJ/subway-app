@@ -70,7 +70,8 @@ function shopCtx(data, ck, wx) {
   return {
     weekend: weekend, slotIdx: idx, slot: cur, now: now, adj: adj,
     rain: (wx && wx.rain != null) ? wx.rain : -1,
-    temp: (wx && wx.temp != null) ? wx.temp : null
+    temp: (wx && wx.temp != null) ? wx.temp : null,
+    wet: !!(wx && ((wx.rain != null && wx.rain >= 30) || /비|소나기|눈/.test(String(wx.txt || ''))))     // 비가 오거나 올 것 같다(확률 30%+ · 날씨 글에 비/눈)
   };
 }
 
@@ -82,6 +83,18 @@ var SHOP_SEASON_KW = {
   summer: /반팔|반바지|냉감|쿨링|냉각|린넨|메쉬|썬크림|선크림|자외선|선글라스|모자|캡모자|샌들|슬리퍼|아쿠아|수영|래시가드|선풍기|서큘레이터|제습|모기|아이스|쿨매트|부채/,
   fall:   /후드|후디|맨투맨|가디건|자켓|재킷|니트(?!릴)|스웨터|점퍼|야상|기모|트렌치|경량패딩|조끼|베스트|긴팔|스카프|부츠|워커/
 };
+// 비·눈 올 때만 쓸모 있는 물건(우산·레인부츠·우비·방수커버…) — 이름이나 상황 테마(우천대비)로 알아본다.
+// 비가 안 오는 날(확률 30% 미만이고 날씨 글에도 비·눈 없음, 날씨를 못 받았을 때도)엔 시간대·계절 점수와 상관없이 맨 아래로 보낸다.
+var SHOP_RAINGEAR = /우산|레인|장화|우비|판초|빗물|방수/;
+function shopIsRainGear(name, theme) { return theme === '우천대비' || SHOP_RAINGEAR.test(String(name || '')); }
+// 날마다·테마마다 달라지는 고정 흔들림(−22~+22) — 같은 요일이라도 어제와 오늘 1등 테마가 같지 않게(하루 안에서는 같다)
+function shopThemeJitter(theme, ck) {
+  var h = (ck.y * 372 + ck.mo * 31 + ck.d) >>> 0;
+  var str = String(theme || '');
+  for (var i = 0; i < str.length; i++) h = (Math.imul(h ^ str.charCodeAt(i), 2654435761) + 0x9E3779B9) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+  return (h % 45) - 22;
+}
 function shopSeasonNow(ck) {
   var m = ck.mo, day = ck.d, cur, next;
   if (m === 12 || m === 1 || m === 2) { cur = 'winter'; next = 'spring'; }
@@ -140,8 +153,11 @@ function shopSeasonScore(name, ctx, cfg) {
 }
 // 상품 1개 점수 — 시간대(현재/인접 슬롯) + 요일 + 날씨(강수·기온)
 function shopScore(theme, ctx, rng, name, cfg) {
+  var gear = shopIsRainGear(name, theme);
+  if (gear && !ctx.wet) { rng(); return -400 + rng() * 12; }                       // 비 안 오는 날 우산·레인부츠 류는 후보에서 사실상 제외
   var sc = rng() * 12;
   sc += shopSeasonScore(name, ctx, cfg);
+  if (theme && ctx._ck) sc += shopThemeJitter(theme, ctx._ck);
   if (!theme) return sc - 12;
   if (ctx.now[theme]) sc += 100;
   else if (ctx.adj[theme]) sc += 45;
@@ -197,6 +213,7 @@ function shopPick(data, ck, wx, cfg) {
   var themes = shopThemeMap(data);
   var ctx = shopCtx(data, ck, wx);
   ctx._season = shopSeasonNow(ck);
+  ctx._ck = ck;
 
   var byCat = {}, scored = [];
   cats.forEach(function (c) {

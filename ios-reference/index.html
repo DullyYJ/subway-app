@@ -39037,8 +39037,21 @@ function _shopCtx(){
     weekend:_shopIsWeekend(), slotIdx:idx, slot:cur, now:now, adj:adj,
     rain:(wx&&wx.rain!=null)?wx.rain:-1,
     temp:(wx&&wx.temp!=null)?wx.temp:null,
-    wxTxt:(wx&&wx.txt)?wx.txt:'', wxEmo:(wx&&wx.emo)?wx.emo:''
+    wxTxt:(wx&&wx.txt)?wx.txt:'', wxEmo:(wx&&wx.emo)?wx.emo:'',
+    wet: !!(wx && ((wx.rain!=null && wx.rain>=30) || /\uBE44|\uC18C\uB098\uAE30|\uB208/.test(String(wx.txt||''))))
   };
+}
+// 비·눈 올 때만 쓸모 있는 물건(우산·레인부츠·우비·방수커버…) — 비 안 오는 날엔 맨 아래로(엔진 shop.js 와 같은 규칙)
+var _SHOP_RAINGEAR = /\uC6B0\uC0B0|\uB808\uC778|\uC7A5\uD654|\uC6B0\uBE44|\uD310\uCD08|\uBE57\uBB3C|\uBC29\uC218/;
+function _shopIsRainGear(name, theme){ return theme==='\uC6B0\uCC9C\uB300\uBE44' || _SHOP_RAINGEAR.test(String(name||'')); }
+// 날마다·테마마다 달라지는 고정 흔들림(-22~+22)
+function _shopThemeJitter(theme){
+  var d=new Date();
+  var h=((d.getFullYear()*372 + (d.getMonth()+1)*31 + d.getDate())>>>0);
+  var str=String(theme||'');
+  for(var i=0;i<str.length;i++) h=((Math.imul(h ^ str.charCodeAt(i), 2654435761) + 0x9E3779B9)>>>0);
+  h=Math.imul(h ^ (h>>>15), 2246822507)>>>0; h=(h ^ (h>>>13))>>>0;
+  return (h % 45) - 22;
 }
 
 // ★ 2026-09-20: 계절 추천. 9월이면 후디·자켓을, 한여름이면 반팔을 위로 올린다.
@@ -39129,8 +39142,10 @@ window._shopSeasonNow = _shopSeasonNow;
 
 // 상품 1개 점수 — 시간대(현재/인접 슬롯) + 요일 + 날씨(강수·기온)
 function _shopScore(theme, ctx, rng, name){
+  if(_shopIsRainGear(name, theme) && !ctx.wet){ rng(); return -400 + rng()*12; }   // 비 안 오는 날 우산·레인부츠 류는 사실상 제외
   var sc = rng()*12;                       // 같은 조건에서도 약간의 변화
   sc += _shopSeasonScore(name, ctx);       // ★ 계절·날씨 (이름 기준, 태그 없어도 동작)
+  if(theme) sc += _shopThemeJitter(theme); // 날마다 달라지는 테마 흔들림
   if(!theme) return sc - 12;               // 상황 태그 없는 상품은 후순위
   if(ctx.now[theme])      sc += 100;       // 지금 시간대에 딱 맞는 테마
   else if(ctx.adj[theme]) sc += 45;        // 앞뒤 시간대 테마
