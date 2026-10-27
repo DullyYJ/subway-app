@@ -85,7 +85,15 @@ public class ShellJvmTest {
             }
             {
                 ShellCore.MemStore es = new ShellCore.MemStore();
-                ok(ErrCore.count(es) == 0 && ErrCore.copyText(es).equals("(오류 없음)") && ErrCore.pageFacts(es).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":[]}}"), "오류 로그: 처음엔 비어 있다");
+                ok(ErrCore.count(es) == 0 && ErrCore.copyText(es).equals("(오류 없음)") && ErrCore.pageFacts(es).equals("{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":[],\"more\":0}}"), "오류 로그: 처음엔 비어 있다");
+                {   // s266: 40건(한글·긴 호출 흔적)이 쌓여도 화면 주소가 서버 한도(f 6000자 · 주소 인코딩 뒤) 안이다 — 예전엔 40건이면 서버가 거절해 빈 화면이 됐다
+                    StringBuilder big = new StringBuilder(); for (int q = 0; q < 70; q++) big.append("호출흔적 ");
+                    ShellCore.MemStore es40 = new ShellCore.MemStore();
+                    for (int q = 0; q < 40; q++) ErrCore.add(es40, "10-28 06:1" + (q % 10), "오류 메시지 번호 " + q + " 한글로 길게 적은 설명", "ShellActivity.java:" + (1000 + q), big.toString());
+                    String pf = ErrCore.pageFacts(es40), u = ShellCore.pageUrlPlain("erl", pf);
+                    ok(ErrCore.count(es40) == 40 && pf.length() < 6000 && u.length() < 7600 && pf.contains("\"more\":") && !pf.contains("\"more\":0"), "오류 로그 40건: 화면 주소가 한도 안(" + pf.length() + "자 · 주소 " + u.length() + "자)이고 나머지는 more 로 알린다");
+                    ok(ErrCore.copyText(es40).contains("오류 메시지 번호 0 ") && ErrCore.copyText(es40).contains("오류 메시지 번호 39"), "복사는 40건 전부");
+                }
                 ErrCore.add(es, "10-21 06:00", "NullPointerException: x", "A.java:3", "A.f:3\nB.g:9");
                 ErrCore.add(es, "10-21 06:01", "IllegalStateException", "B.java:7", "");
                 ok(ErrCore.count(es) == 2, "두 건");

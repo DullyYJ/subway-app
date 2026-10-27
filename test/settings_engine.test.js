@@ -198,7 +198,9 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(t1.includes('오류 로그 2건') && t1.indexOf('IllegalStateException') < t1.indexOf('NullPointerException: x'), '오류 로그: 최신이 위');
     ok(t1.includes('10-21 06:00 · 2회') && t1.includes('A.java:3') && t1.includes('A.f:3\nB.g:9'), '오류 로그: 횟수 · 위치 · 흔적');
     ok(acts(PG('erl', { errs: E1 })).map(a => a.v).filter(v => /^erl\./.test(v)).join() === 'erl.copy,erl.clear', '오류 로그: 복사 · 지우기');
-    ok(texts(PG('erl', { errs: new Array(80).fill(E1[0]) })).filter(x => x === 'NullPointerException: x').length === 40, '오류 로그: 최대 40건만'); }
+    ok(texts(PG('erl', { errs: new Array(80).fill(E1[0]) })).filter(x => x === 'NullPointerException: x').length === 40, '오류 로그: 최대 40건만')
+    const tm = texts(PG('erl', { errs: E1, more: 30 }));
+    ok(tm.includes('오류 로그 32건') && tm.some(x => /최근 2건만 보여 드려요\. 오래된 30건은 \[복사\]로/.test(x)) && !texts(PG('erl', { errs: E1 })).some(x => /건만 보여 드려요/.test(x)), 's266: 오류 로그: 주소 한도로 일부만 받았으면(more) 전체 건수와 안내를 보여 준다'); }
   { const t = texts(PG('locd', {})).join('\n'), a = acts(PG('locd', {})).map(x => x.v).join();
     ok(/백그라운드 위치 데이터를 수집/.test(t) && /하차역·환승역 도착 알림/.test(t) && /저장하지 않습니다/.test(t), '위치 안내: 고지 글');
     ok(a === 'locd.no,locd.ok,pol.privacy', '위치 안내: 거부 · 동의 · 방침 보기'); }

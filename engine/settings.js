@@ -217,6 +217,7 @@ function settingsPageFacts(pf) {
     nat: settingsFlag(pf.nat, true), sup: tri(pf.sup), gr: tri(pf.gr), on: settingsFlag(pf.on, false), pfl: settingsFlag(pf.pfl, false), pfr: settingsFlag(pf.pfr, false), nv: settingsFlag(pf.nv, false),
     perf: settingsPerfFacts(pf.perf),
     ph: ['plain', 'reco', 'alert2', 'alert1', 'quit'].indexOf(pf.ph) >= 0 ? pf.ph : '', left: settingsInt(pf.left, 0, 600, 0), stopped: settingsFlag(pf.stopped, false),
+    more: Math.max(0, Math.min(999, Math.round(Number(pf.more)) || 0)),
     errs: (Array.isArray(pf.errs) ? pf.errs : []).slice(-40).map(function (e) { e = e && typeof e === 'object' ? e : {}; return { t: settingsStr(e.t, 24), m: settingsStr(e.m, 300), f: settingsStr(e.f, 200), s: settingsStr(e.s, 600), n: settingsInt(e.n, 1, 9999, 1) }; }),
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
@@ -523,8 +524,9 @@ function settingsPagePol(p) {
 }
 // 오류 로그: 앱이 모아 둔 기록(pf.errs 오래된 것부터)을 최신이 위로. 복사/지우기는 앱이 한다(erl.copy · erl.clear).
 function settingsPageErl(f) {
-  var n = f.errs.length, k = [settingsTitleN('오류 로그' + (n ? ' ' + n + '건' : ''), 4), settingsDescN('앱이 멈추거나 문제가 생겼을 때의 기록이에요. 캡처하거나 복사해서 보내 주세요.', 8)];
+  var n = f.errs.length, k = [settingsTitleN('오류 로그' + (n ? ' ' + (n + (f.more > 0 ? f.more : 0)) + '건' : ''), 4), settingsDescN('앱이 멈추거나 문제가 생겼을 때의 기록이에요. 캡처하거나 복사해서 보내 주세요.', 8)];
   if (n) k.push(settingsRowN([settingsBtnN('복사', 'erl.copy', { size: 12, h: 38 }), settingsBtnN('지우기', 'erl.clear', { size: 12, h: 38, tc: '#ff453a' })], 6));
+  if (f.more > 0) k.push({ t: 'text', s: '최근 ' + n + '건만 보여 드려요. 오래된 ' + f.more + '건은 [복사]로 전체를 확인할 수 있어요.', size: 11.5, color: 'sub', lh: 1.5, pad: [0, 0, 0, 6] });
   if (!n) k.push({ t: 'text', s: '기록된 오류가 없습니다.', size: 13, color: 'sub', lh: 1.6, pad: [0, 18, 0, 18], align: 'center' });
   f.errs.slice().reverse().forEach(function (e) {
     k.push({ t: 'text', s: e.t + (e.n > 1 ? ' · ' + e.n + '회' : ''), size: 11, color: 'sub', lh: 1.4, pad: [0, 10, 0, 1] });

@@ -66,7 +66,28 @@ public final class ErrCore {
     }
 
     /** 엔진 오류 로그 화면에 보내는 기기 사실(오래된 것부터). */
-    public static String pageFacts(ShellCore.Store st) { return "{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":" + json(list(st)) + "}}"; }
+    public static String pageFacts(ShellCore.Store st) { return pageFacts(st, PAGE_BUDGET); }
+
+    /** 화면 주소(GET)에 실려 가는 글 길이 한도(주소 인코딩 뒤) — 서버는 f 가 6000자를 넘으면 거절하고, 한글은 주소에서 9배가 되어 40건을 다 실으면 화면이 비었다(s266). */
+    public static final int PAGE_BUDGET = 6400;
+
+    /** 최신 기록부터 한도 안에서 가능한 만큼 싣는다(나머지 개수는 more — 엔진이 '복사로 전체 확인'을 안내). 복사는 전부를 복사한다. */
+    public static String pageFacts(ShellCore.Store st, int budget) {
+        List<Entry> all = list(st), keep = new ArrayList<Entry>();
+        int used = 80;
+        for (int i = all.size() - 1; i >= 0; i--) {
+            Entry e = all.get(i);
+            int w = enc(ShellCore.q(e.t)) + enc(ShellCore.q(e.m)) + enc(ShellCore.q(e.f)) + enc(ShellCore.q(e.s)) + 40;
+            if (used + w > budget) {
+                if (keep.isEmpty()) { Entry c = new Entry(); c.t = e.t; c.n = e.n; c.m = cut(e.m, 120); c.f = cut(e.f, 80); c.s = ""; keep.add(c); }
+                break;
+            }
+            used += w; keep.add(e);
+        }
+        java.util.Collections.reverse(keep);
+        return "{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":" + json(keep) + ",\"more\":" + Math.max(0, all.size() - keep.size()) + "}}";
+    }
+    static int enc(String s) { try { return java.net.URLEncoder.encode(s, "UTF-8").length(); } catch (java.io.UnsupportedEncodingException e) { return s.length() * 9; } }
 
     /** 복사할 글(예전 웹 copyErrLog 와 같은 모양). */
     public static String copyText(ShellCore.Store st) {

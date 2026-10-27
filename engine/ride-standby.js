@@ -253,6 +253,24 @@ function rsXCommit(st, i, now, ms) {
   return prev;
 }
 // 환승 대기: 아직 안 탄 첫 환승 구간이 있고 앞 구간을 내렸으면 st.xw = {i,k,mode,line,name,arrMs,seen,shr}. 예약(xPend)은 그 시각이 되면 확정한다.
+// ★ s266 (YJ: 역에 도착한 게 확인되면 먼저 시각표대로 전진시키고 GPS 영점을 맞춰라 · 환승 칸과 버스 하차 칸을 마커가 오갔다):
+//   · 다음 승차역에 닿았나 — 승차 노드 150m 안(정확도의 절반 뺀 값)에서 걷는 속도(2.5m/s 이하)로 머문 위치 기록이 있으면 된다. 예전 rsAlightGps 는 마지막 기록 하나만 보고 20~120초 창이 필요해 지하 진입 뒤 기록이 드물면 놓쳤다.
+//   · 한 번 닿았다고 판단하면 st.xAl = 승차 노드 로 붙잡는다 — 예정 시각이 밀려도(연착 처리) 판단이 풀려 마커가 되돌아가지 않게.
+//   · 닿았다고 처음 판단할 때 앞 구간 마지막 노드(버스 하차)를 통과로 적어 둔다 — 시각 기준이 환승 칸으로 넘어온다.
+//   · 지하철 환승 열차는 시각표(다음 차) 시각에서 RS_XAUTO_MS 가 지나도록 승강장 위치 기록이 없으면(지하에선 기록이 끊긴다) 탄 것으로 보고 그 시각으로 자동 승차 처리한다(영점은 이후 GPS 가 맞춘다).
+var RS_XNEAR_M = 150, RS_XAUTO_MS = 20000;
+function rsAtBoard(st, tr, bi) {
+  var s = rsStopOf(st, bi); if (!s || !isFinite(s.lat) || !isFinite(s.lng) || !tr.length) return false;
+  var i, j, q, o, acc;
+  for (i = tr.length - 1; i >= 0; i--) {
+    q = tr[i]; acc = q[3] != null && isFinite(q[3]) ? Math.min(+q[3], 100) * 0.5 : 0;
+    if (rsHav(q[1], q[2], s.lat, s.lng) - acc > RS_XNEAR_M) continue;
+    for (j = i - 1; j >= 0; j--) if (q[0] - tr[j][0] >= 20000) { o = tr[j]; break; }
+    if (!o) return false;
+    return rsHav(o[1], o[2], q[1], q[2]) / ((q[0] - o[0]) / 1000) <= 2.5;
+  }
+  return false;
+}
 function rsXwait(st, tr, now, notes) {
   var eta = st.eta;
   if (st.wait || !eta) { delete st.xw; delete st.xPend; return; }
@@ -262,9 +280,25 @@ function rsXwait(st, tr, now, notes) {
   var dep = (st.etaMs && st.etaMs[L.bi] != null && isFinite(st.etaMs[L.bi])) ? st.etaMs[L.bi] : null;
   if (dep == null) { var sp = (st.stops || []).filter(function (q) { return q.i === L.bi; })[0]; dep = sp && isFinite(sp.arrMs) ? sp.arrMs : null; }
   var prevAt = st.etaMs && st.etaMs[L.bi - 1] != null && isFinite(st.etaMs[L.bi - 1]) ? st.etaMs[L.bi - 1] : null;      // 웹 _timeMaxIdx: 시각표상 앞 구간 하차 시각이 지났으면 내린 것으로 본다
-  if (dep == null || !(pm >= L.bi - 1 || (prevAt != null && prevAt <= now) || rsAlightGps(st, tr, L.bi))) { delete st.xw; if (st.xPend && st.xPend.i !== L.bi) delete st.xPend; return; }
+  var alit = st.xAl === L.bi;
+  if (dep == null || !(alit || pm >= L.bi - 1 || (prevAt != null && prevAt <= now) || rsAlightGps(st, tr, L.bi) || rsAtBoard(st, tr, L.bi))) { delete st.xw; if (st.xPend && st.xPend.i !== L.bi) delete st.xPend; return; }
+  if (!alit) {
+    st.xAl = L.bi;
+    if (pm < L.bi - 1) {        // 버스 하차를 통과로 적어 시각 기준을 환승 칸으로
+      var ps = (eta.passes = eta.passes || []), pe = L.bi - 1, has = false, pk;
+      for (pk = 0; pk < ps.length; pk++) if (ps[pk] && ps[pk].idx >= pe) has = true;
+      if (!has && pe >= 1) { var pms = prevAt != null && prevAt <= now ? prevAt : now; ps.push({ idx: pe, ms: pms, src: 'gps' }); notes.push('환승역 도착으로 ' + pe + '번 하차 통과 기록'); }
+    }
+  }
   var keep = st.xw && st.xw.i === L.bi ? st.xw : null;
   st.xw = { i: L.bi, k: L.k, mode: L.mode, line: L.line, name: L.name, arrMs: dep, seen: keep ? !!keep.seen : (st.xSeen === L.bi), shr: keep ? !!keep.shr : false };
+  if (!st.xPend && L.mode === 'sub' && st.xw.arrMs != null) {
+    // s266 (YJ: 사용자가 역에 있다고 판정되면 다음 열차 시간표대로 탔다고 가정하고 첫 열차는 일단 태워 — 그리고 영점을 맞춘다): 시각표 다음 차 시각이 지나면(RS_XAUTO_MS 뒤) 탄 것으로 하고 이후 GPS 영점이 바로잡는다.
+    var bx = st.bl && st.bl.x && st.bl.x.i === L.bi ? st.bl.x : null;
+    if (!st.xwAt || st.xwAt.i !== L.bi) st.xwAt = { i: L.bi, at: now };
+    if (bx && bx.ms != null && now - st.xw.arrMs >= RS_XAUTO_MS) { rsXCommit(st, L.bi, now, st.xw.arrMs); notes.push('환승 열차 시각표 출발(' + L.bi + '번) — 시각표대로 탔다고 보고 이어서 GPS 영점'); return; }
+    if (bx && bx.ms == null && bx.n >= RS_BLX_MAXTRY && st.xFree !== L.bi) { st.xFree = L.bi; notes.push('환승 시각표 다음 차를 못 구함 — 위치 판단으로'); }      // 시각표가 없으면 위치 증거에 맡긴다
+  }
   if (st.xPend && st.xPend.i === L.bi && dep - now <= RS_EARLY_MS) { var pv = rsXCommit(st, L.bi, now, st.xPend.lv != null && isFinite(st.xPend.lv) ? +st.xPend.lv : null); notes.push('환승 예약 확정(' + L.bi + '번)'); if (st.rsUndo && st.rsUndo.x) st.rsUndo.prev = pv; }
 }
 function rsContrast(hex) {
@@ -879,8 +913,22 @@ function rsResync(st, now, notes) {
 }
 
 // 다음 호출까지 몇 ms 기다릴지 — 표시 도착 시각(정류장·역) 앞 nearBeforeSec ~ 뒤 nearAfterSec 안이면 짧게(영점이 도착 5초 안에 잡히게), 아니면 기본.
+// ★ s266 (YJ: 환승을 위한 하차 전후 3분 · 탑승 전후 3분은 GPS 를 촘촘히 돌려 환승 목적지 도착·환승 대중교통 탑승을 정확히 확인): 모든 구간의 승차 노드(탑승)와 마지막이 아닌 구간의 하차 노드(환승 하차)의
+//   표시 시각 앞뒤 RS_XFER_WIN_MS 안이면 짧은 간격(nearStepMs) — 승차 대기 중이어도 적용한다.
+var RS_XFER_WIN_MS = 180000;
+function rsXferNear(st, r, now) {
+  var legs = rsLegsOf(st.eta), k, ids = [], j, am, s;
+  for (k = 0; k < legs.length; k++) { ids.push(legs[k].bi); if (k < legs.length - 1) ids.push(legs[k].ai); }
+  for (j = 0; j < ids.length; j++) {
+    am = (r && r.etaMs && r.etaMs[ids[j]] != null) ? r.etaMs[ids[j]] : (st.etaMs && st.etaMs[ids[j]] != null ? st.etaMs[ids[j]] : null);
+    if (am == null) { s = rsStopOf(st, ids[j]); am = s && s.arrMs != null ? s.arrMs : null; }
+    if (am != null && isFinite(am) && Math.abs(now - am) <= RS_XFER_WIN_MS) return true;
+  }
+  return false;
+}
 function rsNextMs(st, r, now, O) {
   var stops = st.stops || [], i;
+  try { if (st.eta && rsXferNear(st, r, now)) return O.nearStepMs; } catch (eX) { }
   if (!st.eta || st.eta.boarded === false || st.eta.notDeparted === true) return O.stepMs;
   for (i = 0; i < stops.length; i++) {
     var s = stops[i], am = (r && r.etaMs && r.etaMs[s.i] != null) ? r.etaMs[s.i] : s.arrMs;
@@ -965,7 +1013,12 @@ var RS_BL_ANS_MS = 90000;         // 이보다 오래된 답은 버린다
 
 // 지금 승차 대기의 대상 — { kind:'sub', line, from, to } | { kind:'bus', cc, sid, no } | null
 function rsBlTarget(st) {
-  var w = st && st.wait, eta = st && st.eta; if (!w || !eta) return null;
+  var w = st && st.wait, eta = st && st.eta; if (!eta) return null;
+  if (!w) {          // s266 (YJ: 환승역에서 14분에 대기를 눌렀더니 14분 탑승처럼 나옴 — 그 시각엔 열차가 없다): 환승 대기 중인 지하철 구간도 시각표 다음 차를 묻는다
+    var xw = st && st.xw, xns = eta.nodes || [], xn = xw ? xns[xw.i] : null, xx = xw ? xns[xw.i + 1] : null;
+    if (xw && !st.xPend && xn && xn.isSub && !xn.isBus && xn.lineName && xn.name) return { kind: 'sub', line: String(xn.lineName), from: String(xn.name), to: (xx && xx.name) ? String(xx.name) : '' };
+    return null;
+  }
   var nodes = eta.nodes || [], n = nodes[w.i], nx = nodes[w.i + 1];
   if (!n) return null;
   if (n.isSub && !n.isBus && n.lineName && n.name) return { kind: 'sub', line: String(n.lineName), from: String(n.name), to: (nx && nx.name) ? String(nx.name) : '' };
@@ -998,9 +1051,34 @@ function rsBlAsk(st, tr, now) {
     return o;
   } catch (e) { return null; }
 }
+// ★ s266 환승 대기(st.xw, 지하철)의 다음 차: 환승역에 내린 뒤(= xw 가 서 있는 동안) 시각표 다음 차를 묻는다 — 계획 시각(버스가 닿는 시각)에 열차가 없을 수 있다.
+//   답은 eta.live 로 적어 ride-eta 가 그 역 시각과 뒤를 그만큼 옮긴다. 승강장까지 걷는 1분을 더한 시각 이후 차부터. 답이 있으면 그 차가 떠난 30초 뒤까지 더 묻지 않고, 못 받으면 15초 간격 6번까지.
+var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000;
+function rsBlAskX(st, now) {
+  try {
+    var x = st.xw, tg = rsBlTarget(st); if (!x || st.wait || !tg) return null;
+    var bl = st.bl = st.bl || {}, bx = bl.x && bl.x.i === x.i ? bl.x : (bl.x = { i: x.i, n: 0 });
+    if (bx.ms != null) { if (now < bx.ms + RS_BLX_PASS_MS) return null; bx.ms = null; bx.n = 0; }       // 그 차가 떠났으면 다음 차를 다시 묻는다
+    if (bx.n >= RS_BLX_MAXTRY || now - (bx.askAt || 0) < RS_BL_STEP_MS) return null;
+    bx.askAt = now; bx.n++;
+    var tz = st.eta.tzOffsetMin != null && isFinite(+st.eta.tzOffsetMin) ? +st.eta.tzOffsetMin : 540;
+    return { kind: 'sub', i: x.i, nowMs: now, fromMs: Math.round(now + RS_BLX_PLAT_MS), allowEarlier: true, maxWait: RS_BL_MAXWAIT_ARR, tz: tz, line: tg.line, from: tg.from, to: tg.to };
+  } catch (e) { return null; }
+}
+function rsBlApplyX(st, req, now, notes) {
+  var b = req && req.bl, x = st && st.xw, eta = st && st.eta, bx = st && st.bl && st.bl.x;
+  if (!b || !x || !eta || !bx || b.kind !== 'sub' || +b.i !== x.i || bx.i !== x.i || st.wait) return;
+  var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000 || bx.lastAt === at) return;
+  bx.lastAt = at;
+  if (b.ms == null || !isFinite(+b.ms) || +b.ms < now - 5000 || +b.ms > now + RS_BLX_MAXAHEAD_MS) return;      // 못 받음 → 계획 시각 그대로
+  var lv = (eta.live || []).filter(function (q) { return q && +q.idx !== x.i; });
+  lv.push({ idx: x.i, ms: Math.round(+b.ms) }); eta.live = lv; bx.ms = Math.round(+b.ms); bx.src = b.src || '';
+  notes.push('환승 다음 차(' + (b.src || '?') + ') ' + Math.round((+b.ms - now) / 1000) + '초 뒤');
+}
 // 받아 온 답(req.bl)을 다음 차 시각(eta.boardNext)으로 반영한다 — 승차역 이후 시각을 옮기는 일은 ride-eta 가 한다.
 function rsBlApply(st, req, now, notes) {
   var b = req && req.bl, w = st && st.wait, eta = st && st.eta;
+  if (!w) { rsBlApplyX(st, req, now, notes); return; }
   if (!b || !w || !eta || b.i !== w.i || b.kind === 'subrt') return;
   var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000) return;       // 오래됐거나 미래의 답은 버린다
   if (b.ms == null || !isFinite(+b.ms)) return;                                                     // 못 받음 → 직전 값 유지(웹 applyDelay(null))
@@ -1179,12 +1257,13 @@ function rideStandby(req) {
   rsRtApply(st, req, now, notes);                 // 1.46) s231 받아 온 '내 열차' 실시간 도착
   rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
   rsXwait(st, tr, now, notes);                    // 1.55) 환승 구간 승차 대기
-  var askBl = rsBlAsk(st, tr, now);               // 1.56) 승차 대기 중 실시간 다음 차를 물을 때인가(s196)
+  var askBl = rsBlAsk(st, tr, now) || rsBlAskX(st, now);               // 1.56) 승차 대기 중 실시간 다음 차를 물을 때인가(s196)
   rsActs(st, req, now, notes);                    // 1.6) 앱이 알려 준 추천 줄 · 닫기 · 오버레이 탑승 손짓
   // 1.7) s229 역까지 이동: 남은 거리·시간 · 역에 닿으면 가장 빠른 열차로 조용히 이어 붙임(그동안은 아래 영점·재동기·이탈 판정·하차 알림을 쉰다)
   var dtInfo = null;
   if (st.dt) { dtInfo = rsDtTick(st, tr, now, req, notes); if (!st.dt && st.dtDone && st.dtDone.at === now) rsXwait(st, tr, now, notes); }
-  var dtHold = !!st.dt || !!(st.dtDone && st.xw && st.xw.i === st.dtDone.i);     // 역까지 이동 중이거나, 이어 붙인 열차를 아직 안 탄 동안은 위치로 통과를 인정하지 않는다(역 안에서 기다리는 중이다)
+  var dtHold = !!st.dt || !!(st.dtDone && st.xw && st.xw.i === st.dtDone.i) || !!(st.xw && st.xw.mode === 'sub' && st.xAl === st.xw.i && st.xFree !== st.xw.i);      // s266: 환승역 승강장에서 열차를 기다리는 동안(xw)은 승차역 근처 위치가 '통과'(= 탑승)로 잡히지 않게 — 시각표 출발·버튼·자동 승차로만 탄 것으로 한다(YJ: 14분에 대기를 눌렀는데 탑승처럼 나옴)
+  //     // 역까지 이동 중이거나, 이어 붙인 열차를 아직 안 탄 동안은 위치로 통과를 인정하지 않는다(역 안에서 기다리는 중이다)
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
   var zero = null, newPass = false, tk = null;
@@ -1200,6 +1279,7 @@ function rideStandby(req) {
       zero.stops.forEach(function (z) {
         if (z.passMs != null && isFinite(z.passMs) && z.apply) {
           var hit = -1; for (var k = 0; k < passes.length; k++) if (passes[k].idx === z.i) { hit = k; break; }
+          if (hit >= 0 && st.rsDone && st.rsDone[z.i]) return;      // s266: 시각표·버튼으로 탔다고 확정한 환승 승차역은 위치(역에 닿은 시각)로 다시 쓰지 않는다 — 탑승 시각이 역에 닿은 시각으로 당겨지던 것
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
           if (hit >= 0) passes[hit] = np; else passes.push(np);
           newPass = true;

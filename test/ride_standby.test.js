@@ -350,7 +350,7 @@ t('버스: 달리는 중(motion)은 오버레이의 이동중 표시를, 서 있
 t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5초, 그 밖에는 5초, 승차 전에는 5초', () => {
   const st = mkState();
   // 3번 역 도착 12:56:00 (etaMs 가 없으면 stops.arrMs)
-  const near = [at(12, 55, 31), at(12, 56, 0), at(12, 56, 39)], far = [at(12, 55, 0), at(12, 56, 45)];
+  const near = [at(12, 55, 31), at(12, 56, 0), at(12, 56, 39)], far = [at(12, 55, 10), at(12, 56, 45)];      // s266: 승차 노드(12:52 쯤) 앞뒤 3분(환승·탑승 확인 창)도 짧은 간격이라 12:55:00 은 '가까움'
   near.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 2500, 'near '+new Date(ms).toISOString() + ' ' + r.nextMs); });
   far.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 5000, 'far '+new Date(ms).toISOString() + ' ' + r.nextMs); });
   const s2 = mkState(); s2.eta.notDeparted = true;
@@ -1017,3 +1017,14 @@ liveHttpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 서울 실�
   .then(() => blHttp()).then(() => { pass++; console.log('  ok   HTTP 처리: /board-live — 실시간 ↔ 시각표 맞춤 · 20분 넘게 남으면 시각표 · 응답 없으면 3초 안에 시각표 · 버스'); }, (e) => { fail++; console.log('  FAIL HTTP board-live', String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); })
   .then(() => httpTest()).then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
   .then(() => { console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0); });
+
+t('s266: 환승 하차·탑승 전후 3분은 승차 대기 중이어도 2.5초 간격(환승 목적지 도착 · 환승 대중교통 탑승 확인용), 그 밖은 5초', () => {
+  const st = mkState(); st.eta.nodes = st.eta.nodes.slice(); // 구간 둘: 노드 1~2 = 1호선(승차 1 · 하차 2) → 노드 3~5 = 2호선(환승 승차 3 · 마지막 하차 5)
+  st.eta.nodes = [st.eta.nodes[0]].concat([1, 2].map(i => ({ name: 'S' + i, isSub: true, lineName: '1호선', planMin: PLAN[i] })), [3, 4, 5].map(i => ({ name: 'S' + i, isSub: true, lineName: '2호선', planMin: PLAN[i] })));
+  st.stops.forEach(q => { q.arrMs = DAY + (PLAN[q.i] || 0) * 60000; });
+  const ai = DAY + PLAN[2] * 60000, bi = DAY + PLAN[3] * 60000;
+  assert.strictEqual(rideStandby({ nowMs: ai - 170000, fixes: [], state: JSON.parse(JSON.stringify(st)) }).nextMs, 2500, '환승 하차 3분 전');
+  assert.strictEqual(rideStandby({ nowMs: bi + 170000, fixes: [], state: JSON.parse(JSON.stringify(st)) }).nextMs, 2500, '환승 탑승 3분 뒤');
+  const far = rideStandby({ nowMs: (ai + bi) / 2 + 600000, fixes: [], state: JSON.parse(JSON.stringify(st)) }).nextMs;
+  assert.ok(far === 5000 || far === 2500, '창 밖 값은 기본 또는 정류장 근처 규칙 ' + far);
+});
