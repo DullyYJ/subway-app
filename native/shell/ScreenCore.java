@@ -1719,11 +1719,8 @@ public final class ScreenCore {
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다
-            float lead = 0f, lastW = 0f;
-            if (n.mk != null && !n.items.isEmpty()) {                                  // s257 (YJ: 내 위치를 가운데로): 처음·끝 칸의 마커도 가운데 올 수 있게 양 끝에 여백을 둔다
-                lead = Math.max(0f, width / 2f - n.items.get(0).max / 2f - n.padL);
-                lastW = n.items.get(n.items.size() - 1).max;
-            }
+            float lead = 0f, lastW = 0f;                                               // s265 (YJ: 처음엔 경로와 마커가 왼쪽 끝에서 시작하고, 진행할수록 마커가 가운데에서 진행): 앞쪽 여백은 없다 — 마커가 가운데를 넘기 전까진 줄이 안 밀린다
+            if (n.mk != null && !n.items.isEmpty()) lastW = n.items.get(n.items.size() - 1).max;       // 끝 칸의 마커는 가운데까지 올 수 있게 오른쪽에만 여백
             float tx = ox + lead, ty = y + n.padT;
             int rowFrom = out.size();
             for (Node c : n.items) {

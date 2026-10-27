@@ -64,6 +64,24 @@ function rideStart(opt, r) {
   if (pp.error) return rstFail(pp.error, '이 경로는 시각 정보가 없어 안내할 수 없어요');
   var pts = D.points(pp.facts).filter(function (p) { return p.type === 'stn' && !p.ld; });
   if (pts.length < 2) return rstFail('nopoints', '안내할 정류장이 부족해요');
+  // ★ s265 (YJ: 같은 구간을 가는 버스가 여러 번호일 때 사용자가 고른 번호로): 팝업에서 고른 번호(r.pick.no)가 경로가 알려 준 대체 번호(첫 버스 구간의 altBus)에 있으면
+  //   첫 버스 구간의 노선 번호를 그 번호로 바꿔 안내한다(실시간 도착을 그 번호로 따라가고, 오버레이·타임라인에도 그 번호가 보인다). 시간은 경로의 것을 그대로 쓴다(같은 정류장 사이를 가는 버스).
+  var pickNo = (r.pick && typeof r.pick === 'object' && r.pick.no != null) ? String(r.pick.no).replace(/\s+/g, '').slice(0, 14) : '';
+  var firstAlts = [];
+  try {
+    var rawSub0 = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fs0 = null, q0;
+    for (q0 = 0; q0 < rawSub0.length; q0++) { var s0 = rawSub0[q0]; if (s0 && (s0.trafficType === 1 || s0.trafficType === 2 || s0.trafficType === 4)) { fs0 = s0; break; } }
+    if (fs0 && fs0.trafficType === 2 && Array.isArray(fs0.altBus)) firstAlts = fs0.altBus.map(function (x) { return String(x).replace(/\s+/g, ''); }).filter(function (x) { return x.length > 0 && x.length <= 14; }).slice(0, 6);
+  } catch (eA) { firstAlts = []; }
+  var planNo = pts[0].sty === 2 ? String(pts[0].lineNm || '') : '';
+  var renamed = false;
+  if (pickNo && planNo && pickNo !== planNo && firstAlts.indexOf(pickNo) >= 0) {
+    for (k = 0; k < pts.length; k++) {
+      if (pts[k].sty !== 2 || String(pts[k].lineNm || '') !== planNo) break;           // 첫 버스 구간(같은 번호로 이어지는 칸)까지만
+      pts[k].lineNm = pickNo; if (pts[k].lineLabel != null) pts[k].lineLabel = pickNo;
+      renamed = true;
+    }
+  }
 
   var aName = String(r.a || '').slice(0, 40), bName = String(r.b || '').slice(0, 40);
   var nodes = [{ name: aName || '출발', isOrigin: true }], tnodes = [{ k: null }], stops = [], etaMs = [null], prevMin = null, last = pts.length - 1, i, k;
@@ -89,6 +107,8 @@ function rideStart(opt, r) {
   // ★ s200 (YJ: 첫 구간이 버스면 10분 안에 오는 버스를 팝업으로 골라 타게): 앱이 고른 버스의 도착 시각(ms). 승차 대기 중 실시간 재보정(/board-live)이 그 차를 따라간다.
   var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
   if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
+  if (firstBl && firstAlts.length) firstBl.alts = firstAlts;                                  // s265: 같은 구간을 가는 다른 번호들(팝업이 쓴다)
+  if (firstBl && renamed) firstBl.no = pickNo;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // 첫 정류장 시각이 이미 지났다면 지난 것으로
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -114,7 +134,7 @@ function rideBusAsk(opt, r) {
   var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
   var no = nd && nd.isBus ? String(nd.lineName || '') : '';
   if (!no) return null;
-  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '' };
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [] };
 }
 function rideBusItems(list, nowMs) {
   var out = [], k, n = Number(nowMs);
@@ -123,5 +143,18 @@ function rideBusItems(list, nowMs) {
   for (k = 0; k < s.length && out.length < RST_PICK_MAX_N; k++) out.push({ sec: Math.round(s[k]), ms: Math.round(n + s[k] * 1000) });
   return out;
 }
+// s265 (YJ: 같은 곳으로 가는 버스가 여러 번호면 팝업에서 고르게): 정류장 도착정보 맵(번호 → 초 목록)에서 내 번호 + 대체 번호들의 10분 안 도착을 번호마다 가장 빠른 2대씩 모아
+//   빠른 순 최대 6줄 — [{ no, sec, ms }]. noOf(번호) = 도착정보 맵의 열쇠 규칙(숫자만 남기기 등)을 워커가 넘긴다(없으면 번호 그대로).
+function rideBusItemsMulti(map, nos, nowMs, noOf) {
+  var out = [], seen = {}, k;
+  if (!map || typeof map !== 'object' || !Array.isArray(nos)) return out;
+  for (k = 0; k < nos.length; k++) {
+    var no = String(nos[k] || ''); if (!no || seen[no]) continue; seen[no] = 1;
+    var list = map[no] || (typeof noOf === 'function' ? map[noOf(no)] : null);
+    rideBusItems(list, nowMs).slice(0, 2).forEach(function (it) { out.push({ no: no, sec: it.sec, ms: it.ms }); });
+  }
+  out.sort(function (a, b) { return a.sec - b.sec; });
+  return out.slice(0, 6);
+}
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V, rideBusAsk: rideBusAsk, rideBusItems: rideBusItems };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V, rideBusAsk: rideBusAsk, rideBusItems: rideBusItems, rideBusItemsMulti: rideBusItemsMulti };

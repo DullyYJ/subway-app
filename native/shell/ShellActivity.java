@@ -4194,25 +4194,28 @@ public class ShellActivity extends Activity {
     @SuppressWarnings("unchecked")
     private void busPickAsk(final String pickJson, final String facts, final List<String> off, final boolean pfl, final String txt0, final int rid) {
         final List<Long> ms = new ArrayList<Long>();
+        final List<String> nos = new ArrayList<String>();              // 줄마다 엔진이 알려 준 버스 번호(같은 구간을 가는 번호가 여러 개일 때 — 고른 번호를 엔진에 돌려준다)
         boolean ask = false;
         long autoMs = 0L;
+        String autoNo = "";
         try {
             Object o = ScreenCore.parse(pickJson);
             if (o instanceof Map) {
                 Map<String, Object> m = (Map<String, Object>) o;
                 ask = Boolean.TRUE.equals(m.get("ask"));
                 if (m.get("auto") instanceof Map && ((Map<String, Object>) m.get("auto")).get("ms") instanceof Number) autoMs = ((Number) ((Map<String, Object>) m.get("auto")).get("ms")).longValue();      // 오는 버스가 하나뿐 — 묻지 않고 그 버스로
+                if (m.get("auto") instanceof Map && ((Map<String, Object>) m.get("auto")).get("no") != null) autoNo = String.valueOf(((Map<String, Object>) m.get("auto")).get("no"));
                 Object inf = m.get("info");
                 if (inf instanceof Map && ((Map<String, Object>) inf).get("items") instanceof List)
-                    for (Object x : (List<Object>) ((Map<String, Object>) inf).get("items")) if (x instanceof Map && ((Map<String, Object>) x).get("ms") instanceof Number) ms.add(((Number) ((Map<String, Object>) x).get("ms")).longValue());
+                    for (Object x : (List<Object>) ((Map<String, Object>) inf).get("items")) if (x instanceof Map && ((Map<String, Object>) x).get("ms") instanceof Number) { ms.add(((Number) ((Map<String, Object>) x).get("ms")).longValue()); Object nv = ((Map<String, Object>) x).get("no"); nos.add(nv == null ? "" : String.valueOf(nv)); }
             }
         } catch (Throwable ignored) { ask = false; }
-        if (!ask && autoMs > 0L) { rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, autoMs), rid); return; }
+        if (!ask && autoMs > 0L) { rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, autoMs, autoNo), rid); return; }
         if (!ask || ms.isEmpty()) { rideCommit(txt0, rid); return; }
         dlgPick = -1;
         boolean shown = dlgOpen(pickJson, new Runnable() { @Override public void run() {
             int ix = dlgPick; dlgPick = -1;
-            if (ix >= 0 && ix < ms.size()) rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, ms.get(ix)), rid);       // 고른 버스로 다시 시작(엔진이 그 차를 따라간다)
+            if (ix >= 0 && ix < ms.size()) rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, ms.get(ix), ix < nos.size() ? nos.get(ix) : ""), rid);       // 고른 버스로 다시 시작(엔진이 그 차를 따라간다)
             else rideCommit(txt0, rid);                                                      // 고르지 않고 시작 = 경로 시각대로
         } }, new Runnable() { @Override public void run() { dlgPick = -1; toast("탑승 안내를 시작하지 않았어요"); } }, 0L);
         if (!shown) rideCommit(txt0, rid);                                                  // 카드를 못 띄우면 예전처럼 바로 시작

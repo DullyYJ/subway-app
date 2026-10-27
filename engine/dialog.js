@@ -67,18 +67,20 @@ function dlgBpickLabel(sec) {
 }
 function dlgBpick(f) {
   var src = Array.isArray(f.items) ? f.items : [], items = [], k;
-  for (k = 0; k < src.length && items.length < 4; k++) {
+  for (k = 0; k < src.length && items.length < 6; k++) {
     var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
-    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms) });
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '' });      // s265: 줄마다 버스 번호(같은 구간을 가는 여러 번호 중 고르기) — 없으면 카드 전체 번호
   }
-  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
+  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' }, nos = {};
+  items.forEach(function (x) { if (x.no) nos[x.no] = 1; });
+  var multiNo = Object.keys(nos).length > 1;
   var head = [
     { t: 'text', pad: [22, 24, 22, 6], s: '탈 버스를 골라 주세요', size: 17, bold: true, lh: 1.4, color: 'text' },
-    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + '10분 안에 오는 버스', size: 13, lh: 1.55, color: 'sub' }
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (multiNo ? '같은 곳으로 가는 10분 안에 오는 버스' : '10분 안에 오는 버스'), size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
     head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: (no ? no + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
+      { label: ((it2.no || no) ? (it2.no || no) + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
@@ -86,7 +88,7 @@ function dlgBpick(f) {
     { label: '고르지 않고 시작', fill: 'card2', line: 'border', tc: 'sub', act: { a: 'call', v: 'dl.ok' } }
   ] });
   return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
-    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
+    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms, no: x.no || no }; }) } };
 }
 
 // ★ s252 (YJ: "하차추천도 앱을 키고있으면 팝업이 뜨고"): 앱 화면을 보는 중에 하차 7분 전 추천이 오면 알림 대신 뜨는 카드(웹 _showBriefingModal 과 같다).

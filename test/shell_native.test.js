@@ -41,7 +41,7 @@ function findAndroidJar() {
     const op = v.slice(v.indexOf('private void openDetailSheet()'), v.indexOf('private void loadDetail()'));
     assert.ok(/clearFlags\(android\.view\.WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(op) && /FLAG_NOT_TOUCH_MODAL/.test(op) && /w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, Math\.max\(Math\.round\(200f \* dpr\), tabsScr\)\)/.test(op), '창은 탭 막대 위까지만 · 바깥 터치는 앱이 받는다 · 화면 전체 흐림 없음');
     assert.ok(/case ShellCore\.E_TAB: if \(sheet != null && ShellCore\.S_DETAIL\.equals\(sheetName\)\) closeSheet\(\); showTab/.test(v), '세부경로가 떠 있을 때 탭을 누르면 시트를 닫고 그 탭으로');
-    assert.ok(/if \(!ask && autoMs > 0L\) \{ rideStartPicked\(RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, autoMs\), rid\); return; \}/.test(v), '엔진이 auto.ms 만 주면(버스 하나) 묻지 않고 그 버스로 시작');
+    assert.ok(/if \(!ask && autoMs > 0L\) \{ rideStartPicked\(RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, autoMs, autoNo\), rid\); return; \}/.test(v), '엔진이 auto.ms 만 주면(버스 하나) 묻지 않고 그 버스로 시작');
   });
   await t('s252: 하차 추천 — 앱을 보는 중이면 팝업 하나 · 오버레이면 오버레이 줄(알림 없음) · 그 밖이면 알림', () => {
     const rn = fs.readFileSync(N('RecoNotify.java'), 'utf8'), v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
@@ -689,7 +689,7 @@ function findAndroidJar() {
   await t('s200: 첫 구간이 버스면 10분 안에 오는 버스를 고르는 팝업 — 엔진이 목록·카드를 만들고 앱은 띄워서 고른 번호의 도착 시각을 시작 엔진에 돌려준다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8');
     assert.ok(/\/ride\/buspick/.test(a) && /tp\.join\(5000\)/.test(a) && /startOk && pick\.length\(\) > 0\) \{ busPickAsk\(/.test(a), '시작 요청과 동시에 /ride/buspick 을 보내고 고를 것이 있을 때만 카드');
-    assert.ok(/private void busPickAsk\(/.test(a) && /Boolean\.TRUE\.equals\(m\.get\("ask"\)\)/.test(a) && /get\("items"\) instanceof List/.test(a) && /RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, ms\.get\(ix\)\)/.test(a), '카드와 함께 온 info.items 의 ms 를 읽어 고른 번호의 도착 시각을 그대로 돌려준다');
+    assert.ok(/private void busPickAsk\(/.test(a) && /Boolean\.TRUE\.equals\(m\.get\("ask"\)\)/.test(a) && /get\("items"\) instanceof List/.test(a) && /RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, ms\.get\(ix\), ix < nos\.size\(\) \? nos\.get\(ix\) : \"\"\)/.test(a), '카드와 함께 온 info.items 의 ms 를 읽어 고른 번호의 도착 시각을 그대로 돌려준다');
     assert.ok(/v\.startsWith\("dl\.bp\."\)/.test(a) && /dlgPick = Integer\.parseInt\(v\.substring\(6\)\)/.test(a) && /if \(!shown\) rideCommit\(txt0, rid\)/.test(a) && /private void rideCommit\(final String txt, final int rid\)/.test(a), '단추 dl.bp.N → 번호 · 카드를 못 띄우면 예전처럼 바로 시작');
     assert.ok(/pickMs > 0L/.test(rc) && /\\"pick\\":\{\\"ms\\":/.test(rc), '시작 본문에 r.pick.ms');
   });
@@ -803,6 +803,19 @@ function findAndroidJar() {
     assert.ok(/startsWith\("f:"\)[\s\S]{0,700}pfBatch\(fe\)/.test(a), '노선도 지하철 호선 칩(f:)마다 머리·본문을 묶음으로 미리 받는다');
     const w = fs.readFileSync(path.join(ROOT, 'engine/shop-worker.js'), 'utf8');
     assert.ok(/alts: q\.get\("alts"\) === "1"/.test(w) && /setTimeout\(function \(\) \{ res\(null\); \}, 2500\)/.test(w), '워커: alts 를 받고 날씨는 2.5초 안에');
+  });
+  await t('s265: 타임라인 — 앞 여백 없이 왼쪽 끝에서 시작 · 손 놓고 10초 뒤 스프링으로 마커 가운데 복귀', async () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/float lead = 0f, lastW = 0f;/.test(sc) && !/lead = Math\.max\(0f, width \/ 2f/.test(sc), '앞쪽 여백(lead)이 없다');
+    assert.ok(/BAND_RETURN_MS = 10000L/.test(sv) && /long wait = BAND_RETURN_MS - \(SystemClock\.uptimeMillis\(\) - bandUserT\)/.test(sv), '놓은 뒤 10초');
+    assert.ok(/postInvalidateDelayed\(Math\.min\(wait, 1000L\)\)/.test(sv) && /bandVel = bandVel \* 0\.78f \+ dlt \* 0\.045f/.test(sv), '쉬는 동안에도 깨어나고 스프링으로 돌아온다');
+    assert.ok(/if \(flingBand && !flingX\.isFinished\(\)\) bandUserT = SystemClock\.uptimeMillis\(\);/.test(sv), '밀어서 미끄러지는 동안도 만지는 중');
+  });
+  await t('s265: 버스 번호 고르기 — 줄마다 번호를 엔진에 돌려준다(앱은 계산하지 않는다)', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8');
+    assert.ok(/nos\.add\(nv == null \? "" : String\.valueOf\(nv\)\)/.test(a) && /autoNo = String\.valueOf/.test(a), '줄마다 no · 자동 선택 no 를 읽는다');
+    assert.ok(/startBody\(ShellCore\.CAP, facts, off, pfl, ms\.get\(ix\), ix < nos\.size\(\) \? nos\.get\(ix\) : ""\)/.test(a) && /startBody\(ShellCore\.CAP, facts, off, pfl, autoMs, autoNo\)/.test(a), '고른 줄의 번호를 시작 요청에 싣는다');
+    assert.ok(/String pickNo\) \{/.test(rc) && /\\"no\\":" \+ ShellCore\.q\(pickNo\)/.test(rc), 'RideCore: r.pick.no');
   });
   await t('s236: 좌우 밀기가 막히지 않고 부드럽게(손가락 1:1 · 빠른 쓸기 · 비스듬히 시작해도 가로로 전환 · 스프링 복귀) · 아래로 당겨 새로고침(스프링)', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');

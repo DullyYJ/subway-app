@@ -38,11 +38,11 @@ async function handleRideBusPick(request, env) {
     m = await Promise.race([Promise.resolve().then(function () { return fetchStopArrivalsAny(ask.cc, ask.sid, env, Date.now() + 3500, typeof LIVE_BUDGET_REF !== "undefined" ? LIVE_BUDGET_REF : { used: 0 }, null); }), cut]);
     if (timer) clearTimeout(timer);
   } catch (e3) { m = null; }
-  var list = m ? (m[ask.no] || (typeof noKey === "function" ? m[noKey(ask.no)] : null)) : null;
-  var items = rideBusItems(list, body.r && body.r.now);
+  var items = [];
+  try { items = rideBusItemsMulti(m, [ask.no].concat(ask.alts || []), body.r && body.r.now, typeof noKey === "function" ? noKey : null); } catch (e5) { items = []; }
   if (!items.length) return nil();
-  if (items.length === 1) {          // s250 (YJ: "어차피 버스 오는 게 하나뿐이면 묻지 말고 그 버스를 타게"): 하나뿐이면 묻지 않는다 — 그 버스를 따라가도록 도착 시각(ms)만 돌려준다
-    return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec }, ver: ENGINE_VERSION }), { headers: H });
+  if (items.length === 1) {          // s250 (YJ: "어차피 버스 오는 게 하나뿐이면 묻지 말고 그 버스를 타게"): 하나뿐이면 묻지 않는다 — 그 버스를 따라가도록 도착 시각(ms)만 돌려준다(s265: 번호도)
+    return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec, no: items[0].no }, ver: ENGINE_VERSION }), { headers: H });
   }
   var card;
   try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }

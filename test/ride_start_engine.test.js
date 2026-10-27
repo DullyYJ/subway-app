@@ -72,6 +72,22 @@ ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.st
   ok(SB.rsBlBusPick({ '931': [200, 900] }, { no: '931', nowMs: T0, fromMs: T0 + 60000, near: T0 + 500000 }) === T0 + 200000, 's200: 고른 차가 2분 반 넘게 어긋나면(지나갔다) 탈 수 있는 첫 차로');
 }
 
+{   // s265 (YJ: 같은 곳으로 가는 버스가 여러 번호면 사용자가 고른 번호로 안내) — 경로가 대체 번호(altBus)를 알려 주고, 고른 번호(pick.no)로 첫 버스 구간이 바뀐다
+  const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23'; bl.altBus = ['931', '932', '9 03'];
+  const fb = ex => facts(Object.assign({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(bl)), walk(2, 900, 1020)] }] } } }, ex || {}));
+  const a = RS.rideBusAsk({ cap: 18 }, fb());
+  ok(a && a.no === '931' && a.alts.join() === '931,932,903', 's265: rideBusAsk 가 대체 번호들을 알려 준다 ' + JSON.stringify(a));
+  const pk = RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 240000, no: '932' } }));
+  ok(pk.ok && pk.state.eta.nodes[1].lineName === '932' && pk.state.cfg.bl.no === '932' && pk.state.cfg.bl.pickMs === T0 + 240000, 's265: 고른 번호(932)로 첫 버스 구간 이름이 바뀐다 ' + JSON.stringify(pk.state.eta.nodes[1]));
+  const bad = RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 240000, no: '777' } }));
+  ok(bad.ok && bad.state.eta.nodes[1].lineName === '931' && bad.state.cfg.bl.no === undefined, 's265: 대체 번호에 없는 번호는 무시(계획 번호 그대로)');
+  const none = RS.rideStart({ cap: 18 }, fb());
+  ok(none.ok && none.state.eta.nodes[1].lineName === '931', 's265: 안 골랐으면 계획 번호 그대로');
+  const m = RS.rideBusItemsMulti({ '931': [700, 400, 90, 250], '932': [60, 800], '903': [10] }, ['931', '932', '903', '931'], T0, null);
+  ok(m.map(x => x.no + ':' + x.sec).join() === '903:10,932:60,931:90,931:250', 's265: 번호마다 빠른 2대씩 모아 빠른 순 ' + JSON.stringify(m));
+  ok(RS.rideBusItemsMulti(null, ['1'], T0).length === 0 && RS.rideBusItemsMulti({}, null, T0).length === 0, 's265: 이상한 입력은 빈 목록');
+}
+
 // ② 이상한 입력
 ok(RS.rideStart({ cap: 5 }, facts()).ok === false, 'cap 12 미만은 거절');
 ok(RS.rideStart({ cap: 18 }, null).error === 'route' && RS.rideStart({ cap: 18 }, { data: { result: { path: 'x' } } }).error === 'route', '경로가 없으면 route');
@@ -201,6 +217,16 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
     arr = { '931': [300, 1200] };
     const one = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b);
     ok(one.ok && one.ask === false && one.auto && one.auto.ms === T0 + 300000 && one.auto.sec === 300 && !one.screen, 's250: 10분 안에 오는 차가 하나뿐이면 묻지 않고 그 차의 도착 시각(auto.ms)만 돌려준다');
+    {   // s265: 같은 구간을 가는 번호가 여럿이면 번호마다 모아 한 팝업에 — 번호 하나씩만 오더라도 서로 다른 번호면 묻는다
+      const bl2 = JSON.parse(JSON.stringify(bl)); bl2.altBus = ['931', '932'];
+      const fb2 = () => facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), bl2, walk(2, 900, 1020)] }] } } });
+      arr = { '931': [300], '932': [100] };
+      const mu = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb2() }))).b);
+      ok(mu.ok && mu.ask === true && mu.info.items.length === 2 && mu.info.items[0].no === '932' && mu.info.items[1].no === '931' && mu.info.items[0].ms === T0 + 100000, 's265: 번호가 다른 차가 둘이면 묻는다(줄마다 번호) ' + JSON.stringify(mu.info && mu.info.items));
+      arr = { '932': [200] };
+      const o2 = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb2() }))).b);
+      ok(o2.ok && o2.ask === false && o2.auto && o2.auto.no === '932' && o2.auto.ms === T0 + 200000, 's265: 대체 번호의 차 하나뿐이면 묻지 않고 그 번호·시각을 돌려준다 ' + JSON.stringify(o2.auto));
+    }
     arr = null;
     ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b).ask === false, 's200: 도착정보를 못 받아도 묻지 않고 그냥 시작하게 둔다');
     arr = { '931': [100] };

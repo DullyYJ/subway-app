@@ -82,6 +82,8 @@ public class ScreenView extends View {
     private ScreenCore.Screen screen;
     private ScreenCore.Layout lay;
     private float dpr = 1f, scrollY = 0f, scrollX = 0f;
+    private static final long BAND_RETURN_MS = 10000L;     // 손 놓고 이 시간이 지나면 마커가 가운데로 돌아온다(s265)
+    private float bandVel;
     private long bandUserT; private float bandX; private boolean flingBand, inBand; private String bandSig = "";   // 본문 안 타임라인 줄(경로 결과 카드)의 가로 위치 · 그 줄을 놓고 미는 중 · 손가락이 그 줄 위에서 시작했다
     private String ctrDone = null;                      // 24시간 차트: 지금 시각 막대를 가운데로 맞춘 막대 내용 표시(내용이 바뀔 때만 다시 맞춘다)
     private final OverScroller flingY, flingX;
@@ -1913,9 +1915,16 @@ public class ScreenView extends View {
         }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { if (flingBand) bandX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.bandMax()); else scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
-        if (lay.bandTop >= 0f && lay.mkBody && lay.mk != null && mkHas && mode != 8 && !(flingBand && !flingX.isFinished()) && now - bandUserT > 6000L) {      // s257 (YJ: "내 위치(마커)를 가운데로"): 마커가 가운데 오도록 줄이 따라간다(손가락으로 밀었으면 6초 쉰다 · 양 끝에서는 끝까지만)
+        if (flingBand && !flingX.isFinished()) bandUserT = SystemClock.uptimeMillis();         // 손가락으로 민 뒤 미끄러지는 동안도 '만지는 중' — 10초는 멈춘 뒤부터 센다
+        if (lay.bandTop >= 0f && lay.mkBody && lay.mk != null && mkHas && mode != 8 && !(flingBand && !flingX.isFinished())) {      // s257·s265 (YJ: 손 놓고 10초 뒤 마커가 가운데로 다시 튕겨 오게): 마커가 가운데 오도록 줄이 따라간다 · 손가락으로 밀었으면 놓은 뒤 10초 쉬고 스프링으로 복귀
             float tgt = ScreenCore.clamp(mkCurX(now) - lay.bandL - lay.bandView / 2f, lay.bandMax()), dlt = tgt - bandX;
-            if (Math.abs(dlt) > 0.3f) { bandX = Math.abs(dlt) < 1.2f ? tgt : bandX + dlt * 0.14f; moving = true; }
+            long wait = BAND_RETURN_MS - (SystemClock.uptimeMillis() - bandUserT);
+            if (wait > 0L) { bandVel = 0f; if (Math.abs(dlt) > 0.3f) postInvalidateDelayed(Math.min(wait, 1000L)); }        // 쉬는 동안: 그리기 루프가 멎어 있어도 10초 뒤에 깨어나게
+            else if (Math.abs(dlt) > 0.3f || Math.abs(bandVel) > 0.05f) {
+                if (Math.abs(dlt) < 1.2f && Math.abs(bandVel) < 0.4f) { bandX = tgt; bandVel = 0f; }
+                else { bandVel = bandVel * 0.78f + dlt * 0.045f; bandX = ScreenCore.clamp(bandX + bandVel, lay.bandMax()); }      // 살짝 넘쳤다 돌아오는 스프링(감쇠 0.78 · 힘 0.045)
+                moving = true;
+            }
         }
         roStep(now);                                                                      // 카드를 끄는 중이면 가장자리 자동 스크롤 · 비키는 카드 이동
 

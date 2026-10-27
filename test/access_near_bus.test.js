@@ -9,7 +9,7 @@ function cut(name) {
   const b = W.indexOf('__name(' + name + ',', a);
   return W.slice(a, b);
 }
-const consts = ['ACCESS_WALK', 'WALK_MPS', 'NEAR_EXTRA', 'NEAR_RATIO', 'NEAR_KEEP', 'BOARD_NEAR_EXTRA', 'BOARD_EXPAND_M', 'PREF_SNAP_M', 'FAV_SNAP_M', 'FAV_WALK_MULT', 'CROSS_ROAD_M', 'STOP_SNAP_M'].map((n) => {
+const consts = ['ACCESS_WALK', 'WALK_MPS', 'NEAR_EXTRA', 'NEAR_RATIO', 'NEAR_KEEP', 'BOARD_NEAR_EXTRA', 'BOARD_EXPAND_M', 'PREF_SNAP_M', 'FAV_SNAP_M', 'FAV_WALK_MULT', 'CROSS_ROAD_M', 'STOP_SNAP_M', 'HOME_STN_M', 'HOME_STN_EXTRA'].map((n) => {
   const m = new RegExp('^var ' + n + ' = [^;]+;', 'm').exec(W); if (!m) throw new Error(n + ' 상수 없음'); return m[0];
 }).join('\n');
 const ctx = { __name: (f) => f, __name2: (f) => f, Math, String, Array, Object, isFinite, Infinity, stopNmKey: (x) => String(x || ''), Set, buildStopRouteIdx: (G) => G.__idx || {} };
@@ -51,5 +51,20 @@ ok(names(r) === 'B|Z', '근처에 그것 하나뿐이면 그대로: ' + names(r)
   const r4 = ctx.an(g3, bc, LAT, LNG, null, {});
   ok(names(r4).indexOf('B|SAME') >= 0, 'nearFirst 가 아니면(도착지 쪽 등) 예전 그대로');
 }
+// s265 (YJ: "3km 이내 역이 있으면 거기가 우선 — 이 동네는 아라역이 우선"): 출발지에서 가장 가까운 역(3km 안)은 늘 후보로 남고, 그보다 1km 넘게 먼 역은 뺀다
+{
+  const bc1 = { H1: at(147) };                                              // 정류장이 적어 반경을 끝까지 넓히는 곳
+  const g4 = G(); g4.ST = { ara: { y: LAT, x: LNG + 600 * MLNG }, gye: { y: LAT, x: LNG + 2400 * MLNG }, mid: { y: LAT, x: LNG + 1500 * MLNG } };
+  const r4 = ctx.an(g4, bc1, LAT, LNG, null, {}, true), n4 = names(r4);
+  ok(n4.indexOf('S|ara') >= 0 && n4.indexOf('S|gye') < 0 && n4.indexOf('S|mid') >= 0, '가장 가까운 역(600m)은 남고 1km 넘게 더 먼 역(2.4km)은 뺀다(1.5km 는 남김): ' + n4);
+  const g5 = G(); g5.ST = { ara: { y: LAT, x: LNG + 2800 * MLNG } };     // 가장 가까운 역이 기본 탐색 반경(2.5km) 밖이어도 3km 안이면 후보
+  const st5 = {}, r5 = ctx.an(g5, busCoord, LAT, LNG, null, st5, true);
+  ok(names(r5).indexOf('S|ara') >= 0 && /^ara:/.test(st5.homeStn || ''), '반경 밖이어도 3km 안의 가장 가까운 역은 후보: ' + names(r5) + ' ' + st5.homeStn);
+  const g6 = G(); g6.ST = { far: { y: LAT, x: LNG + 3500 * MLNG } };
+  ok(names(ctx.an(g6, busCoord, LAT, LNG, null, {}, true)).indexOf('S|far') < 0, '3km 밖 역은 넣지 않는다');
+  const g7 = G(); g7.ST = g4.ST;
+  ok(names(ctx.an(g7, bc1, LAT, LNG, null, {}, false)).indexOf('S|gye') >= 0, '도착지 쪽(nearFirst 아님)은 이 규칙을 쓰지 않는다');
+}
+
 console.log('access_near_bus: pass', pass, 'fail', fail);
 process.exit(fail ? 1 : 0);

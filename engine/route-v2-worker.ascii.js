@@ -31,6 +31,8 @@ var B2S_WALK = 500;
 var B2B_WALK = 200;
 var HOP_WALK_M = 600;
 var ACCESS_WALK = 900;
+var HOME_STN_M = 3e3;
+var HOME_STN_EXTRA = 1e3;
 var ISO_ID = "";
 var ISO_N = 0;
 var WARM_AT = 0;
@@ -38,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s264";
+var ENGINE_VERSION = "route-v2-2026-10-28s265";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -1392,6 +1394,27 @@ function accessNodes(G, busCoord, lat, lng, allowBus, stat, nearFirst) {
       if (extra) stat.candExtra = extra;
       stat.candTotal = kept.length;
     }
+    if (nearFirst && G && G.ST) {
+      // s265: the subway station of the user's own neighbourhood (nearest one within HOME_STN_M of the origin) always stays a start candidate,
+      //   and stations clearly farther than it are dropped, so the neighbourhood station wins over a far one reached only because it is faster.
+      let hn = null, hd = Infinity;
+      for (const id in G.ST) {
+        const st = G.ST[id];
+        if (!st || st.y == null) continue;
+        const d = hav(lat, lng, st.y, st.x);
+        if (d < hd) {
+          hd = d;
+          hn = id;
+        }
+      }
+      if (hn != null && hd <= HOME_STN_M) {
+        const hk = "S|" + hn;
+        const k3 = kept.filter((x) => x[0].charCodeAt(0) !== 83 || x[0] === hk || x[2] <= hd + HOME_STN_EXTRA);
+        if (!k3.some((x) => x[0] === hk)) k3.push([hk, hd / WALK_MPS, hd, true]);
+        if (stat) stat.homeStn = hn + ":" + Math.round(hd) + "m";
+        kept = k3;
+      }
+    }
     return kept.map((x) => [x[0], x[1]]);
   }
   return [];
@@ -1973,6 +1996,7 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
         o.waitReal = !!L.waitReal;
         o.waitEstimated = !!L.waitEstimated;
         o.boardStopId = L.boardStopId || null;
+        o.altBus = busAltNos(G, L);
       }
     }
     if (L.mode === "transfer") {
@@ -2949,6 +2973,50 @@ function applyExpressDiscount(legs) {
 }
 __name(applyExpressDiscount, "applyExpressDiscount");
 __name2(applyExpressDiscount, "applyExpressDiscount");
+// s265 (YJ: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uba74 \uace0\ub97c \uc218 \uc788\uac8c): \ud0c0\ub294 \uc815\ub958\uc7a5\uc5d0 \uc11c\uace0 \ub0b4\ub9ac\ub294 \uc815\ub958\uc7a5 \uadfc\ucc98\uc5d0\ub3c4 \uc11c\ub294 \ub2e4\ub978 \ubc88\ud638\uc758 \ubc84\uc2a4 \ubaa9\ub85d(\uc790\uae30 \ubc88\ud638 \uc81c\uc678). \uc544\ub2c8\uba74 null.
+function busAltNos(G, L) {
+  try {
+    if (!G || !G.routeStops || !L || L.mode !== "bus" || !L.coordList || L.coordList.length < 2) return null;
+    const c0 = L.coordList[0], c1 = L.coordList[L.coordList.length - 1];
+    if (!c0 || !c1) return null;
+    const seen = {}, out = [];
+    const own = noKey(L.busNo || String(L.line || "").replace(/^\d+_/, ""));
+    if (own) seen[own] = 1;
+    for (const rk in G.routeStops) {
+      if (rk === L.line) continue;
+      const a = G.routeStops[rk];
+      if (!a || a.length < 2) continue;
+      const no = noKey(G.routeNoOf && G.routeNoOf[rk] || String(rk).replace(/^\d+_/, ""));
+      if (!no || seen[no]) continue;
+      let ib = -1;
+      for (let k = 0; k < a.length - 1; k++) {
+        if (Math.abs(a[k].lat - c0[0]) > 4e-4 || Math.abs(a[k].lng - c0[1]) > 5e-4) continue;
+        if (hav(a[k].lat, a[k].lng, c0[0], c0[1]) <= 35) {
+          ib = k;
+          break;
+        }
+      }
+      if (ib < 0) continue;
+      let ok = false;
+      for (let j = ib + 1; j < a.length; j++) {
+        if (Math.abs(a[j].lat - c1[0]) > 8e-4 || Math.abs(a[j].lng - c1[1]) > 1e-3) continue;
+        if (hav(a[j].lat, a[j].lng, c1[0], c1[1]) <= 70) {
+          ok = true;
+          break;
+        }
+      }
+      if (!ok) continue;
+      seen[no] = 1;
+      out.push(no);
+      if (out.length >= 6) break;
+    }
+    return out.length ? out : null;
+  } catch (e) {
+    return null;
+  }
+}
+__name(busAltNos, "busAltNos");
+__name2(busAltNos, "busAltNos");
 function optimizeAlight(legs) {
   if (!legs || legs.length < 2) return 0;
   let delta = 0;
@@ -2974,7 +3042,7 @@ function optimizeAlight(legs) {
     const _travel = Math.max(0, (bs.sec || 0) - _wait);
     const per = _travel / Math.max(1, last);
     const costAt = /* @__PURE__ */ __name((k) => bs.secList && bs.secList[k] != null ? bs.secList[k] : per * k, "costAt");
-    let best = -1, bestCost = Infinity, bestWalk = 0, curCost = Infinity;
+    let best = -1, bestCost = Infinity, bestWalk = 0, curCost = Infinity, bestHit = false;
     for (let k = 1; k <= last; k++) {
       const c = bs.coordList[k];
       if (!c) continue;
@@ -2989,10 +3057,12 @@ function optimizeAlight(legs) {
         bestCost = cost;
         best = k;
         bestWalk = w;
+        bestHit = hit;
       }
     }
     if (best < 0 || best === last) continue;
-    if (!(curCost - bestCost >= ALIGHT_MIN_GAIN)) continue;
+    if (!(curCost - bestCost >= ALIGHT_MIN_GAIN) && !(bestHit && curCost - bestCost > 0)) continue;
+    // s265 (YJ: \uc5ed \uc55e\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5ec\ub7ec \uac1c\uba74 \uc81c\uc77c \uba3c\uc800 \ub2ff\ub294 \uc5ed \uc774\ub984 \uc815\ub958\uc7a5\uc5d0\uc11c \ub0b4\ub824\uc57c \ud55c\ub2e4): \uc5ed \uc774\ub984\uc774 \ub9de\ub294 \uc815\ub958\uc7a5\uc774 \uc774\ubbf8 \uc55e\uc5d0 \uc788\uc73c\uba74 \uc0b4\uc9dd\ub9cc(60\ucd08 \ubbf8\ub9cc) \ube68\ub77c\ub3c4 \uadf8\ucabd\uc73c\ub85c \uc55e\ub2f9\uae34\ub2e4
     const _oldSec = bs.sec || 0, _oldWalk = legs[wIdx].sec || 0;
     bs.stopList = bs.stopList.slice(0, best + 1);
     bs.coordList = bs.coordList.slice(0, best + 1);
@@ -3306,7 +3376,8 @@ function legsToSubPath(legs, r, o) {
         waitLive: L.mode === "bus" ? !!L.waitLive : false,
         waitEstimated: L.mode === "bus" ? !!L.waitEstimated : false,
         boardStopId: L.mode === "bus" ? L.boardStopId || null : null,
-        boardCc: L.mode === "bus" ? String(L.line || "").split("_")[0] || null : null
+        boardCc: L.mode === "bus" ? String(L.line || "").split("_")[0] || null : null,
+        altBus: L.mode === "bus" && Array.isArray(L.altBus) && L.altBus.length ? L.altBus : null
       });
     } else if (L.mode === "longdist") {
       const _arr = cum;
@@ -19962,18 +20033,20 @@ function dlgBpickLabel(sec) {
 }
 function dlgBpick(f) {
   var src = Array.isArray(f.items) ? f.items : [], items = [], k;
-  for (k = 0; k < src.length && items.length < 4; k++) {
+  for (k = 0; k < src.length && items.length < 6; k++) {
     var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
-    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms) });
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '' });      // s265: \uc904\ub9c8\ub2e4 \ubc84\uc2a4 \ubc88\ud638(\uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \uc5ec\ub7ec \ubc88\ud638 \uc911 \uace0\ub974\uae30) \u2014 \uc5c6\uc73c\uba74 \uce74\ub4dc \uc804\uccb4 \ubc88\ud638
   }
-  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
+  var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' }, nos = {};
+  items.forEach(function (x) { if (x.no) nos[x.no] = 1; });
+  var multiNo = Object.keys(nos).length > 1;
   var head = [
     { t: 'text', pad: [22, 24, 22, 6], s: '\ud0c8 \ubc84\uc2a4\ub97c \uace8\ub77c \uc8fc\uc138\uc694', size: 17, bold: true, lh: 1.4, color: 'text' },
-    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4', size: 13, lh: 1.55, color: 'sub' }
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + (multiNo ? '\uac19\uc740 \uacf3\uc73c\ub85c \uac00\ub294 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4' : '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4'), size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
     head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: (no ? no + '\ubc88 ' : (i + 1) + '\ubc88\uc9f8 ') + '(' + dlgBpickLabel(it2.sec).replace(' \ub3c4\ucc29', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '\uc21c\ud65843\ubc88 (9\ubd84 36\ucd08 \ud6c4)' \u2014 \ubc84\uc2a4 \ubc88\ud638(\uc608\uc0c1 \uc2dc\uac04)
+      { label: ((it2.no || no) ? (it2.no || no) + '\ubc88 ' : (i + 1) + '\ubc88\uc9f8 ') + '(' + dlgBpickLabel(it2.sec).replace(' \ub3c4\ucc29', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '\uc21c\ud65843\ubc88 (9\ubd84 36\ucd08 \ud6c4)' \u2014 \ubc84\uc2a4 \ubc88\ud638(\uc608\uc0c1 \uc2dc\uac04)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
@@ -19981,7 +20054,7 @@ function dlgBpick(f) {
     { label: '\uace0\ub974\uc9c0 \uc54a\uace0 \uc2dc\uc791', fill: 'card2', line: 'border', tc: 'sub', act: { a: 'call', v: 'dl.ok' } }
   ] });
   return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: nope }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null,
-    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms }; }) } };
+    info: { items: items.map(function (x) { return { sec: x.sec, ms: x.ms, no: x.no || no }; }) } };
 }
 
 // \u2605 s252 (YJ: "\ud558\ucc28\ucd94\ucc9c\ub3c4 \uc571\uc744 \ud0a4\uace0\uc788\uc73c\uba74 \ud31d\uc5c5\uc774 \ub728\uace0"): \uc571 \ud654\uba74\uc744 \ubcf4\ub294 \uc911\uc5d0 \ud558\ucc28 7\ubd84 \uc804 \ucd94\ucc9c\uc774 \uc624\uba74 \uc54c\ub9bc \ub300\uc2e0 \ub728\ub294 \uce74\ub4dc(\uc6f9 _showBriefingModal \uacfc \uac19\ub2e4).
@@ -22974,6 +23047,24 @@ function rideStart(opt, r) {
   if (pp.error) return rstFail(pp.error, '\uc774 \uacbd\ub85c\ub294 \uc2dc\uac01 \uc815\ubcf4\uac00 \uc5c6\uc5b4 \uc548\ub0b4\ud560 \uc218 \uc5c6\uc5b4\uc694');
   var pts = D.points(pp.facts).filter(function (p) { return p.type === 'stn' && !p.ld; });
   if (pts.length < 2) return rstFail('nopoints', '\uc548\ub0b4\ud560 \uc815\ub958\uc7a5\uc774 \ubd80\uc871\ud574\uc694');
+  // \u2605 s265 (YJ: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uc77c \ub54c \uc0ac\uc6a9\uc790\uac00 \uace0\ub978 \ubc88\ud638\ub85c): \ud31d\uc5c5\uc5d0\uc11c \uace0\ub978 \ubc88\ud638(r.pick.no)\uac00 \uacbd\ub85c\uac00 \uc54c\ub824 \uc900 \ub300\uccb4 \ubc88\ud638(\uccab \ubc84\uc2a4 \uad6c\uac04\uc758 altBus)\uc5d0 \uc788\uc73c\uba74
+  //   \uccab \ubc84\uc2a4 \uad6c\uac04\uc758 \ub178\uc120 \ubc88\ud638\ub97c \uadf8 \ubc88\ud638\ub85c \ubc14\uafd4 \uc548\ub0b4\ud55c\ub2e4(\uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc744 \uadf8 \ubc88\ud638\ub85c \ub530\ub77c\uac00\uace0, \uc624\ubc84\ub808\uc774\u00b7\ud0c0\uc784\ub77c\uc778\uc5d0\ub3c4 \uadf8 \ubc88\ud638\uac00 \ubcf4\uc778\ub2e4). \uc2dc\uac04\uc740 \uacbd\ub85c\uc758 \uac83\uc744 \uadf8\ub300\ub85c \uc4f4\ub2e4(\uac19\uc740 \uc815\ub958\uc7a5 \uc0ac\uc774\ub97c \uac00\ub294 \ubc84\uc2a4).
+  var pickNo = (r.pick && typeof r.pick === 'object' && r.pick.no != null) ? String(r.pick.no).replace(/\s+/g, '').slice(0, 14) : '';
+  var firstAlts = [];
+  try {
+    var rawSub0 = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fs0 = null, q0;
+    for (q0 = 0; q0 < rawSub0.length; q0++) { var s0 = rawSub0[q0]; if (s0 && (s0.trafficType === 1 || s0.trafficType === 2 || s0.trafficType === 4)) { fs0 = s0; break; } }
+    if (fs0 && fs0.trafficType === 2 && Array.isArray(fs0.altBus)) firstAlts = fs0.altBus.map(function (x) { return String(x).replace(/\s+/g, ''); }).filter(function (x) { return x.length > 0 && x.length <= 14; }).slice(0, 6);
+  } catch (eA) { firstAlts = []; }
+  var planNo = pts[0].sty === 2 ? String(pts[0].lineNm || '') : '';
+  var renamed = false;
+  if (pickNo && planNo && pickNo !== planNo && firstAlts.indexOf(pickNo) >= 0) {
+    for (k = 0; k < pts.length; k++) {
+      if (pts[k].sty !== 2 || String(pts[k].lineNm || '') !== planNo) break;           // \uccab \ubc84\uc2a4 \uad6c\uac04(\uac19\uc740 \ubc88\ud638\ub85c \uc774\uc5b4\uc9c0\ub294 \uce78)\uae4c\uc9c0\ub9cc
+      pts[k].lineNm = pickNo; if (pts[k].lineLabel != null) pts[k].lineLabel = pickNo;
+      renamed = true;
+    }
+  }
 
   var aName = String(r.a || '').slice(0, 40), bName = String(r.b || '').slice(0, 40);
   var nodes = [{ name: aName || '\ucd9c\ubc1c', isOrigin: true }], tnodes = [{ k: null }], stops = [], etaMs = [null], prevMin = null, last = pts.length - 1, i, k;
@@ -22999,6 +23090,8 @@ function rideStart(opt, r) {
   // \u2605 s200 (YJ: \uccab \uad6c\uac04\uc774 \ubc84\uc2a4\uba74 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4\ub97c \ud31d\uc5c5\uc73c\ub85c \uace8\ub77c \ud0c0\uac8c): \uc571\uc774 \uace0\ub978 \ubc84\uc2a4\uc758 \ub3c4\ucc29 \uc2dc\uac01(ms). \uc2b9\ucc28 \ub300\uae30 \uc911 \uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(/board-live)\uc774 \uadf8 \ucc28\ub97c \ub530\ub77c\uac04\ub2e4.
   var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
   if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
+  if (firstBl && firstAlts.length) firstBl.alts = firstAlts;                                  // s265: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ub2e4\ub978 \ubc88\ud638\ub4e4(\ud31d\uc5c5\uc774 \uc4f4\ub2e4)
+  if (firstBl && renamed) firstBl.no = pickNo;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // \uccab \uc815\ub958\uc7a5 \uc2dc\uac01\uc774 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4\uba74 \uc9c0\ub09c \uac83\uc73c\ub85c
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -23024,7 +23117,7 @@ function rideBusAsk(opt, r) {
   var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
   var no = nd && nd.isBus ? String(nd.lineName || '') : '';
   if (!no) return null;
-  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '' };
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [] };
 }
 function rideBusItems(list, nowMs) {
   var out = [], k, n = Number(nowMs);
@@ -23032,6 +23125,19 @@ function rideBusItems(list, nowMs) {
   var s = list.map(Number).filter(function (v) { return isFinite(v) && v > 0 && v <= RST_PICK_MAX_SEC; }).sort(function (a, b) { return a - b; });
   for (k = 0; k < s.length && out.length < RST_PICK_MAX_N; k++) out.push({ sec: Math.round(s[k]), ms: Math.round(n + s[k] * 1000) });
   return out;
+}
+// s265 (YJ: \uac19\uc740 \uacf3\uc73c\ub85c \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uba74 \ud31d\uc5c5\uc5d0\uc11c \uace0\ub974\uac8c): \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4 \ub9f5(\ubc88\ud638 \u2192 \ucd08 \ubaa9\ub85d)\uc5d0\uc11c \ub0b4 \ubc88\ud638 + \ub300\uccb4 \ubc88\ud638\ub4e4\uc758 10\ubd84 \uc548 \ub3c4\ucc29\uc744 \ubc88\ud638\ub9c8\ub2e4 \uac00\uc7a5 \ube60\ub978 2\ub300\uc529 \ubaa8\uc544
+//   \ube60\ub978 \uc21c \ucd5c\ub300 6\uc904 \u2014 [{ no, sec, ms }]. noOf(\ubc88\ud638) = \ub3c4\ucc29\uc815\ubcf4 \ub9f5\uc758 \uc5f4\uc1e0 \uaddc\uce59(\uc22b\uc790\ub9cc \ub0a8\uae30\uae30 \ub4f1)\uc744 \uc6cc\ucee4\uac00 \ub118\uae34\ub2e4(\uc5c6\uc73c\uba74 \ubc88\ud638 \uadf8\ub300\ub85c).
+function rideBusItemsMulti(map, nos, nowMs, noOf) {
+  var out = [], seen = {}, k;
+  if (!map || typeof map !== 'object' || !Array.isArray(nos)) return out;
+  for (k = 0; k < nos.length; k++) {
+    var no = String(nos[k] || ''); if (!no || seen[no]) continue; seen[no] = 1;
+    var list = map[no] || (typeof noOf === 'function' ? map[noOf(no)] : null);
+    rideBusItems(list, nowMs).slice(0, 2).forEach(function (it) { out.push({ no: no, sec: it.sec, ms: it.ms }); });
+  }
+  out.sort(function (a, b) { return a.sec - b.sec; });
+  return out.slice(0, 6);
 }
 // \ud0d1\uc2b9 \uc2dc\uc791 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /ride/start (engine/ride-start.js \uc758 rideStart). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/ride/start") return handleRideStart(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(12 \uc774\uc0c1), r:{ data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, allowed? } }
@@ -23073,11 +23179,11 @@ async function handleRideBusPick(request, env) {
     m = await Promise.race([Promise.resolve().then(function () { return fetchStopArrivalsAny(ask.cc, ask.sid, env, Date.now() + 3500, typeof LIVE_BUDGET_REF !== "undefined" ? LIVE_BUDGET_REF : { used: 0 }, null); }), cut]);
     if (timer) clearTimeout(timer);
   } catch (e3) { m = null; }
-  var list = m ? (m[ask.no] || (typeof noKey === "function" ? m[noKey(ask.no)] : null)) : null;
-  var items = rideBusItems(list, body.r && body.r.now);
+  var items = [];
+  try { items = rideBusItemsMulti(m, [ask.no].concat(ask.alts || []), body.r && body.r.now, typeof noKey === "function" ? noKey : null); } catch (e5) { items = []; }
   if (!items.length) return nil();
-  if (items.length === 1) {          // s250 (YJ: "\uc5b4\ucc28\ud53c \ubc84\uc2a4 \uc624\ub294 \uac8c \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \ub9d0\uace0 \uadf8 \ubc84\uc2a4\ub97c \ud0c0\uac8c"): \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uadf8 \ubc84\uc2a4\ub97c \ub530\ub77c\uac00\ub3c4\ub85d \ub3c4\ucc29 \uc2dc\uac01(ms)\ub9cc \ub3cc\ub824\uc900\ub2e4
-    return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec }, ver: ENGINE_VERSION }), { headers: H });
+  if (items.length === 1) {          // s250 (YJ: "\uc5b4\ucc28\ud53c \ubc84\uc2a4 \uc624\ub294 \uac8c \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \ub9d0\uace0 \uadf8 \ubc84\uc2a4\ub97c \ud0c0\uac8c"): \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uadf8 \ubc84\uc2a4\ub97c \ub530\ub77c\uac00\ub3c4\ub85d \ub3c4\ucc29 \uc2dc\uac01(ms)\ub9cc \ub3cc\ub824\uc900\ub2e4(s265: \ubc88\ud638\ub3c4)
+    return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec, no: items[0].no }, ver: ENGINE_VERSION }), { headers: H });
   }
   var card;
   try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }
