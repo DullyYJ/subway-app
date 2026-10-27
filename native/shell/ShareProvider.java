@@ -19,14 +19,14 @@ public class ShareProvider extends ContentProvider {
 
     private File fileOf(Uri uri) throws FileNotFoundException {
         String n = uri.getLastPathSegment();
-        if (n == null || !n.matches("gildongmu_\\d{1,16}\\.png")) throw new FileNotFoundException("name");
+        if (n == null || !n.matches("gildongmu_\\d{1,16}\\.(png|gif)")) throw new FileNotFoundException("name");
         File f = new File(new File(getContext().getCacheDir(), DIR), n);
         if (!f.isFile()) throw new FileNotFoundException("none");
         return f;
     }
     @Override public boolean onCreate() { return true; }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException { return ParcelFileDescriptor.open(fileOf(uri), ParcelFileDescriptor.MODE_READ_ONLY); }
-    @Override public String getType(Uri uri) { return "image/png"; }
+    @Override public String getType(Uri uri) { String n = uri.getLastPathSegment(); return n != null && n.endsWith(".gif") ? "image/gif" : "image/png"; }
     @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
         try {
             File f = fileOf(uri);

@@ -3383,28 +3383,38 @@ public class ShellActivity extends Activity {
         final int[] pal = ShellCore.palette(ShellCore.theme(store));
         new Thread(new Runnable() {
             @Override public void run() {
-                Uri uri = null;
+                Uri uri = null; String mime = "image/png";
                 try {
-                    android.graphics.Bitmap bmp = ShareArt.draw(sh, pal);
                     File dir = new File(getCacheDir(), ShareProvider.DIR);
                     if (!dir.isDirectory()) dir.mkdirs();
                     File[] old = dir.listFiles();
                     if (old != null) for (File o : old) o.delete();
-                    File f = new File(dir, "gildongmu_" + System.currentTimeMillis() + ".png");
-                    FileOutputStream os = new FileOutputStream(f);
-                    try { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, os); } finally { os.close(); }
-                    uri = ShareProvider.uriFor(ShellActivity.this, f);
+                    long ts = System.currentTimeMillis();
+                    try {                                                         // 움직이는 그림(GIF): 마커 깜박임 + 길동무 친구 한 마리가 노선선 위를 오간다
+                        byte[] gif = ShareArt.gif(ShellActivity.this, sh, pal, ts);
+                        File f = new File(dir, "gildongmu_" + ts + ".gif");
+                        FileOutputStream os = new FileOutputStream(f);
+                        try { os.write(gif); } finally { os.close(); }
+                        uri = ShareProvider.uriFor(ShellActivity.this, f); mime = "image/gif";
+                    } catch (Throwable t) {                                       // 실패하면 예전처럼 멈춘 그림(PNG)으로 보낸다
+                        ErrLog.record(ShellActivity.this, t, false);
+                        android.graphics.Bitmap bmp = ShareArt.draw(sh, pal);
+                        File f = new File(dir, "gildongmu_" + ts + ".png");
+                        FileOutputStream os = new FileOutputStream(f);
+                        try { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, os); } finally { os.close(); }
+                        uri = ShareProvider.uriFor(ShellActivity.this, f); mime = "image/png";
+                    }
                 } catch (Throwable t) { ErrLog.record(ShellActivity.this, t, false); }
-                final Uri fu = uri;
-                main.post(new Runnable() { @Override public void run() { startShare(sh.text, fu); } });
+                final Uri fu = uri; final String fm = mime;
+                main.post(new Runnable() { @Override public void run() { startShare(sh.text, fu, fm); } });
             }
         }).start();
     }
-    private void startShare(String text, Uri img) {
+    private void startShare(String text, Uri img, String mime) {
         try {
             Intent send = new Intent(Intent.ACTION_SEND);
             send.putExtra(Intent.EXTRA_TEXT, text);
-            if (img != null) { send.setType("image/png"); send.putExtra(Intent.EXTRA_STREAM, img); send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+            if (img != null) { send.setType(mime); send.putExtra(Intent.EXTRA_STREAM, img); send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); }
             else send.setType("text/plain");
             Intent chooser = Intent.createChooser(send, "내 위치 공유");
             try {
