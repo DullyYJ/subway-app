@@ -93,10 +93,11 @@ var RIDE_ETA_DEFAULTS = {
   //   영점이 잡히면 뒤 도착 시각(etaMs)이 초 단위로 맞춰지고(ride-track 영점 보간), 그 맞춰진 시각에서 5초만 당긴다. false 로 두면 예전처럼 항상 당긴다.
   arriveEarlyAfterZero: true,
   // ★ 2026-10-14 (실기기 로그: 부평에서 마커가 멈췄다 — 구간표가 14구간뿐이라 응답이 끊긴 26분 뒤 끝났다): 남은 구간 전부를 준다(상한은 안전장치).
-  // ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 3정거장 이상 탄 뒤에는 도착 확정(영점·움직임·위치 판단 통과 증거)이 없으면 역을 건너뛰지 않는다):
-  //   탑승 구간(같은 노선·같은 종류의 이어진 정차 노드)에서 승차역 뒤 holdAfterStops 번째 정류장부터는, 통과 증거(gps·move·pf)가 그 정류장 이후로 없으면 마커가 그 정류장에 '닿지 않고' 바로 앞에서 기다린다(pos.hold = 그 노드 번호).
-  //   시각표 기준 도착 시각(etaMs·arr)과 알림(하차 N정거장 전)은 그대로다 — 멈추는 건 마커(pos)뿐이고, 알림이 쓰는 시각표 위치는 pos.ttFrom 으로 따로 준다. 0 이면 끔.
-  holdAfterStops: 3,
+  // ★ 2026-10-28 s268 (YJ: "GPS 영점 실패 → 시간표대로 가다가 연속 3회 실패하면 실시간 API 로 내 차량 위치 맞추기" — s231 의 '역 앞 대기'는 없앴다):
+  //   지하철 구간(pos 가 있을 때)에서 승차역 뒤 holdAfterStops 번째 정류장부터, 통과 증거(gps·move·pf)가 그 정류장 이후로 없고 예정 시각 + holdGraceSec 이 지났으면 '도착 확정 실패'다.
+  //   마커는 세우지 않고 시각표대로 간다. 실패한 노드 번호 목록을 pos.miss 로 준다 — 엔진(ride-standby)이 연속 실패를 세어 GPS 탐색(2회)·실시간 API(3회, 서울 실시간 노선만)를 켠다. 0 이면 끔.
+  holdAfterStops: 1,
+  holdGraceSec: 60,
   posSegCount: 80,        // pos.segs — 앞으로 그릴 구간 수(응답이 끊겨도 시각표대로 끝까지 이어 그리게)
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
@@ -264,7 +265,7 @@ function rideEta(input) {
   if (input && input.op === 'arrive') return rideArrive(input);
   var r = _rideEtaCore(input);
   try { r.hold = _reHold(input, r); } catch (eH) { r.hold = null; }
-  try { if (input && (input.timetableFirst === true || input.ttSub === true) && input.notDeparted !== true && r && r.etaMs) r.pos = _rePos(input, r); } catch (e) { r.pos = null; }
+  try { if (input && input.timetableFirst === true && input.notDeparted !== true && r && r.etaMs) r.pos = _rePos(input, r); } catch (e) { r.pos = null; }
   return r;
 }
 // ★ 2026-10-13 (YJ: "계산은 엔진이, 그림은 앱이"): 시각표 기준 위치. 앱은 이 구간(from→to)과 t0·t1 시각만 받아 그 사이를 시간 흐름대로 그린다(위치 계산 없음).
@@ -286,27 +287,20 @@ function _rePos(input, r) {
   var pos = -1;
   for (k = 0; k < idxs.length; k++) if (idxs[k] === f) { pos = k; break; }
   if (pos < 0) { for (k = 0; k < idxs.length; k++) if (idxs[k] > f) { pos = Math.max(0, k - 1); break; } if (pos < 0) pos = idxs.length - 1; f = idxs[pos]; }
-  // s231: 도착 확정 없이 건너뛰지 않는다 — 승차 구간 3정거장 뒤부터는 통과 증거(gps·move·pf)가 없는 정류장에서 멈춰 기다린다
-  var holdK = -1, cf = -1, ttF = f;
-  if (+O.holdAfterStops > 0 && input.ttSub !== true) {      // s267: ttSub(버스에서 환승한 지하철 · 보여 주기만)는 s231 '역 앞 대기'를 쓰지 않는다 — 도착 판정은 기존 GPS 규칙 그대로
+  // s268: 도착 확정 실패 목록(pos.miss) — 마커는 세우지 않는다(시각표대로 전진, 다음 역 영점에서 맞춘다)
+  var missL = [], cf = -1;
+  if (+O.holdAfterStops > 0) {
     for (i = 0; i < ps.length; i++) { var sr0 = ps[i].src, pi0 = +ps[i].idx; if ((sr0 === 'gps' || sr0 === 'move' || sr0 === 'pf') && isFinite(pi0) && pi0 > cf) cf = pi0; }
     for (k = 1; k < idxs.length; k++) {
-      var nI = idxs[k]; if (nI <= cf || _reLegPos(nodes, nI) < +O.holdAfterStops) continue;
-      if (eff(k) <= nowMs || pos >= k) holdK = k;
-      break;
+      var nI = idxs[k]; if (nI <= cf || !nodes[nI] || !nodes[nI].isSub || _reLegPos(nodes, nI) < +O.holdAfterStops) continue;
+      if (eff(k) + (+O.holdGraceSec || 0) * 1000 <= nowMs) missL.push(nI); else break;
     }
-    if (holdK >= 1) { if (pos >= holdK) { pos = holdK - 1; f = idxs[pos]; } else if (pos < holdK - 1) holdK = -1; }
   }
   if (pos >= idxs.length - 1) return { from: f, to: f, t0: null, t1: null, ratio: 0, moving: false, floor: fl, segs: [] };
   var dwMs = function (nodeIdx) { var nn = nodes[nodeIdx]; return (nn && nn.isBus) ? 0 : O.stopDwellSec * 1000; };      // 정차(문 열림)는 지하철 역만 — 버스는 GPS 기준이라 정차를 두지 않는다
   var t = idxs[pos + 1], t0 = eff(pos) + dwMs(idxs[pos]), t1 = eff(pos + 1);
   if (!(t1 - t0 >= 5000)) t0 = eff(pos);
   var ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
-  if (holdK >= 1 && pos === holdK - 1) {      // 기다리는 동안: 닿을 시각을 '지금 + 여유'로 두어 마커가 정류장 가까이까지만 간다(기다릴수록 천천히 다가가지만 닿지는 않는다)
-    t1 = Math.max(t1, nowMs + Math.max(20000, 0.1 * Math.max(0, nowMs - t0)));
-    ratio = t1 > t0 ? Math.max(0, Math.min(1, (nowMs - t0) / (t1 - t0))) : 0;
-    return { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl, hold: t, ttFrom: ttF, segs: [{ from: f, to: t, a: eff(pos), t0: t0, t1: t1 }] };
-  }
   // ★ 2026-10-13 (YJ: 마커가 갑자기 멈추고 노란색 — 백그라운드에서 엔진 응답이 끊기면 마지막 구간이 끝난 채 굳었다): 앞으로의 구간 전부를 함께 준다.
   //   앱은 '지금 시각이 어느 구간(a~t1)에 드는지' 찾아 그리기만 한다 — 응답이 몇 분 끊겨도 시각표대로 이어서 그린다(새 증거가 오면 엔진이 다시 계산한다).
   var segs = [], q, lim = Math.min(idxs.length - 1, pos + O.posSegCount);
@@ -315,7 +309,9 @@ function _rePos(input, r) {
     if (!(s1 - s0 >= 5000)) s0 = eff(q);
     segs.push({ from: fa, to: fb, a: eff(q), t0: s0, t1: s1 });
   }
-  return { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl, segs: segs };
+  var outP = { from: f, to: t, t0: t0, t1: t1, ratio: Math.round(ratio * 1000) / 1000, moving: ratio > 0 && ratio < 1, floor: fl, segs: segs };
+  if (missL.length) outP.miss = missL;
+  return outP;
 }
 // ★ 2026-10-16: 정차 표시 — 가장 앞선 통과(영점 gps · 위치 채택 pf · 움직임 move)가 난 역에서 markerDwellSec 동안은 마커를 그 역 위에 세운다.
 //   시각은 엔진이 정한 그 역의 통과 시각(etaMs — gps 는 실제 통과 시각, pf 는 채택 지연을 뺀 값)이다. 앱은 now < untilMs 인 동안 정지(노란색)로 그리기만 한다.
@@ -500,7 +496,7 @@ function _rideEtaCore(input) {
       var lastPs = legsMap[L][legsMap[L].length - 1].idx, liveSeen = {};
       for (var lj = 0; lj < (input.live || []).length; lj++) {
         var LV0 = input.live[lj];
-        if (!LV0 || !isFinite(+LV0.idx) || !isFinite(+LV0.ms)) continue;
+        if (!LV0 || !isFinite(+LV0.idx) || !isFinite(+LV0.ms) || LV0.fix === true) continue;      // s268: fix = 영점 연속 실패 뒤 실시간 API 로 맞춘 내 열차 — 오래된 통과 기록과 섞지 않고 그 시각으로 직접 맞춘다((마) 단계)
         var li0 = +LV0.idx;
         if (li0 <= lastPs || li0 >= n || !valid[li0] || !_reIsTransit(nodes[li0]) || legOf[li0] !== L) continue;
         // 같은 역에 도착 예정 열차가 여러 대면(앞차·내 열차·뒤차) 모두 후보로 넘긴다 — 어느 것이 내 열차인지는 지연 필터가 통과 기록과 맞춰 가른다
@@ -615,7 +611,6 @@ function _rideEtaCore(input) {
   // (바) 연착: 앵커 뒤 첫 정차 노드의 예정 시각이 지났는데 도착 증거가 없다
   var nxO = -1;
   for (k = anchor.idx + 1; k < n; k++) if (valid[k] && _reIsTransit(nodes[k]) && out[k] != null) { nxO = k; break; }
-  // ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철의 '중간 이동'): input.ttSub === true 면 이 걸음은 구간 중간 위치(pos)만 그려 준다 — 도착 시각·연착·영점 규칙은 건드리지 않는다(GPS 우선 그대로).
 // ★ 2026-10-13 (YJ: "탑승이 확정되면 시간표 기준으로 마커를 움직인다. 도착 때 GPS 로 영점만 본다"): input.timetableFirst === true 면 증거가 없다고 연착으로 밀지 않는다 — 시각표(+통과 증거로 배운 지연)가 기준이다.
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정 — 늦으면 밀고 빠르면 당겨라"): '증거 없음'은 연착이 아니지만 GPS 가 '아직 안 닿았다'고 말하면(input.notYet:[idx] — ride-track zero 의 notYet) 그 정류장은 연착이다 → 바로 지금 + overdueExtraMin 으로 올리고 뒤를 민다.
   var nyHit = false;

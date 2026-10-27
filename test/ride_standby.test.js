@@ -349,6 +349,7 @@ t('버스: 달리는 중(motion)은 오버레이의 이동중 표시를, 서 있
 });
 t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5초, 그 밖에는 5초, 승차 전에는 5초', () => {
   const st = mkState();
+  st.eta.nodes = st.eta.nodes.map(n => n.isBus ? Object.assign({}, n, { isBus: false, isSub: true, lineName: '인천1호선' }) : n);      // s268: 지하철 구간(시각표 우선) 기준 — 앞선 버스 시험이 공용 nodes 를 버스로 바꿔 둔다
   // 3번 역 도착 12:56:00 (etaMs 가 없으면 stops.arrMs)
   const near = [at(12, 55, 31), at(12, 56, 0), at(12, 56, 39)], far = [at(12, 55, 10), at(12, 56, 45)];      // s266: 승차 노드(12:52 쯤) 앞뒤 3분(환승·탑승 확인 창)도 짧은 간격이라 12:55:00 은 '가까움'
   near.forEach(ms => { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.strictEqual(r.nextMs, 2500, 'near '+new Date(ms).toISOString() + ' ' + r.nextMs); });
@@ -902,15 +903,6 @@ function runUntil(st, from, to, cond, fixFn) {
   for (ms = from; ms <= to; ms += 5000) { r = stepL(st, ms, fixFn ? fixFn(ms) : []); st = r.state; if (cond && cond(r, ms)) break; }
   return { r: r, st: st, ms: ms };
 }
-t('s231 도착 확정 없이 3정거장 넘어가면 마커가 그 역 앞에서 기다린다(건너뛰지 않는다) · 알림은 시각표대로', () => {
-  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 5, 0), (r) => r.pos && r.pos.hold != null);
-  assert.ok(o.r.pos && o.r.pos.hold === 4, 'hold ' + JSON.stringify(o.r.pos));
-  assert.ok(o.r.pos.from === 3 && o.r.pos.to === 4, 'from/to ' + JSON.stringify(o.r.pos));
-  assert.ok(o.st.xf === 1 && o.st.hd === 4, 'xf ' + o.st.xf);
-  const later = runUntil(o.st, o.ms + 5000, o.ms + 300000, null);
-  assert.strictEqual(later.r.pos.from, 3, '계속 기다린다(5정거장 뒤까지 가 있으면 안 된다) ' + JSON.stringify(later.r.pos));
-  assert.ok(later.r.curIdx >= 4, '알림 위치는 시각표대로 ' + later.r.curIdx);
-});
 // ★ 2026-10-28 s267 (YJ: 버스에서 환승한 지하철에서 임학·계산·경인교대 사이 이동이 안 그려지고 마커가 역에서 역으로 건너뜀 — 역 도착 판정은 그대로)
 function busSubState() {
   const nd = [{ name: '출발', isOrigin: true }, { name: 'B1', isBus: true, lineName: '9701', planMin: 12 * 60 + 40 }, { name: 'B2', isBus: true, lineName: '9701', planMin: 12 * 60 + 46 }], stops = [];
@@ -934,56 +926,77 @@ t('s267 버스→지하철 환승 뒤에도 역 사이 중간 위치(pos)가 매
   assert.ok(Object.keys(seenMid).length >= 5, '역 사이 중간 위치가 구간마다 나온다: ' + Object.keys(seenMid));
   assert.ok(st.eta.passes.filter(q => q.src === 'gps').length >= 6, 'GPS 영점은 기존대로 잡힌다');
 });
-t('s231 첫 정거장부터 2번째까지는 GPS 가 없어도 그대로 달린다(첫 승차 직후 3정거장은 보호하지 않는다)', () => {
-  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 57, 30), null);
-  assert.ok(o.r.pos.hold == null && o.r.pos.from >= 2, JSON.stringify(o.r.pos));
+// ★ 2026-10-28 s268 (YJ: 지하철 규칙 2가지 — 서울 실시간 노선은 영점 연속 3회 실패 시 API 로 내 열차 맞추기, API 없는 노선(인천1호선)은 GPS 만 · 하차까지 반복 · 영점 실패 중에도 마커는 시각표대로 전진)
+const lastPos = (o) => o.r.pos.from + o.r.pos.ratio;
+t('s268 영점이 계속 없어도 마커는 역 앞에서 멈추지 않고 시각표대로 간다 · 실패 역은 pos.miss 로 센다(첫 역부터, 예정 +60초 뒤)', () => {
+  const o1 = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 54, 50), null);
+  assert.strictEqual(o1.st.xf || 0, 0, '2번 역 예정 직후엔 아직 실패가 아니다(60초 여유) ' + o1.st.xf);
+  const o2 = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 55, 30), null);
+  assert.strictEqual(o2.st.xf, 1, '첫 역부터 센다 ' + o2.st.xf);
+  const o3 = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 1, 0), null);
+  assert.ok(o3.st.xf >= 4, '실패가 쌓인다(연속) ' + o3.st.xf);
+  assert.ok(o3.r.pos.from >= 5 && o3.r.pos.hold == null, '마커는 시각표대로 계속 간다(역 앞 대기 없음) ' + JSON.stringify(o3.r.pos));
+  assert.ok(o3.r.curIdx >= 5, '알림 위치도 시각표대로 ' + o3.r.curIdx);
 });
-function failTwice(line) {
-  let o = runUntil(longState(line), at(12, 52, 5), at(13, 5, 0), (r) => r.pos && r.pos.hold === 4);
-  assert.strictEqual(o.st.xf, 1);
-  const st = o.st; st.eta.passes.push({ idx: 4, ms: o.ms, src: 'gps' });                 // 4번 역은 늦게나마 GPS 로 확정(여전히 '제때'는 아니었다)
-  o = runUntil(st, o.ms + 5000, at(13, 10, 0), (r) => r.pos && r.pos.hold === 5);
-  assert.ok(o.r.pos.hold === 5 && o.st.xf === 2, 'xf ' + o.st.xf + ' ' + JSON.stringify(o.r.pos));
-  return o;
-}
-t('s231 서로 다른 역에서 연달아 2번 실패하면 5분 GPS 탐색이 시작되고, 5번 역 근처를 잡으면 영점이 강제로 적힌다', () => {
-  const o = failTwice('인천1호선');
-  assert.ok(o.st.srch && o.st.srch.i === 5 && o.st.srch.until === o.ms + 300000, JSON.stringify(o.st.srch));
-  // 5번 역(경도 LNG0+DL*4) 곁을 1분 전에 지나간 좌표들 + 지금은 조금 지나친 곳
-  const nowMs = o.ms + 60000, fx = [[nowMs - 50000, LAT, LNG0 + DL * 4 - 0.0008, 30], [nowMs - 40000, LAT, LNG0 + DL * 4, 30], [nowMs - 30000, LAT, LNG0 + DL * 4 + 0.0010, 30], [nowMs - 5000, LAT, LNG0 + DL * 4 + 0.0030, 30]];
+t('s268 영점이 잡히면 그 역까지의 실패가 지워진다(연속 실패만 센다)', () => {
+  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 59, 0), null);
+  assert.ok(o.st.xf >= 3, 'xf ' + o.st.xf);
+  const st = o.st; st.eta.passes.push({ idx: 4, ms: o.ms - 30000, src: 'gps' });
+  const r = stepL(st, o.ms + 5000, []);
+  assert.strictEqual(r.state.xf || 0, 0, '4번 영점 → 4번 이하 실패는 지워진다(그 뒤 역은 아직 예정 전) ' + r.state.xf);
+});
+t('s268 인천1호선(API 없는 노선): 연속 2회 실패 → GPS 5분 탐색, 몇 번을 실패해도 실시간 API 는 부르지 않는다 · 탐색으로 잡으면 영점이 적힌다', () => {
+  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.srch);
+  assert.ok(o.st.srch && o.st.srch.i === 3 && o.st.xf === 2 && o.st.sd === 3, JSON.stringify(o.st.srch) + ' xf ' + o.st.xf);
+  const later = runUntil(o.st, o.ms + 5000, at(13, 8, 0), null);
+  assert.ok(!later.st.rt && !later.r.ask, '실시간 위치를 모르는 노선은 API 를 부르지 않는다: ' + JSON.stringify(later.st.rt));
+  // 3번 역(경도 LNG0+DL*2) 곁을 지나간 흔적이 있으면 탐색이 영점을 적는다
+  const nowMs = o.ms + 30000, fx = [[nowMs - 50000, LAT, LNG0 + DL * 2 - 0.0008, 30], [nowMs - 40000, LAT, LNG0 + DL * 2, 30], [nowMs - 30000, LAT, LNG0 + DL * 2 + 0.0010, 30], [nowMs - 5000, LAT, LNG0 + DL * 2 + 0.0030, 30]];
   const r = stepL(o.st, nowMs, fx);
-  assert.ok(r.state.eta.passes.some(p => p.idx === 5 && p.src === 'gps'), JSON.stringify(r.notes));
-  assert.ok(!r.state.srch && r.state.xf === 0, '탐색 끝 · 연쇄 실패 처음부터');
-  assert.ok(!r.state.rt && !r.ask, '실시간 위치를 모르는 노선(인천1호선)은 API 를 부르지 않는다');
-  assert.ok(r.pos.hold == null || r.pos.hold > 5);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 3 && p.src === 'gps'), JSON.stringify(r.notes));
+  assert.ok(!r.state.srch, '탐색 끝');
 });
-t('s231 탐색 5분 안에 못 잡으면 탐색만 끝낸다(마커는 계속 기다림)', () => {
-  const o = failTwice('인천1호선');
+t('s268 탐색 5분 안에 못 잡으면 탐색만 끝낸다(마커는 계속 시각표대로) · 같은 역으로 다시 탐색하지 않는다', () => {
+  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.srch);
   const r = stepL(o.st, o.ms + 301000, []);
-  assert.ok(!r.state.srch && !r.state.eta.passes.some(p => p.idx === 5), JSON.stringify(r.notes));
+  assert.ok(!r.state.eta.passes.some(p => p.idx === 3) && (!r.state.srch || r.state.srch.i !== 3), JSON.stringify(r.notes));      // 끝난 탐색 자리에 새 실패 역(5번)이 생기면 그 역으로는 다시 시작할 수 있다
+  const r2 = stepL(r.state, o.ms + 306000, []);
+  assert.ok(!r2.state.srch || r2.state.srch.i > 3, '같은 역(3번)은 다시 탐색하지 않는다 ' + JSON.stringify(r2.state.srch));
 });
-t('s231 실시간 노선(1호선): 영점이 강제로 잡힌 직후에만 다음 역 도착정보를 묻고, 답이 오면 그 역을 실시간 시각으로 맞춘다 · 그 뒤 더는 묻지 않는다', () => {
-  const o = failTwice('1호선');
-  const nowMs = o.ms + 60000, fx = [[nowMs - 50000, LAT, LNG0 + DL * 4 - 0.0008, 30], [nowMs - 40000, LAT, LNG0 + DL * 4, 30], [nowMs - 30000, LAT, LNG0 + DL * 4 + 0.0010, 30], [nowMs - 5000, LAT, LNG0 + DL * 4 + 0.0030, 30]];
-  let r = stepL(o.st, nowMs, fx);
-  assert.ok(r.state.rt && r.state.rt.i1 === 6 && r.state.rt.line === '1호선', JSON.stringify(r.state.rt));
-  assert.ok(r.ask && r.ask.kind === 'boardlive' && r.ask.body.kind === 'subrt' && r.ask.body.i === 6 && r.ask.body.from === 'L5' && r.ask.body.prev === 'L4', JSON.stringify(r.ask));
-  const quiet = stepL(r.state, nowMs + 5000, []);
+t('s268 서울 실시간 노선(1호선): 영점 연속 3회 실패 → 다음 역 도착정보로 내 열차를 맞춘다 · 답이 오면 실시간 시각으로 · 3회 더 실패하면 또(하차까지 반복)', () => {
+  const o = runUntil(longState('1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
+  assert.ok(o.st.rt && o.st.rt.i0 === 4 && o.st.rt.i1 === 5 && o.st.rt.line === '1호선' && o.st.mb === 4, JSON.stringify(o.st.rt) + ' mb ' + o.st.mb);
+  assert.ok(o.r.ask && o.r.ask.kind === 'boardlive' && o.r.ask.body.kind === 'subrt' && o.r.ask.body.i === 5 && o.r.ask.body.from === 'L4' && o.r.ask.body.prev === 'L3', JSON.stringify(o.r.ask));
+  const quiet = stepL(o.st, o.ms + 5000, []);
   assert.ok(!quiet.ask, '15초 안에는 다시 묻지 않는다');
-  const ttMs = r.etaMs ? null : null;
-  const base = stepL(quiet.state, nowMs + 20000, []);
-  const baseEta = base.state.etaMs[6];
-  const live = nowMs + 20000 + 150000;
-  const ans = { ok: true, kind: 'subrt', i: 6, ms: live, src: 'realtime', at: nowMs + 20000 };
-  const a = stepL(quiet.state, nowMs + 20000, [], { bl: ans });
-  assert.ok(a.state.rt.done === 1 && a.state.eta.live.length === 1 && a.state.eta.live[0].idx === 6, JSON.stringify(a.notes));
-  assert.ok(Math.abs(a.state.etaMs[6] - live) < 20000 || Math.abs(a.state.etaMs[6] - baseEta) < Math.abs(baseEta - live), '실시간 쪽으로 맞춰진다 ' + (a.state.etaMs[6] - live) + ' / base ' + (baseEta - live));
-  const after = stepL(a.state, nowMs + 40000, []);
-  assert.ok(!after.ask, '맞춘 뒤엔 묻지 않는다');
-  // 답이 없으면(못 찾음) 최대 2번까지만 묻고 끝
-  let s2 = r.state, asks = 1;
-  for (let ms = nowMs + 20000; ms < nowMs + 200000; ms += 5000) { const q = stepL(s2, ms, []); s2 = q.state; if (q.ask) asks++; }
+  const baseEta = stepL(quiet.state, o.ms + 20000, []).state.etaMs[5];
+  const live = o.ms + 20000 + 150000;
+  const a = stepL(quiet.state, o.ms + 20000, [], { bl: { ok: true, kind: 'subrt', i: 5, ms: live, src: 'realtime', at: o.ms + 20000 } });
+  assert.ok(a.state.rt.done === 1 && a.state.eta.live.length === 1 && a.state.eta.live[0].idx === 5, JSON.stringify(a.notes));
+  assert.ok(Math.abs(a.state.etaMs[5] - live) < Math.abs(baseEta - live), '실시간 쪽으로 맞춰진다');
+  // 답이 없으면(못 찾음) 한 번의 시도에서 최대 2번만 묻는다
+  let s2 = o.st, asks = 1;
+  for (let ms = o.ms + 5000; ms < o.ms + 170000; ms += 5000) { const q = stepL(s2, ms, []); s2 = q.state; if (q.ask) asks++; if (s2.rt && s2.rt.i0 !== 4) break; }
   assert.strictEqual(asks, 2, '최대 2번 ' + asks);
+  // 하차까지 반복: 보정 뒤 다시 3회(새 실패) 쌓이면 또 맞춘다 — 4번 이후 역 5·6·7 이 실패
+  const again = runUntil(a.state, o.ms + 25000, at(13, 14, 0), (r) => r.state.rt && r.state.rt.i0 > 4);
+  assert.ok(again.st.rt && again.st.rt.i0 > 4 && again.st.mb > 4, '두 번째 보정 ' + JSON.stringify(again.st.rt) + ' mb ' + again.st.mb);
+});
+t('s268 구간별 규칙 판정(rsTtNow): 지하철 구간은 시각표 우선 · 버스 구간·환승 사이는 GPS 우선 · 대기 중·통과 없음·목적지 뒤는 처음 값 그대로', () => {
+  const { rsTtNow } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+  const nd = [{ name: '출발', isOrigin: true }, { name: 'S0', isSub: true, lineName: '1호선' }, { name: 'S1', isSub: true, lineName: '1호선' }, { name: 'B0', isBus: true, lineName: '9701' }, { name: 'B1', isBus: true, lineName: '9701' }, { name: 'T0', isSub: true, lineName: '인천1호선' }, { name: 'T1', isSub: true, lineName: '인천1호선' }];
+  const mk = (tf, last, o) => ({ st: Object.assign({}, o || {}), eta: { nodes: nd, boarded: true, timetableFirst: tf, passes: last < 0 ? [] : [{ idx: 1, src: 'gps' }].concat(last > 1 ? [{ idx: last, src: 'gps' }] : []) } });
+  const v = (tf, last, o) => { const m = mk(tf, last, o); return rsTtNow(m.st, m.eta, m.eta.passes); };
+  assert.strictEqual(v(true, 1), true, '지하철로 시작해 타고 가는 중');
+  assert.strictEqual(v(false, 1), true, '버스로 시작해도 지하철 구간이면 시각표 우선');
+  assert.strictEqual(v(true, 2), false, '지하철을 내린 뒤 다음이 버스(환승 사이)면 GPS 우선');
+  assert.strictEqual(v(true, 3), false, '버스를 타고 가는 중이면 지하철로 시작했어도 GPS 우선(버스 규칙)');
+  assert.strictEqual(v(false, 5), true, '버스 다음 지하철(인천1호선)을 타고 가는 중 → 시각표 우선');
+  assert.strictEqual(v(true, 6), true, '목적지에 닿은 뒤는 처음 값');
+  assert.strictEqual(v(false, 6), false, '목적지 뒤(처음 값 false)');
+  assert.strictEqual(v(false, -1), false, '통과가 없으면 처음 값'); assert.strictEqual(v(true, -1), true);
+  assert.strictEqual(v(true, 3, { xw: { i: 5 } }), true, '환승 대기 중에는 처음 값 그대로'); assert.strictEqual(v(false, 4, { xw: { i: 5 } }), false);
+  assert.strictEqual(v(true, 1, { wait: { i: 1 } }), true, '첫 승차 대기 중에는 처음 값');
 });
 t('s231 rsRtPick: 내 방향으로 오는 가장 가까운 열차 — 이미 역에 들어온 차(도착·출발)·다른 호선·반대 방향은 뺀다', () => {
   const q = { line: '1호선', prev: 'A', from: 'B', nowMs: 1000000 };
