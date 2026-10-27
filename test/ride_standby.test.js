@@ -385,6 +385,19 @@ t('추천 줄 버튼 글(go)은 엔진이 정한 대로 7~8자 안에서 그대�
   assert.strictEqual(g({ a: 'x', b: 'y' }), '맛집 보기');
   assert.strictEqual(g({ a: 'x', b: 'y', go: '아주아주 길고 긴 버튼 이름' }).length, 8);
 });
+t('s258 추천 동기화: rcDis -1 = 지금 보이는 추천 줄 닫기(앱 팝업·알림에서 처리하면 오버레이 줄도 사라진다) · rcRetry 는 못 보낸 추천을 다시 판정하게 한다', () => {
+  let st = withOvl(mkState());
+  let r = stepO(st, at(12, 50, 0), { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); st = r.state;
+  r = stepO(st, at(12, 54, 0)); st = r.state;
+  assert.ok(r.overlay.reco.on, '7분 안엔 오버레이 줄이 있다');
+  r = stepO(st, at(12, 54, 5), { rcDis: -1 }); st = r.state;
+  assert.strictEqual(r.overlay.reco.on, false, 'rcDis -1 로 앱에서 처리하면 오버레이 줄이 사라진다');
+  r = stepO(st, at(12, 54, 20)); st = r.state;
+  assert.strictEqual(r.overlay.reco.on, false, '다시 뜨지 않는다');
+  st.recoKey = 'k|d'; st.recoAt = at(12, 54, 0);
+  r = stepO(st, at(12, 54, 30), { rcRetry: 1 }); st = r.state;
+  assert.ok(r.reco && r.reco.fire === true, 'rcRetry: 추천 기록을 비워 같은 걸음에서 다시 판정해 보낸다(창이 열려 있는 동안)');
+});
 t('추천 줄: /reco-text 의 ad 를 req.rc 로 알려 주면 도착 7분 안에 [보기][확인] 줄로 나오고, rcDis 로 닫으면 사라진다', () => {
   let st = withOvl(mkState());
   let r = stepO(st, at(12, 50, 0), { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); st = r.state;

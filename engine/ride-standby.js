@@ -471,7 +471,8 @@ function rsActs(st, req, now, notes) {
     var sig = String(rc.a) + '|' + String(rc.b || '');
     if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rsClampTxt(rc.go, 8) || '맛집 보기' };
   }
-  if (isFinite(req.rcDis) && +req.rcDis > 0) st.rcDis = +req.rcDis;
+  if (isFinite(req.rcDis)) { if (+req.rcDis > 0) st.rcDis = +req.rcDis; else if (+req.rcDis < 0 && st.rcAd) st.rcDis = st.rcAd.at; }      // s258: -1 = '지금 보이는 추천 줄 닫기'(앱 팝업·알림에서 확인·보기를 눌렀으면 오버레이 줄도 사라지게 — 한쪽에서 처리하면 다른 쪽도 사라진다)
+  if (+req.rcRetry === 1 && st.recoKey) { st.recoKey = ''; st.recoAt = 0; }      // s258: 추천을 보내지 못했으면(통신 실패) 창이 열려 있는 동안 다시 판정하게 — 예전엔 한 번 실패하면 그 여정엔 영영 안 떴다
   var a = req.act;
   if (a === 'detour') rsDtActStart(st, now, notes);
   else if (a === 'open' || a === 'pill') { st.rsOpen = now + 20000; if (st.xw) st.xw.shr = false; if (st.wait) st.wait.shr = false; }

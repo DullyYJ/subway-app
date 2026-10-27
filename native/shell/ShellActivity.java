@@ -3853,6 +3853,21 @@ public class ShellActivity extends Activity {
         if (ok != null) ok.run(); else if (no != null) no.run();
     }
     /** s252 (YJ: 하차 추천도 앱을 켜 두면 팝업): 엔진(/screen/dlg kind:reco)이 만든 카드를 띄운다. 알림 대신 이것 하나만 보인다 — 못 띄우면 false(부르는 쪽이 알림으로 대신). */
+    private volatile boolean recoPopOpen;
+    /** s258: 오버레이·알림에서 추천을 처리했다 — 열려 있는 앱 추천 팝업을 (처리 콜백 없이) 닫는다. */
+    static void recoPopupClose() {
+        final ShellActivity a = live;
+        if (a == null) return;
+        a.main.post(new Runnable() { @Override public void run() {
+            try {
+                if (!a.recoPopOpen || a.dlgD == null) return;
+                android.app.Dialog d = a.dlgD;
+                if (a.dlgAuto != null) { a.main.removeCallbacks(a.dlgAuto); a.dlgAuto = null; }
+                a.dlgD = null; a.dlgV = null; a.dlgOk = null; a.dlgNo = null; a.recoPopOpen = false;
+                d.dismiss();
+            } catch (Throwable ignored) { }
+        } });
+    }
     static boolean recoPopup(String title, String text, RideCore.RecoAd ad, double[] loc) { ShellActivity a = live; return a != null && a.recoPop(title, text, ad, loc); }
     private boolean recoPop(final String title, final String text, final RideCore.RecoAd ad, final double[] loc) {
         {
@@ -3863,8 +3878,9 @@ public class ShellActivity extends Activity {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", body, 6000);
                 final String txt = r.status == 200 && r.body != null ? r.body : "";
                 main.post(new Runnable() { @Override public void run() {
-                    Runnable go = new Runnable() { @Override public void run() { OvCore.Row row = new OvCore.Row(); row.a = ad == null ? "" : ad.a; RecoGo.open(ShellActivity.this, ad, loc, row); } };
-                    if (resumed && txt.length() > 2 && dlgOpen(txt, go, null, 0L)) return;
+                    Runnable go = new Runnable() { @Override public void run() { recoPopOpen = false; RideService.recoDone(); try { ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(RecoNotify.RECO_ID); } catch (Throwable ignored) { } OvCore.Row row = new OvCore.Row(); row.a = ad == null ? "" : ad.a; RecoGo.open(ShellActivity.this, ad, loc, row); } };
+                    Runnable no = new Runnable() { @Override public void run() { recoPopOpen = false; RideService.recoDone(); try { ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(RecoNotify.RECO_ID); } catch (Throwable ignored) { } } };       // s258: 확인·닫기도 처리한 것 — 오버레이 줄·알림이 같이 사라진다
+                    if (resumed && txt.length() > 2 && dlgOpen(txt, go, no, 0L)) { recoPopOpen = true; return; }
                     RecoNotify.show(app, title, text);                                // 팝업을 못 띄웠다 — 추천은 한 여정에 한 번뿐이라 알림으로라도 보낸다
                 } });
             } }, "shell-reco-pop").start();

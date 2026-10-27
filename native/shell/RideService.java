@@ -182,8 +182,13 @@ public class RideService extends Service {
     private final java.util.HashSet<String> zeroSeen = new java.util.HashSet<>();
     private void zeroDiag(String resp) {
         try {
-            if (resp == null || zeroSeen.size() >= 60 || (resp.indexOf("\"zero\"") < 0 && resp.indexOf("영점") < 0 && resp.indexOf("마커 되돌아감") < 0 && resp.indexOf("연착") < 0 && resp.indexOf("재동기") < 0 && resp.indexOf("통과") < 0)) return;
+            if (resp == null || zeroSeen.size() >= 60 || (resp.indexOf("\"zero\"") < 0 && resp.indexOf("영점") < 0 && resp.indexOf("마커 되돌아감") < 0 && resp.indexOf("연착") < 0 && resp.indexOf("재동기") < 0 && resp.indexOf("통과") < 0 && resp.indexOf("\"reco\"") < 0)) return;
             org.json.JSONObject o = new org.json.JSONObject(resp);
+            org.json.JSONObject rcj = o.optJSONObject("reco");
+            if (rcj != null) {                                                   // s258: 도착 전 추천이 왜 안 떴는지 — 판정 이유(off·noeta·window·dup·recent·ok)와 남은 시간이 바뀔 때만 한 줄
+                String rm = "RIDE_RECO 이유=" + rcj.optString("why", "?") + " 시간대=" + rcj.optString("slot", "?") + " 발사=" + rcj.optBoolean("fire", false) + (rcj.has("remSec") ? " 남은=" + (rcj.optInt("remSec") / 60) + "분" : "");
+                if ((!"window".equals(rcj.optString("why", "")) || rcj.optInt("remSec", 99999) <= 600) && zeroSeen.add(rm)) ErrLog.record(this, new IllegalStateException(rm), false);
+            }
             org.json.JSONObject z = o.optJSONObject("zero");
             org.json.JSONArray st = z == null ? null : z.optJSONArray("stops");
             for (int i = 0; st != null && i < st.length(); i++) {
@@ -252,9 +257,10 @@ public class RideService extends Service {
         }
         @Override public void recoGo(OvCore.Row r) {
             if (core != null) core.dismissReco(r.at);
+            recoClosedHere();
             RecoGo.open(RideService.this, core == null ? null : core.lastRecoAd(), core == null ? null : core.recoLoc, r);
         }
-        @Override public void recoOk(long at) { if (core != null) core.dismissReco(at); if (h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } }); }
+        @Override public void recoOk(long at) { if (core != null) core.dismissReco(at); recoClosedHere(); if (h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } }); }
         @Override public void quitApp() { finishRide("user"); ShellActivity.quitAll(); }
         @Override public void endRide() { finishRide("user"); }
     };
@@ -375,6 +381,8 @@ public class RideService extends Service {
                 try { sent = RecoNotify.send(app, body, core); } catch (Throwable ignored) { }
                 recoStage = sent ? "바로 받아 알림 보냄" : "바로 받기 실패/보낼 시간대 아님"; recoStageAt = System.currentTimeMillis();
                 recoLive = false;
+                if (!sent && recoRetryN < 3 && core != null) { recoRetryN++; core.retryReco(); }          // s258: 못 보냈으면(통신 실패) 도착 전 창이 열려 있는 동안 다시 판정한다(세 번까지)
+                try { if (!sent) ErrLog.record(RideService.this, new IllegalStateException("RIDE_RECO 보내기 실패(" + recoRetryN + "/3) 단계=" + recoStage + " 이유=" + (core == null ? "?" : core.recoWhy())), false); } catch (Throwable ignored) { }
                 if (sent && h != null) h.post(new Runnable() { @Override public void run() { updateOverlay(); } });
             }
         }, "ride-reco-live").start();
@@ -387,6 +395,19 @@ public class RideService extends Service {
             return m.find() ? Long.parseLong(m.group(1)) : 0L;
         } catch (RuntimeException e) { return 0L; }
     }
+    /** s258 (YJ: 추천은 보는 화면 한 곳에만 뜨고, 한쪽에서 확인·접속하면 다른 쪽(오버레이·앱 팝업·알림)도 사라진다): 오버레이에서 처리했으니 앱 팝업과 알림을 닫는다. */
+    private void recoClosedHere() {
+        try { ShellActivity.recoPopupClose(); } catch (Throwable ignored) { }
+        try { NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE); if (nm != null) nm.cancel(RecoNotify.RECO_ID); } catch (Throwable ignored) { }
+    }
+    /** 앱 팝업·알림에서 처리했다 — 엔진에 '지금 보이는 추천 줄 닫기'를 알려 오버레이 줄도 사라지게 한다. */
+    static void recoDone() {
+        final RideService s = inst;
+        if (s == null || s.core == null) return;
+        s.core.dismissAnyReco();
+        if (s.h != null) s.h.post(new Runnable() { @Override public void run() { s.h.removeCallbacks(s.stepRunnable); s.h.post(s.stepRunnable); } });
+    }
+    private int recoRetryN = 0;
     private void fireAlert(RideCore.Step s) {
         try {
             Notification.Builder b = builder(CH_ALERT).setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(s.title).setContentText(s.body).setAutoCancel(true).setContentIntent(openIntent());

@@ -67,10 +67,13 @@ public final class RideCore {
     private volatile String pendingBl = "";            // /board-live 가 준 답(다음 걸음 요청의 bl 로 한 번만 실어 보낸다) — 승차 대기 중 실시간 재보정(s196)
     private String blInFlight = "";
     public void setBl(String resp) { if (resp != null && resp.length() > 2 && resp.length() < 4000) pendingBl = resp; }
-    public void setRecoAd(RecoAd ad) { if (ad != null) { pendingAd = ad; lastAd = ad; } }
+    public void setRecoAd(RecoAd ad) { if (ad != null) { pendingAd = ad; lastAd = ad; rcDisAny = false; } }
     public RecoAd lastRecoAd() { return lastAd; }
     public void queueAct(String a) { if ("press".equals(a) || "undo".equals(a) || "open".equals(a) || "close".equals(a) || "pill".equals(a) || "detour".equals(a)) pendingAct = a; }
     public void dismissReco(long at) { if (at > 0) rcDis = at; }
+    private volatile boolean rcDisAny, rcRetry;        // s258: 팝업·알림에서 처리했으면 '지금 보이는 추천 줄 닫기'(-1) · 못 보냈으면 다시 판정(1) — 엔진이 오버레이 줄을 같이 정리한다
+    public void dismissAnyReco() { rcDisAny = true; }
+    public void retryReco() { rcRetry = true; }
 
     /** /reco-text 응답의 ad 줄 → RecoAd. 줄이 없으면 null. */
     @SuppressWarnings("unchecked")
@@ -95,7 +98,8 @@ public final class RideCore {
         } catch (ScreenCore.ParseError e) { return null; }
     }
     /** 하차 추천 상태(엔진 reco 그대로) — 설정 '상태 확인'이 보여 준다. 판단은 엔진이 했고 여기는 받은 값을 들고만 있는다. */
-    private String recoDest = "", recoSlot = "";
+    private String recoDest = "", recoSlot = "", recoWhy = "";
+    public String recoWhy() { return recoWhy; }
     private long recoRem = Long.MIN_VALUE, recoAlertAt = 0L, recoTick = 0L;
     private boolean recoDinner;
 
@@ -190,7 +194,8 @@ public final class RideCore {
         b.append("],\"state\":").append(stateJson.length() > 0 ? stateJson : "null");
         RecoAd ad = pendingAd; adInFlight = ad;
         if (ad != null) b.append(",\"rc\":{\"a\":").append(ShellCore.q(ad.a)).append(",\"b\":").append(ShellCore.q(ad.b)).append(",\"m\":").append(ShellCore.q(ad.m)).append(",\"go\":").append(ShellCore.q(ad.go)).append('}');
-        if (rcDis > 0) b.append(",\"rcDis\":").append(rcDis);
+        if (rcDisAny) b.append(",\"rcDis\":-1"); else if (rcDis > 0) b.append(",\"rcDis\":").append(rcDis);
+        if (rcRetry) { b.append(",\"rcRetry\":1"); rcRetry = false; }
         String act = pendingAct; actInFlight = act;
         if (act.length() > 0) b.append(",\"act\":").append(ShellCore.q(act));
         String bl = pendingBl; blInFlight = bl;
@@ -260,7 +265,7 @@ public final class RideCore {
             if (m.get("reco") instanceof Map) {
                 Map<String, Object> rc = (Map<String, Object>) m.get("reco");
                 s.recoBody = recoBody(rc);
-                recoDest = BoardCore.s(rc.get("dest"), 40); recoSlot = BoardCore.s(rc.get("slot"), 12); recoDinner = Boolean.TRUE.equals(rc.get("dinner"));
+                recoDest = BoardCore.s(rc.get("dest"), 40); recoSlot = BoardCore.s(rc.get("slot"), 12); recoWhy = BoardCore.s(rc.get("why"), 12); recoDinner = Boolean.TRUE.equals(rc.get("dinner"));
                 recoRem = rc.get("remSec") instanceof Number ? ((Number) rc.get("remSec")).longValue() : Long.MIN_VALUE;
                 recoAlertAt = rc.get("alertAt") instanceof Number ? ((Number) rc.get("alertAt")).longValue() : 0L;
                 recoTick = System.currentTimeMillis();
