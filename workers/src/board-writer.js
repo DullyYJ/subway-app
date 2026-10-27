@@ -788,13 +788,15 @@ function pickPool(kst) {
   return weekend ? { key: "nightWe", prob: 0.7, extra: 0 } : { key: "nightWd", prob: 0.8, extra: 0 };
 }
 __name(pickPool, "pickPool");
-var _wxCache = { at: 0, v: null };
+var _wxCache = { at: 0, v: null }, _wxCoolUntil = 0;     // s251: 한도 초과(429)면 10분은 부르지 않고 날씨 없이(옛 값도 쓰지 않는다)
 async function getWeather() {
+  if (Date.now() < _wxCoolUntil) return null;
   // ★ 2026-10-05: 10분 캐시 — 글·댓글·대화·반응이 모두 날씨를 쓰게 됐다(호출이 몰리지 않게). 실패하면 3시간 안의 옛 값을 쓴다.
   if (_wxCache.v && Date.now() - _wxCache.at < 10 * 60e3) return _wxCache.v;
   try {
     const u = "https://api.open-meteo.com/v1/forecast?latitude=37.57&longitude=126.98&current=temperature_2m,weather_code&timezone=Asia%2FSeoul";
     const r = await fetch(u, { signal: AbortSignal.timeout(5e3) });
+    if (r.status === 429) { _wxCoolUntil = Date.now() + 6e5; _wxCache = { at: 0, v: null }; return null; }
     if (!r.ok) throw new Error("http");
     const d = await r.json();
     if (!d || !d.current) throw new Error("nodata");

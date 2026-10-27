@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s250";
+var ENGINE_VERSION = "route-v2-2026-10-27s251";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23201,6 +23201,7 @@ function cbBrief(inp, wF, wT) {
 var CB_WX_CACHE = {};
 async function cbWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
+  if (typeof wxLimited === "function" && wxLimited()) return null;          // s251: \ub0a0\uc528 API \ud55c\ub3c4\ub97c \ub2e4 \uc37c\uc73c\uba74 \ub0a0\uc528 \uc5c6\uc774
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = CB_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
@@ -23209,7 +23210,7 @@ async function cbWeather(lat, lng) {
     clearTimeout(t);
     if (j && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
   } catch (e) {}
-  return c ? c.wx : null;
+  return c && !(typeof wxLimited === "function" && wxLimited()) ? c.wx : null;
 }
 async function handleCommuteBrief(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

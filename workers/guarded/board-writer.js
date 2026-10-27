@@ -788,13 +788,15 @@ function pickPool(kst) {
   return weekend ? { key: "nightWe", prob: 0.7, extra: 0 } : { key: "nightWd", prob: 0.8, extra: 0 };
 }
 __name(pickPool, "pickPool");
-var _wxCache = { at: 0, v: null };
+var _wxCache = { at: 0, v: null }, _wxCoolUntil = 0;     // s251: \ud55c\ub3c4 \ucd08\uacfc(429)\uba74 10\ubd84\uc740 \ubd80\ub974\uc9c0 \uc54a\uace0 \ub0a0\uc528 \uc5c6\uc774(\uc61b \uac12\ub3c4 \uc4f0\uc9c0 \uc54a\ub294\ub2e4)
 async function getWeather() {
+  if (Date.now() < _wxCoolUntil) return null;
   // \u2605 2026-10-05: 10\ubd84 \uce90\uc2dc \u2014 \uae00\u00b7\ub313\uae00\u00b7\ub300\ud654\u00b7\ubc18\uc751\uc774 \ubaa8\ub450 \ub0a0\uc528\ub97c \uc4f0\uac8c \ub410\ub2e4(\ud638\ucd9c\uc774 \ubab0\ub9ac\uc9c0 \uc54a\uac8c). \uc2e4\ud328\ud558\uba74 3\uc2dc\uac04 \uc548\uc758 \uc61b \uac12\uc744 \uc4f4\ub2e4.
   if (_wxCache.v && Date.now() - _wxCache.at < 10 * 60e3) return _wxCache.v;
   try {
     const u = "https://api.open-meteo.com/v1/forecast?latitude=37.57&longitude=126.98&current=temperature_2m,weather_code&timezone=Asia%2FSeoul";
     const r = await fetch(u, { signal: AbortSignal.timeout(5e3) });
+    if (r.status === 429) { _wxCoolUntil = Date.now() + 6e5; _wxCache = { at: 0, v: null }; return null; }
     if (!r.ok) throw new Error("http");
     const d = await r.json();
     if (!d || !d.current) throw new Error("nodata");

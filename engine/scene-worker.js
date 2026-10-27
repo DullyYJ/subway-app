@@ -3,8 +3,13 @@
 // ★ s218: 날씨는 Open-Meteo(키 없음)에서 엔진이 직접 받는다. 예전엔 subway-api 워커의 /weather 를 불렀는데 배포된 그 워커에는 그 길이 없어(Not found)
 //   홈 AI 브리핑·장면·쇼핑·출퇴근 브리핑의 날씨가 한 번도 안 나왔다. 반환: { temp, feel, hum, wind(km/h), uv, rain(%, 앞으로 3시간 최대), tmin, tmax, txt } | null
 var WX_CODES = { 0: "맑음", 1: "대체로 맑음", 2: "구름 조금", 3: "흐림", 45: "안개", 48: "안개", 51: "이슬비", 53: "이슬비", 55: "이슬비", 56: "어는 비", 57: "어는 비", 61: "비", 63: "비", 65: "강한 비", 66: "어는 비", 67: "어는 비", 71: "눈", 73: "눈", 75: "강한 눈", 77: "눈", 80: "소나기", 81: "소나기", 82: "강한 소나기", 85: "눈", 86: "눈", 95: "천둥번개", 96: "천둥번개", 99: "천둥번개" };
+// s251 (YJ: "API 호출량을 다 쓰면 날씨 연동은 하지 마"): Open-Meteo 가 한도 초과(429)를 알리면 10분 동안은 부르지도 않고 날씨를 아예 내지 않는다(옛 캐시도 쓰지 않는다) — 장면·브리핑·위젯은 날씨 없이 그린다.
+var WX_COOL_UNTIL = 0;
+function wxLimited() { return Date.now() < WX_COOL_UNTIL; }
 async function wxMeteo(lat, lng, signal) {
+  if (wxLimited()) return null;
   var r = await fetch("https://api.open-meteo.com/v1/forecast?latitude=" + Number(lat).toFixed(3) + "&longitude=" + Number(lng).toFixed(3) + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&hourly=precipitation_probability&daily=uv_index_max,temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=Asia%2FSeoul&wind_speed_unit=kmh", { signal: signal });
+  if (r && r.status === 429) { WX_COOL_UNTIL = Date.now() + 6e5; return null; }
   var j = r.ok ? await r.json() : null, c = j && j.current;
   if (!c || typeof c.temperature_2m !== "number") return null;
   var n = function (v) { return typeof v === "number" && isFinite(v) ? v : null; }, rd = function (v) { v = n(v); return v == null ? null : Math.round(v); };
@@ -15,6 +20,7 @@ async function wxMeteo(lat, lng, signal) {
 }
 async function sceneWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
+  if (wxLimited()) return null;
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = SCENE_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
@@ -23,7 +29,7 @@ async function sceneWeather(lat, lng) {
     clearTimeout(t);
     if (w) { var wx = { temp: w.temp, rain: w.rain, txt: String(w.txt || "").slice(0, 12), feel: w.feel, wind: w.wind, uv: w.uv, hum: w.hum }; SCENE_WX_CACHE[key] = { ts: now, wx: wx }; return wx; }
   } catch (e) {}
-  return c ? c.wx : null;
+  return c && !wxLimited() ? c.wx : null;
 }
 async function handleScene(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

@@ -23,6 +23,20 @@ const DATA = { current: { time: '2026-10-26T09:00', temperature_2m: 11.6, appare
     const bad = mk({ ok: false, json: async () => null }, []);
     assert.strictEqual(await bad.sceneWeather(37.5, 127.0), null);
   });
+  await t('s251: 한도 초과(429)면 날씨를 내지 않는다 — 옛 캐시도 쓰지 않고 10분은 부르지도 않는다', async () => {
+    const calls2 = []; let mode = 'ok';
+    const f = async (u) => { calls2.push(u); return mode === 'ok' ? { ok: true, status: 200, json: async () => DATA } : { ok: false, status: 429, json: async () => ({ error: true, reason: 'Daily API request limit exceeded' }) }; };
+    const cache = {};
+    const m2 = new Function('fetch', 'SCENE_WX_CACHE', 'AbortController', code + ';return {wxMeteo,sceneWeather,wxLimited}')(f, cache, AbortController);
+    assert.ok((await m2.sceneWeather(37.5, 127.0)).temp === 12 && !m2.wxLimited(), '처음엔 받는다');
+    mode = '429';
+    assert.strictEqual(await m2.wxMeteo(37.6, 127.1), null);
+    assert.ok(m2.wxLimited(), '429 를 받으면 한도 표시');
+    const n = calls2.length;
+    assert.strictEqual(await m2.sceneWeather(37.5, 127.0), null, '방금 받은 캐시가 있어도 날씨를 내지 않는다');
+    assert.strictEqual(await m2.sceneWeather(37.9, 127.5), null);
+    assert.strictEqual(calls2.length, n, '쉬는 동안은 API 를 부르지도 않는다');
+  });
   const w = fs.readFileSync(path.join(root, 'engine/route-v2-worker.ascii.js'), 'utf8');
   await t('워커에 내장 · 순수 ASCII · 출퇴근 브리핑도 같은 함수 사용', async () => {
     assert.ok(w.indexOf('async function wxMeteo(') > 0 && w.indexOf('typeof wxMeteo === "function"') > 0);

@@ -4,6 +4,7 @@
 var CB_WX_CACHE = {};
 async function cbWeather(lat, lng) {
   if (!(isFinite(lat) && isFinite(lng) && lat > 33 && lat < 39 && lng > 124 && lng < 132)) return null;
+  if (typeof wxLimited === "function" && wxLimited()) return null;          // s251: 날씨 API 한도를 다 썼으면 날씨 없이
   var key = Math.round(lat * 20) + "," + Math.round(lng * 20), c = CB_WX_CACHE[key], now = Date.now();
   if (c && now - c.ts < 6e5) return c.wx;
   try {
@@ -12,7 +13,7 @@ async function cbWeather(lat, lng) {
     clearTimeout(t);
     if (j && typeof j.temp === "number") { if (Object.keys(CB_WX_CACHE).length > 60) CB_WX_CACHE = {}; CB_WX_CACHE[key] = { ts: now, wx: j }; return j; }
   } catch (e) {}
-  return c ? c.wx : null;
+  return c && !(typeof wxLimited === "function" && wxLimited()) ? c.wx : null;
 }
 async function handleCommuteBrief(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };

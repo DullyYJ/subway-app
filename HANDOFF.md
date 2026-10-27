@@ -2917,3 +2917,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **세부경로 시트(`openDetailSheet`)**: 창을 탭 막대 위까지만 덮고(`w.setLayout(MATCH, tabsScr)`, 위 정렬) 어둡게 하는 0.82 는 창 안(root 배경 0xD1000000)에서만 — `FLAG_DIM_BEHIND` 를 쓰지 않아 하단탭·탑승 시트가 밝게 보이고, `FLAG_NOT_TOUCH_MODAL` 로 그 영역 터치는 앱이 받는다. 탭을 누르면(`E_TAB`) 세부경로를 닫고 그 탭으로 간다.
 - **탈 버스 고르기(`/ride/buspick`, 엔진 s250)**: 10분 안에 오는 버스가 **하나뿐이면 묻지 않는다** — 응답은 `{ask:false, auto:{ms,sec}}`, 앱(`busPickAsk`)이 그 도착 시각으로 바로 `/ride/start` 를 다시 불러 그 버스를 따라간다. 둘 이상일 때만 카드를 띄우고 단추 글은 `순환43번 (9분 36초 후)`(버스 번호 + 예상 시간).
 - 워커 `route-v2-2026-10-27s250`(s249 의 정류장 확장 포함) 재배포 필요. 옛 워커면 예전처럼 한 대여도 묻는다.
+
+## s251 — 날씨 API 한도를 다 쓰면 날씨 연동을 하지 않는다 (YJ)
+- Open-Meteo 무료 한도: 분 600 · 시간 5,000 · 일 10,000. 비상업 용도만 무료 — 오버레이 추천(광고)을 붙이기 전까지는 무방하다고 YJ 확인. 광고 후에는 유료 플랜 또는 다른 API 필요.
+- `wxMeteo`(scene-worker.js)가 429 를 받으면 `WX_COOL_UNTIL` = 지금+10분: 그동안 API 를 부르지 않고 `sceneWeather`·`cbWeather`·위젯 한마디 모두 날씨를 내지 않는다(옛 캐시 포함). 장면·브리핑은 날씨 없이(wxKnown=false) 그린다.
+- 게시판 워커(`workers/src/board-writer.js` → `guarded/`, **별도 워커**)의 `getWeather` 도 429 면 10분 쉬고 null(옛 값 3시간 사용 규칙은 429 일 때만 끈다). 다른 실패는 예전대로.
+- 워커 `route-v2-2026-10-27s251` + 게시판 워커(guarded/board-writer.js) 재배포 필요.
