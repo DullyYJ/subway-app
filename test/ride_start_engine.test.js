@@ -198,6 +198,9 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
     arr = { '931': [900, 1200] };
     const b = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b);
     ok(b.ok && b.ask === false, 's200: 10분 안에 오는 차가 없으면 묻지 않는다');
+    arr = { '931': [300, 1200] };
+    const one = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b);
+    ok(one.ok && one.ask === false && one.auto && one.auto.ms === T0 + 300000 && one.auto.sec === 300 && !one.screen, 's250: 10분 안에 오는 차가 하나뿐이면 묻지 않고 그 차의 도착 시각(auto.ms)만 돌려준다');
     arr = null;
     ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b).ask === false, 's200: 도착정보를 못 받아도 묻지 않고 그냥 시작하게 둔다');
     arr = { '931': [100] };

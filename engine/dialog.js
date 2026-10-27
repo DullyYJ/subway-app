@@ -74,11 +74,11 @@ function dlgBpick(f) {
   var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
   var head = [
     { t: 'text', pad: [22, 24, 22, 6], s: '탈 버스를 골라 주세요', size: 17, bold: true, lh: 1.4, color: 'text' },
-    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (no ? no + '번 · ' : '') + '10분 안에 오는 버스', size: 13, lh: 1.55, color: 'sub' }
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + '10분 안에 오는 버스', size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
     head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: (i + 1) + '번째  ' + dlgBpickLabel(it2.sec), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }
+      { label: (no ? no + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [

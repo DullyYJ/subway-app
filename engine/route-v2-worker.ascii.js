@@ -38,7 +38,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-27s249";
+var ENGINE_VERSION = "route-v2-2026-10-27s250";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19827,11 +19827,11 @@ function dlgBpick(f) {
   var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' };
   var head = [
     { t: 'text', pad: [22, 24, 22, 6], s: '\ud0c8 \ubc84\uc2a4\ub97c \uace8\ub77c \uc8fc\uc138\uc694', size: 17, bold: true, lh: 1.4, color: 'text' },
-    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + (no ? no + '\ubc88 \u00b7 ' : '') + '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4', size: 13, lh: 1.55, color: 'sub' }
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4', size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
     head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: (i + 1) + '\ubc88\uc9f8  ' + dlgBpickLabel(it2.sec), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }
+      { label: (no ? no + '\ubc88 ' : (i + 1) + '\ubc88\uc9f8 ') + '(' + dlgBpickLabel(it2.sec).replace(' \ub3c4\ucc29', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '\uc21c\ud65843\ubc88 (9\ubd84 36\ucd08 \ud6c4)' \u2014 \ubc84\uc2a4 \ubc88\ud638(\uc608\uc0c1 \uc2dc\uac04)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
@@ -22919,6 +22919,9 @@ async function handleRideBusPick(request, env) {
   var list = m ? (m[ask.no] || (typeof noKey === "function" ? m[noKey(ask.no)] : null)) : null;
   var items = rideBusItems(list, body.r && body.r.now);
   if (!items.length) return nil();
+  if (items.length === 1) {          // s250 (YJ: "\uc5b4\ucc28\ud53c \ubc84\uc2a4 \uc624\ub294 \uac8c \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \ub9d0\uace0 \uadf8 \ubc84\uc2a4\ub97c \ud0c0\uac8c"): \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uadf8 \ubc84\uc2a4\ub97c \ub530\ub77c\uac00\ub3c4\ub85d \ub3c4\ucc29 \uc2dc\uac01(ms)\ub9cc \ub3cc\ub824\uc900\ub2e4
+    return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec }, ver: ENGINE_VERSION }), { headers: H });
+  }
   var card;
   try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }
   if (!card || !card.ok) return nil();

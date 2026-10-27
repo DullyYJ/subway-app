@@ -1389,7 +1389,7 @@ public class ShellActivity extends Activity {
 
     private void apply(ShellCore.Effect e) {
         switch (e.kind) {
-            case ShellCore.E_TAB: showTab(e.arg); break;
+            case ShellCore.E_TAB: if (sheet != null && ShellCore.S_DETAIL.equals(sheetName)) closeSheet(); showTab(e.arg); break;           // 세부경로가 떠 있어도 하단탭이 눌린다 — 시트는 닫고 그 탭으로
             case ShellCore.E_REFRESH: applyTheme(); refreshLast(); break;
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
@@ -4080,16 +4080,19 @@ public class ShellActivity extends Activity {
     private void busPickAsk(final String pickJson, final String facts, final List<String> off, final boolean pfl, final String txt0, final int rid) {
         final List<Long> ms = new ArrayList<Long>();
         boolean ask = false;
+        long autoMs = 0L;
         try {
             Object o = ScreenCore.parse(pickJson);
             if (o instanceof Map) {
                 Map<String, Object> m = (Map<String, Object>) o;
                 ask = Boolean.TRUE.equals(m.get("ask"));
+                if (m.get("auto") instanceof Map && ((Map<String, Object>) m.get("auto")).get("ms") instanceof Number) autoMs = ((Number) ((Map<String, Object>) m.get("auto")).get("ms")).longValue();      // 오는 버스가 하나뿐 — 묻지 않고 그 버스로
                 Object inf = m.get("info");
                 if (inf instanceof Map && ((Map<String, Object>) inf).get("items") instanceof List)
                     for (Object x : (List<Object>) ((Map<String, Object>) inf).get("items")) if (x instanceof Map && ((Map<String, Object>) x).get("ms") instanceof Number) ms.add(((Number) ((Map<String, Object>) x).get("ms")).longValue());
             }
         } catch (Throwable ignored) { ask = false; }
+        if (!ask && autoMs > 0L) { rideStartPicked(RideCore.startBody(ShellCore.CAP, facts, off, pfl, autoMs), rid); return; }
         if (!ask || ms.isEmpty()) { rideCommit(txt0, rid); return; }
         dlgPick = -1;
         boolean shown = dlgOpen(pickJson, new Runnable() { @Override public void run() {
@@ -4338,10 +4341,16 @@ public class ShellActivity extends Activity {
         sheet.setContentView(root);
         try {
             android.view.Window w = sheet.getWindow();
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            // s250 (YJ: 세부경로를 볼 때 하단탭이 흐려지지 말고 눌리게): 창을 탭 막대 위까지만 덮고(어둡게 하는 것도 이 창 안에서만) 그 아래는 앱이 그대로 받는다 — 탭 · 탑승 시트가 밝은 채로 눌린다
+            int tabsScr = getResources().getDisplayMetrics().heightPixels - Math.round(56f * dpr);
+            if (tabs != null && tabs.getHeight() > 0) { int[] tl0 = new int[2]; tabs.getLocationOnScreen(tl0); tabsScr = tl0[1]; }
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, Math.max(Math.round(200f * dpr), tabsScr));
+            w.setGravity(android.view.Gravity.TOP);
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
-            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            w.setDimAmount(0.82f);
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            w.addFlags(android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+            root.setBackgroundColor(0xD1000000);                                         // 웹 0.82 어둡게 — 창 안쪽만
+            sheet.setCanceledOnTouchOutside(false);
             w.setWindowAnimations(android.R.style.Animation_InputMethod);
             sheet.show();
         } catch (Throwable t) { toast("세부경로를 열지 못했어요"); sheet = null; sheetView = null; sheetName = ""; return; }

@@ -36,6 +36,13 @@ function findAndroidJar() {
     assert.ok(/private void ttApply\(String txt\)[^]*?if \(map\.ttWantFetch\(\)\) ttFetch\(\);/.test(a), '서버가 못 채운 경우에만 기기가 /next-train 으로 받는다');
     assert.ok(!/sheetName = ShellCore\.S_MAPTT;\s*ttRender\(\);\s*ttFetch\(\);/.test(a) && /case MapCore\.R_TT_LOAD: ttRender\(\)/.test(a), '열 때 두 번 묻지 않는다(화면 요청과 시간표 요청 경합 없음)');
   });
+  await t('s250: 세부경로 시트가 떠도 하단탭 · 탑승 시트는 밝고 눌린다 / 오는 버스가 하나뿐이면 묻지 않고 그 버스로', () => {
+    const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const op = v.slice(v.indexOf('private void openDetailSheet()'), v.indexOf('private void loadDetail()'));
+    assert.ok(/clearFlags\(android\.view\.WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(op) && /FLAG_NOT_TOUCH_MODAL/.test(op) && /w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, Math\.max\(Math\.round\(200f \* dpr\), tabsScr\)\)/.test(op), '창은 탭 막대 위까지만 · 바깥 터치는 앱이 받는다 · 화면 전체 흐림 없음');
+    assert.ok(/case ShellCore\.E_TAB: if \(sheet != null && ShellCore\.S_DETAIL\.equals\(sheetName\)\) closeSheet\(\); showTab/.test(v), '세부경로가 떠 있을 때 탭을 누르면 시트를 닫고 그 탭으로');
+    assert.ok(/if \(!ask && autoMs > 0L\) \{ rideStartPicked\(RideCore\.startBody\(ShellCore\.CAP, facts, off, pfl, autoMs\), rid\); return; \}/.test(v), '엔진이 auto.ms 만 주면(버스 하나) 묻지 않고 그 버스로 시작');
+  });
   await t('ShellCore 를 JVM 에서 컴파일하고 자체 점검(ShellJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('ShellCore.java'), N('HomeSearchCore.java'), N('HomeCore.java'), N('WalkCore.java'), N('BoardCore.java'), N('ChatCore.java'), N('FoodCore.java'), N('MapCore.java'), N('FavCore.java'), N('HcardsCore.java'), N('RideCore.java'), N('RulesCore.java'), N('LegacyCore.java'), N('CmCore.java'), N('GwCore.java'), N('DevCore.java'), N('ErrCore.java'), N('ShareCore.java'), N('OvCore.java'), N('RsCore.java'), N('ActRowCore.java'), N('TileMapCore.java'), N('NetPost.java'), N('PerfLog.java'), N('Debounce.java'), N('Swr.java'), N('RunnerCore.java'), N('SceneModel.java'), path.join(__dirname, 'java', 'ShellJvmTest.java')], { env: ENV, encoding: 'utf8' });
@@ -297,7 +304,7 @@ function findAndroidJar() {
     const dt = sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('));
     assert.ok(/cv\.rotate\(ang, it\.ix, it\.iy\)/.test(dt) && /\/ 200f/.test(dt) && /final String bt = ellipsizeTd/.test(dt) && dt.indexOf('final String bt = ellipsizeTd') < dt.indexOf('setText(ScreenCore.TD_BADGE_TXT'), '▾ 는 0.2초 돌고 · 뱃지 글은 색을 정하기 전에 줄여서 보인다');
     const op = v.slice(v.indexOf('private void openDetailSheet()'), v.indexOf('private void loadDetail()'));
-    assert.ok(/setDimAmount\(0\.82f\)/.test(op) && /520f \* dpr/.test(op) && /20f \* dpr/.test(op) && /tabs\.getLocationOnScreen/.test(op) && /120f \* dpr/.test(op) && /PathInterpolator\(0\.25f, 0\.1f, 0\.25f, 1f\)/.test(op) && /setDuration\(250L\)/.test(op) && /root\.setOnClickListener/.test(op) && /경로를 불러오는 중/.test(op), '웹 틀: 어둡기 .82 · 너비 520 · 위 모서리 20 · 탭바 위 · 끌어 닫기 120dp .25초 ease · 바깥 누르면 닫힘 · 불러오는 중 글');
+    assert.ok(/setBackgroundColor\(0xD1000000\)/.test(op) && !/FLAG_DIM_BEHIND\);\s*\n\s*w\.setDimAmount/.test(op) && /520f \* dpr/.test(op) && /20f \* dpr/.test(op) && /tabs\.getLocationOnScreen/.test(op) && /120f \* dpr/.test(op) && /PathInterpolator\(0\.25f, 0\.1f, 0\.25f, 1f\)/.test(op) && /setDuration\(250L\)/.test(op) && /root\.setOnClickListener/.test(op) && /경로를 불러오는 중/.test(op), '웹 틀: 어둡기 .82 · 너비 520 · 위 모서리 20 · 탭바 위 · 끌어 닫기 120dp .25초 ease · 바깥 누르면 닫힘 · 불러오는 중 글');
     assert.ok(/HomeCore\.optName\(home\.resTab\) \+ " 경로로 확정했어요"/.test(v) && /postDelayed\([\s\S]{0,160}closeSheet\(\)[\s\S]{0,40}600L/.test(v) && /ovlHintOnce\(\)/.test(v) && /RideOverlay\.supported\(\) && !RideOverlay\.allowed\(this\)/.test(v) && /optName\(String tab\)/.test(hm), '확정: 토스트(옵션 이름) · 초록 단추 다시 받기 · 0.6초 뒤 닫힘 · 오버레이 권한 안내는 한 번만');
   });
   await t('홈·시간표·버스 보정(s150): 단추 스피너는 spin 만 · 경로 찾는 동안만 · 시간표 머리 놀이터가 스크롤을 따라감 · 다음 열차 줄로 한 번 내려감 · 위치는 저장값→마지막 위치→새 위치', async () => {
