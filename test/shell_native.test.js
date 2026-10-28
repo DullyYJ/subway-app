@@ -788,6 +788,11 @@ function findAndroidJar() {
     assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
     assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
   });
+  await t('s280: 입력칸의 긴 글자(편집 중 아닐 때)는 … 으로 줄여 보이고, 편집을 시작하면 전체 · 후보 줄은 이름 전체', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/private String inbarShown\(ScreenCore\.Item it, String v\)/.test(v) && /cv\.drawText\(empty \? it\.label : inbarShown\(it, empty \? it\.label : v\), it\.textX/.test(v) && /inbarMemo/.test(v) && /tp\.measureText\(v\) > maxW/.test(v), '입력칸 글자가 자리보다 길면 … (같은 글 · 같은 폭은 계산 기억)');
+  });
+
   await t('s278: 출퇴근 브리핑은 설정 화면 안에 · 장소는 같은 화면 입력칸(하위 화면으로 안 간다) · 시각 고르기만 시트', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const cm = fs.readFileSync(N('CmCore.java'), 'utf8');

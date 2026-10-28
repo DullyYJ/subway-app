@@ -126,6 +126,26 @@ public class ScreenView extends View {
     private String editKey;
     private int eL = -1, eT = -1, eW = -1, eH = -1;            // 마지막으로 놓은 글자 입력칸 자리
     private final Map<String, String> fieldVals = new HashMap<String, String>(), fieldBase = new HashMap<String, String>();
+    // 입력칸 글자(편집 중이 아닐 때) 줄임: 같은 글 · 같은 폭이면 지난 계산을 쓴다(맞으면 새 객체 없음)
+    private static final class InbarMemo { String v, r; float w, size; boolean bold; }
+    private final Map<String, InbarMemo> inbarMemo = new HashMap<String, InbarMemo>();
+    /** 글자 자리(오른쪽 단추 앞까지)보다 길면 … 으로 줄인다. 지금 tp 에 글자 크기가 이미 맞춰져 있다. */
+    private String inbarShown(ScreenCore.Item it, String v) {
+        float maxW = it.ix + it.iw - 8f - it.textX;
+        if (v == null || v.length() < 2 || maxW < 24f) return v;
+        InbarMemo m = inbarMemo.get(it.key);
+        if (m != null && m.v.equals(v) && m.w == maxW && m.size == it.size && m.bold == it.bold) return m.r;
+        String r = v;
+        if (tp.measureText(v) > maxW) {
+            int n = v.length();
+            float ew = tp.measureText("\u2026");
+            while (n > 1 && tp.measureText(v, 0, n) + ew > maxW) n--;
+            r = v.substring(0, n) + "\u2026";
+        }
+        if (m == null) { if (inbarMemo.size() > 24) inbarMemo.clear(); m = new InbarMemo(); inbarMemo.put(it.key, m); }
+        m.v = v; m.r = r; m.w = maxW; m.size = it.size; m.bold = it.bold;
+        return r;
+    }
     private final java.util.HashMap<String, Float> widthMemo = new java.util.HashMap<String, Float>();         // 글자 폭 기억: 8초마다 오는 새 화면은 대부분 같은 글이라 다시 재지 않는다(배치가 주 스레드에서 도는 시간을 줄인다)
     private float memoDpr = -1f;
     private final ScreenCore.Measurer measurer = new ScreenCore.Measurer() {
@@ -2905,7 +2925,7 @@ public class ScreenView extends View {
             boolean empty = v == null || v.length() == 0;
             setText(it.size, it.bold, empty ? alpha(cc(it.sc, pal[R_SUB]), 0.8f) : cc(it.tc, pal[R_TEXT]));
             cv.save(); rf.set(it.ix + 8f, it.iy, it.ix + it.iw - 8f, it.iy + it.ih); cv.clipRect(rf);
-            cv.drawText(empty ? it.label : v, it.textX, base(it.iy, it.ih, 0), tp);
+            cv.drawText(empty ? it.label : inbarShown(it, empty ? it.label : v), it.textX, base(it.iy, it.ih, 0), tp);          // 글자 자리보다 길면 … 으로 줄여 보인다(편집을 시작하면 전체 글자 · 후보 줄은 이름을 다 보여 준다)
             cv.restore();
         }
         rf.set(it.btx, it.bty, it.btx + it.sw, it.bty + it.sh);
