@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s286";
+var ENGINE_VERSION = "route-v2-2026-10-28s287";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23679,6 +23679,21 @@ function cbCheerMonth(nowMs) {                                    // \ud55c \ub2
   });
   return out;
 }
+function cbCheerValidate(o) {                                     // s286: \uc11c\ubc84 AI(Gemini)\uac00 \uc4f4 \ud55c \ub2ec \uce58 \uac80\uc0ac \u2014 { morn:[\u2026], eve:[\u2026] } \uac01 31\uac1c \uc774\uc0c1 \u00b7 \ud55c \uc904 6~60\uc790 \u00b7 \uc11c\ub85c \ub2e4\ub984 \u00b7 \uc774\ubaa8\uc9c0\u00b7\uc904\ubc14\uafc8 \uc5c6\uc74c. \ud558\ub098\ub77c\ub3c4 \uc5b4\uae0b\ub098\uba74 null(\uc870\uac01 \uc870\ud569\uc73c\ub85c \ub300\uc2e0\ud55c\ub2e4).
+  if (!o || typeof o !== 'object') return null;
+  var out = {};
+  for (var q = 0; q < 2; q++) {
+    var kd = q ? 'eve' : 'morn', a = o[kd], seen = {}, r = [];
+    if (!Array.isArray(a) || a.length < 31) return null;
+    for (var i = 0; i < 31; i++) {
+      var t = typeof a[i] === 'string' ? a[i].replace(/\s+/g, ' ').trim() : '';
+      if (t.length < 6 || t.length > 60 || seen[t] || /[\ud800-\udfff\u2600-\u27bf]/.test(t)) return null;
+      seen[t] = 1; r.push(/[.!?\uc694]$/.test(t) ? t : t + '.');
+    }
+    out[kd] = r;
+  }
+  return out;
+}
 function cbCheerWx(w) {                                           // \ub0a0\uc528 \uba38\ub9ac\ub9d0 \u2014 \ub208 > \ube44 > \ubb34\ub354\uc704 > \ucd94\uc704 > \ubc14\ub78c > \ub9d1\uc74c > \ud750\ub9bc \uc21c\uc73c\ub85c \ud558\ub098
   if (!w) return '';
   var t = w.txt || '', f = w.feel != null ? w.feel : w.temp;
@@ -23801,15 +23816,35 @@ async function cbEta(plan, nowMs, env, ctx) {
     return best;
   } catch (e) { return null; }
 }
-// s286: \uc751\uc6d0 \ubb38\uad6c \ud55c \ub2ec \uce58 \u2014 \uc11c\ubc84\uac00 \ub2ec\ub9c8\ub2e4 \ub9cc\ub4e4\uc5b4 KV(ROWS_KV "cheer:YYYY-MM")\uc5d0 \ub454\ub2e4. \uc54c\ub9bc \ub54c \uc77d\uace0(\uc5c6\uc73c\uba74 \uadf8 \uc790\ub9ac\uc5d0\uc11c \uac19\uc740 \uacb0\uacfc\ub97c \ub9cc\ub4e0\ub2e4), cron(scheduled)\uc774 \ub2ec \ubc14\ub014 \ub54c\u00b725\uc77c \uc774\ud6c4 \ub2e4\uc74c \ub2ec \uac83\uc744 \ubbf8\ub9ac \ub9cc\ub4e0\ub2e4.
+// s286: \uc751\uc6d0 \ubb38\uad6c \ud55c \ub2ec \uce58 \u2014 \uc11c\ubc84\uac00 \ub2ec\ub9c8\ub2e4 \ub9cc\ub4e4\uc5b4 KV(ROWS_KV "cheer:YYYY-MM")\uc5d0 \ub454\ub2e4. \uc54c\ub9bc \ub54c \uc77d\uace0(\uc5c6\uc73c\uba74 \uc870\uac01 \uc870\ud569\uc73c\ub85c \uadf8 \uc790\ub9ac\uc5d0\uc11c \ub9cc\ub4e0\ub2e4), cron(scheduled)\uc774 \ub2ec \ubc14\ub014 \ub54c\u00b725\uc77c \uc774\ud6c4 \ub2e4\uc74c \ub2ec \uac83\uc744 \ubbf8\ub9ac \ub9cc\ub4e0\ub2e4.
 function cbCheerKey(ms) { var d = new Date(ms + 9 * 3600000); return "cheer:" + d.getUTCFullYear() + "-" + (d.getUTCMonth() < 9 ? "0" : "") + (d.getUTCMonth() + 1); }
 async function cbCheerLoad(env, nowMs, ctx) {
   var key = cbCheerKey(nowMs), got = null;
   try { if (env && env.ROWS_KV) got = await env.ROWS_KV.get(key, { type: "json", cacheTtl: 3600 }); } catch (e) {}
   if (got && got.ym && got.morn && got.eve) return got;
-  var built = cbCheerMonth(nowMs);
-  try { if (env && env.ROWS_KV && ctx && ctx.waitUntil) ctx.waitUntil(env.ROWS_KV.put(key, JSON.stringify(built), { expirationTtl: 50 * 24 * 3600 }).catch(function () {})); } catch (e2) {}
+  var built = cbCheerMonth(nowMs);                                  // KV \uc5d0 \uc544\uc9c1 \uc5c6\uc73c\uba74(cron \uc774 \ubabb \ub3cc\uc558\uc73c\uba74) \uc870\uac01 \uc870\ud569\uc73c\ub85c \u2014 \uc800\uc7a5\uc740 cron \ub9cc \ud55c\ub2e4(AI \ubb38\uad6c\ub97c \ub36e\uc5b4\uc4f0\uc9c0 \uc54a\uac8c)
   return built;
+}
+// Gemini \ub85c \ud55c \ub2ec \uce58\ub97c \uc4f4\ub2e4 \u2014 \uc11c\ubc84 \ube44\ubc00\uac12 GEMINI_API_KEY \uac00 \uc788\uc744 \ub54c\ub9cc(\uc5c6\uac70\ub098 \uc2e4\ud328\ud558\uba74 null \u2192 \uc870\uac01 \uc870\ud569). cron \uc5d0\uc11c\ub9cc \ubd80\ub978\ub2e4(\ub2ec\ub9c8\ub2e4 \ud55c \ubc88).
+async function cbCheerGen(env, nowMs) {
+  var key = env && env.GEMINI_API_KEY;
+  if (!key || typeof fetch !== "function") return null;
+  var mo = new Date(nowMs + 9 * 3600000).getUTCMonth() + 1;
+  var prompt = "\ud55c\uad6d \uc218\ub3c4\uad8c \ub300\uc911\uad50\ud1b5 \ucd9c\ud1f4\uadfc \uc774\uc6a9\uc790\uc5d0\uac8c \ubcf4\ub0b4\ub294 " + mo + "\uc6d4\uc758 \uc751\uc6d0 \ubb38\uad6c\ub97c \uc4f0\uc138\uc694. JSON \uc73c\ub85c\ub9cc \ucd9c\ub825: {\"morn\":[31\uac1c],\"eve\":[31\uac1c]}\n\uc870\uac74:\n- morn \uc740 \ucd9c\uadfc\uae38: \uc624\ub298 \ud558\ub8e8\ub97c \ud798\ucc28\uac8c \uc2dc\uc791\ud558\ub3c4\ub85d \ubd81\ub3cb\ub294 \ub9d0. eve \ub294 \ud1f4\uadfc\uae38: \ud558\ub8e8 \uace0\uc0dd\ud55c \uc0ac\uc6a9\uc790\ub97c \ub530\ub73b\ud558\uac8c \uc704\ub85c\ud558\ub294 \ub9d0.\n- \uac01\uac01 31\uac1c, \uc11c\ub85c \ubaa8\ub450 \ub2e4\ub978 \ubb38\uc7a5, \ud55c \ubb38\uc7a5 12~40\uc790, \ubd80\ub4dc\ub7ec\uc6b4 ~\ud574\uc694 \uccb4, \ub9c8\uce68\ud45c\ub85c \ub05d\ub0bc \uac83.\n- " + mo + "\uc6d4\uc758 \uacc4\uc808\uac10(\ub0a0\uc528 \u00b7 \ud48d\uacbd \u00b7 \ubd84\uc704\uae30)\uc744 \uc790\uc5f0\uc2a4\ub7fd\uac8c \ub2f4\ub418 \uc694\uc77c \u00b7 \ub0a0\uc9dc \u00b7 \uad6c\uccb4\uc801 \ub0a0\uc528(\ube44, \ub208 \ub4f1)\ub294 \uc4f0\uc9c0 \ub9d0 \uac83(\uc55e\uc5d0 \ub530\ub85c \ubd99\ub294\ub2e4).\n- \uc774\ubaa8\uc9c0 \u00b7 \uc815\uce58 \u00b7 \uc885\uad50 \u00b7 \uad11\uace0 \uae08\uc9c0.";
+  var models = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+  for (var i = 0; i < models.length; i++) {
+    try {
+      var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 20000);
+      var res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + models[i] + ":generateContent?key=" + encodeURIComponent(key), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 1 } }), signal: ac.signal });
+      clearTimeout(t);
+      var j = await res.json();
+      var txt = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0] && j.candidates[0].content.parts[0].text;
+      if (!txt) continue;
+      var ok = cbCheerValidate(JSON.parse(String(txt).replace(/^```(?:json)?\s*|\s*```$/g, "")));
+      if (ok) return ok;
+    } catch (e) {}
+  }
+  return null;
 }
 async function cbCheerCron(env) {
   if (!env || !env.ROWS_KV) return { skipped: "no-kv" };
@@ -23818,9 +23853,12 @@ async function cbCheerCron(env) {
   var made = [];
   for (var i = 0; i < ms.length; i++) {
     var key = cbCheerKey(ms[i]), have = null;
-    try { have = await env.ROWS_KV.get(key); } catch (e) {}
-    if (have) continue;
-    await env.ROWS_KV.put(key, JSON.stringify(cbCheerMonth(ms[i])), { expirationTtl: 50 * 24 * 3600 });
+    try { have = await env.ROWS_KV.get(key, "json"); } catch (e) {}
+    if (have && (have.src !== "macro" || !env.GEMINI_API_KEY || Date.now() - (have.at || 0) < 20 * 3600000)) continue;      // \uc788\uc73c\uba74 \uadf8\ub300\ub85c \u00b7 AI \ud0a4\uac00 \uc788\ub294\ub370 \uc870\uac01 \uc870\ud569\uc73c\ub85c \ub9cc\ub4e4\uc5b4\uc84c\uc73c\uba74 \ud558\ub8e8 \ud55c \ubc88 \ub2e4\uc2dc \uc2dc\ub3c4
+    var m = cbCheerMonth(ms[i]), g = await cbCheerGen(env, ms[i]);          // AI \uac00 \uc4f4 \uac83\uc774 \uac80\uc0ac\ub97c \ud1b5\uacfc\ud558\uba74 \uadf8\uac83\uc744, \uc544\ub2c8\uba74 \uc870\uac01 \uc870\ud569\uc744
+    if (g) { m.morn = g.morn; m.eve = g.eve; m.src = "gemini"; } else m.src = "macro";
+    m.at = Date.now();
+    await env.ROWS_KV.put(key, JSON.stringify(m), { expirationTtl: 50 * 24 * 3600 });
     made.push(key);
   }
   return { made: made };

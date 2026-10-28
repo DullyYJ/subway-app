@@ -180,9 +180,9 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
   const scn = fs.readFileSync(path.join(root, 'engine/scene-worker.js'), 'utf8');
   const glue = scn.slice(scn.indexOf('var WX_CODES'), scn.indexOf('async function sceneWeather')) + '\n' + fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8');   // s219: 날씨는 장면 엔진의 wxMeteo(Open-Meteo)를 같이 쓴다
   const calls = [];
-  const fn = new Function('cbPlan', 'cbCompose', 'cbCheerMonth', 'WSAY_WX_URL', 'fetch', 'AbortController', 'Response', glue + '\nreturn { handleCommuteBrief: handleCommuteBrief, cbCheerCron: cbCheerCron, cbCheerLoad: cbCheerLoad };');
+  const fn = new Function('cbPlan', 'cbCompose', 'cbCheerMonth', 'cbCheerValidate', 'WSAY_WX_URL', 'fetch', 'AbortController', 'Response', glue + '\nreturn { handleCommuteBrief: handleCommuteBrief, cbCheerCron: cbCheerCron, cbCheerLoad: cbCheerLoad };');
   const fakeFetch = async (u) => { calls.push(u); return { ok: true, json: async () => ({ current: { time: '2026-10-21T07:00', temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 60, weather_code: 2, wind_speed_10m: 2 }, hourly: { time: ['2026-10-21T07:00', '2026-10-21T08:00', '2026-10-21T09:00'], precipitation_probability: [30, 10, 5] }, daily: { uv_index_max: [3], temperature_2m_max: [21], temperature_2m_min: [9] } }) }; };
-  const G = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, 'https://wx.test/weather', fakeFetch, AbortController, Response), h = (rq, env) => G.handleCommuteBrief(rq, env || {}, { waitUntil: () => {} });
+  const G = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, M.cbCheerValidate, 'https://wx.test/weather', fakeFetch, AbortController, Response), h = (rq, env) => G.handleCommuteBrief(rq, env || {}, { waitUntil: () => {} });
   const post = (b) => h(new Request('https://x.test/commute-brief', { method: 'POST', body: typeof b === 'string' ? b : JSON.stringify(b) })).then(r => r.json().then(j => [r.status, j]));
   const [s1, j1] = await post({ kind: 'morn', nowMs: AT('2026-10-21T07:40:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } });
   try {
@@ -190,7 +190,7 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
     assert.ok(/인하대 14° 구름/.test(j1.body)); assert.ok(calls.length >= 2 && /latitude=37\.44/.test(calls[0]), calls.join(' '));
     const [s2] = await post('JSON 아님'); assert.strictEqual(s2, 400);
     const [s3] = await post({ pad: 'x'.repeat(7000) }); assert.strictEqual(s3, 413);
-    const bad = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, 'https://wx.test/weather', async () => { throw new Error('down'); }, AbortController, Response).handleCommuteBrief;
+    const bad = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, M.cbCheerValidate, 'https://wx.test/weather', async () => { throw new Error('down'); }, AbortController, Response).handleCommuteBrief;
     const r4 = await bad(new Request('https://x.test/commute-brief', { method: 'POST', body: JSON.stringify({ kind: 'eve', nowMs: AT('2026-10-21T18:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }) }), {}, { waitUntil: () => {} }).then(r => r.json());
     assert.strictEqual(r4.ok, true); assert.ok(!/°/.test(r4.body), '날씨 서버가 죽어도 문구는 나온다');
     pass++; console.log('  ok   워커 연결부: 날씨 받기 · 잘못된 본문 · 너무 큼 · 날씨 서버 장애');
@@ -220,6 +220,39 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
     assert.strictEqual(j7.body, j6.body, 'KV 가 죽어도 같은 문구');
     pass++; console.log('  ok   응원 문구 서버(s286): cron 이 달마다 한 번만 만들어 KV 에 두고 · 25일부터 다음 달 · 알림이 KV 문구를 쓴다 · KV 없어도 같은 문구');
   } catch (e) { fail++; console.log('  FAIL 응원 문구 서버(s286)', String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
+  try {
+    // s286: 서버에 Gemini 키(GEMINI_API_KEY)가 있으면 AI 가 쓴 한 달 치를 저장한다 — 검사에 걸리면 조각 조합으로
+    const lines = (p, n) => Array.from({ length: n }, (_, i) => p + ' ' + (i + 1) + '번째 마음 응원해요.');
+    assert.ok(M.cbCheerValidate({ morn: lines('힘찬', 31), eve: lines('포근한', 31) }), '정상');
+    assert.strictEqual(M.cbCheerValidate({ morn: lines('힘찬', 30), eve: lines('포근한', 31) }), null, '31개 미만');
+    assert.strictEqual(M.cbCheerValidate({ morn: lines('힘찬', 31).map(() => '똑같은 문장이에요'), eve: lines('포근한', 31) }), null, '중복');
+    assert.strictEqual(M.cbCheerValidate({ morn: lines('힘찬', 31).map((x, i) => i ? x : x + ' 😀'), eve: lines('포근한', 31) }), null, '이모지');
+    assert.strictEqual(M.cbCheerValidate({ morn: lines('힘찬', 31).map((x, i) => i ? x : '가'.repeat(80)), eve: lines('포근한', 31) }), null, '너무 김');
+    assert.strictEqual(M.cbCheerValidate(null), null);
+    const kv = new Map(), KV = { get: async (k) => kv.has(k) ? JSON.parse(kv.get(k)) : null, put: async (k, v) => { kv.set(k, v); } };
+    const gcalls = []; let mode = 'ok';
+    const gfetch = async (u, o) => { gcalls.push(u); if (mode === 'throw') throw new Error('x'); const body = mode === 'ok' ? JSON.stringify({ morn: lines('힘찬', 31), eve: lines('포근한', 31) }) : '{"morn":["짧음"]}'; return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: body }] } }] }) }; };
+    const G2 = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, M.cbCheerValidate, 'https://wx.test/weather', gfetch, AbortController, Response);
+    const real = Date.now, setNow = ms => { Date.now = () => ms; };
+    try {
+      setNow(AT('2026-10-03T04:00:00+09:00'));
+      assert.deepStrictEqual((await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' })).made, ['cheer:2026-10']);
+      const saved = JSON.parse(kv.get('cheer:2026-10')); assert.strictEqual(saved.src, 'gemini'); assert.strictEqual(saved.morn[0], '힘찬 1번째 마음 응원해요.'); assert.ok(/generativelanguage/.test(gcalls[0]) && /key=k/.test(gcalls[0]));
+      const n0 = gcalls.length; assert.deepStrictEqual((await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' })).made, []); assert.strictEqual(gcalls.length, n0, 'AI 로 만든 달은 다시 부르지 않는다');
+      // 실패 → 조각 조합 · 하루 안엔 재시도 안 함 · 20시간 뒤엔 재시도
+      mode = 'bad'; setNow(AT('2026-11-03T04:00:00+09:00')); await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' });
+      assert.strictEqual(JSON.parse(kv.get('cheer:2026-11')).src, 'macro', '검사에 걸리면 조각 조합'); assert.strictEqual(JSON.parse(kv.get('cheer:2026-11')).morn.length, 31);
+      const n1 = gcalls.length; setNow(AT('2026-11-03T10:00:00+09:00')); await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' }); assert.strictEqual(gcalls.length, n1, '6시간 뒤엔 재시도 안 함');
+      mode = 'ok'; setNow(AT('2026-11-04T04:00:00+09:00')); assert.deepStrictEqual((await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' })).made, ['cheer:2026-11']); assert.strictEqual(JSON.parse(kv.get('cheer:2026-11')).src, 'gemini', '다음 날 다시 시도해 성공');
+      // 키가 없으면 AI 를 부르지 않는다 · 네트워크가 죽어도 조각 조합
+      const n2 = gcalls.length; mode = 'throw'; setNow(AT('2026-12-03T04:00:00+09:00')); await G2.cbCheerCron({ ROWS_KV: KV }); assert.strictEqual(gcalls.length, n2); assert.strictEqual(JSON.parse(kv.get('cheer:2026-12')).src, 'macro');
+      setNow(AT('2027-01-03T04:00:00+09:00')); await G2.cbCheerCron({ ROWS_KV: KV, GEMINI_API_KEY: 'k' }); assert.strictEqual(JSON.parse(kv.get('cheer:2027-01')).src, 'macro', '요청이 던져도 조각 조합');
+    } finally { Date.now = real; }
+    // 알림: AI 문구가 저장돼 있으면 그대로 마지막 줄에 붙는다
+    const at = AT('2026-10-12T07:40:00+09:00'), body = await G2.handleCommuteBrief(new Request('https://x.test/commute-brief', { method: 'POST', body: JSON.stringify({ kind: 'morn', nowMs: at, from: { nm: '인하대' }, to: { nm: '강남' } }) }), { ROWS_KV: KV }, { waitUntil: () => {} }).then(r => r.json());
+    assert.ok(/힘찬 12번째 마음 응원해요\.$/.test(body.body), body.body.split('\n').pop());
+    pass++; console.log('  ok   응원 문구 AI(s286): Gemini 키가 있으면 한 달 치를 AI 가 쓴다 · 검사 · 실패하면 조각 조합 · 하루 한 번 재시도 · 키 없으면 부르지 않는다');
+  } catch (e) { fail++; console.log('  FAIL 응원 문구 AI(s286)', String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   console.log('commute_brief:', pass, '통과', fail, '실패');
   process.exit(fail ? 1 : 0);
 })();

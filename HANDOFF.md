@@ -3166,3 +3166,7 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `engine/commute-brief-worker.js`: `cbCheerLoad`(KV `cheer:YYYY-MM` 읽기, 없으면 그 자리에서 같은 문구를 만들고 저장) · `cbCheerCron`(이달 것이 없으면 만들어 `ROWS_KV` 에 50일 보관, 25일부터는 다음 달 것도). 워커 `scheduled` 에 `cbCheerCron` 추가 → 기존 cron 이 돌 때마다 한 번 확인(이미 있으면 읽기만).
 - 앱 변경 없음(알림 때마다 `/commute-brief` 를 부르므로 서버가 바꾼 문구를 그대로 받는다). 워커 `route-v2-2026-10-28s286`.
 - 한계: LLM 키가 없어 문구는 조각 조합(결정적). KV 의 `cheer:YYYY-MM` 값을 직접 고치면 그 달 문구가 바뀐다(`morn`/`eve` 각 31개 배열). 기기에서는 확인하지 못했다.
+
+### s287 — 응원 문구를 Gemini 로 (YJ: "서버에 재미나이 키 있을텐데")
+- 워커 `cbCheerGen`: `env.GEMINI_API_KEY`(route-v2 워커의 비밀값 — 다른 워커 food/board-writer 에 있는 키와는 별개이니 route-v2 에도 넣어야 한다)가 있으면 cron(`cbCheerCron`)이 달마다 한 번 Gemini 로 출근 31 · 퇴근 31문장을 쓰게 한다(모델 순서 `gemini-flash-latest` → `2.5-flash` → `2.5-flash-lite` → `2.0-flash`, 20초 제한, JSON 응답). `cbCheerValidate` 가 31개 이상 · 6~60자 · 중복/이모지 없음을 검사해 통과해야 저장(`src:'gemini'`), 아니면 조각 조합(`src:'macro'`)을 저장하고 하루(20시간) 뒤 다시 시도. 알림 요청 경로는 AI 를 부르지 않고 KV 만 읽는다(KV 가 비면 조각 조합으로 즉석 생성, 저장은 cron 만).
+- 키가 없거나 AI 가 실패해도 s286 의 조각 조합이 그대로 나온다. 워커 `route-v2-2026-10-28s287`. 실제 Gemini 응답은 이 환경에서 호출하지 못해 모의 응답으로만 시험했다.

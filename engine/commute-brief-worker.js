@@ -30,15 +30,35 @@ async function cbEta(plan, nowMs, env, ctx) {
     return best;
   } catch (e) { return null; }
 }
-// s286: 응원 문구 한 달 치 — 서버가 달마다 만들어 KV(ROWS_KV "cheer:YYYY-MM")에 둔다. 알림 때 읽고(없으면 그 자리에서 같은 결과를 만든다), cron(scheduled)이 달 바뀔 때·25일 이후 다음 달 것을 미리 만든다.
+// s286: 응원 문구 한 달 치 — 서버가 달마다 만들어 KV(ROWS_KV "cheer:YYYY-MM")에 둔다. 알림 때 읽고(없으면 조각 조합으로 그 자리에서 만든다), cron(scheduled)이 달 바뀔 때·25일 이후 다음 달 것을 미리 만든다.
 function cbCheerKey(ms) { var d = new Date(ms + 9 * 3600000); return "cheer:" + d.getUTCFullYear() + "-" + (d.getUTCMonth() < 9 ? "0" : "") + (d.getUTCMonth() + 1); }
 async function cbCheerLoad(env, nowMs, ctx) {
   var key = cbCheerKey(nowMs), got = null;
   try { if (env && env.ROWS_KV) got = await env.ROWS_KV.get(key, { type: "json", cacheTtl: 3600 }); } catch (e) {}
   if (got && got.ym && got.morn && got.eve) return got;
-  var built = cbCheerMonth(nowMs);
-  try { if (env && env.ROWS_KV && ctx && ctx.waitUntil) ctx.waitUntil(env.ROWS_KV.put(key, JSON.stringify(built), { expirationTtl: 50 * 24 * 3600 }).catch(function () {})); } catch (e2) {}
+  var built = cbCheerMonth(nowMs);                                  // KV 에 아직 없으면(cron 이 못 돌았으면) 조각 조합으로 — 저장은 cron 만 한다(AI 문구를 덮어쓰지 않게)
   return built;
+}
+// Gemini 로 한 달 치를 쓴다 — 서버 비밀값 GEMINI_API_KEY 가 있을 때만(없거나 실패하면 null → 조각 조합). cron 에서만 부른다(달마다 한 번).
+async function cbCheerGen(env, nowMs) {
+  var key = env && env.GEMINI_API_KEY;
+  if (!key || typeof fetch !== "function") return null;
+  var mo = new Date(nowMs + 9 * 3600000).getUTCMonth() + 1;
+  var prompt = "한국 수도권 대중교통 출퇴근 이용자에게 보내는 " + mo + "월의 응원 문구를 쓰세요. JSON 으로만 출력: {\"morn\":[31개],\"eve\":[31개]}\n조건:\n- morn 은 출근길: 오늘 하루를 힘차게 시작하도록 북돋는 말. eve 는 퇴근길: 하루 고생한 사용자를 따뜻하게 위로하는 말.\n- 각각 31개, 서로 모두 다른 문장, 한 문장 12~40자, 부드러운 ~해요 체, 마침표로 끝낼 것.\n- " + mo + "월의 계절감(날씨 · 풍경 · 분위기)을 자연스럽게 담되 요일 · 날짜 · 구체적 날씨(비, 눈 등)는 쓰지 말 것(앞에 따로 붙는다).\n- 이모지 · 정치 · 종교 · 광고 금지.";
+  var models = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"];
+  for (var i = 0; i < models.length; i++) {
+    try {
+      var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, 20000);
+      var res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + models[i] + ":generateContent?key=" + encodeURIComponent(key), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 1 } }), signal: ac.signal });
+      clearTimeout(t);
+      var j = await res.json();
+      var txt = j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0] && j.candidates[0].content.parts[0].text;
+      if (!txt) continue;
+      var ok = cbCheerValidate(JSON.parse(String(txt).replace(/^```(?:json)?\s*|\s*```$/g, "")));
+      if (ok) return ok;
+    } catch (e) {}
+  }
+  return null;
 }
 async function cbCheerCron(env) {
   if (!env || !env.ROWS_KV) return { skipped: "no-kv" };
@@ -47,9 +67,12 @@ async function cbCheerCron(env) {
   var made = [];
   for (var i = 0; i < ms.length; i++) {
     var key = cbCheerKey(ms[i]), have = null;
-    try { have = await env.ROWS_KV.get(key); } catch (e) {}
-    if (have) continue;
-    await env.ROWS_KV.put(key, JSON.stringify(cbCheerMonth(ms[i])), { expirationTtl: 50 * 24 * 3600 });
+    try { have = await env.ROWS_KV.get(key, "json"); } catch (e) {}
+    if (have && (have.src !== "macro" || !env.GEMINI_API_KEY || Date.now() - (have.at || 0) < 20 * 3600000)) continue;      // 있으면 그대로 · AI 키가 있는데 조각 조합으로 만들어졌으면 하루 한 번 다시 시도
+    var m = cbCheerMonth(ms[i]), g = await cbCheerGen(env, ms[i]);          // AI 가 쓴 것이 검사를 통과하면 그것을, 아니면 조각 조합을
+    if (g) { m.morn = g.morn; m.eve = g.eve; m.src = "gemini"; } else m.src = "macro";
+    m.at = Date.now();
+    await env.ROWS_KV.put(key, JSON.stringify(m), { expirationTtl: 50 * 24 * 3600 });
     made.push(key);
   }
   return { made: made };

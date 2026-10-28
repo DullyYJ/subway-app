@@ -104,6 +104,21 @@ function cbCheerMonth(nowMs) {                                    // 한 달 치
   });
   return out;
 }
+function cbCheerValidate(o) {                                     // s286: 서버 AI(Gemini)가 쓴 한 달 치 검사 — { morn:[…], eve:[…] } 각 31개 이상 · 한 줄 6~60자 · 서로 다름 · 이모지·줄바꿈 없음. 하나라도 어긋나면 null(조각 조합으로 대신한다).
+  if (!o || typeof o !== 'object') return null;
+  var out = {};
+  for (var q = 0; q < 2; q++) {
+    var kd = q ? 'eve' : 'morn', a = o[kd], seen = {}, r = [];
+    if (!Array.isArray(a) || a.length < 31) return null;
+    for (var i = 0; i < 31; i++) {
+      var t = typeof a[i] === 'string' ? a[i].replace(/\s+/g, ' ').trim() : '';
+      if (t.length < 6 || t.length > 60 || seen[t] || /[\ud800-\udfff\u2600-\u27bf]/.test(t)) return null;
+      seen[t] = 1; r.push(/[.!?요]$/.test(t) ? t : t + '.');
+    }
+    out[kd] = r;
+  }
+  return out;
+}
 function cbCheerWx(w) {                                           // 날씨 머리말 — 눈 > 비 > 무더위 > 추위 > 바람 > 맑음 > 흐림 순으로 하나
   if (!w) return '';
   var t = w.txt || '', f = w.feel != null ? w.feel : w.temp;
@@ -195,4 +210,4 @@ function cbBrief(inp, wF, wT) {
   return cbCompose(plan, { nowMs: inp && inp.nowMs }, wF, wT);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { cbPlan: cbPlan, cbCompose: cbCompose, cbBrief: cbBrief, cbFindStn: cbFindStn, cbResolve: cbResolve, cbPair: cbPair, cbClosing: cbClosing, cbCheerMonth: cbCheerMonth, CB_V: CB_V, CB_IMG: CB_IMG, CB_WISH: CB_WISH, CB_DOW: CB_DOW };
+if (typeof module !== 'undefined' && module.exports) module.exports = { cbPlan: cbPlan, cbCompose: cbCompose, cbBrief: cbBrief, cbFindStn: cbFindStn, cbResolve: cbResolve, cbPair: cbPair, cbClosing: cbClosing, cbCheerMonth: cbCheerMonth, cbCheerValidate: cbCheerValidate, CB_V: CB_V, CB_IMG: CB_IMG, CB_WISH: CB_WISH, CB_DOW: CB_DOW };
