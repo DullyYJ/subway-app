@@ -113,7 +113,8 @@ public final class ChatCore {
         b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
         b.append(",\"my\":").append(st.get(K_MY, "[]"));
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
-        b.append(",\"st\":").append(ShellCore.q(live ? (loaded ? "ready" : failed ? "fail" : "loading") : ("all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel)) ? "ready" : "fail"));
+        boolean have = "all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel);          // 이 방의 글을 받아 둔 적이 있나 — 준비됨은 '이 방' 기준이다(다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않게 · s289)
+        b.append(",\"st\":").append(ShellCore.q(have ? "ready" : live ? (failed ? "fail" : "loading") : "fail"));
         b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append("},\"d\":{");
         List<Object> g = withG ? new ArrayList<Object>(talk.values()) : new ArrayList<Object>();
         b.append("\"g\":").append(HomeSearchCore.toJson(g));

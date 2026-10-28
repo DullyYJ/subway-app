@@ -642,6 +642,14 @@ public class ShellActivity extends Activity {
     }
     /** 버스 '주변' 화면은 위치 칸마다 열쇠가 달라진다 — 가장 최근 6곳만 두고 오래된 곳의 글 · 파일은 치운다(쌓이지 않게). */
     private final java.util.ArrayList<String> busKeys = new java.util.ArrayList<String>();
+    /** 지금 위치 칸(cell)과 같거나 이웃한 칸의 버스 '주변' 화면 열쇠 중 가장 최근 것(10분 신선 시간 안인 것만). 없으면 null. */
+    private String nearBusKey(String cell) {
+        for (int i = busKeys.size() - 1; i >= 0; i--) {
+            String k = busKeys.get(i), c = k.substring(k.lastIndexOf('|') + 1);
+            if (MapCore.cellsNear(c, cell, 3) && cacheGet(k, true) != null) return k;
+        }
+        return null;
+    }
     private void trimBusKeys(String key) {
         busKeys.remove(key); busKeys.add(key);
         while (busKeys.size() > 6) {
@@ -714,7 +722,10 @@ public class ShellActivity extends Activity {
     private void showSkeleton(ScreenView v, String screen) {
         try {
             if (v == body && ShellCore.S_MAPB.equals(screen) && "bus".equals(map.mode()) && MapCore.VW_NEAR.equals(map.busView())) {        // 버스: 엔진이 그려 둔 정류장 뼈대(도착정보 자리는 '불러오는 중')를 먼저 — 같은 동네(약 110m 칸)일 때만, 숫자는 없다
-                String cell = map.stopsCell(), sk = cell.length() > 0 && cell.equals(store.get("bsk_cell", "")) ? cacheGet(ShellCore.busSkelKey(store), true) : null;
+                String cell = map.stopsCell();
+                String nk = cell.length() > 0 ? nearBusKey(cell) : null;                                 // s289: 같은 동네(이웃 칸)에서 방금 본 정류장 · 도착정보 화면이 있으면 회색 뼈대 대신 그것을 먼저(받은 뒤 흐른 초만큼 줄어든 채)
+                if (nk != null) { String c = cacheGet(nk, true); if (c != null) { long am = diskMtime(nk); v.setSourceAge(am > 0L ? System.currentTimeMillis() - am : 0L); v.setScreen(parsedGet(c), false); shownJson.remove(v); shownKey.remove(v); skelViews.add(v); return; } }
+                String sk = cell.length() > 0 && MapCore.cellsNear(cell, store.get("bsk_cell", ""), 3) ? cacheGet(ShellCore.busSkelKey(store), true) : null;          // 뼈대도 이웃 칸이면 쓴다
                 if (sk != null) { v.setSourceAge(0L); v.setScreen(parsedGet(sk), false); shownJson.remove(v); shownKey.remove(v); skelViews.add(v); return; }
             }
             if (v == body && ShellCore.S_CHAT.equals(screen)) {                              // 실시간소통: 회색 뼈대 대신 엔진이 만든 '불러오는 중' 화면(칩 줄 그대로 · 고른 칩만 바뀜) — 빈 화면 없이
@@ -1669,7 +1680,7 @@ public class ShellActivity extends Activity {
             }
             if (nt != null) { try { nt.join(9000); } catch (InterruptedException ignored) { } }
         }
-        return chat.request(ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());
+        return chat.requestFor(sel, true, ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());          // 받은 방(sel)의 화면을 묻는다 — 그 사이 고른 방(chat.sel())이 바뀌었어도 다른 방 화면이 이 방 열쇠로 캐시에 들어가지 않게(s289)
     }
     /**
      * 호선 방 좌우 밀기를 부드럽게: 지금 방 둘레(앞뒤 2칸)의 방 화면을 뒤에서 미리 받아 둔다(이미 45초 안에 받은 방은 건너뜀 · 마지막 방 바뀐 뒤 0.7초 가만히 있을 때만 · 고스트 상태기라 지금 화면을 건드리지 않는다).
@@ -1714,6 +1725,7 @@ public class ShellActivity extends Activity {
             }
             if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChatN.talksUrlNow(), 7000); if (tr.status == 200) pfChatN.addTalks(tr.body, me); }
             else { NetPost.Res rr = NetPost.get(pfChatN.roomUrl(sel), 12000); if (rr.status == 200) pfChatN.addRoom(sel, rr.body); }
+            if (!("all".equals(sel) ? pfChatN.hasTalks() : pfChatN.hasRoom(sel))) return false;          // 글을 못 받았으면 오류 화면을 캐시에 남기지 않는다(다음 순회에 다시)
             String body = pfChatN.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
             screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
         }

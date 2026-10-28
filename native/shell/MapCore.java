@@ -87,6 +87,17 @@ public final class MapCore {
     /** 즐겨찾기 새로고침도 현재 위치를 다시 확인해야 한다 — mp.rf 가 켜 두고, 껍데기가 한 번 읽는다. */
     private boolean refLoc;
     public boolean takeRefLoc() { boolean r = refLoc; refLoc = false; return r; }
+    /** 두 위치 칸(cellOf)이 서로 이웃인가 — 칸 번호 차이가 위 · 경도 모두 n 칸(칸 하나 약 110m) 이하. 실내 GPS 가 조금 흔들려 칸이 바뀌어도 같은 동네로 본다(s289). 칸 이름이 아니면 false. */
+    public static boolean cellsNear(String a, String b, int n) {
+        long[] x = cellIx(a), y = cellIx(b);
+        return x != null && y != null && Math.abs(x[0] - y[0]) <= n && Math.abs(x[1] - y[1]) <= n;
+    }
+    private static long[] cellIx(String c) {
+        if (c == null || !c.startsWith("bsc_")) return null;
+        int u = c.indexOf('_', 4);
+        if (u < 0) return null;
+        try { return new long[] { Long.parseLong(c.substring(4, u)), Long.parseLong(c.substring(u + 1)) }; } catch (NumberFormatException e) { return null; }
+    }
     public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;

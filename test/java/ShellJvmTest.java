@@ -625,6 +625,18 @@ public class ShellJvmTest {
             String rq9 = c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L);
             ok(rq9.contains("\"sel\":\"1호선\"") && rq9.contains("\"st\":\"ready\"") && rq9.contains("영희") && c2.act("ch.x.0", new java.util.HashMap<String, String>(), "나") == ChatCore.R_NONE, "고스트 요청: 방을 직접 정하고 눌림 번호표는 안 건드린다");
             ok(c2.requestFor("2호선", false, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"fail\""), "받은 적 없는 방은 실패로 표시");
+            {   // s289 방 상태는 '이 방' 기준 — 다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않는다(영상: 글이 있던 방이 "아직 글이 없어요")
+                ChatCore lv = new ChatCore(new ShellCore.MemStore());
+                ok(lv.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"\"}]}", "나") && lv.loaded, "전체 방을 받았다(loaded = true)");
+                String l2 = lv.requestFor("2호선", true, 18, "pastel", -540, "나", 1000L);
+                ok(l2.contains("\"sel\":\"2호선\"") && l2.contains("\"st\":\"loading\"") && !l2.contains("\"st\":\"ready\""), "다른 방을 받았어도 이 방 글이 없으면 '불러오는 중': " + l2);
+                lv.failed = true;
+                ok(lv.requestFor("2호선", true, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"fail\""), "받기에 실패했으면 실패");
+                lv.addRoom("2호선", "{\"ok\":true,\"msgs\":[]}");
+                ok(lv.requestFor("2호선", true, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"ready\""), "받았는데 정말 글이 없는 방은 준비됨(그때만 '글이 없어요')");
+                ok(lv.requestFor("all", true, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"ready\""), "전체 방은 글이 있으니 준비됨");
+                ok(MapCore.cellsNear("bsc_37583_126708", "bsc_37584_126710", 3) && !MapCore.cellsNear("bsc_37583_126708", "bsc_37587_126708", 3) && !MapCore.cellsNear("bsc_37583_126708", "", 3) && !MapCore.cellsNear(null, "bsc_1_2", 3) && !MapCore.cellsNear("bsc_x_y", "bsc_1_2", 3) && MapCore.cellsNear("bsc_1_2", "bsc_1_2", 0), "위치 칸 이웃: 위 · 경도 3칸(약 330m) 이내");
+            }
             {   // s274 모든 방을 한 요청으로(batchRequest) — 맨 위는 전체 방 · alts 는 글을 받아 둔 노선 방만(전체 방 줄 g 는 뺀다) · requestFor 는 예전과 같다
                 c2.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"1호선\"}]}", "나");
                 c2.addRoom("2호선", "{\"ok\":true,\"msgs\":[{\"id\":\"m9\",\"ts\":60,\"nick\":\"민수\",\"text\":\"혼잡\",\"kind\":\"\"}]}");

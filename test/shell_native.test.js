@@ -471,7 +471,7 @@ function findAndroidJar() {
   });
   await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
-    assert.ok(/private void showSkeleton[\s\S]{0,700}busSkelKey\(store\)/.test(a) && /bsk_cell/.test(a) && /stopsCell\(\)/.test(a), '버스 뼈대: 같은 동네(110m 칸)의 엔진이 그린 정류장 뼈대를 먼저 그린다');
+    assert.ok(/private void showSkeleton[\s\S]{0,1700}busSkelKey\(store\)/.test(a) && /bsk_cell/.test(a) && /stopsCell\(\)/.test(a), '버스 뼈대: 같은 동네(110m 칸)의 엔진이 그린 정류장 뼈대를 먼저 그린다');
     assert.ok(/saveBusSkeleton\(\)/.test(a) && /bodyRequest\(ShellCore\.CAP, ShellCore\.theme\(store\), true\)/.test(a), '정류장을 받은 뒤 도착정보 없는 화면을 엔진에게 받아 저장(백그라운드)');
     const f = a.slice(a.indexOf('private void loadMapBodyFast'), a.indexOf('private long preConnAt'));
     assert.ok(/if \(!keep\) map\.clearArrivals\(\)/.test(f) && /speculativeNeed\(\)/.test(f) && /fetchBusNeed\(v, keep, 0, \+\+seqMapB, true\)/.test(f) && /preconnectBus\(\)/.test(f), '콜드 스타트/탭 진입: 옛 도착정보 비우고 · 엔진 왕복 없이 도착정보만 곧장 받는다');
@@ -906,6 +906,12 @@ function findAndroidJar() {
     assert.ok(/chat\.select\(a\.v\); chatSwipeAt = android\.os\.SystemClock\.uptimeMillis\(\);/.test(a) && /uptimeMillis\(\) - chatSwipeAt < 1500L\) \{ chatPolling = true; main\.postDelayed\(this, 1600L\); return; \}/.test(a), '넘기는 중에는 새로고침이 끼지 않는다');
     assert.ok(/!\(ck != null && ck\.startsWith\(ShellCore\.S_CHAT \+ "\|"\)\)\) fadeIn\(v\)/.test(a), '소통방은 흐릿하게 떠오르지 않는다');
     assert.ok(/chatWarmSoon\(\);\s*\/\/ 이웃 방은 멈출 때까지/.test(a) && /n - chatWarmAt >= 500L\) \{ chatWarmAt = n; chatWarmRun\(\); return; \}/.test(a) && /chatWarmBusy\.add\(sel\)/.test(a) && /chatWarmSoon\(\); chatBgKick\(\); return;/.test(a), '이웃 방은 밀자마자 · 열 때 모든 방을 바로');
+  });
+  await t('s289: 소통방 — 받은 방 기준으로 묻는다(다른 방 화면이 이 방 열쇠로 캐시에 안 들어간다) · 글 못 받은 미리받기는 캐시에 안 남긴다 · 버스: 같은 동네 이웃 칸의 최근 화면을 회색 뼈대 대신 먼저', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/return chat\.requestFor\(sel, true, ShellCore\.CAP/.test(a) && !/return chat\.request\(ShellCore\.CAP/.test(a), '받은 방(sel)으로 묻는다');
+    assert.ok(/if \(!\("all"\.equals\(sel\) \? pfChatN\.hasTalks\(\) : pfChatN\.hasRoom\(sel\)\)\) return false;/.test(a), '글을 못 받았으면 캐시에 남기지 않는다');
+    assert.ok(/private String nearBusKey\(String cell\)/.test(a) && /MapCore\.cellsNear\(c, cell, 3\) && cacheGet\(k, true\) != null/.test(a) && /String nk = cell\.length\(\) > 0 \? nearBusKey\(cell\) : null;/.test(a) && /MapCore\.cellsNear\(cell, store\.get\("bsk_cell", ""\), 3\)/.test(a), '버스: 이웃 칸 최근 화면 · 뼈대');
   });
   await t('s241: 반응 속도 기록 · 글자 폭 기억 — 숫자 몇 개만 모으고(내용 없음) 개발자 도구에서 읽는다', () => {
     const np = fs.readFileSync(N('NetPost.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), pl = fs.readFileSync(N('PerfLog.java'), 'utf8');
