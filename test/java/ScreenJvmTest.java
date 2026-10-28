@@ -734,7 +734,7 @@ public class ScreenJvmTest {
         for (ScreenCore.Item q : BDL.body) if (q.kind == ScreenCore.K_TRK) { bdN++; if (bd0 == null) bd0 = q; }
         ok(bdN == 3 && bd0.band && bd0.cl > 0f && bd0.cr > bd0.cl && BDL.bandTop >= 0f && BDL.bandBot - BDL.bandTop >= ScreenCore.TRK_H - 0.1f, "본문 타임라인: 칸 셋이 본문에 놓이고 가로 틀·세로 범위가 잡힌다");
         ScreenCore.Item bdLast = null; for (ScreenCore.Item q : BDL.body) if (q.kind == ScreenCore.K_TRK) bdLast = q;
-        ok(BDL.bandMax() > 0f && near(BDL.bandMax(), bdLast.x + bdLast.w / 2f - BDL.bandL - BDL.bandView / 2f), "본문 타임라인(s257): 마커가 있으면 끝 칸도 가운데까지 밀린다(양 끝 여백)");
+        ok(BDL.bandMax() > 0f && near(BDL.bandMax(), bdLast.x + bdLast.w + 14f - BDL.bandL - BDL.bandView), "본문 타임라인(s285): 마지막 칸(+오른쪽 여백)에서 멈춘다 — 그 뒤 빈 공백이 보이지 않는다");
         ok(near(bd0.x, BDL.bandL + 14f) && bd0.x + bd0.w / 2f - BDL.bandL - BDL.bandView / 2f < 0f, "본문 타임라인(s265): 앞 여백 없음 — 처음엔 경로가 왼쪽 끝에서 시작하고(마커도 왼쪽), 마커가 가운데를 넘어야 줄이 밀린다");
         ok(bd0.ci == 0 && bdLast.ci == 2, "본문 타임라인(s257): 칸의 줄 안 자리(ci) — 앱이 화면에 보이는 마커 자리로 지금 칸·지난 칸을 다시 정한다");
         ok(BDL.mk != null && BDL.mkBody && near(BDL.mk.x0, bd0.x + 32f) && near(BDL.mk.x(0.5f), bd0.x + 64f), "본문 타임라인: 내 위치 마커가 칸 가운데 사이에 놓인다");

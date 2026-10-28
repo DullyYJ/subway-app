@@ -797,7 +797,7 @@ function findAndroidJar() {
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
-    assert.ok(/return R_RENDER \| R_BUS;/.test(cm) && /deb\.trailing\("cmq", 110L/.test(a) && /if \(\(r & CmCore\.R_RENDER\) != 0\) cmReload\(\);\s*if \(\(r & CmCore\.R_BUS\) != 0\) cmBusSearch/.test(a), '지하철역 후보를 먼저 바로 그리고 버스정류장은 오는 대로 한 번 더 · 0.11초 기다림');
+    assert.ok(/return R_RENDER \| R_BUS;/.test(cm) && /deb\.trailing\("cmq", 40L/.test(a) && /if \(\(r & CmCore\.R_RENDER\) != 0\) cmReload\(\);\s*if \(\(r & CmCore\.R_BUS\) != 0\) cmBusSearch/.test(a), '지하철역 후보를 먼저 바로 그리고 버스정류장은 오는 대로 한 번 더 · 0.04초 기다림');
     assert.ok(/n\.nobtn = optBool\(m, "nobtn", false\)/.test(sc) && /it\.sw <= 0f\) return;/.test(sv) && /public int blurInline\(/.test(cm), '저장 단추 없는 입력칸(nobtn) · 벗어나면 자동 저장');
     assert.ok(/n\.grp = optStr\(m, "grp"/.test(sc) && /private void pickGrp\(ScreenCore\.Item pi\)/.test(sv) && /pi\.gk\.length\(\) > 0\) pickGrp\(pi\)/.test(sv), '같은 묶음(grp) 단추는 눌리면 앱이 바로 켜 보인다');
     assert.ok(/private void cmPrefetchTp\(\)/.test(a) && /tpCache\.get\(url\)/.test(a) && /public static String tpPopFacts\(/.test(cm) && /final boolean tpPop = "cm"\.equals\(page\) && cm\.pop && "tp"\.equals\(cm\.sub\)/.test(a), '시각 팝업 화면은 미리 받아 두고 가운데 팝업으로 연다');
@@ -868,6 +868,7 @@ function findAndroidJar() {
   await t('s265: 타임라인 — 앞 여백 없이 왼쪽 끝에서 시작 · 손 놓고 10초 뒤 스프링으로 마커 가운데 복귀', async () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/float lead = 0f, lastW = 0f;/.test(sc) && !/lead = Math\.max\(0f, width \/ 2f/.test(sc), '앞쪽 여백(lead)이 없다');
+    assert.ok(/float endX = tx \+ n\.padR;/.test(sc) && !/lastW > 0f \? tx - lastW/.test(sc), 's285: 끝에도 여백 없이 — 마지막 칸에서 멈춘다(오른쪽 공백이 안 보인다)');
     assert.ok(/BAND_RETURN_MS = 10000L/.test(sv) && /long wait = BAND_RETURN_MS - \(SystemClock\.uptimeMillis\(\) - bandUserT\)/.test(sv), '놓은 뒤 10초');
     assert.ok(/postInvalidateDelayed\(Math\.min\(wait, 1000L\)\)/.test(sv) && /bandVel = bandVel \* 0\.78f \+ dlt \* 0\.045f/.test(sv), '쉬는 동안에도 깨어나고 스프링으로 돌아온다');
     assert.ok(/if \(flingBand && !flingX\.isFinished\(\)\) bandUserT = SystemClock\.uptimeMillis\(\);/.test(sv), '밀어서 미끄러지는 동안도 만지는 중');
@@ -890,6 +891,13 @@ function findAndroidJar() {
     assert.ok(!/if \(tdAct \|\| tdAnim\) postInvalidateOnAnimation\(\)/.test(sv), '예전 매 프레임 전체 그리기가 없다');
     assert.ok(/if \(tdAnim\) postInvalidateOnAnimation\(\);\s*else if \(tdAct && isShown\(\)\)/.test(sv) && /now - tdFullT >= 1000L/.test(sv) && /postInvalidateDelayed\(33L, Math\.max\(0, Math\.round\(tdX0 \* dpr\)\)/.test(sv), '점 자리만 33ms · 전체는 1초에 한 번');
     assert.ok(/tdFirst/.test(sv) && /tdX0 = Math\.min\(tdX0, ax\)/.test(sv), '맥박 자리를 그릴 때 모은다');
+  });
+  await t('s285: 설정창 역 제안 — 더 새 응답이면 적용(앞선 빠른 응답을 버리지 않는다) · 40ms 디바운스 · 알림만 소요 요청', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/if \(my <= seqCmApplied \|\| txt\.length\(\) == 0/.test(a) && /seqCmApplied = my;/.test(a), '적용 규칙');
+    assert.ok(/deb\.trailing\("cmq", 40L/.test(a), '40ms');
+    assert.ok(/"\,\\"eta\\":1"/.test(fs.readFileSync(N('CmCore.java'), 'utf8')), 'CmCore eta');
+    assert.ok(/CmCore\.briefBody\(st, kind, System\.currentTimeMillis\(\), gps, true\)/.test(fs.readFileSync(N('CommuteAlarm.java'), 'utf8')), '알림은 eta 요청');
   });
   await t('s241: 반응 속도 기록 · 글자 폭 기억 — 숫자 몇 개만 모으고(내용 없음) 개발자 도구에서 읽는다', () => {
     const np = fs.readFileSync(N('NetPost.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), pl = fs.readFileSync(N('PerfLog.java'), 'utf8');

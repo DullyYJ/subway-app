@@ -1736,7 +1736,6 @@ public final class ScreenCore {
         float ox = x0 + n.padL;
         if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다
             float lead = 0f, lastW = 0f;                                               // s265 (YJ: 처음엔 경로와 마커가 왼쪽 끝에서 시작하고, 진행할수록 마커가 가운데에서 진행): 앞쪽 여백은 없다 — 마커가 가운데를 넘기 전까진 줄이 안 밀린다
-            if (n.mk != null && !n.items.isEmpty()) lastW = n.items.get(n.items.size() - 1).max;       // 끝 칸의 마커는 가운데까지 올 수 있게 오른쪽에만 여백
             float tx = ox + lead, ty = y + n.padT;
             int rowFrom = out.size();
             for (Node c : n.items) {
@@ -1755,7 +1754,7 @@ public final class ScreenCore {
                 it.band = true; it.cl = x0; it.cr = x0 + width;
                 out.add(it); tx += c.max;
             }
-            float endX = Math.max(tx + n.padR, lastW > 0f ? tx - lastW / 2f + width / 2f : 0f);
+            float endX = tx + n.padR;                                                    // s285 (YJ: 마지막에서 멈추고 공백이 보이면 안 돼): 끝 칸 뒤에 마커를 가운데 두려던 여백은 없앴다 — 줄은 마지막 칸(+오른쪽 여백)에서 끝난다
             for (int q = rowFrom; q < out.size(); q++) out.get(q).cr2 = endX;
             if (n.mk != null && rowFrom < out.size() && n.mk.f < out.size() - rowFrom && n.mk.t < out.size() - rowFrom) {
                 Mark k = n.mk; Item a = out.get(rowFrom + k.f), b = out.get(rowFrom + k.t);

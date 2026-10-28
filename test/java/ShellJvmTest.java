@@ -213,6 +213,8 @@ public class ShellJvmTest {
                 // 엔진 요청 본문
                 String bb = CmCore.briefBody(cs, "eve", 1760000000000L, new double[] { 37.5, 127.0 });
                 ok(bb.equals("{\"kind\":\"eve\",\"nowMs\":1760000000000,\"from\":{\"nm\":\"강남구청\"},\"eFrom\":{\"nm\":\"사당\"},\"gps\":{\"lat\":37.5,\"lng\":127.0}}"), "브리핑 요청 본문: " + bb);
+                String bbE = CmCore.briefBody(cs, "eve", 1760000000000L, new double[] { 37.5, 127.0 }, true);
+                ok(bbE.contains(",\"eta\":1") && !bb.contains("\"eta\""), "s285: 알림 요청만 경로 소요(eta)를 요청한다: " + bbE);
                 ok(CmCore.occBody(cs, 5L).equals("{\"op\":\"occ\",\"nowMs\":5,\"morn\":\"12:00\",\"eve\":\"00:05\",\"days\":[0,6]}"), "알람 시각 요청 본문: " + CmCore.occBody(cs, 5L));
                 long[] oc = CmCore.parseOcc("{\"ok\":true,\"v\":1,\"morn\":[1,2,3],\"eve\":[9]}", "morn", 2);
                 ok(oc.length == 2 && oc[1] == 2 && CmCore.parseOcc("{\"ok\":true,\"eve\":[9]}", "eve", 14)[0] == 9 && CmCore.parseOcc("{\"ok\":false}", "morn", 5).length == 0 && CmCore.parseOcc("망가짐", "morn", 5).length == 0, "알람 시각 읽기");

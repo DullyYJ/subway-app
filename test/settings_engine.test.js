@@ -387,6 +387,8 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     const cb = E.settingsScreen({ cap: 8, p: 'cmb' }, { pf: { cb: { kind: 'eve', title: '퇴근길 브리핑 · 강남→수원', body: '강남 → 수원\n강남 12° 맑음\n· 우산은 필요 없어요\n오늘도 수고했어요' } } });
     const cj = JSON.stringify(cb.body);
     ok(cb.ok && /퇴근길 브리핑/.test(cj) && /cmb\.ok/.test(cj) && /cmb\.go/.test(cj) && /퇴근하기/.test(cj) && !/pg\.back/.test(cj) && /오늘도 수고했어요/.test(cj), 's281: 알림 브리핑 창 — 글 · [확인] · [퇴근하기] (뒤로가기 줄 없음)');
+    const cb2 = JSON.stringify(E.settingsScreen({ cap: 8, p: 'cmb' }, { pf: { cb: { kind: 'eve', title: 't', body: '예상 50분 소요 · 20:53경 도착 · 환승 없음\n강남 12° 맑음' } } }).body);
+    ok(/예상 50분 소요 · 20:53경 도착/.test(cb2) && /"b":1|bold|"w":"b/i.test(cb2), 's285: 브리핑 창 첫 줄(소요 · 도착)이 굵게');
     ok(/출근하기/.test(JSON.stringify(E.settingsScreen({ cap: 8, p: 'cmb' }, { pf: { cb: { kind: 'morn', title: 't', body: 'a\nb' } } }).body)), 's281: 출근 알림은 [출근하기]');
   }
   ok(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf })).rev !== E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { days: [0] }) })).rev, '요일이 바뀌면 rev 가 바뀐다(앱이 다시 그린다)');

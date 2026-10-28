@@ -53,16 +53,15 @@ t('장소가 없으면 현재 위치(없으면 인천 기본값)로 날씨를 �
   const r = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T07:40:00+09:00') }, null, null);
   assert.strictEqual(r.route, null); assert.ok(!/→/.test(r.title));
 });
-t('제목·본문: 경로 · 날씨 · 오늘 최저최고 · 도착지 날씨(다를 때) · 혼잡도 · 추천 3개 이하 · 마무리', () => {
+t('제목·본문(s285): 예상 소요·도착시각 · 출발지 날씨 · 도착지 날씨 · 출발지 혼잡도 · 추천 3개 이하 · 마무리 (경로줄 · 오늘 최저최고 · 도착지 혼잡도는 없다)', () => {
   const r = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T07:40:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, WX, { temp: 18, rain: 10, txt: '맑음' });
-  assert.strictEqual(r.title, '출근길 브리핑 · 인하대→강남');
+  assert.strictEqual(r.title, '출근길 브리핑 · 인하대→강남'); assert.strictEqual(r.kind, 'morn');
   const L = r.body.split('\n');
-  assert.strictEqual(L[0], '인하대 → 강남');
-  assert.strictEqual(L[1], '인하대 14° 구름 · 체감 11° · 습도 60%');
-  assert.strictEqual(L[2], '오늘 9°~21° · 강수 30%');
-  assert.strictEqual(L[3], '강남 18° 맑음');
-  assert.ok(/^인하대 혼잡도 \d+% \((여유|보통|혼잡)\)$/.test(L[4]), L[4]);
-  assert.ok(/^강남 혼잡도 \d+% \((여유|보통|혼잡)\)$/.test(L[5]), '도착역 혼잡도도(s281): ' + L[5]);
+  assert.ok(!/→/.test(L[0]) && !/오늘 \d/.test(r.body), '경로줄 · 오늘 최저최고 없음: ' + L[0]);
+  assert.strictEqual(L[0], '인하대 14° 구름 · 체감 11° · 습도 60%');
+  assert.strictEqual(L[1], '강남 18° 맑음');
+  assert.ok(/^인하대 혼잡도 \d+% \((여유|보통|혼잡)\)$/.test(L[2]), L[2]);
+  assert.strictEqual(r.body.split('\n').filter(x => /혼잡도/.test(x)).length, 1, '도착역 혼잡도 줄은 없다(출발지만)');
   const recs = L.filter(x => x.indexOf('· ') === 0);
   assert.ok(recs.length >= 1 && recs.length <= 3, '추천 ' + recs.length);
   assert.ok(recs.indexOf('· 접이식 우산 있으면 안심이에요') >= 0 && recs.indexOf('· 쌀쌀해요, 겉옷 챙기세요') >= 0);
@@ -78,7 +77,7 @@ t('도착지 날씨는 출발지와 비슷해도 늘 보인다(s281) · 옷차�
 t('날씨를 못 받으면 날씨·추천(날씨 기반) 줄만 빠진다', () => {
   const r = M.cbBrief({ kind: 'eve', nowMs: AT('2026-10-21T21:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, null, null);
   const L = r.body.split('\n');
-  assert.strictEqual(L[0], '강남 → 인하대'); assert.ok(/혼잡도/.test(L[1]) && /혼잡도/.test(L[2])); assert.strictEqual(L.length, 4);   // 경로 · 출발역 혼잡도 · 도착역 혼잡도 · 마무리(피크 아님)
+  assert.ok(/^강남 혼잡도/.test(L[0])); assert.strictEqual(L.length, 2);   // 출발역 혼잡도 · 마무리(피크 아님)
 });
 t('피크 시간 안내: 출근 7~9시 / 퇴근 17~19시에만', () => {
   const a = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T08:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, null, null).body;
@@ -88,20 +87,34 @@ t('피크 시간 안내: 출근 7~9시 / 퇴근 17~19시에만', () => {
 });
 t('버스 출발이면 혼잡도 줄을 빼고, 극단 날씨 추천(더위·추위·강수·자외선·바람)', () => {
   const bus = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T10:00:00+09:00'), from: { nm: '정류장', lat: 37.5, lng: 127, bus: true }, to: { nm: '강남' } }, null, null).body;
-  assert.ok(!/정류장 혼잡도/.test(bus) && /^강남 혼잡도/m.test(bus), '버스 출발지는 혼잡도 줄이 없고 도착역(지하철)만');
+  assert.ok(!/혼잡도/.test(bus), '버스 출발지는 혼잡도 줄이 없다(도착지 혼잡도는 안 보여 준다)');
   const hot = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T10:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, { temp: 35, feel: 38, hum: 85, uv: 9, wind: 40, rain: 50, txt: '맑음' }, null).body;
   assert.ok(/우산 꼭 챙기세요/.test(hot) && /무더위예요/.test(hot) && (hot.match(/^· /gm) || []).length === 3);
   const cold = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T10:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, { temp: -3, feel: -8, txt: '눈' }, null).body;
   assert.ok(/강추위예요/.test(cold));
 });
-t('마무리 멘트: 요일별 6개가 주차마다 돈다 · 같은 날은 같은 문구 · 출근과 퇴근은 다르다', () => {
-  const a = M.cbClosing('morn', AT('2026-10-21T07:00:00+09:00')), b = M.cbClosing('morn', AT('2026-10-21T22:00:00+09:00'));
-  assert.strictEqual(a, b);
-  const seen = new Set(); for (let w = 0; w < 6; w++) seen.add(M.cbClosing('eve', AT('2026-10-21T18:00:00+09:00') + w * 7 * 86400000));
-  assert.ok(seen.size === 6, '6가지가 돈다: ' + seen.size);
-  assert.notStrictEqual(M.cbClosing('morn', AT('2026-10-21T07:00:00+09:00')), M.cbClosing('eve', AT('2026-10-21T07:00:00+09:00')));
-  for (let d = 0; d < 7; d++) { const ms = AT('2026-10-21T07:00:00+09:00') + d * 86400000; assert.notStrictEqual(M.cbClosing('morn', ms), M.cbClosing('morn', ms + 86400000), '날마다 다르다 ' + d); }
-  assert.ok(M.CB_CLOSING.morn.length === 7 && M.CB_CLOSING.eve.length === 7);
+t('응원 문구(s285): 출근=힘찬 응원 · 퇴근=위로 · 날마다 다르다(63일 순환) · 같은 날은 같은 문구', () => {
+  const N = M.CB_CHEER.morn.length;
+  assert.ok(N >= 60 && M.CB_CHEER.eve.length === N && new Set(M.CB_CHEER.morn).size === N && new Set(M.CB_CHEER.eve).size === N, '출근 · 퇴근 각 ' + N + '개, 겹치는 문장 없음');
+  assert.strictEqual(M.cbClosing('morn', AT('2026-10-21T07:00:00+09:00')), M.cbClosing('morn', AT('2026-10-21T22:00:00+09:00')), '같은 날은 같은 문구');
+  for (const kind of ['morn', 'eve']) {
+    const seen = new Set(); for (let d = 0; d < N; d++) seen.add(M.cbClosing(kind, AT('2026-10-21T07:00:00+09:00') + d * 86400000));
+    assert.strictEqual(seen.size, N, kind + ': ' + N + '일 동안 매일 다르다');
+  }
+  assert.ok(M.CB_CHEER.morn.every(x => !M.CB_CHEER.eve.includes(x)), '출근과 퇴근 문장은 다르다');
+  assert.ok(M.CB_CHEER.eve.filter(x => /수고|고생|쉬|위로|괜찮|토닥/.test(x)).length >= 20, '퇴근 문구는 수고 · 위로 · 휴식을 건네는 문장이 대부분');
+  assert.ok(M.CB_CHEER.morn.filter(x => /힘|응원|출발|시작|파이팅|화이팅|당당|용기|에너지|기운|도전|자신/.test(x)).length >= 15, '출근 문구에는 힘찬 응원이 담긴다');
+});
+t('예상 소요 · 도착시각(s285): 엔진이 준 경로 소요로 한국 시각 도착을 만든다 · 없으면 줄이 빠진다', () => {
+  const at = AT('2026-10-21T18:00:00+09:00');
+  const r = M.cbCompose(M.cbPlan({ kind: 'eve', nowMs: at, from: { nm: '인하대' }, to: { nm: '강남' } }), { nowMs: at, eta: { min: 50, xfer: 0 } }, null, null);
+  const L = r.body.split('\n');
+  assert.strictEqual(L[0], '예상 50분 소요 · 18:50경 도착 · 환승 없음');
+  const r2 = M.cbCompose(M.cbPlan({ kind: 'eve', nowMs: at, from: { nm: '인하대' }, to: { nm: '강남' } }), { nowMs: at, eta: { min: 75, xfer: 2 } }, null, null);
+  assert.strictEqual(r2.body.split('\n')[0], '예상 1시간 15분 소요 · 19:15경 도착 · 환승 2회');
+  const r3 = M.cbCompose(M.cbPlan({ kind: 'eve', nowMs: AT('2026-10-21T23:30:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }), { nowMs: AT('2026-10-21T23:30:00+09:00'), eta: { min: 60, xfer: 1 } }, null, null);
+  assert.ok(/^예상 1시간 소요 · 00:30경 도착/.test(r3.body.split('\n')[0]), '자정을 넘기면 00:30: ' + r3.body.split('\n')[0]);
+  assert.ok(!/예상 .* 소요/.test(M.cbBrief({ kind: 'eve', nowMs: at, from: { nm: '인하대' }, to: { nm: '강남' } }, null, null).body), 'eta 가 없으면 줄이 없다');
 });
 t('새 글에 이모지가 없다', () => {
   const r = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T08:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, WX, WX);
@@ -123,7 +136,7 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
   const body = w.slice(i + ms.length, j);
   assert.ok(body.indexOf(esc(src)) >= 0, '모듈 사본');
   assert.ok(body.indexOf(esc(fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8').trimEnd())) >= 0, '연결부 사본');
-  assert.ok(w.indexOf('if (url.pathname === "/commute-brief") return handleCommuteBrief(request);') > 0);
+  assert.ok(w.indexOf('if (url.pathname === "/commute-brief") return handleCommuteBrief(request, env, ctx);') > 0);
   assert.ok(!/[^\x00-\x7f]/.test(body));
 });
 

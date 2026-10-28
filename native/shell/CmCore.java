@@ -83,10 +83,13 @@ public final class CmCore {
 
     // ═════════════ 엔진 요청 본문 ═════════════
     /** POST /commute-brief 본문. gps 가 null 이면 싣지 않는다. */
-    public static String briefBody(ShellCore.Store st, String kind, long nowMs, double[] gps) {
+    public static String briefBody(ShellCore.Store st, String kind, long nowMs, double[] gps) { return briefBody(st, kind, nowMs, gps, false); }
+    /** eta 가 true 면 엔진에 "가장 빠른 경로의 예상 소요 · 도착시각도 구해 달라"(알림 · 브리핑 창만 — 위젯 좌표 갱신은 경로 탐색을 안 한다). */
+    public static String briefBody(ShellCore.Store st, String kind, long nowMs, double[] gps, boolean eta) {
         StringBuilder b = new StringBuilder("{\"kind\":").append(ShellCore.q("eve".equals(kind) ? "eve" : ("auto".equals(kind) ? "auto" : "morn"))).append(",\"nowMs\":").append(nowMs);
         for (String k : PK) { String p = placeJson(st, k); if (p != null) b.append(',').append(ShellCore.q(k)).append(':').append(p); }
         if (gps != null) b.append(",\"gps\":{\"lat\":").append(gps[0]).append(",\"lng\":").append(gps[1]).append('}');
+        if (eta) b.append(",\"eta\":1");
         return b.append('}').toString();
     }
     /** POST /commute-alarm 본문(op:'occ') — 앞으로 28일치 울릴 시각을 엔진이 정한다. */

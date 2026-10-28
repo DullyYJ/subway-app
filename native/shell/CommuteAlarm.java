@@ -87,11 +87,11 @@ final class CommuteAlarm {
     static boolean send(Context c, String kind) {
         ShellCore.Store st = store(c);
         double[] gps = lastKnown(c);
-        String body = CmCore.briefBody(st, kind, System.currentTimeMillis(), gps);
+        String body = CmCore.briefBody(st, kind, System.currentTimeMillis(), gps, true);
         String[] tb = null;
         for (int i = 0; i < 2 && tb == null; i++) {
             try {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-brief", body, 8000);
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-brief", body, 10000);
                 if (r.status == 200) tb = CmCore.parseBrief(r.body);
             } catch (Throwable ignored) { }
         }

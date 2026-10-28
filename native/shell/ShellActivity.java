@@ -4843,7 +4843,7 @@ public class ShellActivity extends Activity {
     }
     // ── s278: 출퇴근 브리핑을 설정 화면 안에서(하위 화면 없이) — 장소는 그 자리 입력칸, 시각 고르기만 시트 ──
     private boolean cmFromInline;
-    private int seqCmI;
+    private int seqCmI, seqCmApplied;
     /** 설정 화면에서 눌린 것이 출퇴근 패널의 것인가(스위치 cm · 요일 · 미리보기 · 시각 · 장소 저장/후보). */
     private static boolean cmInlineOwns(ScreenCore.Act a) {
         if (a == null) return false;
@@ -4863,7 +4863,7 @@ public class ShellActivity extends Activity {
         if ("focus".equals(kind)) { cm.focusInline(k, value); return; }
         if ("edit".equals(kind)) {
             final String q = value;
-            deb.trailing("cmq", 110L, new Runnable() { @Override public void run() {          // 글자가 멈추면(0.11초) 지하철역 후보부터 바로 그린다
+            deb.trailing("cmq", 40L, new Runnable() { @Override public void run() {          // 글자가 멈추면(0.04초) 지하철역 후보부터 바로 그린다
                 int r = cm.onInline(k, q);
                 if ((r & CmCore.R_RENDER) != 0) cmReload();
                 if ((r & CmCore.R_BUS) != 0) cmBusSearch(cm.pkQ);                      // 버스정류장은 찾아 오는 대로 한 번 더
@@ -4889,7 +4889,8 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() { @Override public void run() {
             final String txt = fetchGeneric(ShellCore.S_SETTINGS); warm(txt);
             main.post(new Runnable() { @Override public void run() {
-                if (my != seqCmI || txt.length() == 0 || li != slots.length - 1 || !ShellCore.S_SETTINGS.equals(slots[li])) return;
+                if (my <= seqCmApplied || txt.length() == 0 || li != slots.length - 1 || !ShellCore.S_SETTINGS.equals(slots[li])) return;          // s285 (YJ: 역 후보가 너무 느려): 먼저 보낸 요청의 답도 더 새 답이 아직 안 왔으면 바로 그린다(예전엔 최신 요청이 아니면 버려, 버스 후보가 끼면 두 번 왕복을 기다렸다) — 더 새 답이 이미 그려졌으면 늦은 옛 답만 버린다
+                seqCmApplied = my;
                 present(v, txt, true);
             } });
         } }, "shell-cmi").start();

@@ -518,7 +518,7 @@ function settingsPageCmb(f) {
   var lines = cb.body.split('\n').filter(function (x) { return x.length > 0; });
   var k = [settingsTitleN(cb.title || (cb.kind === 'eve' ? '퇴근길 브리핑' : '출근길 브리핑'), 12)];
   lines.forEach(function (ln, i) {
-    var last = i === lines.length - 1 && lines.length > 1, bullet = ln.indexOf('· ') === 0, first = i === 0 && ln.indexOf('→') > 0;
+    var last = i === lines.length - 1 && lines.length > 1, bullet = ln.indexOf('· ') === 0, first = i === 0 && /도착/.test(ln);
     if (last) k.push({ t: 'text', s: ln, size: 14, bold: true, color: 'gold', lh: 1.6, pad: [0, 8, 0, 16] });
     else k.push({ t: 'text', s: bullet ? ln : ln, size: first ? 14 : 13, bold: first, color: bullet || first ? 'text' : 'sub', lh: 1.6, pad: [0, 0, 0, first ? 8 : 4] });
   });
