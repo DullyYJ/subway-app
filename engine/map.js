@@ -679,6 +679,7 @@ function mapBusRows(rows, info, si) {                              // 노선+방
   var out = order.slice(0, 20).map(function (k, ri) {
     var g = by[k], r = g[0];
     var arr = g.slice(0, 2).map(function (x) {
+      if (x.est) { var eo = { s: x.prev <= 0 ? '곧 도착' : '약 ' + Math.max(1, Math.round(x.prev * MAP_EST_MIN)) + '분', sec: 0 }; if (x.prev > 0) eo.p = x.prev + '번째전'; else eo.soon = 1; return eo; }     // s270: 버스 위치로 어림한 시간(초 단위 카운트다운이 아니다)
       if (x.none) return { s: '도착정보 없음', sec: 0 };                                                    // 경유노선만 알고 지금 오는 차는 모를 때(웹 _noArr)
       var o = { s: x.sec <= 1 ? '곧 도착' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (x.sec <= 60) o.soon = 1; return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
@@ -766,6 +767,34 @@ function mapLmVote(list) {                                          // 웹: 노�
   return cand.length ? cand[0].nm : '';
 }
 function mapFxOf(list) { var o = null; list.forEach(function (r) { if (r && r.fx) { if (!o) o = {}; o[r.fx.k] = r.fx.v; } }); return o; }
+// ── s270: 도착정보가 비는 정류장(회차 첫 정류장 등)의 대기시간 어림 — 노선 정류장 목록에서 이 정류장의 순번(들)을 알아 두고(nx['od|정류장|노선'] = "순번,순번" · 못 찾으면 '-'),
+//   노선의 버스 위치(r4…)에서 이 순번 앞(같은 순번 포함)에 있는 가장 가까운 차 2대를 골라 정류장 수 × 1.5분으로 '약 N분'. 노선 상세(1정거장 전 · 약 2분)와 같은 계산이다.
+var MAP_EST_ASK = 3, MAP_EST_AWAY = 30, MAP_EST_MIN = 1.5;
+function mapOrdOf(stn, ids, myNm) {
+  var o = [], k;
+  for (k = 0; k < stn.length && o.length < 4; k++) if (ids[stn[k][1]] && stn[k][0] > 0) o.push(stn[k][0]);
+  if (!o.length && myNm) for (k = 0; k < stn.length && o.length < 4; k++) if (mapLmNorm(stn[k][2]) === myNm && stn[k][0] > 0) o.push(stn[k][0]);
+  return o.length ? o.join(',') : '-';
+}
+function mapBusPosUrl(s, rid) {
+  return MAP_TAGO_BUS_POS + '?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&routeId=' + encodeURIComponent(rid) + '&numOfRows=100&pageNo=1&_type=json';
+}
+function mapEstRows(r, od, text) {                                  // 버스 위치를 아직 못 받았거나 접근하는 차가 없으면 null (줄은 그대로 '도착정보 없음')
+  if (text === undefined || mapArrErr(text)) return null;
+  var P = mapBrPos(String(text), false);
+  if (!P.known || !P.buses.length) return null;
+  var best = null;
+  String(od).split(',').forEach(function (c) {
+    c = parseInt(c, 10);
+    if (!isFinite(c)) return;
+    var aw = [];
+    P.buses.forEach(function (b) { var d = c - b[0]; if (b[0] > 0 && d >= 0 && d <= MAP_EST_AWAY) aw.push(d); });
+    aw.sort(function (x, y) { return x - y; });
+    if (aw.length && (!best || aw[0] < best[0])) best = aw;
+  });
+  if (!best) return null;
+  return best.slice(0, 2).map(function (d) { return { no: r.no, sec: d * 90, prev: d, cong: 0, low: false, dir: r.dir, rid: r.rid, tp: r.tp, est: 1 }; });
+}
 function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
   var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
   stops.forEach(function (s, i) {
@@ -774,11 +803,12 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     rows.forEach(function (r) {
       if (r.dir || !r.rid) return;
       var key = s.id + '|' + r.rid;
-      if (nx[key] !== undefined || seen[key]) return;
+      var needOd = !!r.none && nx['od|' + key] === undefined;                  // s270: 도착정보가 없는 줄은 이 정류장의 노선 순번도 함께 알아 둔다(버스 위치로 대기시간을 어림하려고)
+      if ((nx[key] !== undefined && !needOd) || seen[key]) return;
       seen[key] = 1;
       var url = mapRouteStnUrl(s, r.rid);
       if (uidx[url] === undefined) { uidx[url] = urls.length; urls.push(url); }
-      jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url] });
+      jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url], none: !!r.none });
     });
   });
   var lmJobs = [];
@@ -807,6 +837,7 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     var name = '';
     if (stn.length) name = at >= 0 ? stn[(at + 1) % stn.length][2] : stn[stn.length - 1][2];
     upd[j.key] = String(name || '').slice(0, 40); changed = true;
+    if (j.none) upd['od|' + j.key] = mapOrdOf(stn, ids, mapLmNorm(j.s.nm));
   });
   lmJobs.forEach(function (j) {
     var list = [], ok = true, ids = peerIds(j), myNm = mapLmNorm(j.s.nm);
@@ -828,7 +859,29 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     if (!rows || !mapTagoLike(stops[i])) return;
     rows.forEach(function (r) { if (!r.dir && r.rid) { var nm = out[stops[i].id + '|' + r.rid]; if (nm) r.dir = nm; } });
   });
+  // s270: 회차 첫 정류장처럼 도착정보 API 가 줄을 비우는 정류장 — 그 노선의 버스 위치와 이 정류장 순번으로 대기시간을 어림해 '도착정보 없음' 대신 보인다(카카오처럼).
+  var estK = {}, estN = 0, estList = [];
+  rowsOf.forEach(function (rows, i) {
+    if (!rows || !mapTagoLike(stops[i])) return;
+    rows.forEach(function (r) {
+      if (!r.none || !r.rid || estK[r.rid] !== undefined) return;
+      var od = out['od|' + stops[i].id + '|' + r.rid];
+      if (!od || od === '-' || estN >= MAP_EST_ASK) return;
+      estK[r.rid] = 'r' + (MAP_NX_ASK + estN); estN++;
+      estList.push({ k: estK[r.rid], url: mapBusPosUrl(stops[i], r.rid) });
+    });
+  });
+  if (estN) rowsOf.forEach(function (rows, i) {
+    if (!rows || !mapTagoLike(stops[i])) return;
+    var next = [], chg = false;
+    rows.forEach(function (r) {
+      var est = (r.none && r.rid && estK[r.rid] !== undefined) ? mapEstRows(r, out['od|' + stops[i].id + '|' + r.rid], res[estK[r.rid]]) : null;
+      if (est && est.length) { chg = true; est.forEach(function (e) { next.push(e); }); } else next.push(r);
+    });
+    if (chg) { rows.length = 0; next.forEach(function (e) { rows.push(e); }); }
+  });
   var ask = [];
+  if (canAsk) estList.forEach(function (e) { if (res[e.k] === undefined || mapArrErr(res[e.k])) ask.push(e); });
   if (canAsk) {
     var want = {};
     jobs.forEach(function (j) { if (upd[j.key] === undefined && j.u < MAP_NX_ASK) want[j.u] = 1; });

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s269";
+var ENGINE_VERSION = "route-v2-2026-10-28s270";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -21948,6 +21948,7 @@ function mapBusRows(rows, info, si) {                              // \ub178\uc1
   var out = order.slice(0, 20).map(function (k, ri) {
     var g = by[k], r = g[0];
     var arr = g.slice(0, 2).map(function (x) {
+      if (x.est) { var eo = { s: x.prev <= 0 ? '\uace7 \ub3c4\ucc29' : '\uc57d ' + Math.max(1, Math.round(x.prev * MAP_EST_MIN)) + '\ubd84', sec: 0 }; if (x.prev > 0) eo.p = x.prev + '\ubc88\uc9f8\uc804'; else eo.soon = 1; return eo; }     // s270: \ubc84\uc2a4 \uc704\uce58\ub85c \uc5b4\ub9bc\ud55c \uc2dc\uac04(\ucd08 \ub2e8\uc704 \uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc774 \uc544\ub2c8\ub2e4)
       if (x.none) return { s: '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c', sec: 0 };                                                    // \uacbd\uc720\ub178\uc120\ub9cc \uc54c\uace0 \uc9c0\uae08 \uc624\ub294 \ucc28\ub294 \ubaa8\ub97c \ub54c(\uc6f9 _noArr)
       var o = { s: x.sec <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (x.sec <= 60) o.soon = 1; return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
@@ -22035,6 +22036,34 @@ function mapLmVote(list) {                                          // \uc6f9: \
   return cand.length ? cand[0].nm : '';
 }
 function mapFxOf(list) { var o = null; list.forEach(function (r) { if (r && r.fx) { if (!o) o = {}; o[r.fx.k] = r.fx.v; } }); return o; }
+// \u2500\u2500 s270: \ub3c4\ucc29\uc815\ubcf4\uac00 \ube44\ub294 \uc815\ub958\uc7a5(\ud68c\ucc28 \uccab \uc815\ub958\uc7a5 \ub4f1)\uc758 \ub300\uae30\uc2dc\uac04 \uc5b4\ub9bc \u2014 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uc758 \uc21c\ubc88(\ub4e4)\uc744 \uc54c\uc544 \ub450\uace0(nx['od|\uc815\ub958\uc7a5|\ub178\uc120'] = "\uc21c\ubc88,\uc21c\ubc88" \u00b7 \ubabb \ucc3e\uc73c\uba74 '-'),
+//   \ub178\uc120\uc758 \ubc84\uc2a4 \uc704\uce58(r4\u2026)\uc5d0\uc11c \uc774 \uc21c\ubc88 \uc55e(\uac19\uc740 \uc21c\ubc88 \ud3ec\ud568)\uc5d0 \uc788\ub294 \uac00\uc7a5 \uac00\uae4c\uc6b4 \ucc28 2\ub300\ub97c \uace8\ub77c \uc815\ub958\uc7a5 \uc218 \u00d7 1.5\ubd84\uc73c\ub85c '\uc57d N\ubd84'. \ub178\uc120 \uc0c1\uc138(1\uc815\uac70\uc7a5 \uc804 \u00b7 \uc57d 2\ubd84)\uc640 \uac19\uc740 \uacc4\uc0b0\uc774\ub2e4.
+var MAP_EST_ASK = 3, MAP_EST_AWAY = 30, MAP_EST_MIN = 1.5;
+function mapOrdOf(stn, ids, myNm) {
+  var o = [], k;
+  for (k = 0; k < stn.length && o.length < 4; k++) if (ids[stn[k][1]] && stn[k][0] > 0) o.push(stn[k][0]);
+  if (!o.length && myNm) for (k = 0; k < stn.length && o.length < 4; k++) if (mapLmNorm(stn[k][2]) === myNm && stn[k][0] > 0) o.push(stn[k][0]);
+  return o.length ? o.join(',') : '-';
+}
+function mapBusPosUrl(s, rid) {
+  return MAP_TAGO_BUS_POS + '?serviceKey=&cityCode=' + encodeURIComponent(s.city || mapCityOf(s.la, s.lo)) + '&routeId=' + encodeURIComponent(rid) + '&numOfRows=100&pageNo=1&_type=json';
+}
+function mapEstRows(r, od, text) {                                  // \ubc84\uc2a4 \uc704\uce58\ub97c \uc544\uc9c1 \ubabb \ubc1b\uc558\uac70\ub098 \uc811\uadfc\ud558\ub294 \ucc28\uac00 \uc5c6\uc73c\uba74 null (\uc904\uc740 \uadf8\ub300\ub85c '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c')
+  if (text === undefined || mapArrErr(text)) return null;
+  var P = mapBrPos(String(text), false);
+  if (!P.known || !P.buses.length) return null;
+  var best = null;
+  String(od).split(',').forEach(function (c) {
+    c = parseInt(c, 10);
+    if (!isFinite(c)) return;
+    var aw = [];
+    P.buses.forEach(function (b) { var d = c - b[0]; if (b[0] > 0 && d >= 0 && d <= MAP_EST_AWAY) aw.push(d); });
+    aw.sort(function (x, y) { return x - y; });
+    if (aw.length && (!best || aw[0] < best[0])) best = aw;
+  });
+  if (!best) return null;
+  return best.slice(0, 2).map(function (d) { return { no: r.no, sec: d * 90, prev: d, cong: 0, low: false, dir: r.dir, rid: r.rid, tp: r.tp, est: 1 }; });
+}
 function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
   var urls = [], uidx = {}, jobs = [], seen = {}, upd = {}, changed = false;
   stops.forEach(function (s, i) {
@@ -22043,11 +22072,12 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     rows.forEach(function (r) {
       if (r.dir || !r.rid) return;
       var key = s.id + '|' + r.rid;
-      if (nx[key] !== undefined || seen[key]) return;
+      var needOd = !!r.none && nx['od|' + key] === undefined;                  // s270: \ub3c4\ucc29\uc815\ubcf4\uac00 \uc5c6\ub294 \uc904\uc740 \uc774 \uc815\ub958\uc7a5\uc758 \ub178\uc120 \uc21c\ubc88\ub3c4 \ud568\uaed8 \uc54c\uc544 \ub454\ub2e4(\ubc84\uc2a4 \uc704\uce58\ub85c \ub300\uae30\uc2dc\uac04\uc744 \uc5b4\ub9bc\ud558\ub824\uace0)
+      if ((nx[key] !== undefined && !needOd) || seen[key]) return;
       seen[key] = 1;
       var url = mapRouteStnUrl(s, r.rid);
       if (uidx[url] === undefined) { uidx[url] = urls.length; urls.push(url); }
-      jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url] });
+      jobs.push({ key: key, s: s, i: i, rid: r.rid, u: uidx[url], none: !!r.none });
     });
   });
   var lmJobs = [];
@@ -22076,6 +22106,7 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     var name = '';
     if (stn.length) name = at >= 0 ? stn[(at + 1) % stn.length][2] : stn[stn.length - 1][2];
     upd[j.key] = String(name || '').slice(0, 40); changed = true;
+    if (j.none) upd['od|' + j.key] = mapOrdOf(stn, ids, mapLmNorm(j.s.nm));
   });
   lmJobs.forEach(function (j) {
     var list = [], ok = true, ids = peerIds(j), myNm = mapLmNorm(j.s.nm);
@@ -22097,7 +22128,29 @@ function mapNxPass(stops, rowsOf, res, nx, pool, canAsk, more) {
     if (!rows || !mapTagoLike(stops[i])) return;
     rows.forEach(function (r) { if (!r.dir && r.rid) { var nm = out[stops[i].id + '|' + r.rid]; if (nm) r.dir = nm; } });
   });
+  // s270: \ud68c\ucc28 \uccab \uc815\ub958\uc7a5\ucc98\ub7fc \ub3c4\ucc29\uc815\ubcf4 API \uac00 \uc904\uc744 \ube44\uc6b0\ub294 \uc815\ub958\uc7a5 \u2014 \uadf8 \ub178\uc120\uc758 \ubc84\uc2a4 \uc704\uce58\uc640 \uc774 \uc815\ub958\uc7a5 \uc21c\ubc88\uc73c\ub85c \ub300\uae30\uc2dc\uac04\uc744 \uc5b4\ub9bc\ud574 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c' \ub300\uc2e0 \ubcf4\uc778\ub2e4(\uce74\uce74\uc624\ucc98\ub7fc).
+  var estK = {}, estN = 0, estList = [];
+  rowsOf.forEach(function (rows, i) {
+    if (!rows || !mapTagoLike(stops[i])) return;
+    rows.forEach(function (r) {
+      if (!r.none || !r.rid || estK[r.rid] !== undefined) return;
+      var od = out['od|' + stops[i].id + '|' + r.rid];
+      if (!od || od === '-' || estN >= MAP_EST_ASK) return;
+      estK[r.rid] = 'r' + (MAP_NX_ASK + estN); estN++;
+      estList.push({ k: estK[r.rid], url: mapBusPosUrl(stops[i], r.rid) });
+    });
+  });
+  if (estN) rowsOf.forEach(function (rows, i) {
+    if (!rows || !mapTagoLike(stops[i])) return;
+    var next = [], chg = false;
+    rows.forEach(function (r) {
+      var est = (r.none && r.rid && estK[r.rid] !== undefined) ? mapEstRows(r, out['od|' + stops[i].id + '|' + r.rid], res[estK[r.rid]]) : null;
+      if (est && est.length) { chg = true; est.forEach(function (e) { next.push(e); }); } else next.push(r);
+    });
+    if (chg) { rows.length = 0; next.forEach(function (e) { rows.push(e); }); }
+  });
   var ask = [];
+  if (canAsk) estList.forEach(function (e) { if (res[e.k] === undefined || mapArrErr(res[e.k])) ask.push(e); });
   if (canAsk) {
     var want = {};
     jobs.forEach(function (j) { if (upd[j.key] === undefined && j.u < MAP_NX_ASK) want[j.u] = 1; });

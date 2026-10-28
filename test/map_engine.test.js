@@ -299,7 +299,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const favS = [{ nm: '검단대성베르힐', id: 'ICB368001467', src: 'tago', la: 37.582405, lo: 126.708497, city: '23' }];
     b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, res: { f0: EMPTY } } });
     ok(b.info.bus.need.map(n => n.k).join() === 'f0,h0,u0' && /nodeId=ICB168001467/.test(b.info.bus.need[1].url), 's199: 즐겨찾기도 바꾼 ID·경유노선 ' + b.info.bus.need.map(n => n.k).join());
-    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, nx: { 'ICB368001467|R991': 'A', 'ICB368001467|R77': 'B', 'ICB368001467|R583': 'C' }, res: { f0: EMPTY, h0: EMPTY, u0: THRU, u100: '{}' } } });
+    b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: favS, nx: { 'ICB368001467|R991': 'A', 'ICB368001467|R77': 'B', 'ICB368001467|R583': 'C', 'od|ICB368001467|R991': '-', 'od|ICB368001467|R77': '-', 'od|ICB368001467|R583': '-' }, res: { f0: EMPTY, h0: EMPTY, u0: THRU, u100: '{}' } } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].rows.length === 3, 's199: 즐겨찾기 경유노선 줄');
     // ④ TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop) — 경유 정류장 목록에서 이 정류장 다음 정류장 이름, 없으면 종점
     {
@@ -366,7 +366,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     };
     let res = {}, nx = {}, last = null, rounds = [];
     for (let round = 0; round < 10; round++) {
-      const b = call({ part: 'b', mode: 'bus', th: 'dark', nx, bus: { lat: 37.5824, lng: 126.7085, res } });
+      const b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5824, lng: 126.7085, nx, res } });      // s270: 기기가 저장해 둔 nx 는 bus.nx 로 실려 온다(예전엔 바깥에 둬서 엔진에 안 닿았다)
       const need = (b.info.bus && b.info.bus.need) || [];
       rounds.push(need.map(n => n.k).join());
       last = b;
@@ -376,10 +376,57 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
       need.forEach(n => { res[n.k] = mock(n.url); });
     }
     const cards = last.body.filter(n => n.t === 'bcard');
-    ok(last.info.bus.st === 'ok' && rounds.length >= 5 && rounds.length <= 6, 's200: 이웃·바꾼 ID·방면까지 한 정류장 화면이 완성되려면 5바퀴 안팎이 든다 ' + JSON.stringify(rounds));
+    ok(last.info.bus.st === 'ok' && rounds.length >= 5 && rounds.length <= 7, 's200: 이웃·바꾼 ID·방면까지 한 정류장 화면이 완성되려면 5바퀴 안팎이 든다 ' + JSON.stringify(rounds));
     ok(cards.length === 3 && cards.every(c => !c.ld && c.rows && c.rows.length >= 1), 's200: 마지막 바퀴에는 모든 카드가 줄을 가진다(불러오는 중 · 없음 아님)');
     ok(rounds.length - 1 > 3, 's200: 옛 한도(3바퀴)로는 마지막 그림이 못 오른다 — 앱은 BUS_ROUNDS 로 늘렸다');
-    ok(rounds[rounds.length - 2] === 'r0,r1,r2', 's200: 마지막 직전 바퀴는 방면 목록(r)만 남은 상태 → 앱은 그 화면을 먼저 그린다 ' + rounds[rounds.length - 2]);
+    ok(rounds[rounds.length - 2].split(',').every(k => /^r\d/.test(k)), 's200: 마지막 직전 바퀴는 방면 목록·버스 위치(r)만 남은 상태 → 앱은 그 화면을 먼저 그린다 ' + rounds[rounds.length - 2]);
+  }
+  // s270: 회차 첫 정류장 — 도착정보 API 가 줄을 비워도 노선 버스 위치로 대기시간을 어림해 '도착정보 없음' 대신 보인다(카카오: 2분 5초 · 1번째전)
+  {
+    const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+    const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '한진', 37.5824, 126.7085)] } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}';
+    const THRU = JSON.stringify({ response: { body: { items: { item: [{ routeno: '순환43', routeid: 'R43', routetp: '순환버스' }] } } } });
+    const stnBody = (myOrd) => JSON.stringify({ response: { body: { items: { item: [{ routeid: 'R43', nodeid: 'X1', nodenm: '앞', nodeord: myOrd - 1, updowncd: 0 }, { routeid: 'R43', nodeid: 'ICB368001467', nodenm: '한진', nodeord: myOrd, updowncd: 1 }, { routeid: 'R43', nodeid: 'X3', nodenm: '다음', nodeord: myOrd + 1, updowncd: 1 }] } } } });
+    const posBody = (...ords) => JSON.stringify({ response: { header: { resultCode: '00' }, body: { items: ords.length ? { item: ords.map((o, k) => ({ nodeord: o, vehicleno: '인천70바' + (4000 + k), routenm: '순환43' })) } : '', totalCount: ords.length } } });
+    const drive = (pos, myOrd) => {
+      let res = {}, nx = {}, last = null, keys = [];
+      for (let round = 0; round < 10; round++) {
+        const b = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5824, lng: 126.7085, nx, res } });
+        const need = (b.info.bus && b.info.bus.need) || [];
+        keys.push(need.map(n => n.k).join());
+        last = b;
+        if (b.info.nx) nx = b.info.nx;
+        if (!need.length) break;
+        Object.keys(res).forEach(k => { if (/^r\d/.test(k)) delete res[k]; });
+        need.forEach(n => {
+          if (/getSttnAcctoArvlPrearngeInfoList/.test(n.url)) res[n.k] = EMPTY;
+          else if (/getSttnThrghRouteList/.test(n.url)) res[n.k] = THRU;
+          else if (/getRouteAcctoThrghSttnList/.test(n.url)) res[n.k] = stnBody(myOrd);
+          else if (/getRouteAcctoBusLcList/.test(n.url)) res[n.k] = pos;
+          else res[n.k] = '';
+        });
+        res.tn = only; res.tp = ''; res.gg = '';
+      }
+      return { last, keys, nx };
+    };
+    const card = r => r.last.body.filter(n => n.t === 'bcard')[0];
+    let r = drive(posBody(29, 20, 40), 30);
+    let row = card(r).rows[0];
+    ok(row && row.no === '순환43' && row.a.length === 2 && row.a[0].s === '약 2분' && row.a[0].p === '1번째전' && row.a[0].sec === 0 && row.a[1].s === '약 15분' && row.a[1].p === '10번째전', 's270: 회차 첫 정류장은 버스 위치로 "약 2분 · 1번째전" 어림 ' + JSON.stringify(row));
+    ok(r.nx['od|ICB368001467|R43'] === '30' && r.last.info.bus.st === 'ok', 's270: 이 정류장의 노선 순번을 기기에 저장(다시 안 물음) ' + r.keys.join(' | '));
+    ok(r.keys.some(k => /r4/.test(k)) && r.keys.every(k => !/r[5-9]/.test(k)), 's270: 버스 위치는 r4… 열쇠로 부탁한다');
+    r = drive(posBody(30), 30);
+    ok(card(r).rows[0].a[0].s === '곧 도착' && card(r).rows[0].a[0].soon === 1, 's270: 이미 이 정류장 순번에 있는 차는 곧 도착');
+    r = drive(posBody(31, 35), 30);
+    ok(card(r).rows[0].a[0].s === '도착정보 없음', 's270: 접근하는 차가 하나도 없으면 그대로 도착정보 없음');
+    r = drive(posBody(), 30);
+    ok(card(r).rows[0].a[0].s === '도착정보 없음' && r.last.info.bus.st === 'ok', 's270: 운행 차가 없으면 그대로 도착정보 없음');
+    r = drive(posBody(5), 40);
+    ok(card(r).rows[0].a[0].s === '도착정보 없음', 's270: 30정거장 넘게 떨어진 차는 어림하지 않는다');
+    // 기기에 순번이 저장돼 있으면 노선 정류장 목록(큰 본문)은 다시 안 받고 버스 위치만 받는다
+    const b2 = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5824, lng: 126.7085, nx: { 'ICB368001467|R43': '선광', 'od|ICB368001467|R43': '30', 'lm|ICB368001467': '' }, res: { tn: only, tp: '', gg: '', a0: EMPTY, g0: EMPTY, t0: THRU, t100: '{}' } } });
+    ok(b2.info.bus.need.map(n => n.k).join() === 'r4' && /getRouteAcctoBusLcList\?serviceKey=&cityCode=23&routeId=R43/.test(b2.info.bus.need[0].url), 's270: 순번이 저장돼 있으면 버스 위치만 부탁 ' + JSON.stringify(b2.info.bus.need));
   }
   // s202: 웹 _tagoResolveStop — 이웃·바꾼 ID 까지 비면 좌표로 가까운 TAGO 정류장을 다시 찾아 그 ID 로 도착정보를 받는다
   {
