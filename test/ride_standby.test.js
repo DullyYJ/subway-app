@@ -4,10 +4,20 @@
 'use strict';
 const assert = require('assert');
 const path = require('path');
-const { rsMonoPos, rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const { rsRecoFresh, rsMonoPos, rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
 
 let pass = 0, fail = 0;
 const t = (name, fn) => { try { fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n      ', String(e && e.message).split('\n')[0]); } };
+t('s271: 받아 둔 추천 글의 하차 N분 전 · 도착 예정 시각을 엔진이 지금 값으로 고친다(앱 계산 제거)', () => {
+  const ARR = 1760000000000;   // KST 17:53
+  const fr = rsRecoFresh(['🚉 하차 7분 전 · 부평 ☕', '하차 7분 전이에요.\n부평 도착 예정 07:30\n\n카푸치노'], ARR, ARR - 120000);
+  assert.deepStrictEqual(fr, ['🚉 하차 2분 전 · 부평 ☕', '하차 2분 전이에요.\n부평 도착 예정 17:53\n\n카푸치노']);
+  assert.strictEqual(rsRecoFresh(['하차 7분 전'], ARR, ARR - 3600000)[0], '하차 7분 전', '한참 남았으면 7분');
+  assert.strictEqual(rsRecoFresh(['하차 7분 전'], ARR, ARR + 60000)[0], '하차 1분 전', '지났으면 1분');
+  assert.strictEqual(rsRecoFresh(null, 1, 1), null);
+  assert.strictEqual(rsRecoFresh(['하차 7분 전'], 0, 5)[0], '하차 7분 전', '입력이 이상하면 그대로');
+  assert.deepStrictEqual(rsRecoFresh(['a', null], ARR, ARR - 60000), ['a', null]);
+});
 
 const DAY = Date.parse('2026-10-13T00:00:00+09:00');
 const at = (h, m, s) => DAY + ((h * 60 + m) * 60 + (s || 0)) * 1000;

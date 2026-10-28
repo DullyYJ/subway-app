@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s270";
+var ENGINE_VERSION = "route-v2-2026-10-28s271";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10812,6 +10812,18 @@ function rsShare(st, r, cells, map, cur, moving, dest, destName, now) {
     lb: { t: '\uae38\ub3d9\ubb34 \u00b7 \ub0b4 \uc704\uce58', a: '\ub3c4\ucc29\uc608\uc815\uc2dc\uac04: ', r: '\ub0a8\uc740\uc2dc\uac04 ' } };      // \uacf5\uc720 \uadf8\ub9bc\uc758 \uc544\ub798 \ud55c \uc904\uacfc \uae00\uba38\ub9ac\ub294 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4(s207)
 }
 
+// s271 (YJ: \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \u2014 \uc571\uc774 \ucd94\ucc9c \uae00 \uc548\uc758 \uc22b\uc790\ub97c \uc9c1\uc811 \uace0\uce58\ub358 \uac83\uc744 \uc5d4\uc9c4\uc73c\ub85c): \ud0d1\uc2b9 \uc804\uc5d0 \ubc1b\uc544 \ub454 \ucd94\ucc9c \uae00\uc758 '\ud558\ucc28 N\ubd84 \uc804' \u00b7 '\ub3c4\ucc29 \uc608\uc815 HH:MM' \uc744 \uc9c0\uae08 \ud130\uc9c4 \uc2dc\uc810\uc758 \uac12\uc73c\ub85c \uace0\uce5c\ub2e4.
+//   \ubc1b\uc544 \ub458 \ub54c\ub294 \ud558\ucc28\uae4c\uc9c0 \ud55c\ucc38 \ub0a8\uc544 N=7 \ub85c \ubc15\ud600 \uc788\ub2e4 \u2192 \uadf8\ub300\ub85c \ub744\uc6b0\uba74 2\ubd84 \ub0a8\uc558\ub294\ub370\ub3c4 '7\ubd84 \uc804'. \ub0a8\uc740 \ubd84\uc740 1~7 \ub85c \ub9de\ucd94\uace0 \ub3c4\ucc29 \uc2dc\uac01\uc740 KST. \uac00\uac8c\u00b7\uba54\ub274\u00b7\ubb38\uad6c\ub294 \uadf8\ub300\ub85c.
+//   texts: \uae00 \ubc30\uc5f4(\uc81c\ubaa9\u00b7\ubcf8\ubb38) \u2192 \uac19\uc740 \uae38\uc774\uc758 \uc0c8 \ubc30\uc5f4. arrMs\u00b7nowMs \uac00 \uc774\uc0c1\ud558\uba74(0 \uc774\ud558\u00b7\uc22b\uc790 \uc544\ub2d8) \uadf8\ub300\ub85c \ub3cc\ub824\uc900\ub2e4. \ud3f0 \uc548 \uc0ac\ubcf8: RideStandbyJ.recoFresh.
+function rsRecoFresh(texts, arrMs, nowMs) {
+  if (!Array.isArray(texts)) return texts;
+  arrMs = Number(arrMs); nowMs = Number(nowMs);
+  if (!isFinite(arrMs) || !isFinite(nowMs) || arrMs <= 0 || nowMs <= 0) return texts;
+  var m = Math.max(1, Math.min(7, Math.round((arrMs - nowMs) / 60000)));
+  var km = (Math.floor(arrMs / 60000) + 540) % 1440; if (km < 0) km += 1440;
+  var hm = (Math.floor(km / 60) < 10 ? '0' : '') + Math.floor(km / 60) + ':' + (km % 60 < 10 ? '0' : '') + (km % 60);
+  return texts.map(function (t) { return t == null ? null : String(t).replace(/\ud558\ucc28 \d+\ubd84 \uc804/g, '\ud558\ucc28 ' + m + '\ubd84 \uc804').replace(/\ub3c4\ucc29 \uc608\uc815 \d{2}:\d{2}/g, '\ub3c4\ucc29 \uc608\uc815 ' + hm); });
+}
 function rsRecoFn() { return (typeof arrRecoWhen === 'function') ? arrRecoWhen : (function () { try { return require('./arrive-reco').arrRecoWhen; } catch (e) { return null; } })(); }
 // \ud558\ucc28 7\ubd84 \uc804 \ucd94\ucc9c(\ub9db\uc9d1\u00b7\ucee4\ud53c\u00b7\uc1fc\ud551 \ubb38\uad6c)\uc744 \uc9c0\uae08 \ubcf4\ub0bc \ub54c\uc778\uac00. \ud310\ub2e8\ub9cc \ud558\uace0 \uae00\uc740 /reco-text \uac00 \ub9cc\ub4e0\ub2e4. \ud55c \uc5ec\uc815\uc5d0 \ud55c \ubc88(st.recoKey), 30\ubd84 \uc548\uc5d0 \ubcf4\ub0c8\uc73c\uba74 \ub2e4\uc2dc \uc548 \ud55c\ub2e4(st.recoAt).
 //   \ubc18\ud658 { fire, key, arrMs, dest, slot, dinner, remMin, loc:{lat,lng}|null } \u2014 \uc571\uc740 fire \uc77c \ub54c\ub9cc /reco-text \uc5d0 \uc774 \uac12\uc744 \uadf8\ub300\ub85c \ubcf4\ub0b8\ub2e4.
@@ -20912,9 +20924,16 @@ function resLiveFacts(r) {
   var w = null, wt = (L.wait && typeof L.wait === 'object') ? L.wait : null;                 // \uc2b9\ucc28 \ub300\uae30 \uc911: \ub9c8\ucee4\ub294 \ud0d1\uc2b9 \uc9c0\uc810\uc5d0 \uc11c\uc11c \uc8fc\ud669 \ub9e5\ubc15 + '\ub300\uae30 \uc911 \u00b7 120m'
   if (wt && isFinite(Number(wt.i)) && Number(wt.i) >= 1) {
     f = Math.floor(Number(wt.i)); t = f; ratio = 0;
-    w = { d: (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null };
+    var wd = (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null;
+    if (wd === null && Array.isArray(wt.me) && wt.me.length >= 2 && wt.lat != null && wt.lng != null && isFinite(Number(wt.lat)) && isFinite(Number(wt.lng)) && isFinite(Number(wt.me[0])) && isFinite(Number(wt.me[1]))) wd = Math.round(resMeters(Number(wt.me[0]), Number(wt.me[1]), Number(wt.lat), Number(wt.lng)));     // s271: \ud0d1\uc2b9 \uc9c0\uc810\uae4c\uc9c0 \uac70\ub9ac\ub294 \uc5d4\uc9c4\uc774 \uc7b0\ub2e4(\uc571\uc740 \ub0b4 \uc704\uce58 \uc88c\ud45c\ub9cc \ubcf4\ub0b8\ub2e4)
+    w = { d: wd };
   }
   return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null };
+}
+function resMeters(la1, lo1, la2, lo2) {
+  var r = Math.PI / 180, dla = (la2 - la1) * r, dlo = (lo2 - lo1) * r;
+  var h = Math.sin(dla / 2) * Math.sin(dla / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dlo / 2) * Math.sin(dlo / 2);
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 // \uc694\uc57d \uce69 \uc904(rhead part 'g') \uc0ac\uc2e4: \ucd1d \ubd84 \u00b7 \ud658\uc2b9 \ud69f\uc218 \u00b7 \uc774\ub3d9 \uc218\ub2e8 \ubb36\uc74c(\uc7a5\uac70\ub9ac \uc774\ub984 \u2192 \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4) \u00b7 \ud658\uc2b9\u00b7\uac70\uc810 \uc774\ub984(\uacb9\uce58\ub294 \uc774\ub984\uc740 \ud55c \ubc88\ub9cc)
 function resTagFacts(route, hf) {

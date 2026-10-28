@@ -333,16 +333,7 @@ public final class RideCore {
      * 받아 둘 때는 하차까지 한참 남아 있어(N=7 로 박힘) 그대로 띄우면 2분 남았는데도 '7분 전'이라 나오고 도착 시각도 그때의 추정이라 어긋난다.
      * 가게·메뉴·문구는 그대로. arrMs·nowMs 가 이상하면 글을 그대로 돌려준다.
      */
-    public static String[] freshenReco(String[] t, long arrMs, long nowMs) {
-        if (t == null || arrMs <= 0L || nowMs <= 0L) return t;
-        long m = Math.round((arrMs - nowMs) / 60000.0);
-        m = Math.max(1L, Math.min(7L, m));
-        long km = ((arrMs / 60000L) + 540L) % 1440L; if (km < 0) km += 1440L;
-        String hm = (km / 60 < 10 ? "0" : "") + (km / 60) + ":" + (km % 60 < 10 ? "0" : "") + (km % 60);
-        String[] o = new String[t.length];
-        for (int i = 0; i < t.length; i++) o[i] = t[i] == null ? null : t[i].replaceAll("하차 \\d+분 전", "하차 " + m + "분 전").replaceAll("도착 예정 \\d{2}:\\d{2}", "도착 예정 " + hm);
-        return o;
-    }
+    public static String[] freshenReco(String[] t, long arrMs, long nowMs) { return RideStandbyJ.recoFresh(t, arrMs, nowMs); }      // s271: 남은 분 · 도착 시각 계산은 엔진(ride-standby rsRecoFresh)의 폰 안 사본
 
     /** 엔진의 진동 무늬 [켜짐, 꺼짐, 켜짐 …](웹 방식) → 안드로이드 무늬 [대기, 켜짐, 꺼짐 …]. 최대 8칸, 한 칸 최대 1초. */
     @SuppressWarnings("unchecked")
@@ -395,17 +386,13 @@ public final class RideCore {
     }
     /** 결과 카드의 내 위치 { cur, pos, arr } (엔진 r.lv). */
     public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + waitJson() + "}"; }
-    /** 승차 대기 중이면 ,"wait":{"i":노드,"d":탑승 지점까지 m(위치를 모르면 d 없음)} — 아니면 "". */
+    /** 승차 대기 중이면 ,"wait":{"i":노드[,"lat":탑승 지점,"lng":…][,"me":[내 위도,경도]]} — 아니면 "". 거리(m)는 엔진(result.js)이 이 값으로 잰다(s271). */
     private String waitJson() {
         if (waitI < 1) return "";
-        String d = "";
-        if (!Double.isNaN(waitLat) && !Double.isNaN(waitLng) && !Double.isNaN(lastLat) && !Double.isNaN(lastLng)) d = ",\"d\":" + Math.round(meters(lastLat, lastLng, waitLat, waitLng));
-        return ",\"wait\":{\"i\":" + waitI + d + "}";
-    }
-    static double meters(double la1, double lo1, double la2, double lo2) {
-        double r = Math.PI / 180.0, dla = (la2 - la1) * r, dlo = (lo2 - lo1) * r;
-        double h = Math.sin(dla / 2) * Math.sin(dla / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dlo / 2) * Math.sin(dlo / 2);
-        return 6371000.0 * 2.0 * Math.atan2(Math.sqrt(h), Math.sqrt(1.0 - h));
+        StringBuilder b = new StringBuilder(",\"wait\":{\"i\":").append(waitI);
+        if (!Double.isNaN(waitLat) && !Double.isNaN(waitLng)) b.append(",\"lat\":").append(waitLat).append(",\"lng\":").append(waitLng);
+        if (!Double.isNaN(waitLat) && !Double.isNaN(waitLng) && !Double.isNaN(lastLat) && !Double.isNaN(lastLng)) b.append(",\"me\":[").append(lastLat).append(',').append(lastLng).append(']');
+        return b.append('}').toString();
     }
 
     // ═════════════ 저장 · 복원 (서비스가 되살아날 때) ═════════════

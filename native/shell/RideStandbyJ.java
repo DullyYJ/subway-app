@@ -795,6 +795,16 @@ final class RideStandbyJ {
         if (!fin(m) || m < 1 || m > ARR_PRE_MIN + 2) return ARR_PRE_MIN;
         return Math.min(ARR_PRE_MIN, m);
     }
+    /** rsRecoFresh(texts, arrMs, nowMs) — 받아 둔 추천 글의 '하차 N분 전' · '도착 예정 HH:MM' 을 지금 값으로(엔진 ride-standby.js 와 같다). 입력이 이상하면 그대로. */
+    static String[] recoFresh(String[] t, long arrMs, long nowMs) {
+        if (t == null || arrMs <= 0L || nowMs <= 0L) return t;
+        long m = Math.max(1L, Math.min(7L, (long) round((arrMs - nowMs) / 60000.0)));
+        long km = ((arrMs / 60000L) + 540L) % 1440L; if (km < 0) km += 1440L;
+        String hm = (km / 60 < 10 ? "0" : "") + (km / 60) + ":" + (km % 60 < 10 ? "0" : "") + (km % 60);
+        String[] o = new String[t.length];
+        for (int i = 0; i < t.length; i++) o[i] = t[i] == null ? null : t[i].replaceAll("하차 \\d+분 전", "하차 " + m + "분 전").replaceAll("도착 예정 \\d{2}:\\d{2}", "도착 예정 " + hm);
+        return o;
+    }
     /** arrRecoWhen({ arrMs, remSec, dest, lastKey, lastAt, nowMs }) */
     static Map<String, Object> arrRecoWhen(Map<String, Object> o0) {
         Map<String, Object> o = o0 == null ? obj() : o0;

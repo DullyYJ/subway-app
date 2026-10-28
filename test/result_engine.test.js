@@ -199,6 +199,14 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   ok(kw && kw.mk && kw.mk.pu === 'w' && kw.mk.r === 0 && kw.mk.f === kw.mk.t && kw.mk.bt === '대기 중 · 120m', '승차 대기 중(lv.wait): 마커가 탑승 지점에 서서 주황 맥박 + 거리 배지(s225)');
   const kw2 = flat(call('fast', { lv: { cur: 1, arr: [], wait: { i: 1 } } }).body.concat(call('fast', { lv: { cur: 1, arr: [], wait: { i: 1 } } }).head)).find(n => n.t === 'trk');
   ok(kw2 && kw2.mk && kw2.mk.pu === 'w' && kw2.mk.bt === '대기 중', '위치를 모르면 배지는 거리 없이');
+  {   // s271: 탑승 지점까지 거리는 엔진이 잰다 — 앱은 탑승 지점 · 내 위치 좌표만 보낸다(예전엔 앱이 재서 d 로 보냈다)
+    const lvm = call('fast', { lv: { cur: 1, arr: [], wait: { i: 1, lat: 37.5009, lng: 127.0, me: [37.5, 127.0] } } });
+    const km = flat(lvm.body.concat(lvm.head)).find(n => n.t === 'trk');
+    ok(km && km.mk && km.mk.pu === 'w' && km.mk.bt === '대기 중 · 100m', '좌표만 보내도 엔진이 거리(m)를 잰다 ' + (km && km.mk && km.mk.bt));
+    const lvn = call('fast', { lv: { cur: 1, arr: [], wait: { i: 1, lat: 37.5009, lng: 127.0 } } });
+    const kn = flat(lvn.body.concat(lvn.head)).find(n => n.t === 'trk');
+    ok(kn && kn.mk && kn.mk.bt === '대기 중', '내 위치를 모르면 거리 없이');
+  }
   const rs = screenCheck([d3, c3, lvs]);
   ok(!rs.err && rs.out.every(l => /^OK/.test(l)), '앱 검증기 통과(탑승 중): ' + (rs.err || rs.out.join(' | ')));
   ok(call('fast').body.some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail') || flat(call('fast').body).some(n => n.t === 'button' && n.act && n.act.v === 'rh.detail'), '결과 카드: 세부경로 보기 단추');

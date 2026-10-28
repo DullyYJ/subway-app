@@ -1068,12 +1068,12 @@ public class ShellJvmTest {
                     RideCore wr = new RideCore();
                     wr.addFix(1000L, 37.5000, 127.0000, 10.0);
                     wr.onStep("{\"state\":{\"wait\":{\"i\":2,\"lat\":37.5009,\"lng\":127.0}},\"nextMs\":5000}");
-                    ok(wr.lvJson().contains("\"wait\":{\"i\":2,\"d\":100}"), "승차 대기 중이면 내 위치 JSON 에 대기 노드 · 탑승 지점까지 거리(s225)");
+                    ok(wr.lvJson().contains("\"wait\":{\"i\":2,\"lat\":37.5009,\"lng\":127.0,\"me\":[37.5,127.0]}"), "승차 대기 중이면 내 위치 JSON 에 대기 노드 · 탑승 지점 · 내 위치 좌표(거리는 엔진이 잰다, s271)");
                     wr.onStep("{\"state\":{},\"nextMs\":5000}");
                     ok(!wr.lvJson().contains("wait"), "대기가 끝나면 wait 가 빠진다");
                     RideCore wn = new RideCore();
                     wn.onStep("{\"state\":{\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}},\"nextMs\":5000}");
-                    ok(wn.lvJson().contains("\"wait\":{\"i\":3}"), "내 위치를 아직 모르면 거리 없이 대기만");
+                    ok(wn.lvJson().contains("\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}") && !wn.lvJson().contains("\"me\""), "내 위치를 아직 모르면 me 없이 대기만");
                 }
                 {
                     String[] fr = RideCore.freshenReco(new String[] { "🚉 하차 7분 전 · 부평 ☕", "하차 7분 전이에요.\n부평 도착 예정 07:30\n\n카푸치노" }, 1760000000000L, 1760000000000L - 120000L);

@@ -170,9 +170,16 @@ function resLiveFacts(r) {
   var w = null, wt = (L.wait && typeof L.wait === 'object') ? L.wait : null;                 // 승차 대기 중: 마커는 탑승 지점에 서서 주황 맥박 + '대기 중 · 120m'
   if (wt && isFinite(Number(wt.i)) && Number(wt.i) >= 1) {
     f = Math.floor(Number(wt.i)); t = f; ratio = 0;
-    w = { d: (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null };
+    var wd = (wt.d != null && isFinite(Number(wt.d)) && Number(wt.d) >= 0) ? Number(wt.d) : null;
+    if (wd === null && Array.isArray(wt.me) && wt.me.length >= 2 && wt.lat != null && wt.lng != null && isFinite(Number(wt.lat)) && isFinite(Number(wt.lng)) && isFinite(Number(wt.me[0])) && isFinite(Number(wt.me[1]))) wd = Math.round(resMeters(Number(wt.me[0]), Number(wt.me[1]), Number(wt.lat), Number(wt.lng)));     // s271: 탑승 지점까지 거리는 엔진이 잰다(앱은 내 위치 좌표만 보낸다)
+    w = { d: wd };
   }
   return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null };
+}
+function resMeters(la1, lo1, la2, lo2) {
+  var r = Math.PI / 180, dla = (la2 - la1) * r, dlo = (lo2 - lo1) * r;
+  var h = Math.sin(dla / 2) * Math.sin(dla / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dlo / 2) * Math.sin(dlo / 2);
+  return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 // 요약 칩 줄(rhead part 'g') 사실: 총 분 · 환승 횟수 · 이동 수단 묶음(장거리 이름 → 지하철 → 버스) · 환승·거점 이름(겹치는 이름은 한 번만)
 function resTagFacts(route, hf) {

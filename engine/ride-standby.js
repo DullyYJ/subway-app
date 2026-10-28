@@ -856,6 +856,18 @@ function rsShare(st, r, cells, map, cur, moving, dest, destName, now) {
     lb: { t: '길동무 · 내 위치', a: '도착예정시간: ', r: '남은시간 ' } };      // 공유 그림의 아래 한 줄과 글머리는 엔진이 정한다(s207)
 }
 
+// s271 (YJ: 계산은 엔진이 — 앱이 추천 글 안의 숫자를 직접 고치던 것을 엔진으로): 탑승 전에 받아 둔 추천 글의 '하차 N분 전' · '도착 예정 HH:MM' 을 지금 터진 시점의 값으로 고친다.
+//   받아 둘 때는 하차까지 한참 남아 N=7 로 박혀 있다 → 그대로 띄우면 2분 남았는데도 '7분 전'. 남은 분은 1~7 로 맞추고 도착 시각은 KST. 가게·메뉴·문구는 그대로.
+//   texts: 글 배열(제목·본문) → 같은 길이의 새 배열. arrMs·nowMs 가 이상하면(0 이하·숫자 아님) 그대로 돌려준다. 폰 안 사본: RideStandbyJ.recoFresh.
+function rsRecoFresh(texts, arrMs, nowMs) {
+  if (!Array.isArray(texts)) return texts;
+  arrMs = Number(arrMs); nowMs = Number(nowMs);
+  if (!isFinite(arrMs) || !isFinite(nowMs) || arrMs <= 0 || nowMs <= 0) return texts;
+  var m = Math.max(1, Math.min(7, Math.round((arrMs - nowMs) / 60000)));
+  var km = (Math.floor(arrMs / 60000) + 540) % 1440; if (km < 0) km += 1440;
+  var hm = (Math.floor(km / 60) < 10 ? '0' : '') + Math.floor(km / 60) + ':' + (km % 60 < 10 ? '0' : '') + (km % 60);
+  return texts.map(function (t) { return t == null ? null : String(t).replace(/하차 \d+분 전/g, '하차 ' + m + '분 전').replace(/도착 예정 \d{2}:\d{2}/g, '도착 예정 ' + hm); });
+}
 function rsRecoFn() { return (typeof arrRecoWhen === 'function') ? arrRecoWhen : (function () { try { return require('./arrive-reco').arrRecoWhen; } catch (e) { return null; } })(); }
 // 하차 7분 전 추천(맛집·커피·쇼핑 문구)을 지금 보낼 때인가. 판단만 하고 글은 /reco-text 가 만든다. 한 여정에 한 번(st.recoKey), 30분 안에 보냈으면 다시 안 한다(st.recoAt).
 //   반환 { fire, key, arrMs, dest, slot, dinner, remMin, loc:{lat,lng}|null } — 앱은 fire 일 때만 /reco-text 에 이 값을 그대로 보낸다.
@@ -1457,4 +1469,4 @@ function handleRideStandby(request, env) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rsTtNow: rsTtNow, rsMonoPos: rsMonoPos, rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rsRecoFresh: rsRecoFresh, rsTtNow: rsTtNow, rsMonoPos: rsMonoPos, rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };

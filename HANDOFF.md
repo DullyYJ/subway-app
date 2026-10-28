@@ -3043,3 +3043,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **어림이 안 되는 경우는 그대로 '도착정보 없음'**: 위치 응답이 없음 · 운행 차 없음 · 순번 앞에 차가 없음(전부 지나감) · 30정거장 초과.
 - **시험**: `map_engine` s270 7건(약 2분/15분 · 곧 도착 · 지나간 차 · 빈 응답 · 30정거장 초과 · 저장된 순번이면 위치만 부탁) + s200 바퀴 시험은 nx 를 `bus.nx` 로 실어 보내도록 바로잡음(예전엔 바깥에 둬서 엔진에 안 닿았다) + s199 즐겨찾기 시험 nx 에 od 추가. ENGINE_VERSION `route-v2-2026-10-28s270`.
 - **한계**: 기기 미검증. 어림값이라 카카오의 초 단위 값과 다르다(약 N분). 노선 정류장 목록에 같은 정류장 ID 가 회차 양쪽에 있으면 가장 가까운 차가 나오는 쪽 순번을 고른다.
+
+## s271 (2026-10-28) — 앱에 있던 계산 두 가지를 엔진으로 (YJ: "모든 계산은 엔진이 앱은 그림만" 점검 1번)
+- **점검 결과(읽기만, 보고함)**: 앱이 계산·문구를 만들던 분명한 곳 — ① `RideCore.freshenReco`(받아 둔 하차 추천 글의 "하차 N분 전"·"도착 예정 HH:MM" 을 앱이 정규식으로 고침, +9시간 박힘) ② `RideCore.meters`(승차 대기 거리 m 를 앱이 haversine 으로 잼) ③ `WidgetCore.evalScene`(위젯 출퇴근 장면 판단 — 이번엔 안 건드림, 영향이 커서 따로 상의).
+- **① 추천 문구**: 엔진 `ride-standby.js rsRecoFresh(texts, arrMs, nowMs)` 로 이동(남은 분 1~7 · KST 시각). 폰 안 사본 `RideStandbyJ.recoFresh`. `RideCore.freshenReco` 는 그것을 부르기만 한다(기존 시험 그대로 통과). 같은 시험 벡터가 JS(`ride_standby.test.js`)와 자바(`ShellJvmTest`)에 있다.
+- **② 대기 거리**: 앱은 `lv.wait` 에 `{i, lat, lng, me:[내 위도,경도]}` 만 싣고(거리 `d` 는 더 이상 안 보냄), 엔진 `result.js resLive` 가 `resMeters` 로 잰다. 옛 `d` 가 오면 그대로 쓴다(호환). `RideCore.meters` 삭제.
+- **시험**: `ride_standby` 1건 · `result_engine` 2건 · `ShellJvmTest` wait JSON 기대값 교체. ENGINE_VERSION `route-v2-2026-10-28s271`(s270 회차 대기시간 포함 — s270 은 커밋만 하고 푸시 전이었다).
+- **남은 점검 항목(안 고침)**: 위젯 출퇴근 판단·문구, 토스트·확인창 문구(앱 직접), 마지막 위치 재사용(30분/6시간/24시간), 버스 도착정보 45초 유지·본문 글자 판정, 탭별 화면 칸 구성(`ShellCore.slotsOf`), 갱신 주기 상수, 버스 초 카운트다운 서식(`ScreenCore.cdFmt`).
