@@ -70,6 +70,12 @@ const { sceneDecide } = require('../engine/scene.js');
   await t('SceneCore·SceneArt·SceneActs 는 android.* 를 쓰지 않는다(순수 자바)', async () => {
     for (const n of ['SceneCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
   });
+  await t('내 버스 번호는 엔진이 알려 준 res.line 으로 그린다 — 무작위 번호는 지나가는 다른 차 장식만(s293)', async () => {
+    const core = fs.readFileSync(N('SceneCore.java'), 'utf8');
+    assert.ok(/String lineNo\(String fallback\)/.test(core) && /res\.line\.length\(\) > 0/.test(core), 'lineNo 도우미');
+    assert.ok(/c\.fillTextC\(busLabel\(\)/.test(core) && /o\.no = busLabel\(\)/.test(core) && /v\.no = lineNo\(pickOf\(BUS_NOS\)\)/.test(core), '타는 중 간판 · 내릴 때 버스 · 기다리는 버스가 내 번호');
+    assert.ok(!/c\.fillTextC\(busNo,/.test(core), '간판에 무작위 busNo 를 직접 쓰지 않는다');
+  });
   await t('ScreenView 가 장면 노드를 그리고 · 손가락으로 잡을 수 있고 · 떼면 놓고 · 안 보이면 저절로 멈춘다', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), c = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/case ScreenCore\.K_SCENE: drawScene\(cv, it\)/.test(v) && /"scene"\.equals\(t\)/.test(c) && /K_SCENE = 35/.test(c));

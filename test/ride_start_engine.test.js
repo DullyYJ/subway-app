@@ -88,6 +88,19 @@ ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.st
   ok(RS.rideBusItemsMulti(null, ['1'], T0).length === 0 && RS.rideBusItemsMulti({}, null, T0).length === 0, 's265: 이상한 입력은 빈 목록');
 }
 
+{   // s293 (YJ: 경로 일치가 아니라 목적지 일치 — 내 목적지·환승 지점에 가는 버스면 후보): 내리는 곳에서 300m 안에 서는 번호까지 대체 번호로
+  const W2 = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8'), vm2 = require('vm');
+  const fn = W2.slice(W2.indexOf('var ALT_BUS_DEST_M'), W2.indexOf('\n}\n', W2.indexOf('function busAltNos(G, L)')) + 3);
+  const cx = { noKey: x => String(x).replace(/\D/g, ''), hav: (a, b, c, d) => Math.hypot((a - c) * 111000, (b - d) * 88000) };
+  vm2.createContext(cx); vm2.runInContext(fn + '\nthis.f = busAltNos;', cx);
+  const st = (lat, lng) => ({ lat, lng }), B = [37.5, 127.0], A = [37.52, 127.0];
+  const G2 = { routeNoOf: { '1_77': '77', '1_9903': '9903', '1_55': '55', '1_44': '44' }, routeStops: {
+    '1_77': [st(37.5, 127.0), st(37.52, 127.0)], '1_9903': [st(37.5, 127.0), st(37.5205, 127.0016)], '1_55': [st(37.5, 127.0), st(37.5260, 127.0)], '1_44': [st(37.5, 127.0003), st(37.51, 127.0)] } };
+  const L2 = { mode: 'bus', line: '1_77', busNo: '77', coordList: [B, A] };
+  const got = cx.f(G2, L2);
+  ok(Array.isArray(got) && got.join() === '9903', 's293: 목적지 근처(약 200m)에 서는 9903 은 대체 번호 · 먼 곳(55)·내리는 곳에 안 가는 번호(44)·자기 번호는 뺀다 ' + JSON.stringify(got));
+}
+
 // ② 이상한 입력
 ok(RS.rideStart({ cap: 5 }, facts()).ok === false, 'cap 12 미만은 거절');
 ok(RS.rideStart({ cap: 18 }, null).error === 'route' && RS.rideStart({ cap: 18 }, { data: { result: { path: 'x' } } }).error === 'route', '경로가 없으면 route');

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s292";
+var ENGINE_VERSION = "route-v2-2026-10-29s293";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -2974,6 +2974,9 @@ function applyExpressDiscount(legs) {
 __name(applyExpressDiscount, "applyExpressDiscount");
 __name2(applyExpressDiscount, "applyExpressDiscount");
 // s265 (YJ: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uba74 \uace0\ub97c \uc218 \uc788\uac8c): \ud0c0\ub294 \uc815\ub958\uc7a5\uc5d0 \uc11c\uace0 \ub0b4\ub9ac\ub294 \uc815\ub958\uc7a5 \uadfc\ucc98\uc5d0\ub3c4 \uc11c\ub294 \ub2e4\ub978 \ubc88\ud638\uc758 \ubc84\uc2a4 \ubaa9\ub85d(\uc790\uae30 \ubc88\ud638 \uc81c\uc678). \uc544\ub2c8\uba74 null.
+// s293 (YJ: a bus that goes to MY destination / transfer point counts, not only the same path): alternatives are judged by DESTINATION match -
+//   same boarding stop (35 m) and a later stop within ALT_BUS_DEST_M of the leg's alighting point (destination or transfer stop). Was 70 m (nearly the same stop only), which is why a bus like 9903 was never offered.
+var ALT_BUS_DEST_M = 300;
 function busAltNos(G, L) {
   try {
     if (!G || !G.routeStops || !L || L.mode !== "bus" || !L.coordList || L.coordList.length < 2) return null;
@@ -2999,8 +3002,8 @@ function busAltNos(G, L) {
       if (ib < 0) continue;
       let ok = false;
       for (let j = ib + 1; j < a.length; j++) {
-        if (Math.abs(a[j].lat - c1[0]) > 8e-4 || Math.abs(a[j].lng - c1[1]) > 1e-3) continue;
-        if (hav(a[j].lat, a[j].lng, c1[0], c1[1]) <= 70) {
+        if (Math.abs(a[j].lat - c1[0]) > 3.2e-3 || Math.abs(a[j].lng - c1[1]) > 4e-3) continue;
+        if (hav(a[j].lat, a[j].lng, c1[0], c1[1]) <= ALT_BUS_DEST_M) {
           ok = true;
           break;
         }

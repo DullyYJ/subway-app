@@ -70,19 +70,22 @@ public final class ErrCore {
 
     /** 화면 주소(GET)에 실려 가는 글 길이 한도(주소 인코딩 뒤) — 서버는 f 가 6000자를 넘으면 거절하고, 한글은 주소에서 9배가 되어 40건을 다 실으면 화면이 비었다(s266). */
     public static final int PAGE_BUDGET = 6400;
+    /** 서버(settings 화면)는 사실 글(f)이 6000자를 넘으면 400 으로 거절한다 — 영어·숫자 흔적(호출 기록)은 주소 인코딩이 길지 않아 PAGE_BUDGET 만으로는 못 걸러, 38건 오류 로그가 안 열렸다(s293). 여유를 두고 5600. */
+    public static final int RAW_BUDGET = 5600;
 
     /** 최신 기록부터 한도 안에서 가능한 만큼 싣는다(나머지 개수는 more — 엔진이 '복사로 전체 확인'을 안내). 복사는 전부를 복사한다. */
     public static String pageFacts(ShellCore.Store st, int budget) {
         List<Entry> all = list(st), keep = new ArrayList<Entry>();
-        int used = 80;
+        int used = 80, raw = 80;                                                // used: 주소에 실린 길이(인코딩 뒤) · raw: 서버가 세는 사실 글 길이(디코딩 뒤 — 6000 넘으면 거절 · s293)
         for (int i = all.size() - 1; i >= 0; i--) {
             Entry e = all.get(i);
             int w = enc(ShellCore.q(e.t)) + enc(ShellCore.q(e.m)) + enc(ShellCore.q(e.f)) + enc(ShellCore.q(e.s)) + 40;
-            if (used + w > budget) {
+            int rw = ShellCore.q(e.t).length() + ShellCore.q(e.m).length() + ShellCore.q(e.f).length() + ShellCore.q(e.s).length() + 40;
+            if (used + w > budget || raw + rw > RAW_BUDGET) {
                 if (keep.isEmpty()) { Entry c = new Entry(); c.t = e.t; c.n = e.n; c.m = cut(e.m, 120); c.f = cut(e.f, 80); c.s = ""; keep.add(c); }
                 break;
             }
-            used += w; keep.add(e);
+            used += w; raw += rw; keep.add(e);
         }
         java.util.Collections.reverse(keep);
         return "{\"pf\":{\"nat\":true,\"nv\":true,\"errs\":" + json(keep) + ",\"more\":" + Math.max(0, all.size() - keep.size()) + "}}";

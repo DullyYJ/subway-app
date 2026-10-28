@@ -319,7 +319,7 @@ public final class SceneCore {
         inside = m.equals("wait") && venue.equals("sub") && res.inside; sta = inside ? res.sta : "";           // 지하철 대기 = 역 안 승강장(실내: 날씨 효과 없음)
         if (m.equals("wait")) {
             Actor h = mkActor(heroId, inside ? W * .5 : venue.equals("sub") ? entX + 6 : W * .48, venue.equals("sub") ? .62 : .66, baseDir); h.hero = true; h.k *= 1.12; h.w *= 1.12; h.spd *= 1.1; h.st = "stand"; h.ph = R.next() * 6; h.umb = !inside && (L.wk.equals("rain") || L.wk.equals("snow")); h.life = 1e9; hero = h; actors.add(h); waitNext = t + rnd(1.5, 3);
-            if (venue.equals("bus")) { Traffic v = new Traffic(); v.lane = 1; v.bus = true; v.L = laneL(1, true); v.dir = 1; v.x = -40; v.v = 52; v.color = css(pickOf(BUS_COLORS)); v.no = pickOf(BUS_NOS); traffic.add(v); }
+            if (venue.equals("bus")) { Traffic v = new Traffic(); v.lane = 1; v.bus = true; v.L = laneL(1, true); v.dir = 1; v.x = -40; v.v = 52; v.color = css(pickOf(BUS_COLORS)); v.no = lineNo(pickOf(BUS_NOS)); traffic.add(v); }          // 기다리는 버스는 엔진이 알려 준 내 버스 번호(res.line) — 지나가는 다른 차만 장식 번호(s293)
         } else if (m.equals("alight")) {
             Actor h2 = mkActor(heroId, 0, -.12, -1); h2.hero = true; h2.k *= 1.1; h2.w *= 1.1; h2.vis = false; h2.life = 1e9; h2.umb = L.wk.equals("rain") || L.wk.equals("snow"); h2.st = "hidden"; hero = h2; actors.add(h2);
             seq = new Seq(); seq.ph = 0; seq.t0 = t; seq.busOn = !venue.equals("sub"); seq.busX = W * .66; seq.L = 120; seq.color = busColor;
@@ -760,7 +760,7 @@ public final class SceneCore {
         }
         drawTrafficPan(c, 0); drawTraffic(c, 0);
         Seq q = seq;
-        if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busNo; o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
+        if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busLabel(); o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
         drawTrafficPan(c, 1); drawTraffic(c, 1);
         if (!inside && ("wait".equals(mode) || "alight".equals(mode))) { if (venue.equals("sub")) SceneArt.drawEntrance(c, g, entX, L, res.line); else SceneArt.drawStop(c, g, stopX, L); }
         drawGfx(c, false);
@@ -846,7 +846,7 @@ public final class SceneCore {
         c.fillStyle("rgba(255,255,255,.85)"); c.fillRect(6, floorY + 12, W - 12, 3);
         for (double f : new double[]{.2, .76}) { double wx = W * f, wyc = H - 17; c.fillStyle("#10131a"); c.beginPath(); c.arc(wx, wyc, 14.5, PI, 0); c.fill(); c.fillRect(wx - 14.5, wyc - .5, 29, 1); SceneArt.drawWheel(c, wx, wyc, 11.5, Rd.rot); }
         // 앞쪽 행선 표지판
-        c.fillStyle("#10131a"); rr(c, W - 44, 8, 34, 11, 3); c.fill(); c.fillStyle("#ffb347"); c.font(8); c.fillTextC(busNo, W - 27, 13.6);
+        c.fillStyle("#10131a"); rr(c, W - 44, 8, 34, 11, 3); c.fill(); c.fillStyle("#ffb347"); c.font(8); c.fillTextC(busLabel(), W - 27, 13.6);
         if (Lk.night) { SceneCv.Grad gl = c.linear(0, roofY, 0, floorY).stop(0, rgba(255, 225, 150, .18)).stop(1, rgba(255, 225, 150, 0)); c.fillGrad(gl); c.fillRect(8, roofY, W - 16, floorY - roofY); }
     }
 
@@ -862,6 +862,9 @@ public final class SceneCore {
         if (L.wind > 0) for (i = 0; i < 30; i++) p.wind.add(new double[]{R.next(), R.next(), rnd(.6, 1.2), R.next(), R.next() * 6.28});          // 바람이 있을 때만(난수열 그대로 유지)
         return p;
     }
+    /** 내 버스 번호(엔진 res.line — 고른 번호가 반영된다). 버스 장면이 아니거나 비어 있으면 fallback. 지나가는 다른 차의 번호만 장식으로 아무 번호나 뽑는다(s293: 77 을 타는데 472 가 보이던 것). */
+    String lineNo(String fallback) { return res != null && "bus".equals(res.venue) && res.line != null && res.line.length() > 0 ? res.line : fallback; }
+    String busLabel() { return lineNo(busNo == null ? "" : busNo); }
     void resetBG() {
         bg = SceneArt.buildBG(factory, L, g, dpr, L.season, dark);
         bgKey = L.slot + "|" + L.wk + "|" + L.season + "|" + L.place + "|w" + L.wind + "|" + dark + "|" + W + "|" + H; wxP = mkWxParts(L.wk); bgTail = dark + "|" + W + "|" + H;

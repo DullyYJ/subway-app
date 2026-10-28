@@ -94,6 +94,13 @@ public class ShellJvmTest {
                     ok(ErrCore.count(es40) == 40 && pf.length() < 6000 && u.length() < 7600 && pf.contains("\"more\":") && !pf.contains("\"more\":0"), "오류 로그 40건: 화면 주소가 한도 안(" + pf.length() + "자 · 주소 " + u.length() + "자)이고 나머지는 more 로 알린다");
                     ok(ErrCore.copyText(es40).contains("오류 메시지 번호 0 ") && ErrCore.copyText(es40).contains("오류 메시지 번호 39"), "복사는 40건 전부");
                 }
+                {   // s293: 영어·숫자(호출 흔적 · 주소)뿐인 38건 — 주소 인코딩은 짧아도 서버가 세는 사실 글 6000자를 넘어 400 → 오류 로그가 안 열렸다(YJ 폰 38건)
+                    StringBuilder tr = new StringBuilder(); for (int q = 0; tr.length() < 590; q++) tr.append("android.os.Handler.dispatchMessage:").append(100 + q).append('\n');
+                    ShellCore.MemStore ea = new ShellCore.MemStore();
+                    for (int q = 0; q < 38; q++) ErrCore.add(ea, "10-29 05:" + (10 + q % 40), "IllegalStateException: BUS_ARR g" + q + " https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=23&nodeId=ICB16800" + q + "&_type=json", "ShellActivity.java:" + (300 + q), tr.toString());
+                    String pa = ErrCore.pageFacts(ea);
+                    ok(ErrCore.count(ea) == 38 && pa.length() <= 6000 && pa.contains("\"more\":") && !pa.contains("\"more\":0") && pa.indexOf("g37") > 0, "오류 로그 38건(영어·숫자): 사실 글 " + pa.length() + "자 ≤ 6000 · 최신 것 우선 · 나머지는 more");
+                }
                 ErrCore.add(es, "10-21 06:00", "NullPointerException: x", "A.java:3", "A.f:3\nB.g:9");
                 ErrCore.add(es, "10-21 06:01", "IllegalStateException", "B.java:7", "");
                 ok(ErrCore.count(es) == 2, "두 건");
