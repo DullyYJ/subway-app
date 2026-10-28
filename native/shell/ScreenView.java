@@ -531,7 +531,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_POSTH) toggleOpen(pi);
                         else if (pi.kind == ScreenCore.K_TDROW && pi.key.length() > 0) toggleTd(pi);
                         else if ((pi.kind == ScreenCore.K_SUG || pi.kind == ScreenCore.K_TROW) && pi.act2 != null && x / dpr >= pi.btx - 6f) { blurInput(); listener.onAction(pi.act2); }
-                        else if (pi.kind == ScreenCore.K_RHD) { blurInput(); listener.onAction(ScreenCore.Layout.rhdAct(pi, x / dpr)); }
+                        else if (pi.kind == ScreenCore.K_RHD) { blurInput(); ScreenCore.Act ra = ScreenCore.Layout.rhdAct(pi, x / dpr); if (ra != null) listener.onAction(ra); }
                         else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
                         else if (pi.kind == ScreenCore.K_BRX && "h".equals(pi.dk)) tapBrh(pi, x / dpr);
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }

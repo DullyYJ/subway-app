@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s268";
+var ENGINE_VERSION = "route-v2-2026-10-28s269";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19119,10 +19119,10 @@ function rheadHeadNodes(f) {
   var nm = function (s) { return rheadNmFix(s).replace(/\uc5ed$/, ''); };
   if (f.nr) {                                           // \uace0\ub978 \ud0ed\ub9cc\uc73c\ub85c\ub294 \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\ub2e4 \u2014 \uba38\ub9ac\uc904\uc5d0 \uc548\ub0b4 \ud55c \uc904\ub9cc(\uc608\uc804 \uc6f9 _showTabNoRoute \uc640 \uac19\uc740 \ubb38\uad6c)
     var lb = f.nr === 'sub' ? '\uc9c0\ud558\ucca0' : (f.nr === 'bus' ? '\ubc84\uc2a4' : '\uc774 \uc218\ub2e8');
-    return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '\ub9cc\uc73c\ub85c \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\uc5b4\uc694', xact: { a: 'call', v: 'rh.close' }, btn: '\uc990\uaca8\ucc3e\uae30', act: { a: 'call', v: 'rh.fav' } }];
+    return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '\ub9cc\uc73c\ub85c \uac08 \uc218 \uc788\ub294 \uacbd\ub85c\uac00 \uc5c6\uc5b4\uc694', btn: '\uc990\uaca8\ucc3e\uae30', act: { a: 'call', v: 'rh.fav' } }];
   }
   var route = (nm(f.a) || nm(f.b)) ? (nm(f.a) + ' \u2192 ' + nm(f.b)) : '';
-  var head = { t: 'rhd', pad: [0, 0, 0, 8], num: String(f.m), unit: f.u ? '\ubd84 \ub0a8\uc74c' : '\ubd84', s: route, xact: { a: 'call', v: 'rh.close' } };
+  var head = { t: 'rhd', pad: [0, 0, 0, 8], num: String(f.m), unit: f.u ? '\ubd84 \ub0a8\uc74c' : '\ubd84', s: route };      // s269(YJ): \ub2eb\uae30(X) \ub2e8\ucd94\ub294 \ube90\ub2e4 \u2014 \uc990\uaca8\ucc3e\uae30\uac00 \uc624\ub978\ucabd \ub05d. \ub2eb\uae30\ub294 \uc548\ub0b4 \uc885\ub8cc\u00b7\uacbd\ub85c \ub2e4\uc2dc \ucc3e\uae30\ub85c
   if (f.fav) { head.btn = '\uc990\uaca8\ucc3e\uae30'; head.act = { a: 'call', v: 'rh.fav' }; }
   var nodes = [head];
   var lines = [];
@@ -21228,13 +21228,13 @@ function resultScreen(opt, r) {
       var rowKids = [
         { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
         { t: 'button', s: '\uc548\ub0b4 \uc885\ub8cc', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
-      var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
+      var rowNode = { t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: rowKids };      // s269(YJ: \uae00\uc790\uc640 \ubc84\ud2bc\uc774 \ub108\ubb34 \ubd99\uc74c \u2014 \uc704 \uac04\uaca9\uc744 \ubc84\ud2bc \uc544\ub798 \uac04\uaca9(4 + \uce74\ub4dc \uc548\ucabd 8 = 12)\uacfc \uac19\uac8c)
       if (typeof r.ride.dt === 'string' && r.ride.dt) nodes.push({ t: 'text', s: r.ride.dt.slice(0, 60), size: 13, bold: true, color: 'gold', lh: 1.4, pad: [8, 6, 0, 4] });      // s229 \uc5ed\uae4c\uc9c0 \uc774\ub3d9: \ub0a8\uc740 \uac70\ub9ac\u00b7\uc2dc\uac04(\uc5d4\uc9c4 ongoing.text)
       nodes.push(rowNode);
-    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // \uc6f9 routeActRow(\uc548\ub0b4 \uc804): [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30][\uacbd\ub85c \ud655\uc815(\ud30c\ub791)]
+    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: [                // \uc6f9 routeActRow(\uc548\ub0b4 \uc804): [\uc138\ubd80\uacbd\ub85c \ubcf4\uae30][\uacbd\ub85c \ud655\uc815(\ud30c\ub791)]
       { t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
       { t: 'button', s: '\uacbd\ub85c \ud655\uc815', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
-    else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
+    else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 12, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
   if (pvPill) nodes.unshift(pvPill);

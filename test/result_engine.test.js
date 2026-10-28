@@ -207,6 +207,7 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
     const rw = (s) => flat(s.body).find(n => n.t === 'row' && n.kids.some(q => q.act && q.act.v === 'rh.detail'));
     const i22 = rw(idle(22)), i21 = rw(idle(21));
     ok(i22 && i22.kids.length === 2 && i22.kids[1].act.v === 'rh.confirm' && i22.kids[1].s === '경로 확정' && i22.kids[1].fill === '#2f7cf6' && i22.kids[1].tc === '#ffffff' && !i21, '안내 전 버튼 줄: cap 22 에는 [세부경로 보기][경로 확정], 옛 앱에는 세부경로 단추 하나');
+    ok(i22.pad[1] === 12 && i22.pad[3] + 8 === 12, 's269: 버튼 줄 위 간격(12) = 버튼 아래 간격(줄 아래 4 + 카드 안쪽 8)');
     const rs3 = screenCheck([idle(22)]);
     ok(!rs3.err && rs3.out.every(l => /^OK/.test(l)), '앱 검증기 통과(안내 전 버튼 줄): ' + (rs3.err || rs3.out.join(' | ')));
   }

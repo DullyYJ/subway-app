@@ -629,7 +629,12 @@ public class ScreenJvmTest {
         ScreenCore.Item rh4 = RL4.body.length == 1 ? RL4.body[0] : null;
         ok(rh4 != null && "m".equals(rh4.tag) && rh4.go.equals("버스만으로 갈 수 있는 경로가 없어요") && near(rh4.zoneX, rh4.x) && rh4.label.length() == 0 && rh4.sw > 0f && rh4.on, "안내 한 줄: 왼쪽 끝에서 시작 · 숫자·단위 없음 · 단추는 그대로");
         ok(RL4.body[0].zoneX + M.width(RL4.body[0].go, ScreenCore.RHD_MSG, true) <= RL4.body[0].sx + 0.5f, "안내 한 줄은 즐겨찾기 알약을 안 덮는다");
-        ok(bad(wrapBody("{\"t\":\"rhd\",\"unit\":\"분\",\"xact\":" + cls + "}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\"}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\",\"btn\":\"x\"}")), "머리줄 모양이 틀리면 거절(num 없음 · 누를 곳 없음 · btn 인데 act 없음)");
+        ok(bad(wrapBody("{\"t\":\"rhd\",\"unit\":\"분\",\"xact\":" + cls + "}")) && !bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\"}")) && bad(wrapBody("{\"t\":\"rhd\",\"num\":\"1\",\"btn\":\"x\"}")), "머리줄 모양이 틀리면 거절(num 없음 · btn 인데 act 없음) — s269: 누를 곳이 없는 머리줄은 허용");
+        ScreenCore.Layout RL5 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"num\":\"99\",\"unit\":\"분\",\"s\":\"내 위치 \u2192 보라매\",\"btn\":\"즐겨찾기\",\"act\":" + fav + "}")), 360f, M);
+        ScreenCore.Item rh5 = RL5.body.length == 1 ? RL5.body[0] : null;
+        ok(rh5 != null && !rh5.on && rh5.sw > 0f && near(rh5.sx + rh5.sw, rh5.x + rh5.w) && ScreenCore.Layout.rhdAct(rh5, rh5.sx + 4f).v.equals("rh.fav"), "s269: 닫기(X)가 없으면 즐겨찾기 알약이 오른쪽 끝에 붙는다");
+        ScreenCore.Layout RL6 = ScreenCore.layout(ScreenCore.load(wrapBody("{\"t\":\"rhd\",\"num\":\"99\",\"unit\":\"분\",\"s\":\"내 위치 \u2192 보라매\"}")), 360f, M);
+        ok(RL6.body.length == 1 && RL6.body[0].sw == 0f && !RL6.body[0].on && ScreenCore.Layout.rhdAct(RL6.body[0], 300f) == null, "s269: 즐겨찾기도 닫기도 없는 머리줄은 눌러도 아무 일 없다");
 
         // ── 구간 타임라인(trk) ──
         String trkCells = "[{\"w\":64,\"n\":\"도보\",\"nc\":\"sub\",\"ns\":9,\"np\":2,\"rc\":\"#8e8e93\",\"dk\":\"e\",\"dc\":\"#d4af37\",\"t\":\"3분\",\"tc\":\"gold\",\"ts\":9,\"tb\":true,\"ti\":0},"

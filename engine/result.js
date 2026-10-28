@@ -486,13 +486,13 @@ function resultScreen(opt, r) {
       var rowKids = [
         { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
         { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } }];
-      var rowNode = { t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: rowKids };
+      var rowNode = { t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: rowKids };      // s269(YJ: 글자와 버튼이 너무 붙음 — 위 간격을 버튼 아래 간격(4 + 카드 안쪽 8 = 12)과 같게)
       if (typeof r.ride.dt === 'string' && r.ride.dt) nodes.push({ t: 'text', s: r.ride.dt.slice(0, 60), size: 13, bold: true, color: 'gold', lh: 1.4, pad: [8, 6, 0, 4] });      // s229 역까지 이동: 남은 거리·시간(엔진 ongoing.text)
       nodes.push(rowNode);
-    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 0, 0, 4], gap: 8, kids: [                // 웹 routeActRow(안내 전): [세부경로 보기][경로 확정(파랑)]
+    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: [                // 웹 routeActRow(안내 전): [세부경로 보기][경로 확정(파랑)]
       { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
       { t: 'button', s: '경로 확정', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
-    else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 0, 0, 4], act: { a: 'call', v: 'rh.detail' } });
+    else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 12, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
   if (pvPill) nodes.unshift(pvPill);

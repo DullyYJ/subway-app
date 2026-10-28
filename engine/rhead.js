@@ -252,10 +252,10 @@ function rheadHeadNodes(f) {
   var nm = function (s) { return rheadNmFix(s).replace(/역$/, ''); };
   if (f.nr) {                                           // 고른 탭만으로는 갈 수 있는 경로가 없다 — 머리줄에 안내 한 줄만(예전 웹 _showTabNoRoute 와 같은 문구)
     var lb = f.nr === 'sub' ? '지하철' : (f.nr === 'bus' ? '버스' : '이 수단');
-    return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '만으로 갈 수 있는 경로가 없어요', xact: { a: 'call', v: 'rh.close' }, btn: '즐겨찾기', act: { a: 'call', v: 'rh.fav' } }];
+    return [{ t: 'rhd', pad: [0, 0, 0, 8], msg: lb + '만으로 갈 수 있는 경로가 없어요', btn: '즐겨찾기', act: { a: 'call', v: 'rh.fav' } }];
   }
   var route = (nm(f.a) || nm(f.b)) ? (nm(f.a) + ' → ' + nm(f.b)) : '';
-  var head = { t: 'rhd', pad: [0, 0, 0, 8], num: String(f.m), unit: f.u ? '분 남음' : '분', s: route, xact: { a: 'call', v: 'rh.close' } };
+  var head = { t: 'rhd', pad: [0, 0, 0, 8], num: String(f.m), unit: f.u ? '분 남음' : '분', s: route };      // s269(YJ): 닫기(X) 단추는 뺐다 — 즐겨찾기가 오른쪽 끝. 닫기는 안내 종료·경로 다시 찾기로
   if (f.fav) { head.btn = '즐겨찾기'; head.act = { a: 'call', v: 'rh.fav' }; }
   var nodes = [head];
   var lines = [];

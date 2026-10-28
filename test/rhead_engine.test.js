@@ -72,8 +72,8 @@ const web = new Function(
   ok(s.bg === 'card' && T({ m: 1 }).bg === 'card', '카드 안 화면이라 바탕은 card');
   ok(s.ok && s.v === 1 && s.screen === 'rhead' && s.cover === 'tab' && s.head.length === 0 && /^r1h:/.test(s.rev) && s.info.part === 'h', '기본 모양');
   const hd = s.body[0];
-  ok(hd.t === 'rhd' && hd.num === '24' && hd.unit === '분' && hd.s === '부평 \u2192 두정' && hd.btn === '즐겨찾기' && hd.act.v === 'rh.fav' && hd.xact.v === 'rh.close', '머리줄: 24 분 · 역 글자 뗀 구간명 · 즐겨찾기 · 닫기');
-  ok(H({ m: 9, a: '가', b: '나', fav: 0 }).body[0].btn === undefined && H({ m: 9, fav: 0 }).body[0].act === undefined, '즐겨찾기를 안 보이면 알약 없음(닫기만)');
+  ok(hd.t === 'rhd' && hd.num === '24' && hd.unit === '분' && hd.s === '부평 \u2192 두정' && hd.btn === '즐겨찾기' && hd.act.v === 'rh.fav' && hd.xact === undefined, '머리줄: 24 분 · 역 글자 뗀 구간명 · 즐겨찾기(오른쪽 끝) · 닫기(X) 없음(s269)');
+  ok(H({ m: 9, a: '가', b: '나', fav: 0 }).body[0].btn === undefined && H({ m: 9, fav: 0 }).body[0].act === undefined, '즐겨찾기를 안 보이면 알약 없음(누를 곳 없는 머리줄)');
   ok(H({ m: 9 }).body[0].s === '' && H({ m: 9, a: '서울역', b: '' }).body[0].s === '서울 \u2192 ', '구간명이 없으면 빈 글');
   ok(s.body.length === 3 && s.body[1].bold === true && s.body[1].color === 'text' && s.body[2].color === 'sub' && s.body[2].s === '가장 빨리 도착하는 경로예요.', '요약 줄: 굵은 전체 줄 + 이유 줄');
   const x = H({ m: 5, xs: [{ kind: 'walk', at: '구로', walkMin: 1, boardAt: '구로', toType: 1, toLine: '천안급행' }, { at: '신도림', fromType: 1, fromLine: '1호선', toType: 1, toLine: '2호선' }] });
@@ -90,7 +90,7 @@ const web = new Function(
   ok(H({ m: 12, u: 1 }).body[0].unit === '분 남음' && H({ m: 12, u: 0 }).body[0].unit === '분' && H({ m: 12 }).body[0].unit === '분', '이동 중이면 단위가 "분 남음" (웹 _updateRouteRemaining 와 같은 글)');
   ok(/'분 남음' : '분'/.test(html) && /_ue\.textContent = _under \? '분 남음'/.test(html), '웹에도 같은 단위 글이 있다');
   const nr = H({ m: 9, nr: 'sub', a: '가', b: '나', sp: { ride: 1, wait: 1, walk: 1 }, why: 'x', xs: [{ kind: 'train', at: 'A' }] });
-  ok(nr.body.length === 1 && nr.body[0].t === 'rhd' && nr.body[0].msg === '지하철만으로 갈 수 있는 경로가 없어요' && nr.body[0].num === undefined && nr.body[0].act.v === 'rh.fav' && nr.body[0].xact.v === 'rh.close', '경로 없는 탭: 안내 한 줄만(요약·환승은 숨김) · 즐겨찾기·닫기는 그대로');
+  ok(nr.body.length === 1 && nr.body[0].t === 'rhd' && nr.body[0].msg === '지하철만으로 갈 수 있는 경로가 없어요' && nr.body[0].num === undefined && nr.body[0].act.v === 'rh.fav' && nr.body[0].xact === undefined, '경로 없는 탭: 안내 한 줄만(요약·환승은 숨김) · 즐겨찾기만(닫기 X 없음)');
   ok(H({ nr: 'bus' }).body[0].msg === '버스만으로 갈 수 있는 경로가 없어요' && H({ nr: 'longdist' }).body[0].msg === '이 수단만으로 갈 수 있는 경로가 없어요', '버스 · 그 밖은 "이 수단"');
   ok(/label=\(type==='sub'\)\?'지하철':\(type==='bus'\?'버스':'이 수단'\)/.test(html) && html.indexOf("'+label+'만으로 갈 수 있는 경로가 없어요</span>") >= 0, '웹 _showTabNoRoute 문구와 같다');
   ok(H({ nr: 'S U<b>' }).body[0].msg === '이 수단만으로 갈 수 있는 경로가 없어요' || H({ nr: 'S U<b>' }).body[0].msg !== undefined, '이상한 nr 도 죽지 않는다');

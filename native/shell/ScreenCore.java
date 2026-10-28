@@ -719,7 +719,7 @@ public final class ScreenCore {
             n.badge = optStr(m, "unit", "", 6); n.s = optStr(m, "s", "", 80); n.label = optStr(m, "btn", "", 12);
             n.act = n.label.length() > 0 ? act(m.get("act"), true) : null;
             n.bact = act(m.get("xact"), false);
-            if (n.act == null && n.bact == null) throw new ParseError("rhd: 누를 곳(act/xact)이 없다");
+            // s269: 즐겨찾기도 닫기(X)도 없는 머리줄(안내 중 · 즐겨찾기 숨김)은 눌리는 곳이 없어도 된다
         } else if ("trk".equals(t)) {                                                                      // 구간 타임라인: 칸(역·도보) 가로 줄. 시각·색·글·배지·선·점은 전부 엔진이 정한다
             pad(m, n);
             for (Object io : asArr(m.get("cells"), "trk.cells")) {
