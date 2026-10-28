@@ -59,6 +59,7 @@ function findAndroidJar() {
     const ov2 = fs.readFileSync(N('RideOverlay.java'), 'utf8');
     assert.ok((rn.match(/if \(ad == null\) ad = RideCore\.textAd\(t\[0\], t\[1\]\);/g) || []).length === 2, 's295: 가게·상품 없는 글만 추천도 두 길(바로·받아 둔 글) 모두 추천 줄로 만들어 오버레이·팝업이 쓴다');
     assert.ok(/row\.kind == 1 && row\.go\.length\(\) == 0\) \{ b2\.set/.test(ov2) && /if \(!b1\.isEmpty\(\)\) btn\(cv, b1, row\.go, true\)/.test(ov2), 's295: 오버레이 추천 줄 — go 가 비면 [보기] 없이 [확인]만');
+    assert.ok(/boolean showRs = !pill && !\(ar && v\.row\.kind == 2\)/.test(ov2), 's297: 캐릭터 앱 종료 줄(row kind 2)이 있으면 글만 있는 도착 [안내 종료] 줄은 그리지 않는다(둘로 뜨지 않는다)');
     assert.ok(/pill && v\.alert > 0 && v\.banner\.length\(\) > 0/.test(ov2) && /v\.alert == 1 \? 0xFFFF453A : 0xFFFF9F0A/.test(ov2), 's295: 알약에도 펼친 카드와 같은 경고 줄(빨강/주황)');
     assert.ok(/static boolean overlayReady\(Context c\)/.test(rs) && /RideOverlay\.allowed\(c\)/.test(rs), '오버레이를 쓸 수 있는지는 서비스가 안다');
   });

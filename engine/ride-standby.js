@@ -37,7 +37,7 @@ var RIDE_STANDBY_DEFAULTS = {
   notYetKeepSec: 45,       // notYet 증거를 유지하는 시간
   gpsGapDeadReckonSec: 180, // 시각표 기준이 아닌 여정(버스): GPS 가 이만큼 끊기면 계획 시각표대로 이어간다(멈춰 서 있지 않게)
   // (offGiveUpSec 는 없앴다 — 2026-10-26 YJ: "경로는 확정되면 사용자가 강제로 취소하거나 도착할 때까지 풀리면 안 된다". 경로를 벗어나도 알림만 하고 안내는 끝내지 않는다.)
-  doneAfterSec: 300,       // 목적지 도착 뒤 이 시간(5분)이 지나면 done — 앱 종료 줄은 3분(RS_END_BTN_MS)에 뜬다
+  doneAfterSec: 300,       // 목적지 도착 뒤 이 시간(5분)이 지나면 done — 앱 종료 줄(캐릭터)은 도착 즉시(RS_END_BTN_MS=0, s297)
   maxStaleSec: 3 * 3600,   // 상태가 이보다 오래 갱신되지 않았으면 done(안전 장치)
   // ★ 2026-10-19 (YJ: "영점은 역·정류장 도착 후 5초 안에"): 다음 호출까지의 간격도 엔진이 정한다(네이티브는 nextMs 를 그대로 따른다).
   //   표시 도착 시각 앞 nearBeforeSec ~ 뒤 nearAfterSec 안에는 nearStepMs, 그 밖에는 stepMs. (웹 _trkGapMs 와 같은 창)
@@ -724,7 +724,7 @@ function rsRsState0(st, r, now) {
 }
 // 하단 줄: 도착 전엔 추천(맛집·카페·쿠팡) · 도착 3분 뒤엔 [앱 종료] 줄(2). 한 번 보인 줄은 30초 붙잡는다(입력이 흔들려도 깜박이지 않게).
 //   s237(YJ): 한 정거장 전에 '내릴 준비' 줄이 추천을 덮던 것을 없앴다 — 추천은 도착 전에 보이고, [앱 종료]는 도착 3분 뒤(RS_END_BTN_MS)에 뜨며 안 눌러도 5분 뒤(doneAfterSec) 앱이 스스로 끝난다.
-var RS_END_BTN_MS = 180000;
+var RS_END_BTN_MS = 0;       // s297 (YJ: 캐릭터 나오는 안내 종료를 살리고 글만 있는 도착 줄은 없앤다): 도착하자마자 캐릭터 줄이 뜬다(예전엔 3분 뒤)
 function rsRows(st, r, now, dest, finLv, arrived) {
   var cfg = st.cfg || {}, ad = st.rcAd, dn = dest ? dest.nodeIdx : -1, k = 0, reco = null, getoff = null;
   var rem = (dn >= 0 && r.etaMs && r.etaMs[dn] != null && isFinite(r.etaMs[dn])) ? Math.round((r.etaMs[dn] - now) / 1000) : null;

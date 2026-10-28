@@ -620,7 +620,7 @@ final class RideStandbyJ {
     }
 
     // ═════════════ 하단 줄(추천 · 앱 종료) ═════════════
-    static final double RS_END_BTN_MS = 180000;
+    static final double RS_END_BTN_MS = 0;
     static Map<String, Object> rows(Map<String, Object> st, Map<String, Object> r, double now, Map<String, Object> dest, int finLv, boolean arrived) {
         Map<String, Object> cfg = mm(st.get("cfg")); if (cfg == null) cfg = obj();
         Map<String, Object> ad = mm(st.get("rcAd"));

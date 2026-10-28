@@ -152,7 +152,7 @@ final class RideOverlay {
         t3.setTextColor(v.alert == 1 ? 0xFFFF453A : (v.alert == 2 ? 0xFFFF9F0A : fg));
         boolean ar = OvCore.arrived(v);
         String rst = v.rsSt;
-        boolean showRs = !pill && (ar || "board".equals(rst) || "undo".equals(rst) || "wait".equals(rst));
+        boolean showRs = !pill && !(ar && v.row.kind == 2) && (ar || "board".equals(rst) || "undo".equals(rst) || "wait".equals(rst));      // s297 (YJ: 안내 종료가 캐릭터 줄과 둘로 뜬다 — 캐릭터 줄을 살린다): 도착 줄(캐릭터 앱 종료 줄 kind 2)이 있으면 글만 있는 도착 [안내 종료] 줄은 그리지 않는다
         boolean hasBtn = showRs && v.rsBt.length() > 0 && ("board".equals(rst) || "undo".equals(rst));
         rsRow.setVisibility(showRs ? View.VISIBLE : View.GONE);
         rsT.setText("wait".equals(rst) && !ar ? "승차 대기 · " + v.rsK : v.rsK); rsT.setTextColor(fg);

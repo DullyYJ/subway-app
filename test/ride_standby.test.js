@@ -372,7 +372,7 @@ t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5�
 
 // ── 오버레이 하단 줄 · 탑승 줄 · 앱 종료 (s109) ─────────────────────────────────────
 const stepO = (st, ms, extra, fix) => rideStandby(Object.assign({ nowMs: ms, fixes: fix === false ? [] : [[ms, LAT, trainLng(ms, 0), 20]], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
-t('추천 줄은 한 정거장 전에도 그대로 나오고(s237: 내릴 준비 줄이 덮지 않는다), 앱 종료 줄은 도착 3분 뒤에야 나온다', () => {
+t('추천 줄은 한 정거장 전에도 그대로 나오고(s237: 내릴 준비 줄이 덮지 않는다), 앱 종료 줄(캐릭터)은 도착하자마자 나온다(s297)', () => {
   let st = withOvl(mkState()), pre = [], post = [], rcSent = false, arr = null;
   for (let ms = at(12, 53, 0); ms <= at(13, 10, 0); ms += 5000) {
     const r = stepO(st, ms, rcSent ? null : { rc: { a: '맛있는집', b: '점심 한 끼', m: '눌러서 위치 확인', go: '메뉴 보러가기' } }); rcSent = true; st = r.state;
@@ -385,7 +385,7 @@ t('추천 줄은 한 정거장 전에도 그대로 나오고(s237: 내릴 준비
   assert.ok(pre.length > 3, '한 정거장 전 구간이 있다');
   assert.ok(pre.every(x => x.getoff === false), '도착 전에는 앱 종료 줄이 없다');
   assert.ok(pre.some(x => x.reco.on && x.reco.go === '메뉴 보러가기' && x.reco.m === '눌러서 위치 확인'), '한 정거장 전에도 추천 줄(아이템에 맞춘 버튼 글 · 셋째 줄)이 나온다');
-  assert.ok(arr && post.length > 3 && post[0].ms - arr >= 180000 && post[0].ms - arr <= 190000, '앱 종료 줄은 도착 3분 뒤: ' + (post.length ? post[0].ms - arr : 'none'));
+  assert.ok(arr && post.length > 3 && post[0].ms - arr >= 0 && post[0].ms - arr <= 10000, '앱 종료 줄(캐릭터)은 도착 즉시(s297, 예전 3분 뒤): ' + (post.length ? post[0].ms - arr : 'none'));
   assert.ok(post.every(x => x.g.a === '도착했어요' && x.g.end === '앱 종료' && x.g.b.length > 0 && x.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(x.g.ch)));
   assert.ok(new Set(post.map(x => x.g.ch)).size === 1, '같은 도착 동안 캐릭터는 그대로');
 });

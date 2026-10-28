@@ -70,7 +70,7 @@ t('환승 승차를 누르면 래치가 풀리고 새 구간에서 다시 계산
   assert.strictEqual(after[0].st.ovlLatch.a, 6);
 });
 t('앱 종료 줄(getoff, s237): 도착 전에는 한 번도 안 나오고(환승역 · 마지막 구간 한 정거장 전 포함), 도착 3분 뒤부터 나오며, 5분 뒤 done+quit', () => {
-  assert.ok(rows.every(r => !r.o.getoff.on || (r.st.arrivedAt && r.ms - r.st.arrivedAt >= 180000)), '도착 전에는 앱 종료 줄이 없고, 도착 3분 뒤부터만 뜬다(s295: 역 대기 20초로 줄어 도착이 앞당겨져 시각 대신 도착 기준으로 본다)');
+  assert.ok(rows.every(r => !r.o.getoff.on || (r.st.arrivedAt && r.ms - r.st.arrivedAt >= 0)), '도착 전에는 앱 종료 줄이 없고, 도착 3분 뒤부터만 뜬다(s295: 역 대기 20초로 줄어 도착이 앞당겨져 시각 대신 도착 기준으로 본다)');
   let st = mk({}), arrAt = null, firstOff = null, doneAt = null, q = null;
   for (let ms = at(12, 50, 10); ms <= at(13, 14, 0); ms += 5000) {
     const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)), act: ms >= at(12, 58, 0) && ms < at(12, 58, 5) ? 'press' : undefined }); st = r.state;
@@ -79,7 +79,7 @@ t('앱 종료 줄(getoff, s237): 도착 전에는 한 번도 안 나오고(환�
     if (r.done) { doneAt = ms; q = r.quit; break; }
   }
   assert.ok(arrAt && firstOff && doneAt, '도착 · 앱 종료 줄 · 종료가 모두 있다');
-  assert.ok(firstOff.ms - arrAt >= 180000 && firstOff.ms - arrAt <= 190000, '도착 3분 뒤에 뜬다: ' + (firstOff.ms - arrAt));
+  assert.ok(firstOff.ms - arrAt >= 0 && firstOff.ms - arrAt <= 10000, '도착 즉시 뜬다(s297): ' + (firstOff.ms - arrAt));
   assert.ok(firstOff.g.end === '앱 종료' && firstOff.g.a === '도착했어요' && firstOff.g.b.length > 0 && firstOff.g.b.length <= 40 && /^(dolsom|lovel|dudung|sul|ppopu|chaeng)$/.test(firstOff.g.ch), JSON.stringify(firstOff.g));
   assert.ok(doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000 && q === true, '안 눌러도 도착 5분 뒤 스스로 종료(quit): ' + (doneAt - arrAt));
 });
@@ -91,7 +91,7 @@ t('도착 알림을 꺼 둬도(allowed.arrive=false 등) 도착하면 기준 시
     if (r.overlay && r.overlay.active && r.overlay.getoff.on && !firstOff) firstOff = ms;
     if (r.done) { doneAt = ms; break; }
   }
-  assert.ok(arrAt && firstOff && doneAt && firstOff - arrAt >= 180000 && firstOff - arrAt <= 190000 && doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000, [arrAt, firstOff, doneAt].join());
+  assert.ok(arrAt && firstOff && doneAt && firstOff - arrAt >= 0 && firstOff - arrAt <= 10000 && doneAt - arrAt >= 300000 && doneAt - arrAt <= 310000, [arrAt, firstOff, doneAt].join());
 });
 t('승차 대기(st.wait) 중에는 단계가 켜지지 않는다', () => {
   const s = mk(); s.wait = { i: 1, arrMs: at(12, 50, 0) };
