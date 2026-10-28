@@ -3125,3 +3125,12 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `ScreenView.drawInbar`: 편집 중이 아닐 때 입력칸 글자가 글자 자리(저장 단추 앞까지)보다 길면 `…` 으로 줄여 그린다(`inbarShown` · 같은 글 · 같은 폭이면 지난 계산 기억 — 매 프레임 재지 않는다). 칸을 눌러 편집하면 진짜 입력칸이 전체 글자를 보인다. 후보 줄(sug)은 이름 전체(원래 폭이 넓다).
 - 모든 inbar 에 적용(출퇴근 장소 칸 · 홈 경로 입력 등 — 둘 다 예전엔 칸 밖이 그냥 잘렸다). 엔진 변경 없음(워커 s279 그대로).
 - **한계(기기 미검증)**: 줄어든 글자는 저장된 이름의 앞부분이다.
+
+## s281 (2026-10-28) — 출퇴근 설정 빠르게·자동 저장·시각 팝업·알림 누르면 앱 안 브리핑 창→자동 경로탐색 (YJ 3장 스크린샷 요청, "모든 계산은 엔진이 앱은 그림만" · "네이티브로")
+- **역 입력 속도**: 글자가 0.11초 멈추면(예전 0.3초) 지하철역 후보를 바로 엔진에서 받아 그리고(`onInline` → `R_RENDER|R_BUS`), 버스정류장은 찾아 오는 대로 한 번 더 그린다(예전엔 버스 API 답을 기다린 뒤에야 첫 그림).
+- **저장 단추 없음**: 엔진 station `inbar` 에 `nobtn:true`(옛 앱은 `btn:'저장'` 그대로). ScreenCore `nobtn`(단추 자리 0 → 입력칸 전체 폭) · ScreenView 는 `sw<=0` 이면 단추 안 그린다/안 누른다. 자동 저장: 후보 줄 누름(기존) · Enter(기존 act) · **입력칸 벗어남**(`CmCore.blurInline` — 저장된 것과 다른 비어있지 않은 글자면 저장+알림 재예약, 다 지우고 벗어나면 그대로 둠. 비우기는 Enter 로만).
+- **시각 고르기 = 가운데 팝업**: `cm.pop` → `openSetPage("cm")` 가 `tpPop` 으로 Dialog 팝업(바깥/뒤로 = 취소). 엔진 `settingsPageTp` 가 `pf.pop` 일 때 뒤로가기 줄 없이 `grp`('ap'/'h'/'m') 단추를 준다. 앱은 `grp` 단추를 누르면 `ScreenView.pickGrp` 로 즉시 켜 보이고(엔진 답 안 기다림), 엔진 글(오전 7:30)은 0.16초 가만히 있으면 한 번만 다시 받는다. 화면 JSON 은 설정 화면이 뜰 때 `cmPrefetchTp()` 가 출근/퇴근 것을 미리 받아 `tpCache` 에 둔다(적중하면 네트워크 없이 바로).
+- **알림 → 앱 안 브리핑 창**: `CommuteAlarm.show` 의 contentIntent 에 `EXTRA_CB_KIND/TITLE/BODY` 를 싣고(요청코드 7710/7711), `captureBrief/takeBrief` → `ShellActivity.briefLaunch()` → `openSetPage("cmb")`(엔진 `p=cmb`, `pf.cb`) 가운데 창: 제목 · 본문(경로 · 출발/도착 날씨·옷차림 · 혼잡 · 응원 한마디) · [확인](닫기) · [출근하기]/[퇴근하기](`startCommuteRoute` = 위젯과 같은 길: `/commute-brief` route → 출발·도착 넣고 `goRoute()` 자동 경로탐색, 이후는 경로탐색 그대로). 알림의 액션 단추도 같은 `WidgetCore.goIntent`. 미리보기도 같은 길(응답의 `kind` 로 출근/퇴근을 엔진이 정함 — `commute-brief.js` 반환에 `kind` 추가).
+- **브리핑 내용(엔진)**: 도착지 날씨(체감·강수 ≥20%) · 도착지 혼잡 줄(출발과 다른 역일 때) · 옷차림/우산 추천은 출발+도착 둘 다 보고 · 응원 문구 풀을 요일×(출근/퇴근)당 6개로 확대(날짜·주에 따라 매일 바뀜).
+- 워커 `route-v2-2026-10-28s281`(settings + commute-brief 내장). 테스트: settings_engine(nobtn · grp · cmb · pop), commute_brief, shell_native s281, ShellJvmTest(blurInline · tpPopFacts · parseBrief kind), ScreenJvmTest(nobtn · grp).
+- **한계(기기 미검증)**: ① "교통상황" = 시간대·노선 혼잡 추정이지 실시간 지연 정보가 아니다. ② 입력칸을 벗어날 때 쓰다 만 글자도 그대로 저장된다(예: "강남"). ③ 팝업 속도는 첫 한 번(미리 받기 전)은 네트워크 한 번을 기다릴 수 있다.

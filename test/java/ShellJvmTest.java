@@ -286,7 +286,7 @@ public class ShellJvmTest {
             c.focusInline("to", "");
             ok(c.inl && "to".equals(c.pkK) && CmCore.inlX.contains("\"pick\":{\"k\":\"to\"") && !c.picking(), "입력칸에 들어오면 그 칸이 고치는 중(하위 화면 아님)");
             ok(c.onInline("to", "강") == CmCore.R_RENDER, "한 글자는 버스 검색 없이 다시 그리기만");
-            ok(c.onInline("to", "강남") == CmCore.R_BUS, "두 글자부터 버스 후보를 찾는다");
+            ok(c.onInline("to", "강남") == (CmCore.R_RENDER | CmCore.R_BUS), "두 글자부터: 지하철 후보는 바로 그리고 버스 후보도 찾는다(s281)");
             c.setBus(java.util.Arrays.asList("강남역"), java.util.Arrays.asList(new double[] { 37.49, 127.02 }));
             ok(ShellCore.settingsFacts(cs).contains("\"bus\":[\"강남역\"]") && ShellCore.settingsFacts(cs).contains("\"q\":\"강남\""), "고치는 중인 칸 · 글자 · 버스 후보가 설정 화면 요청에 실린다");
             ok((c.act(cs, "call", "pk.b.0", null, false, null) & CmCore.R_RESCHED) != 0 && "강남역".equals(CmCore.place(cs, "to")) && cs.get("cm_to_g", "").startsWith("37.49,127.02") && !c.inl && CmCore.inlX.length() == 0, "버스 후보를 누르면 좌표와 함께 저장하고 고치기가 끝난다");
@@ -298,6 +298,23 @@ public class ShellJvmTest {
             ok(c.act(cs, "call", "pk.save.zzz", null, false, "x") == CmCore.R_NONE && c.act(cs, "call", "pk.n", null, false, "x") == CmCore.R_NONE, "모르는 칸 · 고치는 중이 아닐 때의 후보 누름은 무시");
             c.focusInline("to", "x"); ok(c.endInline() && !c.endInline() && CmCore.inlX.length() == 0, "고치기를 끝내면 요청 조각이 사라진다");
             ok(c.act(cs, "call", "cm.test", null, false, null) == CmCore.R_TEST, "미리보기는 어느 상태에서나");
+            // s281: 입력칸을 벗어나면 자동 저장
+            c.focusInline("to", ""); 
+            ok((c.blurInline(cs, "to", "  광화문 ") & CmCore.R_RESCHED) != 0 && "광화문".equals(CmCore.place(cs, "to")) && !c.inl, "벗어나면 친 글자를 자동 저장");
+            c.focusInline("to", "광화문");
+            ok(c.blurInline(cs, "to", "광화문") == CmCore.R_RENDER && "광화문".equals(CmCore.place(cs, "to")), "같은 글자면 알림 다시 예약 없이 닫기만");
+            c.focusInline("to", "");
+            ok(c.blurInline(cs, "to", "  ") == CmCore.R_RENDER && "광화문".equals(CmCore.place(cs, "to")), "다 지우고 벗어나면 저장된 것은 그대로(Enter 로만 비움)");
+            ok(c.blurInline(cs, "to", "x") == CmCore.R_NONE, "고치는 중이 아니면 무시");
+            // s281: 시각 고르기 팝업 사실
+            cs.put(CmCore.K_EVE, "18:30");
+            String pf = CmCore.tpPopFacts(cs, "eve");
+            ok(pf.contains("\"pop\":true") && pf.contains("\"sub\":\"tp\"") && pf.contains("\"t\":\"eve\"") && pf.contains("\"ap\":\"pm\"") && pf.contains("\"h\":6") && pf.contains("\"m\":30"), "시각 팝업 사실: 지금 저장된 시각(오후 6:30)에서 시작");
+            CmCore tp = new CmCore(); tp.act(cs, "call", "cm.tp.morn", null, false, null); tp.pop = true;
+            ok(tp.pageFacts(cs).contains("\"pop\":true") && (tp.act(cs, "call", "tp.h.9", null, false, null) & CmCore.R_RENDER) != 0 && tp.tpH == 9, "팝업에서 시를 고르면 상태에 적힌다");
+            ok((tp.act(cs, "call", "tp.ok", null, false, null) & CmCore.R_RESCHED) != 0 && !tp.pop && tp.sub.length() == 0 && CmCore.morn(cs).startsWith("09:"), "확인 = 저장하고 팝업을 끝낸다");
+            String[] bf = CmCore.parseBrief("{\"ok\":true,\"kind\":\"eve\",\"title\":\"퇴근길 브리핑\",\"body\":\"a\\nb\"}");
+            ok(bf != null && bf.length == 3 && "eve".equals(bf[2]) && "morn".equals(CmCore.parseBrief("{\"ok\":true,\"title\":\"t\",\"body\":\"b\"}")[2]), "브리핑 응답에서 엔진이 정한 출근/퇴근 종류도 읽는다");
         }
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();

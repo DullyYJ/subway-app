@@ -144,14 +144,14 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   names.forEach(p => {
     const sc = PG(p, {});
     ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s2p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
-    if (p === 'locd' || /^ask/.test(p)) ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), p + ': 안내 화면은 뒤로 가기 단추가 없다(단추 둘만)');
+    if (p === 'locd' || p === 'cmb' || /^ask/.test(p)) ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), p + ': 안내 화면은 뒤로 가기 단추가 없다(단추 둘만)');
     else ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
     ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');
     ok(JSON.stringify(PG(p, {})) === JSON.stringify(sc) && PG(p, { x: 1 }).rev === sc.rev, p + ': 같은 입력 → 같은 출력, 모르는 사실은 무시');
   });
   ok(PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 7, m: 30 } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' && PG('cm', { sub: 'pick', pick: { k: 'to', q: '' } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', '시각/장소 고르기의 뒤로 단추는 출퇴근 브리핑 알림으로 돌아간다');
   // 행동 이름은 허용 목록 모양만
-  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|ask\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
+  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|ask\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|cmb\.(ok|go)|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
   names.concat(['tp', 'pick']).forEach(p => {
     const sc = p === 'tp' ? PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } }) : p === 'pick' ? PG('cm', { sub: 'pick', pick: { k: 'to', q: '강' }, bus: ['강남역', '강남역', '강동'] }) : PG(p, {});
     const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
@@ -374,6 +374,20 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     const pn2 = scH2.body.find(n => /cmp\./.test(JSON.stringify(n)) && n.kids), ix = pn2.kids.findIndex(n => n.t === 'row' && n.kids.every(k => k.t === 'inbar'));
     ok(pn2.kids[ix + 1].t === 'sug' && pn2.kids.filter(n => n.t === 'sug').length >= 2 && ir.length === 2, '후보 줄은 가로 칸 줄 바로 아래에 끼운다');
     ok(!all(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf }))).some(n => n.t === 'row' && n.kids.some(k => k.t === 'inbar')), '가로 칸을 모르는 앱(cmh 없음)에게는 세로 입력칸 그대로');
+  }
+  {
+    const scN = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmh: 1, cmf }));
+    ok(all(scN).filter(n => n.t === 'inbar' && /^cmp\./.test(n.key)).every(n => n.nobtn === true && n.btn === '저장'), 's281: 역 입력칸은 저장 단추를 그리지 않는다(nobtn · 옛 앱은 btn 그대로)');
+    const tpPop = E.settingsScreen({ cap: 8, p: 'cm' }, { pf: { sub: 'tp', pop: true, tp: { t: 'morn', ap: 'pm', h: 5, m: 20 } } });
+    const tj = JSON.stringify(tpPop.body);
+    ok(!/pg\.back/.test(tj) && (tj.match(/"grp":"h"/g) || []).length === 12 && (tj.match(/"grp":"m"/g) || []).length === 12 && (tj.match(/"grp":"ap"/g) || []).length === 2, 's281: 시각 팝업은 뒤로가기 줄이 없고 오전/오후 · 시 · 분 칸이 묶음(grp)으로 온다');
+    ok(/오후 5:20/.test(tj) && /tp\.ok/.test(tj) && /tp\.cancel/.test(tj), 's281: 시각 팝업 글(오후 5:20) · 확인 · 취소');
+    const noPop = JSON.stringify(E.settingsScreen({ cap: 8, p: 'cm' }, { pf: { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } } }).body);
+    ok(/pg\.back/.test(noPop) && !/"grp"/.test(noPop), 's281: 팝업이 아니면(옛 앱) 기존 시각 화면 그대로');
+    const cb = E.settingsScreen({ cap: 8, p: 'cmb' }, { pf: { cb: { kind: 'eve', title: '퇴근길 브리핑 · 강남→수원', body: '강남 → 수원\n강남 12° 맑음\n· 우산은 필요 없어요\n오늘도 수고했어요' } } });
+    const cj = JSON.stringify(cb.body);
+    ok(cb.ok && /퇴근길 브리핑/.test(cj) && /cmb\.ok/.test(cj) && /cmb\.go/.test(cj) && /퇴근하기/.test(cj) && !/pg\.back/.test(cj) && /오늘도 수고했어요/.test(cj), 's281: 알림 브리핑 창 — 글 · [확인] · [퇴근하기] (뒤로가기 줄 없음)');
+    ok(/출근하기/.test(JSON.stringify(E.settingsScreen({ cap: 8, p: 'cmb' }, { pf: { cb: { kind: 'morn', title: 't', body: 'a\nb' } } }).body)), 's281: 출근 알림은 [출근하기]');
   }
   ok(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf })).rev !== E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { days: [0] }) })).rev, '요일이 바뀌면 rev 가 바뀐다(앱이 다시 그린다)');
 }

@@ -254,8 +254,8 @@ public class ShellActivity extends Activity {
         showTab(ShellCore.currentTab(store));
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
-        WidgetCore.captureLaunch(getIntent());
-        widgetLaunch();
+        WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
+        widgetLaunch(); briefLaunch();
         gwSync(false);
         launchLocate();
         main.postDelayed(new Runnable() { @Override public void run() {                // 켠 직후 바쁜 시간이 지나 한가해지면 무거운 준비물(지도 엔진 · 노선도 그림)을 미리 만들어 둔다 — 탭에 들어갈 때 버벅이지 않게
@@ -282,8 +282,8 @@ public class ShellActivity extends Activity {
     @Override protected void onNewIntent(Intent it) {
         super.onNewIntent(it);
         setIntent(it);
-        WidgetCore.captureLaunch(it);
-        widgetLaunch();
+        WidgetCore.captureLaunch(it); CommuteAlarm.captureBrief(it);
+        widgetLaunch(); briefLaunch();
     }
     @Override protected void onStart() { super.onStart(); if (vec != null) vec.onStart(); }
     @Override protected void onStop() { RideService.setAppFront(false); if (vec != null) vec.onStop(); super.onStop(); WidgetCore.onAppLeft(this); }
@@ -296,6 +296,10 @@ public class ShellActivity extends Activity {
         if ("community".equals(tab)) { closeSheet(); store.put(ShellCore.K_TAB, "community"); showTab("community"); }
         final String go = WidgetCore.takeLaunch(this);
         if (!"morn".equals(go) && !"eve".equals(go)) return;
+        startCommuteRoute(go);
+    }
+    /** 출근/퇴근 단추(위젯 · 알림 · 브리핑 창): 설정한 출발·도착을 엔진이 찾아 준 좌표로 넣고 곧바로 경로탐색 — 그 뒤는 경로탐색 그대로. */
+    private void startCommuteRoute(final String go) {
         if (rideLocked()) return;
         toast("출퇴근 경로를 찾는 중이에요");
         final String body = CmCore.briefBody(store, go, System.currentTimeMillis(), null);
@@ -1432,7 +1436,7 @@ public class ShellActivity extends Activity {
             if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep && !skelViews.contains(v));
             skelViews.remove(v);
-            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); }
+            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); if (ck != null && ck.startsWith(ShellCore.S_SETTINGS + "|")) cmPrefetchTp(); }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
         } catch (Throwable e) {
@@ -4666,10 +4670,12 @@ public class ShellActivity extends Activity {
     }
     private void openSetPage(String page) {
         closeSheet();
-        setPage = page; arrStat = false; cmFromInline = false;
-        if ("cm".equals(page) && !"tp".equals(cm.sub)) { cm.sub = ""; cm.clearBus(); }          // 설정 화면 안 패널이 시각 고르기만 시트로 열 때(sub=tp)는 그대로
+        setPage = page; arrStat = false;
+        if (!"cm".equals(page)) { cm.pop = false; cmFromInline = false; }
+        if ("cm".equals(page) && !"tp".equals(cm.sub)) { cm.sub = ""; cm.pop = false; cm.clearBus(); }          // 설정 화면 안 패널이 시각 고르기만 시트로 열 때(sub=tp)는 그대로
         sheetName = ShellCore.S_SETPG;
-        final boolean pop = "locd".equals(page) || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
+        final boolean tpPop = "cm".equals(page) && cm.pop && "tp".equals(cm.sub);                        // 시각 고르기 · 출퇴근 브리핑 알림 창도 가운데 팝업
+        final boolean pop = "locd".equals(page) || "cmb".equals(page) || tpPop || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
         popSheet = pop;
         sheetView = new ScreenView(this);
         sheetView.setDpr(dpr);
@@ -4686,7 +4692,12 @@ public class ShellActivity extends Activity {
             if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
             box.addView(sheetView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             sheet.setContentView(box);
-            sheet.setCancelable(false); sheet.setCanceledOnTouchOutside(false);
+            boolean soft = tpPop || "cmb".equals(page);                                              // 시각 · 브리핑 창은 바깥을 누르거나 뒤로 가기로도 닫힌다
+            sheet.setCancelable(soft); sheet.setCanceledOnTouchOutside(soft);
+            if (soft) sheet.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) {
+                if (tpPop) { cm.sub = ""; cm.pop = false; cmFromInline = false; }
+                closeSheet();
+            } });
             android.view.Window w = sheet.getWindow();
             float sw = getResources().getDisplayMetrics().widthPixels / dpr;
             w.setLayout(Math.round(Math.min(sw - 44f, 400f) * dpr), Math.round(200f * dpr));          // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
@@ -4705,6 +4716,7 @@ public class ShellActivity extends Activity {
     }
     private void loadSetPage() {
         final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
+            : "cmb".equals(setPage) ? ShellCore.pageUrlPlain("cmb", cmbFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
             : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
             : "locd".equals(setPage) ? ShellCore.pageUrlPlain("locd", null)
@@ -4714,10 +4726,13 @@ public class ShellActivity extends Activity {
             : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.withPerf(DevCore.pageFacts(devPh, devLeft(), devStopped), PerfLog.snapshot()))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
+        final String hit = "cm".equals(setPage) && cm.pop ? tpCache.get(url) : null;                     // 미리 받아 둔 시각 고르기 화면이면 기다리지 않고 바로 올린다
+        if (hit != null) { present(sheetView, hit, true); return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
+                if (txt.indexOf("\"body\"") > 0 && url.indexOf("p=cm&") > 0 && url.indexOf("pop") > 0) tpPut(url, txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
                     if (ShellCore.isAskPage(setPage) && txt.indexOf("\"body\"") < 0) { askUnburn(setPage); setupNoEngine = true; closeSheet(); if ("askovl".equals(setPage)) toast("설정에서 '다른 앱 위에 표시'를 켜 주세요"); return; }          // 서버 엔진이 아직 이 안내를 모르면(붙여넣기 전) 이번 실행엔 건너뛰고, '물었다' 표시는 지워 둔다
@@ -4742,12 +4757,53 @@ public class ShellActivity extends Activity {
         return out;
     }
     /** 출퇴근 브리핑 화면 눌림 — 저장은 CmCore, 알림 문구·시각은 엔진. */
+    private final java.util.HashMap<String, String> tpCache = new java.util.HashMap<String, String>();
+    private void tpPut(final String url, final String txt) { main.post(new Runnable() { @Override public void run() { if (tpCache.size() > 12) tpCache.clear(); tpCache.put(url, txt); } }); }
+    /** 설정 화면이 뜨면 출근·퇴근 시각 고르기 팝업 화면을 뒤에서 미리 받아 둔다 — 시각 칸을 누르면 기다림 없이 뜬다. */
+    private long tpPreAt;
+    private void cmPrefetchTp() {
+        long now = System.currentTimeMillis();
+        if (now - tpPreAt < 120000L) return;
+        tpPreAt = now;
+        for (String k : new String[] { "morn", "eve" }) {
+            final String url = ShellCore.pageUrlCm(CmCore.tpPopFacts(store, k));
+            if (tpCache.containsKey(url)) continue;
+            new Thread(new Runnable() { @Override public void run() {
+                NetPost.Res r = NetPost.get(url, 8000);
+                if (r.status == 200 && r.body.indexOf("\"body\"") > 0) tpPut(url, r.body);
+            } }, "shell-tppre").start();
+        }
+    }
+    private String cmbKind = "morn", cmbTitle = "", cmbBody = "";
+    private String cmbFacts() {
+        return "{\"pf\":{\"cb\":{\"kind\":" + ShellCore.q(cmbKind) + ",\"title\":" + ShellCore.q(cmbTitle) + ",\"body\":" + ShellCore.q(cmbBody) + "}}}";
+    }
+    /** 출퇴근 브리핑 알림을 눌러 앱이 열렸다 — 가운데 창에 브리핑을 보이고 [확인](닫기) · [출근하기]/[퇴근하기](자동 경로탐색) 를 준다. */
+    private void briefLaunch() {
+        final String[] b = CommuteAlarm.takeBrief();
+        if (b == null) return;
+        main.post(new Runnable() { @Override public void run() {
+            if (isFinishing()) return;
+            cmbKind = "eve".equals(b[0]) ? "eve" : "morn"; cmbTitle = b[1]; cmbBody = b[2];
+            openSetPage("cmb");
+        } });
+    }
+    /** 브리핑 창의 단추. */
+    private void cmbAct(String v) {
+        if ("cmb.ok".equals(v)) { closeSheet(); return; }
+        if ("cmb.go".equals(v)) { final String k = cmbKind; closeSheet(); startCommuteRoute(k); }
+    }
     private void cmAct(String a, String v, String key, boolean on, String q) {
+        if (cm.pop && v != null && (v.startsWith("tp.ap.") || v.startsWith("tp.h.") || v.startsWith("tp.m."))) {          // 시각 팝업: 칸은 화면(grp)이 바로 켰다 — 엔진 글(오전 7:30)만 잠깐 가만히 있으면 다시 받는다
+            cm.act(store, a, v, key, on, q);
+            deb.trailing("tpl", 160L, new Runnable() { @Override public void run() { if (cm.pop && "tp".equals(cm.sub) && sheet != null && sheet.isShowing()) loadSetPage(); } });
+            return;
+        }
         int r = cm.act(store, a, v, key, on, q);
         if ((r & CmCore.R_CLOSE) != 0) { closeSheet(); loadSlot(slots.length - 1, true); return; }
         if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
-        if (cmFromInline && cm.sub.length() == 0) { cmFromInline = false; closeSheet(); cmReload(); return; }          // 시각 고르기를 마쳤다 — 시트를 닫고 설정 화면의 패널을 새로
+        if (cmFromInline && cm.sub.length() == 0) { cmFromInline = false; cm.pop = false; closeSheet(); cmReload(); return; }          // 시각 고르기를 마쳤다 — 시트를 닫고 설정 화면의 패널을 새로
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
         if ((r & CmCore.R_RENDER) != 0) loadSetPage();
     }
@@ -4764,7 +4820,7 @@ public class ShellActivity extends Activity {
         int r = cm.act(store, a, v, key, on, q);
         if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
-        if ("tp".equals(cm.sub)) { openSetPage("cm"); cmFromInline = true; return; }
+        if ("tp".equals(cm.sub)) { cm.pop = true; openSetPage("cm"); cmFromInline = true; return; }
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
         if ((r & CmCore.R_RENDER) != 0) cmReload();
     }
@@ -4773,14 +4829,20 @@ public class ShellActivity extends Activity {
         if ("focus".equals(kind)) { cm.focusInline(k, value); return; }
         if ("edit".equals(kind)) {
             final String q = value;
-            deb.trailing("cmq", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
+            deb.trailing("cmq", 110L, new Runnable() { @Override public void run() {          // 글자가 멈추면(0.11초) 지하철역 후보부터 바로 그린다
                 int r = cm.onInline(k, q);
-                if ((r & CmCore.R_BUS) != 0) cmBusSearch(cm.pkQ); else if ((r & CmCore.R_RENDER) != 0) cmReload();
+                if ((r & CmCore.R_RENDER) != 0) cmReload();
+                if ((r & CmCore.R_BUS) != 0) cmBusSearch(cm.pkQ);                      // 버스정류장은 찾아 오는 대로 한 번 더
             } });
             return;
         }
         if ("blur".equals(kind)) {
-            main.postDelayed(new Runnable() { @Override public void run() { if (cm.inl && k.equals(cm.pkK) && cm.endInline()) cmReload(); } }, 350L);
+            final String typed = value;
+            main.postDelayed(new Runnable() { @Override public void run() {          // 후보 줄을 누른 게 아니면(그러면 이미 저장돼 inl 이 꺼져 있다) 친 글자를 그대로 자동 저장
+                int r = cm.blurInline(store, k, typed);
+                if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(ShellActivity.this); gwSync(false); }
+                if ((r & CmCore.R_RENDER) != 0) cmReload();
+            } }, 350L);
         }
     }
     /** 설정 화면을 지금 기기 사실(출퇴근 패널 포함)로 다시 받아 위치·입력은 그대로 두고 갱신한다. */
@@ -4833,6 +4895,7 @@ public class ShellActivity extends Activity {
     }
     private void setPageAct(String a, String v, String key, boolean on) {
         if ("cm".equals(setPage)) { cmAct(a, v, key, on, null); return; }
+        if ("cmb".equals(setPage)) { if ("call".equals(a)) cmbAct(v); return; }
         int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
         if (r == ShellCore.PG_CLOSE) {
             if (locOk != null && ShellCore.isPolPage(setPage)) { openSetPage("locd"); return; }          // 안내에서 방침을 보러 갔다 오면 안내로 돌아온다

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s279";
+var ENGINE_VERSION = "route-v2-2026-10-28s281";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13628,7 +13628,7 @@ function settingsScreen(inp, factsIn) {
 //   gw.add.<hb|hw|vb|vw> \u00b7 gw.roam.<dn|up> \u00b7 erl.copy \u00b7 erl.clear \u00b7 locd.ok \u00b7 locd.no \u00b7 ask.ok \u00b7 ask.no \u00b7 cm.day.<0-6> \u00b7 cm.preset.<weekday|weekend|all> \u00b7 cm.tp.<morn|eve> \u00b7 cm.test \u00b7 cm.pick.<from|to|eFrom|eTo> \u00b7
 //   tp.ap.<am|pm> \u00b7 tp.h.<1-12> \u00b7 tp.m.<0-55> \u00b7 tp.ok \u00b7 tp.cancel \u00b7 pk.save \u00b7 pk.clear \u00b7 pk.u.<\ubc88\ud638> \u00b7 pk.b.<\ubc88\ud638> \u00b7 pk.cancel.   \uc2a4\uc704\uce58(toggle) \ud0a4: cm \u00b7 ovl.
 // \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550
-var SETTINGS_PAGES = { sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', polp: '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', poll: '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', polo: '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', erl: '\uc624\ub958 \ub85c\uadf8', locd: '\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4', askbat: '\ud654\uba74\uc744 \uaebc\ub3c4 \ub04a\uae30\uc9c0 \uc54a\uac8c', asksam: '\uac24\ub7ed\uc2dc \uc808\uc804 \uc81c\uc678', askovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc' };
+var SETTINGS_PAGES = { cmb: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551', sam: '\uac24\ub7ed\uc2dc \ubc31\uadf8\ub77c\uc6b4\ub4dc \uc720\uc9c0', ovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', dev: '\uac1c\ubc1c\uc790 \ub3c4\uad6c', arr: '\ud558\ucc28 5\ubd84 \uc804 \ucd94\ucc9c', gw: '\uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f', cm: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', polp: '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', poll: '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', polo: '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', erl: '\uc624\ub958 \ub85c\uadf8', locd: '\uc704\uce58 \uc815\ubcf4 \uc774\uc6a9 \uc548\ub0b4', askbat: '\ud654\uba74\uc744 \uaebc\ub3c4 \ub04a\uae30\uc9c0 \uc54a\uac8c', asksam: '\uac24\ub7ed\uc2dc \uc808\uc804 \uc81c\uc678', askovl: '\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc' };
 var SETTINGS_ASK = { askbat: 1, asksam: 1, askovl: 1 };      // \ucc98\uc74c \uc124\uce58 \ub54c \uc774\uc5b4\uc11c \ubb3b\ub294 \uae30\uae30 \uc124\uc815 \uc548\ub0b4 \u2014 \ub4a4\ub85c \uac00\uae30 \uc5c6\uc774 [\ub098\uc911\uc5d0]/[\uc124\uc815\ud558\uae30] \ub9cc
 var SETTINGS_DAY_NM = ['\uc77c', '\uc6d4', '\ud654', '\uc218', '\ubaa9', '\uae08', '\ud1a0'];
 var SETTINGS_BK = ['\uc54c \uc218 \uc5c6\uc74c', '\ud65c\uc131', '\uc791\uc5c5 \uc9d1\ud569', '\uc790\uc8fc \uc0ac\uc6a9', '\ub4dc\ubb3c\uac8c \uc0ac\uc6a9', '\uc81c\ud55c'];
@@ -13688,6 +13688,8 @@ function settingsPageFacts(pf) {
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
     from: settingsStr(pf.from, 60), to: settingsStr(pf.to, 60), eFrom: settingsStr(pf.eFrom, 60), eTo: settingsStr(pf.eTo, 60),
+    pop: settingsFlag(pf.pop, false),                                                       // \ud31d\uc5c5(\uac00\uc6b4\ub370 \ucc3d)\uc73c\ub85c \uc5f4\ub9b0 \ud654\uba74 \u2014 \ub4a4\ub85c \uac00\uae30 \uc904 \uc5c6\uc774
+    cb: (pf.cb && typeof pf.cb === 'object') ? { kind: pf.cb.kind === 'eve' ? 'eve' : 'morn', title: settingsStr(pf.cb.title, 80), body: settingsStr(pf.cb.body, 900) } : null,
     sub: pf.sub === 'tp' ? 'tp' : (pf.sub === 'pick' ? 'pick' : ''),
     tp: tp ? { t: tp.t === 'eve' ? 'eve' : 'morn', ap: tp.ap === 'pm' ? 'pm' : 'am', h: settingsInt(tp.h, 1, 12, 7), m: settingsInt(tp.m, 0, 55, 0) - (settingsInt(tp.m, 0, 55, 0) % 5) } : null,
     pick: pk ? { k: SETTINGS_PICK[pk.k] ? pk.k : 'from', q: settingsStr(pk.q, 60) } : null,
@@ -13906,7 +13908,7 @@ function settingsCmInline(f, info) {
   var HINT = { from: '\uc608: \uc544\ub77c', to: '\uc608: \uac15\ub0a8', eFrom: '\ube44\uc6b0\uba74 \ud68c\uc0ac \uadfc\ucc98', eTo: '\ube44\uc6b0\uba74 \uc9d1 \uadfc\ucc98' };          // \uac00\ub85c \uce78\uc740 \uc881\uc544 \uc9e7\uc740 \uc548\ub0b4 \uae00(\uc774\ub984\uc740 \uc704 \ub77c\ubca8)
   var inb = function (x, wide) {
     var active = !!(pk && pk.k === x), act = settingsCall('pk.save.' + x);
-    return { t: 'inbar', key: 'cmp.' + x, hint: wide ? SETTINGS_PICK[x][1] : HINT[x], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '\uc800\uc7a5', bh: 30, bsize: 11, bpx: wide ? 0 : 8, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
+    return { t: 'inbar', key: 'cmp.' + x, hint: wide ? SETTINGS_PICK[x][1] : HINT[x], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '\uc800\uc7a5', nobtn: true, bh: 30, bsize: 11, bpx: wide ? 0 : 8, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
   };
   var sug = function (x) {                                          // \uace0\uce58\ub294 \uc911\uc778 \uce78\uc758 \ud6c4\ubcf4 \uc904(\uc9c0\ud558\ucca0: \uc5d4\uc9c4 \uc5ed \ud45c \u00b7 \ubc84\uc2a4: \uc571\uc774 \ucc3e\uc544 \uc628 \uc774\ub984)
     if (!(pk && pk.k === x)) return;
@@ -13953,21 +13955,35 @@ function settingsPageCm(f) {
 function settingsPageTp(f) {
   var tp = f.tp || { t: 'morn', ap: 'am', h: 7, m: 30 };
   var now = (tp.ap === 'pm' ? '\uc624\ud6c4' : '\uc624\uc804') + ' ' + tp.h + ':' + ('0' + tp.m).slice(-2);
+  var g = function (n, grp) { if (f.pop) n.grp = grp; return n; };      // \ud31d\uc5c5\uc774\uba74 \uc571\uc774 \uac19\uc740 \ubb36\uc74c \uc548\uc5d0\uc11c \ub20c\ub9b0 \uce78\uc744 \ubc14\ub85c \ucf1c \ubcf4\uc778\ub2e4(\uc5d4\uc9c4 \ub2f5\uc744 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
   var k = [{ t: 'text', s: tp.t === 'eve' ? '\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac04' : '\ucd9c\uadfc \ube0c\ub9ac\ud551 \uc2dc\uac04', size: 14, bold: true, color: 'sub', lh: 1.3, pad: [0, 0, 0, 4] },
     { t: 'text', s: now, size: 28, bold: true, color: 'gold', lh: 1.25, pad: [0, 0, 0, 14] },
-    settingsRowN([settingsBtnN('\uc624\uc804', 'tp.ap.am', { size: 13, on: tp.ap === 'am' }), settingsBtnN('\uc624\ud6c4', 'tp.ap.pm', { size: 13, on: tp.ap === 'pm' })], 14),
+    settingsRowN([g(settingsBtnN('\uc624\uc804', 'tp.ap.am', { size: 13, on: tp.ap === 'am' }), 'ap'), g(settingsBtnN('\uc624\ud6c4', 'tp.ap.pm', { size: 13, on: tp.ap === 'pm' }), 'ap')], 14),
     settingsLabelN('\uc2dc', 6)];
   [[1, 6], [7, 12]].forEach(function (r, i) {
-    var ks = []; for (var h = r[0]; h <= r[1]; h++) ks.push(settingsBtnN(String(h), 'tp.h.' + h, { size: 14, h: 40, on: tp.h === h }));
+    var ks = []; for (var h = r[0]; h <= r[1]; h++) ks.push(g(settingsBtnN(String(h), 'tp.h.' + h, { size: 14, h: 40, on: tp.h === h }), 'h'));
     k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 14 : 7], kids: ks });
   });
   k.push(settingsLabelN('\ubd84', 6));
   [[0, 25], [30, 55]].forEach(function (r, i) {
-    var ks = []; for (var m = r[0]; m <= r[1]; m += 5) ks.push(settingsBtnN(('0' + m).slice(-2), 'tp.m.' + m, { size: 14, h: 40, on: tp.m === m }));
+    var ks = []; for (var m = r[0]; m <= r[1]; m += 5) ks.push(g(settingsBtnN(('0' + m).slice(-2), 'tp.m.' + m, { size: 14, h: 40, on: tp.m === m }), 'm'));
     k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 18 : 7], kids: ks });
   });
   k.push(settingsRowN([settingsBtnN('\ucde8\uc18c', 'tp.cancel', { size: 14, h: 46, tc: 'sub' }), settingsBtnN('\ud655\uc778', 'tp.ok', { size: 14, h: 46, gold: true })], 0));
-  return [settingsPanelN(k, 8)];
+  return [settingsPanelN(k, f.pop ? 24 : 8)];
+}
+// s281: \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc\uc744 \ub204\ub974\uba74 \uc571 \uc548\uc5d0\uc11c \ub728\ub294 \ucc3d \u2014 \uae00(\uacbd\ub85c \u00b7 \ub0a0\uc528 \u00b7 \uc637\ucc28\ub9bc \u00b7 \uad50\ud1b5 \u00b7 \uc624\ub298\uc758 \uc751\uc6d0 \ud55c\ub9c8\ub514)\uc740 \uc5d4\uc9c4\uc774 \uc54c\ub9bc\uc6a9\uc73c\ub85c \ub9cc\ub4e0 \uac83\uc744 \uadf8\ub300\ub85c \uc4f0\uace0, \ub2e8\ucd94\ub294 [\ud655\uc778](\ub2eb\uae30) \u00b7 [\ucd9c\uadfc\ud558\uae30]/[\ud1f4\uadfc\ud558\uae30](\uc790\ub3d9 \uacbd\ub85c\ud0d0\uc0c9).
+function settingsPageCmb(f) {
+  var cb = f.cb || { kind: 'morn', title: '\ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551', body: '' };
+  var lines = cb.body.split('\n').filter(function (x) { return x.length > 0; });
+  var k = [settingsTitleN(cb.title || (cb.kind === 'eve' ? '\ud1f4\uadfc\uae38 \ube0c\ub9ac\ud551' : '\ucd9c\uadfc\uae38 \ube0c\ub9ac\ud551'), 12)];
+  lines.forEach(function (ln, i) {
+    var last = i === lines.length - 1 && lines.length > 1, bullet = ln.indexOf('\u00b7 ') === 0, first = i === 0 && ln.indexOf('\u2192') > 0;
+    if (last) k.push({ t: 'text', s: ln, size: 14, bold: true, color: 'gold', lh: 1.6, pad: [0, 8, 0, 16] });
+    else k.push({ t: 'text', s: bullet ? ln : ln, size: first ? 14 : 13, bold: first, color: bullet || first ? 'text' : 'sub', lh: 1.6, pad: [0, 0, 0, first ? 8 : 4] });
+  });
+  k.push(settingsRowN([settingsBtnN('\ud655\uc778', 'cmb.ok', { size: 14, h: 46 }), settingsBtnN(cb.kind === 'eve' ? '\ud1f4\uadfc\ud558\uae30' : '\ucd9c\uadfc\ud558\uae30', 'cmb.go', { size: 14, h: 46, gold: true })], 0));
+  return [settingsPanelN(k, 24)];
 }
 // \uc7a5\uc18c \uace0\ub974\uae30(\uc9c0\ud558\ucca0\uc5ed\uc740 \uc5d4\uc9c4 \uc5ed \ud45c\uc5d0\uc11c, \ubc84\uc2a4\uc815\ub958\uc7a5\uc740 \uc571\uc774 \ucc3e\uc544 \uc628 \uc774\ub984\uc744 \ubc1b\uc544\uc11c)
 function settingsPagePick(f, info) {
@@ -14100,8 +14116,8 @@ function settingsPageScreen(inp, factsIn) {
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
   else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
-  var body = (p === 'locd' || SETTINGS_ASK[p] ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, cmb: settingsPageCmb, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
+  var body = (p === 'locd' || p === 'cmb' || SETTINGS_ASK[p] || (p === 'cm' && info.sub === 'tp' && pf.pop) ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;
@@ -23575,22 +23591,22 @@ var CB_V = 1;
 var CB_DEF_LAT = 37.45, CB_DEF_LNG = 126.70;
 var CB_CLOSING = {
   morn: [
-    ['\uc77c\uc694\uc77c \uc774\ub3d9, \uc5ec\uc720\ub86d\uac8c \ub2e4\ub140\uc624\uc138\uc694', '\uc77c\uc694\uc77c\uc5d4 \uc11c\ub450\ub974\uc9c0 \uc54a\uc544\ub3c4 \uad1c\ucc2e\uc544\uc694', '\ud55c \uc8fc \uc7ac\ucda9\uc804\ud558\uba70 \ubb34\uc0ac\ud788 \ub2e4\ub140\uc624\uc138\uc694'],
-    ['\ud55c \uc8fc\uc758 \uc2dc\uc791, \uac00\ubccd\uac8c \ucd9c\ubc1c\ud574\uc694', '\uc6d4\uc694\uc77c \uc544\uce68, \ucee4\ud53c \ud55c \uc794\uc758 \uc5ec\uc720 \ucc59\uae30\uc138\uc694', '\uc0c8\ub85c\uc6b4 \ud55c \uc8fc, \ubb34\ub9ac\ud558\uc9c0 \ub9d0\uace0 \ucc28\uadfc\ucc28\uadfc'],
-    ['\ud654\uc694\uc77c, \ub9ac\ub4ec \ud0c0\uae30 \uc88b\uc740 \ub0a0\uc774\uc5d0\uc694', '\uc5b4\uc81c\ubcf4\ub2e4 \ud55c\uacb0 \uc218\uc6d4\ud560 \uac70\uc608\uc694', '\ud654\uc694\uc77c \uc544\uce68, \uc624\ub298 \ud560 \uc77c \ud558\ub098\ub9cc \ud655\uc2e4\ud788'],
-    ['\ubc8c\uc368 \uc218\uc694\uc77c, \ubc18\ud658\uc810\uc774\uc5d0\uc694', '\ud55c \uc8fc\uc758 \ud55c\uac00\uc6b4\ub370, \ud398\uc774\uc2a4 \uc720\uc9c0\ud558\uc138\uc694', '\uc218\uc694\uc77c, \uc810\uc2ec \uba54\ub274 \ubbf8\ub9ac \uc815\ud574\ub450\uba74 \uae30\ubd84 \uc88b\uc544\uc694'],
-    ['\ubaa9\uc694\uc77c, \ub0b4\uc77c\uc774\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\uace0\ube44\ub9cc \ub118\uae30\uba74 \uc8fc\ub9d0\uc774 \ubcf4\uc5ec\uc694', '\ubaa9\uc694\uc77c \uc544\uce68, \uc870\uae08\ub9cc \ub354 \ud798\ub0b4\uc694'],
-    ['\uae08\uc694\uc77c\uc774\uc5d0\uc694, \ub9c8\ubb34\ub9ac \uc798\ud558\uace0 \uc990\uaca8\uc694', '\uae08\uc694\uc77c \uc544\uce68\uc740 \ubc1c\uac78\uc74c\ub3c4 \uac00\ubccd\uc8e0', '\uc624\ub298\ub9cc \uc9c0\ub098\uba74 \uc8fc\ub9d0, \ud654\uc774\ud305'],
-    ['\ud1a0\uc694\uc77c\uc5d0\ub3c4 \ub098\uc11c\ub294 \ub2f9\uc2e0, \uba4b\uc838\uc694', '\uc8fc\ub9d0 \uc774\ub3d9, \uc624\ub298\uc740 \uc77c\ucc0d \ub9c8\uce58\uae38', '\ud1a0\uc694\uc77c, \uac08 \uae38\uc740 \uc9e7\uac8c \ub9c8\uc74c\uc740 \uac00\ubccd\uac8c']
+    ['\uc77c\uc694\uc77c \uc774\ub3d9, \uc5ec\uc720\ub86d\uac8c \ub2e4\ub140\uc624\uc138\uc694', '\uc77c\uc694\uc77c\uc5d4 \uc11c\ub450\ub974\uc9c0 \uc54a\uc544\ub3c4 \uad1c\ucc2e\uc544\uc694', '\ud55c \uc8fc \uc7ac\ucda9\uc804\ud558\uba70 \ubb34\uc0ac\ud788 \ub2e4\ub140\uc624\uc138\uc694', '\uc77c\uc694\uc77c \uc544\uce68 \uacf5\uae30, \ucc9c\ucc9c\ud788 \ub9c8\uc2dc\uba70 \uac00\uc694', '\uc624\ub298\uc740 \ub290\uae0b\ud558\uac8c \ud55c \uac78\uc74c\uc529', '\uc26c\ub294 \ub0a0\uc758 \uc774\ub3d9\ub3c4 \uc18c\uc911\ud574\uc694'],
+    ['\ud55c \uc8fc\uc758 \uc2dc\uc791, \uac00\ubccd\uac8c \ucd9c\ubc1c\ud574\uc694', '\uc6d4\uc694\uc77c \uc544\uce68, \ucee4\ud53c \ud55c \uc794\uc758 \uc5ec\uc720 \ucc59\uae30\uc138\uc694', '\uc0c8\ub85c\uc6b4 \ud55c \uc8fc, \ubb34\ub9ac\ud558\uc9c0 \ub9d0\uace0 \ucc28\uadfc\ucc28\uadfc', '\uc6d4\uc694\uc77c, \uc2dc\uc791\uc774 \ubc18\uc774\uc5d0\uc694', '\uccab \ub2e8\ucd94\ub9cc \uc798 \ub07c\uc6b0\uba74 \ud55c \uc8fc\uac00 \ud3b8\ud574\uc694', '\uc6d4\uc694\uc77c \uc544\uce68, \uc624\ub298\ub3c4 \uac00\ubccd\uac8c \ucd9c\ubc1c\ud574\uc694'],
+    ['\ud654\uc694\uc77c, \ub9ac\ub4ec \ud0c0\uae30 \uc88b\uc740 \ub0a0\uc774\uc5d0\uc694', '\uc5b4\uc81c\ubcf4\ub2e4 \ud55c\uacb0 \uc218\uc6d4\ud560 \uac70\uc608\uc694', '\ud654\uc694\uc77c \uc544\uce68, \uc624\ub298 \ud560 \uc77c \ud558\ub098\ub9cc \ud655\uc2e4\ud788', '\ud654\uc694\uc77c, \uc5b4\uc81c\uc758 \ud53c\ub85c\ub294 \ub193\uace0 \uac00\uc694', '\ub9ac\ub4ec\uc774 \ubd99\ub294 \ub0a0\uc774\uc5d0\uc694, \ud798\ub0b4\uc694', '\uc624\ub298 \ud558\ub8e8 \uc791\uc740 \uc131\ucde8 \ud558\ub098 \ucc59\uaca8\uc694'],
+    ['\ubc8c\uc368 \uc218\uc694\uc77c, \ubc18\ud658\uc810\uc774\uc5d0\uc694', '\ud55c \uc8fc\uc758 \ud55c\uac00\uc6b4\ub370, \ud398\uc774\uc2a4 \uc720\uc9c0\ud558\uc138\uc694', '\uc218\uc694\uc77c, \uc810\uc2ec \uba54\ub274 \ubbf8\ub9ac \uc815\ud574\ub450\uba74 \uae30\ubd84 \uc88b\uc544\uc694', '\uc218\uc694\uc77c, \uc808\ubc18 \uc654\uc73c\ub2c8 \uc798\ud558\uace0 \uc788\uc5b4\uc694', '\ud55c \uc8fc\uc758 \ud5c8\ub9ac\ub97c \ub118\ub294 \ub0a0\uc774\uc5d0\uc694', '\uc218\uc694\uc77c \uc544\uce68, \ubb3c \ud55c \uc794 \ub9c8\uc2dc\uace0 \ucd9c\ubc1c\ud574\uc694'],
+    ['\ubaa9\uc694\uc77c, \ub0b4\uc77c\uc774\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\uace0\ube44\ub9cc \ub118\uae30\uba74 \uc8fc\ub9d0\uc774 \ubcf4\uc5ec\uc694', '\ubaa9\uc694\uc77c \uc544\uce68, \uc870\uae08\ub9cc \ub354 \ud798\ub0b4\uc694', '\ubaa9\uc694\uc77c, \uc8fc\ub9d0\uc774 \ud55c \uac78\uc74c \uac00\uae4c\uc6cc\uc84c\uc5b4\uc694', '\uc870\uae08\ub9cc \ub354, \uac70\uc758 \ub2e4 \uc654\uc5b4\uc694', '\ubaa9\uc694\uc77c \uc544\uce68\ub3c4 \uac70\ub72c\ud788 \uc9c0\ub098\uac00\uc694'],
+    ['\uae08\uc694\uc77c\uc774\uc5d0\uc694, \ub9c8\ubb34\ub9ac \uc798\ud558\uace0 \uc990\uaca8\uc694', '\uae08\uc694\uc77c \uc544\uce68\uc740 \ubc1c\uac78\uc74c\ub3c4 \uac00\ubccd\uc8e0', '\uc624\ub298\ub9cc \uc9c0\ub098\uba74 \uc8fc\ub9d0, \ud654\uc774\ud305', '\uae08\uc694\uc77c \uc544\uce68, \uc624\ub298 \ud558\ub8e8\ub9cc \uac00\ubccd\uac8c', '\ud55c \uc8fc\uc758 \ub9c8\uc9c0\ub9c9 \ucd9c\uadfc, \ud798\ucc28\uac8c \uac00\uc694', '\uae08\uc694\uc77c, \uc800\ub141 \uc57d\uc18d \uc0dd\uac01\ud558\uba70 \ud798\ub0b4\uc694'],
+    ['\ud1a0\uc694\uc77c\uc5d0\ub3c4 \ub098\uc11c\ub294 \ub2f9\uc2e0, \uba4b\uc838\uc694', '\uc8fc\ub9d0 \uc774\ub3d9, \uc624\ub298\uc740 \uc77c\ucc0d \ub9c8\uce58\uae38', '\ud1a0\uc694\uc77c, \uac08 \uae38\uc740 \uc9e7\uac8c \ub9c8\uc74c\uc740 \uac00\ubccd\uac8c', '\ud1a0\uc694\uc77c \ucd9c\uadfc\uae38, \uc548\uc804\uc774 \uc81c\uc77c\uc774\uc5d0\uc694', '\uc8fc\ub9d0 \uadfc\ubb34 \uc751\uc6d0\ud574\uc694', '\uc624\ub298\ub3c4 \ubb34\uc0ac\ud788, \ucc9c\ucc9c\ud788 \ub2e4\ub140\uc624\uc138\uc694']
   ],
   eve: [
-    ['\uc77c\uc694\uc77c\uae4c\uc9c0 \uc218\uace0\ud588\uc5b4\uc694, \ub0b4\uc77c\uc744 \uc704\ud574 \uc77c\ucc0d \uc26c\uc5b4\uc694', '\ud55c \uc8fc \uc798 \ub9c8\ucce4\uc5b4\uc694', '\uc77c\uc694\uc77c \uc800\ub141, \ub530\ub73b\ud558\uac8c \ub9c8\ubb34\ub9ac\ud558\uc138\uc694'],
-    ['\uc6d4\uc694\uc77c \ubb34\uc0ac\ud788 \ub05d, \ud479 \uc26c\uc138\uc694', '\ud55c \uc8fc\uc758 \uccab \uace0\ube44 \ud1b5\uacfc, \uc218\uace0\ud588\uc5b4\uc694', '\uc6d4\uc694\uc77c \ud1f4\uadfc, \uc800\ub141\uc740 \ub9db\uc788\ub294 \uac78\ub85c'],
-    ['\ud654\uc694\uc77c\ub3c4 \ud074\ub9ac\uc5b4, \uc798\ud558\uace0 \uc788\uc5b4\uc694', '\uc624\ub298 \ud558\ub8e8\ub3c4 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694', '\ud654\uc694\uc77c \uc800\ub141, \uc77c\ucc0d \uc26c\uc5b4\ub450\uba74 \ub0b4\uc77c\uc774 \ud3b8\ud574\uc694'],
-    ['\uc808\ubc18 \uc654\uc5b4\uc694, \ub0a8\uc740 \uc774\ud2c0\ub3c4 \uac00\ubccd\uac8c', '\uc218\uc694\uc77c \ud1f4\uadfc, \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694', '\ubc18\ud658\uc810 \ud1b5\uacfc, \uc624\ub298\uc740 \uc880 \uc26c\uc138\uc694'],
-    ['\ub0b4\uc77c\ub9cc \ubc84\ud2f0\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\ubaa9\uc694\uc77c\uae4c\uc9c0 \ub2ec\ub824\uc628 \ub2f9\uc2e0, \ub300\ub2e8\ud574\uc694', '\uc624\ub298 \uc800\ub141\uc740 \uc88b\uc544\ud558\ub294 \uac83 \ud558\ub098 \ud558\uc138\uc694'],
-    ['\ud55c \uc8fc \ub9c8\ubb34\ub9ac, \uc990\uac70\uc6b4 \uc8fc\ub9d0 \ubcf4\ub0b4\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc, \uc548\uc804\ud558\uac8c \ub4e4\uc5b4\uac00\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc\uae38\uc774 \uc81c\uc77c \uac00\ubccd\uc8e0'],
-    ['\uc8fc\ub9d0 \uadfc\ubb34\uae4c\uc9c0 \uc815\ub9d0 \uc218\uace0\ud588\uc5b4\uc694', '\ud1a0\uc694\uc77c\uae4c\uc9c0 \uc77c\ud55c \ub2f9\uc2e0, \ub0b4\uc77c\uc740 \ud479 \uc26c\uc5b4\uc694', '\uc624\ub298\uc740 \uc815\ub9d0 \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694']
+    ['\uc77c\uc694\uc77c\uae4c\uc9c0 \uc218\uace0\ud588\uc5b4\uc694, \ub0b4\uc77c\uc744 \uc704\ud574 \uc77c\ucc0d \uc26c\uc5b4\uc694', '\ud55c \uc8fc \uc798 \ub9c8\ucce4\uc5b4\uc694', '\uc77c\uc694\uc77c \uc800\ub141, \ub530\ub73b\ud558\uac8c \ub9c8\ubb34\ub9ac\ud558\uc138\uc694', '\uc77c\uc694\uc77c \uc800\ub141, \ub0b4\uc77c\uc744 \uc704\ud55c \ucda9\uc804 \uc2dc\uac04\uc774\uc5d0\uc694', '\uc624\ub298\ub3c4 \uc798 \ubcf4\ub0c8\uc5b4\uc694, \ud479 \uc26c\uc5b4\uc694', '\ub530\ub73b\ud55c \uc800\ub141 \ub4dc\uc2dc\uace0 \uc77c\ucc0d \uc26c\uc5b4\uc694'],
+    ['\uc6d4\uc694\uc77c \ubb34\uc0ac\ud788 \ub05d, \ud479 \uc26c\uc138\uc694', '\ud55c \uc8fc\uc758 \uccab \uace0\ube44 \ud1b5\uacfc, \uc218\uace0\ud588\uc5b4\uc694', '\uc6d4\uc694\uc77c \ud1f4\uadfc, \uc800\ub141\uc740 \ub9db\uc788\ub294 \uac78\ub85c', '\uc6d4\uc694\uc77c \ud1f4\uadfc, \uc624\ub298 \ud558\ub8e8 \uc815\ub9d0 \uc218\uace0\ud588\uc5b4\uc694', '\ud55c \uc8fc \uc2dc\uc791\uc744 \uc798 \ud574\ub0c8\uc5b4\uc694', '\uc6d4\uc694\uc77c \uc800\ub141, \ub098\ub97c \uc704\ud55c \uc2dc\uac04 \uac00\uc838\uc694'],
+    ['\ud654\uc694\uc77c\ub3c4 \ud074\ub9ac\uc5b4, \uc798\ud558\uace0 \uc788\uc5b4\uc694', '\uc624\ub298 \ud558\ub8e8\ub3c4 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694', '\ud654\uc694\uc77c \uc800\ub141, \uc77c\ucc0d \uc26c\uc5b4\ub450\uba74 \ub0b4\uc77c\uc774 \ud3b8\ud574\uc694', '\ud654\uc694\uc77c \ud1f4\uadfc\uae38, \uc624\ub298\ub3c4 \uc798 \ubc84\ud17c\uc5b4\uc694', '\uc218\uace0\ud55c \ub098\uc5d0\uac8c \ub9db\uc788\ub294 \uc800\ub141\uc744 \uc120\ubb3c\ud574\uc694', '\ud654\uc694\uc77c \uc800\ub141, \ud3b8\ud788 \uc26c\uc5b4\uc694'],
+    ['\uc808\ubc18 \uc654\uc5b4\uc694, \ub0a8\uc740 \uc774\ud2c0\ub3c4 \uac00\ubccd\uac8c', '\uc218\uc694\uc77c \ud1f4\uadfc, \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694', '\ubc18\ud658\uc810 \ud1b5\uacfc, \uc624\ub298\uc740 \uc880 \uc26c\uc138\uc694', '\uc218\uc694\uc77c \ud1f4\uadfc, \ud55c \uc8fc\uc758 \uc808\ubc18\uc744 \ud574\ub0c8\uc5b4\uc694', '\uc624\ub298\uc740 \uc77c\ucc0d \uc7a0\uc790\ub9ac\uc5d0 \ub4e4\uc5b4\uc694', '\ubc18\ud658\uc810 \uc9c0\ub0ac\uc5b4\uc694, \uc218\uace0 \ub9ce\uc558\uc5b4\uc694'],
+    ['\ub0b4\uc77c\ub9cc \ubc84\ud2f0\uba74 \uae08\uc694\uc77c\uc774\uc5d0\uc694', '\ubaa9\uc694\uc77c\uae4c\uc9c0 \ub2ec\ub824\uc628 \ub2f9\uc2e0, \ub300\ub2e8\ud574\uc694', '\uc624\ub298 \uc800\ub141\uc740 \uc88b\uc544\ud558\ub294 \uac83 \ud558\ub098 \ud558\uc138\uc694', '\ubaa9\uc694\uc77c \ud1f4\uadfc, \ub0b4\uc77c\ub9cc \uc9c0\ub098\uba74 \uc8fc\ub9d0\uc774\uc5d0\uc694', '\uc624\ub298\ub3c4 \uace0\uc0dd\ud588\uc5b4\uc694, \uc870\uae08\ub9cc \ub354 \ud798\ub0b4\uc694', '\ubaa9\uc694\uc77c \uc800\ub141, \uac00\ubccd\uac8c \uc0b0\ucc45\ub3c4 \uc88b\uc544\uc694'],
+    ['\ud55c \uc8fc \ub9c8\ubb34\ub9ac, \uc990\uac70\uc6b4 \uc8fc\ub9d0 \ubcf4\ub0b4\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc, \uc548\uc804\ud558\uac8c \ub4e4\uc5b4\uac00\uc138\uc694', '\uae08\uc694\uc77c \ud1f4\uadfc\uae38\uc774 \uc81c\uc77c \uac00\ubccd\uc8e0', '\uae08\uc694\uc77c \ud1f4\uadfc, \ud55c \uc8fc \uc815\ub9d0 \uace0\uc0dd\ud588\uc5b4\uc694', '\uc774\uc81c \uc8fc\ub9d0\uc774\uc5d0\uc694, \ub9c8\uc74c\uaecf \uc26c\uc5b4\uc694', '\ubd88\uae08 \ud1f4\uadfc\uae38, \uc548\uc804\ud558\uac8c \uac00\uc138\uc694'],
+    ['\uc8fc\ub9d0 \uadfc\ubb34\uae4c\uc9c0 \uc815\ub9d0 \uc218\uace0\ud588\uc5b4\uc694', '\ud1a0\uc694\uc77c\uae4c\uc9c0 \uc77c\ud55c \ub2f9\uc2e0, \ub0b4\uc77c\uc740 \ud479 \uc26c\uc5b4\uc694', '\uc624\ub298\uc740 \uc815\ub9d0 \uace0\uc0dd \ub9ce\uc558\uc5b4\uc694', '\ud1a0\uc694\uc77c \ud1f4\uadfc, \uc624\ub298 \ud558\ub8e8\ub3c4 \uace0\uc0dd\ud588\uc5b4\uc694', '\ub0b4\uc77c\uc740 \ud479 \uc26c\uc5b4\uc694', '\uc8fc\ub9d0 \uadfc\ubb34 \ub05d, \uc218\uace0 \ub9ce\uc558\uc5b4\uc694']
   ]
 };
 
@@ -23702,20 +23718,29 @@ function cbCompose(plan, ctx, wF0, wT0) {
     if (wF.tmax != null && wF.tmin != null) lines.push('\uc624\ub298 ' + wF.tmin + '\u00b0~' + wF.tmax + '\u00b0' + (wF.rain > 0 ? ' \u00b7 \uac15\uc218 ' + wF.rain + '%' : ''));
     else if (wF.rain >= 20) lines.push('\uac15\uc218\ud655\ub960 ' + wF.rain + '%');
   }
-  if (wT && wF && toStn && (Math.abs(wT.temp - wF.temp) >= 2 || Math.abs((wT.rain || 0) - (wF.rain || 0)) >= 20 || wT.txt !== wF.txt)) {
-    lines.push((toStn.name + ' ' + wT.temp + '\u00b0 ' + wT.txt + (wT.rain >= 40 ? ' \u00b7 \uac15\uc218 ' + wT.rain + '%' : '')).replace(/\s+$/, ''));
+  if (wT && toStn) {                                                // s281: \ub3c4\ucc29\uc9c0 \ub0a0\uc528\ub294 \ucd9c\ubc1c\uc9c0\uc640 \ube44\uc2b7\ud574\ub3c4 \ub298 \ubcf4\uc778\ub2e4(YJ: \ucd9c\ubc1c\uc9c0\u00b7\ub3c4\ucc29\uc9c0 \ub0a0\uc528)
+    var tl = toStn.name + ' ' + wT.temp + '\u00b0 ' + wT.txt;
+    if (wT.feel != null && Math.abs(wT.feel - wT.temp) >= 2) tl += ' \u00b7 \uccb4\uac10 ' + wT.feel + '\u00b0';
+    if (wT.rain >= 20) tl += ' \u00b7 \uac15\uc218 ' + wT.rain + '%';
+    lines.push(tl.replace(/\s+$/, ''));
   }
   if (!(fromStn && fromStn.bus)) lines.push(stnNm + ' \ud63c\uc7a1\ub3c4 ' + pct + '% (' + congTxt + ')');
+  if (toStn && !toStn.bus && toStn.name !== stnNm) {                  // s281: \uad50\ud1b5\uc0c1\ud669 \u2014 \ub3c4\ucc29\uc5ed \ud63c\uc7a1\ub3c4\ub3c4(\ucd9c\ubc1c\uc5ed\uacfc \uac19\uc740 \uc2dc\uac01 \uae30\uc900)
+    var pct2 = cbCongPct(toStn.name, toStn.line, h, wk);
+    lines.push(toStn.name + ' \ud63c\uc7a1\ub3c4 ' + pct2 + '% (' + (pct2 < 40 ? '\uc5ec\uc720' : pct2 < 65 ? '\ubcf4\ud1b5' : '\ud63c\uc7a1') + ')');
+  }
   var recs = [];
   if (wF) {
-    if (wF.rain >= 40) recs.push('\uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694');
-    else if (wF.rain >= 20) recs.push('\uc811\uc774\uc2dd \uc6b0\uc0b0 \uc788\uc73c\uba74 \uc548\uc2ec\uc774\uc5d0\uc694');
-    var ft = wF.feel != null ? wF.feel : wF.temp;
-    if (ft >= 33) recs.push('\ubb34\ub354\uc704\uc608\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc\uc5d0 \uc218\ubd84 \ucc59\uae30\uc138\uc694');
-    else if (ft >= 28) recs.push('\ub354\uc6cc\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc \ucd94\ucc9c');
-    else if (ft <= 0) recs.push('\uac15\ucd94\uc704\uc608\uc694, \ubaa9\ub3c4\ub9ac\u00b7\uc7a5\uac11 \ud544\uc218');
-    else if (ft <= 5) recs.push('\ucd94\uc6cc\uc694, \ub450\uaebc\uc6b4 \uc678\ud22c \uc785\uc73c\uc138\uc694');
-    else if (ft <= 11) recs.push('\uc300\uc300\ud574\uc694, \uac89\uc637 \ucc59\uae30\uc138\uc694');
+    var rainX = Math.max(wF.rain || 0, wT ? (wT.rain || 0) : 0);                 // \uc637\ucc28\ub9bc \u00b7 \uc6b0\uc0b0\uc740 \ucd9c\ubc1c\uc9c0\uc640 \ub3c4\ucc29\uc9c0 \uc911 \ub098\uc05c \ucabd\uc5d0 \ub9de\ucd98\ub2e4
+    var ft = wF.feel != null ? wF.feel : wF.temp, ftT = wT ? (wT.feel != null ? wT.feel : wT.temp) : ft;
+    var ftHi = Math.max(ft, ftT), ftLo = Math.min(ft, ftT);
+    if (rainX >= 40) recs.push('\uc6b0\uc0b0 \uaf2d \ucc59\uae30\uc138\uc694');
+    else if (rainX >= 20) recs.push('\uc811\uc774\uc2dd \uc6b0\uc0b0 \uc788\uc73c\uba74 \uc548\uc2ec\uc774\uc5d0\uc694');
+    if (ftHi >= 33) recs.push('\ubb34\ub354\uc704\uc608\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc\uc5d0 \uc218\ubd84 \ucc59\uae30\uc138\uc694');
+    else if (ftHi >= 28) recs.push('\ub354\uc6cc\uc694, \uc2dc\uc6d0\ud55c \uc637\ucc28\ub9bc \ucd94\ucc9c');
+    else if (ftLo <= 0) recs.push('\uac15\ucd94\uc704\uc608\uc694, \ubaa9\ub3c4\ub9ac\u00b7\uc7a5\uac11 \ud544\uc218');
+    else if (ftLo <= 5) recs.push('\ucd94\uc6cc\uc694, \ub450\uaebc\uc6b4 \uc678\ud22c \uc785\uc73c\uc138\uc694');
+    else if (ftLo <= 11) recs.push('\uc300\uc300\ud574\uc694, \uac89\uc637 \ucc59\uae30\uc138\uc694');
     if (isMorn && wF.tmax != null && wF.tmin != null && (wF.tmax - wF.tmin) >= 10) recs.push('\uc77c\uad50\ucc28 ' + (wF.tmax - wF.tmin) + '\u00b0, \uac89\uc637 \ud558\ub098 \ucc59\uae30\uba74 \uc88b\uc544\uc694');
     if (wF.hum != null && wF.hum >= 80 && wF.temp >= 24) recs.push('\uc2b5\ub3c4 \ub192\uc544 \ud6c4\ud141\uc9c0\uadfc\ud574\uc694');
     if (isMorn && wF.uv != null && wF.uv >= 8) recs.push('\uc790\uc678\uc120 \uac15\ud574\uc694, \uc120\ud06c\ub9bc \uc78a\uc9c0 \ub9c8\uc138\uc694');
@@ -23726,7 +23751,7 @@ function cbCompose(plan, ctx, wF0, wT0) {
   lines.push(cbClosing(plan.kind, nowMs));
   var title = (isMorn ? '\ucd9c\uadfc\uae38 \ube0c\ub9ac\ud551' : '\ud1f4\uadfc\uae38 \ube0c\ub9ac\ud551') + (fromStn && toStn ? ' \u00b7 ' + fromStn.name + '\u2192' + toStn.name : '');
   var route = (fromStn && toStn) ? { from: { name: fromStn.name, lat: fromStn.lat, lng: fromStn.lng, bus: !!fromStn.bus }, to: { name: toStn.name, lat: toStn.lat, lng: toStn.lng, bus: !!toStn.bus } } : null;
-  return { v: CB_V, title: title, body: lines.join('\n'), route: route };
+  return { v: CB_V, kind: plan.kind, title: title, body: lines.join('\n'), route: route };
 }
 function cbBrief(inp, wF, wT) {
   var plan = cbPlan(inp);

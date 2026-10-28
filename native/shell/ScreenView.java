@@ -600,7 +600,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_BRX && "h".equals(pi.dk)) tapBrh(pi, x / dpr);
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
-                        else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); else if (pi.kind == ScreenCore.K_BUTTON && a != null && a.v != null && a.v.startsWith("rh.tab.")) pickRtab(pi); listener.onAction(a); }
+                        else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); else if (pi.kind == ScreenCore.K_BUTTON && a != null && a.v != null && a.v.startsWith("rh.tab.")) pickRtab(pi); else if (pi.kind == ScreenCore.K_BUTTON && pi.gk.length() > 0) pickGrp(pi); listener.onAction(a); }
                     }
                 } else if (mode == 1 || mode == 2 || mode == 8) {
                     vt.computeCurrentVelocity(1000, maxFling);
@@ -658,6 +658,18 @@ public class ScreenView extends View {
         pi.fill = on.fill; pi.line = on.line; pi.tc = on.tc;
         on.fill = f; on.line = l; on.tc = t;
         rtA = pi; rtB = on; rtT0 = android.os.SystemClock.uptimeMillis();
+        invalidate();
+    }
+    /** 같은 묶음(grp)의 단추 중 하나를 누르면 엔진 답을 기다리지 않고 그 자리에서 켜 보인다 — 켜져 있던 단추와 모양을 맞바꾼다. */
+    private void pickGrp(ScreenCore.Item pi) {
+        if (lay == null || pi.fill == null) return;
+        if (pi.fill.role != null && "gold".equals(pi.fill.role)) return;
+        ScreenCore.Item on = null;
+        for (ScreenCore.Item it : lay.body) if (it != pi && it.kind == ScreenCore.K_BUTTON && pi.gk.equals(it.gk) && it.fill != null && "gold".equals(it.fill.role)) on = it;
+        if (on == null) return;
+        ScreenCore.Col f = pi.fill, l = pi.line, t = pi.tc;
+        pi.fill = on.fill; pi.line = on.line; pi.tc = on.tc;
+        on.fill = f; on.line = l; on.tc = t;
         invalidate();
     }
     private ScreenCore.Item rtA, rtB; private long rtT0; private final int[] rtFrom = new int[6]; private boolean rtAnim;
@@ -1896,7 +1908,7 @@ public class ScreenView extends View {
         if (listener != null) listener.onSet(a, !wasOn);
     }
     private void tapInbar(ScreenCore.Item it, float xdp, boolean inFootRegion) {
-        if (xdp >= it.btx - 4f && xdp < it.btx + it.sw + 4f) { if (!it.on) fireInbar(it, inFootRegion, it.act); return; }      // on = 흐린 단추(dim): 눌러도 무시
+        if (it.sw > 0f && xdp >= it.btx - 4f && xdp < it.btx + it.sw + 4f) { if (!it.on) fireInbar(it, inFootRegion, it.act); return; }      // on = 흐린 단추(dim): 눌러도 무시
         beginEdit(it);
     }
     /** 입력줄 단추(또는 키보드의 보내기): 쓰던 글을 보관하고 행동을 알린다. 아래 고정 줄이면 키보드를 그대로 두고(이어 쓰기), 본문 안이면 내린다. */
@@ -2928,6 +2940,7 @@ public class ScreenView extends View {
             cv.drawText(empty ? it.label : inbarShown(it, empty ? it.label : v), it.textX, base(it.iy, it.ih, 0), tp);          // 글자 자리보다 길면 … 으로 줄여 보인다(편집을 시작하면 전체 글자 · 후보 줄은 이름을 다 보여 준다)
             cv.restore();
         }
+        if (it.sw <= 0f) return;                                                              // 단추 없는 입력칸(nobtn)
         rf.set(it.btx, it.bty, it.btx + it.sw, it.bty + it.sh);
         if (it.pathOps.length > 0) {                                                       // 둥근 아이콘 단추(실시간 대화 보내기): 금색 동그라미 + 흰 아이콘
             p.setStyle(Paint.Style.FILL); p.setColor(it.on ? alpha(cc(it.ac, pal[R_GOLD]), 0.5f) : cc(it.ac, pal[R_GOLD])); cv.drawCircle(it.btx + it.sw / 2f, it.bty + it.sh / 2f, it.sw / 2f, p);

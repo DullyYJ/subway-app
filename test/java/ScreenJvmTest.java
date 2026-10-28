@@ -347,6 +347,17 @@ public class ScreenJvmTest {
             for (ScreenCore.Item q : RL.body) if (q.kind == ScreenCore.K_INBAR) { if ("a".equals(q.key)) ia = q; else if ("b".equals(q.key)) ib = q; }
             ok(ia != null && ib != null && near(ia.y, ib.y) && ib.x > ia.x + ia.w && ia.w < 170f && near(ia.w, ib.w), "row 안 inbar 두 칸이 같은 높이에 같은 폭으로 나란히");
         }
+        {
+            ScreenCore.Screen nbS = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"inbar\",\"key\":\"a\",\"hint\":\"x\",\"btn\":\"저장\",\"nobtn\":true,\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v1\"}},{\"t\":\"inbar\",\"key\":\"b\",\"hint\":\"y\",\"btn\":\"저장\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v2\"}}]}");
+            ScreenCore.Layout NL = ScreenCore.layout(nbS, 340f, M);
+            ScreenCore.Item na = null, nb = null;
+            for (ScreenCore.Item q : NL.body) if (q.kind == ScreenCore.K_INBAR) { if ("a".equals(q.key)) na = q; else if ("b".equals(q.key)) nb = q; }
+            ok(na != null && nb != null && na.sw <= 0f && nb.sw > 0f && na.iw > nb.iw + 20f, "inbar nobtn: 단추 자리를 비우고 입력칸이 전체 폭을 쓴다(s281)");
+            ScreenCore.Screen gpS = ScreenCore.load(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"1\",\"grp\":\"h\",\"fill\":\"gold\",\"act\":{\"a\":\"call\",\"v\":\"tp.h.1\"}},{\"t\":\"button\",\"s\":\"2\",\"grp\":\"h\",\"act\":{\"a\":\"call\",\"v\":\"tp.h.2\"}}]}"));
+            ScreenCore.Layout GL = ScreenCore.layout(gpS, 340f, M);
+            int gn = 0; for (ScreenCore.Item q : GL.body) if (q.kind == ScreenCore.K_BUTTON && "h".equals(q.gk)) gn++;
+            ok(gn == 2, "button grp: 같은 묶음 이름이 항목에 실린다(s281)");
+        }
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}]}]}")), "row 안에 row 를 둘 수 없다");
         StringBuilder rwNine = new StringBuilder("{\"t\":\"row\",\"kids\":[");
         for (int i = 0; i < 9; i++) { if (i > 0) rwNine.append(','); rwNine.append("{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}"); }

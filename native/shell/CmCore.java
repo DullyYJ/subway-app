@@ -19,6 +19,8 @@ public final class CmCore {
     /** 눌림 결과(비트) — 껍데기가 이 값을 보고 다시 그리기·알림 다시 예약·미리보기·닫기·버스 정류장 찾기를 한다. */
     public static final int R_NONE = 0, R_RENDER = 1, R_RESCHED = 2, R_TEST = 4, R_CLOSE = 8, R_BUS = 16;
 
+    /** s281: 시각 고르기를 가운데 팝업으로 열었다 — 엔진이 뒤로 가기 줄을 빼고 단추 묶음(grp)을 준다. */
+    public boolean pop;
     public String sub = "";                          // "" · "tp"(시각 고르기) · "pick"(장소 고르기)
     public String tpT = "morn", tpAp = "am";
     public int tpH = 7, tpM = 30;
@@ -116,7 +118,8 @@ public final class CmCore {
             if (!Boolean.TRUE.equals(m.get("ok")) || !(m.get("title") instanceof String) || !(m.get("body") instanceof String)) return null;
             String t = (String) m.get("title"), b = (String) m.get("body");
             if (t.length() == 0 || b.length() == 0) return null;
-            return new String[] { t.length() > 80 ? t.substring(0, 80) : t, b.length() > 800 ? b.substring(0, 800) : b };
+            String k = "eve".equals(m.get("kind")) ? "eve" : "morn";                 // 엔진이 정한 출근/퇴근(미리보기 auto 도 여기서 정해진다)
+            return new String[] { t.length() > 80 ? t.substring(0, 80) : t, b.length() > 800 ? b.substring(0, 800) : b, k };
         } catch (ScreenCore.ParseError e) { return null; }
     }
 
@@ -126,6 +129,7 @@ public final class CmCore {
         b.append(",\"morn\":").append(ShellCore.q(morn(st))).append(",\"eve\":").append(ShellCore.q(eve(st)));
         b.append(",\"days\":[").append(daysStr(days(st))).append(']');
         for (String k : PK) b.append(',').append(ShellCore.q(k)).append(':').append(ShellCore.q(place(st, k)));
+        if ("tp".equals(sub) && pop) b.append(",\"pop\":true");
         if ("tp".equals(sub)) b.append(",\"sub\":\"tp\",\"tp\":{\"t\":").append(ShellCore.q(tpT)).append(",\"ap\":").append(ShellCore.q(tpAp)).append(",\"h\":").append(tpH).append(",\"m\":").append(tpM).append('}');
         else if ("pick".equals(sub)) {
             b.append(",\"sub\":\"pick\",\"pick\":{\"k\":").append(ShellCore.q(pkK)).append(",\"q\":").append(ShellCore.q(pkQ)).append("},\"bus\":[");
@@ -133,6 +137,14 @@ public final class CmCore {
             b.append(']');
         }
         return b.append("}}").toString();
+    }
+    /** 시각 고르기 팝업 화면의 기기 사실(미리 받아 두려고 — 상태를 바꾸지 않는다). kind = morn | eve. */
+    public static String tpPopFacts(ShellCore.Store st, String kind) {
+        String s = "eve".equals(kind) ? eve(st) : morn(st);
+        int h24 = (s.charAt(0) - '0') * 10 + (s.charAt(1) - '0'), m = (s.charAt(3) - '0') * 10 + (s.charAt(4) - '0');
+        CmCore c = new CmCore(); c.sub = "tp"; c.pop = true; c.tpT = "eve".equals(kind) ? "eve" : "morn";
+        c.tpAp = h24 >= 12 ? "pm" : "am"; c.tpH = h24 % 12 == 0 ? 12 : h24 % 12; c.tpM = m - (m % 5);
+        return c.pageFacts(st);
     }
     /** 엔진이 보여 준 지하철역 후보(info.pk.u 의 이름들)를 받아 둔다 — pk.u.<번호> 를 눌렀을 때 이름을 찾는다. */
     private void syncX() {
@@ -163,7 +175,19 @@ public final class CmCore {
         if (!same) clearBus();
         if (pkQ.trim().length() < 2) { clearBus(); syncX(); return R_RENDER; }
         syncX();
-        return R_BUS;
+        return R_RENDER | R_BUS;                   // 지하철역 후보는 엔진이 바로 그린다 · 버스정류장은 찾아 오는 대로 한 번 더 그린다
+    }
+    /** 입력칸을 벗어남(s281) — 친 글자가 있고 저장된 것과 다르면 자동 저장한다. @return 눌림 결과(R_*) */
+    public int blurInline(ShellCore.Store st, String k, String typed) {
+        if (!inl || !k.equals(pkK)) return R_NONE;
+        String t = typed == null ? "" : typed.trim();
+        if (t.length() > 0 && t.length() <= 60 && !t.equals(place(st, k).trim())) {          // 글자를 모두 지운 채 벗어나면 저장된 것을 그대로 둔다 — 비우기는 Enter 로만
+
+            setPlace(st, k, t, null); endInline();
+            return R_RENDER | R_RESCHED;
+        }
+        endInline();
+        return R_RENDER;
     }
     /** 고치기를 끝낸다(저장하지 않은 글자는 버린다). 켜져 있었으면 true. */
     public boolean endInline() { boolean was = inl; inl = false; clearBus(); syncX(); return was; }
@@ -223,12 +247,12 @@ public final class CmCore {
         if ("tp.ap.am".equals(v) || "tp.ap.pm".equals(v)) { tpAp = v.endsWith("pm") ? "pm" : "am"; return R_RENDER; }
         if (v.startsWith("tp.h.")) { int h = num(v, 5); if (h < 1 || h > 12) return R_NONE; tpH = h; return R_RENDER; }
         if (v.startsWith("tp.m.")) { int m = num(v, 5); if (m < 0 || m > 55 || m % 5 != 0) return R_NONE; tpM = m; return R_RENDER; }
-        if ("tp.cancel".equals(v)) { sub = ""; return R_RENDER; }
+        if ("tp.cancel".equals(v)) { sub = ""; pop = false; return R_RENDER; }
         if ("tp.ok".equals(v)) {
             int h24 = (tpH % 12) + ("pm".equals(tpAp) ? 12 : 0);
             String s = (h24 < 10 ? "0" : "") + h24 + ":" + (tpM < 10 ? "0" : "") + tpM;
             st.put("eve".equals(tpT) ? K_EVE : K_MORN, s);
-            sub = "";
+            sub = ""; pop = false;
             return R_RENDER | R_RESCHED;
         }
         if (v.startsWith("cm.pick.")) {

@@ -168,7 +168,7 @@ function settingsScreen(inp, factsIn) {
 //   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · erl.copy · erl.clear · locd.ok · locd.no · ask.ok · ask.no · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
 //   tp.ap.<am|pm> · tp.h.<1-12> · tp.m.<0-55> · tp.ok · tp.cancel · pk.save · pk.clear · pk.u.<번호> · pk.b.<번호> · pk.cancel.   스위치(toggle) 키: cm · ovl.
 // ══════════════════════════════════════════════════════════════════════════
-var SETTINGS_PAGES = { sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내', askbat: '화면을 꺼도 끊기지 않게', asksam: '갤럭시 절전 제외', askovl: '다른 앱 위에 표시' };
+var SETTINGS_PAGES = { cmb: '출퇴근 브리핑', sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내', askbat: '화면을 꺼도 끊기지 않게', asksam: '갤럭시 절전 제외', askovl: '다른 앱 위에 표시' };
 var SETTINGS_ASK = { askbat: 1, asksam: 1, askovl: 1 };      // 처음 설치 때 이어서 묻는 기기 설정 안내 — 뒤로 가기 없이 [나중에]/[설정하기] 만
 var SETTINGS_DAY_NM = ['일', '월', '화', '수', '목', '금', '토'];
 var SETTINGS_BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
@@ -228,6 +228,8 @@ function settingsPageFacts(pf) {
     roam: settingsInt(pf.roam, 2, 10, 6), mOn: settingsFlag(pf.mOn, false), eOn: settingsFlag(pf.eOn, false),
     morn: settingsHm(pf.morn, '07:30'), eve: settingsHm(pf.eve, '18:30'), days: days,
     from: settingsStr(pf.from, 60), to: settingsStr(pf.to, 60), eFrom: settingsStr(pf.eFrom, 60), eTo: settingsStr(pf.eTo, 60),
+    pop: settingsFlag(pf.pop, false),                                                       // 팝업(가운데 창)으로 열린 화면 — 뒤로 가기 줄 없이
+    cb: (pf.cb && typeof pf.cb === 'object') ? { kind: pf.cb.kind === 'eve' ? 'eve' : 'morn', title: settingsStr(pf.cb.title, 80), body: settingsStr(pf.cb.body, 900) } : null,
     sub: pf.sub === 'tp' ? 'tp' : (pf.sub === 'pick' ? 'pick' : ''),
     tp: tp ? { t: tp.t === 'eve' ? 'eve' : 'morn', ap: tp.ap === 'pm' ? 'pm' : 'am', h: settingsInt(tp.h, 1, 12, 7), m: settingsInt(tp.m, 0, 55, 0) - (settingsInt(tp.m, 0, 55, 0) % 5) } : null,
     pick: pk ? { k: SETTINGS_PICK[pk.k] ? pk.k : 'from', q: settingsStr(pk.q, 60) } : null,
@@ -446,7 +448,7 @@ function settingsCmInline(f, info) {
   var HINT = { from: '예: 아라', to: '예: 강남', eFrom: '비우면 회사 근처', eTo: '비우면 집 근처' };          // 가로 칸은 좁아 짧은 안내 글(이름은 위 라벨)
   var inb = function (x, wide) {
     var active = !!(pk && pk.k === x), act = settingsCall('pk.save.' + x);
-    return { t: 'inbar', key: 'cmp.' + x, hint: wide ? SETTINGS_PICK[x][1] : HINT[x], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '저장', bh: 30, bsize: 11, bpx: wide ? 0 : 8, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
+    return { t: 'inbar', key: 'cmp.' + x, hint: wide ? SETTINGS_PICK[x][1] : HINT[x], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '저장', nobtn: true, bh: 30, bsize: 11, bpx: wide ? 0 : 8, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
   };
   var sug = function (x) {                                          // 고치는 중인 칸의 후보 줄(지하철: 엔진 역 표 · 버스: 앱이 찾아 온 이름)
     if (!(pk && pk.k === x)) return;
@@ -493,21 +495,35 @@ function settingsPageCm(f) {
 function settingsPageTp(f) {
   var tp = f.tp || { t: 'morn', ap: 'am', h: 7, m: 30 };
   var now = (tp.ap === 'pm' ? '오후' : '오전') + ' ' + tp.h + ':' + ('0' + tp.m).slice(-2);
+  var g = function (n, grp) { if (f.pop) n.grp = grp; return n; };      // 팝업이면 앱이 같은 묶음 안에서 눌린 칸을 바로 켜 보인다(엔진 답을 기다리지 않는다)
   var k = [{ t: 'text', s: tp.t === 'eve' ? '퇴근 브리핑 시간' : '출근 브리핑 시간', size: 14, bold: true, color: 'sub', lh: 1.3, pad: [0, 0, 0, 4] },
     { t: 'text', s: now, size: 28, bold: true, color: 'gold', lh: 1.25, pad: [0, 0, 0, 14] },
-    settingsRowN([settingsBtnN('오전', 'tp.ap.am', { size: 13, on: tp.ap === 'am' }), settingsBtnN('오후', 'tp.ap.pm', { size: 13, on: tp.ap === 'pm' })], 14),
+    settingsRowN([g(settingsBtnN('오전', 'tp.ap.am', { size: 13, on: tp.ap === 'am' }), 'ap'), g(settingsBtnN('오후', 'tp.ap.pm', { size: 13, on: tp.ap === 'pm' }), 'ap')], 14),
     settingsLabelN('시', 6)];
   [[1, 6], [7, 12]].forEach(function (r, i) {
-    var ks = []; for (var h = r[0]; h <= r[1]; h++) ks.push(settingsBtnN(String(h), 'tp.h.' + h, { size: 14, h: 40, on: tp.h === h }));
+    var ks = []; for (var h = r[0]; h <= r[1]; h++) ks.push(g(settingsBtnN(String(h), 'tp.h.' + h, { size: 14, h: 40, on: tp.h === h }), 'h'));
     k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 14 : 7], kids: ks });
   });
   k.push(settingsLabelN('분', 6));
   [[0, 25], [30, 55]].forEach(function (r, i) {
-    var ks = []; for (var m = r[0]; m <= r[1]; m += 5) ks.push(settingsBtnN(('0' + m).slice(-2), 'tp.m.' + m, { size: 14, h: 40, on: tp.m === m }));
+    var ks = []; for (var m = r[0]; m <= r[1]; m += 5) ks.push(g(settingsBtnN(('0' + m).slice(-2), 'tp.m.' + m, { size: 14, h: 40, on: tp.m === m }), 'm'));
     k.push({ t: 'row', gap: 7, pad: [0, 0, 0, i ? 18 : 7], kids: ks });
   });
   k.push(settingsRowN([settingsBtnN('취소', 'tp.cancel', { size: 14, h: 46, tc: 'sub' }), settingsBtnN('확인', 'tp.ok', { size: 14, h: 46, gold: true })], 0));
-  return [settingsPanelN(k, 8)];
+  return [settingsPanelN(k, f.pop ? 24 : 8)];
+}
+// s281: 출퇴근 브리핑 알림을 누르면 앱 안에서 뜨는 창 — 글(경로 · 날씨 · 옷차림 · 교통 · 오늘의 응원 한마디)은 엔진이 알림용으로 만든 것을 그대로 쓰고, 단추는 [확인](닫기) · [출근하기]/[퇴근하기](자동 경로탐색).
+function settingsPageCmb(f) {
+  var cb = f.cb || { kind: 'morn', title: '출퇴근 브리핑', body: '' };
+  var lines = cb.body.split('\n').filter(function (x) { return x.length > 0; });
+  var k = [settingsTitleN(cb.title || (cb.kind === 'eve' ? '퇴근길 브리핑' : '출근길 브리핑'), 12)];
+  lines.forEach(function (ln, i) {
+    var last = i === lines.length - 1 && lines.length > 1, bullet = ln.indexOf('· ') === 0, first = i === 0 && ln.indexOf('→') > 0;
+    if (last) k.push({ t: 'text', s: ln, size: 14, bold: true, color: 'gold', lh: 1.6, pad: [0, 8, 0, 16] });
+    else k.push({ t: 'text', s: bullet ? ln : ln, size: first ? 14 : 13, bold: first, color: bullet || first ? 'text' : 'sub', lh: 1.6, pad: [0, 0, 0, first ? 8 : 4] });
+  });
+  k.push(settingsRowN([settingsBtnN('확인', 'cmb.ok', { size: 14, h: 46 }), settingsBtnN(cb.kind === 'eve' ? '퇴근하기' : '출근하기', 'cmb.go', { size: 14, h: 46, gold: true })], 0));
+  return [settingsPanelN(k, 24)];
 }
 // 장소 고르기(지하철역은 엔진 역 표에서, 버스정류장은 앱이 찾아 온 이름을 받아서)
 function settingsPagePick(f, info) {
@@ -640,8 +656,8 @@ function settingsPageScreen(inp, factsIn) {
   if (p === 'cm' && pf.sub === 'tp') { info.sub = 'tp'; kids = settingsPageTp(pf); }
   else if (p === 'cm' && pf.sub === 'pick') { info.sub = 'pick'; kids = settingsPagePick(pf, info); }
   else if (p.indexOf('pol') === 0) kids = settingsPagePol(p);
-  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
-  var body = (p === 'locd' || SETTINGS_ASK[p] ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
+  else kids = ({ sam: settingsPageSam, ovl: settingsPageOvl, dev: settingsPageDev, arr: settingsPageArr, gw: settingsPageGw, cm: settingsPageCm, cmb: settingsPageCmb, erl: settingsPageErl, locd: settingsPageLocd, askbat: settingsPageAskBat, asksam: settingsPageAskSam, askovl: settingsPageAskOvl })[p](pf);
+  var body = (p === 'locd' || p === 'cmb' || SETTINGS_ASK[p] || (p === 'cm' && info.sub === 'tp' && pf.pop) ? [] : [settingsBackN(info.sub ? SETTINGS_PAGES.cm : '')]).concat(kids, [{ t: 'spacer', h: 28 }]);
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: body, info: info };
   out.rev = 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(body));
   return out;

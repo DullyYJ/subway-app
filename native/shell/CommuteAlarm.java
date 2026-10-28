@@ -95,8 +95,8 @@ final class CommuteAlarm {
                 if (r.status == 200) tb = CmCore.parseBrief(r.body);
             } catch (Throwable ignored) { }
         }
-        if (tb == null) tb = new String[] { "eve".equals(kind) ? "퇴근길 브리핑" : ("morn".equals(kind) ? "출근길 브리핑" : "출퇴근 브리핑"), "브리핑을 받지 못했어요. 앱에서 확인해 보세요" };
-        show(c, tb[0], tb[1]);
+        if (tb == null) tb = new String[] { "eve".equals(kind) ? "퇴근길 브리핑" : ("morn".equals(kind) ? "출근길 브리핑" : "출퇴근 브리핑"), "브리핑을 받지 못했어요. 앱에서 확인해 보세요", "eve".equals(kind) ? "eve" : "morn" };
+        show(c, tb[2], tb[0], tb[1]);
         return true;
     }
 
@@ -114,15 +114,32 @@ final class CommuteAlarm {
         } catch (Throwable t) { return null; }
     }
 
-    private static void show(Context c, String title, String text) {
+    // ── s281: 알림을 누르면 앱 안 가운데 창으로 브리핑을 보여 주고 [출근하기]/[퇴근하기] 로 경로탐색까지 이어진다 ──
+    static final String EXTRA_CB_KIND = "gdm_cb_kind", EXTRA_CB_TITLE = "gdm_cb_title", EXTRA_CB_BODY = "gdm_cb_body";
+    private static volatile String[] pendingBrief;
+    /** 앱이 알림을 눌러 열렸으면 { 출근/퇴근, 제목, 본문 } 을 적어 두고 인텐트에서 지운다(화면을 돌려도 다시 뜨지 않게). */
+    static void captureBrief(Intent it) {
+        try {
+            if (it == null || !it.hasExtra(EXTRA_CB_KIND)) return;
+            String k = it.getStringExtra(EXTRA_CB_KIND), t = it.getStringExtra(EXTRA_CB_TITLE), b = it.getStringExtra(EXTRA_CB_BODY);
+            it.removeExtra(EXTRA_CB_KIND); it.removeExtra(EXTRA_CB_TITLE); it.removeExtra(EXTRA_CB_BODY);
+            if (b == null || b.length() == 0) return;
+            pendingBrief = new String[] { "eve".equals(k) ? "eve" : "morn", t == null ? "" : t, b };
+        } catch (Throwable ignored) { }
+    }
+    static String[] takeBrief() { String[] b = pendingBrief; pendingBrief = null; return b; }
+
+    private static void show(Context c, String kind, String title, String text) {
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         if (Build.VERSION.SDK_INT >= 26) nm.createNotificationChannel(new NotificationChannel(CH, "출퇴근 브리핑", NotificationManager.IMPORTANCE_DEFAULT));
-        Intent i = new Intent(c, ShellActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        PendingIntent p = PendingIntent.getActivity(c, 1, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Intent i = new Intent(c, ShellActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_CB_KIND, kind).putExtra(EXTRA_CB_TITLE, title).putExtra(EXTRA_CB_BODY, text);
+        PendingIntent p = PendingIntent.getActivity(c, "eve".equals(kind) ? 7711 : 7710, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CH) : new Notification.Builder(c);
         b.setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(title).setContentText(text.indexOf('\n') > 0 ? text.substring(0, text.indexOf('\n')) : text)
             .setStyle(new Notification.BigTextStyle().bigText(text)).setAutoCancel(true).setContentIntent(p);
+        try { b.addAction(android.R.drawable.ic_menu_directions, "eve".equals(kind) ? "퇴근하기" : "출근하기", WidgetCore.goIntent(c, "eve".equals(kind) ? "eve" : "morn")); } catch (Throwable ignored) { }          // 알림에서 바로 눌러도 앱이 열려 경로탐색
         nm.notify(NOTI_ID, b.build());
     }
 }

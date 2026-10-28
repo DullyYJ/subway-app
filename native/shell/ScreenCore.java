@@ -205,6 +205,7 @@ public final class ScreenCore {
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
         public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
         public String[] mp = null; public int cm = 0;   // post: 닉네임 뒤에 점(·)으로 이어 그리는 조각들 · 댓글 수(0 이면 숨김)
+        public boolean nobtn; public String grp = "";                                  // inbar: 단추 없이 입력칸만(엔터 = act) — 출퇴근 장소 칸
         public float bpx = 0f, ifh = 0f, ifr = 0f, lbw = 0f, inh = 0f;   // inh: inbar 입력 테두리 상자 높이(0 이면 줄 높이)   // inbar: 단추 좌우 안쪽 여백 · 입력 글자 뒤 바탕 띠 높이·모서리 / panel: 왼쪽 띠 두께
         public String ifill = "", lbc = "";                   // inbar: 입력 글자 뒤 바탕 띠 색 / panel: 왼쪽 띠 색
         public String offf = "", offb = "", offt = "";      // chips: 꺼진 칩 바탕 · 테두리 · 글자(없으면 기본 모양)                             // bcard: ✏️(별명) · 🗺️(위치) 단추의 행동
@@ -494,7 +495,7 @@ public final class ScreenCore {
             pad(m, n); n.s = optStr(m, "s", "", 80); if (n.s.length() == 0) throw new ParseError("button: s 없음");
             n.size = optNum(m, "size", 12f, 6f, 40f); n.h = optNum(m, "h", 40f, 20f, 120f); n.act = act(m.get("act"), true);
             n.fill = roleOrCss(m, "fill", ""); n.line = roleOrCss(m, "line", ""); n.tc = roleOrCss(m, "tc", ""); n.bold = optBool(m, "bold", false);
-            n.r = optNum(m, "r", 12f, 0f, 40f);
+            n.r = optNum(m, "r", 12f, 0f, 40f); n.grp = optStr(m, "grp", "", 12);      // grp = 같은 묶음 안에서 하나만 켜지는 단추(시각 고르기) — 누르면 앱이 바로 켜 보인다
             n.align = optStr(m, "al", "center", 8); if (!"left".equals(n.align) && !"center".equals(n.align)) throw new ParseError("button.al");      // 입력칸처럼 왼쪽에 붙여 쓰는 단추(웹 입력 상자)
         } else if ("panel".equals(t)) {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
@@ -699,7 +700,7 @@ public final class ScreenCore {
             n.top = optBool(m, "top", false);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
             n.onc = roleOrCss(m, "onc", "gold"); if (n.onc.length() == 0) n.onc = "gold"; n.chk = roleOrCss(m, "ckf", "#121214"); if (n.chk.length() == 0) n.chk = "#121214";
-            n.dot = roleOrCss(m, "dot", ""); n.bold = optBool(m, "bold", false); n.watch = optBool(m, "watch", false);
+            n.dot = roleOrCss(m, "dot", ""); n.bold = optBool(m, "bold", false); n.watch = optBool(m, "watch", false); n.nobtn = optBool(m, "nobtn", false);
             n.on = optBool(m, "dim", false); n.bact = act(m.get("eact"), false);
             n.spin = optBool(m, "spin", n.on && n.act != null && "rt.gps".equals(n.act.v));      // 옛 엔진은 spin 을 안 준다 — 위치 감지 단추만 흐릴 때 돌던 옛 동작 그대로(경로 탐색 단추는 흐려도 안 돈다)              // dim = 단추를 흐리게(눌러도 아무 일 없음) · eact = 키보드의 확인 키 행동(없으면 단추 행동)
             n.bh = optNum(m, "bh", 0f, 0f, 60f); n.bsize = optNum(m, "bsize", 0f, 0f, 30f);
@@ -2006,7 +2007,7 @@ public final class ScreenCore {
         if ("button".equals(n.t)) {
             Item it = new Item(); it.kind = K_BUTTON; it.x = ox; it.y = y; it.w = innerW; it.h = n.h;
             it.label = n.s; it.size = n.size; it.act = n.act; it.bold = n.bold; it.radius = n.r;
-            it.left = "left".equals(n.align);
+            it.left = "left".equals(n.align); it.gk = n.grp;
             it.lines = new String[] { ellipsize(n.s, innerW - (it.left ? 22f : 16f), n.size, n.bold, m) };
             it.fill = col(n.fill, new Col("card", 0)); it.line = col(n.line, new Col("border", 0)); it.tc = col(n.tc, new Col("sub", 0));
             out.add(it);
@@ -2357,12 +2358,12 @@ public final class ScreenCore {
         if ("inbar".equals(t0(n))) {
             float bsz = n.bsize > 0f ? n.bsize : n.size;
             float btnH = n.bh > 0f ? Math.min(n.bh, n.h) : n.h;
-            float btnW = n.bops.length > 0 ? btnH : m.width(n.label, bsz, true) + (n.bpx > 0f ? n.bpx : INBAR_BTN_PADX) * 2f;        // 아이콘 단추는 동그라미(가로=세로)
+            float btnW = n.nobtn ? 0f : n.bops.length > 0 ? btnH : m.width(n.label, bsz, true) + (n.bpx > 0f ? n.bpx : INBAR_BTN_PADX) * 2f;        // 아이콘 단추는 동그라미(가로=세로)
             Item it = new Item(); it.kind = K_INBAR; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
             it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.act = n.act; it.badge = n.label;
             it.bold = n.bold; it.size2 = n.bsize > 0f ? n.bsize : 0f; it.watch = n.watch; it.on = n.on; it.spin = n.spin; it.act2 = n.bact;
             float inH = n.inh > 0f ? Math.min(n.inh, n.h) : n.h;
-            it.ix = ox; it.iy = y + (n.h - inH) / 2f; it.iw = Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = inH;
+            it.ix = ox; it.iy = y + (n.h - inH) / 2f; it.iw = n.nobtn ? innerW : Math.max(40f, innerW - btnW - INBAR_GAP); it.ih = inH;
             it.btx = ox + innerW - btnW; it.bty = y + (n.h - btnH) / 2f; it.sw = btnW; it.sh = btnH; it.top = n.top; it.pathOps = n.bops;
             it.textX = ox + 14f;
             if (n.dot.length() > 0) { it.dotC = col(n.dot, null); it.bx = ox + 14f + 5f; it.by = y + n.h / 2f; it.textX = ox + 14f + 10f + 10f; }       // 동그라미(지름 10) + 간격 10 → 글자

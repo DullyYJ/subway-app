@@ -544,7 +544,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/private boolean reviveRide\(\)/.test(a) && /RideService\.running\) && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)|!RideService\.running && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)/.test(a) && /reviveRide\(\);\s*rsApply\.run\(\)/.test(a), '앞으로 돌아오면 저장된 탑승 안내를 되살린다');
     const o = a.slice(a.indexOf('private void openSetPage('), a.indexOf('private void loadSetPage()'));
-    assert.ok(/pop = "locd"\.equals\(page\) \|\| ShellCore\.isAskPage\(page\)/.test(o) && /Theme_Material_Light_Dialog_NoActionBar/.test(o) && /setDimAmount\(0\.68f\)/.test(o) && /Gravity\.CENTER/.test(o) && /setCancelable\(false\)/.test(o), '위치 · 설치 안내는 가운데 어두운 팝업(웹 .68)');
+    assert.ok(/pop = "locd"\.equals\(page\) \|\| "cmb"\.equals\(page\) \|\| tpPop \|\| ShellCore\.isAskPage\(page\)/.test(o) && /Theme_Material_Light_Dialog_NoActionBar/.test(o) && /setDimAmount\(0\.68f\)/.test(o) && /Gravity\.CENTER/.test(o) && /setCancelable\((false|soft)\)/.test(o), '위치 · 설치 안내는 가운데 어두운 팝업(웹 .68)');
     assert.ok(/popResize\(dp\)/.test(a) && /private void popResize\(float dp\)/.test(a), '팝업 높이는 화면이 정한 글 높이에 맞춘다');
     assert.ok(/askUnburn\(setPage\); setupNoEngine = true;/.test(a) && /setupNoEngine \|\| setupPhase != 0/.test(a) && /K_SETUPV, ""\)\)\) \{ store\.put\(ShellCore\.K_SETUPV, "2"\)/.test(a) && /K_SETUPV = "setup_v"/.test(sc), '엔진이 모르는 안내는 건너뛰되 표시는 지우고 · 한 번 되돌린다');
     assert.ok(/RideService\.running && RideService\.liveRide\.length\(\) < 3\) return;/.test(a), '서비스가 돌지만 첫 값이 아직이면 확정을 지우지 않는다');
@@ -788,6 +788,16 @@ function findAndroidJar() {
     assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
     assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
   });
+  await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');
+    const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/return R_RENDER \| R_BUS;/.test(cm) && /deb\.trailing\("cmq", 110L/.test(a) && /if \(\(r & CmCore\.R_RENDER\) != 0\) cmReload\(\);\s*if \(\(r & CmCore\.R_BUS\) != 0\) cmBusSearch/.test(a), '지하철역 후보를 먼저 바로 그리고 버스정류장은 오는 대로 한 번 더 · 0.11초 기다림');
+    assert.ok(/n\.nobtn = optBool\(m, "nobtn", false\)/.test(sc) && /it\.sw <= 0f\) return;/.test(sv) && /public int blurInline\(/.test(cm), '저장 단추 없는 입력칸(nobtn) · 벗어나면 자동 저장');
+    assert.ok(/n\.grp = optStr\(m, "grp"/.test(sc) && /private void pickGrp\(ScreenCore\.Item pi\)/.test(sv) && /pi\.gk\.length\(\) > 0\) pickGrp\(pi\)/.test(sv), '같은 묶음(grp) 단추는 눌리면 앱이 바로 켜 보인다');
+    assert.ok(/private void cmPrefetchTp\(\)/.test(a) && /tpCache\.get\(url\)/.test(a) && /public static String tpPopFacts\(/.test(cm) && /final boolean tpPop = "cm"\.equals\(page\) && cm\.pop && "tp"\.equals\(cm\.sub\)/.test(a), '시각 팝업 화면은 미리 받아 두고 가운데 팝업으로 연다');
+    assert.ok(/EXTRA_CB_KIND/.test(al) && /static void captureBrief\(Intent it\)/.test(al) && /WidgetCore\.goIntent\(c, "eve"\.equals\(kind\) \? "eve" : "morn"\)/.test(al) && /\.putExtra\(EXTRA_CB_BODY, text\)/.test(al), '알림: 누르면 브리핑 글을 실어 앱을 열고 · [출근하기]/[퇴근하기] 단추');
+    assert.ok(/private void briefLaunch\(\)/.test(a) && /openSetPage\("cmb"\)/.test(a) && /private void cmbAct\(String v\)/.test(a) && /startCommuteRoute\(k\)/.test(a) && /private void startCommuteRoute\(final String go\)/.test(a) && /setHomeFields\(\);\s*goRoute\(\);/.test(a), '알림 창 [확인] 닫기 · [출근하기] = 장소를 넣고 자동 경로탐색(goRoute)');
+  });
   await t('s280: 입력칸의 긴 글자(편집 중 아닐 때)는 … 으로 줄여 보이고, 편집을 시작하면 전체 · 후보 줄은 이름 전체', async () => {
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/private String inbarShown\(ScreenCore\.Item it, String v\)/.test(v) && /cv\.drawText\(empty \? it\.label : inbarShown\(it, empty \? it\.label : v\), it\.textX/.test(v) && /inbarMemo/.test(v) && /tp\.measureText\(v\) > maxW/.test(v), '입력칸 글자가 자리보다 길면 … (같은 글 · 같은 폭은 계산 기억)');
@@ -801,8 +811,8 @@ function findAndroidJar() {
     assert.ok(/public static volatile String inlX/.test(cm) && /public void focusInline\(/.test(cm) && /public int onInline\(/.test(cm) && /public boolean endInline\(/.test(cm) && /v\.startsWith\("pk\.save\."\)/.test(cm) && /"pk\.n"\.equals\(v\)/.test(cm), '고치는 중인 칸 · 글자 · 후보를 요청에 싣고, 저장/지하철 후보 눌림을 받는다');
     assert.ok(/cmInlineOwns\(a\)/.test(a) && /private void cmInlineAct\(/.test(a) && /private void cmText\(final String k/.test(a) && /key\.startsWith\("cmp\."\)\) \{ cmText\(key\.substring\(4\)/.test(a) && /a\.v\.startsWith\("pk\."\)\) \{ cmInlineAct\("call", a\.v, null, false, q\)/.test(a), '설정 화면의 눌림 · 입력 이벤트가 출퇴근 패널로 간다');
     assert.ok(/private void cmReload\(\)/.test(a) && /present\(v, txt, true\);/.test(a.slice(a.indexOf('private void cmReload()'), a.indexOf('private void cmReload()') + 900)), '화면을 새로 받아도 위치 · 입력은 그대로(keep)');
-    assert.ok(/if \("tp"\.equals\(cm\.sub\)\) \{ openSetPage\("cm"\); cmFromInline = true; return; \}/.test(a) && /if \(cmFromInline && cm\.sub\.length\(\) == 0\) \{ cmFromInline = false; closeSheet\(\); cmReload\(\); return; \}/.test(a), '시각 고르기만 시트로 열고 마치면 닫고 설정 화면을 새로');
-    assert.ok(/cm\.endInline\(\)\) cmReload\(\)/.test(a) && /postDelayed[\s\S]{0,300}350L/.test(a.slice(a.indexOf('private void cmText('), a.indexOf('private void cmText(') + 1200)), '저장 안 하고 나가면 글자를 버린다(후보 줄을 누르는 동안은 기다림)');
+    assert.ok(/if \("tp"\.equals\(cm\.sub\)\) \{ cm\.pop = true; openSetPage\("cm"\); cmFromInline = true; return; \}/.test(a) && /if \(cmFromInline && cm\.sub\.length\(\) == 0\) \{ cmFromInline = false; cm\.pop = false; closeSheet\(\); cmReload\(\); return; \}/.test(a), '시각 고르기만 팝업으로 열고 마치면 닫고 설정 화면을 새로');
+    assert.ok(/cm\.blurInline\(store, k, typed\)/.test(a) && /postDelayed[\s\S]{0,500}350L/.test(a.slice(a.indexOf('private void cmText('), a.indexOf('private void cmText(') + 1800)), '입력칸을 벗어나면 친 글자를 자동 저장한다(후보 줄을 누르는 동안은 기다림) — s281');
   });
 
   await t('s277: 분류를 오가도 안 끊긴다 — 이웃 분류는 뒤 스레드에서 미리 읽고 배치하고 · 큰 그림도 미리 풀고 · 채팅 읽기 한 번 · 테마 중복 적용 없음', async () => {
@@ -819,7 +829,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const ad = a.slice(a.indexOf('private void adoptDisk('), a.indexOf('private void adoptDisk(') + 1200);
     assert.ok(/shownKey\.get\(v\)/.test(ad) && /otherShown = sk != null && !key\.equals\(sk\)/.test(ad) && /skelViews\.contains\(v\) \|\| otherShown/.test(ad), '디스크에서 읽은 화면이 이 칸이 기다리는 열쇠이고 다른 분류가 떠 있으면 올린다');
-    assert.ok(/private void shownKeyPut\(ScreenView v\)/.test(a) && /shownJson\.put\(v, json\); shownKeyPut\(v\); skelViews\.remove\(v\);/.test(a) && /if \(v != sheetView\) \{ shownJson\.put\(v, json\); shownKeyPut\(v\); neighborPre\(v, sc, ck\); \}/.test(a), '지금 보이는 화면의 열쇠를 적는다(캐시로 올릴 때 · 받아 올릴 때)');
+    assert.ok(/private void shownKeyPut\(ScreenView v\)/.test(a) && /shownJson\.put\(v, json\); shownKeyPut\(v\); skelViews\.remove\(v\);/.test(a) && /if \(v != sheetView\) \{ shownJson\.put\(v, json\); shownKeyPut\(v\); neighborPre\(v, sc, ck\);/.test(a), '지금 보이는 화면의 열쇠를 적는다(캐시로 올릴 때 · 받아 올릴 때)');
     assert.ok(!/shownJson\.remove\(v\);(?! shownKey\.remove\(v\);)/.test(a), '화면을 비우면 열쇠도 지운다');
     assert.ok(/boolean over = size\(\) > 180;/.test(a), '화면 글 메모리 캐시 180칸(미리 받은 분류가 밀려나지 않게)');
   });
