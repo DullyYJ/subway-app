@@ -36,7 +36,7 @@ function mapSvAttempts(env, url, seq) {                    // → [() => Promise
   if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
   return out;
 }
-async function mapSvOne(env, k, url) {                     // → 본문 글(실패는 '')
+async function mapSvOne0(env, k, url) {                    // → 본문 글(실패는 '')
   var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
   if (cacheable) {
     try {
@@ -46,6 +46,11 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
         if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
       }
     } catch (e0) { cache = null; }
+    var kvb = await mapSvKvGet(env, k, url);                                                   // s290: 이 데이터센터 캐시에 없으면 전국 공용 저장소(KV)에서 — 다른 곳에서 한 번이라도 받았으면 바로 나온다
+    if (kvb) {
+      if (cache && ck) { try { await cache.put(ck, new Response(kvb, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eK) { /* 무시 */ } }
+      return kvb;
+    }
   }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // 공공데이터 키가 둘이면 정류장을 반반씩(짝수 번째는 키1 먼저 · 홀수 번째는 키2 먼저) 나눠 묻고, 한쪽이 오류면 바로 다른 쪽 · 마지막은 BUSAPI 바인딩
   if (!atts.length) return '';
@@ -74,11 +79,91 @@ async function mapSvOne(env, k, url) {                     // → 본문 글(실
     inflight.splice(inflight.indexOf(w), 1);
     if (w.b) {
       if (cache && ck && mapSvOkBody(k, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
+      if (cacheable && mapSvOkBody(k, w.b)) mapSvKvPut(env, k, url, w.b);                       // s290: 전국 공용 저장소에도(응답을 붙잡지 않고 뒤에서)
       return w.b;
     }
     if (!inflight.length && launched < max) { launched++; start(); }                           // 빨리 실패했다 — 곧바로 다음 길
   }
   return '';
+}
+// ★ s290 — 버스 서버 쪽 빠르게 (YJ: "버스 탭 들어가면 정류장이 너무 늦게 떠")
+//   ① 정류장 목록(tp·gg·tn·d1)은 데이터센터 캐시(12시간)에 더해 전국 공용 저장소 KV 에도 14일 둔다 — 처음 가는 데이터센터·캐시가 비워진 뒤에도 공공 API 를 다시 기다리지 않는다.
+//      받은 주소는 'bsreg' 목록에 기억해 두고, 알림 시각(cron)마다 오래된 것부터 몇 개씩 다시 받아 둔다 → 자주 가는 동네는 늘 따뜻하다.
+//   ② 도착정보(a·f·g·h·t·u)는 같은 주소를 동시에 부르면 하나로 합치고(앱이 '정류장만 먼저'와 '한 번에'를 같이 보낸다), 5초 안 다시 부르면 방금 받은 것을 쓴다.
+//      도착정보의 원천 갱신이 수십 초 단위라 5초는 화면에 보이는 차이가 없고, 빈 값·오류는 기억하지 않는다.
+var MAPSV_CTX = null;
+var MAPSV_MEMO = {}, MAPSV_MEMO_N = 0, MAPSV_MEMO_MS = 5000;
+var MAPSV_KV_TTL = 14 * 86400, MAPSV_REG = 'bsreg', MAPSV_REG_MAX = 240, MAPSV_WARM_AGE = 6 * 86400000, MAPSV_WARM_N = 8;
+function mapSvHash(s) {                                     // 32비트 두 개(서로 다른 시작값) → 16글자. 저장 값에 원본 주소를 같이 넣어 확인하므로 겹쳐도 틀린 본문은 쓰지 않는다
+  var h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x5bd1e995, i, c;
+  for (i = 0; i < s.length; i++) {
+    c = s.charCodeAt(i);
+    h1 ^= c; h1 = Math.imul(h1, 16777619) >>> 0;
+    h2 = (Math.imul(h2 ^ c, 2246822519) + 374761393) >>> 0;
+  }
+  return ('00000000' + h1.toString(16)).slice(-8) + ('00000000' + h2.toString(16)).slice(-8);
+}
+function mapSvKvKey(k, url) { return 'bs:' + mapSvHash(String(k) + '|' + String(url)); }
+async function mapSvKvGet(env, k, url) {                    // → 본문 글 또는 ''
+  try {
+    if (!env || !env.ROWS_KV || typeof env.ROWS_KV.get !== 'function') return '';
+    var v = await env.ROWS_KV.get(mapSvKvKey(k, url), { type: 'json', cacheTtl: 300 });
+    if (v && v.u === url && mapSvOkBody(k, v.b)) return v.b;
+  } catch (e) { /* 저장소 실패는 없는 것으로 */ }
+  return '';
+}
+function mapSvKvPut(env, k, url, body) {                    // 응답을 붙잡지 않는다(waitUntil)
+  try {
+    if (!env || !env.ROWS_KV || typeof env.ROWS_KV.put !== 'function' || typeof body !== 'string' || body.length > 200000) return;
+    var run = (async function () {
+      await env.ROWS_KV.put(mapSvKvKey(k, url), JSON.stringify({ u: url, b: body, at: Date.now() }), { expirationTtl: MAPSV_KV_TTL });
+      await mapSvRegAdd(env, k, url);
+    })().catch(function () { /* 무시 */ });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(run);
+  } catch (e) { /* 무시 */ }
+}
+async function mapSvRegAdd(env, k, url) {
+  var reg = await env.ROWS_KV.get(MAPSV_REG, { type: 'json' });
+  if (!Array.isArray(reg)) reg = [];
+  var now = Date.now(), i;
+  for (i = 0; i < reg.length; i++) if (reg[i] && reg[i].k === k && reg[i].u === url) { reg[i].at = now; return env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); }
+  reg.push({ k: k, u: url, at: now });
+  if (reg.length > MAPSV_REG_MAX) reg = reg.slice(reg.length - MAPSV_REG_MAX);
+  return env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL });
+}
+/** 알림 시각(cron)마다: 기억해 둔 정류장 주소 중 6일 넘게 안 받은 것을 오래된 순으로 몇 개 다시 받아 저장소에 둔다. 받은 개수를 돌려준다. */
+async function mapBusWarmCron(env, nowMs) {
+  if (!env || !env.ROWS_KV) return 0;
+  var reg = await env.ROWS_KV.get(MAPSV_REG, { type: 'json' });
+  if (!Array.isArray(reg) || !reg.length) return 0;
+  var now = Number(nowMs) || Date.now();
+  var due = reg.filter(function (e) { return e && e.k && e.u && now - Number(e.at || 0) >= MAPSV_WARM_AGE; }).sort(function (a, b) { return a.at - b.at; }).slice(0, MAPSV_WARM_N);
+  var n = 0, i;
+  for (i = 0; i < due.length; i++) {
+    var e = due[i], body = '';
+    try {
+      var atts = mapSvAttempts(env, e.u, i);
+      for (var a = 0; a < atts.length && !body; a++) {
+        var p = atts[a](); if (!p) continue;
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 6000); })]);
+        if (res && res.status === 200) { var tx = await res.text(); if (!mapArrErr(tx) && mapSvOkBody(e.k, tx)) body = tx; }
+      }
+    } catch (e1) { body = ''; }
+    if (!body) continue;
+    try { await env.ROWS_KV.put(mapSvKvKey(e.k, e.u), JSON.stringify({ u: e.u, b: body, at: now }), { expirationTtl: MAPSV_KV_TTL }); n++; e.at = now; } catch (e2) { /* 다음에 */ }
+  }
+  if (n > 0) { try { await env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); } catch (e3) { /* 다음에 */ } }
+  return n;
+}
+function mapSvOne(env, k, url) {                            // → Promise<본문 글> (정류장 목록은 mapSvOne0 의 캐시 · 도착정보는 합치기 + 5초 기억)
+  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url);
+  var now = Date.now(), e = MAPSV_MEMO[url];
+  if (e && now - e.t < MAPSV_MEMO_MS) return e.p;
+  var ent = { t: now, p: null };
+  ent.p = mapSvOne0(env, k, url).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
+  if (++MAPSV_MEMO_N > 300) { MAPSV_MEMO = {}; MAPSV_MEMO_N = 0; }
+  MAPSV_MEMO[url] = ent;
+  return ent.p;
 }
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
 async function mapSvResolve(env, cap, body, out) {

@@ -920,6 +920,9 @@ function findAndroidJar() {
     assert.ok(/final long pt0 = PerfLog\.now\(\);[\s\S]{0,120}drawAll\(cv\);\s*PerfLog\.draw\(pt0\)/.test(sv) && /PerfLog\.layout\(plt0\)/.test(sv), '그리기 · 화면 구성 시간을 잰다');
     assert.ok(/widthMemo/.test(sv) && /memoDpr != dpr/.test(sv) && /widthMemo\.size\(\) > 6000/.test(sv), '글자 폭 기억(밀도가 바뀌면 비움 · 6000개 넘으면 비움)');
     assert.ok(/"perf\.reset"\.equals\(v\)\) \{ PerfLog\.reset\(\); return PG_RENDER;/.test(sc), '기록 지우기');
+    assert.ok(/PerfLog\.begin\("bus\.stops"\)[\s\S]{0,80}PerfLog\.begin\("bus\.arr"\)/.test(a) && /PerfLog\.end\("bus\.stops", "버스 진입→정류장"\)/.test(a) && /PerfLog\.end\("bus\.arr", "버스 진입→도착정보"\)/.test(a), 's290: 버스 진입→정류장·도착정보 구간 시간');
+    assert.ok(/PerfLog\.begin\("chat\.sw"\)/.test(a) && /PerfLog\.end\("chat\.sw", "소통방 전환\(받아 둔 방\)"\)/.test(a) && /PerfLog\.end\("chat\.sw", "소통방 전환\(못 받은 방\)"\)/.test(a) && /PerfLog\.end\("chat\.ld", "소통방 받기→화면"\)/.test(a), 's290: 소통방 전환 구간 시간');
+    assert.ok(/PerfLog\.parseServerTiming\(c\.getHeaderField\("Server-Timing"\)\)/.test(np), 's290: 서버 처리 시간(Server-Timing)을 읽는다');
     assert.ok(/DevCore\.withPerf\(DevCore\.pageFacts\(devPh, devLeft\(\), devStopped\), PerfLog\.snapshot\(\)\)/.test(a), '개발자 도구를 열 때 기록을 보낸다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);

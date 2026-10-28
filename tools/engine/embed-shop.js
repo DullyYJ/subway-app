@@ -55,7 +55,7 @@ for (const S of SETS) {
   }
 }
 // 모든 /screen/* 응답에 ETag · max-age · 304 를 붙이는 바깥 껍질(handleFetchCond)을 fetch 에 연결(한 번만)
-if (w.indexOf('return await handleFetchCond(request, env, ctx);') < 0) {
+if (w.indexOf('await handleFetchCond(request, env, ctx)') < 0) {
   if (w.indexOf('return await handleFetch(request, env, ctx);') < 0) throw new Error('fetch 연결 지점 없음');
   w = w.replace('return await handleFetch(request, env, ctx);', 'return await handleFetchCond(request, env, ctx);');
 }

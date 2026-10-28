@@ -133,11 +133,24 @@ public class ShellJvmTest {
                 ok(ShellCore.routePage(ds, "dev", "call", "dev.start.all", null, false, true) == ShellCore.PG_DEVSTART && ShellCore.routePage(ds, "dev", "call", "dev.stop", null, false, true) == ShellCore.PG_DEVSTOP && ShellCore.routePage(ds, "dev", "call", "pg.back", null, false, true) == ShellCore.PG_CLOSE && ShellCore.routePage(ds, "dev", "call", "dev.start.zz", null, false, true) == ShellCore.PG_NONE, "dev 화면 행동 라우팅");
                 ok(ShellCore.pageUrlDev(DevCore.pageFacts(null, 0, false)).contains("p=dev&f="), "dev 화면 주소");
                 PerfLog.reset();
-                ok(PerfLog.snapshot().equals("{\"d\":[0,0,0,0],\"l\":[0,0,0,0],\"n\":[]}"), "반응 속도 기록: 처음은 모두 0");
+                ok(PerfLog.snapshot().equals("{\"d\":[0,0,0,0],\"l\":[0,0,0,0],\"n\":[],\"s\":[]}"), "반응 속도 기록: 처음은 모두 0");
                 { long t0 = PerfLog.now(); PerfLog.draw(t0); PerfLog.layout(t0); PerfLog.net("https://route-v2.phg0643.workers.dev/screen/map?cap=18&q=secret", t0, true); PerfLog.net("https://route-v2.phg0643.workers.dev/screen/map?x=1", t0, false); }
                 String pfs = PerfLog.snapshot();
                 ok(pfs.startsWith("{\"d\":[1,") && pfs.contains("[\"/screen/map\",2,") && !pfs.contains("secret") && !pfs.contains("cap="), "반응 속도 기록: 경로별로 모으고 질문 내용은 남기지 않는다 " + pfs);
                 ok(DevCore.withPerf("{\"pf\":{\"nv\":true}}", "{\"d\":[1]}").equals("{\"pf\":{\"nv\":true,\"perf\":{\"d\":[1]}}}") && DevCore.withPerf("zz", "{}").equals("zz"), "개발자 도구 사실에 기록을 덧붙인다");
+                PerfLog.reset();
+                // s290: 구간 시간(begin~end) · 서버 처리 시간(Server-Timing)
+                ok(PerfLog.parseServerTiming("app;dur=123") == 123L && PerfLog.parseServerTiming("cache;desc=HIT, app;dur=45.6") == 45L && PerfLog.parseServerTiming(null) == -1L && PerfLog.parseServerTiming("app;dur=") == -1L && PerfLog.parseServerTiming("zz") == -1L, "Server-Timing 읽기");
+                PerfLog.end("x", "없는 동작");
+                ok(PerfLog.snapshot().contains("\"s\":[]"), "시작 없이 끝난 동작은 세지 않는다");
+                PerfLog.begin("bus.stops"); PerfLog.begin("bus.arr");
+                PerfLog.end("bus.stops", "버스 진입→정류장"); PerfLog.end("bus.stops", "버스 진입→정류장");
+                String sp = PerfLog.snapshot();
+                ok(sp.contains("[\"버스 진입→정류장\",1,") && !sp.contains("도착정보"), "한 동작은 한 번만 센다 · 안 끝난 동작은 없다 " + sp);
+                PerfLog.begin("chat.sw"); PerfLog.drop("chat.sw"); PerfLog.end("chat.sw", "소통방");
+                ok(!PerfLog.snapshot().contains("소통방"), "버린 동작은 세지 않는다");
+                PerfLog.net("https://a.b/screen/map", PerfLog.now(), true); PerfLog.srv("https://a.b/screen/map?q=1", 200); PerfLog.srv("https://a.b/screen/map", 400);
+                ok(PerfLog.snapshot().contains("[\"/screen/map\",1,") && PerfLog.snapshot().contains(",300]"), "서버 처리 평균이 경로 행 끝에 붙는다 " + PerfLog.snapshot());
                 PerfLog.reset();
             }
             {

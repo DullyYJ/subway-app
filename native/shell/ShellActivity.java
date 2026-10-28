@@ -1646,6 +1646,7 @@ public class ShellActivity extends Activity {
     private void loadChat(final ScreenView v, final boolean keep, final boolean fetch) {
         final int my = ++seqChat;
         final String sel = chat.sel(), me = ShellCore.commId(store);
+        if (fetch) PerfLog.begin("chat.ld");
         startChatPoll();
         new Thread(new Runnable() {
             @Override public void run() {
@@ -1655,7 +1656,7 @@ public class ShellActivity extends Activity {
                     if (my != seqChat) return;
                     if (!sel.equals(chat.sel())) return;                       // 방을 넘기는 사이 늦게 온 옛 방 화면 — 올리지 않는다(방이 되돌아가고 글 올릴 방이 어긋나던 문제 · s286). 받은 화면은 캐시에 이미 들어갔다
                     present(v, txt, keep);
-                    if (txt.length() > 0 && !isNotMod(txt)) chat.onScreen(txt);
+                    if (txt.length() > 0 && !isNotMod(txt)) { chat.onScreen(txt); PerfLog.end("chat.sw", "소통방 전환(못 받은 방)"); PerfLog.end("chat.ld", "소통방 받기→화면"); }
                 } });
             }
         }, "shell-chat").start();
@@ -1789,7 +1790,9 @@ public class ShellActivity extends Activity {
     private void chatAct(ScreenCore.Act a, final ScreenView src) {
         if ("cat".equals(a.a)) {
             chat.select(a.v); chatSwipeAt = android.os.SystemClock.uptimeMillis();
+            PerfLog.begin("chat.sw");                                            // s290: 구간 시간 — 방을 고른 때부터 그 방 글이 화면에 뜰 때까지
             final boolean shown = keyedShow(body, ShellCore.S_CHAT);
+            if (shown) PerfLog.end("chat.sw", "소통방 전환(받아 둔 방)");
             if (!shown) showSkeleton(body, ShellCore.S_CHAT);                    // 아직 못 받은 방: 받는 동안 옛 방이 그대로 멈춰 보이지 않게 바로 뼈대로 넘긴다(밀기 모션도 곧장 시작)
             chatWarmSoon();                                                      // 이웃 방은 멈출 때까지 기다리지 않고 지금부터 받는다(계속 밀어도 앞 방이 이미 받아져 있게 · s286)
             deb.trailing("chatsel", shown ? 220L : 60L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); } });      // 받아 둔 방은 화면이 이미 떠 있으니 220ms · 못 받은 방은 기다릴 까닭이 없어 60ms      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
@@ -2433,6 +2436,7 @@ public class ShellActivity extends Activity {
      * 옛 도착 숫자는 엔진에 넣지 않는다(보여 줄 옛 화면이 없으면 비운다). 지난번 도착정보 주소를 모르면 평소 길(엔진에게 묻기).
      */
     private void loadMapBodyFast(final ScreenView v, final boolean keep) {
+        if (!busRefreshing && "bus".equals(map.mode())) { PerfLog.begin("bus.stops"); PerfLog.begin("bus.arr"); }          // s290: 구간 시간 — 버스 탭을 연 때부터 정류장·도착정보가 뜰 때까지
         if (busRefreshing) map.restoreArrivals(); busRefreshing = false;
         if (v == body && "bus".equals(map.mode())) {
             preconnectBus(); locKick();                                                     // 위치를 한 번 더 확인한다(홈과 같은 위치 — 달라졌으면 허브가 바로 그 동네로 옮긴다)
@@ -2530,12 +2534,12 @@ public class ShellActivity extends Activity {
         if (txt.length() > 0) map.onScreen(txt);
         if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
         final boolean shownNow = round >= MapCore.BUS_ROUNDS || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다)
-        if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
+        if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); if (txt.length() > 0 && map.stopCount() > 0) PerfLog.end("bus.stops", "버스 진입→정류장"); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
         syncMapView();
         if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
         if (deferNeed) return;
         if (txt.length() > 0 && !map.busNeed.isEmpty() && round < MapCore.BUS_ROUNDS) fetchBusNeed(v, keep, round, my, shownNow && !busRefreshing);
-        else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { brPrefetch(); saveBusSkeleton(); }
+        else { if (busRefreshing) busOk(); if (txt.length() > 0 && "bus".equals(map.view) && map.busNeed.isEmpty()) { PerfLog.end("bus.arr", "버스 진입→도착정보"); brPrefetch(); saveBusSkeleton(); }
             if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
                 busRetryN++; final long wait = 1500L * busRetryN;
                 main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);

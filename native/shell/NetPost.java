@@ -220,6 +220,7 @@ public final class NetPost {
             }
             int code = c.getResponseCode();
             String tag = c.getHeaderField("ETag"); int ma = parseMaxAge(c.getHeaderField("Cache-Control"));
+            long stm = PerfLog.parseServerTiming(c.getHeaderField("Server-Timing")); if (stm >= 0L) PerfLog.srv(url, stm);          // s290: 서버가 알려 준 처리 시간 — 앱이 잰 시간에서 빼면 전송·기다림이 남는다
             if (code == 304) { reuse = true; return new Res(304, "", "", tag, ma); }
             java.io.InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
             java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();

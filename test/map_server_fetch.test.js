@@ -71,10 +71,73 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
   {
     const store = new Map();
     const caches = { default: { match: async (rq) => store.has(rq.url) ? new Response(store.get(rq.url)) : undefined, put: async (rq, rs) => { store.set(rq.url, await rs.text()); } } };
-    const log1 = [], log2 = [], c = load({ caches });
+    let off = 0; class MD extends Date { static now() { return Date.now.call(Date) + off; } }
+    const log1 = [], log2 = [], log3 = [], c = load({ caches, Date: MD });
     await post(c.H, { BUSAPI: binding(log1) }, base(true));
     await post(c.H, { BUSAPI: binding(log2) }, base(true));
-    ok(log1.some(u => /getStationByPos/.test(u)) && !log2.some(u => /getStationByPos/.test(u)) && log2.filter(u => /getStationByUid/.test(u)).length === 3, '같은 칸을 다시 열면 정류장 조회는 캐시 · 도착정보만 새로 받는다');
+    ok(log1.some(u => /getStationByPos/.test(u)) && !log2.some(u => /getStationByPos/.test(u)), '같은 칸을 다시 열면 정류장 조회는 캐시');
+    ok(log2.filter(u => /getStationByUid/.test(u)).length === 0, 's290: 5초 안에 다시 열면 도착정보는 방금 받은 것을 쓴다(같은 주소는 다시 부르지 않는다)');
+    off = 6000;
+    await post(c.H, { BUSAPI: binding(log3) }, base(true));
+    ok(log3.filter(u => /getStationByUid/.test(u)).length === 3, '5초가 지나면 도착정보만 새로 받는다');
+  }
+  // ②-2 s290: 동시에 같은 도착정보를 부르면 하나로 합친다 · 빈 값은 기억하지 않는다
+  {
+    const log = [], c = load();
+    const [r1, r2] = await Promise.all([post(c.H, { BUSAPI: binding(log) }, base(true)), post(c.H, { BUSAPI: binding(log) }, base(true))]);
+    ok(r1.j.info.bus.st === 'ok' && r2.j.info.bus.st === 'ok' && log.filter(u => /getStationByUid/.test(u)).length === 3, '동시에 두 번 물어도 도착정보 공공 호출은 3번뿐 ' + log.filter(u => /getStationByUid/.test(u)).length);
+    const flaky = []; let phase = 1;
+    const b3 = { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); flaky.push(inner); if (/getStationByPos/.test(inner)) return new Response(SEOUL_POS, { status: 200 }); if (/getStationByUid/.test(inner)) return phase === 1 ? new Response('', { status: 500 }) : new Response(ARR('N1'), { status: 200 }); return new Response('', { status: 200 }); } };
+    const c3 = load();
+    await post(c3.H, { BUSAPI: b3 }, base(true));
+    const before = flaky.filter(u => /getStationByUid/.test(u)).length; phase = 2;
+    const r3 = await post(c3.H, { BUSAPI: b3 }, base(true));
+    ok(flaky.filter(u => /getStationByUid/.test(u)).length > before && r3.j.info.bus.st === 'ok', '실패(빈 값)는 기억하지 않아 바로 다시 받는다');
+  }
+  // ②-3 s290: 정류장 목록 전국 저장소(KV) — 데이터센터 캐시가 비어도 KV 에서 · 처음 받으면 KV 와 목록에 기록
+  {
+    const kv = new Map(), mkKv = () => ({ get: async (k, o) => { const v = kv.get(k); return v == null ? null : (o && (o.type === 'json' || o === 'json') ? JSON.parse(v) : v); }, put: async (k, v, o) => { kv.set(k, v); kv.ttl = o; } });
+    const pend = [], ctxw = { waitUntil: (p) => pend.push(p) };
+    const log1 = [], log2 = [], c = load({ MAPSV_CTX: undefined });
+    c.MAPSV_CTX = ctxw;
+    const env = () => ({ BUSAPI: binding([]), ROWS_KV: mkKv() });
+    const e1 = { BUSAPI: binding(log1), ROWS_KV: mkKv() };
+    await post(c.H, e1, base(true));
+    await Promise.all(pend);
+    const keys = [...kv.keys()];
+    ok(keys.some(k => /^bs:[0-9a-f]{16}$/.test(k)) && keys.includes('bsreg') && kv.ttl && kv.ttl.expirationTtl === 14 * 86400, '처음 받은 정류장 목록은 KV 에 14일 + 기억 목록(bsreg)에 기록 ' + keys.join());
+    const reg = JSON.parse(kv.get('bsreg'));
+    ok(reg.length >= 1 && reg.every(e => /^(tp|gg|tn|d1)$/.test(e.k) && typeof e.u === 'string' && e.at > 0), '목록 항목은 {k,u,at}');
+    const c2 = load(); c2.MAPSV_CTX = ctxw;
+    await post(c2.H, { BUSAPI: binding(log2), ROWS_KV: mkKv() }, base(true));
+    ok(log1.some(u => /getStationByPos/.test(u)) && !log2.some(u => /getStationByPos/.test(u)) && log2.filter(u => /getStationByUid/.test(u)).length === 3, '새 데이터센터(캐시 없음)도 KV 에서 정류장 목록을 바로 쓴다 · 도착정보만 새로 받는다');
+    // 엉뚱한 주소 값(해시 겹침)이면 쓰지 않는다
+    const k0 = keys.find(k => /^bs:/.test(k)), v0 = JSON.parse(kv.get(k0)); v0.u = 'https://other'; kv.set(k0, JSON.stringify(v0));
+    const log3 = [], c3 = load(); c3.MAPSV_CTX = ctxw;
+    await post(c3.H, { BUSAPI: binding(log3), ROWS_KV: mkKv() }, base(true));
+    ok(log3.some(u => /getStationByPos/.test(u)), '저장된 주소가 다르면(해시 겹침) 쓰지 않고 새로 받는다');
+  }
+  // ②-4 s290: cron — 6일 넘은 항목만 오래된 순으로 최대 8개 다시 받는다
+  {
+    const kv = new Map(), env = { BUSAPI: binding([]), ROWS_KV: { get: async (k) => kv.has(k) ? JSON.parse(kv.get(k)) : null, put: async (k, v) => { kv.set(k, v); } } };
+    const U = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList?cityCode=23&gpsLati=37.5&gpsLong=127&_type=json';
+    const now = Date.now(), reg = [];
+    for (let i = 0; i < 12; i++) reg.push({ k: 'tn', u: U + '&i=' + i, at: now - (7 + i) * 86400000 });
+    reg.push({ k: 'tn', u: U + '&fresh=1', at: now - 86400000 });
+    kv.set('bsreg', JSON.stringify(reg));
+    const TN = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'ICB1', nodenm: 'a', gpslati: 37.5, gpslong: 127, citycode: '23', nodeno: '1' }] } } } });
+    const c = load({ tagoAttempts: () => [{ via: 'env-key', run: async () => new Response(TN, { status: 200 }) }] });
+    const code2 = vm.runInContext('mapBusWarmCron', vm.createContext(c));
+    const n = await code2(env, now);
+    const after = JSON.parse(kv.get('bsreg'));
+    ok(n === 8 && after.filter(e => e.at === now).length === 8, '한 번에 8개까지 다시 받는다 ' + n);
+    ok(after.find(e => /fresh=1/.test(e.u)).at === now - 86400000 && after.filter(e => e.at < now - 7 * 86400000).length === 3, '어제 받은 것은 건드리지 않고, 가장 오래된 것부터 받는다');
+    ok(await code2({}, now) === 0 && await code2({ ROWS_KV: { get: async () => null, put: async () => { } } }, now) === 0, '저장소나 목록이 없으면 아무것도 안 한다');
+  }
+  // ②-5 s290: 워커 연결 — 요청 ctx 를 건네 응답 뒤 저장 · 알림 시각에 정류장 목록 다시 받기
+  {
+    const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
+    ok(/async function handleFetch\(request, env, ctx\) \{\n  if \(typeof MAPSV_CTX !== "undefined"\) MAPSV_CTX = ctx \|\| null;/.test(w) && /ctx\.waitUntil\(mapBusWarmCron\(env, Date\.now\(\)\)\.catch\(/.test(w), '워커: ctx 전달 · cron 에서 mapBusWarmCron');
   }
   // ③ 바인딩이 없으면 need 를 그대로(기기가 예전 방식으로 이어 감)
   {

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s287";
+var ENGINE_VERSION = "route-v2-2026-10-28s290";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8437,11 +8437,14 @@ var route_v2_worker_default = { async scheduled(event, env, ctx) {
   }));
   ctx.waitUntil(cbCheerCron(env).catch(function() {
   }));
+  ctx.waitUntil(mapBusWarmCron(env, Date.now()).catch(function() {
+  }));
 }, async fetch(request, env, ctx) {
   var _gd = await guardEnter(request, env);
   if (_gd.res) return _gd.res;
+  var _t0 = Date.now();
   try {
-    return await handleFetchCond(request, env, ctx);
+    return serverTimed(await handleFetchCond(request, env, ctx), _t0);
   } catch (e) {
     return new Response(JSON.stringify({
       error: String(e && e.message || e),
@@ -13650,9 +13653,13 @@ function settingsPerfFacts(p) {
   var four = function (a) { a = Array.isArray(a) ? a : []; return [0, 1, 2, 3].map(function (i) { return settingsInt(a[i], 0, 99999999, 0); }); };
   var net = (Array.isArray(p.n) ? p.n : []).slice(0, 12).map(function (r) {
     r = Array.isArray(r) ? r : [];
-    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0) };
+    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0), sv: settingsInt(r[5], -1, 99999999, -1) };
   });
-  return { d: four(p.d), l: four(p.l), n: net };
+  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 10).map(function (r) {            // \uad6c\uac04 \uc2dc\uac04: [\uc774\ub984, \ud69f\uc218, \ud3c9\uade0ms, \ucd5c\ub300ms]
+    r = Array.isArray(r) ? r : [];
+    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0) };
+  });
+  return { d: four(p.d), l: four(p.l), n: net, s: spans };
 }
 // \ubc18\uc751 \uc18d\ub3c4 \uae00: \uae30\uc900(\ub290\ub9bc) = \uadf8\ub9ac\uae30 17ms \u00b7 \ud654\uba74 \uad6c\uc131 16ms \uc774\uc0c1, \uc11c\ubc84 \ud3c9\uade0 800ms \uc774\uc0c1. \ub290\ub9b0 \ube44\uc728\uc774 5% \ub97c \ub118\uac70\ub098 \ucd5c\ub300\uac00 100ms \ub97c \ub118\uc73c\uba74 \uc9da\uc5b4 \uc900\ub2e4.
 function settingsPerfLines(pf) {
@@ -13662,9 +13669,10 @@ function settingsPerfLines(pf) {
   out.push('\ud654\uba74 \uad6c\uc131  ' + l[0] + '\ud68c \u00b7 \ud3c9\uade0 ' + l[1] + 'ms \u00b7 \ucd5c\ub300 ' + l[2] + 'ms \u00b7 \ub290\ub9b0 \uac83 ' + l[3] + '\ud68c(' + pct(l) + '%)');
   var slowNet = [];
   pf.n.forEach(function (r) {
-    out.push('\uc11c\ubc84 ' + r.p + '  ' + r.n + '\ud68c \u00b7 \ud3c9\uade0 ' + r.a + 'ms \u00b7 \ucd5c\ub300 ' + r.m + 'ms' + (r.x ? ' \u00b7 \uc2e4\ud328 ' + r.x + '\ud68c' : ''));
+    out.push('\uc11c\ubc84 ' + r.p + '  ' + r.n + '\ud68c \u00b7 \ud3c9\uade0 ' + r.a + 'ms \u00b7 \ucd5c\ub300 ' + r.m + 'ms' + (r.sv >= 0 ? ' (\uc11c\ubc84 \ucc98\ub9ac ' + r.sv + 'ms \u00b7 \uc804\uc1a1 ' + Math.max(0, r.a - r.sv) + 'ms)' : '') + (r.x ? ' \u00b7 \uc2e4\ud328 ' + r.x + '\ud68c' : ''));
     if (r.n >= 2 && r.a >= 800) slowNet.push(r.p);
   });
+  (pf.s || []).forEach(function (r) { out.push('\uad6c\uac04 ' + r.p + '  ' + r.n + '\ud68c \u00b7 \ud3c9\uade0 ' + r.a + 'ms \u00b7 \ucd5c\ub300 ' + r.m + 'ms'); });          // \uc0ac\ub78c\uc774 \ub290\ub07c\ub294 \ud55c \ub3d9\uc791(\uc9c4\uc785\u2192\ud654\uba74)\uc758 \uc2dc\uc791\ubd80\ud130 \ub05d\uae4c\uc9c0
   var notes = [];
   if (d[0] >= 30 && (pct(d) > 5 || d[2] > 100)) notes.push('\uadf8\ub9ac\uae30\uac00 \uc790\uc8fc \ub290\ub824\uc694(17ms \ub118\ub294 \ube44\uc728 ' + pct(d) + '%, \ucd5c\ub300 ' + d[2] + 'ms) \u2014 \ud55c \ud654\uba74\uc5d0 \uadf8\ub9b4 \uac83\uc774 \ub9ce\uac70\ub098 \uacc4\uc18d \ub2e4\uc2dc \uadf8\ub9ac\ub294 \uacf3\uc774 \uc788\ub2e4\ub294 \ub73b\uc774\uc5d0\uc694.');
   if (l[0] >= 5 && (pct(l) > 5 || l[2] > 100)) notes.push('\ud654\uba74 \uad6c\uc131\uc774 \ub290\ub824\uc694(\ucd5c\ub300 ' + l[2] + 'ms) \u2014 \ubaa9\ub85d\uc774 \uae38\uac70\ub098 \uae00\uc774 \ub9ce\uc740 \ud654\uba74\uc774\uc5d0\uc694.');
@@ -22633,7 +22641,7 @@ function mapSvAttempts(env, url, seq) {                    // \u2192 [() => Prom
   if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
   return out;
 }
-async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 '')
+async function mapSvOne0(env, k, url) {                    // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 '')
   var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
   if (cacheable) {
     try {
@@ -22643,6 +22651,11 @@ async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb3
         if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
       }
     } catch (e0) { cache = null; }
+    var kvb = await mapSvKvGet(env, k, url);                                                   // s290: \uc774 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uc5d0 \uc5c6\uc73c\uba74 \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c(KV)\uc5d0\uc11c \u2014 \ub2e4\ub978 \uacf3\uc5d0\uc11c \ud55c \ubc88\uc774\ub77c\ub3c4 \ubc1b\uc558\uc73c\uba74 \ubc14\ub85c \ub098\uc628\ub2e4
+    if (kvb) {
+      if (cache && ck) { try { await cache.put(ck, new Response(kvb, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eK) { /* \ubb34\uc2dc */ } }
+      return kvb;
+    }
   }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // \uacf5\uacf5\ub370\uc774\ud130 \ud0a4\uac00 \ub458\uc774\uba74 \uc815\ub958\uc7a5\uc744 \ubc18\ubc18\uc529(\uc9dd\uc218 \ubc88\uc9f8\ub294 \ud0a41 \uba3c\uc800 \u00b7 \ud640\uc218 \ubc88\uc9f8\ub294 \ud0a42 \uba3c\uc800) \ub098\ub220 \ubb3b\uace0, \ud55c\ucabd\uc774 \uc624\ub958\uba74 \ubc14\ub85c \ub2e4\ub978 \ucabd \u00b7 \ub9c8\uc9c0\ub9c9\uc740 BUSAPI \ubc14\uc778\ub529
   if (!atts.length) return '';
@@ -22671,11 +22684,91 @@ async function mapSvOne(env, k, url) {                     // \u2192 \ubcf8\ubb3
     inflight.splice(inflight.indexOf(w), 1);
     if (w.b) {
       if (cache && ck && mapSvOkBody(k, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+      if (cacheable && mapSvOkBody(k, w.b)) mapSvKvPut(env, k, url, w.b);                       // s290: \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c\uc5d0\ub3c4(\uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\uace0 \ub4a4\uc5d0\uc11c)
       return w.b;
     }
     if (!inflight.length && launched < max) { launched++; start(); }                           // \ube68\ub9ac \uc2e4\ud328\ud588\ub2e4 \u2014 \uace7\ubc14\ub85c \ub2e4\uc74c \uae38
   }
   return '';
+}
+// \u2605 s290 \u2014 \ubc84\uc2a4 \uc11c\ubc84 \ucabd \ube60\ub974\uac8c (YJ: "\ubc84\uc2a4 \ud0ed \ub4e4\uc5b4\uac00\uba74 \uc815\ub958\uc7a5\uc774 \ub108\ubb34 \ub2a6\uac8c \ub5a0")
+//   \u2460 \uc815\ub958\uc7a5 \ubaa9\ub85d(tp\u00b7gg\u00b7tn\u00b7d1)\uc740 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc(12\uc2dc\uac04)\uc5d0 \ub354\ud574 \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c KV \uc5d0\ub3c4 14\uc77c \ub454\ub2e4 \u2014 \ucc98\uc74c \uac00\ub294 \ub370\uc774\ud130\uc13c\ud130\u00b7\uce90\uc2dc\uac00 \ube44\uc6cc\uc9c4 \ub4a4\uc5d0\ub3c4 \uacf5\uacf5 API \ub97c \ub2e4\uc2dc \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+//      \ubc1b\uc740 \uc8fc\uc18c\ub294 'bsreg' \ubaa9\ub85d\uc5d0 \uae30\uc5b5\ud574 \ub450\uace0, \uc54c\ub9bc \uc2dc\uac01(cron)\ub9c8\ub2e4 \uc624\ub798\ub41c \uac83\ubd80\ud130 \uba87 \uac1c\uc529 \ub2e4\uc2dc \ubc1b\uc544 \ub454\ub2e4 \u2192 \uc790\uc8fc \uac00\ub294 \ub3d9\ub124\ub294 \ub298 \ub530\ub73b\ud558\ub2e4.
+//   \u2461 \ub3c4\ucc29\uc815\ubcf4(a\u00b7f\u00b7g\u00b7h\u00b7t\u00b7u)\ub294 \uac19\uc740 \uc8fc\uc18c\ub97c \ub3d9\uc2dc\uc5d0 \ubd80\ub974\uba74 \ud558\ub098\ub85c \ud569\uce58\uace0(\uc571\uc774 '\uc815\ub958\uc7a5\ub9cc \uba3c\uc800'\uc640 '\ud55c \ubc88\uc5d0'\ub97c \uac19\uc774 \ubcf4\ub0b8\ub2e4), 5\ucd08 \uc548 \ub2e4\uc2dc \ubd80\ub974\uba74 \ubc29\uae08 \ubc1b\uc740 \uac83\uc744 \uc4f4\ub2e4.
+//      \ub3c4\ucc29\uc815\ubcf4\uc758 \uc6d0\ucc9c \uac31\uc2e0\uc774 \uc218\uc2ed \ucd08 \ub2e8\uc704\ub77c 5\ucd08\ub294 \ud654\uba74\uc5d0 \ubcf4\uc774\ub294 \ucc28\uc774\uac00 \uc5c6\uace0, \ube48 \uac12\u00b7\uc624\ub958\ub294 \uae30\uc5b5\ud558\uc9c0 \uc54a\ub294\ub2e4.
+var MAPSV_CTX = null;
+var MAPSV_MEMO = {}, MAPSV_MEMO_N = 0, MAPSV_MEMO_MS = 5000;
+var MAPSV_KV_TTL = 14 * 86400, MAPSV_REG = 'bsreg', MAPSV_REG_MAX = 240, MAPSV_WARM_AGE = 6 * 86400000, MAPSV_WARM_N = 8;
+function mapSvHash(s) {                                     // 32\ube44\ud2b8 \ub450 \uac1c(\uc11c\ub85c \ub2e4\ub978 \uc2dc\uc791\uac12) \u2192 16\uae00\uc790. \uc800\uc7a5 \uac12\uc5d0 \uc6d0\ubcf8 \uc8fc\uc18c\ub97c \uac19\uc774 \ub123\uc5b4 \ud655\uc778\ud558\ubbc0\ub85c \uacb9\uccd0\ub3c4 \ud2c0\ub9b0 \ubcf8\ubb38\uc740 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+  var h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x5bd1e995, i, c;
+  for (i = 0; i < s.length; i++) {
+    c = s.charCodeAt(i);
+    h1 ^= c; h1 = Math.imul(h1, 16777619) >>> 0;
+    h2 = (Math.imul(h2 ^ c, 2246822519) + 374761393) >>> 0;
+  }
+  return ('00000000' + h1.toString(16)).slice(-8) + ('00000000' + h2.toString(16)).slice(-8);
+}
+function mapSvKvKey(k, url) { return 'bs:' + mapSvHash(String(k) + '|' + String(url)); }
+async function mapSvKvGet(env, k, url) {                    // \u2192 \ubcf8\ubb38 \uae00 \ub610\ub294 ''
+  try {
+    if (!env || !env.ROWS_KV || typeof env.ROWS_KV.get !== 'function') return '';
+    var v = await env.ROWS_KV.get(mapSvKvKey(k, url), { type: 'json', cacheTtl: 300 });
+    if (v && v.u === url && mapSvOkBody(k, v.b)) return v.b;
+  } catch (e) { /* \uc800\uc7a5\uc18c \uc2e4\ud328\ub294 \uc5c6\ub294 \uac83\uc73c\ub85c */ }
+  return '';
+}
+function mapSvKvPut(env, k, url, body) {                    // \uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\ub294\ub2e4(waitUntil)
+  try {
+    if (!env || !env.ROWS_KV || typeof env.ROWS_KV.put !== 'function' || typeof body !== 'string' || body.length > 200000) return;
+    var run = (async function () {
+      await env.ROWS_KV.put(mapSvKvKey(k, url), JSON.stringify({ u: url, b: body, at: Date.now() }), { expirationTtl: MAPSV_KV_TTL });
+      await mapSvRegAdd(env, k, url);
+    })().catch(function () { /* \ubb34\uc2dc */ });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(run);
+  } catch (e) { /* \ubb34\uc2dc */ }
+}
+async function mapSvRegAdd(env, k, url) {
+  var reg = await env.ROWS_KV.get(MAPSV_REG, { type: 'json' });
+  if (!Array.isArray(reg)) reg = [];
+  var now = Date.now(), i;
+  for (i = 0; i < reg.length; i++) if (reg[i] && reg[i].k === k && reg[i].u === url) { reg[i].at = now; return env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); }
+  reg.push({ k: k, u: url, at: now });
+  if (reg.length > MAPSV_REG_MAX) reg = reg.slice(reg.length - MAPSV_REG_MAX);
+  return env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL });
+}
+/** \uc54c\ub9bc \uc2dc\uac01(cron)\ub9c8\ub2e4: \uae30\uc5b5\ud574 \ub454 \uc815\ub958\uc7a5 \uc8fc\uc18c \uc911 6\uc77c \ub118\uac8c \uc548 \ubc1b\uc740 \uac83\uc744 \uc624\ub798\ub41c \uc21c\uc73c\ub85c \uba87 \uac1c \ub2e4\uc2dc \ubc1b\uc544 \uc800\uc7a5\uc18c\uc5d0 \ub454\ub2e4. \ubc1b\uc740 \uac1c\uc218\ub97c \ub3cc\ub824\uc900\ub2e4. */
+async function mapBusWarmCron(env, nowMs) {
+  if (!env || !env.ROWS_KV) return 0;
+  var reg = await env.ROWS_KV.get(MAPSV_REG, { type: 'json' });
+  if (!Array.isArray(reg) || !reg.length) return 0;
+  var now = Number(nowMs) || Date.now();
+  var due = reg.filter(function (e) { return e && e.k && e.u && now - Number(e.at || 0) >= MAPSV_WARM_AGE; }).sort(function (a, b) { return a.at - b.at; }).slice(0, MAPSV_WARM_N);
+  var n = 0, i;
+  for (i = 0; i < due.length; i++) {
+    var e = due[i], body = '';
+    try {
+      var atts = mapSvAttempts(env, e.u, i);
+      for (var a = 0; a < atts.length && !body; a++) {
+        var p = atts[a](); if (!p) continue;
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 6000); })]);
+        if (res && res.status === 200) { var tx = await res.text(); if (!mapArrErr(tx) && mapSvOkBody(e.k, tx)) body = tx; }
+      }
+    } catch (e1) { body = ''; }
+    if (!body) continue;
+    try { await env.ROWS_KV.put(mapSvKvKey(e.k, e.u), JSON.stringify({ u: e.u, b: body, at: now }), { expirationTtl: MAPSV_KV_TTL }); n++; e.at = now; } catch (e2) { /* \ub2e4\uc74c\uc5d0 */ }
+  }
+  if (n > 0) { try { await env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); } catch (e3) { /* \ub2e4\uc74c\uc5d0 */ } }
+  return n;
+}
+function mapSvOne(env, k, url) {                            // \u2192 Promise<\ubcf8\ubb38 \uae00> (\uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 mapSvOne0 \uc758 \uce90\uc2dc \u00b7 \ub3c4\ucc29\uc815\ubcf4\ub294 \ud569\uce58\uae30 + 5\ucd08 \uae30\uc5b5)
+  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url);
+  var now = Date.now(), e = MAPSV_MEMO[url];
+  if (e && now - e.t < MAPSV_MEMO_MS) return e.p;
+  var ent = { t: now, p: null };
+  ent.p = mapSvOne0(env, k, url).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
+  if (++MAPSV_MEMO_N > 300) { MAPSV_MEMO = {}; MAPSV_MEMO_N = 0; }
+  MAPSV_MEMO[url] = ent;
+  return ent.p;
 }
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
 async function mapSvResolve(env, cap, body, out) {
@@ -24441,6 +24534,7 @@ async function guardEnter(request, env, opt) {
 // ===== GUARD ENGINE END =====
 
 async function handleFetch(request, env, ctx) {
+  if (typeof MAPSV_CTX !== "undefined") MAPSV_CTX = ctx || null;
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
   if (url.pathname === "/ride-eta") return handleRideEtaNT(request, env);
@@ -24970,3 +25064,13 @@ export {
   route_v2_worker_default as default
 };
 //# sourceMappingURL=route-v2-worker.js.map
+
+// s290: Server-Timing - the app reads app;dur=ms and subtracts it from its own measured time (what remains is transfer/wait).
+function serverTimed(res, t0) {
+  try {
+    if (!res || !res.headers) return res;
+    var v = "app;dur=" + Math.max(0, Date.now() - t0);
+    try { res.headers.set("Server-Timing", v); return res; }
+    catch (e1) { var h = new Headers(res.headers); h.set("Server-Timing", v); return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h }); }
+  } catch (e) { return res; }
+}

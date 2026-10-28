@@ -18,7 +18,7 @@ ok(E.scEtag('') !== E.scEtag(' ') && E.scEtag(null) === E.scEtag(''), '빈 글 �
   const cut = t => t.slice(0, t.indexOf('if (typeof module')).trimEnd();
   const src = esc(cut(fs.readFileSync(path.join(__dirname, '../engine/screen-cache.js'), 'utf8'))), glue = esc(fs.readFileSync(path.join(__dirname, '../engine/screen-cache-worker.js'), 'utf8').trimEnd());
   ok(w.includes('// ===== SCACHE ENGINE BEGIN =====\n' + src + '\n' + glue + '\n// ===== SCACHE ENGINE END ====='), '워커 내장 사본이 같다');
-  ok(w.includes('if (url.pathname === "/screen/batch") return handleScreenBatch(request);') && w.includes('return await handleFetchCond(request, env, ctx);') && !/return await handleFetch\(request, env, ctx\);/.test(w), '워커 경로 · fetch 연결');
+  ok(w.includes('if (url.pathname === "/screen/batch") return handleScreenBatch(request);') && w.includes('serverTimed(await handleFetchCond(request, env, ctx), _t0)') && !/return await handleFetch\(request, env, ctx\);/.test(w), '워커 경로 · fetch 연결');
 }
 (async () => {
   const tmp = path.join(require('os').tmpdir(), 'rv2_sc_' + process.pid + '.mjs');

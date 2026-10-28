@@ -188,9 +188,13 @@ function settingsPerfFacts(p) {
   var four = function (a) { a = Array.isArray(a) ? a : []; return [0, 1, 2, 3].map(function (i) { return settingsInt(a[i], 0, 99999999, 0); }); };
   var net = (Array.isArray(p.n) ? p.n : []).slice(0, 12).map(function (r) {
     r = Array.isArray(r) ? r : [];
-    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0) };
+    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0), sv: settingsInt(r[5], -1, 99999999, -1) };
   });
-  return { d: four(p.d), l: four(p.l), n: net };
+  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 10).map(function (r) {            // 구간 시간: [이름, 횟수, 평균ms, 최대ms]
+    r = Array.isArray(r) ? r : [];
+    return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0) };
+  });
+  return { d: four(p.d), l: four(p.l), n: net, s: spans };
 }
 // 반응 속도 글: 기준(느림) = 그리기 17ms · 화면 구성 16ms 이상, 서버 평균 800ms 이상. 느린 비율이 5% 를 넘거나 최대가 100ms 를 넘으면 짚어 준다.
 function settingsPerfLines(pf) {
@@ -200,9 +204,10 @@ function settingsPerfLines(pf) {
   out.push('화면 구성  ' + l[0] + '회 · 평균 ' + l[1] + 'ms · 최대 ' + l[2] + 'ms · 느린 것 ' + l[3] + '회(' + pct(l) + '%)');
   var slowNet = [];
   pf.n.forEach(function (r) {
-    out.push('서버 ' + r.p + '  ' + r.n + '회 · 평균 ' + r.a + 'ms · 최대 ' + r.m + 'ms' + (r.x ? ' · 실패 ' + r.x + '회' : ''));
+    out.push('서버 ' + r.p + '  ' + r.n + '회 · 평균 ' + r.a + 'ms · 최대 ' + r.m + 'ms' + (r.sv >= 0 ? ' (서버 처리 ' + r.sv + 'ms · 전송 ' + Math.max(0, r.a - r.sv) + 'ms)' : '') + (r.x ? ' · 실패 ' + r.x + '회' : ''));
     if (r.n >= 2 && r.a >= 800) slowNet.push(r.p);
   });
+  (pf.s || []).forEach(function (r) { out.push('구간 ' + r.p + '  ' + r.n + '회 · 평균 ' + r.a + 'ms · 최대 ' + r.m + 'ms'); });          // 사람이 느끼는 한 동작(진입→화면)의 시작부터 끝까지
   var notes = [];
   if (d[0] >= 30 && (pct(d) > 5 || d[2] > 100)) notes.push('그리기가 자주 느려요(17ms 넘는 비율 ' + pct(d) + '%, 최대 ' + d[2] + 'ms) — 한 화면에 그릴 것이 많거나 계속 다시 그리는 곳이 있다는 뜻이에요.');
   if (l[0] >= 5 && (pct(l) > 5 || l[2] > 100)) notes.push('화면 구성이 느려요(최대 ' + l[2] + 'ms) — 목록이 길거나 글이 많은 화면이에요.');
