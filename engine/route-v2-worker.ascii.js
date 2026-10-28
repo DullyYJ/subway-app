@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s271";
+var ENGINE_VERSION = "route-v2-2026-10-28s272";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -16846,7 +16846,39 @@ function cmPreDue(o) {
   return r;
 }
 
-// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-alarm {op:'due'|'occ'|'pre', \u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
+// \u2500\u2500 s272 (YJ: \uacc4\uc0b0\uc740 \uc5d4\uc9c4\uc774 \u2014 \uc704\uc82f\uc758 \ucd9c\ud1f4\uadfc \uc7a5\uba74 \ud310\ub2e8\uc744 \uc571 \ubc16\uc73c\ub85c): \uce90\ub9ad\ud130 \uc2dc\uacc4 \uc704\uc82f\uc758 \ucd9c\ud1f4\uadfc \uc7a5\uba74 \ubaa9\ub85d \u2500\u2500
+//   cmWidgetScenes({ nowMs, on, mOn, eOn, morn, eve, days })  (op:'wscene')
+//   \u2192 { v:1, validMs, showMs, btn:{morn,eve}, say:{morn:[\uc9041,\uc9042], eve:[\u2026]}, list:[{ k:'morn'|'eve', key, at, until }\u2026] }
+//   list : \uc9c0\uae08 \uc774\ud6c4(\ub05d\uc774 \uc544\uc9c1 \uc548 \uc9c0\ub09c \uac83) 14\uc77c\uce58 \uc7a5\uba74 \u2014 \uc124\uc815\ud55c \uc694\uc77c \u00b7 \ucf1c\uc9c4 \ucabd(mOn/eOn)\ub9cc. at = \uc2dc\uc791 \uc2dc\uac01, until = \uc2dc\uc791 + validMs(\uadf8 \uc548\uc5d0 \ud654\uba74\uc744 \ucf1c\uba74 \uc7a5\uba74\uc774 \ub72c\ub2e4).
+//          key = \ub0a0\uc9dc(yyyymmdd) + \uc885\ub958 + \uc2dc\uc791 \ubd84 \u2014 \uc2dc\uac01\uc744 \ubc14\uafb8\uba74 \ud0a4\uac00 \ub2ec\ub77c\uc838 \uc0c8 \uc2dc\uac01\uc5d0 \ub2e4\uc2dc \ub72c\ub2e4(\uc571\uc774 '\uc774\ubbf8 \ub20c\ub800\ub2e4/\uc9c0\ub098\uac14\ub2e4' \uae30\ub85d\uc744 \uc774 \ud0a4\ub85c \ud55c\ub2e4).
+//   showMs : \uc7a5\uba74\uc774 \ucc98\uc74c \ubcf4\uc778 \ub4a4 \uba87 ms \ub3d9\uc548 \ub5a0 \uc788\ub098 \u00b7 btn / say : \ubc84\ud2bc \uc774\ub984 \u00b7 \uc5d4\uc9c4 \uc751\ub2f5(/widget-say)\uc774 \uc624\uae30 \uc804\u00b7\uc2e4\ud328 \ub54c\uc758 \uae30\ubcf8 \ubb38\uad6c.
+//   \uc571\uc740 \uc774 \ubaa9\ub85d\uc744 \uae30\uae30\uc5d0 \ub450\uace0(\uc624\ud504\ub77c\uc778\uc5d0\uc11c\ub3c4 \ub3d9\uc791) \uc9c0\uae08\uc774 \uc5b4\ub290 \uce78\uc5d0 \ub4dc\ub294\uc9c0\ub9cc \ubcf4\uace0 \uc54c\ub78c\uc744 \uac74\ub2e4. \uc694\uc77c\u00b7\uc2dc\uac01 \uaddc\uce59\uc740 \uc5ec\uae30 \ud55c \uacf3\uc5d0\ub9cc \uc788\ub2e4.
+var CM_WS_DAYS = 14, CM_WS_VALID_MS = 90 * 60000, CM_WS_SHOW_MS = 3 * 60000;
+var CM_WS_BTN = { morn: '\ucd9c\uadfc\ud558\uae30', eve: '\ud1f4\uadfc\ud558\uae30' };
+var CM_WS_SAY = { morn: ['\uc624\ub298\ub3c4 \ud654\uc774\ud305!', ''], eve: ['\uc624\ub298\ub3c4 \uc218\uace0 \ub9ce\uc558\uc5b4\uc694', ''] };
+function cmWsMin(str, def) { var m = cmHm(str); return (m == null || m >= 1440) ? def : m; }
+function cmWidgetScenes(o) {
+  o = o || {};
+  var r = { v: CM_ALARM_V, validMs: CM_WS_VALID_MS, showMs: CM_WS_SHOW_MS, btn: CM_WS_BTN, say: CM_WS_SAY, list: [] };
+  var now = Number(o.nowMs);
+  if (!isFinite(now) || o.on !== true) return r;
+  var days = cmDaysOf(o.days), p = cmParts(now), mm = cmWsMin(o.morn, 450), em = cmWsMin(o.eve, 1110);
+  for (var i = 0; i < CM_WS_DAYS; i++) {
+    var dd = new Date(Date.UTC(p.y, p.mo, p.d + i, 12, 0, 0, 0));
+    if (days.indexOf(dd.getUTCDay()) < 0) continue;
+    var ymd = String(dd.getUTCFullYear() * 10000 + (dd.getUTCMonth() + 1) * 100 + dd.getUTCDate());
+    [['morn', mm, o.mOn !== false], ['eve', em, o.eOn !== false]].forEach(function (c) {
+      if (!c[2]) return;
+      var at = Date.UTC(p.y, p.mo, p.d + i, Math.floor(c[1] / 60), c[1] % 60, 0, 0) - CM_KST, until = at + CM_WS_VALID_MS;
+      if (until <= now) return;
+      r.list.push({ k: c[0], key: ymd + c[0] + c[1], at: at, until: until });
+    });
+  }
+  r.list.sort(function (a, b) { return a.at - b.at; });
+  return r;
+}
+
+// \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /commute-alarm {op:'due'|'occ'|'pre'|'wscene', \u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
 function handleCommuteAlarm(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
@@ -16856,7 +16888,7 @@ function handleCommuteAlarm(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var out;
-    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : (body && body.op === 'wscene') ? cmWidgetScenes(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
     out.ok = true;
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });

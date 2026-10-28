@@ -36,7 +36,6 @@ import org.json.JSONObject;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
@@ -68,8 +67,7 @@ public final class WidgetCore {
     static final long ROAM_ALARM_COOLDOWN_MS = 600000L;                      // 알람은 프로세스만 되살린다: 마지막 움직임이 끝난 지 10분이 안 됐으면 알람으로는 또 움직이지 않는다
     static long lastRoamEnd;                                                 // 마지막 움직임이 끝난 시각(uptime)
     static boolean awakeHold;                                                // 화면이 켜지는 순간: 곧장 깨어난 모습으로 시작(집에서 자는 모습을 잠깐 보이지 않게)
-    /** 출퇴근 버튼은 '처음 보인 때'부터 3분만 떠 있고, 안 누르면 다시 시계로 돌아간다. 보이기 전(화면이 꺼져 있던 동안)에는 시작 시각 +90분까지 기다린다. */
-    static final long SHOW_MS = 3L * 60000L, WAIT_MS = 90L * 60000L;
+    // s272: 출퇴근 장면의 요일·시각·기다리는 시간(90분)·떠 있는 시간(3분)·버튼 이름·기본 문구는 엔진이 정한 목록(WidgetSceneCore ← /commute-alarm op:'wscene')을 따른다.
     static final String ENGINE = ShellCore.BASE;
 
     // ───────── 저장값 ─────────
@@ -95,6 +93,7 @@ public final class WidgetCore {
     }
     public static void setConfigJson(Context c, String json) {
         sp(c).edit().putString("cfg", json == null ? "{}" : json).apply();
+        ensurePlan(c, true);                                    // 설정이 바뀌었다 — 엔진에서 새 장면 목록을 받는다(올 때까지 옛 목록은 안 쓴다)
         scheduleNext(c); evalScene(c); refreshAll(c, true); wake(c, "cfg");
     }
     /** 지금 저장된 설정과 같은 글인가(같으면 다시 그리지 않으려고). */
@@ -110,15 +109,6 @@ public final class WidgetCore {
         } catch (Exception ignored) { }
         return false;
     }
-    static int hm(String s, int def) {
-        try { String[] p = s.split(":"); return Integer.parseInt(p[0].trim()) * 60 + Integer.parseInt(p[1].trim()); } catch (Exception e) { return def; }
-    }
-    static String ymd(Calendar cal) { return cal.get(Calendar.YEAR) * 10000 + (cal.get(Calendar.MONTH) + 1) * 100 + cal.get(Calendar.DAY_OF_MONTH) + ""; }
-    static long startMs(Calendar base, int minutes) {
-        Calendar c = (Calendar) base.clone(); c.set(Calendar.HOUR_OF_DAY, minutes / 60); c.set(Calendar.MINUTE, minutes % 60); c.set(Calendar.SECOND, 0); c.set(Calendar.MILLISECOND, 0);
-        return c.getTimeInMillis();
-    }
-
     // ───────── 출퇴근 장면 ─────────
     public static final class Scene { public String kind = "", key = "", say1 = "", say2 = "", mood = "cheer", btn = ""; public long until; public boolean fetched; }
     public static Scene scene(Context c) {
@@ -130,44 +120,63 @@ public final class WidgetCore {
     static void clearScene(Context c) {
         sp(c).edit().remove("scKind").remove("scKey").remove("scSay1").remove("scSay2").remove("scMood").remove("scBtn").remove("scUntil").remove("scFetched").remove("scShown").apply();
     }
-    /** 오늘 지금 보여야 할 출퇴근 장면이 있으면 시작하고, 끝난 장면은 치운다. 알람·위젯 갱신·화면 켜짐·탭 때 부른다. */
+    // ───────── 장면 목록(엔진이 정한 14일치) ─────────
+    static String cfgSig(Cfg f) { return WidgetSceneCore.sig(f.on, f.mOn, f.eOn, f.morn, f.eve, f.days); }
+    /** 지금 설정으로 받아 둔 목록(설정이 바뀌었거나 못 받았으면 null). */
+    static WidgetSceneCore.Plan plan(Context c) {
+        SharedPreferences p = sp(c);
+        if (!cfgSig(cfg(c)).equals(p.getString("wsSig", ""))) return null;
+        return WidgetSceneCore.parse(p.getString("wsPlan", ""));
+    }
+    static final long PLAN_REFRESH_MS = 12L * 3600000L, PLAN_RETRY_MS = 5L * 60000L;
+    static volatile boolean planBusy; static volatile long planTryAt;
+    /** 목록이 없거나 12시간 넘었으면 엔진에서 새로 받는다(뒤 스레드 · 실패하면 5분 뒤에나 다시). 받으면 장면을 다시 판단하고 알람을 건다. */
+    static void ensurePlan(final Context c, boolean force) {
+        final Cfg f = cfg(c);
+        if (!f.on || planBusy) return;
+        long now = System.currentTimeMillis();
+        SharedPreferences p = sp(c);
+        boolean have = cfgSig(f).equals(p.getString("wsSig", "")) && p.getString("wsPlan", "").length() > 0;
+        if (!force && have && now - p.getLong("wsAt", 0L) < PLAN_REFRESH_MS) return;
+        if (!force && now - planTryAt < PLAN_RETRY_MS) return;
+        planBusy = true; planTryAt = now;
+        final String body = WidgetSceneCore.reqBody(now, f.on, f.mOn, f.eOn, f.morn, f.eve, f.days), sig = cfgSig(f);
+        new Thread(new Runnable() { @Override public void run() {
+            boolean got = false;
+            try {
+                NetPost.Res r = NetPost.post(ENGINE + "/commute-alarm", body, 8000);
+                if (r != null && r.status == 200 && r.body != null && WidgetSceneCore.parse(r.body) != null) {
+                    sp(c).edit().putString("wsPlan", r.body).putString("wsSig", sig).putLong("wsAt", System.currentTimeMillis()).apply();
+                    got = true;
+                }
+            } catch (Throwable ignored) { }
+            planBusy = false;
+            if (!cfgSig(cfg(c)).equals(sig)) { ensurePlan(c, true); return; }          // 받는 사이 설정이 또 바뀌었다 — 한 번 더
+            if (got) handler().post(new Runnable() { @Override public void run() { evalScene(c); scheduleNext(c); refreshAll(c, true); wake(c, "plan"); } });
+        } }, "gdm-widget-plan").start();
+    }
+
+    /** 엔진이 정한 목록에서 지금 보여야 할 출퇴근 장면이 있으면 시작하고, 끝난 장면은 치운다. 알람·위젯 갱신·화면 켜짐·탭 때 부른다. */
     public static boolean evalScene(Context c) {
         Cfg f = cfg(c); boolean started = false;
+        ensurePlan(c, false);
+        WidgetSceneCore.Plan p = plan(c);
         Scene cur = scene(c); long now = System.currentTimeMillis();
         if (cur.kind.length() > 0 && now >= cur.until) { sp(c).edit().putString("lastDone", cur.key).apply(); clearScene(c); cur = scene(c); }   // 안 눌렀어도 끝난 장면은 다시 안 띄운다
-        if (!f.on || (cur.kind.equals("morn") && !f.mOn) || (cur.kind.equals("eve") && !f.eOn)) { if (cur.kind.length() > 0) clearScene(c); if (!f.on) return false; cur = scene(c); }
-        Calendar cal = Calendar.getInstance();
-        if (!f.days[cal.get(Calendar.DAY_OF_WEEK) - 1]) { if (cur.kind.length() > 0 && !cur.key.startsWith(ymd(cal))) clearScene(c); return false; }
-        if (cur.kind.length() > 0) {            // 설정에서 시각을 바꿨으면 옛 시각의 장면은 치운다(새 시각에 다시 뜬다)
-            String want = sceneKey(cal, cur.kind, hm("morn".equals(cur.kind) ? f.morn : f.eve, "morn".equals(cur.kind) ? 450 : 1110));
-            if (!cur.key.equals(want)) { clearScene(c); cur = scene(c); }
-        }
-        String lastDone = sp(c).getString("lastDone", "");
-        String best = null; long bestStart = 0;
-        for (int k = 0; k < 2; k++) {
-            String kind = k == 0 ? "morn" : "eve";
-            if (k == 0 ? !f.mOn : !f.eOn) continue;          // 장소가 없는 쪽은 장면을 만들지 않는다(눌러도 갈 곳이 없다)
-            int sm = hm(k == 0 ? f.morn : f.eve, k == 0 ? 450 : 1110);
-            long st = startMs(cal, sm);
-            String key = sceneKey(cal, kind, sm);
-            if (now >= st && now < st + WAIT_MS && !key.equals(lastDone) && st >= bestStart) { best = kind; bestStart = st; }
-        }
-        if (best != null && !(cur.kind.equals(best) && cur.key.equals(sceneKey(cal, best, hm("morn".equals(best) ? f.morn : f.eve, "morn".equals(best) ? 450 : 1110))))) { startScene(c, best, bestStart); started = true; }
+        if (!f.on) { if (cur.kind.length() > 0) clearScene(c); return false; }
+        if (cur.kind.length() > 0 && (p == null || p.find(cur.key) == null)) { clearScene(c); cur = scene(c); }      // 설정을 바꿔 옛 시각의 장면은 목록에 없다 — 치운다(새 시각에 다시 뜬다)
+        if (p == null) return false;
+        WidgetSceneCore.Entry best = p.pick(now, sp(c).getString("lastDone", ""));
+        if (best != null && !(cur.kind.equals(best.k) && cur.key.equals(best.key))) { startScene(c, p, best); started = true; }
         return started;
     }
-    /** 장면 열쇠 = 날짜 + 출퇴근 + 시작 시각(분). 시각이 열쇠에 들어 있어서, 오늘 앞서 다른 시각으로 한 번 보였거나 눌렀어도 시각을 바꾸면 새 시각에 다시 뜬다. */
-    static String sceneKey(Calendar cal, String kind, int minutes) { return ymd(cal) + kind + minutes; }
-    static void startScene(final Context c, final String kind, long startAt) {
-        Calendar cal = Calendar.getInstance();
-        final Cfg cf0 = cfg(c);
-        final String key = sceneKey(cal, kind, hm("morn".equals(kind) ? cf0.morn : cf0.eve, "morn".equals(kind) ? 450 : 1110));
-        long until = startAt + WAIT_MS;
-        SharedPreferences.Editor e = sp(c).edit();
-        e.putString("scKind", kind).putString("scKey", key).putLong("scUntil", until).putLong("scShown", 0L).putBoolean("scFetched", false).putString("scMood", "cheer");
-        e.putString("scBtn", "morn".equals(kind) ? "출근하기" : "퇴근하기");
-        e.putString("scSay1", "morn".equals(kind) ? "오늘도 화이팅!" : "오늘도 수고 많았어요").putString("scSay2", "");     // 엔진 응답 전·실패 때의 기본 문구
-        e.apply();
-        fetchSay(c, kind, key);
+    static void startScene(final Context c, WidgetSceneCore.Plan p, WidgetSceneCore.Entry e) {
+        SharedPreferences.Editor ed = sp(c).edit();
+        ed.putString("scKind", e.k).putString("scKey", e.key).putLong("scUntil", e.until).putLong("scShown", 0L).putBoolean("scFetched", false).putString("scMood", "cheer");
+        ed.putString("scBtn", p.btnOf(e.k));
+        ed.putString("scSay1", p.sayOf(e.k, 0)).putString("scSay2", p.sayOf(e.k, 1));     // 엔진 응답(/widget-say) 전·실패 때의 기본 문구 — 이것도 엔진 목록 값
+        ed.apply();
+        fetchSay(c, e.k, e.key);
     }
     static void fetchSay(final Context c, final String kind, final String key) {
         final Cfg f = cfg(c);
@@ -205,10 +214,13 @@ public final class WidgetCore {
     }
     /** 앱이 위젯 버튼으로 열렸다 — 그 장면은 끝낸 것으로 친다(다시 안 뜸). */
     public static void markDone(Context c, String kind) {
-        Calendar cal = Calendar.getInstance(); Cfg cf0 = cfg(c);
         Scene cs = scene(c);
-        String key = (cs.kind.equals(kind) && cs.key.length() > 0) ? cs.key : sceneKey(cal, kind, hm("morn".equals(kind) ? cf0.morn : cf0.eve, "morn".equals(kind) ? 450 : 1110));
-        sp(c).edit().putString("lastDone", key).apply();
+        String key = (cs.kind.equals(kind) && cs.key.length() > 0) ? cs.key : "";
+        if (key.length() == 0) {                                                       // 장면 기록이 없으면 지금 그 종류로 열려 있는 목록 칸의 키
+            WidgetSceneCore.Plan p = plan(c); long now = System.currentTimeMillis();
+            if (p != null) for (WidgetSceneCore.Entry e : p.list) if (e.k.equals(kind) && now >= e.at && now < e.until) key = e.key;
+        }
+        if (key.length() > 0) sp(c).edit().putString("lastDone", key).apply();
         clearScene(c); refreshAll(c, true); scheduleNext(c);
     }
 
@@ -217,8 +229,8 @@ public final class WidgetCore {
         Scene cur = scene(c); if (cur.kind.length() == 0) return;
         SharedPreferences p = sp(c);
         if (p.getLong("scShown", 0L) != 0L) return;
-        long now = System.currentTimeMillis();
-        p.edit().putLong("scShown", now).putLong("scUntil", Math.min(cur.until, now + SHOW_MS)).apply();
+        long now = System.currentTimeMillis(); WidgetSceneCore.Plan pl = plan(c);
+        p.edit().putLong("scShown", now).putLong("scUntil", pl == null ? cur.until : Math.min(cur.until, now + pl.showMs)).apply();
         scheduleNext(c);
     }
 
@@ -236,16 +248,7 @@ public final class WidgetCore {
         Cfg f = cfg(a); long now = System.currentTimeMillis(), next = Long.MAX_VALUE;
         Scene s = scene(a); if (s.kind.length() > 0 && s.until > now) next = Math.min(next, s.until + 1000L);
         next = Math.min(next, WidgetSim.roamNext(now, java.util.TimeZone.getDefault(), WidgetSim.ROAM_EVERY_MIN) + 500L);   // 정시 기준 ROAM_EVERY_MIN 분마다: 앱을 깨워 동물을 내보낸다(조용한 타이머, 알림 아님)
-        if (f.on) {
-            Calendar cal = Calendar.getInstance();
-            for (int d = 0; d < 8; d++) {
-                Calendar day = (Calendar) cal.clone(); day.add(Calendar.DAY_OF_YEAR, d);
-                if (!f.days[day.get(Calendar.DAY_OF_WEEK) - 1]) continue;
-                long m = startMs(day, hm(f.morn, 450)), e = startMs(day, hm(f.eve, 1110));
-                if (f.mOn && m > now + 1000L) next = Math.min(next, m);
-                if (f.eOn && e > now + 1000L) next = Math.min(next, e);
-            }
-        }
+        if (f.on) { WidgetSceneCore.Plan pl = plan(a); if (pl != null) next = Math.min(next, pl.nextAt(now)); }       // 엔진이 정한 목록의 다음 시작 시각
         if (next == Long.MAX_VALUE) return;
         try {
             boolean exact = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
@@ -471,7 +474,7 @@ public final class WidgetCore {
             int bpv = px(n, Math.max(0f, (g.btnH - g.btnTs * WidgetGeo.LINE_K) / 2f));
             rv.setViewPadding(btn, 0, bpv, 0, bpv);           // 버튼 폭은 말풍선과 같다(match_parent — 둘 다 같은 좌우 여백 안에 있다)
             rv.setViewPadding(bub, px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad), px(n, g.bubPad));
-            rv.setTextViewText(btn, s.btn.length() > 0 ? s.btn : ("morn".equals(s.kind) ? "출근하기" : "퇴근하기"));
+            rv.setTextViewText(btn, s.btn);          // 버튼 이름은 엔진 목록(btn) 값 — 장면을 시작할 때 저장해 둔다
             rv.setOnClickPendingIntent(btn, goIntent(c, s.kind));
             rv.setOnClickPendingIntent(bub, communityIntent(c));
         }

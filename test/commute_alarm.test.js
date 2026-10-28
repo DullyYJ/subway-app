@@ -7,7 +7,7 @@ process.env.TZ = 'Asia/Seoul';
 const assert = require('assert');
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
-const { cmDue, cmOccurrences, cmPreDue, handleCommuteAlarm } = require(path.join(root, 'engine/commute-alarm.js'));
+const { cmWidgetScenes, cmDue, cmOccurrences, cmPreDue, handleCommuteAlarm } = require(path.join(root, 'engine/commute-alarm.js'));
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; console.log('  ok  ' + name); } catch (e) { fail++; console.log('  FAIL ' + name + '\n     ' + (e && e.message)); } }
 
@@ -198,6 +198,52 @@ async function call(method, body) {
   const req = new Request('https://x/commute-alarm', { method, body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)) });
   const res = await handleCommuteAlarm(req); return { status: res.status, json: await res.json().catch(() => null) };
 }
+// ── s272: 위젯 출퇴근 장면 목록 — 예전 위젯(WidgetCore.evalScene)의 규칙을 얼려 둔 사본과 같은 칸이 나와야 한다 ──
+function refWidgetActive(cfg, now) {   // 예전 규칙: 설정 요일 · 켜진 쪽 · 시작 ≤ 지금 < 시작 + 90분 → [{k, key}]
+  const out = [], n = new Date(now);
+  [['morn', cfg.morn, 450, cfg.mOn !== false], ['eve', cfg.eve, 1110, cfg.eOn !== false]].forEach(([k, s, def, on]) => {
+    if (!on || !cfg.on) return;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s); const sm = m ? (+m[1]) * 60 + (+m[2]) : def;
+    for (let back = 0; back <= 0; back++) {        // 예전 위젯은 오늘 시작분만 봤다(자정을 넘겨 이어지는 어제 장면은 없음)
+      const d = new Date(n.getFullYear(), n.getMonth(), n.getDate() - back, Math.floor(sm / 60), sm % 60, 0, 0);
+      const days = cfg.days && cfg.days.length ? cfg.days : [0, 1, 2, 3, 4, 5, 6];
+      if (days.indexOf(d.getDay()) < 0) continue;
+      if (now >= d.getTime() && now < d.getTime() + 90 * 60000) out.push(k + ':' + (d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) + k + sm);
+    }
+  });
+  return out.sort();
+}
+t('위젯 장면 목록: 켜진 쪽 · 설정 요일만, 14일치, 시각 순, 끝이 안 지난 것만', () => {
+  const NOW = new Date(2026, 9, 28, 10, 0, 0).getTime();       // 2026-10-28(수) 10:00
+  const r = cmWidgetScenes({ nowMs: NOW, on: true, mOn: true, eOn: true, morn: '07:30', eve: '18:30', days: [1, 2, 3, 4, 5] });
+  assert.strictEqual(r.v, 1); assert.strictEqual(r.validMs, 5400000); assert.strictEqual(r.showMs, 180000);
+  assert.deepStrictEqual(r.btn, { morn: '출근하기', eve: '퇴근하기' }); assert.strictEqual(r.say.morn[0], '오늘도 화이팅!'); assert.strictEqual(r.say.eve[0], '오늘도 수고 많았어요');
+  assert.strictEqual(r.list[0].k, 'eve'); assert.strictEqual(r.list[0].key, '20261028eve1110'); assert.strictEqual(r.list[0].at, new Date(2026, 9, 28, 18, 30).getTime()); assert.strictEqual(r.list[0].until - r.list[0].at, 5400000);
+  assert.ok(r.list.every((e, i) => i === 0 || e.at >= r.list[i - 1].at), '시각 순');
+  assert.ok(r.list.every(e => [1, 2, 3, 4, 5].indexOf(new Date(e.at).getDay()) >= 0), '주말 없음');
+  assert.ok(r.list.every(e => e.until > NOW));
+  assert.strictEqual(r.list.length, 19);   // 10/28 저녁 1 + 이후 13일(10/29~11/10) 중 평일 9일 × 2
+});
+t('위젯 장면 목록: 꺼짐 · 한쪽 꺼짐 · 이상한 시각은 기본값 · 요일 비면 매일', () => {
+  const NOW = new Date(2026, 9, 28, 10, 0, 0).getTime();
+  assert.deepStrictEqual(cmWidgetScenes({ nowMs: NOW, on: false, morn: '07:30', eve: '18:30' }).list, []);
+  assert.deepStrictEqual(cmWidgetScenes({ nowMs: NaN, on: true }).list, []);
+  const e = cmWidgetScenes({ nowMs: NOW, on: true, mOn: false, eOn: true, morn: 'x', eve: 'zz:zz', days: [] });
+  assert.ok(e.list.length === 14 && e.list.every(x => x.k === 'eve' && /eve1110$/.test(x.key)), '저녁만 · 기본 18:30 · 매일 14일');
+  const m = cmWidgetScenes({ nowMs: NOW, on: true, mOn: true, eOn: false, morn: '25:99', eve: '18:30' });
+  assert.ok(m.list.every(x => /morn450$/.test(x.key)), '범위 밖 시각은 기본 07:30');
+});
+t('위젯 장면 목록: 예전 위젯 규칙(오늘 시작 ≤ 지금 < 시작+90분)과 같은 칸 — 분 단위로 훑어 비교', () => {
+  const cfgs = [{ on: true, mOn: true, eOn: true, morn: '07:30', eve: '18:30', days: [1, 2, 3, 4, 5] }, { on: true, mOn: true, eOn: true, morn: '23:00', eve: '00:30', days: [] }, { on: true, mOn: false, eOn: true, morn: '08:00', eve: '17:45', days: [0, 6] }];
+  const T0 = new Date(2026, 9, 28, 0, 0, 0).getTime();
+  cfgs.forEach(cfg => {
+    for (let k = 0; k < 4 * 1440; k += 7) {
+      const now = T0 + k * 60000, sc = cmWidgetScenes(Object.assign({ nowMs: now }, cfg));
+      const got = sc.list.filter(e => e.at <= now && now < e.until).map(e => e.k + ':' + e.key).sort();
+      assert.deepStrictEqual(got, refWidgetActive(cfg, now), new Date(now).toString() + ' ' + JSON.stringify(cfg));
+    }
+  });
+});
 (async () => {
   const c0 = configs[0], nowMs = D0 + (7 * 60 + 30) * 60000 + 3000;
   let r = await call('POST', Object.assign({ nowMs, on: true, osOk: false, lastKey: '' }, c0));
@@ -206,6 +252,7 @@ async function call(method, body) {
   t('POST op=occ: 4주치 시각', () => { assert.strictEqual(r.status, 200); assert.ok(r.json.morn.length >= 25 && r.json.eve.length >= 25); assert.strictEqual(r.json.ok, true); });
   r = await call('POST', { op: 'pre', nowMs: D0 + 7 * 3600000, morn: '07:30', eve: '18:30', days: [1, 2, 3, 4, 5], ageMorn: null, ageEve: 5 });
   t('POST op=pre: 때가 된 구간 이름만 돌려준다', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.deepStrictEqual(r.json.due, ['morn']); assert.strictEqual(r.json.v, 1); });
+  r = await call('POST', JSON.stringify({ op: 'wscene', nowMs: new Date(2026, 9, 28, 10, 0, 0).getTime(), on: true, mOn: true, eOn: true, morn: '07:30', eve: '18:30', days: [3] })); t('POST op=wscene: 장면 목록', () => { assert.strictEqual(r.status, 200); assert.strictEqual(r.json.ok, true); assert.strictEqual(r.json.list[0].key, '20261028eve1110'); assert.ok(r.json.list.length === 3); });
   r = await call('GET'); t('GET → 405', () => assert.strictEqual(r.status, 405));
   r = await call('OPTIONS'); t('OPTIONS → 204', () => assert.strictEqual(r.status, 204));
   r = await call('POST', '{not json'); t('이상한 JSON → 400', () => assert.strictEqual(r.status, 400));

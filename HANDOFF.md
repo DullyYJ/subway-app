@@ -3050,3 +3050,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **② 대기 거리**: 앱은 `lv.wait` 에 `{i, lat, lng, me:[내 위도,경도]}` 만 싣고(거리 `d` 는 더 이상 안 보냄), 엔진 `result.js resLive` 가 `resMeters` 로 잰다. 옛 `d` 가 오면 그대로 쓴다(호환). `RideCore.meters` 삭제.
 - **시험**: `ride_standby` 1건 · `result_engine` 2건 · `ShellJvmTest` wait JSON 기대값 교체. ENGINE_VERSION `route-v2-2026-10-28s271`(s270 회차 대기시간 포함 — s270 은 커밋만 하고 푸시 전이었다).
 - **남은 점검 항목(안 고침)**: 위젯 출퇴근 판단·문구, 토스트·확인창 문구(앱 직접), 마지막 위치 재사용(30분/6시간/24시간), 버스 도착정보 45초 유지·본문 글자 판정, 탭별 화면 칸 구성(`ShellCore.slotsOf`), 갱신 주기 상수, 버스 초 카운트다운 서식(`ScreenCore.cdFmt`).
+
+## s272 (2026-10-28) — 위젯 출퇴근 장면 판단을 엔진으로 (YJ: "계속 진행해줘" — s271 점검 3번)
+- **전**: `WidgetCore.evalScene/startScene/scheduleNext` 가 요일·시각(기본 07:30/18:30)·90분 대기·3분 표시·장면 키·버튼 이름("출근하기/퇴근하기")·기본 문구를 앱에서 정했다.
+- **엔진**: `commute-alarm.js cmWidgetScenes({nowMs,on,mOn,eOn,morn,eve,days})` (POST `/commute-alarm` `op:'wscene'`) → `{validMs:90분, showMs:3분, btn, say, list:[{k,key,at,until}]}` 14일치(설정 요일 · 켜진 쪽만 · 끝이 안 지난 것). 키 = `yyyymmdd + morn|eve + 시작 분` (옛 키와 같은 글자 — 진행 중인 장면이 업데이트 뒤에도 이어진다). 시각은 KST. 예전 위젯과 같이 **오늘 시작분만** 본다(자정을 넘기는 어제 장면 없음). 공휴일은 여전히 안 본다(예전과 같음 — 나중에 이 한 곳에서 정책을 정하면 된다).
+- **앱**: 새 순수 클래스 `WidgetSceneCore`(요청 본문 · 응답 읽기 · "지금이 목록의 어느 칸에 드는가" `pick` · `nextAt` · 설정 서명 `sig`). `WidgetCore` 는 목록을 기기(`wsPlan`/`wsSig`/`wsAt`)에 두고 오프라인에서도 그 목록으로 판단한다. 목록은 설정이 바뀔 때(`setConfigJson`) 새로 받고, 없거나 12시간 넘으면 `evalScene` 이 뒤 스레드에서 받는다(실패하면 5분 뒤). **설정이 바뀌면 새 목록이 오기 전엔 옛 목록을 쓰지 않는다(서명 다름 → 장면 없음).** `Calendar`·`hm`·`startMs`·`sceneKey`·`SHOW_MS/WAIT_MS`·버튼/기본 문구 제거.
+- **시험**: `commute_alarm` 4건(목록 · 꺼짐/기본값 · 예전 규칙과 분 단위 비교 · op) · `widget_native` 2건(엔진 응답을 자바가 읽고 20분 간격으로 훑어 예전 규칙과 같은 칸 · 위젯 자바에 규칙/문구 없음) · `WidgetSceneJvmTest` · 안드로이드 컴파일 목록에 `WidgetSceneCore`. ENGINE_VERSION `route-v2-2026-10-28s272`.
+- **한계(기기 미검증)**: ① 처음 설치/설정 직후 엔진을 한 번 받아야 장면이 뜬다(오프라인이면 목록이 올 때까지 안 뜸) ② 알람이 목록의 다음 시작 시각에 걸리는지 · 화면 켜짐에서 장면이 뜨는지는 실기기 확인 필요.

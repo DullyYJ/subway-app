@@ -102,7 +102,39 @@ function cmPreDue(o) {
   return r;
 }
 
-// ── Worker 연결부 — POST /commute-alarm {op:'due'|'occ'|'pre', …} (handleFetch 에 길을 둔다) ──
+// ── s272 (YJ: 계산은 엔진이 — 위젯의 출퇴근 장면 판단을 앱 밖으로): 캐릭터 시계 위젯의 출퇴근 장면 목록 ──
+//   cmWidgetScenes({ nowMs, on, mOn, eOn, morn, eve, days })  (op:'wscene')
+//   → { v:1, validMs, showMs, btn:{morn,eve}, say:{morn:[줄1,줄2], eve:[…]}, list:[{ k:'morn'|'eve', key, at, until }…] }
+//   list : 지금 이후(끝이 아직 안 지난 것) 14일치 장면 — 설정한 요일 · 켜진 쪽(mOn/eOn)만. at = 시작 시각, until = 시작 + validMs(그 안에 화면을 켜면 장면이 뜬다).
+//          key = 날짜(yyyymmdd) + 종류 + 시작 분 — 시각을 바꾸면 키가 달라져 새 시각에 다시 뜬다(앱이 '이미 눌렀다/지나갔다' 기록을 이 키로 한다).
+//   showMs : 장면이 처음 보인 뒤 몇 ms 동안 떠 있나 · btn / say : 버튼 이름 · 엔진 응답(/widget-say)이 오기 전·실패 때의 기본 문구.
+//   앱은 이 목록을 기기에 두고(오프라인에서도 동작) 지금이 어느 칸에 드는지만 보고 알람을 건다. 요일·시각 규칙은 여기 한 곳에만 있다.
+var CM_WS_DAYS = 14, CM_WS_VALID_MS = 90 * 60000, CM_WS_SHOW_MS = 3 * 60000;
+var CM_WS_BTN = { morn: '출근하기', eve: '퇴근하기' };
+var CM_WS_SAY = { morn: ['오늘도 화이팅!', ''], eve: ['오늘도 수고 많았어요', ''] };
+function cmWsMin(str, def) { var m = cmHm(str); return (m == null || m >= 1440) ? def : m; }
+function cmWidgetScenes(o) {
+  o = o || {};
+  var r = { v: CM_ALARM_V, validMs: CM_WS_VALID_MS, showMs: CM_WS_SHOW_MS, btn: CM_WS_BTN, say: CM_WS_SAY, list: [] };
+  var now = Number(o.nowMs);
+  if (!isFinite(now) || o.on !== true) return r;
+  var days = cmDaysOf(o.days), p = cmParts(now), mm = cmWsMin(o.morn, 450), em = cmWsMin(o.eve, 1110);
+  for (var i = 0; i < CM_WS_DAYS; i++) {
+    var dd = new Date(Date.UTC(p.y, p.mo, p.d + i, 12, 0, 0, 0));
+    if (days.indexOf(dd.getUTCDay()) < 0) continue;
+    var ymd = String(dd.getUTCFullYear() * 10000 + (dd.getUTCMonth() + 1) * 100 + dd.getUTCDate());
+    [['morn', mm, o.mOn !== false], ['eve', em, o.eOn !== false]].forEach(function (c) {
+      if (!c[2]) return;
+      var at = Date.UTC(p.y, p.mo, p.d + i, Math.floor(c[1] / 60), c[1] % 60, 0, 0) - CM_KST, until = at + CM_WS_VALID_MS;
+      if (until <= now) return;
+      r.list.push({ k: c[0], key: ymd + c[0] + c[1], at: at, until: until });
+    });
+  }
+  r.list.sort(function (a, b) { return a.at - b.at; });
+  return r;
+}
+
+// ── Worker 연결부 — POST /commute-alarm {op:'due'|'occ'|'pre'|'wscene', …} (handleFetch 에 길을 둔다) ──
 function handleCommuteAlarm(request) {
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
@@ -112,10 +144,10 @@ function handleCommuteAlarm(request) {
     var body;
     try { body = JSON.parse(raw); } catch (e0) { return new Response(JSON.stringify({ ok: false, error: 'bad-json' }), { status: 400, headers: H }); }
     var out;
-    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
+    try { out = (body && body.op === 'occ') ? cmOccurrences(body) : (body && body.op === 'pre') ? cmPreDue(body) : (body && body.op === 'wscene') ? cmWidgetScenes(body) : cmDue(body); } catch (e) { return new Response(JSON.stringify({ ok: false, error: String(e && e.message || e) }), { status: 500, headers: H }); }
     out.ok = true;
     return new Response(JSON.stringify(out), { headers: H });
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { cmDue: cmDue, cmOccurrences: cmOccurrences, cmPreDue: cmPreDue, handleCommuteAlarm: handleCommuteAlarm, CM_ALARM_V: CM_ALARM_V, CM_OS_DAYS: CM_OS_DAYS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { cmWidgetScenes: cmWidgetScenes, cmDue: cmDue, cmOccurrences: cmOccurrences, cmPreDue: cmPreDue, handleCommuteAlarm: handleCommuteAlarm, CM_ALARM_V: CM_ALARM_V, CM_OS_DAYS: CM_OS_DAYS };
