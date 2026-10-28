@@ -183,6 +183,32 @@ final class RideStandbyJ {
     }
 
     /** 환승 대기: 아직 안 탄 첫 환승 구간이 있고 앞 구간을 내렸으면 st.xw. 예약(xPend)은 그 시각이 되면 확정한다. */
+    // s293 (YJ: 환승을 안 눌러도 GPS 로 이동하면 자동 탑승) — engine/ride-standby.js rsXGo 그대로. 확정이면 { 통과 시각(ms), 이유 글 } 을 돌려준다.
+    static final double RS_XGO_AWAY_M = 400, RS_XGO_MPS = 4.0, RS_XGO_WIN_SEC = 60, RS_XGO_SPAN_SEC = 15, RS_XGO_FRESH_SEC = 25, RS_XGO_GRACE_MS = 240000;
+    static Object[] xGo(Map<String, Object> st, List<Object> tr, double now, double bi, double depMs) {
+        Map<String, Object> s = stopOf(st, bi);
+        if (s == null || !fin(s.get("lat")) || !fin(s.get("lng"))) return null;
+        Map<String, Object> g = mm(st.get("xGo"));
+        if (g == null || num(g.get("i")) != bi) { g = obj("i", bi, "ts", 0.0); st.put("xGo", g); }
+        if (!tr.isEmpty() && atBoard(st, tr, bi)) g.put("ts", now);
+        if (num(g.get("ts")) > 0 && !tr.isEmpty()) {
+            Object last = null;
+            for (int k = tr.size() - 1; k >= 0; k--) { Object a3 = at(tr.get(k), 3); if (a3 == null || !fin(a3) || num(a3) <= 150) { last = tr.get(k); break; } }
+            if (last != null && now - num(at(last, 0)) <= RS_XGO_FRESH_SEC * 1000) {
+                double dl = rsHav(num(at(last, 1)), num(at(last, 2)), num(s.get("lat")), num(s.get("lng")));
+                if (dl >= RS_XGO_AWAY_M) {
+                    List<Object> win = new ArrayList<Object>();
+                    for (Object q : tr) { Object a3 = at(q, 3); if (now - num(at(q, 0)) <= RS_XGO_WIN_SEC * 1000 && (a3 == null || !fin(a3) || num(a3) <= 150)) win.add(q); }
+                    if (win.size() >= 3) {
+                        Object f0 = win.get(0), f1 = win.get(win.size() - 1); double dt = (num(at(f1, 0)) - num(at(f0, 0))) / 1000;
+                        if (dt >= RS_XGO_SPAN_SEC) { double sp = rsHav(num(at(f0, 1)), num(at(f0, 2)), num(at(f1, 1)), num(at(f1, 2))) / dt; if (sp >= RS_XGO_MPS) return new Object[] { num(g.get("ts")), "역에서 " + Math.round(dl) + "m · " + String.format(java.util.Locale.US, "%.1f", sp) + "m/s" }; }
+                    }
+                }
+            }
+        }
+        if (!Double.isNaN(depMs) && !Double.isInfinite(depMs) && now - depMs >= RS_XGO_GRACE_MS) return new Object[] { depMs, "계획 출발 " + Math.round((now - depMs) / 60000) + "분 뒤까지 증거가 없어 시각표대로" };
+        return null;
+    }
     static void xwait(Map<String, Object> st, List<Object> tr, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta"));
         if (st.get("wait") != null || eta == null) { st.remove("xw"); st.remove("xPend"); return; }
@@ -217,6 +243,8 @@ final class RideStandbyJ {
             if (bx != null && num(bx.get("i")) != L.bi) bx = null;
             Map<String, Object> xa = mm(st.get("xwAt"));
             if (xa == null || num(xa.get("i")) != L.bi) st.put("xwAt", obj("i", (double) L.bi, "at", now));
+            Object[] go = xGo(st, tr, now, L.bi, num(xwN.get("arrMs")));      // s293: 안 눌러도 GPS 로 이동이 보이면 자동 승차
+            if (go != null) { xCommit(st, L.bi, now, (Double) go[0]); notes.add("환승 열차 자동 탑승(" + L.bi + "번) — " + go[1]); return; }
             if (bx != null && bx.get("ms") != null && now - num(xwN.get("arrMs")) >= RS_XAUTO_MS) { xCommit(st, L.bi, now, num(xwN.get("arrMs"))); notes.add("환승 열차 시각표 출발(" + L.bi + "번) — 시각표대로 탔다고 보고 이어서 GPS 영점"); return; }
             if (bx != null && bx.get("ms") == null && num(bx.get("n")) >= BLX_MAXTRY && !(st.get("xFree") != null && num(st.get("xFree")) == L.bi)) { st.put("xFree", (double) L.bi); notes.add("환승 시각표 다음 차를 못 구함 — 위치 판단으로"); }
         }

@@ -271,6 +271,31 @@ function rsAtBoard(st, tr, bi) {
   }
   return false;
 }
+// ★ s293 (YJ: 환승을 안 눌렀는데 열차를 탔다 — 사용자가 안 눌러도 GPS 상 이동하면 자동으로 탑승 판단): 환승 열차(지하철) 대기 중 역에 있었던 사람(걷는 속도로 150m 안 = rsAtBoard)이
+//   그 뒤 역에서 400m 넘게 벗어나 빠르게(4m/s 이상, 걷는 속도 아님) 움직이면 열차를 탄 것 — 승차 지점에서 떠난 마지막 시각을 통과로 적고 확정한다(rsWait 의 첫 승차 감지와 같은 기준).
+//   시각표 다음 차(bl.x)를 못 구해 20초 자동 승차가 안 걸리는 경우도 있어, 계획 출발 시각에서 4분(3분 뒤 '환승하셨다면' 알약이 먼저 뜬다)이 지나도록 아무 증거가 없으면 시각표대로 탔다고 본다(영영 '기다리는 중'에 멈추지 않게).
+var RS_XGO_AWAY_M = 400, RS_XGO_MPS = 4.0, RS_XGO_WIN_SEC = 60, RS_XGO_SPAN_SEC = 15, RS_XGO_FRESH_SEC = 25, RS_XGO_GRACE_MS = 240000;
+function rsXGo(st, tr, now, bi, depMs) {
+  var s = rsStopOf(st, bi); if (!s || !isFinite(s.lat) || !isFinite(s.lng)) return null;
+  var g = st.xGo && st.xGo.i === bi ? st.xGo : (st.xGo = { i: bi, ts: 0 });
+  if (tr.length && rsAtBoard(st, tr, bi)) g.ts = now;
+  if (g.ts > 0 && tr.length) {
+    var last = null, k, z;
+    for (k = tr.length - 1; k >= 0; k--) if (tr[k][3] == null || tr[k][3] <= 150) { last = tr[k]; break; }
+    if (last && now - last[0] <= RS_XGO_FRESH_SEC * 1000) {
+      var dl = rsHav(last[1], last[2], s.lat, s.lng);
+      if (dl >= RS_XGO_AWAY_M) {
+        var win = tr.filter(function (q) { return now - q[0] <= RS_XGO_WIN_SEC * 1000 && (q[3] == null || q[3] <= 150); });
+        if (win.length >= 3) {
+          var f0 = win[0], f1 = win[win.length - 1], dt = (f1[0] - f0[0]) / 1000;
+          if (dt >= RS_XGO_SPAN_SEC) { var sp = rsHav(f0[1], f0[2], f1[1], f1[2]) / dt; if (sp >= RS_XGO_MPS) return { ms: g.ts, why: '역에서 ' + Math.round(dl) + 'm · ' + sp.toFixed(1) + 'm/s' }; }
+        }
+      }
+    }
+  }
+  if (depMs != null && isFinite(depMs) && now - depMs >= RS_XGO_GRACE_MS) return { ms: depMs, why: '계획 출발 ' + Math.round((now - depMs) / 60000) + '분 뒤까지 증거가 없어 시각표대로' };
+  return null;
+}
 function rsXwait(st, tr, now, notes) {
   var eta = st.eta;
   if (st.wait || !eta) { delete st.xw; delete st.xPend; return; }
@@ -296,6 +321,8 @@ function rsXwait(st, tr, now, notes) {
     // s266 (YJ: 사용자가 역에 있다고 판정되면 다음 열차 시간표대로 탔다고 가정하고 첫 열차는 일단 태워 — 그리고 영점을 맞춘다): 시각표 다음 차 시각이 지나면(RS_XAUTO_MS 뒤) 탄 것으로 하고 이후 GPS 영점이 바로잡는다.
     var bx = st.bl && st.bl.x && st.bl.x.i === L.bi ? st.bl.x : null;
     if (!st.xwAt || st.xwAt.i !== L.bi) st.xwAt = { i: L.bi, at: now };
+    var go = rsXGo(st, tr, now, L.bi, st.xw.arrMs);      // s293: 안 눌러도 GPS 로 이동이 보이면 자동 승차
+    if (go) { rsXCommit(st, L.bi, now, go.ms); notes.push('환승 열차 자동 탑승(' + L.bi + '번) — ' + go.why); return; }
     if (bx && bx.ms != null && now - st.xw.arrMs >= RS_XAUTO_MS) { rsXCommit(st, L.bi, now, st.xw.arrMs); notes.push('환승 열차 시각표 출발(' + L.bi + '번) — 시각표대로 탔다고 보고 이어서 GPS 영점'); return; }
     if (bx && bx.ms == null && bx.n >= RS_BLX_MAXTRY && st.xFree !== L.bi) { st.xFree = L.bi; notes.push('환승 시각표 다음 차를 못 구함 — 위치 판단으로'); }      // 시각표가 없으면 위치 증거에 맡긴다
   }

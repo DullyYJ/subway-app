@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s293";
+var ENGINE_VERSION = "route-v2-2026-10-29s294";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8538,11 +8538,12 @@ var RIDE_ETA_DEFAULTS = {
   // \u2605 2026-10-19 (YJ: "\uac01 \uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 12\ucd08 \ub3d9\uc548 \ubb38\uc774 \uc5f4\ub9b0\ub2e4\uace0 \uc0dd\uac01\ud574\uc918 \u2014 \uc2dc\uac04\ud45c\uc0c1 \uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 12\ucd08 \uc815\uc9c0(\uc815\uc9c0 \uc911\uc5d4 GPS \uc601\uc810) \ud558\uace0 \ub2e4\uc74c \uc5ed\uc73c\ub85c. \ubc84\uc2a4\ub294 \ub124\ube44\uac8c\uc774\uc158\ucc98\ub7fc GPS \uae30\uc900\uc774\ub2c8 \uc801\uc6a9 X"): 10 \u2192 12\ucd08, \uc9c0\ud558\ucca0 \uc5ed\uc5d0\ub9cc(\ubc84\uc2a4 \uc815\ub958\uc7a5\uc740 0).
   // \u2605 2026-10-19 (YJ: "\ub3c4\ucc29 \ud6c4 \uc5ed\uc5d0 \uba38\ubb34\ub974\ub294 \uc2dc\uac04\uc744 20\ucd08\ub85c"): 12 \u2192 20\ucd08.
   // \u2605 2026-10-26 (YJ: \uc5ed\uc5d0 \ub3c4\ucc29\ud55c \ub4a4 \ub2e4\uc74c \uc5ed\uc73c\ub85c \uc774\ub3d9\ud558\ub294 \uac8c \ub108\ubb34 \ube60\ub974\ub2e4 \u2014 \uc57d 10\ucd08 \ub2a6\ucdb0\uc918): 20 \u2192 30\ucd08.
-  stopDwellSec: 30,
+  // \u2605 2026-10-29 s293 (YJ: "\uaf2d \uc911\uac04\uc5ed \ub3c4\ucc29 \ud6c4 15\ucd08 \ub4a4\uc5d0 \ub2e4\uc74c \uc5ed \uc774\ub3d9 \uc911\uc73c\ub85c \ub098\uc624\uac8c"): 30 \u2192 15\ucd08(\uc815\ucc28 \ud45c\uc2dc \u00b7 \ub9c8\ucee4 \ubaa8\ub450).
+  stopDwellSec: 15,
   // \uc601\uc810(GPS \ud1b5\uacfc)\uc744 \ubc1b\uc740 \uc5ed\uc5d0\uc11c \ub9c8\ucee4\uac00 \uba48\ucdb0 \uc788\uc5b4\uc57c \ud558\ub294 \uc2dc\uac04(\ucd08). \ud1b5\uacfc \uc2dc\uac01(\uc601\uc810\uc774\uba74 \uc2e4\uc81c \ud1b5\uacfc \uc2dc\uac01) + \uc774\ub9cc\ud07c\uae4c\uc9c0 hold \ub85c \uc54c\ub9b0\ub2e4 \u2014 \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\ub97c \ubabb \uc4f0\ub294 \uacbd\uc6b0\uc5d0\ub3c4 \uc571\uc774 \uadf8\ub9b0\ub2e4.
   // \u2605 2026-10-19 (YJ: \uac19\uc740 \uc694\uccad): 12 \u2192 20\ucd08 \u2014 \uc815\ucc28(pos)\uc640 \uac19\uc740 \uac12.
   // \u2605 2026-10-26 (YJ: \uac19\uc740 \uc694\uccad): 20 \u2192 30\ucd08 \u2014 \uc815\ucc28(pos)\uc640 \uac19\uc740 \uac12.
-  markerDwellSec: 30,
+  markerDwellSec: 15,
   // \u2605 2026-10-14 (YJ: \uc778\ucc9c1\ud638\uc120(\uc2e4\uc2dc\uac04 \uc704\uce58 \uc5c6\uc74c) \uc2dc\ud5d8 \u2014 \ub3c4\ucc29 \ud45c\uc2dc\uac00 \uc57d 15\ucd08 \ub2a6\ub2e4 \u2192 \ud604\uc7ac\ubcf4\ub2e4 10\ucd08 \uc77c\ucc0d \ub3c4\ucc29\uc73c\ub85c \ud310\uc815): \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\uc5d0\uc11c '\uc911\uac04 \uacbd\ub85c\uc5ed'(\uc2b9\ucc28\uc5ed\u00b7\ucd5c\uc885 \ubaa9\uc801\uc9c0 \uc81c\uc678)\uc5d0 \ub2ff\uc558\ub2e4\uace0 \ubcf4\ub294 \uc2dc\uac01\uc744
   //   \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\ubcf4\ub2e4 \uc774\ub9cc\ud07c(\ucd08) \uc55e\ub2f9\uae34\ub2e4. 0 \uc774\uba74 \ub054. \ud45c\uc2dc\ud558\ub294 \ub3c4\ucc29 \uc2dc\uac01(etaMs\u00b7arr)\uc740 \uadf8\ub300\ub85c\uc774\uace0 \ub9c8\ucee4\u00b7\uc624\ubc84\ub808\uc774\uac00 \uc77d\ub294 pos(from/to/t0/t1/segs)\ub9cc \ub2f9\uaca8\uc9c4\ub2e4. (\uc601\uc810 \ucc3d\uc740 ride-track zeroLeadSec \uac00 \uac19\uc774 \uc77c\ucc0d \uc5f4\ub9b0\ub2e4)
   // \u2605 2026-10-15 (YJ: \ub9c8\ucee4\uac00 \ub2e4\uc74c \uc5ed\uc5d0 \ub108\ubb34 \uc77c\ucc0d \uc62c\ub77c\uac04\ub2e4 \u2192 10\ucd08\ub97c 5\ucd08\ub85c): \uac12\ub9cc 10 \u2192 5.
@@ -10235,6 +10236,31 @@ function rsAtBoard(st, tr, bi) {
   }
   return false;
 }
+// \u2605 s293 (YJ: \ud658\uc2b9\uc744 \uc548 \ub20c\ub800\ub294\ub370 \uc5f4\ucc28\ub97c \ud0d4\ub2e4 \u2014 \uc0ac\uc6a9\uc790\uac00 \uc548 \ub20c\ub7ec\ub3c4 GPS \uc0c1 \uc774\ub3d9\ud558\uba74 \uc790\ub3d9\uc73c\ub85c \ud0d1\uc2b9 \ud310\ub2e8): \ud658\uc2b9 \uc5f4\ucc28(\uc9c0\ud558\ucca0) \ub300\uae30 \uc911 \uc5ed\uc5d0 \uc788\uc5c8\ub358 \uc0ac\ub78c(\uac77\ub294 \uc18d\ub3c4\ub85c 150m \uc548 = rsAtBoard)\uc774
+//   \uadf8 \ub4a4 \uc5ed\uc5d0\uc11c 400m \ub118\uac8c \ubc97\uc5b4\ub098 \ube60\ub974\uac8c(4m/s \uc774\uc0c1, \uac77\ub294 \uc18d\ub3c4 \uc544\ub2d8) \uc6c0\uc9c1\uc774\uba74 \uc5f4\ucc28\ub97c \ud0c4 \uac83 \u2014 \uc2b9\ucc28 \uc9c0\uc810\uc5d0\uc11c \ub5a0\ub09c \ub9c8\uc9c0\ub9c9 \uc2dc\uac01\uc744 \ud1b5\uacfc\ub85c \uc801\uace0 \ud655\uc815\ud55c\ub2e4(rsWait \uc758 \uccab \uc2b9\ucc28 \uac10\uc9c0\uc640 \uac19\uc740 \uae30\uc900).
+//   \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28(bl.x)\ub97c \ubabb \uad6c\ud574 20\ucd08 \uc790\ub3d9 \uc2b9\ucc28\uac00 \uc548 \uac78\ub9ac\ub294 \uacbd\uc6b0\ub3c4 \uc788\uc5b4, \uacc4\ud68d \ucd9c\ubc1c \uc2dc\uac01\uc5d0\uc11c 4\ubd84(3\ubd84 \ub4a4 '\ud658\uc2b9\ud558\uc168\ub2e4\uba74' \uc54c\uc57d\uc774 \uba3c\uc800 \ub72c\ub2e4)\uc774 \uc9c0\ub098\ub3c4\ub85d \uc544\ubb34 \uc99d\uac70\uac00 \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c\ub300\ub85c \ud0d4\ub2e4\uace0 \ubcf8\ub2e4(\uc601\uc601 '\uae30\ub2e4\ub9ac\ub294 \uc911'\uc5d0 \uba48\ucd94\uc9c0 \uc54a\uac8c).
+var RS_XGO_AWAY_M = 400, RS_XGO_MPS = 4.0, RS_XGO_WIN_SEC = 60, RS_XGO_SPAN_SEC = 15, RS_XGO_FRESH_SEC = 25, RS_XGO_GRACE_MS = 240000;
+function rsXGo(st, tr, now, bi, depMs) {
+  var s = rsStopOf(st, bi); if (!s || !isFinite(s.lat) || !isFinite(s.lng)) return null;
+  var g = st.xGo && st.xGo.i === bi ? st.xGo : (st.xGo = { i: bi, ts: 0 });
+  if (tr.length && rsAtBoard(st, tr, bi)) g.ts = now;
+  if (g.ts > 0 && tr.length) {
+    var last = null, k, z;
+    for (k = tr.length - 1; k >= 0; k--) if (tr[k][3] == null || tr[k][3] <= 150) { last = tr[k]; break; }
+    if (last && now - last[0] <= RS_XGO_FRESH_SEC * 1000) {
+      var dl = rsHav(last[1], last[2], s.lat, s.lng);
+      if (dl >= RS_XGO_AWAY_M) {
+        var win = tr.filter(function (q) { return now - q[0] <= RS_XGO_WIN_SEC * 1000 && (q[3] == null || q[3] <= 150); });
+        if (win.length >= 3) {
+          var f0 = win[0], f1 = win[win.length - 1], dt = (f1[0] - f0[0]) / 1000;
+          if (dt >= RS_XGO_SPAN_SEC) { var sp = rsHav(f0[1], f0[2], f1[1], f1[2]) / dt; if (sp >= RS_XGO_MPS) return { ms: g.ts, why: '\uc5ed\uc5d0\uc11c ' + Math.round(dl) + 'm \u00b7 ' + sp.toFixed(1) + 'm/s' }; }
+        }
+      }
+    }
+  }
+  if (depMs != null && isFinite(depMs) && now - depMs >= RS_XGO_GRACE_MS) return { ms: depMs, why: '\uacc4\ud68d \ucd9c\ubc1c ' + Math.round((now - depMs) / 60000) + '\ubd84 \ub4a4\uae4c\uc9c0 \uc99d\uac70\uac00 \uc5c6\uc5b4 \uc2dc\uac01\ud45c\ub300\ub85c' };
+  return null;
+}
 function rsXwait(st, tr, now, notes) {
   var eta = st.eta;
   if (st.wait || !eta) { delete st.xw; delete st.xPend; return; }
@@ -10260,6 +10286,8 @@ function rsXwait(st, tr, now, notes) {
     // s266 (YJ: \uc0ac\uc6a9\uc790\uac00 \uc5ed\uc5d0 \uc788\ub2e4\uace0 \ud310\uc815\ub418\uba74 \ub2e4\uc74c \uc5f4\ucc28 \uc2dc\uac04\ud45c\ub300\ub85c \ud0d4\ub2e4\uace0 \uac00\uc815\ud558\uace0 \uccab \uc5f4\ucc28\ub294 \uc77c\ub2e8 \ud0dc\uc6cc \u2014 \uadf8\ub9ac\uace0 \uc601\uc810\uc744 \ub9de\ucd98\ub2e4): \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28 \uc2dc\uac01\uc774 \uc9c0\ub098\uba74(RS_XAUTO_MS \ub4a4) \ud0c4 \uac83\uc73c\ub85c \ud558\uace0 \uc774\ud6c4 GPS \uc601\uc810\uc774 \ubc14\ub85c\uc7a1\ub294\ub2e4.
     var bx = st.bl && st.bl.x && st.bl.x.i === L.bi ? st.bl.x : null;
     if (!st.xwAt || st.xwAt.i !== L.bi) st.xwAt = { i: L.bi, at: now };
+    var go = rsXGo(st, tr, now, L.bi, st.xw.arrMs);      // s293: \uc548 \ub20c\ub7ec\ub3c4 GPS \ub85c \uc774\ub3d9\uc774 \ubcf4\uc774\uba74 \uc790\ub3d9 \uc2b9\ucc28
+    if (go) { rsXCommit(st, L.bi, now, go.ms); notes.push('\ud658\uc2b9 \uc5f4\ucc28 \uc790\ub3d9 \ud0d1\uc2b9(' + L.bi + '\ubc88) \u2014 ' + go.why); return; }
     if (bx && bx.ms != null && now - st.xw.arrMs >= RS_XAUTO_MS) { rsXCommit(st, L.bi, now, st.xw.arrMs); notes.push('\ud658\uc2b9 \uc5f4\ucc28 \uc2dc\uac01\ud45c \ucd9c\ubc1c(' + L.bi + '\ubc88) \u2014 \uc2dc\uac01\ud45c\ub300\ub85c \ud0d4\ub2e4\uace0 \ubcf4\uace0 \uc774\uc5b4\uc11c GPS \uc601\uc810'); return; }
     if (bx && bx.ms == null && bx.n >= RS_BLX_MAXTRY && st.xFree !== L.bi) { st.xFree = L.bi; notes.push('\ud658\uc2b9 \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28\ub97c \ubabb \uad6c\ud568 \u2014 \uc704\uce58 \ud310\ub2e8\uc73c\ub85c'); }      // \uc2dc\uac01\ud45c\uac00 \uc5c6\uc73c\uba74 \uc704\uce58 \uc99d\uac70\uc5d0 \ub9e1\uae34\ub2e4
   }

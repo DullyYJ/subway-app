@@ -516,6 +516,31 @@ t('탑승 시트(환승): 앞 구간을 내린 뒤 출발 2분 전에 올라와 
   const g = stepX(r.state, D - 20000);
   assert.ok(g.overlay.rs.st === 'hidden' && !g.state.xw, '눌러 확정하면 이 구간은 더 안 나온다');
 });
+// ★ s293 (YJ: 아라역에서 환승을 안 눌렀는데 열차를 탔다 — GPS 로 이동이 보이면 자동 탑승 · 마커·장면이 대기에 멈추지 않게)
+t('s293 환승 자동 탑승: 역에서 걷는 속도로 머문 뒤 400m 넘게 4m/s 이상으로 벗어나면 누르지 않아도 탄 것으로 확정(통과는 역에서 떠난 시각) · 걸어서 멀어지면 아니다', () => {
+  const M = 1 / (111320 * Math.cos(LAT * Math.PI / 180)), lng4 = LNG0 + DL * 3;
+  let r = stepX(xferState(), at(12, 55, 0)), D = r.state.etaMs[4];
+  assert.ok(r.state.xw && r.state.xw.i === 4, '환승 대기');
+  const still = [0, 1, 2, 3].map(k => [D - 60000 + k * 10000, LAT, lng4 + (k % 2) * 2 * M, 10]);
+  r = stepX(r.state, D - 25000, { fixes: still });
+  assert.ok(r.state.xw && r.state.xGo && r.state.xGo.ts > 0, '역에 머문 것을 기억한다(아직 대기)');
+  const seenAt = r.state.xGo.ts;
+  const fast = []; for (let k = 1; k <= 14; k++) fast.push([D - 25000 + k * 5000, LAT, lng4 + 6 * 5 * k * M, 10]);
+  const done = stepX(r.state, D + 46000, { fixes: fast });
+  assert.ok(!done.state.xw && done.state.eta.passes.some(p => p.idx === 4 && p.ms === seenAt && p.src === 'gps'), '자동 탑승 확정 ' + JSON.stringify(done.state.xw) + ' ' + done.notes.filter(n => /자동/.test(n)));
+  assert.ok(done.notes.some(n => /환승 열차 자동 탑승\(4번\)/.test(n)), '이유가 notes 에 남는다');
+  const walk = []; for (let k = 1; k <= 14; k++) walk.push([D - 25000 + k * 5000, LAT, lng4 + 1.4 * 5 * k * M, 10]);
+  const w = stepX(r.state, D + 46000, { fixes: walk });
+  assert.ok(w.state.xw && w.state.xw.i === 4, '걷는 속도로는 확정하지 않는다');
+  const jump = stepX(r.state, D + 46000, { fixes: [[D + 44000, LAT, lng4 + 900 * M, 10], [D + 46000, LAT, lng4 + 905 * M, 10]] });
+  assert.ok(jump.state.xw && jump.state.xw.i === 4, '좌표가 두 개뿐이면(빠른 속도 증거 부족) 확정하지 않는다');
+});
+t('s293 환승 자동 탑승: 시각표 다음 차(bl.x)를 못 구해도 계획 출발 4분이 지나도록 증거가 없으면 시각표대로 탄 것으로 이어간다 · 그 전에는 대기', () => {
+  let r = stepX(xferState(), at(12, 55, 0)); const D = r.state.etaMs[4];
+  const a = stepX(r.state, D + 230000); assert.ok(a.state.xw && a.state.xw.i === 4, '230초: 아직 대기');
+  const b = stepX(r.state, D + 241000);
+  assert.ok(!b.state.xw && b.state.eta.passes.some(p => p.idx === 4 && p.ms === D), '4분 뒤: 시각표 출발로 확정 ' + JSON.stringify(b.state.xw));
+});
 t('탑승 시트(환승): 일찍 누르면 예약(알약) → 도착 1분 반 전에 확정, 앞 구간 하차 전엔 안 나오고, 3분 넘게 안 누르면 알약·"환승하셨다면"', () => {
   const st0 = xferState(); st0.eta.passes = st0.eta.passes.slice(0, 2);
   let r = stepX(st0, at(12, 52, 30));
