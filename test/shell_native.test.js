@@ -780,6 +780,14 @@ function findAndroidJar() {
     assert.ok(/ChatCore\.K_SELS/.test(a) && /ChatCore\.decSels\(savedSels\)/.test(a) && /store\.put\(ChatCore\.K_SELS, enc\)/.test(a) && /PF_BURST_MS = 20000L/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 대화방 전부/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return prefetchNews/.test(a), 's274: 방 목록을 적어 둬 켜자마자 모두 받는다 · 쇼핑 · 소식 · 게시판 · 대화방은 맨 앞순서 · 켠 직후 20초는 넓게');
     assert.ok(/"food"\.equals\(tab\)/.test(a) && /"food"\.equals\(ct\)/.test(a) && !/\(si\[0\] - dir\) % n/.test(a), '맛집 탭: 좌우 밀기 = 엔진이 준 sw(카테고리 칩 끝없이 · 끝에서 반대쪽 끝으로) — 앱은 계산하지 않는다(food_engine 시험이 도는 것을 확인)');
   });
+  await t('s276: 앱을 켠 뒤 첫 미리 받기는 강제 — 쇼핑 · 소식 · 실시간소통의 모든 분류를 \'최근에 받았다\' 며 건너뛰지 않고 새로 받는다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/final boolean cold = prefetchAt == 0L;/.test(a) && /prefetchNews\(live\.contains\(ShellCore\.S_NEWS\), cold\)/.test(a) && /private boolean prefetchNews\(boolean live, boolean force\)/.test(a), '켠 뒤 첫 미리 받기를 알아본다 · 소식에 넘긴다');
+    assert.ok(/!force && nc != null && nowMs - nc\.at < PF_SKIP_MS/.test(a) && /!force && nc != null && nc\.sig == sg/.test(a), '소식: 강제면 신선 시간으로 건너뛰지 않는다');
+    assert.ok(/pfChatAll\(java\.util\.Arrays\.asList\("all"\), liveRoom, theme, sec, cold\)/.test(a) && /pfChatAll\(sels, liveRoom, theme, sec, cold && !net\)/.test(a), '실시간소통: 강제면 싱싱한 방도 새로 받는다');
+    assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
+    assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
+  });
   await t('s275: 같은 화면에서 분류만 바꿀 때, 메모리에서 밀려난 분류가 디스크에 있으면 네트워크를 기다리지 않고 바로 올린다 · 화면 캐시 한도 180', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const ad = a.slice(a.indexOf('private void adoptDisk('), a.indexOf('private void adoptDisk(') + 1200);
@@ -807,7 +815,7 @@ function findAndroidJar() {
   await t('s263: 탭 안 카테고리 미리 받기 — 쇼핑은 엔진이 모든 카테고리를 한 번에(alts) · 노선도 호선 칩은 묶음으로 · 날씨용 위치를 싣는다', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/private String shopCallAll\(String ck, String cat\)[\s\S]{0,200}shopCall0\(ck, cat, true\)/.test(a), '쇼핑 미리 받기는 alts 로 한 번에 받는다');
-    assert.ok(/String base = shopCallAll\(key, store\.get\(ShellCore\.K_SHOP_CAT, ""\)\);[\s\S]{0,200}if \(shopAltsOk\) return net;/.test(a), 'alts 가 오면 끝 · 아니면(옛 워커) 아래에서 하나씩');
+    assert.ok(/base = shopCallAll\(key, store\.get\(ShellCore\.K_SHOP_CAT, ""\)\);[\s\S]{0,260}if \(shopAltsOk\) return net;/.test(a), 'alts 가 오면 끝 · 아니면(옛 워커) 아래에서 하나씩');
     assert.ok(/m\.remove\("alts"\)[\s\S]{0,600}prefetchPut\(k, js, false\)/.test(a) && /prefetchPut\(ck, cur, false\);/.test(a), 'alts 를 떼어 카테고리별 캐시에 넣고 지금 화면은 뗀 글로 덮는다');
     assert.ok(/ShellCore\.shopUrl\(cat, all, pfLL\(\)\)/.test(a) && /\\"alts\\":1/.test(a), '주소·본문에 alts 와 날씨용 위치');
     assert.ok(/startsWith\("f:"\)[\s\S]{0,700}pfBatch\(fe\)/.test(a), '노선도 지하철 호선 칩(f:)마다 머리·본문을 묶음으로 미리 받는다');

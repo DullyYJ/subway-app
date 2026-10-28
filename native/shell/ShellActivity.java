@@ -505,10 +505,12 @@ public class ShellActivity extends Activity {
     /** (스레드 안) 화면 하나를 받는다. 돌려주는 글: 받은 화면 · NOT_MOD(캐시 그대로) · ""(못 받음). 받은 화면은 캐시와 ETag 를 함께 갱신한다. */
     /** 화면 열쇠별 마지막 실패 이유(HTTP 코드 · 통신 오류) — 안내 화면에 작게 보인다. */
     private final java.util.concurrent.ConcurrentHashMap<String, String> netDiag = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private final ThreadLocal<Boolean> forceNet = new ThreadLocal<Boolean>();
     private String screenCall(final String ck, boolean get, String url, String body, String sig, int timeoutMs) {
         final int sg = (sig != null ? sig : (get ? url : body)).hashCode();
         final ShellCore.Cond c = condOf(ck);
-        final boolean have = c != null && c.etag.length() > 0 && haveCached(ck);
+        final boolean fn = Boolean.TRUE.equals(forceNet.get());                 // 강제로 받는다(켠 뒤 첫 미리 받기): 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다
+        final boolean have = !fn && c != null && c.etag.length() > 0 && haveCached(ck);
         final long now = System.currentTimeMillis();
         if (have && c.fresh(now, sg)) return NOT_MOD;
         delayBodies.remove(ck);
@@ -1034,6 +1036,7 @@ public class ShellActivity extends Activity {
     }
     private void prefetchTabs() {
         if (pfPending.get() > 0) return;                                  // 아직 도는 중
+        final boolean cold = prefetchAt == 0L;                            // 앱을 켠 뒤 첫 미리 받기(s276, YJ: 처음 켤 때는 강제로 받는다) — 쇼핑 · 소식 · 실시간소통의 모든 분류는 '최근에 받았다' 며 건너뛰지 않고 새로 받는다
         prefetchAt = System.currentTimeMillis();
         if (pfChat == null) pfChat = new ChatCore(store);
         if (pfMap == null) pfMap = new MapCore(store);
@@ -1091,7 +1094,7 @@ public class ShellActivity extends Activity {
             if (txt.length() > 0 && !isNotMod(txt)) main.post(new Runnable() { @Override public void run() { board.onScreen(txt); } });
             return true;
         } });
-        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS), cold); } });    // 소식(모든 분류)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return rloadFetch(); } });                                    // 경로 탐색 로딩 카드(글 · 모양은 엔진 — 한 번 받아 두면 앱을 끌 때까지 쓴다)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { boolean n = dlgFetch("exit"); n |= dlgFetch("report"); n |= dlgFetch("perm"); return n; } });      // 종료 · 신고 · 권한 안내 카드(글 · 단추 · 모양은 엔진)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
@@ -1107,12 +1110,12 @@ public class ShellActivity extends Activity {
             if (sels.size() < 2) { String c = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.S_CHAT + "|all", false); } }); if (c != null) sels = chatSelsOf(c); }
             boolean net = false;
             if (sels.size() < 2) {                                                              // 처음 켬: 전체 방 하나만 먼저 받아 엔진이 칩으로 준 방 목록을 안다
-                java.util.Map<String, String> m0 = pfChatAll(java.util.Arrays.asList("all"), liveRoom, theme, sec, false);
+                java.util.Map<String, String> m0 = pfChatAll(java.util.Arrays.asList("all"), liveRoom, theme, sec, cold);
                 net = true;
                 String src = m0.get("all");
                 if (src != null) sels = chatSelsOf(src);
             }
-            if (sels.size() >= 2) { chatSelsSet(sels); pfChatAll(sels, liveRoom, theme, sec, false); net = true; }
+            if (sels.size() >= 2) { chatSelsSet(sels); pfChatAll(sels, liveRoom, theme, sec, cold && !net); net = true; }
             return net;
         } });
         if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집
@@ -1145,21 +1148,30 @@ public class ShellActivity extends Activity {
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
             String cached = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
-            boolean missing = pfNeeds(key);
+            boolean missing = cold || pfNeeds(key);                       // 켠 뒤 첫 미리 받기는 강제(s276) — 최근에 받았어도 · 엔진이 '같다'고 해도 새로 받는다
             if (!missing && cached != null) for (String c : ShellCore.catValues(cached)) if (pfNeeds("shop|" + c)) { missing = true; break; }
             if (!missing && cached != null) { shopWarm(cached); return false; }
-            String base = shopCallAll(key, store.get(ShellCore.K_SHOP_CAT, ""));
+            forceNet.set(cold ? Boolean.TRUE : null);
+            String base;
+            try { base = shopCallAll(key, store.get(ShellCore.K_SHOP_CAT, "")); } finally { forceNet.remove(); }
             if (base.length() > 0) net = true;
             if (shopAltsOk) return net;                                   // 엔진이 모든 분류를 줬다 — 끝
+            if (isNotMod(base) && cached != null) {                       // 엔진이 '같다'(304) — 다른 분류도 전에 같은 응답으로 받아 둔 것이라 모두 있으면 하나씩 다시 받지 않는다
+                boolean all = true;
+                for (String c : ShellCore.catValues(cached)) if (!haveCached("shop|" + c)) { all = false; break; }
+                if (all) { shopWarm(cached); return net; }
+            }
             String src = base.length() > 0 && !isNotMod(base) ? base : cached;
             if (src == null || src.length() == 0) return net;
             shopWarm(src);
             int fails = 0;
             for (String c : ShellCore.catValues(src)) {                   // 옛 워커(alts 없음) 대비: 분류별로 하나씩
                 String ck = "shop|" + c;
-                if (ck.equals(key) || !pfNeeds(ck)) continue;
+                if (ck.equals(key) || (!cold && !pfNeeds(ck))) continue;
                 pfGap();
-                String cr = shopCall(ck, c);
+                forceNet.set(cold ? Boolean.TRUE : null);
+                String cr;
+                try { cr = shopCall(ck, c); } finally { forceNet.remove(); }
                 net = true;
                 if (cr.length() > 0) fails = 0; else if (++fails >= 2) break;
             }
@@ -1315,16 +1327,16 @@ public class ShellActivity extends Activity {
     }
     /** 소식: 엔진이 모든 분류의 화면을 한 번에 계산해 주므로(alts) 한 번 받아 분류마다 캐시에 둔다. live 면 지금 분류 화면은 건드리지 않는다(눌림이 목록과 묶여 있어서). */
     @SuppressWarnings("unchecked")
-    private boolean prefetchNews(boolean live) {
+    private boolean prefetchNews(boolean live, boolean force) {
         String curKey = ShellCore.cacheKey(ShellCore.S_NEWS, store);
         ShellCore.Cond nc = condOf("newsalts");
         long nowMs = System.currentTimeMillis();
-        if (nc != null && nowMs - nc.at < PF_SKIP_MS && haveCached(curKey)) return false;
+        if (!force && nc != null && nowMs - nc.at < PF_SKIP_MS && haveCached(curKey)) return false;
         String[] feeds = feedsAll(ShellCore.feedUrls(ShellCore.S_NEWS), 8000);
         ShellCore.NewsRows rows = ShellCore.NewsRows.from(feeds);
         String body = ShellCore.newsBody(store, rows, true);
         final int sg = body.hashCode();
-        if (nc != null && nc.sig == sg && haveCached(curKey) && nowMs - nc.at < 60000L) return false;            // 같은 기사 목록이고 엔진이 말한 신선 시간(1분) 안
+        if (!force && nc != null && nc.sig == sg && haveCached(curKey) && nowMs - nc.at < 60000L) return false;            // 같은 기사 목록이고 엔진이 말한 신선 시간(1분) 안
         NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/news", body, 15000);
         if (r.status != 200 || r.body == null) return true;
         try {
