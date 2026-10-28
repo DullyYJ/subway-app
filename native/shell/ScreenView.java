@@ -339,11 +339,55 @@ public class ScreenView extends View {
             return;
         }
     }
+    // ── s277 (YJ: 보던 분류로 돌아오면 렉 · 늦게 나온다): 곧 올 화면(이웃 분류)의 '배치'를 뒤 스레드에서 미리 해 둔다 — 큰 화면(채팅 200줄 · 쇼핑 160장)은 글 폭 재기 + 칸 배치가 주 스레드에서 수십 ms 걸렸다.
+    //    엔진이 준 글로 앱이 그리기 전 준비만 한다(계산 결과를 바꾸지 않는다: 같은 ScreenCore.layout 을 같은 폭·높이로 돌릴 뿐). 한 번 쓰면 버린다(배치는 눌림·켜짐 상태를 지니므로).
+    private static final class PreLay { final float w, h, d; final ScreenCore.Layout lay; PreLay(float w, float h, float d, ScreenCore.Layout l) { this.w = w; this.h = h; this.d = d; lay = l; } }
+    private final java.util.LinkedHashMap<ScreenCore.Screen, PreLay> preLay = new java.util.LinkedHashMap<ScreenCore.Screen, PreLay>(8, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<ScreenCore.Screen, PreLay> e) { return size() > 8; }
+    };
+    private final java.util.concurrent.ConcurrentHashMap<String, Float> bgMemo = new java.util.concurrent.ConcurrentHashMap<String, Float>();
+    private static final java.util.concurrent.ExecutorService PRE_EX = java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+        @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "scr-prelay"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY + 1); return t; }
+    });
+    /** (주 스레드) 이 화면의 배치와 처음 보일 큰 그림 디코딩을 뒤에서 미리 해 둔다. 이미 해 뒀거나 폭이 아직 없거나 남는 세로를 채우는 노드(fit)가 있으면 하지 않는다. */
+    public void preLayout(final ScreenCore.Screen s) {
+        if (s == null || s.fitNode != null || getWidth() <= 0 || getHeight() <= 0 || dpr <= 0f) return;
+        final float w = getWidth() / dpr, h = getHeight() / dpr, d = dpr;
+        synchronized (preLay) { PreLay p = preLay.get(s); if (p != null && p.w == w && p.h == h && p.d == d) return; }
+        final TextPaint pb = new TextPaint(tp);
+        PRE_EX.execute(new Runnable() { @Override public void run() {
+            try {
+                final ScreenCore.Measurer bm = new ScreenCore.Measurer() {
+                    @Override public float width(String str, float size, boolean bold) {
+                        final boolean memo = str.length() >= 2 && str.length() <= 80;
+                        String k = null;
+                        if (memo) { k = (bold ? "b" : "n") + size + "|" + d + "|" + str; Float c = bgMemo.get(k); if (c != null) return c.floatValue(); }
+                        pb.setTypeface(face(bold)); pb.setTextSize(size * d);
+                        float wv = pb.measureText(str) / d;
+                        if (memo) { if (bgMemo.size() > 6000) bgMemo.clear(); bgMemo.put(k, Float.valueOf(wv)); }
+                        return wv;
+                    }
+                };
+                ScreenCore.Layout L = ScreenCore.layout(s, w, bm, null, h);
+                synchronized (preLay) { preLay.put(s, new PreLay(w, h, d, L)); }
+                int n = 0;                                                                   // 처음 화면에 보일 큰 그림(파일에 이미 있는 것)을 미리 풀어 둔다 — 돌아왔을 때 곰돌이 자리표시자 없이
+                for (ScreenCore.Item it : L.body) {
+                    if (n >= 16 || it.y > h * 1.4f) break;
+                    if (it.img != null && it.img.length() > 0) { ImageBank.preDecode(it.img, Math.round(it.iw * d), Math.round(it.ih * d)); n++; }
+                }
+            } catch (Throwable ignored) { }
+        } });
+    }
+    private ScreenCore.Layout takePre(float w, float h) {
+        if (openKey != null) return null;
+        synchronized (preLay) { PreLay p = preLay.remove(screen); if (p != null && p.w == w && p.h == h && p.d == dpr) return p.lay; }
+        return null;
+    }
     private void relayout() {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
         final long plt0 = PerfLog.now();
-        lay = ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr);
+        { ScreenCore.Layout pl = takePre(getWidth() / dpr, getHeight() / dpr); lay = pl != null ? pl : ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr); }
         PerfLog.layout(plt0);
         if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; }
         if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
@@ -3599,6 +3643,25 @@ public class ScreenView extends View {
             pool = Executors.newFixedThreadPool(3);
         }
 
+        /** (뒤 스레드가 직접 부른다) 파일 캐시에 이미 있는 그림을 메모리로 미리 풀어 둔다 — 내려받지는 않는다(받기는 warm). 이미 메모리에 있거나 풀고 있으면 건너뛴다. */
+        static void preDecode(String url, int w, int h) {
+            if (mem == null || url == null || url.length() == 0) return;
+            if (mem.get(url) != null) return;
+            synchronized (ImageBank.class) {
+                if (loading.contains(url)) return;
+                Long f = failed.get(url);
+                if (f != null && SystemClock.uptimeMillis() - f < 60000L) return;
+                File ff = new File(dir, key(url));
+                if (!ff.exists() || ff.length() == 0) return;
+                loading.add(url);
+            }
+            Bitmap bm = null;
+            try { bm = load(url, Math.max(32, w), Math.max(32, h)); } catch (Throwable t) { bm = null; }
+            synchronized (ImageBank.class) {
+                loading.remove(url);
+                if (bm == null) failed.put(url, SystemClock.uptimeMillis()); else mem.put(url, bm);
+            }
+        }
         /** 있으면 바로 돌려주고, 없으면 받으러 가고 null. */
         static Bitmap get(final String url, final int w, final int h, final View v) {
             Bitmap b = mem.get(url);
@@ -3660,8 +3723,10 @@ public class ScreenView extends View {
         }
 
         /** 파일 캐시가 40MB 를 넘으면 오래된 것부터 지운다. */
+        private static int trimN = 0;
         private static void trim() {
             try {
+                if ((++trimN & 15) != 0) return;                                  // s277: 받을 때마다 파일 천 개를 훑고 크기를 재던 것 — 열여섯 장에 한 번만
                 File[] fs = dir.listFiles(); if (fs == null) return;
                 long tot = 0; for (File x : fs) tot += x.length();
                 if (tot < 40L * 1024 * 1024) return;

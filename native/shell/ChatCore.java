@@ -256,9 +256,16 @@ public final class ChatCore {
     }
     /** 'all' 방에서 글을 보낼 때 붙일 노선 — 엔진이 화면 info.pl 로 정해 준 값. */
     public String postLine = "";
+    // s277: 방을 오갈 때마다 화면 전체(수백 줄)를 주 스레드에서 다시 읽어 postLine 만 꺼내던 것 — 같은 글이면 지난 답을 쓴다(최근 8개)
+    private final java.util.LinkedHashMap<String, String> plMemo = new java.util.LinkedHashMap<String, String>(16, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { return size() > 8; }
+    };
     @SuppressWarnings("unchecked")
     public void onScreen(String json) {
-        try { Object o = ScreenCore.parse(json); Object i = o instanceof Map ? ((Map<String, Object>) o).get("info") : null; postLine = i instanceof Map ? BoardCore.s(((Map<String, Object>) i).get("pl"), 20) : ""; }
+        if (json == null) { postLine = ""; return; }
+        String m = plMemo.get(json);
+        if (m != null) { postLine = m; return; }
+        try { Object o = ScreenCore.parse(json); Object i = o instanceof Map ? ((Map<String, Object>) o).get("info") : null; postLine = i instanceof Map ? BoardCore.s(((Map<String, Object>) i).get("pl"), 20) : ""; plMemo.put(json, postLine); }
         catch (Exception e) { postLine = ""; }
     }
 }

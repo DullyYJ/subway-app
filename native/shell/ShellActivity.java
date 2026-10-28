@@ -65,14 +65,44 @@ public class ShellActivity extends Activity {
     private final java.util.HashMap<ScreenView, String> shownKey = new java.util.HashMap<ScreenView, String>();         // 칸이 지금 보여 주는 화면의 캐시 열쇠(같은 화면에서 분류만 바꿔 옛 분류가 남아 있는 때를 알아보려고)
     private void shownKeyPut(ScreenView v) { String k = viewKey.get(v); if (k != null) shownKey.put(v, k); else shownKey.remove(v); }
     // 검증을 마친 화면 객체: 받는 스레드에서 미리 읽어 두면(warm) 올릴 때 주 스레드가 글을 다시 읽지 않는다
-    private final java.util.LinkedHashMap<String, ScreenCore.Screen> parsedScr = new java.util.LinkedHashMap<String, ScreenCore.Screen>(16, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ScreenCore.Screen> e) { return size() > 48; }
-    };
+    private final java.util.LinkedHashMap<String, ScreenCore.Screen> parsedScr = new java.util.LinkedHashMap<String, ScreenCore.Screen>(16, 0.75f, true);
+    private long parsedChars = 0L;                                           // 읽어 둔 화면 글자 수 합(메모리 한도). s277: 48칸 → 100칸 · 600만 글자 — 미리 받은 화면(분류 · 방)이 100개가 넘어 48칸은 오래된 것부터 다 밀려나, 돌아올 때 주 스레드가 다시 읽었다
+    private static final int PARSED_MAX = 100; private static final long PARSED_CHARS = 6000000L;
+    private void parsedTrim() {                                              // parsedScr 잠금 안에서
+        java.util.Iterator<java.util.Map.Entry<String, ScreenCore.Screen>> it = parsedScr.entrySet().iterator();
+        while (it.hasNext() && (parsedScr.size() > PARSED_MAX || parsedChars > PARSED_CHARS) && parsedScr.size() > 1) { parsedChars -= it.next().getKey().length(); it.remove(); }
+    }
     private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
         synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(json); if (c != null) return c; }
         ScreenCore.Screen sc = ScreenCore.load(json);
-        synchronized (parsedScr) { parsedScr.put(json, sc); }
+        synchronized (parsedScr) { if (parsedScr.put(json, sc) == null) parsedChars += json.length(); parsedTrim(); }
         return sc;
+    }
+    /** s277: 방금 올린 커뮤니티·쇼핑·뉴스 화면의 이웃 분류(엔진이 sw.t 표에 담은 왼쪽·오른쪽)를 뒤에서 미리 읽고 '배치'까지 해 둔다 — 밀었다가 돌아올 때 주 스레드가 큰 화면을 다시 읽고 재지 않는다. 글·표는 엔진 것, 앱은 준비만. */
+    private void neighborPre(ScreenView v, ScreenCore.Screen sc, String ck) {
+        try {
+            if (v != body || ck == null || sc == null || sc.swT == null || sc.swK == null) return;
+            int bar = ck.indexOf('|'); if (bar <= 0) return;
+            String sl = ck.substring(0, bar);
+            if (!ShellCore.S_SHOP.equals(sl) && !ShellCore.S_NEWS.equals(sl) && !ShellCore.S_CHAT.equals(sl)) return;
+            ScreenCore.Act[] e = sc.swT.get(sc.swK);
+            if (e == null) return;
+            final ArrayList<String> js = new ArrayList<String>();
+            for (ScreenCore.Act a : e) {
+                if (a == null || !"cat".equals(a.a) || a.v == null || a.v.length() == 0) continue;
+                String c = cacheGet(sl + "|" + a.v, false);
+                if (c != null && !isNotMod(c)) js.add(c);
+            }
+            if (js.isEmpty()) return;
+            ioExec.execute(new Runnable() { @Override public void run() {
+                for (String c : js) {
+                    try {
+                        final ScreenCore.Screen n = parsedGet(c);
+                        main.post(new Runnable() { @Override public void run() { try { body.preLayout(n); } catch (Throwable ignored) { } } });
+                    } catch (Throwable ignored) { }
+                }
+            } });
+        } catch (Throwable ignored) { }
     }
     /** 받는 스레드에서 부른다: 글을 미리 검증·해석해 둔다(실패해도 조용히 — 올릴 때 다시 알린다). */
     private void warm(String json) { if (json == null || json.length() < 5 || json.length() > 600000 || isNotMod(json)) return; try { parsedGet(json); } catch (Throwable ignored) { } }
@@ -337,8 +367,11 @@ public class ShellActivity extends Activity {
     }
 
     // ───────────── 색 ─────────────
+    private int[] lastPal;
     private void applyTheme() {
         int[] pal = ShellCore.palette(ShellCore.theme(store));
+        if (lastPal != null && java.util.Arrays.equals(lastPal, pal)) return;          // s277: 분류를 바꿀 때마다 색을 다시 입히며 다섯 화면을 다시 그리던 것 — 색이 그대로면 건너뛴다
+        lastPal = pal.clone();
         hdr.setPalette(pal);
         head.setPalette(pal);
         body.setPalette(pal);
@@ -654,9 +687,10 @@ public class ShellActivity extends Activity {
         try {
             String ak = viewKey.get(v); long am = ak == null ? -1L : diskMtime(ak);
             v.setSourceAge(am > 0L ? System.currentTimeMillis() - am : 0L);                 // 캐시 화면의 버스 초 카운트다운은 받은 뒤 흐른 만큼 이미 줄어 있다
-            v.setScreen(parsedGet(json), false); shownJson.put(v, json); shownKeyPut(v); skelViews.remove(v);
+            ScreenCore.Screen sc0 = parsedGet(json);
+            v.setScreen(sc0, false); shownJson.put(v, json); shownKeyPut(v); skelViews.remove(v);
             String ck = viewKey.get(v);
-            if (ck != null && v != sheetView) restoreState(ck, json);
+            if (ck != null && v != sheetView) { restoreState(ck, json); neighborPre(v, sc0, ck); }
             return true;
         } catch (Throwable e) { return false; }
     }
@@ -1398,7 +1432,7 @@ public class ShellActivity extends Activity {
             if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep && !skelViews.contains(v));
             skelViews.remove(v);
-            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); }
+            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
         } catch (Throwable e) {
@@ -1643,7 +1677,7 @@ public class ShellActivity extends Activity {
                 if (i < 0 || i >= inner.length || inner[i] == null || !"cat".equals(inner[i].a)) continue;
                 final String sel = inner[i].v, key = ShellCore.S_CHAT + "|" + sel;
                 final String c = cacheGet(key, false);
-                if (c != null) ioExec.execute(new Runnable() { @Override public void run() { warm(c); } });          // 글 읽기를 미리(밀 때 주 스레드가 안 읽도록)
+                if (c != null) ioExec.execute(new Runnable() { @Override public void run() { warm(c); try { final ScreenCore.Screen n = parsedGet(c); main.post(new Runnable() { @Override public void run() { try { body.preLayout(n); } catch (Throwable ignored) { } } }); } catch (Throwable ignored) { } } });          // 글 읽기 + 배치를 미리(밀 때 주 스레드가 안 읽고 안 재도록)
                 if (cacheAge(key) < CHAT_NEAR_FRESH_MS) continue;
                 pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfChatRoom(sel, theme, sec); } });
             }

@@ -718,7 +718,7 @@ function findAndroidJar() {
   });
   await t('s205: 미리받기 — 맛집(도착지·위치 확정 · 장소별 열쇠 · 호출 한도) · 호선 방 밀기(앞뒤 방 미리 · 뼈대 · 디바운스 · 캐시 120)', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
-    assert.ok(/size\(\) > 180; if \(over\) scrKeys\.remove/.test(a) && /return size\(\) > 48; \}/.test(a), '화면 캐시 180(s275: 120 → 180) · 읽어 둔 화면 48(미리 받은 화면이 밀려나지 않게)');
+    assert.ok(/size\(\) > 180; if \(over\) scrKeys\.remove/.test(a) && /PARSED_MAX = 100; private static final long PARSED_CHARS = 6000000L/.test(a), '화면 캐시 180(s275: 120 → 180) · 읽어 둔 화면 100칸 · 600만 글자(s277: 48 → 글자 수 한도, 미리 받은 화면이 밀려나지 않게)');
     assert.ok(/if \(ShellCore\.S_FOOD\.equals\(screen\)\) foodSyncSig\(\);/.test(a) && /private void foodSyncSig\(\)/.test(a) && /ShellCore\.K_FOODSIG/.test(a), '맛집을 열 때 장소 표시를 맞춘다');
     assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
     assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
@@ -788,11 +788,21 @@ function findAndroidJar() {
     assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
     assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
   });
+  await t('s277: 분류를 오가도 안 끊긴다 — 이웃 분류는 뒤 스레드에서 미리 읽고 배치하고 · 큰 그림도 미리 풀고 · 채팅 읽기 한 번 · 테마 중복 적용 없음', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    const c = fs.readFileSync(N('ChatCore.java'), 'utf8');
+    assert.ok(/private void neighborPre\(ScreenView v, ScreenCore\.Screen sc, String ck\)/.test(a) && /sc\.swT\.get\(sc\.swK\)/.test(a) && /ioExec\.execute[\s\S]{0,300}body\.preLayout\(n\)/.test(a) && /neighborPre\(v, sc0, ck\)/.test(a), '엔진 표(sw.t)의 이웃 분류를 뒤에서 읽고 배치까지');
+    assert.ok(/public void preLayout\(final ScreenCore\.Screen s\)/.test(v) && /s\.fitNode != null/.test(v) && /PRE_EX\.execute/.test(v) && /private ScreenCore\.Layout takePre\(float w, float h\)/.test(v) && /ScreenCore\.Layout pl = takePre\(getWidth\(\) \/ dpr, getHeight\(\) \/ dpr\); lay = pl != null \? pl : ScreenCore\.layout/.test(v), '같은 ScreenCore.layout 을 뒤에서 돌려 두고 한 번 쓰고 버린다(남는 세로 채우는 화면 제외)');
+    assert.ok(/static void preDecode\(String url, int w, int h\)/.test(v) && /ImageBank\.preDecode\(it\.img/.test(v) && /\(\+\+trimN & 15\) != 0/.test(v), '처음 보일 그림을 미리 풀고 · 파일 캐시 정리는 열여섯 장에 한 번');
+    assert.ok(/plMemo\.get\(json\)/.test(c) && /private int\[\] lastPal;/.test(a) && /Arrays\.equals\(lastPal, pal\)\) return;/.test(a), '채팅 info.pl 읽기 기억 · 색이 같으면 다시 입히지 않는다');
+    assert.ok(/body\.preLayout\(n\)[\s\S]{0,120}\/\/ 글 읽기 \+ 배치를 미리|글 읽기 \+ 배치를 미리/.test(a), '채팅 앞뒤 방 미리받기도 배치까지');
+  });
   await t('s275: 같은 화면에서 분류만 바꿀 때, 메모리에서 밀려난 분류가 디스크에 있으면 네트워크를 기다리지 않고 바로 올린다 · 화면 캐시 한도 180', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const ad = a.slice(a.indexOf('private void adoptDisk('), a.indexOf('private void adoptDisk(') + 1200);
     assert.ok(/shownKey\.get\(v\)/.test(ad) && /otherShown = sk != null && !key\.equals\(sk\)/.test(ad) && /skelViews\.contains\(v\) \|\| otherShown/.test(ad), '디스크에서 읽은 화면이 이 칸이 기다리는 열쇠이고 다른 분류가 떠 있으면 올린다');
-    assert.ok(/private void shownKeyPut\(ScreenView v\)/.test(a) && /shownJson\.put\(v, json\); shownKeyPut\(v\); skelViews\.remove\(v\);/.test(a) && /if \(v != sheetView\) \{ shownJson\.put\(v, json\); shownKeyPut\(v\); \}/.test(a), '지금 보이는 화면의 열쇠를 적는다(캐시로 올릴 때 · 받아 올릴 때)');
+    assert.ok(/private void shownKeyPut\(ScreenView v\)/.test(a) && /shownJson\.put\(v, json\); shownKeyPut\(v\); skelViews\.remove\(v\);/.test(a) && /if \(v != sheetView\) \{ shownJson\.put\(v, json\); shownKeyPut\(v\); neighborPre\(v, sc, ck\); \}/.test(a), '지금 보이는 화면의 열쇠를 적는다(캐시로 올릴 때 · 받아 올릴 때)');
     assert.ok(!/shownJson\.remove\(v\);(?! shownKey\.remove\(v\);)/.test(a), '화면을 비우면 열쇠도 지운다');
     assert.ok(/boolean over = size\(\) > 180;/.test(a), '화면 글 메모리 캐시 180칸(미리 받은 분류가 밀려나지 않게)');
   });
