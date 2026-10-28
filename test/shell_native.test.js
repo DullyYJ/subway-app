@@ -718,7 +718,7 @@ function findAndroidJar() {
   });
   await t('s205: 미리받기 — 맛집(도착지·위치 확정 · 장소별 열쇠 · 호출 한도) · 호선 방 밀기(앞뒤 방 미리 · 뼈대 · 디바운스 · 캐시 120)', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
-    assert.ok(/size\(\) > 120; if \(over\) scrKeys\.remove/.test(a) && /return size\(\) > 48; \}/.test(a), '화면 캐시 120 · 읽어 둔 화면 48(미리 받은 화면이 밀려나지 않게)');
+    assert.ok(/size\(\) > 180; if \(over\) scrKeys\.remove/.test(a) && /return size\(\) > 48; \}/.test(a), '화면 캐시 180(s275: 120 → 180) · 읽어 둔 화면 48(미리 받은 화면이 밀려나지 않게)');
     assert.ok(/if \(ShellCore\.S_FOOD\.equals\(screen\)\) foodSyncSig\(\);/.test(a) && /private void foodSyncSig\(\)/.test(a) && /ShellCore\.K_FOODSIG/.test(a), '맛집을 열 때 장소 표시를 맞춘다');
     assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
     assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
@@ -779,6 +779,14 @@ function findAndroidJar() {
     assert.ok(/s274/.test(a) && /newFixedThreadPool\(Math\.min\(PF_CHAT_PAR, jobs\.size\(\)\)/.test(a) && /invokeAll\(cs, 20/.test(a) && /g\.batchRequest\(rooms, ShellCore\.CAP, theme, tzo, me\)/.test(a) && /ChatCore\.parseBatch\(r\.body\)/.test(a) && /pfChatBusy\.compareAndSet\(false, true\)/.test(a), 's274: 모든 방 원자료를 동시에 받고 한 요청(alts)으로 묻는다 · 순회가 겹치지 않는다');
     assert.ok(/ChatCore\.K_SELS/.test(a) && /ChatCore\.decSels\(savedSels\)/.test(a) && /store\.put\(ChatCore\.K_SELS, enc\)/.test(a) && /PF_BURST_MS = 20000L/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 대화방 전부/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return prefetchNews/.test(a), 's274: 방 목록을 적어 둬 켜자마자 모두 받는다 · 쇼핑 · 소식 · 게시판 · 대화방은 맨 앞순서 · 켠 직후 20초는 넓게');
     assert.ok(/"food"\.equals\(tab\)/.test(a) && /"food"\.equals\(ct\)/.test(a) && !/\(si\[0\] - dir\) % n/.test(a), '맛집 탭: 좌우 밀기 = 엔진이 준 sw(카테고리 칩 끝없이 · 끝에서 반대쪽 끝으로) — 앱은 계산하지 않는다(food_engine 시험이 도는 것을 확인)');
+  });
+  await t('s275: 같은 화면에서 분류만 바꿀 때, 메모리에서 밀려난 분류가 디스크에 있으면 네트워크를 기다리지 않고 바로 올린다 · 화면 캐시 한도 180', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const ad = a.slice(a.indexOf('private void adoptDisk('), a.indexOf('private void adoptDisk(') + 1200);
+    assert.ok(/shownKey\.get\(v\)/.test(ad) && /otherShown = sk != null && !key\.equals\(sk\)/.test(ad) && /skelViews\.contains\(v\) \|\| otherShown/.test(ad), '디스크에서 읽은 화면이 이 칸이 기다리는 열쇠이고 다른 분류가 떠 있으면 올린다');
+    assert.ok(/private void shownKeyPut\(ScreenView v\)/.test(a) && /shownJson\.put\(v, json\); shownKeyPut\(v\); skelViews\.remove\(v\);/.test(a) && /if \(v != sheetView\) \{ shownJson\.put\(v, json\); shownKeyPut\(v\); \}/.test(a), '지금 보이는 화면의 열쇠를 적는다(캐시로 올릴 때 · 받아 올릴 때)');
+    assert.ok(!/shownJson\.remove\(v\);(?! shownKey\.remove\(v\);)/.test(a), '화면을 비우면 열쇠도 지운다');
+    assert.ok(/boolean over = size\(\) > 180;/.test(a), '화면 글 메모리 캐시 180칸(미리 받은 분류가 밀려나지 않게)');
   });
   await t('s237: 경고 테두리는 카드 모양을 그대로 두고 빛만 둘레를 따라 달린다 · 추천 버튼 글은 엔진 값 · 앱 종료 줄 3분/자동 종료 5분은 엔진 · 추천은 받아 둔 글이 없으면 바로 받는다', () => {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), ov = fs.readFileSync(N('OvCore.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');

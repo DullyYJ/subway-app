@@ -58,10 +58,12 @@ public class ShellActivity extends Activity {
     // 화면 글 캐시: 탭을 오갈 때 마지막으로 받은 화면을 바로 올리고, 새 글은 뒤에서 받아 바꾼다(스크롤은 그대로)
     private final java.util.Set<String> scrKeys = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());      // 메모리 캐시에 든 열쇠(다른 스레드에서 "캐시가 있나" 볼 때)
     private final java.util.LinkedHashMap<String, String> scrCache = new java.util.LinkedHashMap<String, String>(32, 0.75f, true) {
-        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { boolean over = size() > 120; if (over) scrKeys.remove(e.getKey()); return over; }       // 오래 안 본 화면부터 버린다(메모리 한도 — 미리 받는 화면(탭 · 분류 · 호선 방 · 지역)이 40을 넘어 앞의 것이 밀려나 스와이프가 느려지던 것을 막으려 120)
+        @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) { boolean over = size() > 180; if (over) scrKeys.remove(e.getKey()); return over; }       // 오래 안 본 화면부터 버린다(메모리 한도 — 미리 받는 화면(탭 · 분류 · 호선 방 · 지역)이 40을 넘어 앞의 것이 밀려나 스와이프가 느려지던 것을 막으려 120)
     };
     private final java.util.HashMap<ScreenView, String> viewKey = new java.util.HashMap<ScreenView, String>();
     private final java.util.HashMap<ScreenView, String> shownJson = new java.util.HashMap<ScreenView, String>();       // 칸이 지금 보여 주는 글(같은 글이면 다시 그리지 않는다)
+    private final java.util.HashMap<ScreenView, String> shownKey = new java.util.HashMap<ScreenView, String>();         // 칸이 지금 보여 주는 화면의 캐시 열쇠(같은 화면에서 분류만 바꿔 옛 분류가 남아 있는 때를 알아보려고)
+    private void shownKeyPut(ScreenView v) { String k = viewKey.get(v); if (k != null) shownKey.put(v, k); else shownKey.remove(v); }
     // 검증을 마친 화면 객체: 받는 스레드에서 미리 읽어 두면(warm) 올릴 때 주 스레드가 글을 다시 읽지 않는다
     private final java.util.LinkedHashMap<String, ScreenCore.Screen> parsedScr = new java.util.LinkedHashMap<String, ScreenCore.Screen>(16, 0.75f, true) {
         @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, ScreenCore.Screen> e) { return size() > 48; }
@@ -566,7 +568,9 @@ public class ShellActivity extends Activity {
         scrCache.put(key, c); scrKeys.add(key);
         for (java.util.Map.Entry<ScreenView, String> e : new java.util.ArrayList<java.util.Map.Entry<ScreenView, String>>(viewKey.entrySet())) {
             ScreenView v = e.getKey();
-            if (key.equals(e.getValue()) && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v)) && !c.equals(shownJson.get(v))) showCached(v, c);
+            String sk = shownKey.get(v);
+            boolean otherShown = sk != null && !key.equals(sk);           // 같은 화면에서 분류만 바꿔 옛 분류가 남아 있다 — 디스크에서 막 읽은 이 분류를 네트워크를 기다리지 않고 바로 올린다
+            if (key.equals(e.getValue()) && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v) || otherShown) && !c.equals(shownJson.get(v))) showCached(v, c);
         }
     }
     /** 켤 때: 지금 탭의 화면 글을 IO 스레드에서 미리 읽고 해석해 둔다(첫 그림이 파일 읽기를 기다리지 않게). */
@@ -648,7 +652,7 @@ public class ShellActivity extends Activity {
         try {
             String ak = viewKey.get(v); long am = ak == null ? -1L : diskMtime(ak);
             v.setSourceAge(am > 0L ? System.currentTimeMillis() - am : 0L);                 // 캐시 화면의 버스 초 카운트다운은 받은 뒤 흐른 만큼 이미 줄어 있다
-            v.setScreen(parsedGet(json), false); shownJson.put(v, json); skelViews.remove(v);
+            v.setScreen(parsedGet(json), false); shownJson.put(v, json); shownKeyPut(v); skelViews.remove(v);
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView) restoreState(ck, json);
             return true;
@@ -671,15 +675,15 @@ public class ShellActivity extends Activity {
         try {
             if (v == body && ShellCore.S_MAPB.equals(screen) && "bus".equals(map.mode()) && MapCore.VW_NEAR.equals(map.busView())) {        // 버스: 엔진이 그려 둔 정류장 뼈대(도착정보 자리는 '불러오는 중')를 먼저 — 같은 동네(약 110m 칸)일 때만, 숫자는 없다
                 String cell = map.stopsCell(), sk = cell.length() > 0 && cell.equals(store.get("bsk_cell", "")) ? cacheGet(ShellCore.busSkelKey(store), true) : null;
-                if (sk != null) { v.setSourceAge(0L); v.setScreen(parsedGet(sk), false); shownJson.remove(v); skelViews.add(v); return; }
+                if (sk != null) { v.setSourceAge(0L); v.setScreen(parsedGet(sk), false); shownJson.remove(v); shownKey.remove(v); skelViews.add(v); return; }
             }
             if (v == body && ShellCore.S_CHAT.equals(screen)) {                              // 실시간소통: 회색 뼈대 대신 엔진이 만든 '불러오는 중' 화면(칩 줄 그대로 · 고른 칩만 바뀜) — 빈 화면 없이
                 String lj = chatLoad.get(chat.sel());
-                if (lj != null) { try { v.setScreen(parsedGet(lj), false); shownJson.remove(v); skelViews.add(v); return; } catch (Throwable ignored) { } }
+                if (lj != null) { try { v.setScreen(parsedGet(lj), false); shownJson.remove(v); shownKey.remove(v); skelViews.add(v); return; } catch (Throwable ignored) { } }
             }
-            v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); skelViews.add(v);
+            v.setScreen(parsedGet(ShellCore.skeletonScreen(screen)), false); shownJson.remove(v); shownKey.remove(v); skelViews.add(v);
         }
-        catch (Throwable e) { v.clearScreen(); shownJson.remove(v); }
+        catch (Throwable e) { v.clearScreen(); shownJson.remove(v); shownKey.remove(v); }
     }
 
     /** 칸 i 의 화면을 받아 올린다. 원자료가 있는 화면은 먼저 원자료를 받는다. */
@@ -702,11 +706,11 @@ public class ShellActivity extends Activity {
             if (c != null && showCached(v, c)) { keepX = true; if (ShellCore.S_MAPB.equals(screen)) syncMapView(); }
             else if (clearOnMiss) {
                 if (v == body && diskAsked.contains(ck)) {                  // 디스크에서 읽는 중 — 곧(수십 ms) 마지막 화면이 올라오므로 뼈대를 잠깐 미뤄 깜빡임을 없앤다
-                    v.clearScreen(); shownJson.remove(v);
+                    v.clearScreen(); shownJson.remove(v); shownKey.remove(v);
                     final String wk = ck; final int wmy = my;
                     main.postDelayed(new Runnable() { @Override public void run() { if (wmy == seq[si] && v.itemCount() == 0 && wk.equals(viewKey.get(v))) showSkeleton(v, screen); } }, 120L);
                 }
-                else if (v == body) showSkeleton(v, screen); else { v.clearScreen(); shownJson.remove(v); }
+                else if (v == body) showSkeleton(v, screen); else { v.clearScreen(); shownJson.remove(v); shownKey.remove(v); }
             }       // 머리 칸(칩 줄)은 뼈대 없이 비운다(높이가 그린 만큼이라)          // 옛 탭 화면이 남아 보이지 않게 — 받는 동안은 뼈대
         }
         final boolean keep = keepX;
@@ -1369,7 +1373,7 @@ public class ShellActivity extends Activity {
         if (json == null || json.length() == 0) {
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
-                try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
+                try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); shownKey.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
             }
             if (keep && v.itemCount() > 0) return;                // 뒤에서 조용히 새로 받던 중 실패 — 떠 있는 옛 화면을 그대로 둔다(SWR: 알림도 띄우지 않는다)
             toast("화면을 받지 못했어요"); return;
@@ -1382,7 +1386,7 @@ public class ShellActivity extends Activity {
             if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep && !skelViews.contains(v));
             skelViews.remove(v);
-            if (v != sheetView) shownJson.put(v, json);
+            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
             if (!keep && v != sheetView) fadeIn(v);
         } catch (Throwable e) {
@@ -1396,8 +1400,8 @@ public class ShellActivity extends Activity {
     private void showDelayed(ScreenView v, String json, boolean keep, int[] delays) {
         boolean hasContent = keep && v.itemCount() > 0 && !skelViews.contains(v) && shownJson.get(v) != null;
         if (!hasContent) {
-            try { v.setScreen(parsedGet(json), false); shownJson.remove(v); skelViews.remove(v); fadeIn(v); }
-            catch (Throwable e) { try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); skelViews.remove(v); } catch (Throwable ignored) { } }
+            try { v.setScreen(parsedGet(json), false); shownJson.remove(v); shownKey.remove(v); skelViews.remove(v); fadeIn(v); }
+            catch (Throwable e) { try { v.setScreen(ScreenCore.load(ShellCore.errorScreen()), false); shownJson.remove(v); shownKey.remove(v); skelViews.remove(v); } catch (Throwable ignored) { } }
         }
         scheduleRetry(v, delays);
     }
@@ -2025,7 +2029,7 @@ public class ShellActivity extends Activity {
             final ScreenCore.Screen scr = pre;
             main.post(new Runnable() { @Override public void run() {
                 if (my != seqFoodP) return;
-                if (scr != null) { v.setScreen(scr, keep); shownJson.put(v, withP); Runnable fa = foodAfter; foodAfter = null; if (fa != null) fa.run(); return; }
+                if (scr != null) { v.setScreen(scr, keep); shownJson.put(v, withP); shownKey.remove(v); Runnable fa = foodAfter; foodAfter = null; if (fa != null) fa.run(); return; }
                 present(v, txt, keep);
             } });
         } });
