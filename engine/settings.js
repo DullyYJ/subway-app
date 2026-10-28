@@ -42,6 +42,9 @@ function settingsFacts(f) {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
     sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
+    cmi: settingsFlag(f.cmi, false),                                                       // s278: 새 앱은 출퇴근 브리핑을 설정 화면 안에 그대로 펼친다(옛 앱은 '시간 · 장소 · 요일 설정' 줄 → 하위 화면)
+    cmf: f.cmf && typeof f.cmf === 'object' ? settingsPageFacts(f.cmf) : null,
+    cmb: (f.cmf && Array.isArray(f.cmf.bus)) ? f.cmf.bus.slice(0, 12).map(function (x) { return settingsStr(x, 60).trim(); }) : [],
     pgs: Array.isArray(f.pgs) ? f.pgs.filter(function (x) { return typeof x === 'string'; }).slice(0, 8) : null          // 앱이 실제로 열 수 있는 하위 화면 이름들(없으면 모두 보인다)
   };
   SETTINGS_NOTIF.forEach(function (n) { o.np[n.key] = settingsFlag(np[n.key], true); });          // 알림은 기본 켜짐(저장값이 0 일 때만 꺼짐)
@@ -113,7 +116,10 @@ function settingsScreen(inp, factsIn) {
 
   // 6) 웹 설정 탭과 같은 순서의 기능 카드: 출퇴근 브리핑 → 캐릭터 시계 위젯 → 하차 추천 → 다른 앱 위에 표시 → 개발자 도구 (웹은 카드 안에 입력칸을 펼치고, 앱은 카드 아래 줄을 눌러 같은 내용의 하위 화면을 연다)
   var onTxt = function (v) { return v == null ? '' : (v ? '켜짐' : '꺼짐'); };
-  if (pgHas('cm')) {
+  if (pgHas('cm') && f.cmi && f.cmf) {
+    var cmInfo = {}, cmKids = settingsCmInline(f, cmInfo);
+    body.push(settingsPanelN(cmKids));
+  } else if (pgHas('cm')) {
     var cmd = settingsBoldN([['설정한 시각에 ', 0], [f.pgs ? '날씨 + 혼잡도 + 준비물 한마디' : '날씨 + AI 역무원 요약', 1], ['를 알림으로 보내드려요.', 0]]);
     body.push(settingsPanelN([settingsTitleN('출퇴근 브리핑 알림', 4), settingsDescN(cmd.s, 6, cmd.hl), settingsNavN('시간 · 장소 · 요일 설정', onTxt(f.cm), pgAct('cm'), true)]));
   }
@@ -411,13 +417,8 @@ function settingsFieldPair(k, a, b, f, mt) {
     return { t: 'button', s: v || SETTINGS_PICK[x][1], size: 14, h: 42, r: 9, bold: false, al: 'left', fill: 'bg', line: 'border2', tc: v ? 'text' : 'sub', act: settingsCall('cm.pick.' + x) };
   }) });
 }
-function settingsPageCm(f) {
-  var d = f.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
-  var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
-  settingsFieldPair(k, 'from', 'to', f, 8);
-  k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 8, 10));
-  settingsFieldPair(k, 'eFrom', 'eTo', f, 2);
-  k.push(settingsSmallN(settingsEveHint(f), 8, 12));
+// 요일 · 시각 · 미리보기 줄(옛 하위 화면과 설정 화면 안 패널이 같이 쓴다)
+function settingsCmRest(k, f) {
   k.push(settingsLabelN('보낼 요일', 6));
   var dayKids = SETTINGS_DAY_NM.map(function (nm, di) {
     var sel = f.days.indexOf(di) >= 0;
@@ -435,6 +436,48 @@ function settingsPageCm(f) {
   k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 12], kids: [settingsBtnN(settingsFmtTime(f.morn), 'cm.tp.morn', { size: 15, h: 44 }), settingsBtnN(settingsFmtTime(f.eve), 'cm.tp.eve', { size: 15, h: 44 })] });
   k.push(settingsBtnN('지금 미리보기', 'cm.test', { size: 13, h: 42 }));
   if (f.nv) k.push(settingsSmallN('기기 절전 설정에 따라 알림이 몇 분 늦게 올 수 있어요. 늦어지면 \'자동 절전 제외 설정\'을 확인해 주세요.', 8, 0));
+}
+// s278: 출퇴근 브리핑을 설정 화면 안에 펼친다(YJ: "설정창으로 빼줘 · 역 선택할 때 두 번째 화면으로 바뀌지 말고 바로 넣게").
+//   장소 네 칸은 하위 화면으로 가지 않고 그 자리의 입력칸(inbar · 저장 단추/엔터) — 글자를 칠 때마다 앱이 검색어(cmf.pick)와 버스 후보(cmf.bus)를 실어 다시 물으면 엔진이 지하철 후보(역 표)와 버스 후보 줄을 그 칸 바로 아래에 끼운다.
+function settingsCmInline(f, info) {
+  var cf = f.cmf, d = cf.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
+  var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: cf.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
+  var pk = cf.pick;
+  var field = function (x, mt) {
+    var act = settingsCall('pk.save.' + x), active = !!(pk && pk.k === x);
+    k.push(settingsLabelN(SETTINGS_PICK[x][0], 5));
+    var nd = { t: 'inbar', key: 'cmp.' + x, hint: SETTINGS_PICK[x][1], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '저장', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
+    k.push(nd);
+    if (!active) return;
+    var q = pk.q.trim(), rows = [];
+    if (q) {
+      var st = settingsStnFind(q), seen = {};
+      info.pk = { u: st.pk, b: [] };
+      st.u.forEach(function (c) { rows.push({ t: 'sug', badge: '지하철', bc: '#0a84ff', name: c.n, sub: c.l.replace(/^지하철 \u00b7 /, ''), act: { a: 'call', v: 'pk.n', id: c.n } }); });
+      f.cmb.forEach(function (nm, i) {
+        if (info.pk.b.length >= SETTINGS_BUS_MAX || !nm || seen[nm]) return;
+        seen[nm] = 1; info.pk.b.push(i);
+        rows.push({ t: 'sug', badge: '버스', bc: '#00b341', name: nm, sub: '', act: settingsCall('pk.b.' + i) });
+      });
+    }
+    if (rows.length) { rows[rows.length - 1].last = true; rows.forEach(function (r) { k.push(r); }); k.push({ t: 'spacer', h: 8 }); }
+    else if (q) k.push(settingsSmallN('맞는 역이나 정류장을 찾지 못했어요. 그대로 저장해도 돼요.', 0, 8));
+  };
+  field('from'); field('to');
+  k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 0, 10));
+  field('eFrom'); field('eTo');
+  k.push(settingsSmallN(settingsEveHint(cf), 0, 12));
+  settingsCmRest(k, cf);
+  return k;
+}
+function settingsPageCm(f) {
+  var d = f.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
+  var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: f.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
+  settingsFieldPair(k, 'from', 'to', f, 8);
+  k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 8, 10));
+  settingsFieldPair(k, 'eFrom', 'eTo', f, 2);
+  k.push(settingsSmallN(settingsEveHint(f), 8, 12));
+  settingsCmRest(k, f);
   return [settingsPanelN(k, 8)];
 }
 // 시각 고르기(예전 바텀시트 _cmTimePick 과 같은 칸: 오전/오후 · 시 12칸 · 분 12칸 · 취소/확인)

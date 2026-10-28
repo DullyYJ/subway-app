@@ -1542,10 +1542,14 @@ public class ShellActivity extends Activity {
         }
         @Override public void onAction(ScreenCore.Act a) { handle(a, false); }
         @Override public void onSet(ScreenCore.Act a, boolean on) { handle(a, on); }
-        @Override public void onSearch(ScreenCore.Act a, String q) { apply(ShellCore.routeSearch(a.tpl, a.empty, q)); }
+        @Override public void onSearch(ScreenCore.Act a, String q) {
+            if (ShellCore.S_SETTINGS.equals(screenName()) && a != null && "call".equals(a.a) && a.v != null && a.v.startsWith("pk.")) { cmInlineAct("call", a.v, null, false, q); return; }          // 설정 화면 안 장소 입력칸의 [저장] · 엔터
+            apply(ShellCore.routeSearch(a.tpl, a.empty, q));
+        }
         @Override public void onInputFocus(boolean on) { if (on) applyIme(); }
         @Override public void onFirstDraw() { }
         @Override public void onText(String key, String value, String kind) {
+            if (ShellCore.S_SETTINGS.equals(screenName()) && key != null && key.startsWith("cmp.")) { cmText(key.substring(4), value, kind); return; }
             if (!ShellCore.S_HOME.equals(screenName())) return;
             homeText(key, value, kind);
         }
@@ -1582,6 +1586,9 @@ public class ShellActivity extends Activity {
                 if ("call".equals(a.a) && (a.v.startsWith("ai.") || a.v.startsWith("tk.") || a.v.startsWith("share."))) hcAct(a.v);
                 else if ("call".equals(a.a)) homeAct(a.v, body.fields());
                 else if ("open".equals(a.a)) apply(ShellCore.linkEffect(a.url));
+                return;
+            } else if (ShellCore.S_SETTINGS.equals(screenName()) && cmInlineOwns(a)) {
+                cmInlineAct(a.a, a.v, a.key, on, "pk.n".equals(a.v) ? a.id : (a.v != null && a.v.startsWith("pk.save.") ? body.fields().get("cmp." + a.v.substring(8)) : null));
                 return;
             } else {
                 Map<String, String> f = (which == 0 ? head : body).fields();
@@ -4659,8 +4666,8 @@ public class ShellActivity extends Activity {
     }
     private void openSetPage(String page) {
         closeSheet();
-        setPage = page; arrStat = false;
-        if ("cm".equals(page)) { cm.sub = ""; cm.clearBus(); }
+        setPage = page; arrStat = false; cmFromInline = false;
+        if ("cm".equals(page) && !"tp".equals(cm.sub)) { cm.sub = ""; cm.clearBus(); }          // 설정 화면 안 패널이 시각 고르기만 시트로 열 때(sub=tp)는 그대로
         sheetName = ShellCore.S_SETPG;
         final boolean pop = "locd".equals(page) || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
         popSheet = pop;
@@ -4740,8 +4747,56 @@ public class ShellActivity extends Activity {
         if ((r & CmCore.R_CLOSE) != 0) { closeSheet(); loadSlot(slots.length - 1, true); return; }
         if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
+        if (cmFromInline && cm.sub.length() == 0) { cmFromInline = false; closeSheet(); cmReload(); return; }          // 시각 고르기를 마쳤다 — 시트를 닫고 설정 화면의 패널을 새로
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
         if ((r & CmCore.R_RENDER) != 0) loadSetPage();
+    }
+    // ── s278: 출퇴근 브리핑을 설정 화면 안에서(하위 화면 없이) — 장소는 그 자리 입력칸, 시각 고르기만 시트 ──
+    private boolean cmFromInline;
+    private int seqCmI;
+    /** 설정 화면에서 눌린 것이 출퇴근 패널의 것인가(스위치 cm · 요일 · 미리보기 · 시각 · 장소 저장/후보). */
+    private static boolean cmInlineOwns(ScreenCore.Act a) {
+        if (a == null) return false;
+        if ("set".equals(a.a)) return "cm".equals(a.key);
+        return "call".equals(a.a) && a.v != null && (a.v.startsWith("cm.") || a.v.startsWith("pk."));
+    }
+    private void cmInlineAct(String a, String v, String key, boolean on, String q) {
+        int r = cm.act(store, a, v, key, on, q);
+        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
+        if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
+        if ("tp".equals(cm.sub)) { openSetPage("cm"); cmFromInline = true; return; }
+        if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
+        if ((r & CmCore.R_RENDER) != 0) cmReload();
+    }
+    /** 장소 입력칸의 글자 이벤트: focus(어느 칸인지) · edit(친 글자 — 잠깐 가만히 있으면 후보 갱신) · blur(저장 안 한 글자는 버린다; 후보 줄을 누르는 동안은 잠깐 기다린다). */
+    private void cmText(final String k, final String value, String kind) {
+        if ("focus".equals(kind)) { cm.focusInline(k, value); return; }
+        if ("edit".equals(kind)) {
+            final String q = value;
+            deb.trailing("cmq", Debounce.TYPE_MS, new Runnable() { @Override public void run() {
+                int r = cm.onInline(k, q);
+                if ((r & CmCore.R_BUS) != 0) cmBusSearch(cm.pkQ); else if ((r & CmCore.R_RENDER) != 0) cmReload();
+            } });
+            return;
+        }
+        if ("blur".equals(kind)) {
+            main.postDelayed(new Runnable() { @Override public void run() { if (cm.inl && k.equals(cm.pkK) && cm.endInline()) cmReload(); } }, 350L);
+        }
+    }
+    /** 설정 화면을 지금 기기 사실(출퇴근 패널 포함)로 다시 받아 위치·입력은 그대로 두고 갱신한다. */
+    private void cmReload() {
+        final int li = slots.length - 1;
+        if (li < 0 || !ShellCore.S_SETTINGS.equals(slots[li])) return;
+        final ScreenView v = viewOfSlot(li);
+        viewKey.put(v, ShellCore.cacheKey(ShellCore.S_SETTINGS, store));
+        final int my = ++seqCmI;
+        new Thread(new Runnable() { @Override public void run() {
+            final String txt = fetchGeneric(ShellCore.S_SETTINGS); warm(txt);
+            main.post(new Runnable() { @Override public void run() {
+                if (my != seqCmI || txt.length() == 0 || li != slots.length - 1 || !ShellCore.S_SETTINGS.equals(slots[li])) return;
+                present(v, txt, true);
+            } });
+        } }, "shell-cmi").start();
     }
     /** 글자가 바뀔 때마다: 검색어를 기억하고 버스정류장을 다시 찾는다(역 후보는 화면을 다시 받을 때 엔진이 정한다). */
     private void cmQuery(String q) {
@@ -4755,7 +4810,8 @@ public class ShellActivity extends Activity {
                 NetPost.Res rb = suggestGet("b", q.trim(), HomeSearchCore.busUrl(HomeSearchCore.BUS_BASE, q.trim()));
                 final List<Map<String, Object>> raw = rb.status == 200 ? HomeSearchCore.parseBus(rb.body) : new java.util.ArrayList<Map<String, Object>>();
                 main.post(new Runnable() { @Override public void run() {
-                    if (my != cmBusSeq || !"cm".equals(setPage) || !cm.picking() || sheet == null || !sheet.isShowing()) return;
+                    boolean inlOk = cm.inl && slots.length > 0 && ShellCore.S_SETTINGS.equals(slots[slots.length - 1]);
+                    if (my != cmBusSeq || (!inlOk && (!"cm".equals(setPage) || !cm.picking() || sheet == null || !sheet.isShowing()))) return;
                     List<String> names = new java.util.ArrayList<String>(); List<double[]> geo = new java.util.ArrayList<double[]>();
                     for (Map<String, Object> m : raw) {
                         Object nm = m.get("nodenm") != null ? m.get("nodenm") : m.get("nodeNm");
@@ -4763,7 +4819,7 @@ public class ShellActivity extends Activity {
                         if (nm instanceof String && ((String) nm).length() > 0 && la != 0 && lo != 0) { names.add((String) nm); geo.add(new double[] { la, lo }); }
                     }
                     cm.setBus(names, geo);
-                    loadSetPage();
+                    if (inlOk) cmReload(); else loadSetPage();
                 } });
             }
         }, "shell-cmbus").start();

@@ -279,10 +279,30 @@ public class ShellJvmTest {
         ok(mb.equals("{\"op\":\"mylines\",\"now\":1792454400000,\"my\":[{\"l\":\"2호선\",\"n\":3,\"t\":5}],\"sec\":[\"2호선\",\"수도권 1호선\"]}") && RulesCore.mylinesBody(null, null, 1L).contains("\"my\":[],\"sec\":[]"), "탄 노선 요청: " + mb);
         ok(RulesCore.applyMyLines(rs, "{\"ok\":true,\"my\":[{\"l\":\"1호선\",\"n\":1,\"t\":99}],\"lines\":[\"1호선\"]}") && rs.get(ChatCore.K_MY, "").startsWith("[{") && rs.get(ChatCore.K_MY, "").contains("\"l\":\"1호선\"") && rs.get(ChatCore.K_MY, "").contains("\"n\":1") && rs.get(ChatCore.K_MY, "").contains("\"t\":99") && !RulesCore.applyMyLines(rs, "{\"ok\":false}"), "탄 노선 기록 저장");
 
+        // ── s278: 설정 화면 안 출퇴근 장소 입력칸(하위 화면 없이) ──
+        {
+            ShellCore.MemStore cs = new ShellCore.MemStore();
+            CmCore c = new CmCore();
+            c.focusInline("to", "");
+            ok(c.inl && "to".equals(c.pkK) && CmCore.inlX.contains("\"pick\":{\"k\":\"to\"") && !c.picking(), "입력칸에 들어오면 그 칸이 고치는 중(하위 화면 아님)");
+            ok(c.onInline("to", "강") == CmCore.R_RENDER, "한 글자는 버스 검색 없이 다시 그리기만");
+            ok(c.onInline("to", "강남") == CmCore.R_BUS, "두 글자부터 버스 후보를 찾는다");
+            c.setBus(java.util.Arrays.asList("강남역"), java.util.Arrays.asList(new double[] { 37.49, 127.02 }));
+            ok(ShellCore.settingsFacts(cs).contains("\"bus\":[\"강남역\"]") && ShellCore.settingsFacts(cs).contains("\"q\":\"강남\""), "고치는 중인 칸 · 글자 · 버스 후보가 설정 화면 요청에 실린다");
+            ok((c.act(cs, "call", "pk.b.0", null, false, null) & CmCore.R_RESCHED) != 0 && "강남역".equals(CmCore.place(cs, "to")) && cs.get("cm_to_g", "").startsWith("37.49,127.02") && !c.inl && CmCore.inlX.length() == 0, "버스 후보를 누르면 좌표와 함께 저장하고 고치기가 끝난다");
+            c.focusInline("from", "아");
+            ok((c.act(cs, "call", "pk.n", null, false, "아라") & CmCore.R_RESCHED) != 0 && "아라".equals(CmCore.place(cs, "from")) && cs.get("cm_from_g", "x").length() == 0 && !c.inl, "지하철 후보를 누르면 이름만 저장");
+            c.focusInline("eFrom", "");
+            ok((c.act(cs, "call", "pk.save.eFrom", null, false, "  부평  ") & CmCore.R_RESCHED) != 0 && "부평".equals(CmCore.place(cs, "eFrom")), "[저장]/엔터는 그 칸 글자를 다듬어 저장");
+            ok((c.act(cs, "call", "pk.save.eFrom", null, false, "") & CmCore.R_RESCHED) != 0 && CmCore.place(cs, "eFrom").length() == 0, "비워서 저장하면 지운다");
+            ok(c.act(cs, "call", "pk.save.zzz", null, false, "x") == CmCore.R_NONE && c.act(cs, "call", "pk.n", null, false, "x") == CmCore.R_NONE, "모르는 칸 · 고치는 중이 아닐 때의 후보 누름은 무시");
+            c.focusInline("to", "x"); ok(c.endInline() && !c.endInline() && CmCore.inlX.length() == 0, "고치기를 끝내면 요청 조각이 사라진다");
+            ok(c.act(cs, "call", "cm.test", null, false, null) == CmCore.R_TEST, "미리보기는 어느 상태에서나");
+        }
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"cmi\":1,\"cmf\":{\"nat\":true,\"nv\":true,\"on\":false,\"morn\":\"07:30\",\"eve\":\"18:30\",\"days\":[1,2,3,4,5],\"from\":\"\",\"to\":\"\",\"eFrom\":\"\",\"eTo\":\"\"},\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");

@@ -338,6 +338,31 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(/ovl\.diag/.test(txtOf(web)) && /pf\.rec/.test(txtOf(web)), '웹: 오버레이 진단·정답 기록 버튼이 있다');
   ok(!/ovl\.diag/.test(txtOf(nat)) && !/pf\.rec/.test(txtOf(nat)) && /pf\.live/.test(txtOf(nat)) && /"key":"ovl"/.test(txtOf(nat)), '네이티브(nv): 웹 진단 도구는 빼고 스위치와 위치 판단기 버튼만');
 }
+// ── s278: 출퇴근 브리핑을 설정 화면 안에(하위 화면 없이) · 장소는 그 자리 입력칸 + 후보 줄 ──
+{
+  const cmf = { nat: true, nv: true, on: true, days: [1, 2, 3, 4, 5], morn: '07:30', eve: '18:30', from: '아라', to: '', eFrom: '', eTo: '' };
+  const base = Object.assign({}, full, { pgs: ['sam', 'ovl', 'arr', 'cm', 'gw', 'dev'], cm: 1 });
+  const nav = JSON.stringify(E.settingsScreen({ cap: 8 }, base).body);
+  ok(/시간 · 장소 · 요일 설정/.test(nav) && !/cmp\./.test(nav), '옛 앱(cmi 없음): 예전 그대로 \'시간 · 장소 · 요일 설정\' 줄 → 하위 화면');
+  const sc = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf }));
+  const js = JSON.stringify(sc.body), nd = all(sc);
+  ok(!/시간 · 장소 · 요일 설정/.test(js), '새 앱(cmi): 하위 화면으로 가는 줄이 없다');
+  const ibs = nd.filter(n => n.t === 'inbar' && /^cmp\./.test(n.key));
+  ok(ibs.map(n => n.key).join() === 'cmp.from,cmp.to,cmp.eFrom,cmp.eTo' && ibs.every(n => n.watch && n.btn === '저장' && n.act.v === 'pk.save.' + n.key.slice(4) && n.eact.v === n.act.v), '장소 네 칸은 그 자리 입력칸(저장 단추 · 엔터 · 글자 바뀜 알림)');
+  ok(ibs[0].value === '아라' && ibs[1].value === '', '저장된 값이 칸에 들어 있다');
+  ok(nd.some(n => n.t === 'toggle' && n.key === 'cm' && n.on === true) && nd.some(n => n.t === 'button' && n.act && n.act.v === 'cm.tp.morn') && nd.some(n => n.t === 'button' && n.act && n.act.v === 'cm.day.1') && nd.some(n => n.t === 'button' && n.act && n.act.v === 'cm.test'), '스위치 · 요일 · 시각 · 미리보기가 같은 화면 안에');
+  ok(nd.filter(n => n.t === 'sug').length === 0, '고치는 중이 아니면 후보 줄이 없다');
+  const sc2 = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { pick: { k: 'to', q: '강남' }, bus: ['강남역', '', '강남역'] }) }));
+  const n2 = all(sc2), jb = JSON.stringify(sc2.body);
+  const i2 = n2.findIndex(n => n.t === 'inbar' && n.key === 'cmp.to'), sg = n2.filter(n => n.t === 'sug');
+  ok(i2 >= 0 && n2[i2].value === '강남' && sg.length >= 3 && n2[i2 + 1].t === 'sug', '고치는 중인 칸 바로 아래에 후보 줄(친 글자가 칸 값)');
+  ok(sg.filter(n => n.badge === '지하철').every(n => n.act.v === 'pk.n' && n.act.id === n.name) && sg.filter(n => n.badge === '버스').map(n => n.act.v).join() === 'pk.b.0', '지하철 후보는 이름을 실어 보내고 · 버스 후보는 앱이 찾은 순번(중복·빈 이름 제외)');
+  ok(sg[sg.length - 1].last === true && !/cmp\.from[\s\S]*"t":"sug"[\s\S]*cmp\.to/.test(jb), '마지막 후보 줄 표시 · 다른 칸 아래에는 끼지 않는다');
+  const sc3 = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { pick: { k: 'to', q: 'zzzqqq' } }) }));
+  ok(all(sc3).some(n => n.t === 'text' && /그대로 저장해도 돼요/.test(n.s)), '후보가 없으면 그대로 저장해도 된다는 안내');
+  ok(!/cmp\./.test(JSON.stringify(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf, pgs: ['sam'] })).body)), '앱이 열 수 없는 화면(cm 가 pgs 에 없음)은 감춘다');
+  ok(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf })).rev !== E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { days: [0] }) })).rev, '요일이 바뀌면 rev 가 바뀐다(앱이 다시 그린다)');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_set_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);

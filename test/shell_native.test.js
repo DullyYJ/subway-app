@@ -788,6 +788,18 @@ function findAndroidJar() {
     assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
     assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
   });
+  await t('s278: 출퇴근 브리핑은 설정 화면 안에 · 장소는 같은 화면 입력칸(하위 화면으로 안 간다) · 시각 고르기만 시트', async () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const cm = fs.readFileSync(N('CmCore.java'), 'utf8');
+    const sh = fs.readFileSync(N('ShellCore.java'), 'utf8');
+    assert.ok(/\\"cmi\\":1,\\"cmf\\":"\)\.append\(CmCore\.inlineFacts\(st\)\)/.test(sh) || /cmi.{0,12}1.{0,30}cmf.{0,12}CmCore\.inlineFacts\(st\)/.test(sh), '설정 요청에 새 앱 표시(cmi)와 출퇴근 기기 사실(cmf)을 싣는다');
+    assert.ok(/public static volatile String inlX/.test(cm) && /public void focusInline\(/.test(cm) && /public int onInline\(/.test(cm) && /public boolean endInline\(/.test(cm) && /v\.startsWith\("pk\.save\."\)/.test(cm) && /"pk\.n"\.equals\(v\)/.test(cm), '고치는 중인 칸 · 글자 · 후보를 요청에 싣고, 저장/지하철 후보 눌림을 받는다');
+    assert.ok(/cmInlineOwns\(a\)/.test(a) && /private void cmInlineAct\(/.test(a) && /private void cmText\(final String k/.test(a) && /key\.startsWith\("cmp\."\)\) \{ cmText\(key\.substring\(4\)/.test(a) && /a\.v\.startsWith\("pk\."\)\) \{ cmInlineAct\("call", a\.v, null, false, q\)/.test(a), '설정 화면의 눌림 · 입력 이벤트가 출퇴근 패널로 간다');
+    assert.ok(/private void cmReload\(\)/.test(a) && /present\(v, txt, true\);/.test(a.slice(a.indexOf('private void cmReload()'), a.indexOf('private void cmReload()') + 900)), '화면을 새로 받아도 위치 · 입력은 그대로(keep)');
+    assert.ok(/if \("tp"\.equals\(cm\.sub\)\) \{ openSetPage\("cm"\); cmFromInline = true; return; \}/.test(a) && /if \(cmFromInline && cm\.sub\.length\(\) == 0\) \{ cmFromInline = false; closeSheet\(\); cmReload\(\); return; \}/.test(a), '시각 고르기만 시트로 열고 마치면 닫고 설정 화면을 새로');
+    assert.ok(/cm\.endInline\(\)\) cmReload\(\)/.test(a) && /postDelayed[\s\S]{0,300}350L/.test(a.slice(a.indexOf('private void cmText('), a.indexOf('private void cmText(') + 1200)), '저장 안 하고 나가면 글자를 버린다(후보 줄을 누르는 동안은 기다림)');
+  });
+
   await t('s277: 분류를 오가도 안 끊긴다 — 이웃 분류는 뒤 스레드에서 미리 읽고 배치하고 · 큰 그림도 미리 풀고 · 채팅 읽기 한 번 · 테마 중복 적용 없음', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const v = fs.readFileSync(N('ScreenView.java'), 'utf8');

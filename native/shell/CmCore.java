@@ -23,6 +23,10 @@ public final class CmCore {
     public String tpT = "morn", tpAp = "am";
     public int tpH = 7, tpM = 30;
     public String pkK = "from", pkQ = "";
+    /** s278: 설정 화면 안 장소 입력칸에서 고치는 중(하위 화면 없이 그 자리에서). 켜져 있으면 pkK 가 그 칸 · pkQ 가 친 글자 — 엔진이 후보 줄을 그 칸 아래에 끼운다. */
+    public boolean inl;
+    /** 설정 화면 요청(f=)에 싣는 '지금 고치는 칸 + 버스 후보' 조각(없으면 ""). 열쇠에도 들어가므로 바뀔 때마다 새 화면을 받는다. */
+    public static volatile String inlX = "";
     private final List<String> uNames = new ArrayList<String>();          // 엔진이 보여 준 지하철역 후보(pk.u.<번호>)
     private final List<String> busNames = new ArrayList<String>();        // 앱이 찾아 온 버스정류장 후보(pk.b.<번호>)
     private final List<double[]> busGeo = new ArrayList<double[]>();
@@ -131,14 +135,47 @@ public final class CmCore {
         return b.append("}}").toString();
     }
     /** 엔진이 보여 준 지하철역 후보(info.pk.u 의 이름들)를 받아 둔다 — pk.u.<번호> 를 눌렀을 때 이름을 찾는다. */
+    private void syncX() {
+        if (!inl) { inlX = ""; return; }
+        StringBuilder b = new StringBuilder(",\"pick\":{\"k\":").append(ShellCore.q(pkK)).append(",\"q\":").append(ShellCore.q(pkQ)).append("},\"bus\":[");
+        for (int i = 0; i < busNames.size(); i++) { if (i > 0) b.append(','); b.append(ShellCore.q(busNames.get(i))); }
+        inlX = b.append(']').toString();
+    }
+    /** 설정 화면 안 출퇴근 패널의 기기 사실(엔진 settingsPageFacts 와 같은 모양 · cmf). */
+    public static String inlineFacts(ShellCore.Store st) {
+        StringBuilder b = new StringBuilder("{\"nat\":true,\"nv\":true,\"on\":").append(on(st));
+        b.append(",\"morn\":").append(ShellCore.q(morn(st))).append(",\"eve\":").append(ShellCore.q(eve(st)));
+        b.append(",\"days\":[").append(daysStr(days(st))).append(']');
+        for (String k : PK) b.append(',').append(ShellCore.q(k)).append(':').append(ShellCore.q(place(st, k)));
+        return b.append(inlX).append('}').toString();
+    }
+    static boolean isPk(String k) { for (String x : PK) if (x.equals(k)) return true; return false; }
+    /** 입력칸에 손가락이 들어옴: 어느 칸인지만 적는다(그려 다시 받지 않는다). */
+    public void focusInline(String k, String q) {
+        if (!isPk(k)) return;
+        inl = true; pkK = k; pkQ = q == null ? "" : q; clearBus(); syncX();
+    }
+    /** 입력칸에서 글자가 바뀜. */
+    public int onInline(String k, String q) {
+        if (!isPk(k)) return R_NONE;
+        boolean same = inl && k.equals(pkK);
+        inl = true; pkK = k; pkQ = q == null ? "" : q;
+        if (!same) clearBus();
+        if (pkQ.trim().length() < 2) { clearBus(); syncX(); return R_RENDER; }
+        syncX();
+        return R_BUS;
+    }
+    /** 고치기를 끝낸다(저장하지 않은 글자는 버린다). 켜져 있었으면 true. */
+    public boolean endInline() { boolean was = inl; inl = false; clearBus(); syncX(); return was; }
     public void setStations(List<String> names) { uNames.clear(); if (names != null) uNames.addAll(names); }
     /** 앱이 찾아 온 버스정류장 후보(이름 · 위도 · 경도). */
     public void setBus(List<String> names, List<double[]> geo) {
         busNames.clear(); busGeo.clear();
-        if (names == null || geo == null) return;
+        if (names == null || geo == null) { syncX(); return; }
         for (int i = 0; i < names.size() && i < geo.size(); i++) { busNames.add(names.get(i)); busGeo.add(geo.get(i)); }
+        syncX();
     }
-    public void clearBus() { busNames.clear(); busGeo.clear(); }
+    public void clearBus() { busNames.clear(); busGeo.clear(); if (inl) syncX(); }
     public boolean picking() { return "pick".equals(sub); }
 
     /** 장소 칸에서 글자가 바뀜 → 검색어를 기억하고 버스정류장을 다시 찾게 한다. */
@@ -201,7 +238,19 @@ public final class CmCore {
             pkK = k; pkQ = place(st, k); sub = "pick"; clearBus(); uNames.clear();
             return pkQ.trim().length() >= 2 ? (R_RENDER | R_BUS) : R_RENDER;
         }
-        if (!"pick".equals(sub)) { if ("cm.test".equals(v)) return R_TEST; return R_NONE; }
+        if ("cm.test".equals(v)) return R_TEST;
+        if (v.startsWith("pk.save.")) {                                            // 설정 화면 안 입력칸의 [저장] · 엔터: 그 칸 글자를 저장(비면 지움)
+            String k = v.substring(8);
+            if (!isPk(k)) return R_NONE;
+            setPlace(st, k, q == null ? "" : q.trim(), null); endInline();
+            return R_RENDER | R_RESCHED;
+        }
+        if ("pk.n".equals(v)) {                                                    // 설정 화면 안 지하철 후보 줄(이름은 엔진이 줬다)
+            if (!inl || q == null || q.trim().length() == 0 || q.length() > 60) return R_NONE;
+            setPlace(st, pkK, q.trim(), null); endInline();
+            return R_RENDER | R_RESCHED;
+        }
+        if (!"pick".equals(sub) && !inl) return R_NONE;
         if ("pk.cancel".equals(v)) { sub = ""; clearBus(); return R_RENDER; }
         if ("pk.clear".equals(v)) { setPlace(st, pkK, "", null); sub = ""; clearBus(); return R_RENDER | R_RESCHED; }
         if ("pk.save".equals(v)) { setPlace(st, pkK, q == null ? pkQ.trim() : q.trim(), null); sub = ""; clearBus(); return R_RENDER | R_RESCHED; }
@@ -214,7 +263,7 @@ public final class CmCore {
         if (v.startsWith("pk.b.")) {
             int i = num(v, 5);
             if (i < 0 || i >= busNames.size()) return R_NONE;
-            setPlace(st, pkK, busNames.get(i), busGeo.get(i)); sub = ""; clearBus();
+            setPlace(st, pkK, busNames.get(i), busGeo.get(i)); sub = ""; inl = false; clearBus(); syncX();
             return R_RENDER | R_RESCHED;
         }
         return R_NONE;
