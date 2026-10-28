@@ -2261,6 +2261,15 @@ public class ShellActivity extends Activity {
         }
         locateFast(8000L, cb);
     }
+    /** 새로고침용: 최근에 받아 둔 위치(20초 안)를 재사용하지 않고 지금 위치를 다시 받는다. */
+    private void locateFresh(final int reqCode, final LocCb cb0) {
+        final LocCb cb = new LocCb() {
+            @Override public void fix(Location l) { saveLoc(l); cb0.fix(l); }
+            @Override public void fail(boolean noperm) { cb0.fail(noperm); }
+        };
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) { locateOnce(reqCode, cb0); return; }
+        locateNow(8000L, 1000L, 0L, cb);
+    }
     // ── 현재 위치(마지막으로 알려진 위치는 쓰지 않는다): 고정밀 현재 위치 + 네트워크 위치를 동시에 · 먼저 오는 것을 바로 반영 · GPS 가 더 정확하면 한 번 더. 화면이 켜져 있는 동안은 가볍게 이어 받는다.
     private LocFused locf;
     private Location liveLoc; private long liveAt;
@@ -2846,14 +2855,22 @@ public class ShellActivity extends Activity {
                 break;
             case MapCore.R_BUS_LOC:
                 toast("내 위치 확인 중...");
-                locateOnce(REQ_MAP_LOC, new LocCb() {
-                    @Override public void fix(Location l) { map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                locateFresh(REQ_MAP_LOC, new LocCb() {                                      // 새로고침은 방금 받아 둔 위치를 쓰지 않고 지금 위치를 다시 확인 — 정류장 목록도 새로
+                    @Override public void fix(Location l) { map.setBusLocFresh(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
                     @Override public void fail(boolean noperm) { toast(noperm ? "위치 권한이 필요해요" : "현재 위치를 찾지 못했어요"); }
                 });
                 break;
             case MapCore.R_STN: openMapSheet(S_STN_H); break;
             case MapCore.R_BUS_VIEW: reloadMap(false); break;                                  // 주변 ↔ 즐겨찾기: 본 적 있으면 그 화면을 먼저 올리고 새로 받는다
-            case MapCore.R_BUS_REF: busRetryN = 0; loadMapBody(body, true); break;                            // 즐겨찾기 새로고침: 도착정보를 다시 받는다
+            case MapCore.R_BUS_REF:
+                busRetryN = 0;
+                if (map.takeRefLoc() && hasLocPerm()) {                                      // 즐겨찾기 새로고침: 도착정보만이 아니라 현재 위치도 다시 확인(옮겼으면 주변 정류장도 그 동네로 — 즐겨찾기는 그대로)
+                    locateFresh(REQ_MAP_LOC, new LocCb() {
+                        @Override public void fix(Location l) { if (farLL(map.busLL, l.getLatitude(), l.getLongitude(), BUS_MOVE_DEG)) map.setBusLocFresh(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                        @Override public void fail(boolean noperm) { loadMapBody(body, true); }
+                    });
+                } else loadMapBody(body, true);
+                break;                            // 즐겨찾기 새로고침: 도착정보를 다시 받는다
             case MapCore.R_BUS_SEL: {
                 loadMapBody(body, true);
                 if (map.toast.length() > 0) { toast(map.toast); map.toast = ""; }

@@ -82,6 +82,15 @@ public final class MapCore {
     /** true 면 이 상태기가 실제 화면의 것이다(미리 받기용 유령 상태기는 false) — 위치 칸을 기기 저장소(ShellCore.K_BUSCELL)에 적어 화면 캐시 열쇠가 따라가게 한다. */
     public boolean primary;
     public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; if (primary) st.put(ShellCore.K_BUSCELL, stopsKey()); loadStopsCache(); }
+    /** 새로고침(아래로 당기기 · 🔄 · 📍): 새로 확인한 위치로 바꾸고 이 칸에 두었던 정류장 목록(24시간 보관)도 버려 정류장을 처음부터 새로 받는다. */
+    public void setBusLocFresh(double la, double lo) {
+        busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false;
+        String k = stopsKey(); if (k.length() > 0) st.put(k, "");
+        if (primary) st.put(ShellCore.K_BUSCELL, stopsKey());
+    }
+    /** 즐겨찾기 새로고침도 현재 위치를 다시 확인해야 한다 — mp.rf 가 켜 두고, 껍데기가 한 번 읽는다. */
+    private boolean refLoc;
+    public boolean takeRefLoc() { boolean r = refLoc; refLoc = false; return r; }
     public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
     private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
@@ -507,7 +516,7 @@ public final class MapCore {
             while (ri.hasNext()) { String rk = ri.next(); if (rk.matches(ARR_KEY) || rk.matches(THRU_KEY)) ri.remove(); }
             return R_BUS_REF;
         }
-        if ("mp.rf".equals(v)) { busSel = -1; if (VW_FAV.equals(busView())) { busRes.clear(); busNeed.clear(); return R_BUS_REF; } return R_BUS_LOC; }
+        if ("mp.rf".equals(v)) { busSel = -1; if (VW_FAV.equals(busView())) { busRes.clear(); busNeed.clear(); refLoc = true; return R_BUS_REF; } return R_BUS_LOC; }
         if (v.startsWith("mp.pc.") || v.startsWith("mp.pm.")) { int i = idx(v, 6); if (i < 0) return R_NONE; busSel = i; return R_BUS_SEL; }
         if (v.startsWith("mp.fv.")) { int i = idx(v, 6); return i >= 0 && toggleFav(i) ? R_BUS_SEL : R_NONE; }
         if (v.startsWith("mp.al.")) {

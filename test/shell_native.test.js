@@ -714,7 +714,7 @@ function findAndroidJar() {
     assert.ok(/it\.lmt\.length\(\) > 0\) \{ setText\(ScreenCore\.BC_LM, true, pal\[R_GOLD\]\)/.test(sv) && /append\(q\.lmt\)/.test(sv), '금색 굵게 11 로 그리고 지문에 넣는다');
     assert.ok(/n\.ract = act\(m\.get\("rt"\), false\)/.test(sc) && /z2\[12\]/.test(sc) && /it\.za\.length > 3 && it\.za\[3\] != null/.test(sv), "안내 줄 '다시 시도 ›' 누르는 자리는 네 번째 칸");
     assert.ok(/public boolean busFailShow;/.test(mc) && /"mp\.rt"\.equals\(v\)/.test(mc) && /busFailShow \? ",\\"fl\\":1" : ""/.test(mc), '요청에 fl · mp.rt 는 도착정보·경유노선만 비운다');
-    assert.ok(/map\.busFailShow = busRetryN >= 3;/.test(a) && /case MapCore\.R_BUS_REF: busRetryN = 0;/.test(a), '자동 재시도 세 번 뒤에만 실패로 그린다 · 다시 시도는 횟수를 처음부터');
+    assert.ok(/map\.busFailShow = busRetryN >= 3;/.test(a) && /case MapCore\.R_BUS_REF:\s*busRetryN = 0;/.test(a), '자동 재시도 세 번 뒤에만 실패로 그린다 · 다시 시도는 횟수를 처음부터');
   });
   await t('s205: 미리받기 — 맛집(도착지·위치 확정 · 장소별 열쇠 · 호출 한도) · 호선 방 밀기(앞뒤 방 미리 · 뼈대 · 디바운스 · 캐시 120)', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
@@ -787,6 +787,11 @@ function findAndroidJar() {
     assert.ok(/pfChatAll\(java\.util\.Arrays\.asList\("all"\), liveRoom, theme, sec, cold\)/.test(a) && /pfChatAll\(sels, liveRoom, theme, sec, cold && !net\)/.test(a), '실시간소통: 강제면 싱싱한 방도 새로 받는다');
     assert.ok(/boolean missing = cold \|\| pfNeeds\(key\);/.test(a) && /forceNet\.set\(cold \? Boolean\.TRUE : null\)/.test(a) && /final boolean fn = Boolean\.TRUE\.equals\(forceNet\.get\(\)\);/.test(a) && /final boolean have = !fn && c != null/.test(a), '쇼핑: 강제면 신선 시간 · ETag 로 건너뛰지 않고 전체 글을 받는다(그 스레드만)');
     assert.ok(/if \(isNotMod\(base\) && cached != null\)/.test(a) && /haveCached\("shop\|" \+ c\)/.test(a), '쇼핑: 엔진이 같다(304)고 하고 모든 분류가 있으면 분류마다 다시 받지 않는다');
+  });
+  await t('s283: 버스 새로고침(당기기 · 🔄 · 📍)은 방금 받은 위치를 쓰지 않고 현재 위치를 다시 확인 · 정류장 목록도 새로 · 즐겨찾기 새로고침도 위치 재확인', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/private void locateFresh\(/.test(a) && /locateNow\(8000L, 1000L, 0L, cb\)/.test(a) && /locateFresh\(REQ_MAP_LOC, new LocCb\(\) \{[\s\S]{0,160}map\.setBusLocFresh\(/.test(a), '주변 새로고침: 지금 위치를 다시 받아 정류장 목록까지 새로');
+    assert.ok(/map\.takeRefLoc\(\) && hasLocPerm\(\)/.test(a) && /public void setBusLocFresh\(/.test(m) && /refLoc = true; return R_BUS_REF/.test(m), '즐겨찾기 새로고침도 위치를 다시 확인(옮겼으면 주변 정류장 갱신)');
   });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');

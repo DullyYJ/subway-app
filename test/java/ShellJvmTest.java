@@ -976,6 +976,10 @@ public class ShellJvmTest {
             }
             ok(bm.act("mp.vw.fav", null) == MapCore.R_BUS_VIEW && bm.busView().equals("fav") && ShellCore.mapKey("mapb", "bus", bsv).endsWith("|fav") && ShellCore.mapKey("maph", "bus", bsv).endsWith("|ALL") && bm.act("mp.vw.fav", null) == MapCore.R_NONE, "즐겨찾기로 전환(캐시 열쇠도 따로 · 머리는 그대로)");
             ok(bm.act("mp.rf", null) == MapCore.R_BUS_REF && bm.bodyRequest(18, "dark").contains("\"vw\":\"fav\"") && bm.act("mp.vw.near", null) == MapCore.R_BUS_VIEW && bm.act("mp.rf", null) == MapCore.R_BUS_LOC, "새로고침: 즐겨찾기는 도착정보만 · 주변은 위치부터");
+            ok(bm.takeRefLoc() && !bm.takeRefLoc(), "s283: 즐겨찾기 새로고침은 현재 위치 재확인 표시를 한 번 남긴다");
+            ok(bm.act("mp.rt", null) == MapCore.R_BUS_REF && !bm.takeRefLoc(), "s283: 카드의 다시 시도는 위치를 다시 확인하지 않는다");
+            { ShellCore.MemStore fs = new ShellCore.MemStore(); MapCore fm = new MapCore(fs); fm.setBusLoc(37.5, 127.0); String ck = MapCore.cellOf(37.5, 127.0); fs.put(ck, "{\"t\":1,\"r\":{}}");
+              fm.setBusLocFresh(37.5, 127.0); ok(fs.get(ck, "x").length() == 0 && fm.busLL[0] == 37.5, "s283: 새로고침 위치는 이 칸에 보관해 둔 정류장 목록을 버린다"); }
             bm.stopJson.clear(); bm.stopJson.add("{\"nm\":\"한진\",\"id\":\"SEOUL:5\",\"src\":\"topis\"}");
             ok(bm.act("mp.al.0", null) == MapCore.R_ALIAS && "SEOUL:5".equals(bm.aliasKey) && "한진".equals(bm.aliasName) && bm.aliasCur.isEmpty(), "✏️ → 별명 입력창 값");
             bm.setAlias("SEOUL:5", "  출근길  "); ok(bm.bodyRequest(18, "dark").contains("\"SEOUL:5\":\"출근길\"") && bm.act("mp.al.0", null) == MapCore.R_ALIAS && "출근길".equals(bm.aliasCur), "별명 저장(앞뒤 공백 제거) → 다음 요청에 실림");
