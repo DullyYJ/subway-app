@@ -147,6 +147,8 @@ public class ShellJvmTest {
                 PerfLog.end("bus.stops", "버스 진입→정류장"); PerfLog.end("bus.stops", "버스 진입→정류장");
                 String sp = PerfLog.snapshot();
                 ok(sp.contains("[\"버스 진입→정류장\",1,") && !sp.contains("도착정보"), "한 동작은 한 번만 센다 · 안 끝난 동작은 없다 " + sp);
+                { long ts0 = PerfLog.now(); PerfLog.span("바퀴", ts0); PerfLog.span("바퀴", ts0); PerfLog.span(null, ts0); }
+                ok(PerfLog.snapshot().contains("[\"바퀴\",2,"), "PerfLog.span: 한 번에 잰 구간도 모은다");
                 PerfLog.begin("chat.sw"); PerfLog.drop("chat.sw"); PerfLog.end("chat.sw", "소통방");
                 ok(!PerfLog.snapshot().contains("소통방"), "버린 동작은 세지 않는다");
                 PerfLog.net("https://a.b/screen/map", PerfLog.now(), true); PerfLog.srv("https://a.b/screen/map?q=1", 200); PerfLog.srv("https://a.b/screen/map", 400);

@@ -11,10 +11,10 @@ package com.dullyyj.subway;
 public final class PerfLog {
     private PerfLog() { }
 
-    private static final int MAX_PATHS = 12;
+    private static final int MAX_PATHS = 40;                 // s292: 12 개로는 /screen/map · /bus-tago 가 밀려 안 보였다(YJ 폰 기록)
     private static long dN, dSum, dMax, dSlow, lN, lSum, lMax, lSlow;
     private static final java.util.LinkedHashMap<String, long[]> NET = new java.util.LinkedHashMap<String, long[]>();     // 경로 → {횟수, 합ms, 최대ms, 실패}
-    private static final int MAX_SPANS = 10;
+    private static final int MAX_SPANS = 14;
     private static final java.util.LinkedHashMap<String, long[]> SPAN = new java.util.LinkedHashMap<String, long[]>();    // 이름 → {횟수, 합ms, 최대ms}
     private static final java.util.HashMap<String, Long> OPEN = new java.util.HashMap<String, Long>();                    // 열쇠 → 시작 시각(ns)
     private static final long SLOW_DRAW_MS = 17L, SLOW_LAYOUT_MS = 16L;
@@ -54,6 +54,13 @@ public final class PerfLog {
     }
     /** 한 동작의 시작을 적는다(같은 열쇠가 이미 열려 있으면 처음 시작을 지키지 않고 새로 시작한다 — 사람이 다시 누른 것이므로). */
     public static synchronized void begin(String key) { if (key != null && OPEN.size() < 16) OPEN.put(key, System.nanoTime()); }
+    /** 한 번에 잰 구간(시작 시각 t0 은 now() 로 잡은 값). */
+    public static synchronized void span(String name, long t0) {
+        if (name == null) return;
+        long[] a = SPAN.get(name);
+        if (a == null) { if (SPAN.size() >= MAX_SPANS) return; a = new long[3]; SPAN.put(name, a); }
+        long d = ms(t0); a[0]++; a[1] += d; if (d > a[2]) a[2] = d;
+    }
     /** 열려 있는 동작이 끝났다 — 걸린 ms 를 name 으로 모은다. 열려 있지 않으면 아무것도 하지 않는다(한 번만 센다). */
     public static synchronized void end(String key, String name) {
         Long t0 = key == null ? null : OPEN.remove(key);

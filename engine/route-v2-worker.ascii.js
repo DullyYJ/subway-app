@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s290";
+var ENGINE_VERSION = "route-v2-2026-10-29s292";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13651,11 +13651,11 @@ function settingsInt(v, lo, hi, def) { v = Math.floor(Number(v)); return (isFini
 function settingsPerfFacts(p) {
   if (!p || typeof p !== 'object') return null;
   var four = function (a) { a = Array.isArray(a) ? a : []; return [0, 1, 2, 3].map(function (i) { return settingsInt(a[i], 0, 99999999, 0); }); };
-  var net = (Array.isArray(p.n) ? p.n : []).slice(0, 12).map(function (r) {
+  var net = (Array.isArray(p.n) ? p.n : []).slice(0, 40).map(function (r) {
     r = Array.isArray(r) ? r : [];
     return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0), sv: settingsInt(r[5], -1, 99999999, -1) };
   });
-  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 10).map(function (r) {            // \uad6c\uac04 \uc2dc\uac04: [\uc774\ub984, \ud69f\uc218, \ud3c9\uade0ms, \ucd5c\ub300ms]
+  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 14).map(function (r) {            // \uad6c\uac04 \uc2dc\uac04: [\uc774\ub984, \ud69f\uc218, \ud3c9\uade0ms, \ucd5c\ub300ms]
     r = Array.isArray(r) ? r : [];
     return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0) };
   });
@@ -13668,7 +13668,7 @@ function settingsPerfLines(pf) {
   out.push('\uadf8\ub9ac\uae30  ' + d[0] + '\ud68c \u00b7 \ud3c9\uade0 ' + d[1] + 'ms \u00b7 \ucd5c\ub300 ' + d[2] + 'ms \u00b7 \ub290\ub9b0 \uac83 ' + d[3] + '\ud68c(' + pct(d) + '%)');
   out.push('\ud654\uba74 \uad6c\uc131  ' + l[0] + '\ud68c \u00b7 \ud3c9\uade0 ' + l[1] + 'ms \u00b7 \ucd5c\ub300 ' + l[2] + 'ms \u00b7 \ub290\ub9b0 \uac83 ' + l[3] + '\ud68c(' + pct(l) + '%)');
   var slowNet = [];
-  pf.n.forEach(function (r) {
+  pf.n.slice().sort(function (a, b) { return (b.a * b.n) - (a.a * a.n); }).slice(0, 14).forEach(function (r) {          // \ucd1d \uac78\ub9b0 \uc2dc\uac04(\ud3c9\uade0\u00d7\ud69f\uc218)\uc774 \ud070 \uac83\ubd80\ud130 14\uac1c \u2014 \uc624\ub798 \uac78\ub9b0 \uc8fc\uc18c\uac00 \ub9e8 \uc704
     out.push('\uc11c\ubc84 ' + r.p + '  ' + r.n + '\ud68c \u00b7 \ud3c9\uade0 ' + r.a + 'ms \u00b7 \ucd5c\ub300 ' + r.m + 'ms' + (r.sv >= 0 ? ' (\uc11c\ubc84 \ucc98\ub9ac ' + r.sv + 'ms \u00b7 \uc804\uc1a1 ' + Math.max(0, r.a - r.sv) + 'ms)' : '') + (r.x ? ' \u00b7 \uc2e4\ud328 ' + r.x + '\ud68c' : ''));
     if (r.n >= 2 && r.a >= 800) slowNet.push(r.p);
   });

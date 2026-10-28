@@ -2520,7 +2520,7 @@ public class ShellActivity extends Activity {
      * 옛 도착 숫자는 엔진에 넣지 않는다(보여 줄 옛 화면이 없으면 비운다). 지난번 도착정보 주소를 모르면 평소 길(엔진에게 묻기).
      */
     private void loadMapBodyFast(final ScreenView v, final boolean keep) {
-        if (!busRefreshing && "bus".equals(map.mode())) { PerfLog.begin("bus.stops"); PerfLog.begin("bus.arr"); }          // s290: 구간 시간 — 버스 탭을 연 때부터 정류장·도착정보가 뜰 때까지
+        if (!busRefreshing && "bus".equals(map.mode())) { PerfLog.begin("bus.stops"); PerfLog.begin("bus.first"); PerfLog.begin("bus.arr"); }          // s290: 구간 시간 — 버스 탭을 연 때부터 정류장·도착정보가 뜰 때까지
         if (busRefreshing) map.restoreArrivals(); busRefreshing = false;
         if (v == body && "bus".equals(map.mode())) {
             preconnectBus(); locKick();                                                     // 위치를 한 번 더 확인한다(홈과 같은 위치 — 달라졌으면 허브가 바로 그 동네로 옮긴다)
@@ -2618,7 +2618,7 @@ public class ShellActivity extends Activity {
         if (txt.length() > 0) map.onScreen(txt);
         if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
         final boolean shownNow = round >= MapCore.BUS_ROUNDS || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다)
-        if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); if (txt.length() > 0 && map.stopCount() > 0) PerfLog.end("bus.stops", "버스 진입→정류장"); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
+        if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); if (txt.length() > 0 && map.stopCount() > 0) PerfLog.end("bus.stops", "버스 진입→정류장"); if (txt.length() > 0 && map.routeCount(0) > 0) PerfLog.end("bus.first", "버스 진입→첫 도착정보"); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
         syncMapView();
         if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
         if (deferNeed) return;
@@ -2681,7 +2681,7 @@ public class ShellActivity extends Activity {
                 final String txt = r.status == 200 && r.body != null ? r.body : ""; warm(txt);          // 해석은 IO 스레드에서 — 주 스레드는 그리기만
                 main.post(new Runnable() { @Override public void run() {
                     busPaintFly = false;
-                    if (my == seqMapB && txt.length() > 0 && !busRefreshing && busShowing()) { v.setSourceAge(map.arrAge()); present(v, txt, true); }          // 그 사이 다음 통신·탭 이동이 있었으면 버린다(최종 그림이 곧 온다)
+                    if (my == seqMapB && txt.length() > 0 && !busRefreshing && busShowing()) { v.setSourceAge(map.arrAge()); present(v, txt, true); if (map.routeCount(0) > 0) PerfLog.end("bus.first", "버스 진입→첫 도착정보"); }          // 그 사이 다음 통신·탭 이동이 있었으면 버린다(최종 그림이 곧 온다)
                     if (busPaintDirty) { busPaintDirty = false; if (my == seqMapB) busPaint(v, my); }
                 } });
             }
@@ -2690,6 +2690,7 @@ public class ShellActivity extends Activity {
     private final java.util.HashSet<String> busDiagSeen = new java.util.HashSet<String>();
     private void fetchBusNeed(final ScreenView v, final boolean keep, final int round, final int my, final boolean partial) {
         final List<String[]> need = new ArrayList<String[]>(map.busNeed);
+        final long rnd0 = PerfLog.now();                                                          // s292: 기기가 직접 받는 한 바퀴(서버가 못 채운 주소)의 시간 — 횟수가 많으면 서버가 한 번에 못 채우고 있다는 뜻
         new Thread(new Runnable() {
             @Override public void run() {
                 final String[] got = new String[need.size()];
@@ -2709,6 +2710,7 @@ public class ShellActivity extends Activity {
                     ts[i].start();
                 }
                 for (Thread t : ts) { try { t.join(20000); } catch (InterruptedException e) { /* 무시 */ } }
+                PerfLog.span("버스 직접 받기 한 바퀴", rnd0);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     if (busRefreshing) {                                                          // s258 (YJ: 하나라도 비면 온 데이터는 살리고 안 온 것만 다시 받아야지) — 예전엔 하나라도 비면 이번 갱신 전체를 버렸다.

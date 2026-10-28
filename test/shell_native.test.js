@@ -928,12 +928,13 @@ function findAndroidJar() {
   });
   await t('s241: 반응 속도 기록 · 글자 폭 기억 — 숫자 몇 개만 모으고(내용 없음) 개발자 도구에서 읽는다', () => {
     const np = fs.readFileSync(N('NetPost.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), pl = fs.readFileSync(N('PerfLog.java'), 'utf8');
-    assert.ok(!/import android/.test(pl) && /synchronized void draw\(/.test(pl) && /synchronized void layout\(/.test(pl) && /synchronized void net\(/.test(pl) && /MAX_PATHS = 12/.test(pl), 'PerfLog: 순수 자바 · 경로 12개까지');
+    assert.ok(!/import android/.test(pl) && /synchronized void draw\(/.test(pl) && /synchronized void layout\(/.test(pl) && /synchronized void net\(/.test(pl) && /MAX_PATHS = 40/.test(pl), 'PerfLog: 순수 자바 · 경로 40개까지');
     assert.ok(/final long t0 = PerfLog\.now\(\)/.test(np) && /PerfLog\.net\(url, t0, /.test(np), '서버 요청 시간을 잰다(NetPost.send 한 곳)');
     assert.ok(/final long pt0 = PerfLog\.now\(\);[\s\S]{0,120}drawAll\(cv\);\s*PerfLog\.draw\(pt0\)/.test(sv) && /PerfLog\.layout\(plt0\)/.test(sv), '그리기 · 화면 구성 시간을 잰다');
     assert.ok(/widthMemo/.test(sv) && /memoDpr != dpr/.test(sv) && /widthMemo\.size\(\) > 6000/.test(sv), '글자 폭 기억(밀도가 바뀌면 비움 · 6000개 넘으면 비움)');
     assert.ok(/"perf\.reset"\.equals\(v\)\) \{ PerfLog\.reset\(\); return PG_RENDER;/.test(sc), '기록 지우기');
-    assert.ok(/PerfLog\.begin\("bus\.stops"\)[\s\S]{0,80}PerfLog\.begin\("bus\.arr"\)/.test(a) && /PerfLog\.end\("bus\.stops", "버스 진입→정류장"\)/.test(a) && /PerfLog\.end\("bus\.arr", "버스 진입→도착정보"\)/.test(a), 's290: 버스 진입→정류장·도착정보 구간 시간');
+    assert.ok(/PerfLog\.begin\("bus\.stops"\)[\s\S]{0,80}PerfLog\.begin\("bus\.arr"\)/.test(a) && /PerfLog\.end\("bus\.stops", "버스 진입→정류장"\)/.test(a) && /PerfLog\.end\("bus\.arr", "버스 진입→도착정보"\)/.test(a) && /PerfLog\.end\("bus\.first", "버스 진입→첫 도착정보"\)/.test(a), 's290: 버스 진입→정류장·첫 도착정보·전체 구간 시간');
+    assert.ok(/PerfLog\.span\("버스 직접 받기 한 바퀴", rnd0\)/.test(a), 's292: 기기가 직접 받는 바퀴 시간');
     assert.ok(/PerfLog\.begin\("chat\.sw"\)/.test(a) && /PerfLog\.end\("chat\.sw", "소통방 전환\(받아 둔 방\)"\)/.test(a) && /PerfLog\.end\("chat\.sw", "소통방 전환\(못 받은 방\)"\)/.test(a) && /PerfLog\.end\("chat\.ld", "소통방 받기→화면"\)/.test(a), 's290: 소통방 전환 구간 시간');
     assert.ok(/PerfLog\.parseServerTiming\(c\.getHeaderField\("Server-Timing"\)\)/.test(np), 's290: 서버 처리 시간(Server-Timing)을 읽는다');
     assert.ok(/DevCore\.withPerf\(DevCore\.pageFacts\(devPh, devLeft\(\), devStopped\), PerfLog\.snapshot\(\)\)/.test(a), '개발자 도구를 열 때 기록을 보낸다');

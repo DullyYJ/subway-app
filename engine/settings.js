@@ -186,11 +186,11 @@ function settingsInt(v, lo, hi, def) { v = Math.floor(Number(v)); return (isFini
 function settingsPerfFacts(p) {
   if (!p || typeof p !== 'object') return null;
   var four = function (a) { a = Array.isArray(a) ? a : []; return [0, 1, 2, 3].map(function (i) { return settingsInt(a[i], 0, 99999999, 0); }); };
-  var net = (Array.isArray(p.n) ? p.n : []).slice(0, 12).map(function (r) {
+  var net = (Array.isArray(p.n) ? p.n : []).slice(0, 40).map(function (r) {
     r = Array.isArray(r) ? r : [];
     return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0), x: settingsInt(r[4], 0, 99999999, 0), sv: settingsInt(r[5], -1, 99999999, -1) };
   });
-  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 10).map(function (r) {            // 구간 시간: [이름, 횟수, 평균ms, 최대ms]
+  var spans = (Array.isArray(p.s) ? p.s : []).slice(0, 14).map(function (r) {            // 구간 시간: [이름, 횟수, 평균ms, 최대ms]
     r = Array.isArray(r) ? r : [];
     return { p: settingsStr(r[0], 40), n: settingsInt(r[1], 0, 99999999, 0), a: settingsInt(r[2], 0, 99999999, 0), m: settingsInt(r[3], 0, 99999999, 0) };
   });
@@ -203,7 +203,7 @@ function settingsPerfLines(pf) {
   out.push('그리기  ' + d[0] + '회 · 평균 ' + d[1] + 'ms · 최대 ' + d[2] + 'ms · 느린 것 ' + d[3] + '회(' + pct(d) + '%)');
   out.push('화면 구성  ' + l[0] + '회 · 평균 ' + l[1] + 'ms · 최대 ' + l[2] + 'ms · 느린 것 ' + l[3] + '회(' + pct(l) + '%)');
   var slowNet = [];
-  pf.n.forEach(function (r) {
+  pf.n.slice().sort(function (a, b) { return (b.a * b.n) - (a.a * a.n); }).slice(0, 14).forEach(function (r) {          // 총 걸린 시간(평균×횟수)이 큰 것부터 14개 — 오래 걸린 주소가 맨 위
     out.push('서버 ' + r.p + '  ' + r.n + '회 · 평균 ' + r.a + 'ms · 최대 ' + r.m + 'ms' + (r.sv >= 0 ? ' (서버 처리 ' + r.sv + 'ms · 전송 ' + Math.max(0, r.a - r.sv) + 'ms)' : '') + (r.x ? ' · 실패 ' + r.x + '회' : ''));
     if (r.n >= 2 && r.a >= 800) slowNet.push(r.p);
   });
