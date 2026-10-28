@@ -3160,3 +3160,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 앱: `CmCore.briefBody(...,eta)` 5인자 · `CommuteAlarm` 은 eta 요청 · POST 10초.
 - 타임라인(`ScreenCore`): s265 의 끝 여백(`padR` 로 마지막 마커 가운데) 제거 → 마지막 칸 + padR 에서 멈춘다. 왼쪽 끝 공백 없음.
 - 워커 `route-v2-2026-10-28s285`(CBRIEF 사본 · 설정 내장 교체). 기기에서는 확인하지 못했다.
+
+## s286 (2026-10-28) — 응원 문구: 서버가 달마다 만들어 KV 에 두고 알림이 가져온다 · 날씨 · 요일에 따라 매일 다르게 (YJ)
+- `engine/commute-brief.js`: 문구 조각 `CB_IMG`(달 12 × 풍경 3 × 출근/퇴근) · `CB_WISH`(출근 14 힘찬 응원 / 퇴근 14 수고·위로) · `CB_DOW`(요일 7 × 주 2가지). `cbCheerMonth(ms)` = 한 달 치 꼬리 31개(달·해 씨앗으로 소원 순서를 섞고, (소원,풍경) 짝이 31일 동안 겹치지 않는다). `cbClosing(kind, ms, wx, month)` = [날씨 머리말(출발지 실시간: 눈>비>무더위>추위>바람>맑음>흐림) + 요일 + 아침/저녁, 요일 응원] + 그날 꼬리. 이전 s285 의 63개 고정 목록(`CB_CHEER`)은 없앴다.
+- `engine/commute-brief-worker.js`: `cbCheerLoad`(KV `cheer:YYYY-MM` 읽기, 없으면 그 자리에서 같은 문구를 만들고 저장) · `cbCheerCron`(이달 것이 없으면 만들어 `ROWS_KV` 에 50일 보관, 25일부터는 다음 달 것도). 워커 `scheduled` 에 `cbCheerCron` 추가 → 기존 cron 이 돌 때마다 한 번 확인(이미 있으면 읽기만).
+- 앱 변경 없음(알림 때마다 `/commute-brief` 를 부르므로 서버가 바꾼 문구를 그대로 받는다). 워커 `route-v2-2026-10-28s286`.
+- 한계: LLM 키가 없어 문구는 조각 조합(결정적). KV 의 `cheer:YYYY-MM` 값을 직접 고치면 그 달 문구가 바뀐다(`morn`/`eve` 각 31개 배열). 기기에서는 확인하지 못했다.

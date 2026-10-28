@@ -65,7 +65,7 @@ t('제목·본문(s285): 예상 소요·도착시각 · 출발지 날씨 · 도�
   const recs = L.filter(x => x.indexOf('· ') === 0);
   assert.ok(recs.length >= 1 && recs.length <= 3, '추천 ' + recs.length);
   assert.ok(recs.indexOf('· 접이식 우산 있으면 안심이에요') >= 0 && recs.indexOf('· 쌀쌀해요, 겉옷 챙기세요') >= 0);
-  assert.strictEqual(L[L.length - 1], M.cbClosing('morn', AT('2026-10-21T07:40:00+09:00')));
+  assert.strictEqual(L[L.length - 1], M.cbClosing('morn', AT('2026-10-21T07:40:00+09:00'), { temp: 14, feel: 11, rain: 30, txt: '구름' }), '마무리는 출발지 날씨를 반영한 매크로 문장');
   assert.deepStrictEqual(r.route.to.name, '강남');
 });
 t('도착지 날씨는 출발지와 비슷해도 늘 보인다(s281) · 옷차림은 두 곳 중 나쁜 쪽에 맞춘다', () => {
@@ -93,17 +93,51 @@ t('버스 출발이면 혼잡도 줄을 빼고, 극단 날씨 추천(더위·추
   const cold = M.cbBrief({ kind: 'morn', nowMs: AT('2026-10-21T10:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }, { temp: -3, feel: -8, txt: '눈' }, null).body;
   assert.ok(/강추위예요/.test(cold));
 });
-t('응원 문구(s285): 출근=힘찬 응원 · 퇴근=위로 · 날마다 다르다(63일 순환) · 같은 날은 같은 문구', () => {
-  const N = M.CB_CHEER.morn.length;
-  assert.ok(N >= 60 && M.CB_CHEER.eve.length === N && new Set(M.CB_CHEER.morn).size === N && new Set(M.CB_CHEER.eve).size === N, '출근 · 퇴근 각 ' + N + '개, 겹치는 문장 없음');
-  assert.strictEqual(M.cbClosing('morn', AT('2026-10-21T07:00:00+09:00')), M.cbClosing('morn', AT('2026-10-21T22:00:00+09:00')), '같은 날은 같은 문구');
-  for (const kind of ['morn', 'eve']) {
-    const seen = new Set(); for (let d = 0; d < N; d++) seen.add(M.cbClosing(kind, AT('2026-10-21T07:00:00+09:00') + d * 86400000));
-    assert.strictEqual(seen.size, N, kind + ': ' + N + '일 동안 매일 다르다');
+t('응원 문구 매크로(s286): 달마다 다르다 · 요일마다 다르다 · 날씨에 따라 머리말이 다르다 · 출근=힘찬 응원 · 퇴근=위로 · 같은 날은 같은 문장', () => {
+  const D = (y, m, d, hh) => AT(y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0') + 'T' + String(hh || 7).padStart(2, '0') + ':00:00+09:00');
+  // 풍경 조각: 12달 × 3 × (출근 · 퇴근) — 달 이름이 들어 있고 달끼리 겹치지 않는다
+  for (const kd of ['morn', 'eve']) {
+    assert.strictEqual(M.CB_IMG[kd].length, 12); assert.strictEqual(M.CB_WISH[kd].length, 14); assert.strictEqual(M.CB_DOW[kd].length, 7);
+    const all = [].concat(...M.CB_IMG[kd]); assert.strictEqual(new Set(all).size, 36, kd + ': 풍경 36개가 모두 다르다');
+    M.CB_IMG[kd].forEach((a, mo) => a.forEach(x => { if (/\d+월/.test(x)) assert.ok(x.indexOf((mo + 1) + '월') >= 0, kd + ' ' + (mo + 1) + '월 풍경에 다른 달 이름: ' + x); }));
+    assert.strictEqual(new Set(M.CB_WISH[kd]).size, 14);
   }
-  assert.ok(M.CB_CHEER.morn.every(x => !M.CB_CHEER.eve.includes(x)), '출근과 퇴근 문장은 다르다');
-  assert.ok(M.CB_CHEER.eve.filter(x => /수고|고생|쉬|위로|괜찮|토닥/.test(x)).length >= 20, '퇴근 문구는 수고 · 위로 · 휴식을 건네는 문장이 대부분');
-  assert.ok(M.CB_CHEER.morn.filter(x => /힘|응원|출발|시작|파이팅|화이팅|당당|용기|에너지|기운|도전|자신/.test(x)).length >= 15, '출근 문구에는 힘찬 응원이 담긴다');
+  assert.ok(M.CB_WISH.morn.every(x => !M.CB_WISH.eve.includes(x)) && [].concat(...M.CB_DOW.morn).every(x => ![].concat(...M.CB_DOW.eve).includes(x)), '출근과 퇴근 문장은 다르다');
+  // 달마다 다르다(같은 요일 · 같은 날짜 번호 · 같은 날씨여도)
+  for (const kd of ['morn', 'eve']) {
+    const imgs = new Set(); for (let m = 1; m <= 12; m++) imgs.add(M.cbClosing(kd, D(2026, m, 15), null).split('. ')[1].split('처럼')[0]);
+    assert.strictEqual(imgs.size, 12, kd + ': 12달이 모두 다른 풍경');
+  }
+  // 한 달 치(cbCheerMonth): 31일 겹침 없음 · 달마다 · 해마다 다르다 · 같은 달은 늘 같다
+  const mm = (y, m) => M.cbCheerMonth(D(y, m, 15));
+  for (const kd of ['morn', 'eve']) {
+    for (let m = 1; m <= 12; m++) assert.strictEqual(new Set(mm(2026, m)[kd]).size, 31, kd + ' ' + m + '월 31일 모두 다르다');
+    for (let m = 1; m < 12; m++) assert.strictEqual(mm(2026, m)[kd].filter(x => mm(2026, m + 1)[kd].includes(x)).length, 0, kd + ' ' + m + '월과 ' + (m + 1) + '월은 겹치는 문장이 없다');
+    assert.ok(mm(2026, 10)[kd].filter((x, i) => x === mm(2027, 10)[kd][i]).length <= 10, kd + ': 해가 바뀌면 순서가 달라진다');
+  }
+  assert.deepStrictEqual(mm(2026, 10), M.cbCheerMonth(D(2026, 10, 1, 0)), '같은 달은 날짜 · 시각과 상관없이 같다'); assert.strictEqual(mm(2026, 10).ym, '2026-10');
+  const custom = mm(2026, 10); custom.morn[20] = '바꾼 꼬리.';
+  assert.ok(M.cbClosing('morn', D(2026, 10, 21), null, custom).endsWith('바꾼 꼬리.'), '서버가 준 달 문구를 쓴다');
+  assert.strictEqual(M.cbClosing('morn', D(2026, 11, 21), null, custom), M.cbClosing('morn', D(2026, 11, 21), null), '달이 다른 문구는 쓰지 않고 새로 만든다');
+  // 한 달(31일) 안에서 같은 문장이 없다
+  for (const kd of ['morn', 'eve']) { const sn = new Set(); for (let d = 1; d <= 31; d++) sn.add(M.cbClosing(kd, D(2026, 10, d), null)); assert.strictEqual(sn.size, 31, kd + ': 10월 31일 모두 다르다'); }
+  assert.strictEqual(M.cbClosing('morn', D(2026, 10, 21, 7), null), M.cbClosing('morn', D(2026, 10, 21, 23), null), '같은 날은 같은 문장');
+  // 요일: 같은 달 · 같은 주의 다른 요일은 요일 이름과 요일 응원이 다르다
+  const dn = ['일', '월', '화', '수', '목', '금', '토'], seen = new Set();
+  for (let d = 18; d <= 24; d++) { const c = M.cbClosing('eve', D(2026, 10, d), null); const k = new Date(D(2026, 10, d) + 9 * 3600000).getUTCDay(); assert.ok(c.indexOf(dn[k] + '요일 저녁,') === 0, c); seen.add(c.split('. ')[0]); }
+  assert.strictEqual(seen.size, 7, '요일마다 다른 첫 문장');
+  assert.notStrictEqual(M.cbClosing('morn', D(2026, 10, 19), null).split('. ')[0], M.cbClosing('morn', D(2026, 10, 26), null).split('. ')[0], '같은 요일도 주마다 번갈아');
+  // 날씨 머리말
+  const head = w => M.cbClosing('morn', D(2026, 10, 19), w).split('월요일')[0];
+  assert.strictEqual(head({ temp: 14, txt: '비', rain: 80 }), '비 오는 '); assert.strictEqual(head({ temp: -3, txt: '눈' }), '눈 내리는 ');
+  assert.strictEqual(head({ temp: 33, feel: 36, txt: '맑음' }), '무더운 '); assert.strictEqual(head({ temp: -2, feel: -6, txt: '맑음' }), '추운 ');
+  assert.strictEqual(head({ temp: 12, wind: 40, txt: '맑음' }), '바람 부는 '); assert.strictEqual(head({ temp: 18, txt: '맑음' }), '맑은 ');
+  assert.strictEqual(head({ temp: 18, txt: '구름 많음' }), '흐린 '); assert.strictEqual(head(null), ''); assert.strictEqual(head({ temp: 18, txt: '' }), '');
+  assert.ok(/^비 오는 월요일 아침, /.test(M.cbBrief({ kind: 'morn', nowMs: D(2026, 10, 19), from: { nm: '인하대' }, to: { nm: '강남' } }, { temp: 14, txt: '비', rain: 80 }, null).body.split('\n').pop()), '브리핑 마지막 줄에 날씨가 반영된다');
+  // 출근=힘찬 응원 · 퇴근=수고 위로
+  assert.ok(M.CB_WISH.eve.filter(x => /수고|고생|쉬|괜찮|토닥|잘했|대단|고마/.test(x)).length >= 10, '퇴근 소원은 수고 · 위로');
+  assert.ok(M.CB_WISH.morn.filter(x => /출발|응원|당당|해내|파이팅|씩씩|웃|기운|에너지|도전/.test(x)).length >= 10, '출근 소원은 힘찬 응원');
+  assert.ok(M.cbClosing('eve', D(2026, 10, 21), null).length < 120, '알림에 들어갈 길이');
 });
 t('예상 소요 · 도착시각(s285): 엔진이 준 경로 소요로 한국 시각 도착을 만든다 · 없으면 줄이 빠진다', () => {
   const at = AT('2026-10-21T18:00:00+09:00');
@@ -138,6 +172,7 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
   assert.ok(body.indexOf(esc(fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8').trimEnd())) >= 0, '연결부 사본');
   assert.ok(w.indexOf('if (url.pathname === "/commute-brief") return handleCommuteBrief(request, env, ctx);') > 0);
   assert.ok(!/[^\x00-\x7f]/.test(body));
+  assert.ok(/ctx\.waitUntil\(cbCheerCron\(env\)\.catch\(/.test(w.slice(w.indexOf('async scheduled(event, env, ctx)'), w.indexOf('async fetch(request, env, ctx)'))), 's286: cron(scheduled)이 응원 문구 한 달 치를 만든다');
 });
 
 (async () => {
@@ -145,9 +180,9 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
   const scn = fs.readFileSync(path.join(root, 'engine/scene-worker.js'), 'utf8');
   const glue = scn.slice(scn.indexOf('var WX_CODES'), scn.indexOf('async function sceneWeather')) + '\n' + fs.readFileSync(path.join(root, 'engine/commute-brief-worker.js'), 'utf8');   // s219: 날씨는 장면 엔진의 wxMeteo(Open-Meteo)를 같이 쓴다
   const calls = [];
-  const fn = new Function('cbPlan', 'cbCompose', 'WSAY_WX_URL', 'fetch', 'AbortController', 'Response', glue + '\nreturn handleCommuteBrief;');
+  const fn = new Function('cbPlan', 'cbCompose', 'cbCheerMonth', 'WSAY_WX_URL', 'fetch', 'AbortController', 'Response', glue + '\nreturn { handleCommuteBrief: handleCommuteBrief, cbCheerCron: cbCheerCron, cbCheerLoad: cbCheerLoad };');
   const fakeFetch = async (u) => { calls.push(u); return { ok: true, json: async () => ({ current: { time: '2026-10-21T07:00', temperature_2m: 14, apparent_temperature: 11, relative_humidity_2m: 60, weather_code: 2, wind_speed_10m: 2 }, hourly: { time: ['2026-10-21T07:00', '2026-10-21T08:00', '2026-10-21T09:00'], precipitation_probability: [30, 10, 5] }, daily: { uv_index_max: [3], temperature_2m_max: [21], temperature_2m_min: [9] } }) }; };
-  const h = fn(M.cbPlan, M.cbCompose, 'https://wx.test/weather', fakeFetch, AbortController, Response);
+  const G = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, 'https://wx.test/weather', fakeFetch, AbortController, Response), h = (rq, env) => G.handleCommuteBrief(rq, env || {}, { waitUntil: () => {} });
   const post = (b) => h(new Request('https://x.test/commute-brief', { method: 'POST', body: typeof b === 'string' ? b : JSON.stringify(b) })).then(r => r.json().then(j => [r.status, j]));
   const [s1, j1] = await post({ kind: 'morn', nowMs: AT('2026-10-21T07:40:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } });
   try {
@@ -155,11 +190,36 @@ t('워커 내장 사본이 모듈 · 연결부와 같고 경로가 등록돼 있
     assert.ok(/인하대 14° 구름/.test(j1.body)); assert.ok(calls.length >= 2 && /latitude=37\.44/.test(calls[0]), calls.join(' '));
     const [s2] = await post('JSON 아님'); assert.strictEqual(s2, 400);
     const [s3] = await post({ pad: 'x'.repeat(7000) }); assert.strictEqual(s3, 413);
-    const bad = fn(M.cbPlan, M.cbCompose, 'https://wx.test/weather', async () => { throw new Error('down'); }, AbortController, Response);
-    const r4 = await bad(new Request('https://x.test/commute-brief', { method: 'POST', body: JSON.stringify({ kind: 'eve', nowMs: AT('2026-10-21T18:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }) })).then(r => r.json());
+    const bad = fn(M.cbPlan, M.cbCompose, M.cbCheerMonth, 'https://wx.test/weather', async () => { throw new Error('down'); }, AbortController, Response).handleCommuteBrief;
+    const r4 = await bad(new Request('https://x.test/commute-brief', { method: 'POST', body: JSON.stringify({ kind: 'eve', nowMs: AT('2026-10-21T18:00:00+09:00'), from: { nm: '인하대' }, to: { nm: '강남' } }) }), {}, { waitUntil: () => {} }).then(r => r.json());
     assert.strictEqual(r4.ok, true); assert.ok(!/°/.test(r4.body), '날씨 서버가 죽어도 문구는 나온다');
     pass++; console.log('  ok   워커 연결부: 날씨 받기 · 잘못된 본문 · 너무 큼 · 날씨 서버 장애');
   } catch (e) { fail++; console.log('  FAIL 워커 연결부', String(e && e.message).split('\n')[0]); }
+  try {
+    // s286: 서버가 달마다 만들어 KV 에 두는 응원 문구 한 달 치
+    const kv = new Map(), puts = [], KV = { get: async (k) => kv.has(k) ? JSON.parse(kv.get(k)) : null, put: async (k, v, o) => { kv.set(k, v); puts.push([k, o && o.expirationTtl]); } };
+    const real = Date.now; const setNow = ms => { Date.now = () => ms; };
+    try {
+      setNow(AT('2026-10-03T04:00:00+09:00')); let r = await G.cbCheerCron({ ROWS_KV: KV });
+      assert.deepStrictEqual(r.made, ['cheer:2026-10'], '이달 것을 만든다'); assert.ok(puts[0][1] >= 40 * 86400, '약 50일 보관');
+      r = await G.cbCheerCron({ ROWS_KV: KV }); assert.deepStrictEqual(r.made, [], '이미 있으면 다시 만들지 않는다(cron 이 자주 돌아도)');
+      setNow(AT('2026-10-26T04:00:00+09:00')); r = await G.cbCheerCron({ ROWS_KV: KV });
+      assert.deepStrictEqual(r.made, ['cheer:2026-11'], '25일부터 다음 달 것을 미리 만든다');
+      setNow(AT('2026-12-28T04:00:00+09:00')); r = await G.cbCheerCron({ ROWS_KV: KV });
+      assert.deepStrictEqual(r.made, ['cheer:2026-12', 'cheer:2027-01'], '12월 말 → 다음 해 1월');
+      assert.deepStrictEqual(await G.cbCheerCron({}), { skipped: 'no-kv' });
+    } finally { Date.now = real; }
+    assert.ok(JSON.parse(kv.get('cheer:2026-11')).morn.length === 31 && JSON.parse(kv.get('cheer:2026-11')).ym === '2026-11');
+    // 알림 요청은 KV 의 이달 문구를 쓴다(서버에서 바꿔 둔 문구가 그대로 나간다) · KV 가 없거나 비어 있어도 같은 문구가 나온다
+    const own = M.cbCheerMonth(AT('2026-11-12T07:00:00+09:00')); own.morn[11] = '서버가 바꿔 둔 11월 12일 꼬리.'; kv.set('cheer:2026-11', JSON.stringify(own));
+    const at = AT('2026-11-12T07:40:00+09:00'), rq = () => new Request('https://x.test/commute-brief', { method: 'POST', body: JSON.stringify({ kind: 'morn', nowMs: at, from: { nm: '인하대' }, to: { nm: '강남' } }) });
+    const j5 = await h(rq(), { ROWS_KV: KV }).then(r => r.json());
+    assert.ok(j5.body.split('\n').pop().endsWith('서버가 바꿔 둔 11월 12일 꼬리.'), j5.body.split('\n').pop());
+    const j6 = await h(rq(), {}).then(r => r.json()), j7 = await h(rq(), { ROWS_KV: { get: async () => { throw new Error('kv down'); }, put: async () => {} } }).then(r => r.json());
+    assert.strictEqual(j6.body.split('\n').pop(), M.cbClosing('morn', at, { temp: 14, feel: 11, rain: 0, txt: '구름' }), 'KV 가 없으면 그 자리에서 같은 문구');
+    assert.strictEqual(j7.body, j6.body, 'KV 가 죽어도 같은 문구');
+    pass++; console.log('  ok   응원 문구 서버(s286): cron 이 달마다 한 번만 만들어 KV 에 두고 · 25일부터 다음 달 · 알림이 KV 문구를 쓴다 · KV 없어도 같은 문구');
+  } catch (e) { fail++; console.log('  FAIL 응원 문구 서버(s286)', String(e && e.stack).split('\n').slice(0, 3).join(' | ')); }
   console.log('commute_brief:', pass, '통과', fail, '실패');
   process.exit(fail ? 1 : 0);
 })();
