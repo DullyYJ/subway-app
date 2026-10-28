@@ -114,6 +114,32 @@ var _MEM = Object.create(null);
 function memGet(k, ttl) { var h = _MEM[k]; return h && Date.now() - h.at < ttl ? h.v : null; }
 function memPut(k, v) { _MEM[k] = { at: Date.now(), v: v }; }
 var _lrRetry = false;
+// ★ s291 (YJ: 소통방이 느리다 — 새 글이 몇 초 뒤에야 보인다): 롱폴. 앱이 wait=20 을 붙여 부르면 since 이후 새 줄이 생길 때까지(최대 20초) 붙들고 있다가
+//   생기는 즉시(1초 간격 확인) 돌려준다. 새 줄이 없이 시간이 다 되면 changed:false 로 돌려준다 → 앱은 곧바로 다시 건다(조용한 방은 20초에 한 번만 요청).
+//   · 확인은 (line, ts) 색인 한 번 읽기(LIMIT 1) — 5초 메모리 스냅샷을 거치지 않아서 바로 보인다. 새 줄이 보이면 이 격리의 스냅샷을 버려 다시 읽는다.
+//   · 한 격리에서 붙들고 있는 요청이 LW_MAX 개를 넘으면 더 붙들지 않고 바로 돌려준다(예전처럼 앱이 6초마다 부르는 것과 같다).
+//   · wait 가 없거나 since 가 0 이면 예전과 완전히 같다(옛 앱 호환). 응답에 changed 가 있으면 새 서버라는 표시다.
+var LW_MAX = 60, LW_STEP_MS = 1000, LW_MAX_S = 20, _lwN = 0;
+async function lrWaitNew(env, line, since, waitS) {   // line: 노선 이름 또는 null(전체 = 대화 줄 전부) → { changed, waited }
+  const t0 = Date.now(), end = t0 + Math.min(LW_MAX_S, Math.max(0, waitS | 0)) * 1000;
+  if (_lwN >= LW_MAX || !(since > 0) || end <= t0) return { changed: false, waited: 0 };
+  _lwN++;
+  try {
+    for (;;) {
+      const now = Date.now();
+      let r = null;
+      try {
+        r = line
+          ? await env.DB.prepare("SELECT 1 AS x FROM line_msgs WHERE line=?1 AND ts > ?2 AND ts <= ?3" + LR_HIDDEN_SQL + " LIMIT 1").bind(line, since, now).first()
+          : await env.DB.prepare("SELECT 1 AS x FROM line_msgs WHERE kind='chat' AND ts > ?1 AND ts <= ?2" + LR_HIDDEN_SQL + " LIMIT 1").bind(since, now).first();
+      } catch (e) { return { changed: false, waited: now - t0 }; }
+      if (r) return { changed: true, waited: now - t0 };
+      const left = end - Date.now();
+      if (left <= 0) return { changed: false, waited: Date.now() - t0 };
+      await new Promise(function (res) { setTimeout(res, Math.min(LW_STEP_MS, left)); });
+    }
+  } finally { _lwN--; }
+}
 async function ensureLineRoom(env, wait) {
   if (_lrReady) return;
   _lrReady = true;
@@ -2307,6 +2333,9 @@ var worker_default = {
     if (url.pathname === "/talks") {
       const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
       const limit = Math.min(60, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
+      const lwS = parseInt(url.searchParams.get("wait") || "0", 10) || 0;
+      let lw = null;
+      if (lwS > 0) { await ensureLineRoom(env).catch(function () {}); lw = await lrWaitNew(env, null, since, lwS); if (lw.changed) delete _MEM["talks"]; }
       const snapKey = new Request(url.origin + "/talks?snap=1");
       // ★ 2026-10-10: workers.dev 에서는 엣지 캐시(caches.default)가 동작하지 않는다(Cloudflare 문서: 사용자 지정 도메인에서만) →
       //   같은 격리 안에서 5초간은 메모리 스냅샷을 쓴다.
@@ -2338,7 +2367,7 @@ var worker_default = {
       }
       let rows = snap.talks || [];
       rows = since > 0 ? rows.filter(function(t) { return t.ts >= since; }) : rows.slice(-limit);
-      return new Response(JSON.stringify({ ok: true, now: Date.now(), talks: rows }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
+      return new Response(JSON.stringify(lw ? { ok: true, now: Date.now(), changed: lw.changed, talks: rows } : { ok: true, now: Date.now(), talks: rows }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
     }
     // ★ 2026-10-03 (개선안 4·5): 노선별 방. 대화 읽기/쓰기 + 지연 제보 집계.
     if (url.pathname === "/lroom" && req.method === "POST") {
@@ -2394,6 +2423,9 @@ var worker_default = {
       const line = String(url.searchParams.get("line") || "").trim();
       if (!lrLineOk(line)) return new Response(JSON.stringify({ ok: false, error: "line" }), { status: 400, headers: cors });
       const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
+      const lwS = parseInt(url.searchParams.get("wait") || "0", 10) || 0;
+      let lw = null;
+      if (lwS > 0) { await ensureLineRoom(env).catch(function () {}); lw = await lrWaitNew(env, line, since, lwS); if (lw.changed) delete _MEM["lroom:" + line]; }
       const snapKey = new Request(url.origin + "/lroom?snap=1&line=" + encodeURIComponent(line));
       let snap = memGet("lroom:" + line, 5000);
       if (!snap) { try { const hit = await caches.default.match(snapKey); if (hit) snap = await hit.json(); } catch (e) {} }
@@ -2414,7 +2446,7 @@ var worker_default = {
         }
       }
       const rows = since > 0 ? (snap.msgs || []).filter((m) => m.ts >= since) : (snap.msgs || []);
-      return new Response(JSON.stringify({ ok: true, now: Date.now(), msgs: rows, alert: snap.alert }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
+      return new Response(JSON.stringify(lw ? { ok: true, now: Date.now(), changed: lw.changed, msgs: rows, alert: snap.alert } : { ok: true, now: Date.now(), msgs: rows, alert: snap.alert }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
     }
     if (url.pathname === "/lalerts") {
       const lines = String(url.searchParams.get("lines") || "").split(",").map((x) => x.trim()).filter(lrLineOk).slice(0, 8);

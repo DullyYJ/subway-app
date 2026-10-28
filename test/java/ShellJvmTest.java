@@ -650,6 +650,28 @@ public class ShellJvmTest {
                 ok(lv.requestFor("all", true, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"ready\""), "전체 방은 글이 있으니 준비됨");
                 ok(MapCore.cellsNear("bsc_37583_126708", "bsc_37584_126710", 3) && !MapCore.cellsNear("bsc_37583_126708", "bsc_37587_126708", 3) && !MapCore.cellsNear("bsc_37583_126708", "", 3) && !MapCore.cellsNear(null, "bsc_1_2", 3) && !MapCore.cellsNear("bsc_x_y", "bsc_1_2", 3) && MapCore.cellsNear("bsc_1_2", "bsc_1_2", 0), "위치 칸 이웃: 위 · 경도 3칸(약 330m) 이내");
             }
+            {   // s291 가장 나중 것만 쓴다(Latest) · 소통방 롱폴 주소/표시
+                Latest lt = new Latest();
+                Latest.Token a1 = lt.begin();
+                final int[] cc = new int[1];
+                a1.onCancel(new Runnable() { @Override public void run() { cc[0]++; } });
+                ok(a1.live() && lt.isCurrent(a1) && cc[0] == 0, "Latest: 시작한 일은 최신");
+                Latest.Token a2 = lt.begin();
+                ok(!a1.live() && a2.live() && !lt.isCurrent(a1) && lt.isCurrent(a2) && cc[0] == 1, "Latest: 새 일을 시작하면 앞 일은 죽고 취소 일이 한 번 불린다");
+                lt.begin(); ok(cc[0] == 1, "Latest: 취소 일은 한 번만");
+                Latest.Token a3 = lt.begin(); lt.cancel(); ok(!a3.live() && !lt.isCurrent(a3), "Latest: cancel 은 새 일 없이 죽인다");
+                final int[] c4 = new int[1]; a3.onCancel(new Runnable() { @Override public void run() { c4[0]++; } }); ok(c4[0] == 1, "Latest: 이미 죽은 표에 건 취소 일은 바로 불린다");
+                Latest.Token a5 = lt.begin(); a5.onCancel(new Runnable() { @Override public void run() { throw new RuntimeException("x"); } }); lt.begin(); ok(!a5.live(), "Latest: 취소 일이 예외를 던져도 계속된다");
+                ChatCore lc = new ChatCore(new ShellCore.MemStore());
+                ok(lc.liveUrl("2호선", 18) == null && lc.liveUrl("all", 18) == null, "롱폴: 아직 한 번도 못 받았으면 주소 없음(먼저 보통 요청)");
+                lc.addRoom("2호선", "{\"ok\":true,\"now\":5000,\"msgs\":[]}");
+                ok(lc.liveUrl("2호선", 18).equals(ShellCore.BOARD_BASE + "/lroom?line=" + ShellCore.enc("2호선") + "&since=5000&wait=18"), "롱폴: 글이 없는 방은 서버가 알려 준 지금 이후를 기다린다 " + lc.liveUrl("2호선", 18));
+                lc.addRoom("2호선", "{\"ok\":true,\"now\":9000,\"changed\":true,\"msgs\":[{\"id\":\"m1\",\"ts\":8000,\"nick\":\"a\",\"text\":\"b\",\"kind\":\"\"}]}");
+                ok(lc.liveUrl("2호선", 18).contains("&since=8000&wait=18") && lc.liveUrl("2호선", 99).endsWith("&wait=20") && lc.liveUrl("2호선", 0) == null, "롱폴: 글이 있으면 마지막 글 시각 이후 · 최대 20초 · 0초는 주소 없음");
+                lc.addTalks("{\"ok\":true,\"now\":7000,\"talks\":[]}", "나");
+                ok(lc.liveUrl("all", 18).equals(ShellCore.BOARD_BASE + "/talks?since=7000&limit=40&wait=18"), "롱폴: 전체도 같다 " + lc.liveUrl("all", 18));
+                ok(ChatCore.liveFlag("{\"ok\":true,\"now\":1730000000000,\"changed\":true,\"msgs\":[]}") == 1 && ChatCore.liveFlag("{\"ok\":true,\"now\":1730000000000,\"changed\":false,\"talks\":[]}") == 0 && ChatCore.liveFlag("{\"ok\":true,\"now\":1730000000000,\"msgs\":[{\"text\":\"\\\"changed\\\":true\"}]}") == -1 && ChatCore.liveFlag(null) == -1 && ChatCore.liveFlag("") == -1, "롱폴 표시: 1 새 글 · 0 없음 · -1 표시 없음(옛 서버, 글 내용 속 글자는 무시)");
+            }
             {   // s274 모든 방을 한 요청으로(batchRequest) — 맨 위는 전체 방 · alts 는 글을 받아 둔 노선 방만(전체 방 줄 g 는 뺀다) · requestFor 는 예전과 같다
                 c2.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"1호선\"}]}", "나");
                 c2.addRoom("2호선", "{\"ok\":true,\"msgs\":[{\"id\":\"m9\",\"ts\":60,\"nick\":\"민수\",\"text\":\"혼잡\",\"kind\":\"\"}]}");

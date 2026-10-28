@@ -18,8 +18,9 @@ public final class ChatCore {
     /** 지금 경로의 지하철 구간 이름들(엔진이 노선으로 바꿔 앞에 둔다). */
     public List<String> routeSec = new ArrayList<String>();
     public boolean failed = false, loaded = false;
-    long sinceG = 0;
+    long sinceG = 0, nowG = 0;                                        // 전체: 마지막 글 시각 · 서버가 알려 준 지금(롱폴의 기준 — 글이 없는 방도 기다릴 수 있게)
     final Map<String, Long> sinceR = new LinkedHashMap<String, Long>();
+    final Map<String, Long> nowR = new LinkedHashMap<String, Long>();
     final Map<String, List<Object>> talk = new LinkedHashMap<String, List<Object>>();       // 전체 방: id → 줄
     final Map<String, Map<String, List<Object>>> room = new LinkedHashMap<String, Map<String, List<Object>>>();   // 노선 방: 노선 → (id → 줄)
     final Map<String, Object> alerts = new LinkedHashMap<String, Object>();
@@ -46,6 +47,7 @@ public final class ChatCore {
         try {
             Object o = ScreenCore.parse(json);
             if (!(o instanceof Map) || !Boolean.TRUE.equals(((Map<String, Object>) o).get("ok")) || !(((Map<String, Object>) o).get("talks") instanceof List)) return fail();
+            { double sn = BoardCore.d(((Map<String, Object>) o).get("now")); if (sn > 0) nowG = (long) sn; }
             for (Object x : (List<Object>) ((Map<String, Object>) o).get("talks")) {
                 if (!(x instanceof Map)) continue;
                 Map<String, Object> m = (Map<String, Object>) x;
@@ -70,6 +72,7 @@ public final class ChatCore {
             Object o = ScreenCore.parse(json);
             if (!(o instanceof Map) || !Boolean.TRUE.equals(((Map<String, Object>) o).get("ok"))) return fail();
             Map<String, Object> mo = (Map<String, Object>) o;
+            { double sn = BoardCore.d(mo.get("now")); if (sn > 0) nowR.put(line, Long.valueOf((long) sn)); }
             Map<String, List<Object>> rm = room.get(line);
             if (rm == null) { rm = new LinkedHashMap<String, List<Object>>(); room.put(line, rm); }
             long since = sinceR.containsKey(line) ? sinceR.get(line) : 0;
@@ -219,6 +222,23 @@ public final class ChatCore {
     // ── 주소 ──
     public static String talksUrl(long since) { return ShellCore.BOARD_BASE + "/talks" + (since > 0 ? "?since=" + since + "&limit=40" : "?limit=30"); }
     public String talksUrlNow() { return talksUrl(sinceG); }
+    /** 롱폴 주소(s291): 이 방(전체는 /talks)의 지금까지 본 마지막 시각 이후 새 글이 생길 때까지 서버가 최대 waitS 초 붙들고 있다가 돌려준다. 아직 한 번도 못 받았으면(시각 0) null — 먼저 보통 요청으로 받아야 한다. */
+    public String liveUrl(String sel, int waitS) {
+        boolean all = "all".equals(sel);
+        long since = all ? sinceG : (sinceR.containsKey(sel) ? sinceR.get(sel) : 0L);
+        long base = since > 0 ? since : (all ? nowG : (nowR.containsKey(sel) ? nowR.get(sel) : 0L));          // 글이 하나도 없는 방은 서버가 알려 준 '지금' 이후를 기다린다
+        if (base <= 0 || waitS <= 0) return null;
+        String u = all ? ShellCore.BOARD_BASE + "/talks?since=" + base + "&limit=40" : ShellCore.BOARD_BASE + "/lroom?line=" + ShellCore.enc(sel) + "&since=" + base;
+        return u + "&wait=" + Math.min(waitS, 20);
+    }
+    /** 롱폴 응답의 changed 표시: 1 새 글 있음 · 0 시간만 지남(새 글 없음) · -1 표시가 없음(옛 서버 — 바로 돌아온 보통 응답). 머리 90글자만 본다(글 내용은 보지 않는다). */
+    public static int liveFlag(String json) {
+        if (json == null) return -1;
+        String h = json.length() > 90 ? json.substring(0, 90) : json;
+        int i = h.indexOf("\"changed\":");
+        if (i < 0) return -1;
+        return h.startsWith("true", i + 10) ? 1 : 0;
+    }
     public String roomUrl(String line) { return ShellCore.BOARD_BASE + "/lroom?line=" + ShellCore.enc(line) + "&since=" + (sinceR.containsKey(line) ? sinceR.get(line) : 0); }
     public static String noticesUrl() { return ShellCore.BASE + "/line-notices"; }
     public static String sendBody(String nick, String text, String line) { return "{\"nick\":" + ShellCore.q(nick) + ",\"text\":" + ShellCore.q(text) + ",\"line\":" + ShellCore.q(line) + "}"; }

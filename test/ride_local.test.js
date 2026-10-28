@@ -10,7 +10,7 @@ let pass = 0, fail = 0;
 const t = async (name, fn) => { try { await fn(); pass++; console.log('  ok  ', name); } catch (e) { fail++; console.log('  FAIL', name, '\n       ', String(e.message || e).split('\n').slice(0, 8).join('\n        ')); } };
 const ENV = Object.assign({}, process.env, { JAVA_TOOL_OPTIONS: '', LC_ALL: 'C.UTF-8', LANG: 'C.UTF-8' });
 const N = n => path.join(ROOT, 'native', 'shell', n);
-const CORE = ['ScreenCore', 'ShellCore', 'HomeSearchCore', 'HomeCore', 'WalkCore', 'BoardCore', 'ChatCore', 'FoodCore', 'MapCore', 'FavCore', 'HcardsCore', 'RideCore', 'RulesCore', 'LegacyCore', 'CmCore', 'GwCore', 'DevCore', 'ErrCore', 'ShareCore', 'OvCore', 'RsCore', 'ActRowCore', 'TileMapCore', 'NetPost', 'PerfLog', 'Debounce', 'Swr', 'RunnerCore', 'SceneModel'];
+const CORE = ['ScreenCore', 'ShellCore', 'HomeSearchCore', 'HomeCore', 'WalkCore', 'BoardCore', 'ChatCore', 'FoodCore', 'MapCore', 'FavCore', 'HcardsCore', 'RideCore', 'RulesCore', 'LegacyCore', 'CmCore', 'GwCore', 'DevCore', 'ErrCore', 'ShareCore', 'OvCore', 'RsCore', 'ActRowCore', 'TileMapCore', 'NetPost', 'PerfLog', 'Latest', 'Debounce', 'Swr', 'RunnerCore', 'SceneModel'];
 const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusionJ', 'RideLocal'];
 (async () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'rlocal-'));

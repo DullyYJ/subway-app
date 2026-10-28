@@ -201,13 +201,24 @@ public final class NetPost {
         PerfLog.net(url, t0, r.status >= 200 && r.status < 400);
         return r;
     }
-    private static Res sendOnce(String method, String url, String body, double timeoutMs, String etag) {
+    private static Res sendOnce(String method, String url, String body, double timeoutMs, String etag) { return sendOnce(method, url, body, timeoutMs, etag, null, 0); }
+    /**
+     * 오래 붙들고 기다리는 요청(롱폴, s291) — 서버가 새 소식이 있을 때까지 최대 ~20초 붙들고 있다가 돌려준다. 보통 요청과 다른 점:
+     *   ① 읽기 제한이 readMs(20초보다 길어도 된다) ② 취소 표(tok)가 죽으면 그 자리에서 연결을 끊어 즉시 돌아온다(방을 넘기거나 화면을 떠났을 때)
+     *   ③ 반응 속도 기록(PerfLog.net)에 넣지 않는다(붙들고 있는 시간이 '느린 서버'로 보이지 않게) ④ 429/503 다시 보내기 없음 — 부르는 쪽 루프가 알아서 쉰다.
+     */
+    public static Res getLive(String url, int readMs, Latest.Token tok) {
+        if (tok != null && !tok.live()) return new Res(-1, "", "cancelled");
+        return sendOnce("GET", url, null, readMs, "", tok, Math.max(2000, Math.min(60000, readMs)));
+    }
+    private static Res sendOnce(String method, String url, String body, double timeoutMs, String etag, Latest.Token tok, int readOverrideMs) {
         if (!ScreenCore.netAllowed(url)) return new Res(-1, "", "blocked");
-        int to = ScreenCore.netTimeout(timeoutMs);
+        int to = readOverrideMs > 0 ? readOverrideMs : ScreenCore.netTimeout(timeoutMs);
         java.net.HttpURLConnection c = null;
         boolean reuse = false;                                  // 응답을 끝까지 읽었으면 연결을 끊지 않는다 — 다음 요청이 같은 연결(HTTP/2 · TLS 이미 끝남)을 이어 쓴다(커넥션 풀)
         try {
             c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            if (tok != null) { final java.net.HttpURLConnection cc = c; tok.onCancel(new Runnable() { @Override public void run() { try { cc.disconnect(); } catch (Throwable ignored) { } } }); }          // 취소되면 읽고 있던 연결을 바로 끊는다
             c.setConnectTimeout(Math.min(to, 6000)); c.setReadTimeout(to);
             c.setInstanceFollowRedirects(false);
             c.setRequestMethod(method);
@@ -234,7 +245,7 @@ public final class NetPost {
             if (code == 429 || code == 503) out.retryS = parseRetryAfter(c.getHeaderField("Retry-After"));
             return out;
         } catch (Throwable t) {
-            return new Res(-1, "", "net: " + String.valueOf(t.getMessage()));
+            return new Res(-1, "", tok != null && !tok.live() ? "cancelled" : "net: " + String.valueOf(t.getMessage()));
         } finally { if (c != null && !reuse) c.disconnect(); }
 }
 }

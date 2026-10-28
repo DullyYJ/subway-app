@@ -123,7 +123,7 @@ public class ShellActivity extends Activity {
     private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
     private int seqFood = 0;
     private ChatCore chat;
-    private int seqChat = 0;
+    private final Latest chatLatest = new Latest();                           // 소통방 화면 받기: 가장 나중에 시작한 것만 올린다(s291 · 예전 순번표 seqChat 를 대신한다)
     private boolean chatPolling;
     private ScreenView sheetView;                       // 글쓰기 같은 아래에서 올라오는 시트
     private android.app.Dialog sheet;
@@ -360,7 +360,7 @@ public class ShellActivity extends Activity {
     }
     @Override protected void onDestroy() { if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
     @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
-    @Override protected void onPause() { resumed = false; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
+    @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
         String t = ShellCore.currentTab(store);
@@ -1631,29 +1631,113 @@ public class ShellActivity extends Activity {
     // ───────────── 실시간소통 ─────────────
     private static final long CHAT_POLL_MS = 6000L;
     private long chatSwipeAt, chatWarmAt, chatBgAt;               // 방을 마지막으로 넘긴 때 · 이웃 방을 마지막으로 미리 받은 때 · 모든 방을 마지막으로 훑은 때(uptime)
+    // s291: 6초마다 새로 받던 방식을 '붙들고 기다리는 요청(롱폴)'으로 바꿨다. 서버가 새 글이 생기는 즉시(1초 안) 돌려주고, 조용한 방은 18초에 한 번만 묻는다.
+    //   chatTick 은 1초마다 지켜보는 감시자일 뿐이다: 소통방이 앞에 있으면 지금 방의 라이브 요청이 돌고 있게 하고, 방이 바뀌었으면 앞 요청을 끊고 새 방으로 다시 걸고,
+    //   화면을 떠났으면 끊는다. 가장 나중 것만 쓰는 규칙은 Latest 한 곳이 맡는다(옛 방의 늦은 결과는 표가 죽어 올라오지 않는다).
+    private static final int CHAT_LIVE_WAIT_S = 18, CHAT_LIVE_READ_MS = 24000;
+    private final Latest chatLive = new Latest();
+    private volatile Latest.Token chatLiveTok;
+    private volatile String chatLiveSel = "";
+    private volatile long chatLiveBuildAt;
+    private volatile boolean chatNoticeBusy;
+    private int chatFetching;                                                       // 사람이 연(방 넘기기 · 글 올리기) 받기가 도는 개수 · 주 스레드에서만
+    private boolean chatRebuildAgain;                                               // 그 사이 라이브가 새 글을 받았다 — 받기가 끝나면 한 번 더 그린다
+    private boolean chatVisible() { return ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") && resumed; }
     private final Runnable chatTick = new Runnable() {
         @Override public void run() {
             chatPolling = false;
-            if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
-            if (android.os.SystemClock.uptimeMillis() - chatSwipeAt < 1500L) { chatPolling = true; main.postDelayed(this, 1600L); return; }          // 방을 넘기는 중에는 6초 새로고침이 끼어들지 않는다(s286)
-            loadChat(body, true, true);
-            chatPolling = true; main.postDelayed(this, CHAT_POLL_MS);
+            if (!chatVisible()) { chatLive.cancel(); chatLiveTok = null; return; }          // 화면을 떠나면 붙들고 있던 요청도 바로 끊는다
+            chatLiveCheck();
+            chatPolling = true; main.postDelayed(this, 1000L);
         }
     };
-    private void startChatPoll() { if (!chatPolling) { chatPolling = true; main.postDelayed(chatTick, CHAT_POLL_MS); } }
+    /** 지금 방의 라이브 요청이 돌고 있게 한다(방이 바뀌었으면 앞 요청을 끊고 새로). 방을 넘기는 중(0.4초 안)에는 멈출 때까지 기다린다. */
+    private void chatLiveCheck() {
+        if (!chatVisible()) return;
+        String sel = chat.sel();
+        Latest.Token t = chatLiveTok;
+        if (t != null && t.live() && sel.equals(chatLiveSel)) return;
+        if (android.os.SystemClock.uptimeMillis() - chatSwipeAt < 400L) return;
+        chatLiveStart(sel);
+    }
+    private void chatLiveStart(final String sel) {
+        final Latest.Token t = chatLive.begin();                                          // 앞 방의 표는 여기서 죽고 읽던 연결이 끊긴다
+        chatLiveTok = t; chatLiveSel = sel;
+        final String me = ShellCore.commId(store);
+        Thread th = new Thread(new Runnable() {
+            @Override public void run() {
+                int fails = 0;
+                while (t.live()) {
+                    final String url; synchronized (chat) { url = chat.liveUrl(sel, CHAT_LIVE_WAIT_S); }
+                    if (url == null) { if (!chatSleep(t, 700L)) break; continue; }          // 이 방을 아직 한 번도 못 받았다 — 첫 보통 요청이 끝날 때까지 잠깐
+                    long t0 = android.os.SystemClock.uptimeMillis();
+                    NetPost.Res r = NetPost.getLive(url, CHAT_LIVE_READ_MS, t);
+                    if (!t.live()) break;
+                    long dt = android.os.SystemClock.uptimeMillis() - t0;
+                    if (r.status == 200 && r.body != null) {
+                        fails = 0;
+                        int fl = ChatCore.liveFlag(r.body);
+                        boolean got;
+                        synchronized (chat) { got = "all".equals(sel) ? chat.addTalks(r.body, me) : chat.addRoom(sel, r.body); }
+                        long now = android.os.SystemClock.uptimeMillis();
+                        if (got && (fl != 0 || now - chatLiveBuildAt > 30000L)) {          // 새 글이 있거나(옛 서버는 늘) · 조용해도 30초에 한 번은 '몇 분 전' 글자를 새로
+                            chatLiveBuildAt = now;
+                            main.post(new Runnable() { @Override public void run() { if (!(t.live() && sel.equals(chat.sel()) && chatVisible())) return; if (chatFetching > 0) { chatRebuildAgain = true; return; } loadChat(body, true, false); } });          // 사람이 연 받기가 도는 중이면 그 그림을 가로채지 않고 끝난 뒤에 한 번 더
+                        }
+                        chatNoticesMaybe();
+                        long gap = fl < 0 ? CHAT_POLL_MS - dt : (dt < 1500L ? 1500L - dt : 0L);          // 옛 서버(붙들지 않고 바로 옴)는 예전처럼 6초 간격 · 서버가 붙들지 못한 응답도 1.5초는 쉰다
+                        if (gap > 0 && !chatSleep(t, gap)) break;
+                    } else {
+                        fails++;
+                        if (!chatSleep(t, Math.min(30000L, 2000L * fails))) break;                // 실패는 점점 길게 쉰다
+                    }
+                }
+                main.post(new Runnable() { @Override public void run() { if (chatLiveTok == t) chatLiveTok = null; } });
+            }
+        }, "shell-chat-live");
+        th.setDaemon(true); th.start();
+    }
+    /** 취소 표가 죽으면 곧바로 false. 아니면 ms 만큼 쉬고 true. */
+    private static boolean chatSleep(Latest.Token t, long ms) {
+        long end = android.os.SystemClock.uptimeMillis() + ms;
+        while (t.live()) {
+            long left = end - android.os.SystemClock.uptimeMillis();
+            if (left <= 0) return true;
+            try { Thread.sleep(Math.min(left, 300L)); } catch (InterruptedException ie) { return false; }
+        }
+        return false;
+    }
+    /** 공지는 60초에 한 번 새로 받는다(바뀌었을 때만 화면을 다시 그린다). */
+    private void chatNoticesMaybe() {
+        if (chatNoticeBusy || System.currentTimeMillis() - chat.noticesAt <= 60000L) return;
+        chatNoticeBusy = true;
+        Thread nt = new Thread(new Runnable() { @Override public void run() {
+            try {
+                NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
+                if (nr.status == 200) {
+                    String before = chat.noticesJson;
+                    chat.setNotices(nr.body, System.currentTimeMillis());
+                    if (!before.equals(chat.noticesJson)) main.post(new Runnable() { @Override public void run() { if (chatVisible()) loadChat(body, true, false); } });
+                }
+            } finally { chatNoticeBusy = false; }
+        } }, "shell-chat-notice2");
+        nt.setDaemon(true); nt.start();
+    }
+    private void startChatPoll() { if (!chatPolling) { chatPolling = true; main.postDelayed(chatTick, 1000L); } }
 
     /** 실시간소통: 이 방의 대화(전체 /talks · 노선 /lroom)와 공식 공지를 받고 엔진에 그릴 화면을 묻는다. */
     private void loadChat(final ScreenView v, final boolean keep, final boolean fetch) {
-        final int my = ++seqChat;
+        final Latest.Token my = chatLatest.begin();
         final String sel = chat.sel(), me = ShellCore.commId(store);
-        if (fetch) PerfLog.begin("chat.ld");
+        if (fetch) { PerfLog.begin("chat.ld"); chatFetching++; }
         startChatPoll();
         new Thread(new Runnable() {
             @Override public void run() {
                 final String body = chatBody(fetch, sel, me);
                 final String txt = screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000); warm(txt);
                 main.post(new Runnable() { @Override public void run() {
-                    if (my != seqChat) return;
+                    if (fetch) { chatFetching = Math.max(0, chatFetching - 1); if (chatFetching == 0 && chatRebuildAgain && my.live() && chatVisible()) { chatRebuildAgain = false; main.post(new Runnable() { @Override public void run() { if (chatVisible() && chatFetching == 0) loadChat(ShellActivity.this.body, true, false); } }); } }          // 받는 사이 라이브 쪽에서 온 새 글이 있었으면 이번 그림 뒤에 한 번 더
+                    if (!my.live()) return;
                     if (!sel.equals(chat.sel())) return;                       // 방을 넘기는 사이 늦게 온 옛 방 화면 — 올리지 않는다(방이 되돌아가고 글 올릴 방이 어긋나던 문제 · s286). 받은 화면은 캐시에 이미 들어갔다
                     present(v, txt, keep);
                     if (txt.length() > 0 && !isNotMod(txt)) { chat.onScreen(txt); PerfLog.end("chat.sw", "소통방 전환(못 받은 방)"); PerfLog.end("chat.ld", "소통방 받기→화면"); }
@@ -1674,14 +1758,14 @@ public class ShellActivity extends Activity {
             }
             if ("all".equals(sel)) {
                 NetPost.Res tr = NetPost.get(chat.talksUrlNow(), 7000);
-                if (tr.status == 200) chat.addTalks(tr.body, me); else chat.failed = !chat.loaded;
+                synchronized (chat) { if (tr.status == 200) chat.addTalks(tr.body, me); else chat.failed = !chat.loaded; }
             } else {
                 NetPost.Res rr = NetPost.get(chat.roomUrl(sel), 12000);
-                if (rr.status == 200) chat.addRoom(sel, rr.body); else chat.failed = !chat.loaded;
+                synchronized (chat) { if (rr.status == 200) chat.addRoom(sel, rr.body); else chat.failed = !chat.loaded; }
             }
             if (nt != null) { try { nt.join(9000); } catch (InterruptedException ignored) { } }
         }
-        return chat.requestFor(sel, true, ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis());          // 받은 방(sel)의 화면을 묻는다 — 그 사이 고른 방(chat.sel())이 바뀌었어도 다른 방 화면이 이 방 열쇠로 캐시에 들어가지 않게(s289)
+        synchronized (chat) { return chat.requestFor(sel, true, ShellCore.CAP, ShellCore.theme(store), -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000, me, System.currentTimeMillis()); }          // 받은 방(sel)의 화면을 묻는다 — 그 사이 고른 방(chat.sel())이 바뀌었어도 다른 방 화면이 이 방 열쇠로 캐시에 들어가지 않게(s289)
     }
     /**
      * 호선 방 좌우 밀기를 부드럽게: 지금 방 둘레(앞뒤 2칸)의 방 화면을 뒤에서 미리 받아 둔다(이미 45초 안에 받은 방은 건너뜀 · 마지막 방 바뀐 뒤 0.7초 가만히 있을 때만 · 고스트 상태기라 지금 화면을 건드리지 않는다).
@@ -1795,7 +1879,7 @@ public class ShellActivity extends Activity {
             if (shown) PerfLog.end("chat.sw", "소통방 전환(받아 둔 방)");
             if (!shown) showSkeleton(body, ShellCore.S_CHAT);                    // 아직 못 받은 방: 받는 동안 옛 방이 그대로 멈춰 보이지 않게 바로 뼈대로 넘긴다(밀기 모션도 곧장 시작)
             chatWarmSoon();                                                      // 이웃 방은 멈출 때까지 기다리지 않고 지금부터 받는다(계속 밀어도 앞 방이 이미 받아져 있게 · s286)
-            deb.trailing("chatsel", shown ? 220L : 60L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); } });      // 받아 둔 방은 화면이 이미 떠 있으니 220ms · 못 받은 방은 기다릴 까닭이 없어 60ms      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
+            deb.trailing("chatsel", shown ? 220L : 60L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); chatLiveCheck(); } });      // 받아 둔 방은 화면이 이미 떠 있으니 220ms · 못 받은 방은 기다릴 까닭이 없어 60ms      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
             return;
         }
         if (!"call".equals(a.a)) return;

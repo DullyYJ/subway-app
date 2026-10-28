@@ -57,6 +57,7 @@ jobs:
           - ride_overlay_level.test.js
           - ride_detour.test.js
           - store_sync.test.js
+          - chat_longpoll.test.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

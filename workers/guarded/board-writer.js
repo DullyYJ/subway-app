@@ -114,6 +114,32 @@ var _MEM = Object.create(null);
 function memGet(k, ttl) { var h = _MEM[k]; return h && Date.now() - h.at < ttl ? h.v : null; }
 function memPut(k, v) { _MEM[k] = { at: Date.now(), v: v }; }
 var _lrRetry = false;
+// \u2605 s291 (YJ: \uc18c\ud1b5\ubc29\uc774 \ub290\ub9ac\ub2e4 \u2014 \uc0c8 \uae00\uc774 \uba87 \ucd08 \ub4a4\uc5d0\uc57c \ubcf4\uc778\ub2e4): \ub871\ud3f4. \uc571\uc774 wait=20 \uc744 \ubd99\uc5ec \ubd80\ub974\uba74 since \uc774\ud6c4 \uc0c8 \uc904\uc774 \uc0dd\uae38 \ub54c\uae4c\uc9c0(\ucd5c\ub300 20\ucd08) \ubd99\ub4e4\uace0 \uc788\ub2e4\uac00
+//   \uc0dd\uae30\ub294 \uc989\uc2dc(1\ucd08 \uac04\uaca9 \ud655\uc778) \ub3cc\ub824\uc900\ub2e4. \uc0c8 \uc904\uc774 \uc5c6\uc774 \uc2dc\uac04\uc774 \ub2e4 \ub418\uba74 changed:false \ub85c \ub3cc\ub824\uc900\ub2e4 \u2192 \uc571\uc740 \uace7\ubc14\ub85c \ub2e4\uc2dc \uac74\ub2e4(\uc870\uc6a9\ud55c \ubc29\uc740 20\ucd08\uc5d0 \ud55c \ubc88\ub9cc \uc694\uccad).
+//   \u00b7 \ud655\uc778\uc740 (line, ts) \uc0c9\uc778 \ud55c \ubc88 \uc77d\uae30(LIMIT 1) \u2014 5\ucd08 \uba54\ubaa8\ub9ac \uc2a4\ub0c5\uc0f7\uc744 \uac70\uce58\uc9c0 \uc54a\uc544\uc11c \ubc14\ub85c \ubcf4\uc778\ub2e4. \uc0c8 \uc904\uc774 \ubcf4\uc774\uba74 \uc774 \uaca9\ub9ac\uc758 \uc2a4\ub0c5\uc0f7\uc744 \ubc84\ub824 \ub2e4\uc2dc \uc77d\ub294\ub2e4.
+//   \u00b7 \ud55c \uaca9\ub9ac\uc5d0\uc11c \ubd99\ub4e4\uace0 \uc788\ub294 \uc694\uccad\uc774 LW_MAX \uac1c\ub97c \ub118\uc73c\uba74 \ub354 \ubd99\ub4e4\uc9c0 \uc54a\uace0 \ubc14\ub85c \ub3cc\ub824\uc900\ub2e4(\uc608\uc804\ucc98\ub7fc \uc571\uc774 6\ucd08\ub9c8\ub2e4 \ubd80\ub974\ub294 \uac83\uacfc \uac19\ub2e4).
+//   \u00b7 wait \uac00 \uc5c6\uac70\ub098 since \uac00 0 \uc774\uba74 \uc608\uc804\uacfc \uc644\uc804\ud788 \uac19\ub2e4(\uc61b \uc571 \ud638\ud658). \uc751\ub2f5\uc5d0 changed \uac00 \uc788\uc73c\uba74 \uc0c8 \uc11c\ubc84\ub77c\ub294 \ud45c\uc2dc\ub2e4.
+var LW_MAX = 60, LW_STEP_MS = 1000, LW_MAX_S = 20, _lwN = 0;
+async function lrWaitNew(env, line, since, waitS) {   // line: \ub178\uc120 \uc774\ub984 \ub610\ub294 null(\uc804\uccb4 = \ub300\ud654 \uc904 \uc804\ubd80) \u2192 { changed, waited }
+  const t0 = Date.now(), end = t0 + Math.min(LW_MAX_S, Math.max(0, waitS | 0)) * 1000;
+  if (_lwN >= LW_MAX || !(since > 0) || end <= t0) return { changed: false, waited: 0 };
+  _lwN++;
+  try {
+    for (;;) {
+      const now = Date.now();
+      let r = null;
+      try {
+        r = line
+          ? await env.DB.prepare("SELECT 1 AS x FROM line_msgs WHERE line=?1 AND ts > ?2 AND ts <= ?3" + LR_HIDDEN_SQL + " LIMIT 1").bind(line, since, now).first()
+          : await env.DB.prepare("SELECT 1 AS x FROM line_msgs WHERE kind='chat' AND ts > ?1 AND ts <= ?2" + LR_HIDDEN_SQL + " LIMIT 1").bind(since, now).first();
+      } catch (e) { return { changed: false, waited: now - t0 }; }
+      if (r) return { changed: true, waited: now - t0 };
+      const left = end - Date.now();
+      if (left <= 0) return { changed: false, waited: Date.now() - t0 };
+      await new Promise(function (res) { setTimeout(res, Math.min(LW_STEP_MS, left)); });
+    }
+  } finally { _lwN--; }
+}
 async function ensureLineRoom(env, wait) {
   if (_lrReady) return;
   _lrReady = true;
@@ -2307,6 +2333,9 @@ var worker_default = {
     if (url.pathname === "/talks") {
       const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
       const limit = Math.min(60, Math.max(1, parseInt(url.searchParams.get("limit") || "30", 10)));
+      const lwS = parseInt(url.searchParams.get("wait") || "0", 10) || 0;
+      let lw = null;
+      if (lwS > 0) { await ensureLineRoom(env).catch(function () {}); lw = await lrWaitNew(env, null, since, lwS); if (lw.changed) delete _MEM["talks"]; }
       const snapKey = new Request(url.origin + "/talks?snap=1");
       // \u2605 2026-10-10: workers.dev \uc5d0\uc11c\ub294 \uc5e3\uc9c0 \uce90\uc2dc(caches.default)\uac00 \ub3d9\uc791\ud558\uc9c0 \uc54a\ub294\ub2e4(Cloudflare \ubb38\uc11c: \uc0ac\uc6a9\uc790 \uc9c0\uc815 \ub3c4\uba54\uc778\uc5d0\uc11c\ub9cc) \u2192
       //   \uac19\uc740 \uaca9\ub9ac \uc548\uc5d0\uc11c 5\ucd08\uac04\uc740 \uba54\ubaa8\ub9ac \uc2a4\ub0c5\uc0f7\uc744 \uc4f4\ub2e4.
@@ -2338,7 +2367,7 @@ var worker_default = {
       }
       let rows = snap.talks || [];
       rows = since > 0 ? rows.filter(function(t) { return t.ts >= since; }) : rows.slice(-limit);
-      return new Response(JSON.stringify({ ok: true, now: Date.now(), talks: rows }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
+      return new Response(JSON.stringify(lw ? { ok: true, now: Date.now(), changed: lw.changed, talks: rows } : { ok: true, now: Date.now(), talks: rows }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
     }
     // \u2605 2026-10-03 (\uac1c\uc120\uc548 4\u00b75): \ub178\uc120\ubcc4 \ubc29. \ub300\ud654 \uc77d\uae30/\uc4f0\uae30 + \uc9c0\uc5f0 \uc81c\ubcf4 \uc9d1\uacc4.
     if (url.pathname === "/lroom" && req.method === "POST") {
@@ -2394,6 +2423,9 @@ var worker_default = {
       const line = String(url.searchParams.get("line") || "").trim();
       if (!lrLineOk(line)) return new Response(JSON.stringify({ ok: false, error: "line" }), { status: 400, headers: cors });
       const since = parseInt(url.searchParams.get("since") || "0", 10) || 0;
+      const lwS = parseInt(url.searchParams.get("wait") || "0", 10) || 0;
+      let lw = null;
+      if (lwS > 0) { await ensureLineRoom(env).catch(function () {}); lw = await lrWaitNew(env, line, since, lwS); if (lw.changed) delete _MEM["lroom:" + line]; }
       const snapKey = new Request(url.origin + "/lroom?snap=1&line=" + encodeURIComponent(line));
       let snap = memGet("lroom:" + line, 5000);
       if (!snap) { try { const hit = await caches.default.match(snapKey); if (hit) snap = await hit.json(); } catch (e) {} }
@@ -2414,7 +2446,7 @@ var worker_default = {
         }
       }
       const rows = since > 0 ? (snap.msgs || []).filter((m) => m.ts >= since) : (snap.msgs || []);
-      return new Response(JSON.stringify({ ok: true, now: Date.now(), msgs: rows, alert: snap.alert }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
+      return new Response(JSON.stringify(lw ? { ok: true, now: Date.now(), changed: lw.changed, msgs: rows, alert: snap.alert } : { ok: true, now: Date.now(), msgs: rows, alert: snap.alert }), { headers: Object.assign({}, cors, { "Cache-Control": "no-store" }) });
     }
     if (url.pathname === "/lalerts") {
       const lines = String(url.searchParams.get("lines") || "").split(",").map((x) => x.trim()).filter(lrLineOk).slice(0, 8);
