@@ -361,6 +361,20 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   const sc3 = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { pick: { k: 'to', q: 'zzzqqq' } }) }));
   ok(all(sc3).some(n => n.t === 'text' && /그대로 저장해도 돼요/.test(n.s)), '후보가 없으면 그대로 저장해도 된다는 안내');
   ok(!/cmp\./.test(JSON.stringify(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf, pgs: ['sam'] })).body)), '앱이 열 수 없는 화면(cm 가 pgs 에 없음)은 감춘다');
+  {
+    const rows = n => (n.kids || []).filter(k => k.t === 'row');
+    const scH = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmh: 1, cmf }));
+    const pn = scH.body.find(n => /cmp\./.test(JSON.stringify(n)) && n.kids);
+    const ir = rows(pn).filter(r => r.kids.every(k => k.t === 'inbar'));
+    ok(ir.length === 2 && ir[0].kids.map(k => k.key).join() === 'cmp.from,cmp.to' && ir[1].kids.map(k => k.key).join() === 'cmp.eFrom,cmp.eTo', '새 앱(cmh): 출발지 · 도착지가 가로 한 줄(출근 · 퇴근 두 줄)');
+    const lr = rows(pn).filter(r => r.kids.every(k => k.t === 'text' && /(출발지|도착지)/.test(k.s)));
+    ok(lr.length === 2 && lr[0].kids.map(k => k.s).join('|') === '출근 출발지 (집 근처)|출근 도착지 (회사 근처)', '이름 라벨도 같은 칸 폭으로 위에 나란히');
+    ok(ir[0].kids.every(k => k.watch && k.act.v === 'pk.save.' + k.key.slice(4) && k.hint.length <= 10), '가로 칸: 저장 · 엔터 · 글자 바뀜 알림은 그대로, 안내 글은 짧게');
+    const scH2 = E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmh: 1, cmf: Object.assign({}, cmf, { pick: { k: 'to', q: '강남' }, bus: ['강남역'] }) }));
+    const pn2 = scH2.body.find(n => /cmp\./.test(JSON.stringify(n)) && n.kids), ix = pn2.kids.findIndex(n => n.t === 'row' && n.kids.every(k => k.t === 'inbar'));
+    ok(pn2.kids[ix + 1].t === 'sug' && pn2.kids.filter(n => n.t === 'sug').length >= 2 && ir.length === 2, '후보 줄은 가로 칸 줄 바로 아래에 끼운다');
+    ok(!all(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf }))).some(n => n.t === 'row' && n.kids.some(k => k.t === 'inbar')), '가로 칸을 모르는 앱(cmh 없음)에게는 세로 입력칸 그대로');
+  }
   ok(E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf })).rev !== E.settingsScreen({ cap: 8 }, Object.assign({}, base, { cmi: 1, cmf: Object.assign({}, cmf, { days: [0] }) })).rev, '요일이 바뀌면 rev 가 바뀐다(앱이 다시 그린다)');
 }
 (async () => {

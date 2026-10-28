@@ -73,7 +73,7 @@ public final class ShellCore {
         b.append(",\"ovl\":").append(ovlOn(st.get(K_OVL, "")) ? 1 : 0);
         b.append(",\"sam\":").append("1".equals(st.get(K_SAM, "0")) ? 1 : 0).append(",\"samw\":").append("1".equals(st.get(K_SAMW, "0")) ? 1 : 0);
         b.append(",\"cm\":").append(CmCore.on(st) ? 1 : 0);
-        b.append(",\"cmi\":1,\"cmf\":").append(CmCore.inlineFacts(st));                          // s278: 출퇴근 브리핑을 설정 화면 안에 펼친다(옛 엔진은 모르는 칸이라 무시)
+        b.append(",\"cmi\":1,\"cmh\":1,\"cmf\":").append(CmCore.inlineFacts(st));                          // s278: 출퇴근 브리핑을 설정 화면 안에 펼친다(옛 엔진은 모르는 칸이라 무시)
         b.append(",\"errn\":").append(ErrCore.count(st));
         b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);

@@ -339,6 +339,14 @@ public class ScreenJvmTest {
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[]}")), "row: 칸이 없으면 거절");
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"toggle\",\"key\":\"k\",\"title\":\"x\"}]}")), "row 안에 스위치를 둘 수 없다");
         ok(!bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"a\"}]},{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"b\"}]}]}")), "row 안에 panel 을 둘 수 있다(도보 안내 두 칸)");
+        ok(!bad(wrapBody("{\"t\":\"row\",\"gap\":10,\"kids\":[{\"t\":\"inbar\",\"key\":\"a\",\"hint\":\"x\",\"btn\":\"저장\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v1\"}},{\"t\":\"inbar\",\"key\":\"b\",\"hint\":\"y\",\"btn\":\"저장\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v2\"}}]}")), "row 안에 inbar 를 둘 수 있다(출퇴근 출발지·도착지 가로 입력칸)");
+        {
+            ScreenCore.Screen rowScr = ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"row\",\"gap\":10,\"kids\":[{\"t\":\"inbar\",\"key\":\"a\",\"hint\":\"x\",\"btn\":\"저장\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v1\"}},{\"t\":\"inbar\",\"key\":\"b\",\"hint\":\"y\",\"btn\":\"저장\",\"h\":42,\"act\":{\"a\":\"call\",\"v\":\"v2\"}}]}]}");
+            ScreenCore.Layout RL = ScreenCore.layout(rowScr, 340f, M);
+            ScreenCore.Item ia = null, ib = null;
+            for (ScreenCore.Item q : RL.body) if (q.kind == ScreenCore.K_INBAR) { if ("a".equals(q.key)) ia = q; else if ("b".equals(q.key)) ib = q; }
+            ok(ia != null && ib != null && near(ia.y, ib.y) && ib.x > ia.x + ia.w && ia.w < 170f && near(ia.w, ib.w), "row 안 inbar 두 칸이 같은 높이에 같은 폭으로 나란히");
+        }
         ok(bad(wrapBody("{\"t\":\"row\",\"kids\":[{\"t\":\"row\",\"kids\":[{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}]}]}")), "row 안에 row 를 둘 수 없다");
         StringBuilder rwNine = new StringBuilder("{\"t\":\"row\",\"kids\":[");
         for (int i = 0; i < 9; i++) { if (i > 0) rwNine.append(','); rwNine.append("{\"t\":\"button\",\"s\":\"a\",\"act\":{\"a\":\"refresh\"}}"); }

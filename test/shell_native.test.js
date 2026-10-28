@@ -792,7 +792,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     const cm = fs.readFileSync(N('CmCore.java'), 'utf8');
     const sh = fs.readFileSync(N('ShellCore.java'), 'utf8');
-    assert.ok(/\\"cmi\\":1,\\"cmf\\":"\)\.append\(CmCore\.inlineFacts\(st\)\)/.test(sh) || /cmi.{0,12}1.{0,30}cmf.{0,12}CmCore\.inlineFacts\(st\)/.test(sh), '설정 요청에 새 앱 표시(cmi)와 출퇴근 기기 사실(cmf)을 싣는다');
+    assert.ok(/\\"cmi\\":1,\\"cmf\\":"\)\.append\(CmCore\.inlineFacts\(st\)\)/.test(sh) || /cmi.{0,12}1.{0,20}cmh.{0,12}1.{0,30}cmf.{0,20}CmCore\.inlineFacts\(st\)/.test(sh), '설정 요청에 새 앱 표시(cmi)와 출퇴근 기기 사실(cmf)을 싣는다');
     assert.ok(/public static volatile String inlX/.test(cm) && /public void focusInline\(/.test(cm) && /public int onInline\(/.test(cm) && /public boolean endInline\(/.test(cm) && /v\.startsWith\("pk\.save\."\)/.test(cm) && /"pk\.n"\.equals\(v\)/.test(cm), '고치는 중인 칸 · 글자 · 후보를 요청에 싣고, 저장/지하철 후보 눌림을 받는다');
     assert.ok(/cmInlineOwns\(a\)/.test(a) && /private void cmInlineAct\(/.test(a) && /private void cmText\(final String k/.test(a) && /key\.startsWith\("cmp\."\)\) \{ cmText\(key\.substring\(4\)/.test(a) && /a\.v\.startsWith\("pk\."\)\) \{ cmInlineAct\("call", a\.v, null, false, q\)/.test(a), '설정 화면의 눌림 · 입력 이벤트가 출퇴근 패널로 간다');
     assert.ok(/private void cmReload\(\)/.test(a) && /present\(v, txt, true\);/.test(a.slice(a.indexOf('private void cmReload()'), a.indexOf('private void cmReload()') + 900)), '화면을 새로 받아도 위치 · 입력은 그대로(keep)');

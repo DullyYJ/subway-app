@@ -302,7 +302,7 @@ public class ShellJvmTest {
         // ── 설정 사실 ──
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
-        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"cmi\":1,\"cmf\":{\"nat\":true,\"nv\":true,\"on\":false,\"morn\":\"07:30\",\"eve\":\"18:30\",\"days\":[1,2,3,4,5],\"from\":\"\",\"to\":\"\",\"eFrom\":\"\",\"eTo\":\"\"},\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);
+        ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"cmi\":1,\"cmh\":1,\"cmf\":{\"nat\":true,\"nv\":true,\"on\":false,\"morn\":\"07:30\",\"eve\":\"18:30\",\"days\":[1,2,3,4,5],\"from\":\"\",\"to\":\"\",\"eFrom\":\"\",\"eTo\":\"\"},\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);
         s2.put("comm_id", "길동무7"); s2.put("np_transfer", "0"); s2.put("ride_log_off", "1"); s2.put("theme", "dark");
         f = ShellCore.settingsFacts(s2);
         ok(f.contains("\"id\":\"길동무7\"") && f.contains("\"transfer\":0") && f.contains("\"rl\":0") && f.contains("\"th\":\"dark\""), "바뀐 기기 사실");

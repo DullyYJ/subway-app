@@ -42,7 +42,7 @@ function settingsFacts(f) {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
     sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
-    cmi: settingsFlag(f.cmi, false),                                                       // s278: 새 앱은 출퇴근 브리핑을 설정 화면 안에 그대로 펼친다(옛 앱은 '시간 · 장소 · 요일 설정' 줄 → 하위 화면)
+    cmi: settingsFlag(f.cmi, false), cmh: settingsFlag(f.cmh, false),                                                      // s278: 새 앱은 출퇴근 브리핑을 설정 화면 안에 그대로 펼친다(옛 앱은 '시간 · 장소 · 요일 설정' 줄 → 하위 화면)
     cmf: f.cmf && typeof f.cmf === 'object' ? settingsPageFacts(f.cmf) : null,
     cmb: (f.cmf && Array.isArray(f.cmf.bus)) ? f.cmf.bus.slice(0, 12).map(function (x) { return settingsStr(x, 60).trim(); }) : [],
     pgs: Array.isArray(f.pgs) ? f.pgs.filter(function (x) { return typeof x === 'string'; }).slice(0, 8) : null          // 앱이 실제로 열 수 있는 하위 화면 이름들(없으면 모두 보인다)
@@ -443,29 +443,38 @@ function settingsCmInline(f, info) {
   var cf = f.cmf, d = cf.nv ? settingsBoldN([['설정한 시각에 ', 0], ['날씨 + 혼잡도 + 준비물 한마디', 1], ['를 알림으로 보내드려요.', 0]]) : settingsBoldN([['설정한 시각에 ', 0], ['날씨 + AI 역무원 요약', 1], ['을 알림으로 보내드려요.', 0]]);
   var k = [{ t: 'toggle', key: 'cm', title: '출퇴근 브리핑 알림', on: cf.on, big: true, size: 15, vp: 0, onc: '#30d158', pad: [0, 0, 0, 4] }, settingsDescN(d.s, 10, d.hl)];
   var pk = cf.pick;
-  var field = function (x, mt) {
-    var act = settingsCall('pk.save.' + x), active = !!(pk && pk.k === x);
-    k.push(settingsLabelN(SETTINGS_PICK[x][0], 5));
-    var nd = { t: 'inbar', key: 'cmp.' + x, hint: SETTINGS_PICK[x][1], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '저장', bh: 30, bsize: 12, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
-    k.push(nd);
-    if (!active) return;
+  var HINT = { from: '예: 아라', to: '예: 강남', eFrom: '비우면 회사 근처', eTo: '비우면 집 근처' };          // 가로 칸은 좁아 짧은 안내 글(이름은 위 라벨)
+  var inb = function (x, wide) {
+    var active = !!(pk && pk.k === x), act = settingsCall('pk.save.' + x);
+    return { t: 'inbar', key: 'cmp.' + x, hint: wide ? SETTINGS_PICK[x][1] : HINT[x], value: active ? pk.q : (cf[x] || ''), maxlen: 60, h: 42, size: 14, r: 9, fill: 'bg', line: 'border2', btn: '저장', bh: 30, bsize: 11, bpx: wide ? 0 : 8, onc: 'gold', ckf: '#121214', watch: true, pad: [0, 0, 0, 8], act: act, eact: act };
+  };
+  var sug = function (x) {                                          // 고치는 중인 칸의 후보 줄(지하철: 엔진 역 표 · 버스: 앱이 찾아 온 이름)
+    if (!(pk && pk.k === x)) return;
     var q = pk.q.trim(), rows = [];
     if (q) {
-      var st = settingsStnFind(q), seen = {};
-      info.pk = { u: st.pk, b: [] };
+      var st = settingsStnFind(q), seen = {}, nb = 0;
       st.u.forEach(function (c) { rows.push({ t: 'sug', badge: '지하철', bc: '#0a84ff', name: c.n, sub: c.l.replace(/^지하철 \u00b7 /, ''), act: { a: 'call', v: 'pk.n', id: c.n } }); });
       f.cmb.forEach(function (nm, i) {
-        if (info.pk.b.length >= SETTINGS_BUS_MAX || !nm || seen[nm]) return;
-        seen[nm] = 1; info.pk.b.push(i);
+        if (nb >= SETTINGS_BUS_MAX || !nm || seen[nm]) return;
+        seen[nm] = 1; nb++;
         rows.push({ t: 'sug', badge: '버스', bc: '#00b341', name: nm, sub: '', act: settingsCall('pk.b.' + i) });
       });
     }
     if (rows.length) { rows[rows.length - 1].last = true; rows.forEach(function (r) { k.push(r); }); k.push({ t: 'spacer', h: 8 }); }
     else if (q) k.push(settingsSmallN('맞는 역이나 정류장을 찾지 못했어요. 그대로 저장해도 돼요.', 0, 8));
   };
-  field('from'); field('to');
+  var pair = function (a, b, mt) {
+    if (f.cmh) {                                                    // 출발지 · 도착지를 가로로(새 앱 cmh)
+      k.push({ t: 'row', gap: 10, pad: [0, mt, 0, 5], kids: [settingsLabelN(SETTINGS_PICK[a][0], 0), settingsLabelN(SETTINGS_PICK[b][0], 0)] });
+      k.push({ t: 'row', gap: 10, pad: [0, 0, 0, 0], kids: [inb(a, false), inb(b, false)] });
+      sug(a); sug(b);
+    } else {
+      [a, b].forEach(function (x) { k.push(settingsLabelN(SETTINGS_PICK[x][0], 5)); k.push(inb(x, true)); sug(x); });
+    }
+  };
+  pair('from', 'to', 0);
   k.push(settingsSmallN('지하철역과 버스정류장 모두 입력할 수 있어요. 검색 목록의 지하철/버스 표시로 구분돼요. 비워두면 현재 위치 기준이에요.', 0, 10));
-  field('eFrom'); field('eTo');
+  pair('eFrom', 'eTo', 0);
   k.push(settingsSmallN(settingsEveHint(cf), 0, 12));
   settingsCmRest(k, cf);
   return k;

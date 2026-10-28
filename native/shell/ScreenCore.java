@@ -516,7 +516,7 @@ public final class ScreenCore {
             for (Object ko : rk) {
                 Map<String, Object> km = asObj(ko, "row 안 노드");
                 String kt = optStr(km, "t", "", 20);
-                if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt) && !"panel".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
+                if (!"button".equals(kt) && !"box".equals(kt) && !"text".equals(kt) && !"panel".equals(kt) && !"inbar".equals(kt)) throw new ParseError("row 안에 " + kt + " 를 둘 수 없다");
                 Node kn = node(ko, sc);
                 if (kn != null) n.kids.add(kn);
             }
