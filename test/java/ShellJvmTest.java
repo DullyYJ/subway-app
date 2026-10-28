@@ -586,6 +586,20 @@ public class ShellJvmTest {
             String rq9 = c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L);
             ok(rq9.contains("\"sel\":\"1호선\"") && rq9.contains("\"st\":\"ready\"") && rq9.contains("영희") && c2.act("ch.x.0", new java.util.HashMap<String, String>(), "나") == ChatCore.R_NONE, "고스트 요청: 방을 직접 정하고 눌림 번호표는 안 건드린다");
             ok(c2.requestFor("2호선", false, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"fail\""), "받은 적 없는 방은 실패로 표시");
+            {   // s274 모든 방을 한 요청으로(batchRequest) — 맨 위는 전체 방 · alts 는 글을 받아 둔 노선 방만(전체 방 줄 g 는 뺀다) · requestFor 는 예전과 같다
+                c2.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"1호선\"}]}", "나");
+                c2.addRoom("2호선", "{\"ok\":true,\"msgs\":[{\"id\":\"m9\",\"ts\":60,\"nick\":\"민수\",\"text\":\"혼잡\",\"kind\":\"\"}]}");
+                java.util.List<String> bs = new java.util.ArrayList<String>(); bs.add("all"); bs.add("1호선"); bs.add("2호선"); bs.add("9호선");
+                String bq = c2.batchRequest(bs, 18, "pastel", -540, "나");
+                Object bo = null; try { bo = ScreenCore.parse(bq); } catch (Exception be) { }
+                ok(bo instanceof java.util.Map && bq.startsWith("{\"cap\":18,\"f\":{\"sel\":\"all\"") && bq.contains("\"alts\":{\"1호선\":{\"f\":{\"sel\":\"1호선\"") && bq.contains("\"2호선\":{\"f\":{\"sel\":\"2호선\"") && !bq.contains("\"9호선\":") && !bq.contains("\"all\":{\"f\""), "묶음 요청: 전체 방이 맨 위 · 글 받은 노선 방만 alts · 못 받은 방(9호선)은 싣지 않는다");
+                ok(bq.contains("\"st\":\"ready\"") && !bq.contains("\"st\":\"fail\"") && bq.contains("안녕") && bq.indexOf("혼잡") > bq.indexOf("\"alts\""), "묶음 요청: 방마다 준비됨 상태 · 전체 방 글은 맨 위에만");
+                int gAt = bq.indexOf("\"2호선\":{"); ok(gAt > 0 && bq.indexOf("\"g\":[]", gAt) > gAt && bq.indexOf("안녕", gAt) < 0, "묶음 요청: 노선 방 항목에는 전체 방 줄(g)을 싣지 않는다(크기)");
+                ok(c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L).startsWith("{\"cap\":18,\"f\":{\"sel\":\"1호선\",\"sec\":") && c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L).endsWith("}}"), "requestFor 모양은 그대로");
+                java.util.Map<String, String> pb = ChatCore.parseBatch("{\"ok\":true,\"screen\":\"chat\",\"ver\":\"v\",\"head\":[],\"body\":[],\"alts\":{\"1호선\":{\"ok\":true,\"screen\":\"chat\",\"head\":[],\"body\":[]},\"2호선\":{\"ok\":false}}}");
+                ok(pb.size() == 2 && pb.containsKey("all") && pb.containsKey("1호선") && !pb.get("all").contains("alts") && !pb.get("all").contains("\"ver\"") && ChatCore.parseBatch("x").isEmpty() && ChatCore.parseBatch(null).isEmpty() && ChatCore.parseBatch("{\"ok\":false,\"alts\":{}}").isEmpty(), "묶음 답: 맨 위 화면은 all · 성공한 방만 · 엉터리는 빈 표");
+                ok(ChatCore.encSels(bs).equals("all\n1호선\n2호선\n9호선") && ChatCore.decSels("all\n1호선\n2호선\n9호선").equals(bs) && ChatCore.decSels("all").isEmpty() && ChatCore.decSels("").isEmpty() && ChatCore.decSels(null).isEmpty() && ChatCore.decSels("a\na\nb").size() == 2, "방 목록 저장/복원: 순서 그대로 · 방이 2개 미만이면 쓰지 않는다 · 중복 제거");
+            }
         }
         // 앱이 죽었다 살아난 뒤 결과 카드 복원
         HomeCore snapSrc = new HomeCore();

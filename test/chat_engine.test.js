@@ -176,6 +176,8 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   Object.keys(rooms).forEach(k => ok(same(out.alts[k], E.chatScreen({ cap: 6, now: NOW }, rooms[k].f, rooms[k].d)), 'alts[' + k + '] = 그 방으로 따로 요청한 화면과 글자 하나까지 같다'));
   ok(out.alts['2호선'].info.sel === '2호선' && out.alts['9호선'].body.some(x => /불러오는 중/.test(x.s || '')), '방마다 자기 방 화면(자료가 없는 방은 불러오는 중)');
   ok(E.chatScreens({ cap: 6, now: NOW }, base, { g: G }).alts === undefined, 'alts 를 달라고 하지 않으면 없다');
+  // s274: 앱이 방 하나하나를 한 요청에 모아 보낼 때 노선 방 항목에는 전체 방 줄(g)을 싣지 않는다 — 노선 방 화면은 g 를 쓰지 않으므로 있든 없든 글자 하나까지 같다
+  ok(same(E.chatScreen({ cap: 6, now: NOW }, rooms['2호선'].f, Object.assign({}, rooms['2호선'].d, { g: G })), E.chatScreen({ cap: 6, now: NOW }, rooms['2호선'].f, Object.assign({}, rooms['2호선'].d, { g: [] }))), '노선 방 화면은 전체 방 줄(g)과 무관');
   const many = {}; for (let i = 0; i < 60; i++) many['k' + i] = { f: base, d: { g: G } };
   ok(Object.keys(E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, many).alts).length === 24, 'alts 개수 상한 24');
   const ex = E.chatScreens({ cap: 6, now: NOW }, base, { g: G }, { a: 3, b: { f: base, d: { g: G } } });

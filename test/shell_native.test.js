@@ -27,7 +27,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/ShellCore\.S_CHAT\.equals\(screen\)\) \{[^]*?chatLoad\.get\(chat\.sel\(\)\)[^]*?skelViews\.add\(v\); return;/.test(a.slice(a.indexOf('private void showSkeleton('), a.indexOf('private void showSkeleton(') + 1800)), '뼈대 자리에 방별 로딩 화면');
     assert.ok(/ChatCore\.parseLoadingBatch\(r\.body\)/.test(a) && /loadingBatchRequest\(sels/.test(a) && /chatLoadBuild\(sels\)/.test(a), '한 번의 요청으로 모든 방 로딩 화면을 받는다');
-    assert.ok(/Math\.min\(da, nn - da\)/.test(a), '미리 받기는 지금 방에서 가까운 방부터');
+    assert.ok(/pfChatAll\(order, chatShown \? liveSel : "", theme, sec, false\)/.test(a) && !/Math\.min\(da, nn - da\)/.test(a), '모든 방을 한꺼번에 받는다(s274: 가까운 방부터 차례로 하던 정렬은 필요 없어졌다)');
   });
   await t('시간표 미리 받기(s248): 역 팝업이 뜨면 모든 노선 시간표를 미리 받아 두고 · 시간표 단추는 이미 받은 화면을 쓰고 · 서버가 못 채웠을 때만 예전 길', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
@@ -647,7 +647,7 @@ function findAndroidJar() {
   await t('s171: 맛집 · 쇼핑 · 지방 노선도까지 켜자마자 미리 · 위치가 늦게 잡혀도 다시 맞춘다 · 서버 두 키 반반', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/private double\[\] pfLL\(\)/.test(a) && /lastLocFresh\(store, 6L \* 3600000L/.test(a) && /final double\[\] ll = pfLL\(\);/.test(a), '켤 때 위치가 아직 없으면 마지막으로 안 위치(6시간 안)로 미리 받는다');
-    assert.ok(/pfAdd\(1, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return pfFoodRun\(ll, dName, dLa, dLo\); \} \}\)/.test(a) && /pfAdd\(1, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 쇼핑/.test(a) && /w >= 3 \|\| pfQueue\.isEmpty\(\)/.test(a), '맛집 · 쇼핑은 대화방보다 앞순서 · 일꾼 3');
+    assert.ok(/pfAdd\(1, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return pfFoodRun\(ll, dName, dLa, dLo\); \} \}\)/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 쇼핑/.test(a) && /w >= \(pfBurst\(\) \? 5 : 3\) \|\| pfQueue\.isEmpty\(\)/.test(a), '맛집 · 쇼핑은 대화방보다 앞순서(s274: 쇼핑 · 대화방은 맨 앞) · 일꾼 3(켠 직후 20초는 5)');
     assert.ok(/private boolean pfFoodRun\(/.test(a) && /needGps\(\)\) \{ if \(ll != null\) pfFood\.setGps/.test(a) && /synchronized \(pfFood\)/.test(a), '맛집: 도착지 전에는 현위치');
     assert.ok(/saveLoc\(Location l\)[^\n]*warmLocTabs\(/.test(a) && /private void warmLocTabs\(/.test(a) && /180000L/.test(a), '위치가 잡히면 맛집 · 버스 노선도를 다시 맞춘다(3분에 한 번)');
     assert.ok(/"busan", "daegu", "gwangju", "daejeon"/.test(a) && /gm\.bodyRequest\(ShellCore\.CAP, theme\)/.test(a), '지방 노선도(부산 · 대구 · 광주 · 대전)도 미리');
@@ -762,7 +762,7 @@ function findAndroidJar() {
     assert.ok(/pollRide\(\);\s*hcEnsureDong\(\);/.test(a) && /hcFixFrom[\s\S]{0,600}hcEnsureDong\(\)/.test(a), '홈이 보이는 동안 5초마다 · 위치가 잡힐 때마다 확인(30초에 한 번만 묻는다)');
     assert.ok(/lastLocFresh\(store, 24L \* 3600000L, now\)/.test(a), '마지막 위치(하루 안)로 먼저 브리핑을 채운다');
     assert.ok(/private String shopCall\(String ck, String cat\) \{\s*String t = shopCall0\(ck, cat, false\);\s*shopWarm\(t\);/.test(a) && /ScreenView\.ImageBank\.warm\(this, ScreenCore\.imageUrls\(txt, 240\)\)/.test(a) && /shopWarm\(src\);/.test(a), '쇼핑 화면을 받을 때마다 상품 그림도 뒤에서 받아 둔다');
-    assert.ok(/static void warm\(Context c, java\.util\.List<String> urls\)/.test(sv) && /private static File fetch\(String url\)/.test(sv) && /newFixedThreadPool\(2,/.test(sv) && /MIN_PRIORITY \+ 1/.test(sv), '그림 미리 받기: 파일만 · 동시 2개 · 낮은 우선순위');
+    assert.ok(/static void warm\(Context c, java\.util\.List<String> urls\)/.test(sv) && /private static File fetch\(String url\)/.test(sv) && /newFixedThreadPool\(6,/.test(sv) && /MIN_PRIORITY \+ 1/.test(sv), '그림 미리 받기: 파일만 · 동시 6개 · 낮은 우선순위');
   });
   await t('s217: 경로 통합 카드 — 알약 줄(tags, 규격 25) · AI 승무원이 경로 카드 안으로 합쳐짐(fuseAi) · 엔진은 규격 25부터만 쓴다', () => {
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), shc = fs.readFileSync(N('ShellCore.java'), 'utf8');
@@ -775,7 +775,9 @@ function findAndroidJar() {
   await t('s235: 모든 호선 방을 뒤에서 계속 받아 둔다(chatBg) · 맛집 탭 좌우 밀기는 카테고리를 끝없이 돈다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/CHAT_BG_MS = 20000L/.test(a) && /private void chatBgSweep\(\)/.test(a) && /chatSels = new ArrayList<String>\(sels\)/.test(a) && /chatBgStart\(\); setupResume/.test(a) && /removeCallbacks\(chatBg\)/.test(a), '모든 방 20초 주기 갱신(켤 때 방 목록 · onResume 시작 · 끝낼 때 정리)');
-    assert.ok(/if \(chatShown && sel\.equals\(liveSel\)\) continue;/.test(a) && /cacheAge\(key\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(pfChatB\)/.test(a) && /warm\(txt\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 미리 읽기');
+    assert.ok(/pfChatAll\(order, chatShown \? liveSel : "", theme, sec, false\)/.test(a) && /sel\.equals\(skipSel\)/.test(a) && /cacheAge\(ShellCore\.S_CHAT \+ "\|" \+ sel\) < CHAT_BG_FRESH_MS/.test(a) && /synchronized \(g\)/.test(a), '보는 방은 6초 주기가 · 싱싱한 방은 건너뛰고 · 따로의 상태기 · 한 줄기로만 만진다');
+    assert.ok(/s274/.test(a) && /newFixedThreadPool\(Math\.min\(PF_CHAT_PAR, jobs\.size\(\)\)/.test(a) && /invokeAll\(cs, 20/.test(a) && /g\.batchRequest\(rooms, ShellCore\.CAP, theme, tzo, me\)/.test(a) && /ChatCore\.parseBatch\(r\.body\)/.test(a) && /pfChatBusy\.compareAndSet\(false, true\)/.test(a), 's274: 모든 방 원자료를 동시에 받고 한 요청(alts)으로 묻는다 · 순회가 겹치지 않는다');
+    assert.ok(/ChatCore\.K_SELS/.test(a) && /ChatCore\.decSels\(savedSels\)/.test(a) && /store\.put\(ChatCore\.K_SELS, enc\)/.test(a) && /PF_BURST_MS = 20000L/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{                \/\/ 대화방 전부/.test(a) && /pfAdd\(0, new PfJob\(\) \{ @Override public boolean run\(\) throws Exception \{ return prefetchNews/.test(a), 's274: 방 목록을 적어 둬 켜자마자 모두 받는다 · 쇼핑 · 소식 · 게시판 · 대화방은 맨 앞순서 · 켠 직후 20초는 넓게');
     assert.ok(/"food"\.equals\(tab\)/.test(a) && /"food"\.equals\(ct\)/.test(a) && !/\(si\[0\] - dir\) % n/.test(a), '맛집 탭: 좌우 밀기 = 엔진이 준 sw(카테고리 칩 끝없이 · 끝에서 반대쪽 끝으로) — 앱은 계산하지 않는다(food_engine 시험이 도는 것을 확인)');
   });
   await t('s237: 경고 테두리는 카드 모양을 그대로 두고 빛만 둘레를 따라 달린다 · 추천 버튼 글은 엔진 값 · 앱 종료 줄 3분/자동 종료 5분은 엔진 · 추천은 받아 둔 글이 없으면 바로 받는다', () => {

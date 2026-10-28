@@ -3558,13 +3558,13 @@ public class ScreenView extends View {
 
         private static ExecutorService warmPool;
         private static final Set<String> warming = new HashSet<String>();
-        /** 미리 받기: 그림 파일만 뒤에서 받아 파일 캐시에 둔다(동시 2개 · 낮은 우선순위). 이미 있거나 받는 중이거나 최근에 실패한 것은 건너뛴다. 화면에 그릴 때는 파일에서 곧바로 읽는다. */
+        /** 미리 받기: 그림 파일만 뒤에서 받아 파일 캐시에 둔다(동시 6개 · 낮은 우선순위 — 쇼핑 모든 분류의 상품 그림이 곰돌이 자리표시자로 오래 남지 않게). 이미 있거나 받는 중이거나 최근에 실패한 것은 건너뛴다. 화면에 그릴 때는 파일에서 곧바로 읽는다. */
         static void warm(Context c, java.util.List<String> urls) {
             if (urls == null || urls.isEmpty()) return;
             init(c);
             synchronized (ImageBank.class) {
                 if (warmPool == null) {
-                    warmPool = Executors.newFixedThreadPool(2, new java.util.concurrent.ThreadFactory() {
+                    warmPool = Executors.newFixedThreadPool(6, new java.util.concurrent.ThreadFactory() {
                         @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "scr-img-warm"); t.setDaemon(true); t.setPriority(Thread.MIN_PRIORITY + 1); return t; }
                     });
                 }

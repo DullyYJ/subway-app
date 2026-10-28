@@ -844,7 +844,8 @@ public class ShellActivity extends Activity {
      *  · 분류 · 방 · 방식마다의 화면까지 받는다: 소식(엔진이 모든 분류를 한 번에), 쇼핑 분류, 대화방, 노선도 버스/지하철, 칩 줄 방식.
      *  · 위치가 필요한 지도 · 맛집은 마지막으로 안 위치로 받는다(위치가 한 번도 없으면 그 안내 화면이 캐시된다).
      */
-    private long prefetchAt = 0L;
+    private volatile long prefetchAt = 0L;
+    private static final long PF_BURST_MS = 20000L;                  // 켠 직후 20초는 미리 받기를 넓게(동시 5개 · 쉬는 틈 거의 없이) — 쇼핑·커뮤니티 모든 분류를 빨리 채우려고. 그 뒤는 예전처럼 천천히(데이터 · 배터리)
     private static final long PF_SKIP_MS = 120000L;                  // 이보다 최근에 받아 둔 화면은 미리 받기에서 건너뛴다(데이터 · 배터리)
     private ChatCore pfChat; private MapCore pfMap, pfMapB; private final FoodCore pfFood = new FoodCore();
 
@@ -859,11 +860,12 @@ public class ShellActivity extends Activity {
     private final java.util.concurrent.atomic.AtomicLong pfSeq = new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicInteger pfPending = new java.util.concurrent.atomic.AtomicInteger(), pfWorkers = new java.util.concurrent.atomic.AtomicInteger();
     private void pfAdd(int prio, PfJob job) { pfPending.incrementAndGet(); pfQueue.add(new PfTask(prio, pfSeq.incrementAndGet(), job)); pfKick(); }
-    private void pfGap() { try { Thread.sleep(100 + rng.nextInt(200)); } catch (InterruptedException ignored) { } }
+    private boolean pfBurst() { long a = prefetchAt; return a > 0L && System.currentTimeMillis() - a < PF_BURST_MS; }
+    private void pfGap() { try { Thread.sleep(pfBurst() ? 15 : 100 + rng.nextInt(200)); } catch (InterruptedException ignored) { } }
     private void pfKick() {
         while (true) {
             int w = pfWorkers.get();
-            if (w >= 3 || pfQueue.isEmpty()) return;
+            if (w >= (pfBurst() ? 5 : 3) || pfQueue.isEmpty()) return;
             if (!pfWorkers.compareAndSet(w, w + 1)) continue;
             new Thread(new Runnable() { @Override public void run() {
                 try {
@@ -1078,47 +1080,35 @@ public class ShellActivity extends Activity {
             prefetchPut(ShellCore.S_HOME, txt, true);
             return true;
         } });
-        if (!live.contains(ShellCore.S_BOARD)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {              // 게시판
+        if (!live.contains(ShellCore.S_BOARD)) pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {              // 게시판
             if (!pfNeeds(ShellCore.S_BOARD)) return false;
             String bb = boardBody(true);
             final String txt = screenCall(ShellCore.S_BOARD, false, ShellCore.BASE + "/screen/board", bb, null, 10000);
             if (txt.length() > 0 && !isNotMod(txt)) main.post(new Runnable() { @Override public void run() { board.onScreen(txt); } });
             return true;
         } });
-        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return prefetchNews(live.contains(ShellCore.S_NEWS)); } });    // 소식(모든 분류)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return rloadFetch(); } });                                    // 경로 탐색 로딩 카드(글 · 모양은 엔진 — 한 번 받아 두면 앱을 끌 때까지 쓴다)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { boolean n = dlgFetch("exit"); n |= dlgFetch("report"); n |= dlgFetch("perm"); return n; } });      // 종료 · 신고 · 권한 안내 카드(글 · 단추 · 모양은 엔진)
         pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 노선도 버스(위치 → 정류장 → 도착정보 왕복이라 묶지 못한다)
             if (("map".equals(cur) && "bus".equals(mapMode)) || ll == null || !pfNeeds(ShellCore.mapKey(ShellCore.S_MAPB, "bus", store, MapCore.cellOf(ll[0], ll[1])))) return false;
             return pfBusRun(ll, theme);
         } });
-        pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {                // 대화방 전부(고스트 상태기) — 엔진이 칩으로 준 순서대로
-            String me = ShellCore.commId(store);
-            int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
-            pfChat.routeSec = new ArrayList<String>(sec);
-            ArrayList<String> sels = new ArrayList<String>(); sels.add("all");
+        final String savedSels = store.get(ChatCore.K_SELS, "");           // 지난번에 엔진이 칩으로 준 방 목록(앱은 적어 둘 뿐) — 켜자마자 모든 방을 한꺼번에 받으려고
+        if (pfChatB == null) pfChatB = new ChatCore(store);
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {                // 대화방 전부: 원자료를 병렬로 받아 한 번에 엔진에 묻는다(방마다 차례로 받던 것을 한 번에 — s274)
+            final String liveRoom = live.contains(ShellCore.S_CHAT) ? liveSel : "";
+            ArrayList<String> sels = new ArrayList<String>(chatSels);
+            if (sels.size() < 2) sels = ChatCore.decSels(savedSels);
+            if (sels.size() < 2) { String c = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.S_CHAT + "|all", false); } }); if (c != null) sels = chatSelsOf(c); }
             boolean net = false;
-            for (int i = 0; i < sels.size() && i < 24; i++) {
-                String sel = sels.get(i), key = ShellCore.S_CHAT + "|" + sel;
-                boolean isLive = live.contains(ShellCore.S_CHAT) && sel.equals(liveSel);
-                if (i > 0 && (isLive || !pfNeeds(key))) continue;
-                if (System.currentTimeMillis() - pfChat.noticesAt > 60000) {
-                    NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
-                    if (nr.status == 200) pfChat.setNotices(nr.body, System.currentTimeMillis());
-                }
-                if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChat.talksUrlNow(), 7000); if (tr.status == 200) pfChat.addTalks(tr.body, me); }
-                else { NetPost.Res rr = NetPost.get(pfChat.roomUrl(sel), 12000); if (rr.status == 200) pfChat.addRoom(sel, rr.body); }
-                String body = pfChat.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
-                String txt = screenCall(key, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
+            if (sels.size() < 2) {                                                              // 처음 켬: 전체 방 하나만 먼저 받아 엔진이 칩으로 준 방 목록을 안다
+                java.util.Map<String, String> m0 = pfChatAll(java.util.Arrays.asList("all"), liveRoom, theme, sec, false);
                 net = true;
-                if (i == 0) {
-                    String src = txt.length() > 0 && !isNotMod(txt) ? txt : null;
-                    if (src == null) { NetPost.Res r0 = NetPost.post(ShellCore.BASE + "/screen/chat", body, 10000); src = r0.status == 200 ? r0.body : ""; }
-                    for (String c : ShellCore.catValues(src)) if (!sels.contains(c)) sels.add(c);
-                    chatSels = new ArrayList<String>(sels);                      // 모든 방 목록(엔진이 칩으로 준 순서) — 아래 chatBg 가 이 목록을 계속 돈다
-                }
-                pfGap();
+                String src = m0.get("all");
+                if (src != null) sels = chatSelsOf(src);
             }
+            if (sels.size() >= 2) { chatSelsSet(sels); pfChatAll(sels, liveRoom, theme, sec, false); net = true; }
             return net;
         } });
         if (!"food".equals(cur)) pfAdd(1, new PfJob() { @Override public boolean run() throws Exception { return pfFoodRun(ll, dName, dLa, dLo); } });          // 맛집
@@ -1147,7 +1137,7 @@ public class ShellActivity extends Activity {
             if (fe.isEmpty()) return net;
             return pfBatch(fe) || net;
         } });
-        pfAdd(1, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 엔진이 모든 분류 화면을 한 번에(alts) — 분류마다 서버를 따로 부르지 않는다(옛 워커면 아래에서 하나씩)
+        pfAdd(0, new PfJob() { @Override public boolean run() throws Exception {                // 쇼핑: 엔진이 모든 분류 화면을 한 번에(alts) — 분류마다 서버를 따로 부르지 않는다(옛 워커면 아래에서 하나씩)
             String key = ShellCore.cacheKey(ShellCore.S_SHOP, store);
             boolean net = false;
             String cached = onMainWait(new java.util.concurrent.Callable<String>() { @Override public String call() { return cacheGet(ShellCore.cacheKey(ShellCore.S_SHOP, store), true); } });
@@ -1171,6 +1161,102 @@ public class ShellActivity extends Activity {
             }
             return net;
         } });
+    }
+    /** 엔진이 전체 방 화면에 칩으로 준 방 목록(맨 앞 all 포함). 못 읽으면 빈 목록. */
+    private ArrayList<String> chatSelsOf(String allScreen) {
+        ArrayList<String> out = new ArrayList<String>();
+        for (String c : ShellCore.catValues(allScreen)) if (!out.contains(c)) out.add(c);
+        if (out.size() >= 2 && !out.contains("all")) out.add(0, "all");
+        return out.size() >= 2 ? out : new ArrayList<String>();
+    }
+    /** 모든 방 목록을 기억한다(메모리 + 다음에 켤 때 쓰도록 저장소에). 앱은 엔진이 준 순서를 그대로 적어 둘 뿐이다. */
+    private void chatSelsSet(final ArrayList<String> sels) {
+        if (sels == null || sels.size() < 2 || sels.equals(chatSels)) return;
+        chatSels = new ArrayList<String>(sels);
+        final String enc = ChatCore.encSels(sels);
+        main.post(new Runnable() { @Override public void run() { store.put(ChatCore.K_SELS, enc); } });
+    }
+    private final java.util.concurrent.atomic.AtomicBoolean pfChatBusy = new java.util.concurrent.atomic.AtomicBoolean();
+    private static final int PF_CHAT_PAR = 6;                          // 방 원자료를 동시에 받는 수(대화 서버에 한꺼번에 몰리지 않게)
+    /**
+     * (뒤 스레드) 모든 방을 병렬로: ① 공지 · 전체 방 · 노선 방들의 원자료를 동시에 받고 ② 한 요청(엔진 alts)으로 방마다의 화면을 계산받아 ③ 방별로 캐시에 둔다.
+     * 방마다 [받기 → 엔진 → 쉼] 을 차례로 하던 것(호선 18개면 수십 번의 왕복)을 '동시 받기 + 한 번 묻기' 로 줄였다. 방 화면은 엔진이 만들고 앱은 담아 둘 뿐이다.
+     * sels: 받을 방(전체 포함) · skipSel: 지금 보는 방(6초 주기가 받는다) · 이미 싱싱한 방(CHAT_BG_FRESH_MS)은 건너뛴다.
+     * @return 방 → 캐시에 둔 화면 글(전체 방은 "all"). 다른 순회가 돌고 있거나 통신을 못 했으면 빈 표.
+     */
+    private java.util.Map<String, String> pfChatAll(final java.util.List<String> sels, final String skipSel, final String theme, final java.util.List<String> sec, final boolean force) {
+        final java.util.Map<String, String> stored = new java.util.LinkedHashMap<String, String>();
+        if (!pfChatBusy.compareAndSet(false, true)) return stored;
+        try {
+            if (pfChatB == null) pfChatB = new ChatCore(store);
+            final ChatCore g = pfChatB;
+            final String me = ShellCore.commId(store);
+            final int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
+            // 무엇을 받을지: 지금 보는 방 · 싱싱한 방은 뺀다
+            final ArrayList<String> want = new ArrayList<String>();
+            for (String sel : sels) {
+                if (sel == null || sel.length() == 0 || want.contains(sel) || sel.equals(skipSel)) continue;
+                if (!force && cacheAge(ShellCore.S_CHAT + "|" + sel) < CHAT_BG_FRESH_MS) continue;
+                want.add(sel);
+            }
+            if (want.isEmpty()) return stored;
+            final boolean needAll = want.contains("all");
+            final ArrayList<String[]> jobs = new ArrayList<String[]>();                       // {방 또는 "~notice", 주소}
+            final boolean needNotice;
+            synchronized (g) {
+                g.routeSec = new ArrayList<String>(sec);
+                needNotice = System.currentTimeMillis() - g.noticesAt > 60000;
+                if (needNotice) jobs.add(new String[] { "~notice", ChatCore.noticesUrl() });
+                for (String sel : want) jobs.add(new String[] { sel, "all".equals(sel) ? g.talksUrlNow() : g.roomUrl(sel) });
+            }
+            // ① 원자료 동시 받기
+            final NetPost.Res[] res = new NetPost.Res[jobs.size()];
+            java.util.concurrent.ExecutorService ex = java.util.concurrent.Executors.newFixedThreadPool(Math.min(PF_CHAT_PAR, jobs.size()), new java.util.concurrent.ThreadFactory() {
+                @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "shell-pf-chat"); t.setDaemon(true); return t; }
+            });
+            try {
+                java.util.ArrayList<java.util.concurrent.Callable<Object>> cs = new java.util.ArrayList<java.util.concurrent.Callable<Object>>();
+                for (int i = 0; i < jobs.size(); i++) {
+                    final int ix = i;
+                    cs.add(new java.util.concurrent.Callable<Object>() { @Override public Object call() {
+                        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                        String[] j = jobs.get(ix);
+                        res[ix] = NetPost.get(j[1], "~notice".equals(j[0]) ? 8000 : "all".equals(j[0]) ? 7000 : 12000);
+                        return null;
+                    } });
+                }
+                ex.invokeAll(cs, 20, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            finally { ex.shutdownNow(); }
+            // ② 받은 것을 상태기에 합치고(차례로 — 상태기는 한 줄기로만 만진다) 받은 방만 골라 한 번에 묻는다
+            final ArrayList<String> got = new ArrayList<String>();
+            final String req;
+            synchronized (g) {
+                for (int i = 0; i < jobs.size(); i++) {
+                    NetPost.Res r = res[i];
+                    if (r == null || r.status != 200 || r.body == null) continue;
+                    String k = jobs.get(i)[0];
+                    if ("~notice".equals(k)) g.setNotices(r.body, System.currentTimeMillis());
+                    else if ("all".equals(k)) { if (g.addTalks(r.body, me)) got.add(k); }
+                    else if (g.addRoom(k, r.body)) got.add(k);
+                }
+                ArrayList<String> rooms = new ArrayList<String>(got); rooms.remove("all");
+                req = got.isEmpty() ? "" : g.batchRequest(rooms, ShellCore.CAP, theme, tzo, me);
+            }
+            if (req.length() == 0) return stored;
+            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/chat", req, 12000);
+            java.util.Map<String, String> m = r.status == 200 ? ChatCore.parseBatch(r.body) : new java.util.LinkedHashMap<String, String>();
+            // ③ 방별 캐시(받지 못한 방 · 전체 방 글을 못 받았으면 그 방은 두지 않는다 — 오류 화면이 남지 않게)
+            for (java.util.Map.Entry<String, String> e : m.entrySet()) {
+                String sel = e.getKey();
+                if (!got.contains(sel)) continue;
+                prefetchPut(ShellCore.S_CHAT + "|" + sel, e.getValue(), false);
+                stored.put(sel, e.getValue());
+            }
+            String allTxt = stored.get("all");
+            if (allTxt != null && needAll) { ArrayList<String> ns = chatSelsOf(allTxt); if (ns.size() >= 2) chatSelsSet(ns); }          // 엔진이 준 방 목록이 바뀌었으면 맞춘다
+            return stored;
+        } finally { pfChatBusy.set(false); }
     }
     /** 묶음 요청: 여러 화면을 /screen/batch 한 번에 받는다. 신선하거나 최근에 받아 둔 것은 빼고, 앱이 가진 ETag 를 실어 같으면 항목만 304 를 받는다. 묶음이 안 되는 워커(옛 버전)면 하나씩. */
     @SuppressWarnings("unchecked")
@@ -1610,37 +1696,9 @@ public class ShellActivity extends Activity {
         final String liveSel = chat.sel(), theme = ShellCore.theme(store);
         final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
         if (pfChatB == null) pfChatB = new ChatCore(store);          // 이 일만 쓰는 따로의 고스트 상태기(다른 미리 받기와 상태를 섞지 않는다)
-        final ArrayList<String> order = new ArrayList<String>(sels);  // 지금 보는 방에서 가까운(좌우로 밀면 닿을) 방부터 — 아직 못 받은 방이 빈 화면으로 뜨는 일을 줄인다
-        final int at = Math.max(0, order.indexOf(liveSel)), nn = order.size();
-        java.util.Collections.sort(order, new java.util.Comparator<String>() { @Override public int compare(String a, String b) {
-            int da = Math.abs(sels.indexOf(a) - at), db = Math.abs(sels.indexOf(b) - at);
-            return Integer.compare(Math.min(da, nn - da), Math.min(db, nn - db));
-        } });
+        final ArrayList<String> order = new ArrayList<String>(sels);
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {
-            boolean net = false;
-            for (String sel : order) {
-                if (chatShown && sel.equals(liveSel)) continue;                              // 지금 보는 방은 6초 주기가 받는다
-                String key = ShellCore.S_CHAT + "|" + sel;
-                if (cacheAge(key) < CHAT_BG_FRESH_MS) continue;
-                String me = ShellCore.commId(store);
-                int tzo = -java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 60000;
-                String txt;
-                synchronized (pfChatB) {
-                    pfChatB.routeSec = new ArrayList<String>(sec);
-                    if (System.currentTimeMillis() - pfChatB.noticesAt > 60000) {
-                        NetPost.Res nr = NetPost.get(ChatCore.noticesUrl(), 8000);
-                        if (nr.status == 200) pfChatB.setNotices(nr.body, System.currentTimeMillis());
-                    }
-                    if ("all".equals(sel)) { NetPost.Res tr = NetPost.get(pfChatB.talksUrlNow(), 7000); if (tr.status == 200) pfChatB.addTalks(tr.body, me); }
-                    else { NetPost.Res rr = NetPost.get(pfChatB.roomUrl(sel), 12000); if (rr.status == 200) pfChatB.addRoom(sel, rr.body); }
-                    String body = pfChatB.requestFor(sel, false, ShellCore.CAP, theme, tzo, me, System.currentTimeMillis());
-                    txt = screenCall(key, false, ShellCore.BASE + "/screen/chat", body, null, 10000);
-                }
-                warm(txt);                                                                    // 눌렀을 때 주 스레드가 글을 읽지 않도록 미리 읽어 둔다
-                net = true;
-                pfGap();
-            }
-            return net;
+            return !pfChatAll(order, chatShown ? liveSel : "", theme, sec, false).isEmpty();           // 모든 방을 한꺼번에(동시 받기 + 한 번 묻기) — 지금 보는 방은 6초 주기가 받는다
         } });
     }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }

@@ -11,7 +11,7 @@ import java.util.Map;
  * 이 기기가 쥔 사실(고른 방·숨긴 글·탄 노선 기록)을 보관하며 눌림의 뜻을 정한다. 통신·시계·6초 주기는 ShellActivity 가 한다.
  */
 public final class ChatCore {
-    public static final String K_SEL = "chat_sel", K_HID = "lrHidden", K_MY = "my_lines";
+    public static final String K_SEL = "chat_sel", K_HID = "lrHidden", K_MY = "my_lines", K_SELS = "chat_sels";
     public static final int R_NONE = 0, R_RENDER = 1, R_SEND = 2, R_REPORT = 3, R_ROOM = 4, R_NEED_ID = 5;
 
     private final ShellCore.Store st;
@@ -105,13 +105,17 @@ public final class ChatCore {
     public String request(int cap, String theme, int tzoMin, String me, long now) { return requestFor(sel(), true, cap, theme, tzoMin, me, now); }
     /** 방 sel 의 요청. live=false 면 눌림 번호표(ridsR)를 건드리지 않는다(미리 받기용 별도 상태기에서 쓴다). */
     public String requestFor(String sel, boolean live, int cap, String theme, int tzoMin, String me, long now) {
-        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"sel\":").append(ShellCore.q(sel));
+        return "{\"cap\":" + cap + "," + fdFor(sel, live, theme, tzoMin, me, true) + "}";
+    }
+    /** 한 방의 사실(f)과 자료(d) 두 조각 — 요청 본문의 알맹이이자, 한 번에 여러 방을 물을 때(alts) 방마다의 { f, d } 다. withG=false 면 전체 방 줄(g)을 비운다(노선 방 화면은 g 를 안 쓴다). */
+    private String fdFor(String sel, boolean live, String theme, int tzoMin, String me, boolean withG) {
+        StringBuilder b = new StringBuilder("\"f\":{\"sel\":").append(ShellCore.q(sel));
         b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
         b.append(",\"my\":").append(st.get(K_MY, "[]"));
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         b.append(",\"st\":").append(ShellCore.q(live ? (loaded ? "ready" : failed ? "fail" : "loading") : ("all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel)) ? "ready" : "fail"));
         b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append("},\"d\":{");
-        List<Object> g = new ArrayList<Object>(talk.values());
+        List<Object> g = withG ? new ArrayList<Object>(talk.values()) : new ArrayList<Object>();
         b.append("\"g\":").append(HomeSearchCore.toJson(g));
         List<String> rids = new ArrayList<String>();
         List<Object> r = new ArrayList<Object>();
@@ -123,8 +127,43 @@ public final class ChatCore {
             if (noticesJson.length() > 0) { Object o = ScreenCore.parse(noticesJson); offOk = true; Object ls = ((Map<String, Object>) o).get("lines"); if (ls instanceof Map) off = ((Map<String, Object>) ls).get(sel); }
         } catch (Exception e) { offOk = false; }
         b.append(",\"off\":").append(HomeSearchCore.toJson(off)).append(",\"offOk\":").append(offOk ? 1 : 0).append(",\"offAt\":").append(noticesAt);
-        b.append(",\"al\":").append(HomeSearchCore.toJson(alerts.get(sel))).append("}}");
+        b.append(",\"al\":").append(HomeSearchCore.toJson(alerts.get(sel))).append("}");
         return b.toString();
+    }
+    /** 이 상태기에 전체 방 글이 있나(= 전체 방 화면을 '준비됨'으로 만들 수 있나). */
+    public boolean hasTalks() { return !talk.isEmpty(); }
+    /** 이 상태기에 그 노선 방 글을 받아 둔 적이 있나. */
+    public boolean hasRoom(String line) { return room.containsKey(line); }
+
+    // ── 모든 방을 한 번에(s274, YJ: 쇼핑·커뮤니티 모든 카테고리를 병렬로 받아 로딩 없애기): 방마다 따로 묻던 것을 한 요청(엔진 alts)으로 — 맨 위는 전체 방 · alts 는 글을 받아 둔 노선 방들.
+    //   엔진이 방마다의 화면을 계산하고(따로 요청했을 때와 글자 하나까지 같다), 앱은 방별로 캐시에 둘 뿐이다. 글을 못 받은 방은 싣지 않는다(오류 화면이 캐시에 남지 않게 — 다음 순회에 다시). ──
+    public String batchRequest(List<String> sels, int cap, String theme, int tzoMin, String me) {
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(',').append(fdFor("all", false, theme, tzoMin, me, true)).append(",\"alts\":{");
+        int n = 0;
+        for (String sel : sels) {
+            if (n >= 23) break;
+            if (sel == null || "all".equals(sel) || !room.containsKey(sel)) continue;
+            if (n++ > 0) b.append(',');
+            b.append(ShellCore.q(sel)).append(":{").append(fdFor(sel, false, theme, tzoMin, me, false)).append('}');
+        }
+        return b.append("}}").toString();
+    }
+    /** 위 요청의 답: 방 → 화면 글(맨 위 화면은 "all" 로). 못 읽거나 ok 가 아니면 빈 표. */
+    @SuppressWarnings("unchecked")
+    public static Map<String, String> parseBatch(String json) {
+        Map<String, String> out = new LinkedHashMap<String, String>();
+        if (json == null || json.length() < 10) return out;
+        try {
+            Object o = ScreenCore.parse(json);
+            if (!(o instanceof Map)) return out;
+            Map<String, Object> m = (Map<String, Object>) o;
+            Object alts = m.remove("alts");
+            m.remove("ver");
+            if (Boolean.TRUE.equals(m.get("ok"))) out.put("all", HomeSearchCore.toJson(m));
+            if (alts instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) alts).entrySet())
+                if (e.getValue() instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) e.getValue()).get("ok"))) out.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
+        } catch (Exception ignored) { }
+        return out;
     }
 
     // ── '불러오는 중' 화면 한꺼번에(s247, YJ: 화면 넘길 때 빈 화면): 아직 못 받은 방으로 넘길 때 회색 뼈대 대신, 칩 줄은 그대로 두고(고른 칩이 바뀐 채) 본문만 '불러오는 중…' 인 엔진 화면을 바로 올린다.
@@ -161,6 +200,19 @@ public final class ChatCore {
                 if (e.getValue() instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) e.getValue()).get("ok"))) out.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
         } catch (Exception ignored) { }
         return out;
+    }
+
+    /** 모든 방 목록(엔진이 칩으로 준 순서)을 저장소 글로 / 되돌린다 — 다음에 켤 때 방 목록을 기다리지 않고 모든 방을 한꺼번에 받으려고. 방 이름 1~29자 · 최대 24개. */
+    public static String encSels(List<String> sels) {
+        StringBuilder b = new StringBuilder();
+        if (sels != null) for (String s : sels) { if (s == null || s.length() == 0 || s.length() > 29 || s.indexOf('\n') >= 0) continue; if (b.length() > 0) b.append('\n'); b.append(s); }
+        return b.toString();
+    }
+    public static ArrayList<String> decSels(String enc) {
+        ArrayList<String> out = new ArrayList<String>();
+        if (enc == null || enc.length() == 0 || enc.length() > 1200) return out;
+        for (String s : enc.split("\n")) { if (s.length() > 0 && s.length() < 30 && !out.contains(s) && out.size() < 24) out.add(s); }
+        return out.size() >= 2 ? out : new ArrayList<String>();
     }
 
     // ── 주소 ──
