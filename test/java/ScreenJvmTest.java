@@ -752,6 +752,8 @@ public class ScreenJvmTest {
         ok(BDL.mk != null && BDL.mkBody && near(BDL.mk.x0, bd0.x + 32f) && near(BDL.mk.x(0.5f), bd0.x + 64f), "본문 타임라인: 내 위치 마커가 칸 가운데 사이에 놓인다");
         ok(BDL.bandSig.length() > 0 && ScreenCore.layout(ScreenCore.load(bandJson), 200f, M).bandSig.equals(BDL.bandSig), "본문 타임라인: 같은 내용이면 같은 표시(바뀔 때만 앱이 마커로 다시 맞춘다)");
         String mkWait = mkJson.replace("\"pu\":\"b\"", "\"pu\":\"w\",\"bt\":\"대기 중 · 350m\",\"bg\":\"#ff9f0a\",\"btc\":\"#ffffff\",\"bz\":9");
+        ScreenCore.Layout MDL = ScreenCore.layout(ScreenCore.load(mkJson.replace("\"r\":0.5", "\"r\":0,\"dw\":1,\"dc\":\"#ffd60a\",\"dhc\":\"rgba(255,214,10,.9)\",\"dring\":\"rgba(255,214,10,.75)\",\"dd\":16")), 200f, M);
+        ok(MDL.mk.dw && near(MDL.mk.dd, 16f) && MDL.mk.dccol != null && MDL.mk.dhcol != null && MDL.mk.drcol != null && MDL.mk.dccol.argb == 0xFFFFD60A && !MKL.mk.dw && near(MKL.mk.dd, 16f), "s295 마커: 역에 서 있는 구간(dw)이면 노란 점·번쩍임·고리 색을 읽고, 달리는 중이면 dw 없음");
         ScreenCore.Layout MWL = ScreenCore.layout(ScreenCore.load(mkWait), 200f, M);
         ok(MWL.mk.btw > 0f && near(MWL.mk.bth, 9f * 1.25f + 2f) && MWL.mk.bty >= 6f + ScreenCore.TRK_NAME_H && MWL.mk.bty + MWL.mk.bth <= 6f + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H && "w".equals(MWL.mk.pu) && MWL.mk.gcol != null, "마커: 대기 배지는 노선 줄 안에 가운데 놓인다");
         ok(bad(mkJson.replace("\"f\":0,\"t\":1", "\"f\":0,\"t\":7")) && bad(mkJson.replace("\"pu\":\"b\"", "\"pu\":\"x\"")) && bad(mkJson.replace("\"c\":\"#0a84ff\"", "\"c\":\"nope\"")) && bad(mkJson.replace("\"r\":0.5", "\"r\":1.5")) && bad(mkJson.replace("\"d\":14", "\"d\":99")), "마커: 칸 번호·종류·색·비율·크기가 틀리면 거절");

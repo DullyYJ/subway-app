@@ -73,9 +73,11 @@ final class RecoNotify {
         return 2;
     }
     private static void deliver(Context c, String title, String text, RideCore.RecoAd ad, RideCore core) {
-        int r = route(RideService.appFront, true, RideService.overlayReady(c), ad != null && ad.a.length() > 0);
+        final boolean front = RideService.appFront, ovl = RideService.overlayReady(c), hasAd = ad != null && ad.a.length() > 0;
+        int r = route(front, true, ovl, hasAd);
+        RideService.recoRoute = (r == 0 ? "팝업" : r == 1 ? "오버레이 줄" : "알림") + "(앱 앞=" + front + " 오버레이 가능=" + ovl + " 추천 줄=" + hasAd + ")";      // s295: 왜 그쪽으로 보냈는지 남긴다
         if (r == 0) { try { if (ShellActivity.recoPopup(title, text, ad, core == null ? null : core.recoLoc)) return; } catch (Throwable ignored) { } }
-        else if (r == 1) return;
+        else if (r == 1) { RideService.watchRecoRow(c, title, text); return; }          // s295: 줄만 믿지 않는다 — 20초 안에 안 그려지면 알림
         show(c, title, text);
     }
 

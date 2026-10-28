@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s294";
+var ENGINE_VERSION = "route-v2-2026-10-29s295";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -1976,7 +1976,7 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
     break;
   }
   const egressSec = gmap[dec(best)] !== void 0 ? gmap[dec(best)] : 0;
-  const clean = legs.filter((L) => !(L.mode === "subway" && L.stopList.length === 0)).map((L) => {
+  const clean = legs.filter((L) => !(L.mode === "subway" && L.stopList.length === 0)).map((L, li, legsArr) => {
     const o = { mode: L.mode, min: Math.max(0, Math.round((L.sec || 0) / 60)) };
     if (L.mode === "subway" || L.mode === "bus") {
       o.line = L.line;
@@ -1996,7 +1996,17 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
         o.waitReal = !!L.waitReal;
         o.waitEstimated = !!L.waitEstimated;
         o.boardStopId = L.boardStopId || null;
-        o.altBus = busAltNos(G, L);
+        const altEnds = {};
+        let nextFrom = "", nextSub = false;
+        for (let q = li + 1; q < legsArr.length; q++) {
+          if (legsArr[q].mode === "subway" || legsArr[q].mode === "bus") {
+            nextFrom = legsArr[q].from || "";
+            nextSub = legsArr[q].mode === "subway";
+            break;
+          }
+        }
+        o.altBus = busAltNos(G, L, altEnds, nextSub ? nextFrom : "");
+        if (o.altBus && Object.keys(altEnds).length) o.altEnd = altEnds;
       }
     }
     if (L.mode === "transfer") {
@@ -2974,15 +2984,26 @@ function applyExpressDiscount(legs) {
 __name(applyExpressDiscount, "applyExpressDiscount");
 __name2(applyExpressDiscount, "applyExpressDiscount");
 // s265 (YJ: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uba74 \uace0\ub97c \uc218 \uc788\uac8c): \ud0c0\ub294 \uc815\ub958\uc7a5\uc5d0 \uc11c\uace0 \ub0b4\ub9ac\ub294 \uc815\ub958\uc7a5 \uadfc\ucc98\uc5d0\ub3c4 \uc11c\ub294 \ub2e4\ub978 \ubc88\ud638\uc758 \ubc84\uc2a4 \ubaa9\ub85d(\uc790\uae30 \ubc88\ud638 \uc81c\uc678). \uc544\ub2c8\uba74 null.
-// s293 (YJ: a bus that goes to MY destination / transfer point counts, not only the same path): alternatives are judged by DESTINATION match -
-//   same boarding stop (35 m) and a later stop within ALT_BUS_DEST_M of the leg's alighting point (destination or transfer stop). Was 70 m (nearly the same stop only), which is why a bus like 9903 was never offered.
+// s293 (YJ: a bus that goes to MY destination / transfer point counts, not only the same path) + s293c (YJ: only buses that can really let you off at the STATION NAME of the
+//   alighting/transfer point - not every bus passing near it): an alternative must stop at the same boarding stop (35 m) and, later on its route, at a stop whose NAME holds the
+//   key of the planned alighting point (station stem + "\uc5ed" taken from the next subway leg or from the alighting stop name; a non-station destination uses its full stop name),
+//   within ALT_BUS_NAME_M metres. When no key can be built it falls back to the geometric rule (ALT_BUS_DEST_M). ends[no] = { n: its alighting stop name, d: metres from the planned point, la, lo }.
 var ALT_BUS_DEST_M = 300;
-function busAltNos(G, L) {
+var ALT_BUS_NAME_M = 600;
+function altEndKey(to, nextFrom) {
+  const nf = stopNmKey(nextFrom);
+  if (nf) return nf.replace(/\uc5ed$/, "") + "\uc5ed";
+  const s = stopNmKey(to), i = s.indexOf("\uc5ed");
+  if (i > 0) return s.slice(0, i + 1);
+  return s.length >= 2 ? s : "";
+}
+function busAltNos(G, L, ends, nextFrom) {
   try {
     if (!G || !G.routeStops || !L || L.mode !== "bus" || !L.coordList || L.coordList.length < 2) return null;
     const c0 = L.coordList[0], c1 = L.coordList[L.coordList.length - 1];
     if (!c0 || !c1) return null;
     const seen = {}, out = [];
+    const nameKey = altEndKey(L.to, nextFrom);
     const own = noKey(L.busNo || String(L.line || "").replace(/^\d+_/, ""));
     if (own) seen[own] = 1;
     for (const rk in G.routeStops) {
@@ -3000,17 +3021,22 @@ function busAltNos(G, L) {
         }
       }
       if (ib < 0) continue;
-      let ok = false;
+      let ok = false, bj = -1, bd = (nameKey ? ALT_BUS_NAME_M : ALT_BUS_DEST_M) + 1;
       for (let j = ib + 1; j < a.length; j++) {
-        if (Math.abs(a[j].lat - c1[0]) > 3.2e-3 || Math.abs(a[j].lng - c1[1]) > 4e-3) continue;
-        if (hav(a[j].lat, a[j].lng, c1[0], c1[1]) <= ALT_BUS_DEST_M) {
+        if (Math.abs(a[j].lat - c1[0]) > 6e-3 || Math.abs(a[j].lng - c1[1]) > 7.5e-3) continue;
+        const dj = hav(a[j].lat, a[j].lng, c1[0], c1[1]);
+        const lim = nameKey ? ALT_BUS_NAME_M : ALT_BUS_DEST_M;
+        if (nameKey && stopNmKey(a[j].node_nm).indexOf(nameKey) < 0) continue;
+        if (dj <= lim && dj < bd) {
           ok = true;
-          break;
+          bj = j;
+          bd = dj;
         }
       }
       if (!ok) continue;
       seen[no] = 1;
       out.push(no);
+      if (ends && bj >= 0) ends[no] = { n: String(a[bj].node_nm || "").slice(0, 24), d: Math.round(bd), la: Math.round(a[bj].lat * 1e6) / 1e6, lo: Math.round(a[bj].lng * 1e6) / 1e6 };
       if (out.length >= 6) break;
     }
     return out.length ? out : null;
@@ -8539,11 +8565,12 @@ var RIDE_ETA_DEFAULTS = {
   // \u2605 2026-10-19 (YJ: "\ub3c4\ucc29 \ud6c4 \uc5ed\uc5d0 \uba38\ubb34\ub974\ub294 \uc2dc\uac04\uc744 20\ucd08\ub85c"): 12 \u2192 20\ucd08.
   // \u2605 2026-10-26 (YJ: \uc5ed\uc5d0 \ub3c4\ucc29\ud55c \ub4a4 \ub2e4\uc74c \uc5ed\uc73c\ub85c \uc774\ub3d9\ud558\ub294 \uac8c \ub108\ubb34 \ube60\ub974\ub2e4 \u2014 \uc57d 10\ucd08 \ub2a6\ucdb0\uc918): 20 \u2192 30\ucd08.
   // \u2605 2026-10-29 s293 (YJ: "\uaf2d \uc911\uac04\uc5ed \ub3c4\ucc29 \ud6c4 15\ucd08 \ub4a4\uc5d0 \ub2e4\uc74c \uc5ed \uc774\ub3d9 \uc911\uc73c\ub85c \ub098\uc624\uac8c"): 30 \u2192 15\ucd08(\uc815\ucc28 \ud45c\uc2dc \u00b7 \ub9c8\ucee4 \ubaa8\ub450).
-  stopDwellSec: 15,
+  // \u2605 2026-10-29 s294 (YJ: "\ub3c4\ucc29 \ud6c4 \ub300\uae30 \uc2dc\uac04\uc740 20\ucd08\ub85c"): 15 \u2192 20\ucd08.
+  stopDwellSec: 20,
   // \uc601\uc810(GPS \ud1b5\uacfc)\uc744 \ubc1b\uc740 \uc5ed\uc5d0\uc11c \ub9c8\ucee4\uac00 \uba48\ucdb0 \uc788\uc5b4\uc57c \ud558\ub294 \uc2dc\uac04(\ucd08). \ud1b5\uacfc \uc2dc\uac01(\uc601\uc810\uc774\uba74 \uc2e4\uc81c \ud1b5\uacfc \uc2dc\uac01) + \uc774\ub9cc\ud07c\uae4c\uc9c0 hold \ub85c \uc54c\ub9b0\ub2e4 \u2014 \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\ub97c \ubabb \uc4f0\ub294 \uacbd\uc6b0\uc5d0\ub3c4 \uc571\uc774 \uadf8\ub9b0\ub2e4.
   // \u2605 2026-10-19 (YJ: \uac19\uc740 \uc694\uccad): 12 \u2192 20\ucd08 \u2014 \uc815\ucc28(pos)\uc640 \uac19\uc740 \uac12.
   // \u2605 2026-10-26 (YJ: \uac19\uc740 \uc694\uccad): 20 \u2192 30\ucd08 \u2014 \uc815\ucc28(pos)\uc640 \uac19\uc740 \uac12.
-  markerDwellSec: 15,
+  markerDwellSec: 20,
   // \u2605 2026-10-14 (YJ: \uc778\ucc9c1\ud638\uc120(\uc2e4\uc2dc\uac04 \uc704\uce58 \uc5c6\uc74c) \uc2dc\ud5d8 \u2014 \ub3c4\ucc29 \ud45c\uc2dc\uac00 \uc57d 15\ucd08 \ub2a6\ub2e4 \u2192 \ud604\uc7ac\ubcf4\ub2e4 10\ucd08 \uc77c\ucc0d \ub3c4\ucc29\uc73c\ub85c \ud310\uc815): \uc2dc\uac01\ud45c \uae30\uc900 \uc704\uce58(pos)\uc5d0\uc11c '\uc911\uac04 \uacbd\ub85c\uc5ed'(\uc2b9\ucc28\uc5ed\u00b7\ucd5c\uc885 \ubaa9\uc801\uc9c0 \uc81c\uc678)\uc5d0 \ub2ff\uc558\ub2e4\uace0 \ubcf4\ub294 \uc2dc\uac01\uc744
   //   \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\ubcf4\ub2e4 \uc774\ub9cc\ud07c(\ucd08) \uc55e\ub2f9\uae34\ub2e4. 0 \uc774\uba74 \ub054. \ud45c\uc2dc\ud558\ub294 \ub3c4\ucc29 \uc2dc\uac01(etaMs\u00b7arr)\uc740 \uadf8\ub300\ub85c\uc774\uace0 \ub9c8\ucee4\u00b7\uc624\ubc84\ub808\uc774\uac00 \uc77d\ub294 pos(from/to/t0/t1/segs)\ub9cc \ub2f9\uaca8\uc9c4\ub2e4. (\uc601\uc810 \ucc3d\uc740 ride-track zeroLeadSec \uac00 \uac19\uc774 \uc77c\ucc0d \uc5f4\ub9b0\ub2e4)
   // \u2605 2026-10-15 (YJ: \ub9c8\ucee4\uac00 \ub2e4\uc74c \uc5ed\uc5d0 \ub108\ubb34 \uc77c\ucc0d \uc62c\ub77c\uac04\ub2e4 \u2192 10\ucd08\ub97c 5\ucd08\ub85c): \uac12\ub9cc 10 \u2192 5.
@@ -8573,8 +8600,19 @@ var RIDE_ETA_DEFAULTS = {
   // \u2605 2026-10-19 (YJ: "\uc5ed \ub3c4\ucc29 \uc2dc\uac04\uc774 06\uc2dc38\ubd84\uc774\uba74 \uc6b0\ub9ac\ub294 06\uc2dc38\ubd8430\ucd08\uc5d0 \ub3c4\ucc29\ud588\ub2e4\uace0 \ud655\uc815\ud55c\ub2e4 \u2014 \uac70\uae30\uc11c\ubd80\ud130\ub294 \uc774\uc804 \uaddc\uce59\uc744 \ub530\ub978\ub2e4"): \uc2dc\uac01\ud45c\uc758 \ubd84 \ub2e8\uc704 \uc2dc\uac01(06:38)\uc740 \uadf8 \ubd84 \uc548(38:00~38:59)\uc758 \uc5b4\ub290 \ub54c\ub4e0 \ub420 \uc218 \uc788\uc5b4 \uac00\uc6b4\ub370(:30)\ub97c \ub3c4\ucc29\uc73c\ub85c \ubcf8\ub2e4.
   //   \uc608\uc815 \uc2dc\uac01(planMs)\uc744 \uc774\ub9cc\ud07c(\ucd08) \ub4a4\ub85c \ub193\uace0, \ud654\uba74 \uc2dc\uac01(HH:MM)\uc740 \ubd84\uc758 \ubaab(floor)\uc73c\ub85c \uc4f4\ub2e4 \u2014 06:38:30 \uc740 '06:38' \ub85c \ubcf4\uc778\ub2e4.
   // \u2605 2026-10-19 (YJ: "\uc9c0\ud558\ucca0 \ub3c4\ucc29\uc744 \ud655\uc815\ud558\ub294 \ub9c8\ucee4\ub3c4 20\ucd08\ucbe4 \ube60\ub978 \uac83 \uac19\ub2e4"): :30 \u2192 :50 \u2014 06:38 \uc774\uba74 06:38:50 \uc5d0 \ub3c4\ucc29\uc73c\ub85c \ud655\uc815\ud55c\ub2e4(\uadf8 \ub4a4 20\ucd08 \uc815\ucc28 \u2192 06:39:10 \uc5d0 \ucd9c\ubc1c). \ud654\uba74 \uc2dc\uac01\uc740 \uc5ec\uc804\ud788 \ubd84\uc758 \ubaab\uc774\ub77c 06:38.
-  planSecOffset: 50
+  // \u2605 2026-10-29 s294 (YJ: "\ub3c4\ucc29\uc2dc\uac04\uc774 7\uc2dc10\ubd84\uc774\uba74 7\uc2dc10\ubd8430\ucd08\ucc98\ub7fc \uc815\uc2dc\uc5d0\uc11c \ub79c\ub364\uc73c\ub85c 20~30\ucd08 \ub4a4\ub85c"): \ub178\ub4dc\ub9c8\ub2e4 \uc815\uc2dc(:00)\uc5d0\uc11c planSecMin~planSecMax \ucd08 \ub4a4(\ub178\ub4dc \uc774\ub984\u00b7\uc608\uc815 \ubd84\uc73c\ub85c \uc815\ud55c \uac12 \u2014 \uac19\uc740 \uc785\ub825\uc774\uba74 \ub298 \uac19\ub2e4).
+  //   planSecOffset \uc744 \uc22b\uc790\ub85c \uc8fc\uba74(\uc635\uc158) \ubaa8\ub4e0 \ub178\ub4dc\ub97c \uadf8 \ucd08\ub85c \uace0\uc815\ud55c\ub2e4(\uc2dc\ud5d8\u00b7\uc61b \uaddc\uce59 :50 / 0).
+  planSecMin: 20, planSecMax: 30
 };
+// \ub178\ub4dc\ub9c8\ub2e4 \uc548\uc815\uc801\uc778 '\ubb34\uc791\uc704' \ucd08(FNV-1a) \u2014 \ub9e4 5\ucd08 \ub2e4\uc2dc \uacc4\uc0b0\ud574\ub3c4 \uac12\uc774 \ubc14\ub00c\uc9c0 \uc54a\ub294\ub2e4(\ubc14\ub00c\uba74 \ub9c8\ucee4\uac00 \ub5a4\ub2e4). \uc790\ubc14 RideEtaJ.planSec \uc640 \uac19\uc740 \uc2dd.
+function _rePlanSec(nd, O) {
+  if (O.planSecOffset != null && isFinite(+O.planSecOffset)) return +O.planSecOffset;
+  var lo = +O.planSecMin, hi = +O.planSecMax;
+  if (!isFinite(lo) || !isFinite(hi) || hi < lo) return 0;
+  var s = String((nd && nd.name) || '') + '|' + String(nd && nd.planMin), h = 2166136261 | 0, c;
+  for (c = 0; c < s.length; c++) { h ^= s.charCodeAt(c); h = Math.imul(h, 16777619); }
+  return lo + ((h >>> 0) % (Math.floor(hi - lo) + 1));
+}
 
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // \uc790\uc815 \uc811\ud798: \ucc28\uc774\ub97c \u00b112\uc2dc\uac04 \uc548\uc73c\ub85c
 function _reHHMM(ms, tzMin, rounding) {
@@ -8818,9 +8856,10 @@ function _rideEtaCore(input) {
     var pmI = nodes[i] && nodes[i].planMin;
     valid[i] = (pmI != null && isFinite(+pmI));
     if (!valid[i]) { planMs[i] = null; continue; }
-    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000 + (+O.planSecOffset || 0) * 1000; }
+    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000; }
     else chain += _reFold(+pmI - (+nodes[prevValid].planMin));
-    planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000;
+    planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000 + _rePlanSec(nodes[i], O) * 1000;
+    if (prevValid >= 0 && planMs[i] < planMs[prevValid]) planMs[i] = planMs[prevValid];      // \uac19\uc740 \ubd84\uc758 \uc774\uc6c3 \ub178\ub4dc\uac00 \uc55e\uc9c8\ub7ec \uac00\uc9c0 \uc54a\uac8c
     prevValid = i;
   }
   if (firstValid < 0) return { arr: [], etaMs: [], delayMin: 0, anchorIdx: -1, notes: ['planMin \uc774 \uc788\ub294 \ub178\ub4dc\uac00 \uc5c6\ub2e4'] };
@@ -10564,13 +10603,27 @@ function rsMonoPos(st, r, now, notes) {
       notes.push('\ub9c8\ucee4 \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0: ' + (Math.round(newP * 100) / 100) + ' \u2192 ' + (Math.round(prevP * 100) / 100) + ' \uc790\ub9ac \uc720\uc9c0');
     }
   }
+  // \u2605 s294 (YJ: \uc601\uc810\uc774 \uc7a1\ud788\uac70\ub098 \ub3c4\ucc29 \ud310\uc815\uc774 \ub09c \uc5ed\uc740 \ub2e4\uc74c \uc5ed\uc73c\ub85c \uc804\uc9c4\ud55c \ub4a4 \ubb34\uc2a8 \uc77c\uc774 \uc788\uc5b4\ub3c4 \ub418\ub3cc\uc544\uac00\uc9c0 \ubabb\ud55c\ub2e4): \ub9c8\ucee4\uac00 \ub2ff\uc740 \uac00\uc7a5 \uc55e \uc5ed(pos.from)\uc744 st.mkFloor \uc5d0 \ubd99\uc7a1\uace0, \uc0c8 \uacc4\uc0b0\uc774 \uadf8\ubcf4\ub2e4 \uc55e \uc5ed\uc744 \uac00\ub9ac\ud0a4\uba74 \uadf8 \uc5ed\uc5d0\uc11c \uc2dc\uc791\ud558\ub294 \uad6c\uac04\uc73c\ub85c \ub04c\uc5b4\uc62c\ub9b0\ub2e4.
+  var pf = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
+  if (+pos.from < pf.n) {
+    var k2 = -1;
+    for (i = 0; i < segs.length; i++) if (+segs[i].from >= pf.n) { k2 = i; break; }
+    if (k2 >= 0) {
+      g = segs[k2]; pos.segs = segs = segs.slice(k2);
+      var rt2 = g.t1 > g.t0 ? Math.max(0, Math.min(1, (now - g.t0) / (g.t1 - g.t0))) : 0;
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt2 * 1000) / 1000; pos.moving = rt2 > 0 && rt2 < 1;
+      notes.push('\ub3c4\ucc29 \ud655\uc815 \uc5ed \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0: ' + pf.n + '\ubc88 \uc55e\uc73c\ub85c\ub294 \uac00\uc9c0 \uc54a\ub294\ub2e4');
+    }
+  }
+  if (+pos.from > pf.n) pf.n = +pos.from;
   st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
 }
 // \ub418\ub3cc\ub9ac\uae30: \ud658\uc2b9 \ud655\uc815(\uc608\uc57d \ud3ec\ud568) \ub610\ub294 \uccab \uad6c\uac04 \ud0d1\uc2b9 \ud655\uc815\uc744 \uc774\uc804 \uae30\ub85d\uc73c\ub85c \ub3cc\ub9b0\ub2e4
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
-  delete st.mk;                                   // \ub418\ub3cc\ub9ac\uba74 \ub9c8\ucee4\ub3c4 \ub418\ub3cc\uc544\uac08 \uc218 \uc788\ub2e4
+  delete st.mk; delete st.mkFloor;                     // \ub418\ub3cc\ub9ac\uba74 \ub9c8\ucee4\ub3c4 \ub418\ub3cc\uc544\uac08 \uc218 \uc788\ub2e4(\uc0ac\uc6a9\uc790\uac00 \uc9c1\uc811 \ub418\ub3cc\ub9b0 \uac83\ub9cc)
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {
@@ -19589,7 +19642,7 @@ function rheadTrkCells(pts, th, ea) {
   return cells;
 }
 // \ub0b4 \uc704\uce58 \ub9c8\ucee4: \uc6f9\uc774 \uc54c\ub824 \uc900 '\uba87 \ubc88\uc9f8 \uce78 \u2192 \uba87 \ubc88\uc9f8 \uce78, \uad6c\uac04 \ube44\uc728' \uacfc \ub300\uae30 \uac70\ub9ac \uc6d0\uc790\ub8cc\ub85c \uc5b4\ub514\uc5d0\u00b7\ubb34\uc2a8 \uc0c9\uc73c\ub85c\u00b7\uc5b4\ub5a4 \uae00\ub85c \uadf8\ub9b4\uc9c0 \uc815\ud55c\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
-var RTRK_MK = { cap: 0.7, hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+var RTRK_MK = { cap: 0.7, hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9, dc: '#ffd60a', dhc: 'rgba(255,214,10,.9)', dring: 'rgba(255,214,10,.75)', dd: 16 };      // s295: dc\u00b7dhc\u00b7dring = \uc5ed\uc5d0 \uc11c \uc788\ub294 \ub3d9\uc548(\ub3c4\ucc29~\ucd9c\ubc1c 20\ucd08) \ub178\ub780 \ub9c8\ucee4 \u00b7 dd = \uadf8\ub54c \uc810 \uc9c0\ub984
 function rheadTrkMark(lv, cells) {
   var p = lv && lv.p;
   if (!p || typeof p !== 'object') return null;
@@ -19600,8 +19653,10 @@ function rheadTrkMark(lv, cells) {
   if (tj < 0 || tj === fi) { tj = fi; r = 0; }
   r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
   var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
+  var dw = !w && !p.sn && (tj === fi || r <= 0);                       // s295 (YJ: \uc5ed\uc5d0 \ub3c4\ucc29\ud558\uba74 \ub178\ub780 \ub9c8\ucee4\ub97c \uadf8\ub300\ub85c \ub450\uc5c8\ub2e4\uac00 \ub300\uae30 20\ucd08 \ub4a4 \ud30c\ub780 \uc774\ub3d9 \ub9c8\ucee4\ub85c): \uc5ed\uc5d0 \uc11c \uc788\ub2e4 = \uc2b9\ucc28 \ub300\uae30\uac00 \uc544\ub2c8\uace0 \u00b7 \uc2e4\uc81c \ucd94\uc801 \uac12\uc774\uba70 \u00b7 \uad6c\uac04 \uc2dc\uc791(\ube44\uc728 0)\uc774\uac70\ub098 \ud55c \uce78\uc5d0 \uba38\ubb38\ub2e4(\ub9c8\ucee4\uac00 \uc5ed \uc790\ub9ac\uc5d0 \ub2ff\uc740 \ub4a4\uc5d0 \uc571\uc774 \uc0c9\uc744 \ubc14\uafbc\ub2e4)
   if (!w && tj !== fi && !p.sn && r > RTRK_MK.cap) r = RTRK_MK.cap;      // s258 (YJ \uc120\ud0dd 1\ubc88: \uad6c\uac04\uc758 70%\uae4c\uc9c0\ub9cc \ubd80\ub4dc\ub7fd\uac8c, \uadf8 \ub4a4\ub294 \ub2e4\uc74c \uc5ed \ub3c4\ucc29\uc774 \ud655\uc815(\ub610\ub294 \uc2dc\uac01\ud45c \ub3c4\ucc29 \uc2dc\uac01)\ub420 \ub54c\uae4c\uc9c0 \ub300\uae30 \u2014 \uc5f4\ucc28\uac00 \ub2a6\uc744 \ub54c \ub9c8\ucee4\uac00 \uc55e\uc11c\uac00\uc9c0 \uc54a\uac8c)
   var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, hh: K.hh, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  if (dw) { mk.dw = 1; mk.dc = K.dc; mk.dhc = K.dhc; mk.dring = K.dring; mk.dd = K.dd; }
   if (w) {
     mk.bt = d == null ? '\ub300\uae30 \uc911' : (d >= 1000 ? '\ub300\uae30 \uc911 \u00b7 ' + (d / 1000).toFixed(1) + 'km' : '\ub300\uae30 \uc911 \u00b7 ' + Math.round(d) + 'm');
     mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
@@ -20306,7 +20361,7 @@ function dlgBpick(f) {
   var src = Array.isArray(f.items) ? f.items : [], items = [], k;
   for (k = 0; k < src.length && items.length < 6; k++) {
     var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
-    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '' });      // s265: \uc904\ub9c8\ub2e4 \ubc84\uc2a4 \ubc88\ud638(\uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \uc5ec\ub7ec \ubc88\ud638 \uc911 \uace0\ub974\uae30) \u2014 \uc5c6\uc73c\uba74 \uce74\ub4dc \uc804\uccb4 \ubc88\ud638
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '', en: it && typeof it === 'object' ? dlgClean(it.en, 24) : '' });      // s265: \uc904\ub9c8\ub2e4 \ubc84\uc2a4 \ubc88\ud638(\uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \uc5ec\ub7ec \ubc88\ud638 \uc911 \uace0\ub974\uae30) \u2014 \uc5c6\uc73c\uba74 \uce74\ub4dc \uc804\uccb4 \ubc88\ud638
   }
   var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' }, nos = {};
   items.forEach(function (x) { if (x.no) nos[x.no] = 1; });
@@ -20316,8 +20371,8 @@ function dlgBpick(f) {
     { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' \u00b7 ' : '') + (multiNo ? '\uac19\uc740 \uacf3\uc73c\ub85c \uac00\ub294 10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4' : '10\ubd84 \uc548\uc5d0 \uc624\ub294 \ubc84\uc2a4'), size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
-    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: ((it2.no || no) ? (it2.no || no) + '\ubc88 ' : (i + 1) + '\ubc88\uc9f8 ') + '(' + dlgBpickLabel(it2.sec).replace(' \ub3c4\ucc29', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '\uc21c\ud65843\ubc88 (9\ubd84 36\ucd08 \ud6c4)' \u2014 \ubc84\uc2a4 \ubc88\ud638(\uc608\uc0c1 \uc2dc\uac04)
+    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: it2.en ? 13 : 15, r: 12, items: [
+      { label: ((it2.no || no) ? (it2.no || no) + '\ubc88 ' : (i + 1) + '\ubc88\uc9f8 ') + '(' + dlgBpickLabel(it2.sec).replace(' \ub3c4\ucc29', '') + ')' + (it2.en ? ' \u00b7 ' + it2.en + '\uc5d0\uc11c \ub0b4\ub824\uc694' : ''), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '\uc21c\ud65843\ubc88 (9\ubd84 36\ucd08 \ud6c4)' \u2014 \ubc84\uc2a4 \ubc88\ud638(\uc608\uc0c1 \uc2dc\uac04)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
@@ -23466,19 +23521,35 @@ function rideStart(opt, r) {
   // \u2605 s265 (YJ: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ubc84\uc2a4\uac00 \uc5ec\ub7ec \ubc88\ud638\uc77c \ub54c \uc0ac\uc6a9\uc790\uac00 \uace0\ub978 \ubc88\ud638\ub85c): \ud31d\uc5c5\uc5d0\uc11c \uace0\ub978 \ubc88\ud638(r.pick.no)\uac00 \uacbd\ub85c\uac00 \uc54c\ub824 \uc900 \ub300\uccb4 \ubc88\ud638(\uccab \ubc84\uc2a4 \uad6c\uac04\uc758 altBus)\uc5d0 \uc788\uc73c\uba74
   //   \uccab \ubc84\uc2a4 \uad6c\uac04\uc758 \ub178\uc120 \ubc88\ud638\ub97c \uadf8 \ubc88\ud638\ub85c \ubc14\uafd4 \uc548\ub0b4\ud55c\ub2e4(\uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc744 \uadf8 \ubc88\ud638\ub85c \ub530\ub77c\uac00\uace0, \uc624\ubc84\ub808\uc774\u00b7\ud0c0\uc784\ub77c\uc778\uc5d0\ub3c4 \uadf8 \ubc88\ud638\uac00 \ubcf4\uc778\ub2e4). \uc2dc\uac04\uc740 \uacbd\ub85c\uc758 \uac83\uc744 \uadf8\ub300\ub85c \uc4f4\ub2e4(\uac19\uc740 \uc815\ub958\uc7a5 \uc0ac\uc774\ub97c \uac00\ub294 \ubc84\uc2a4).
   var pickNo = (r.pick && typeof r.pick === 'object' && r.pick.no != null) ? String(r.pick.no).replace(/\s+/g, '').slice(0, 14) : '';
-  var firstAlts = [];
+  var firstAlts = [], firstEnds = {};
   try {
     var rawSub0 = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fs0 = null, q0;
     for (q0 = 0; q0 < rawSub0.length; q0++) { var s0 = rawSub0[q0]; if (s0 && (s0.trafficType === 1 || s0.trafficType === 2 || s0.trafficType === 4)) { fs0 = s0; break; } }
+    if (fs0 && fs0.trafficType === 2 && fs0.altEnd && typeof fs0.altEnd === 'object') {      // s293b: \ub300\uccb4 \ubc88\ud638\ub9c8\ub2e4 \ub0b4\ub9ac\ub294 \uacf3(\uc815\ub958\uc7a5 \uc774\ub984 \u00b7 \uacc4\ud68d \ud558\ucc28 \uc9c0\uc810\uc5d0\uc11c m \u00b7 \uc88c\ud45c) \u2014 \ud658\uc2b9\uc5ed\uc740 \ubc88\ud638\ub9c8\ub2e4 \ucd9c\uad6c\uac00 \ub2e4\ub97c \uc218 \uc788\ub2e4
+      Object.keys(fs0.altEnd).slice(0, 6).forEach(function (kk) {
+        var e0 = fs0.altEnd[kk], no0 = String(kk).replace(/\s+/g, '').slice(0, 14);
+        if (!no0 || !e0 || typeof e0 !== 'object') return;
+        var d0 = Number(e0.d), la0 = Number(e0.la), lo0 = Number(e0.lo);
+        firstEnds[no0] = { n: String(e0.n == null ? '' : e0.n).slice(0, 24), d: isFinite(d0) && d0 >= 0 && d0 <= 400 ? Math.round(d0) : 0, la: isFinite(la0) && Math.abs(la0) <= 90 ? la0 : null, lo: isFinite(lo0) && Math.abs(lo0) <= 180 ? lo0 : null };
+      });
+    }
     if (fs0 && fs0.trafficType === 2 && Array.isArray(fs0.altBus)) firstAlts = fs0.altBus.map(function (x) { return String(x).replace(/\s+/g, ''); }).filter(function (x) { return x.length > 0 && x.length <= 14; }).slice(0, 6);
   } catch (eA) { firstAlts = []; }
   var planNo = pts[0].sty === 2 ? String(pts[0].lineNm || '') : '';
-  var renamed = false;
+  var renamed = false, endSwap = null;
   if (pickNo && planNo && pickNo !== planNo && firstAlts.indexOf(pickNo) >= 0) {
+    var endK = -1;
     for (k = 0; k < pts.length; k++) {
       if (pts[k].sty !== 2 || String(pts[k].lineNm || '') !== planNo) break;           // \uccab \ubc84\uc2a4 \uad6c\uac04(\uac19\uc740 \ubc88\ud638\ub85c \uc774\uc5b4\uc9c0\ub294 \uce78)\uae4c\uc9c0\ub9cc
       pts[k].lineNm = pickNo; if (pts[k].lineLabel != null) pts[k].lineLabel = pickNo;
-      renamed = true;
+      renamed = true; endK = k;
+    }
+    // s293b (YJ: \ud658\uc2b9\uc5ed\uc774\uba74 \ud0c8 \uc218 \uc788\ub294 \ubc84\uc2a4\ub9c8\ub2e4 \ub0b4\ub9ac\ub294 \ucd9c\uad6c\uac00 \ub2e4\ub974\ub2e4): \uace0\ub978 \ubc88\ud638\uac00 \uacc4\ud68d\uacfc \ub2e4\ub978 \uc815\ub958\uc7a5(40m \ub118\uac8c)\uc5d0\uc11c \ub0b4\ub824 \uc8fc\uba74 \ud558\ucc28 \uce78\uc758 \uc774\ub984\u00b7\uc88c\ud45c\ub97c \uadf8 \uc815\ub958\uc7a5\uc73c\ub85c \ubc14\uafbc\ub2e4 \u2014 \ud558\ucc28 \uc54c\ub9bc\u00b7\uc601\uc810\uc774 \uadf8 \uc815\ub958\uc7a5 \uae30\uc900\uc774 \ub41c\ub2e4.
+    //   \uc2dc\uac01\uc740 \uacc4\ud68d \uadf8\ub300\ub85c(\uac19\uc740 \uad6c\uac04 \ub2e4\ub978 \ubc88\ud638) \u2014 \ub0b4\ub9b0 \ub4a4 \uac77\ub294 \uac70\ub9ac \ucc28\uc774\ub294 \uc54c \uc218 \uc5c6\uc5b4 \uc2dc\uac01\ud45c\ub294 \uac74\ub4dc\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc54c\ub9bc \uae00\uc5d0 \uc815\ub958\uc7a5 \uc774\ub984\uc774 \ub098\uc628\ub2e4).
+    var en = firstEnds[pickNo];
+    if (endK >= 0 && en && en.n && (en.d >= 40 || en.n !== pts[endK].nm) && en.la != null && en.lo != null) {
+      endSwap = { n: en.n, d: en.d, from: pts[endK].nm };
+      pts[endK].nm = en.n; pts[endK].la = en.la; pts[endK].lo = en.lo;
     }
   }
 
@@ -23507,7 +23578,9 @@ function rideStart(opt, r) {
   var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
   if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
   if (firstBl && firstAlts.length) firstBl.alts = firstAlts;                                  // s265: \uac19\uc740 \uad6c\uac04\uc744 \uac00\ub294 \ub2e4\ub978 \ubc88\ud638\ub4e4(\ud31d\uc5c5\uc774 \uc4f4\ub2e4)
+  if (firstBl && Object.keys(firstEnds).length) firstBl.ends = firstEnds;                      // s293b: \ub300\uccb4 \ubc88\ud638\ubcc4 \ub0b4\ub9ac\ub294 \uacf3(\uc120\ud0dd\ucc3d\uc774 '\u25cb\u25cb \ud558\ucc28'\ub97c \ubcf4\uc778\ub2e4)
   if (firstBl && renamed) firstBl.no = pickNo;
+  if (firstBl && endSwap) firstBl.endSwap = endSwap;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // \uccab \uc815\ub958\uc7a5 \uc2dc\uac01\uc774 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4\uba74 \uc9c0\ub09c \uac83\uc73c\ub85c
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -23533,7 +23606,10 @@ function rideBusAsk(opt, r) {
   var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
   var no = nd && nd.isBus ? String(nd.lineName || '') : '';
   if (!no) return null;
-  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [] };
+  var nds = s.state.eta.nodes, ek = b.i, end = nd.name ? String(nd.name) : '';      // s293c: \ub0b4 \ubc88\ud638\uac00 \ub0b4\ub9ac\ub294 \uacf3(\uccab \ubc84\uc2a4 \uad6c\uac04\uc758 \ub9c8\uc9c0\ub9c9 \uce78 \uc774\ub984)
+  while (nds[ek + 1] && nds[ek + 1].isBus && String(nds[ek + 1].lineName || '') === no) ek++;
+  if (nds[ek] && nds[ek].name) end = String(nds[ek].name);
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', end: end, alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [], ends: (b.ends && typeof b.ends === 'object') ? b.ends : {} };
 }
 function rideBusItems(list, nowMs) {
   var out = [], k, n = Number(nowMs);
@@ -23598,6 +23674,7 @@ async function handleRideBusPick(request, env) {
   var items = [];
   try { items = rideBusItemsMulti(m, [ask.no].concat(ask.alts || []), body.r && body.r.now, typeof noKey === "function" ? noKey : null); } catch (e5) { items = []; }
   if (!items.length) return nil();
+  items.forEach(function (it) { var e = ask.ends && ask.ends[it.no]; it.en = (e && e.n) ? e.n : (it.no === ask.no ? ask.end : ''); });      // s293c: \ubc84\uc2a4\ub9c8\ub2e4 \ud55c \uc904 \u2014 '\u25cb\u25cb\uc5d0\uc11c \ub0b4\ub824\uc694'(\ub300\uccb4 \ubc88\ud638\ub294 \uadf8 \ubc88\ud638\uac00 \ub0b4\ub9ac\ub294 \uc815\ub958\uc7a5, \ub0b4 \ubc88\ud638\ub294 \uacc4\ud68d\ud55c \ud558\ucc28 \uc815\ub958\uc7a5)
   if (items.length === 1) {          // s250 (YJ: "\uc5b4\ucc28\ud53c \ubc84\uc2a4 \uc624\ub294 \uac8c \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \ub9d0\uace0 \uadf8 \ubc84\uc2a4\ub97c \ud0c0\uac8c"): \ud558\ub098\ubfd0\uc774\uba74 \ubb3b\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uadf8 \ubc84\uc2a4\ub97c \ub530\ub77c\uac00\ub3c4\ub85d \ub3c4\ucc29 \uc2dc\uac01(ms)\ub9cc \ub3cc\ub824\uc900\ub2e4(s265: \ubc88\ud638\ub3c4)
     return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec, no: items[0].no }, ver: ENGINE_VERSION }), { headers: H });
   }

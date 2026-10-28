@@ -80,11 +80,12 @@ var RIDE_ETA_DEFAULTS = {
   // ★ 2026-10-19 (YJ: "도착 후 역에 머무르는 시간을 20초로"): 12 → 20초.
   // ★ 2026-10-26 (YJ: 역에 도착한 뒤 다음 역으로 이동하는 게 너무 빠르다 — 약 10초 늦춰줘): 20 → 30초.
   // ★ 2026-10-29 s293 (YJ: "꼭 중간역 도착 후 15초 뒤에 다음 역 이동 중으로 나오게"): 30 → 15초(정차 표시 · 마커 모두).
-  stopDwellSec: 15,
+  // ★ 2026-10-29 s294 (YJ: "도착 후 대기 시간은 20초로"): 15 → 20초.
+  stopDwellSec: 20,
   // 영점(GPS 통과)을 받은 역에서 마커가 멈춰 있어야 하는 시간(초). 통과 시각(영점이면 실제 통과 시각) + 이만큼까지 hold 로 알린다 — 시각표 기준 위치(pos)를 못 쓰는 경우에도 앱이 그린다.
   // ★ 2026-10-19 (YJ: 같은 요청): 12 → 20초 — 정차(pos)와 같은 값.
   // ★ 2026-10-26 (YJ: 같은 요청): 20 → 30초 — 정차(pos)와 같은 값.
-  markerDwellSec: 15,
+  markerDwellSec: 20,
   // ★ 2026-10-14 (YJ: 인천1호선(실시간 위치 없음) 시험 — 도착 표시가 약 15초 늦다 → 현재보다 10초 일찍 도착으로 판정): 시각표 기준 위치(pos)에서 '중간 경로역'(승차역·최종 목적지 제외)에 닿았다고 보는 시각을
   //   표시 도착 시각보다 이만큼(초) 앞당긴다. 0 이면 끔. 표시하는 도착 시각(etaMs·arr)은 그대로이고 마커·오버레이가 읽는 pos(from/to/t0/t1/segs)만 당겨진다. (영점 창은 ride-track zeroLeadSec 가 같이 일찍 열린다)
   // ★ 2026-10-15 (YJ: 마커가 다음 역에 너무 일찍 올라간다 → 10초를 5초로): 값만 10 → 5.
@@ -114,8 +115,19 @@ var RIDE_ETA_DEFAULTS = {
   // ★ 2026-10-19 (YJ: "역 도착 시간이 06시38분이면 우리는 06시38분30초에 도착했다고 확정한다 — 거기서부터는 이전 규칙을 따른다"): 시각표의 분 단위 시각(06:38)은 그 분 안(38:00~38:59)의 어느 때든 될 수 있어 가운데(:30)를 도착으로 본다.
   //   예정 시각(planMs)을 이만큼(초) 뒤로 놓고, 화면 시각(HH:MM)은 분의 몫(floor)으로 쓴다 — 06:38:30 은 '06:38' 로 보인다.
   // ★ 2026-10-19 (YJ: "지하철 도착을 확정하는 마커도 20초쯤 빠른 것 같다"): :30 → :50 — 06:38 이면 06:38:50 에 도착으로 확정한다(그 뒤 20초 정차 → 06:39:10 에 출발). 화면 시각은 여전히 분의 몫이라 06:38.
-  planSecOffset: 50
+  // ★ 2026-10-29 s294 (YJ: "도착시간이 7시10분이면 7시10분30초처럼 정시에서 랜덤으로 20~30초 뒤로"): 노드마다 정시(:00)에서 planSecMin~planSecMax 초 뒤(노드 이름·예정 분으로 정한 값 — 같은 입력이면 늘 같다).
+  //   planSecOffset 을 숫자로 주면(옵션) 모든 노드를 그 초로 고정한다(시험·옛 규칙 :50 / 0).
+  planSecMin: 20, planSecMax: 30
 };
+// 노드마다 안정적인 '무작위' 초(FNV-1a) — 매 5초 다시 계산해도 값이 바뀌지 않는다(바뀌면 마커가 떤다). 자바 RideEtaJ.planSec 와 같은 식.
+function _rePlanSec(nd, O) {
+  if (O.planSecOffset != null && isFinite(+O.planSecOffset)) return +O.planSecOffset;
+  var lo = +O.planSecMin, hi = +O.planSecMax;
+  if (!isFinite(lo) || !isFinite(hi) || hi < lo) return 0;
+  var s = String((nd && nd.name) || '') + '|' + String(nd && nd.planMin), h = 2166136261 | 0, c;
+  for (c = 0; c < s.length; c++) { h ^= s.charCodeAt(c); h = Math.imul(h, 16777619); }
+  return lo + ((h >>> 0) % (Math.floor(hi - lo) + 1));
+}
 
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // 자정 접힘: 차이를 ±12시간 안으로
 function _reHHMM(ms, tzMin, rounding) {
@@ -359,9 +371,10 @@ function _rideEtaCore(input) {
     var pmI = nodes[i] && nodes[i].planMin;
     valid[i] = (pmI != null && isFinite(+pmI));
     if (!valid[i]) { planMs[i] = null; continue; }
-    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000 + (+O.planSecOffset || 0) * 1000; }
+    if (firstValid < 0) { firstValid = i; chain = +pmI; ms0 = nowMs + _reFold(+pmI - nowMin) * 60000; }
     else chain += _reFold(+pmI - (+nodes[prevValid].planMin));
-    planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000;
+    planMs[i] = ms0 + (chain - (+nodes[firstValid].planMin)) * 60000 + _rePlanSec(nodes[i], O) * 1000;
+    if (prevValid >= 0 && planMs[i] < planMs[prevValid]) planMs[i] = planMs[prevValid];      // 같은 분의 이웃 노드가 앞질러 가지 않게
     prevValid = i;
   }
   if (firstValid < 0) return { arr: [], etaMs: [], delayMin: 0, anchorIdx: -1, notes: ['planMin 이 있는 노드가 없다'] };

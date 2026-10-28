@@ -41,6 +41,7 @@ async function handleRideBusPick(request, env) {
   var items = [];
   try { items = rideBusItemsMulti(m, [ask.no].concat(ask.alts || []), body.r && body.r.now, typeof noKey === "function" ? noKey : null); } catch (e5) { items = []; }
   if (!items.length) return nil();
+  items.forEach(function (it) { var e = ask.ends && ask.ends[it.no]; it.en = (e && e.n) ? e.n : (it.no === ask.no ? ask.end : ''); });      // s293c: 버스마다 한 줄 — '○○에서 내려요'(대체 번호는 그 번호가 내리는 정류장, 내 번호는 계획한 하차 정류장)
   if (items.length === 1) {          // s250 (YJ: "어차피 버스 오는 게 하나뿐이면 묻지 말고 그 버스를 타게"): 하나뿐이면 묻지 않는다 — 그 버스를 따라가도록 도착 시각(ms)만 돌려준다(s265: 번호도)
     return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec, no: items[0].no }, ver: ENGINE_VERSION }), { headers: H });
   }

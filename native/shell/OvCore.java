@@ -148,6 +148,10 @@ public final class OvCore {
     /** 칸 줄을 그릴 수 있나. */
     public static boolean hasStrip(Ov v) { return v.cells.length > 0; }
     /** 도착 줄([안내 종료] 버튼)이 보이는 상태인가. */
+    /** s295 (YJ: 역에 도착하면 노랑을 두었다가 20초 뒤 파란 이동 마커로 — 앱·오버레이 모두): 현재 칸 점·알약 점 색을 한 곳에서 정한다. 승차 대기 주황 · 달리는 중 파랑 · 역에 서 있는 동안(도착~출발) 노랑. */
+    public static final int C_WAIT = 0xFFF0A500, C_MOVE = 0xFF0A84FF, C_STOP = 0xFFFFD60A;
+    public static boolean waiting(Ov v) { return v != null && !v.rsEnd && ("wait".equals(v.rsSt) || "board".equals(v.rsSt)); }
+    public static int stateRgb(Ov v) { return waiting(v) ? C_WAIT : (v != null && v.moving) ? C_MOVE : C_STOP; }
     public static boolean arrived(Ov v) { return "board".equals(v.rsSt) && v.rsEnd && v.rsBt.length() > 0; }
     /** 앱 탑승 시트가 보일 상태인가(올라온 시트 · 기록 직후 되돌리기 · 대기 알약). 도착 줄(안내 종료)은 앱에서는 따로 있으니 제외. */
     public static boolean rsShown(Ov v) { return v != null && !v.rsEnd && ("board".equals(v.rsSt) || "wait".equals(v.rsSt) || "undo".equals(v.rsSt)); }

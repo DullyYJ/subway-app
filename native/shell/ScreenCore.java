@@ -380,7 +380,7 @@ public final class ScreenCore {
 
     private static Mark mark(Map<String, Object> m, int cells) throws ParseError {
         Mark k = new Mark();
-        k.f = (int) optNum(m, "f", 0f, 0f, 9999f); k.t = (int) optNum(m, "t", (float) k.f, 0f, 9999f);
+        k.n = cells; k.f = (int) optNum(m, "f", 0f, 0f, 9999f); k.t = (int) optNum(m, "t", (float) k.f, 0f, 9999f);
         if (k.f >= cells || k.t >= cells) throw new ParseError("mk: 칸 번호가 범위를 벗어났다");
         k.r = optNum(m, "r", 0f, 0f, 1f); k.ms = optNum(m, "ms", 0f, 0f, 10000f);
         k.d = optNum(m, "d", 14f, 6f, 30f); k.bw = optNum(m, "bw", 2f, 0f, 6f); k.hw = optNum(m, "hw", 6f, 0f, 16f);
@@ -388,6 +388,8 @@ public final class ScreenCore {
         k.pu = optStr(m, "pu", "b", 2); if (!"b".equals(k.pu) && !"w".equals(k.pu)) throw new ParseError("mk: pu 는 b 또는 w");
         k.c = roleOrCss(m, "c", "#0a84ff"); k.bc = roleOrCss(m, "bc", "#ffffff"); k.hc = roleOrCss(m, "hc", ""); k.ring = roleOrCss(m, "ring", "");
         k.bt = optStr(m, "bt", "", 24); k.bg = roleOrCss(m, "bg", "#ff9f0a"); k.btc = roleOrCss(m, "btc", "#ffffff");
+        k.dw = optNum(m, "dw", 0f, 0f, 1f) > 0.5f; k.dd = optNum(m, "dd", 16f, 6f, 30f);
+        k.dc = roleOrCss(m, "dc", "#ffd60a"); k.dhc = roleOrCss(m, "dhc", "rgba(255,214,10,.9)"); k.dring = roleOrCss(m, "dring", "rgba(255,214,10,.75)");
         return k;
     }
     private static final int BAD_COLOR = 0x01234567;
@@ -1215,13 +1217,17 @@ public final class ScreenCore {
     /** 배치 결과. */
     /** 구간 타임라인 위의 내 위치 마커. 어느 칸에서 어느 칸으로 얼마나 갔는지·색·크기·맥박·대기 배지 글은 전부 엔진이 정했다 — 앱은 칸 가운데 사이를 이어 그리기만 한다. */
     public static final class Mark {
-        public int f, t;                                   // 칸 번호(trk.cells 안)
+        public int f, t, n;                               // 칸 번호(trk.cells 안) · n = 칸 수(s294: 같은 경로인지 가늠하는 값)
         public float hh = .9f;                              // 마커가 이 비율 이상 가면 도착한 칸(금색 · 앞 칸은 회색) — 엔진이 정한 값을 앱이 화면에 보이는 마커 자리에 대 본다
         public float r, ms, d, bw, hw, pms, rms, bz;       // 구간 비율 · 옮겨 가는 ms(0 이면 곧바로) · 점 지름 · 흰 테두리 · 번쩍임 두께 · 번쩍임·퍼지는 고리 주기 ms · 배지 글자
         public String pu = "b", c = "", bc = "", hc = "", ring = "", bt = "", bg = "", btc = "";      // pu b=깜박임 w=승차 대기 맥박 · 점·테두리·번쩍임·고리·배지 글·배지 바탕·배지 글자 색
         // 배치 뒤(dp)
         public float x0, x1, y, btw, bty, bth;             // 시작·끝 칸 가운데 x · 점 가운데 y · 배지 글 폭 · 배지 위 y · 배지 높이
         public Col ccol, bcol, hcol, rcol, gcol, tcol;     // 점 · 테두리 · 번쩍임 · 고리 · 배지 바탕 · 배지 글자 (읽은 색)
+        public boolean dw;                                 // s295: 역에 서 있는 구간(도착~출발) — 마커가 역 자리에 닿으면 노랑, 떠나면 파랑(엔진이 정한다)
+        public float dd = 16f;                             // s295: 노란 마커 점 지름
+        public String dc = "#ffd60a", dhc = "rgba(255,214,10,.9)", dring = "rgba(255,214,10,.75)";
+        public Col dccol, dhcol, drcol;                    // s295: 노란 마커의 점 · 번쩍임 · 고리 색(읽은 색)
         public float x(float ratio) { return x0 + (x1 - x0) * ratio; }
     }
 
@@ -1432,7 +1438,7 @@ public final class ScreenCore {
                 contentW = Math.max(contentW, x + n.padR);
                 if (n.mk != null && L.mk == null) {                                                  // 내 위치 마커: 칸 가운데 사이 · 점 높이 · (대기면) 배지 자리
                     Mark k = n.mk; Item a = hi.get(rowFrom + k.f), b = hi.get(rowFrom + k.t);
-                    k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null);
+                    k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null); k.dccol = col(k.dc, null); k.dhcol = col(k.dhc, null); k.drcol = col(k.dring, null);
                     k.x0 = a.x + a.w / 2f; k.x1 = b.x + b.w / 2f; k.y = rowY + TRK_NAME_H + TRK_BADGE_H + TRK_DOT_Y;
                     if (k.bt.length() > 0) { k.btw = m.width(k.bt, k.bz, true); k.bth = k.bz * 1.25f + 2f; k.bty = rowY + TRK_NAME_H + (TRK_BADGE_H - k.bth) / 2f; }
                     L.mk = k;
@@ -1758,7 +1764,7 @@ public final class ScreenCore {
             for (int q = rowFrom; q < out.size(); q++) out.get(q).cr2 = endX;
             if (n.mk != null && rowFrom < out.size() && n.mk.f < out.size() - rowFrom && n.mk.t < out.size() - rowFrom) {
                 Mark k = n.mk; Item a = out.get(rowFrom + k.f), b = out.get(rowFrom + k.t);
-                k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null);
+                k.ccol = col(k.c, null); k.bcol = col(k.bc, null); k.hcol = col(k.hc, null); k.rcol = col(k.ring, null); k.gcol = col(k.bg, null); k.tcol = col(k.btc, null); k.dccol = col(k.dc, null); k.dhcol = col(k.dhc, null); k.drcol = col(k.dring, null);
                 k.x0 = a.x + a.w / 2f; k.x1 = b.x + b.w / 2f; k.y = ty + TRK_NAME_H + TRK_BADGE_H + TRK_DOT_Y;
                 if (k.bt.length() > 0) { k.btw = m.width(k.bt, k.bz, true); k.bth = k.bz * 1.25f + 2f; k.bty = ty + TRK_NAME_H + (TRK_BADGE_H - k.bth) / 2f; }
                 out.get(rowFrom).bmk = k;

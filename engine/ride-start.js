@@ -67,19 +67,35 @@ function rideStart(opt, r) {
   // ★ s265 (YJ: 같은 구간을 가는 버스가 여러 번호일 때 사용자가 고른 번호로): 팝업에서 고른 번호(r.pick.no)가 경로가 알려 준 대체 번호(첫 버스 구간의 altBus)에 있으면
   //   첫 버스 구간의 노선 번호를 그 번호로 바꿔 안내한다(실시간 도착을 그 번호로 따라가고, 오버레이·타임라인에도 그 번호가 보인다). 시간은 경로의 것을 그대로 쓴다(같은 정류장 사이를 가는 버스).
   var pickNo = (r.pick && typeof r.pick === 'object' && r.pick.no != null) ? String(r.pick.no).replace(/\s+/g, '').slice(0, 14) : '';
-  var firstAlts = [];
+  var firstAlts = [], firstEnds = {};
   try {
     var rawSub0 = (pick[tab] && Array.isArray(pick[tab].subPath)) ? pick[tab].subPath : [], fs0 = null, q0;
     for (q0 = 0; q0 < rawSub0.length; q0++) { var s0 = rawSub0[q0]; if (s0 && (s0.trafficType === 1 || s0.trafficType === 2 || s0.trafficType === 4)) { fs0 = s0; break; } }
+    if (fs0 && fs0.trafficType === 2 && fs0.altEnd && typeof fs0.altEnd === 'object') {      // s293b: 대체 번호마다 내리는 곳(정류장 이름 · 계획 하차 지점에서 m · 좌표) — 환승역은 번호마다 출구가 다를 수 있다
+      Object.keys(fs0.altEnd).slice(0, 6).forEach(function (kk) {
+        var e0 = fs0.altEnd[kk], no0 = String(kk).replace(/\s+/g, '').slice(0, 14);
+        if (!no0 || !e0 || typeof e0 !== 'object') return;
+        var d0 = Number(e0.d), la0 = Number(e0.la), lo0 = Number(e0.lo);
+        firstEnds[no0] = { n: String(e0.n == null ? '' : e0.n).slice(0, 24), d: isFinite(d0) && d0 >= 0 && d0 <= 400 ? Math.round(d0) : 0, la: isFinite(la0) && Math.abs(la0) <= 90 ? la0 : null, lo: isFinite(lo0) && Math.abs(lo0) <= 180 ? lo0 : null };
+      });
+    }
     if (fs0 && fs0.trafficType === 2 && Array.isArray(fs0.altBus)) firstAlts = fs0.altBus.map(function (x) { return String(x).replace(/\s+/g, ''); }).filter(function (x) { return x.length > 0 && x.length <= 14; }).slice(0, 6);
   } catch (eA) { firstAlts = []; }
   var planNo = pts[0].sty === 2 ? String(pts[0].lineNm || '') : '';
-  var renamed = false;
+  var renamed = false, endSwap = null;
   if (pickNo && planNo && pickNo !== planNo && firstAlts.indexOf(pickNo) >= 0) {
+    var endK = -1;
     for (k = 0; k < pts.length; k++) {
       if (pts[k].sty !== 2 || String(pts[k].lineNm || '') !== planNo) break;           // 첫 버스 구간(같은 번호로 이어지는 칸)까지만
       pts[k].lineNm = pickNo; if (pts[k].lineLabel != null) pts[k].lineLabel = pickNo;
-      renamed = true;
+      renamed = true; endK = k;
+    }
+    // s293b (YJ: 환승역이면 탈 수 있는 버스마다 내리는 출구가 다르다): 고른 번호가 계획과 다른 정류장(40m 넘게)에서 내려 주면 하차 칸의 이름·좌표를 그 정류장으로 바꾼다 — 하차 알림·영점이 그 정류장 기준이 된다.
+    //   시각은 계획 그대로(같은 구간 다른 번호) — 내린 뒤 걷는 거리 차이는 알 수 없어 시각표는 건드리지 않는다(알림 글에 정류장 이름이 나온다).
+    var en = firstEnds[pickNo];
+    if (endK >= 0 && en && en.n && (en.d >= 40 || en.n !== pts[endK].nm) && en.la != null && en.lo != null) {
+      endSwap = { n: en.n, d: en.d, from: pts[endK].nm };
+      pts[endK].nm = en.n; pts[endK].la = en.la; pts[endK].lo = en.lo;
     }
   }
 
@@ -108,7 +124,9 @@ function rideStart(opt, r) {
   var pickMs = (r.pick && typeof r.pick === 'object' && isFinite(Number(r.pick.ms))) ? Math.round(Number(r.pick.ms)) : null;
   if (firstBl && pickMs != null && Math.abs(pickMs - now) <= 30 * 60000) firstBl.pickMs = pickMs;
   if (firstBl && firstAlts.length) firstBl.alts = firstAlts;                                  // s265: 같은 구간을 가는 다른 번호들(팝업이 쓴다)
+  if (firstBl && Object.keys(firstEnds).length) firstBl.ends = firstEnds;                      // s293b: 대체 번호별 내리는 곳(선택창이 '○○ 하차'를 보인다)
   if (firstBl && renamed) firstBl.no = pickNo;
+  if (firstBl && endSwap) firstBl.endSwap = endSwap;
   var firstSub = pts[0].sty === 1, passes = [];
   if (etaMs[1] != null && now >= etaMs[1]) passes.push({ idx: 1, ms: etaMs[1], src: 'gps' });      // 첫 정류장 시각이 이미 지났다면 지난 것으로
   var eta = { nodes: nodes, passes: passes, boarded: true, notDeparted: false, tzOffsetMin: tz };
@@ -134,7 +152,10 @@ function rideBusAsk(opt, r) {
   var nd = s.state.eta && s.state.eta.nodes ? s.state.eta.nodes[b.i] : null;
   var no = nd && nd.isBus ? String(nd.lineName || '') : '';
   if (!no) return null;
-  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [] };
+  var nds = s.state.eta.nodes, ek = b.i, end = nd.name ? String(nd.name) : '';      // s293c: 내 번호가 내리는 곳(첫 버스 구간의 마지막 칸 이름)
+  while (nds[ek + 1] && nds[ek + 1].isBus && String(nds[ek + 1].lineName || '') === no) ek++;
+  if (nds[ek] && nds[ek].name) end = String(nds[ek].name);
+  return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', end: end, alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [], ends: (b.ends && typeof b.ends === 'object') ? b.ends : {} };
 }
 function rideBusItems(list, nowMs) {
   var out = [], k, n = Number(nowMs);

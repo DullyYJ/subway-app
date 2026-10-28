@@ -599,13 +599,27 @@ function rsMonoPos(st, r, now, notes) {
       notes.push('마커 되돌아감 방지: ' + (Math.round(newP * 100) / 100) + ' → ' + (Math.round(prevP * 100) / 100) + ' 자리 유지');
     }
   }
+  // ★ s294 (YJ: 영점이 잡히거나 도착 판정이 난 역은 다음 역으로 전진한 뒤 무슨 일이 있어도 되돌아가지 못한다): 마커가 닿은 가장 앞 역(pos.from)을 st.mkFloor 에 붙잡고, 새 계산이 그보다 앞 역을 가리키면 그 역에서 시작하는 구간으로 끌어올린다.
+  var pf = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
+  if (+pos.from < pf.n) {
+    var k2 = -1;
+    for (i = 0; i < segs.length; i++) if (+segs[i].from >= pf.n) { k2 = i; break; }
+    if (k2 >= 0) {
+      g = segs[k2]; pos.segs = segs = segs.slice(k2);
+      var rt2 = g.t1 > g.t0 ? Math.max(0, Math.min(1, (now - g.t0) / (g.t1 - g.t0))) : 0;
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt2 * 1000) / 1000; pos.moving = rt2 > 0 && rt2 < 1;
+      notes.push('도착 확정 역 되돌아감 방지: ' + pf.n + '번 앞으로는 가지 않는다');
+    }
+  }
+  if (+pos.from > pf.n) pf.n = +pos.from;
   st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
 }
 // 되돌리기: 환승 확정(예약 포함) 또는 첫 구간 탑승 확정을 이전 기록으로 돌린다
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
-  delete st.mk;                                   // 되돌리면 마커도 되돌아갈 수 있다
+  delete st.mk; delete st.mkFloor;                     // 되돌리면 마커도 되돌아갈 수 있다(사용자가 직접 되돌린 것만)
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {

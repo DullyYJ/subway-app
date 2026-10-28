@@ -2127,6 +2127,9 @@ public class ScreenView extends View {
         if (k == null) { mkHas = false; return; }
         long now = SystemClock.uptimeMillis();
         float to = k.x(k.r);
+        final boolean sameRoute = mkHas && keep && k.n == mkFloorN;
+        if (sameRoute && k.f < mkFloorF) return;                 // s294 (YJ: 도착이 판정된 역은 다음 역으로 가면 무슨 일이 있어도 되돌아가지 못한다): 같은 경로에서 이미 지나간 칸보다 뒤 칸으로 가라는 값은 버린다
+        mkFloorF = sameRoute ? Math.max(mkFloorF, k.f) : k.f; mkFloorN = k.n;
         if (!mkHas || !keep || k.ms <= 0f) { mkHas = true; mkFromX = mkToX = to; mkMs = 0f; mkT0 = now; mkBack = 0; }
         else if (Math.abs(to - mkToX) > 0.01f) {
             float back = mkToX - to;                                                     // 뒤로 가는 값: GPS 흔들림으로 역에 서 있다 0.05~0.2 구간 되돌아가는 것은 걸러 낸다(웹 역주행 가드 _markerMaxProg).
@@ -2136,21 +2139,29 @@ public class ScreenView extends View {
         } else mkBack = 0;
     }
     private int mkBack;                                    // 연속으로 뒤로 가라고 온 횟수
+    private int mkFloorN = -1, mkFloorF = -1;              // s294: 지금 경로(칸 수)에서 마커가 이미 닿은 가장 앞 칸 — 이보다 뒤로는 되돌리지 않는다
     private float mkCurX(long now) {
         if (mkMs <= 0f) return mkToX;
         float t = (now - mkT0) / mkMs;
         return t >= 1f ? mkToX : mkFromX + (mkToX - mkFromX) * t;
     }
     /** 내 위치 마커: 점 + 흰 테두리 + 번쩍임(승차 대기면 맥박) + 퍼지는 고리 + (대기면) 알약 배지. 모양·색·주기·글은 엔진이 정했다. */
+    /** s295 (YJ: 역에 도착하면 노란색을 두었다가 대기 20초 뒤 파란 이동 마커로): 엔진이 '역에 서 있는 구간'(mk.dw)이라 했고 마커가 그 역 자리에 실제로 닿았을 때만 참 — 미끄러져 오는 3초 동안은 아직 파랑이다. */
+    private boolean mkDwelling(long now) {
+        ScreenCore.Mark k = lay == null ? null : lay.mk;
+        return k != null && mkHas && k.dw && !"w".equals(k.pu) && k.dccol != null && (mkMs <= 0f || now - mkT0 >= mkMs);
+    }
     private boolean drawMk(Canvas cv, long now) {
         ScreenCore.Mark k = lay.mk;
         if (k == null || !mkHas) return false;
-        float x = mkCurX(now), y = k.y, rad = k.d / 2f, ph;
+        final boolean dwell = mkDwelling(now);
+        float x = mkCurX(now), y = k.y, rad = (dwell ? k.dd : k.d) / 2f, ph;
         boolean wait = "w".equals(k.pu);
         // 퍼지는 고리(0.5배 → 2.4배, 흐려지며 사라짐)
-        if (k.rcol != null && k.rms > 0f) {
+        final ScreenCore.Col dotC = dwell ? k.dccol : k.ccol, haloC = dwell ? k.dhcol : k.hcol, ringC = dwell ? k.drcol : k.rcol;
+        if (ringC != null && k.rms > 0f) {
             float f = (now % (long) k.rms) / k.rms, e = 1f - (1f - f) * (1f - f);
-            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(alpha(cc(k.rcol, 0xFF0A84FF), 0.85f * (1f - f)));
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setColor(alpha(cc(ringC, dwell ? 0xFFFFD60A : 0xFF0A84FF), 0.85f * (1f - f)));
             cv.drawCircle(x, y, (rad + 2f) * (0.5f + 1.9f * e), p);
         }
         p.setStyle(Paint.Style.FILL);
@@ -2160,12 +2171,12 @@ public class ScreenView extends View {
         if (wait) {                                                              // 맥박: 1 → 1.25배 · 투명도 1 → .75
             scale = 1f + 0.25f * tri; op = 1f - 0.25f * tri;
             if (k.hcol != null) { p.setColor(cc(k.hcol, 0)); cv.drawCircle(x, y, (rad + k.hw) * scale, p); }
-        } else if (k.hcol != null) {                                             // 번쩍임: 바깥 둘레가 커지며 옅어짐
-            p.setColor(alpha(cc(k.hcol, 0), 1f - tri)); cv.drawCircle(x, y, rad + k.hw * tri, p);
+        } else if (haloC != null) {                                              // 번쩍임: 바깥 둘레가 커지며 옅어짐
+            p.setColor(alpha(cc(haloC, 0), 1f - tri)); cv.drawCircle(x, y, rad + k.hw * tri, p);
         }
         float rr = rad * scale;
         if (k.bw > 0f && k.bcol != null) { p.setColor(alpha(cc(k.bcol, 0xFFFFFFFF), op)); cv.drawCircle(x, y, rr, p); }
-        p.setColor(alpha(cc(k.ccol, 0xFF0A84FF), op)); cv.drawCircle(x, y, Math.max(0f, rr - k.bw * scale), p);
+        p.setColor(alpha(cc(dotC, 0xFF0A84FF), op)); cv.drawCircle(x, y, Math.max(0f, rr - k.bw * scale), p);
         if (k.bt.length() > 0) {                                                 // 대기 배지(알약)
             float pw = k.btw + 14f;
             rf.set(x - pw / 2f, k.bty, x + pw / 2f, k.bty + k.bth);
@@ -2981,6 +2992,7 @@ public class ScreenView extends View {
     private long lastTapScale;
     /** 경로 결과 머리줄: 큰 분 숫자 + 단위 + 구간명(같은 글자 밑선) + 오른쪽 즐겨찾기 알약 + 닫기 ×. */
     /** 구간 타임라인 칸: 이름(아래 맞춤, 두 줄까지) · 배지 · 선+점 · 시각. 무엇을 어떤 색·크기로 쓸지는 전부 엔진이 정했다. */
+    private static final boolean SHOW_HERE = false;            // s294: 금색 '지금 칸' 표시(마커와 둘로 보여 헷갈린다) — 끈다
     private void drawTrk(Canvas cv, ScreenCore.Item it) {
         // s257 (YJ: "마커가 2개 나온다"): 금색 '지금 칸'과 회색 '지난 칸'은 엔진이 화면 값을 줄 때 정해 둔 것이라, 마커는 부드럽게 움직이는데 이쪽은 옛 값에 멈춰 둘이 갈라졌다.
         //   마커가 있으면 화면에 실제로 보이는 마커 자리(mkCurX)에서 다시 정한다 — 마커가 hh(엔진 값) 이상 가면 그 칸이 '지금'이고 그 앞은 지난 칸(회색). 마커가 곧 유일한 위치 표시.
@@ -2990,12 +3002,13 @@ public class ScreenView extends View {
             int here = rr >= k.hh ? k.t : k.f;
             liveHr = here > 0 && it.ci == here; livePs = here > 0 && it.ci >= 0 && it.ci < here;
         }
-        final boolean hrNow = liveHr, psNow = livePs;
+        final boolean dwCell = lay != null && lay.mk != null && it.ci >= 0 && it.ci == lay.mk.f && mkDwelling(SystemClock.uptimeMillis());      // s295: 마커가 역에 서 있는 동안 그 역 이름을 금색 굵게(점은 마커가 대신한다)
+        final boolean hrNow = SHOW_HERE && liveHr, psNow = livePs;      // s294 (YJ: "지난 역으로 삼은 역은 화면에 표출하지 말고 데이터만 내부에서 계산"): 금색 '지금 칸'(점·이름·고리)은 그리지 않는다 — 엔진 값(hr)과 지난 칸 흐림(ps)은 그대로 계산한다
         float cx = it.x + it.w / 2f, axisTop = it.y + ScreenCore.TRK_NAME_H + ScreenCore.TRK_BADGE_H;
         float ly = axisTop + ScreenCore.TRK_LINE_Y, cy = axisTop + ScreenCore.TRK_DOT_Y;
         // 이름: 마지막 줄의 아래가 nameBot
         if (it.lines.length > 0) {
-            setText(it.size, it.bold || hrNow, hrNow ? 0xFFFFD60A : psNow ? alpha(cc(it.nc, pal[R_TEXT]), 0.35f) : cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);      // 지금 칸: 금색 굵게 · 지나간 칸: 흐리게(웹 htl-gps-here · htl-passed)
+            setText(it.size, it.bold || hrNow || dwCell, hrNow ? 0xFFFFD60A : dwCell ? pal[R_GOLD] : psNow ? alpha(cc(it.nc, pal[R_TEXT]), 0.35f) : cc(it.nc, pal[R_TEXT])); tp.setTextAlign(Paint.Align.CENTER);      // 지금 칸: 금색 굵게 · 지나간 칸: 흐리게(웹 htl-gps-here · htl-passed)
             for (int i = 0; i < it.lines.length; i++) {
                 float top = it.y + it.nameBot - (it.lines.length - i) * it.lineH;
                 cv.drawText(it.lines[i], cx, base(top, it.lineH, 0), tp);

@@ -70,7 +70,7 @@ t('환승 승차를 누르면 래치가 풀리고 새 구간에서 다시 계산
   assert.strictEqual(after[0].st.ovlLatch.a, 6);
 });
 t('앱 종료 줄(getoff, s237): 도착 전에는 한 번도 안 나오고(환승역 · 마지막 구간 한 정거장 전 포함), 도착 3분 뒤부터 나오며, 5분 뒤 done+quit', () => {
-  assert.ok(rows.every(r => !r.o.getoff.on), '도착 전(13:05 까지, 도착은 13:03 쯤)에는 앱 종료 줄이 없다');
+  assert.ok(rows.every(r => !r.o.getoff.on || (r.st.arrivedAt && r.ms - r.st.arrivedAt >= 180000)), '도착 전에는 앱 종료 줄이 없고, 도착 3분 뒤부터만 뜬다(s295: 역 대기 20초로 줄어 도착이 앞당겨져 시각 대신 도착 기준으로 본다)');
   let st = mk({}), arrAt = null, firstOff = null, doneAt = null, q = null;
   for (let ms = at(12, 50, 10); ms <= at(13, 14, 0); ms += 5000) {
     const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)), act: ms >= at(12, 58, 0) && ms < at(12, 58, 5) ? 'press' : undefined }); st = r.state;

@@ -472,13 +472,28 @@ final class RideStandbyJ {
                 notes.add("마커 되돌아감 방지: " + ns(Math.floor(newP * 100 + 0.5) / 100) + " → " + ns(Math.floor(prevP * 100 + 0.5) / 100) + " 자리 유지");
             }
         }
+        // s294 (YJ: 도착이 판정된 역은 되돌아가지 못한다) — engine/ride-standby.js rsMonoPos 의 st.mkFloor 그대로
+        Map<String, Object> pf = mm(st.get("mkFloor"));
+        if (pf == null || !key.equals(pf.get("key"))) { pf = obj("key", key, "n", -1.0); st.put("mkFloor", pf); }
+        if (num(pos.get("from")) < num(pf.get("n"))) {
+            int k2 = -1;
+            for (i = 0; i < segs.size(); i++) if (num(mm(segs.get(i)).get("from")) >= num(pf.get("n"))) { k2 = i; break; }
+            if (k2 >= 0) {
+                Map<String, Object> g = mm(segs.get(k2)); List<Object> ns3 = new ArrayList<Object>(segs.subList(k2, segs.size())); pos.put("segs", ns3); segs = ns3;
+                double g0 = num(g.get("t0")), g1 = num(g.get("t1")), rt2 = g1 > g0 ? Math.max(0, Math.min(1, (now - g0) / (g1 - g0))) : 0;
+                if (pos.get("ttFrom") == null) pos.put("ttFrom", pos.get("from"));
+                pos.put("from", g.get("from")); pos.put("to", g.get("to")); pos.put("t0", g0); pos.put("t1", g1); pos.put("ratio", Math.floor(rt2 * 1000 + 0.5) / 1000); pos.put("moving", rt2 > 0 && rt2 < 1);
+                notes.add("도착 확정 역 되돌아감 방지: " + ns(num(pf.get("n"))) + "번 앞으로는 가지 않는다");
+            }
+        }
+        if (num(pos.get("from")) > num(pf.get("n"))) pf.put("n", num(pos.get("from")));
         List<Object> keep = new ArrayList<Object>();
         for (i = 0; i < segs.size() && i < 6; i++) { Map<String, Object> x = mm(segs.get(i)); keep.add(list(num(x.get("from")), num(x.get("to")), num(x.get("t0")), num(x.get("t1")))); }
         st.put("mk", obj("key", key, "s", keep));
     }
     static void doUndo(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")), ux = mm(st.get("rsUndo"));
-        st.remove("mk");                                   // 되돌리면 마커도 되돌아갈 수 있다
+        st.remove("mk"); st.remove("mkFloor");                   // 되돌리면 마커도 되돌아갈 수 있다
         List<Object> pxs = l(eta.get("passes")); if (pxs == null) pxs = new ArrayList<Object>();
         if (ux == null) return;
         double wi = num(mm(ux.get("w")).get("i")); int ki;

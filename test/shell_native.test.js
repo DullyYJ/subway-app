@@ -47,9 +47,15 @@ function findAndroidJar() {
     const rn = fs.readFileSync(N('RecoNotify.java'), 'utf8'), v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8');
     assert.ok(/static int route\(boolean appFront, boolean hasPopup, boolean ovlReady, boolean hasAd\) \{\s*if \(appFront && hasPopup\) return 0;\s*if \(!appFront && ovlReady && hasAd\) return 1;\s*return 2;/.test(rn), '앱 보는 중 → 팝업 · 앱 밖 + 오버레이 + 추천 줄 → 오버레이만 · 나머지 알림');
     assert.ok(/deliver\(c, t\[0\], t\[1\], ad, core\)/.test(rn) && (rn.match(/deliver\(c, t\[0\]/g) || []).length === 2 && !/send\(Context[\s\S]{0,400}show\(c, t\[0\]/.test(rn), '실시간 · 받아 둔 글 두 길 모두 deliver 를 지난다');
-    assert.ok(/boolean recoPop\(final String title[\s\S]{0,200}if \(!resumed \|\| isFinishing\(\) \|\| dlgD != null\) return false;/.test(v) && /"kind\\":\\"reco\\"/.test(v) && /RecoNotify\.show\(app, title, text\)/.test(v), '팝업은 엔진 카드(kind:reco) · 못 띄우면 알림으로 대신');
+    assert.ok(/boolean recoPop\(final String title[\s\S]{0,200}if \(!resumed \|\| isFinishing\(\)\) \{[^}]*return false; \}/.test(v) && /"kind\\":\\"reco\\"/.test(v) && /RecoNotify\.show\(app, title, text\)/.test(v), '팝업은 엔진 카드(kind:reco) · 못 띄우면 알림으로 대신');
     assert.ok(/static boolean recoPopup\(String title[\s\S]{0,120}live;/.test(v) && /ShellActivity\.recoPopup\(title, text, ad,/.test(rn), '앱이 보이는 동안(appFront)에만 팝업 길을 탄다');
     assert.ok(/"dl\.go"\.equals\(v\)\) v = "dl\.ok"/.test(v), 'dl.go 는 확인 쪽(맛집·쿠팡 열기)');
+    // s295 (YJ: 도착인데 추천이 알림으로만 오고 팝업·오버레이가 안 떴다): 이유를 남기고(recoRoute) · 팝업이 막히면 기다리고/기본 확인창으로 · 오버레이 줄이 안 그려지면 알림으로
+    assert.ok(/RideService\.recoRoute = \(r == 0 \? "팝업" : r == 1 \? "오버레이 줄" : "알림"\)/.test(rn) && /RideService\.watchRecoRow\(c, title, text\); return;/.test(rn), 's295: 어디로 왜 보냈는지 남기고 · 오버레이 줄로 보냈으면 감시');
+    assert.ok(/static void watchRecoRow\([\s\S]{0,500}if \(recoRowSeen\) return;[\s\S]{0,200}RecoNotify\.show\(app, title, text\)/.test(rs) && /core\.ov\.row\.kind == 1\) recoRowSeen = true/.test(rs), 's295: 20초 안에 오버레이 줄이 안 그려지면 알림으로 대신 · 그려지면 감시 끝');
+    assert.ok(/recoPopWait\(title, text, ad, loc, 16\)/.test(v) && /private void recoPopWait\([\s\S]{0,1600}\}, 750L\)/.test(v), 's295: 다른 창이 떠 있으면 알림으로 새지 않고 닫히길 기다렸다 띄운다(최대 12초)');
+    assert.ok(/new android\.app\.AlertDialog\.Builder\(ShellActivity\.this[\s\S]{0,200}setTitle\(title\)\.setMessage\(text\)/.test(v) && /RIDE_RECO 팝업 실패/.test(v), 's295: 팝업 화면을 못 받으면 기본 확인창으로 띄우고 오류 기록에 남긴다');
+    assert.ok(/RideService\.recoStage \+ \(RideService\.recoRoute\.length\(\) > 0/.test(v), 's295: 설정 상태 확인에 보낸 곳·이유가 같이 보인다');
     assert.ok(/static boolean overlayReady\(Context c\)/.test(rs) && /RideOverlay\.allowed\(c\)/.test(rs), '오버레이를 쓸 수 있는지는 서비스가 안다');
   });
   await t('s256: 켜자마자 엔진 경로 계산을 미리 예열(/warm — 뒤 스레드 · 90초 한 번) · 경로 탐색 눌렀을 때 콜드 스타트를 기다리지 않게', () => {

@@ -69,7 +69,7 @@ function dlgBpick(f) {
   var src = Array.isArray(f.items) ? f.items : [], items = [], k;
   for (k = 0; k < src.length && items.length < 6; k++) {
     var it = src[k], sec = it && typeof it === 'object' ? Number(it.sec) : NaN, ms = it && typeof it === 'object' ? Number(it.ms) : NaN;
-    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '' });      // s265: 줄마다 버스 번호(같은 구간을 가는 여러 번호 중 고르기) — 없으면 카드 전체 번호
+    if (isFinite(sec) && sec > 0 && isFinite(ms)) items.push({ sec: Math.round(sec), ms: Math.round(ms), no: it && typeof it === 'object' ? dlgClean(it.no, 14) : '', en: it && typeof it === 'object' ? dlgClean(it.en, 24) : '' });      // s265: 줄마다 버스 번호(같은 구간을 가는 여러 번호 중 고르기) — 없으면 카드 전체 번호
   }
   var no = dlgClean(f.no, 14), stop = dlgClean(f.stop, 40), nope = { a: 'call', v: 'dl.no' }, nos = {};
   items.forEach(function (x) { if (x.no) nos[x.no] = 1; });
@@ -79,8 +79,8 @@ function dlgBpick(f) {
     { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (multiNo ? '같은 곳으로 가는 10분 안에 오는 버스' : '10분 안에 오는 버스'), size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
-    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: 15, r: 12, items: [
-      { label: ((it2.no || no) ? (it2.no || no) + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')', fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
+    head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: it2.en ? 13 : 15, r: 12, items: [
+      { label: ((it2.no || no) ? (it2.no || no) + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')' + (it2.en ? ' · ' + it2.en + '에서 내려요' : ''), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
     ] });
   });
   head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [

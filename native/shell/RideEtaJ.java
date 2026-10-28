@@ -31,13 +31,21 @@ final class RideEtaJ {
         driftPerStop = 0.12, driftBiasPerStop = 0.07,
         priorDelayMin = 0.5, priorNarrowW = 0.5, priorNarrowSd = 3, priorWideSd = 8, softMin = 0.2, quantile = 0.1,
         snapBackMin = 2, snapLateMaxMin = 1.5, snapCandMaxMin = 6, snapEps = 0.5, snapOldW = 0.4, staleShiftMin = 40,
-        stopDwellSec = 15, markerDwellSec = 15, arriveEarlySec = 5, posSegCount = 80,
+        stopDwellSec = 20, markerDwellSec = 20, arriveEarlySec = 5, posSegCount = 80,
         overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
-        boardMaxWaitMin = 30, planSecOffset = 50, holdAfterStops = 1, holdGraceSec = 60;
+        boardMaxWaitMin = 30, planSecMin = 20, planSecMax = 30, holdAfterStops = 1, holdGraceSec = 60;
     static final boolean burstRamp = true, arriveEarlyAfterZero = true;
     static final String rounding = "floor", overdueMode = "clamp";
 
+    /** s294: 노드마다 정시에서 20~30초 뒤(FNV-1a, engine/ride-eta.js _rePlanSec 와 같은 식). */
+    static double planSec(Object nd, Object planMin) {
+        Object nm = nd == null ? null : g(nd, "name");
+        String s = (truthy(nm) ? str(nm) : "") + "|" + (planMin == null ? "undefined" : ns(num(planMin)));
+        int h = (int) 2166136261L;
+        for (int c = 0; c < s.length(); c++) { h ^= s.charAt(c); h *= 16777619; }
+        return planSecMin + ((h & 0xFFFFFFFFL) % ((long) Math.floor(planSecMax - planSecMin) + 1));
+    }
     static double fold(double d) { return d - round(d / 1440) * 1440; }
     static String hhmm(double ms, double tzMin, String rnd) {
         double m = (ms + tzMin * 60000) / 60000;
@@ -252,9 +260,10 @@ final class RideEtaJ {
             Object pmI = g(nodes.get(i), "planMin");
             valid[i] = (pmI != null && fin(pmI));
             if (!valid[i]) { planMs[i] = Double.NaN; continue; }
-            if (firstValid < 0) { firstValid = i; chain = num(pmI); ms0 = nowMs + fold(num(pmI) - nowMin) * 60000 + (truthy(planSecOffset) ? planSecOffset : 0) * 1000; }
+            if (firstValid < 0) { firstValid = i; chain = num(pmI); ms0 = nowMs + fold(num(pmI) - nowMin) * 60000; }
             else chain += fold(num(pmI) - gn(nodes.get(prevValid), "planMin"));
-            planMs[i] = ms0 + (chain - gn(nodes.get(firstValid), "planMin")) * 60000;
+            planMs[i] = ms0 + (chain - gn(nodes.get(firstValid), "planMin")) * 60000 + planSec(nodes.get(i), pmI) * 1000;
+            if (prevValid >= 0 && planMs[i] < planMs[prevValid]) planMs[i] = planMs[prevValid];
             prevValid = i;
         }
         if (firstValid < 0) return obj("arr", new ArrayList<Object>(), "etaMs", new ArrayList<Object>(), "delayMin", 0, "anchorIdx", -1, "notes", list("planMin 이 있는 노드가 없다"));

@@ -358,7 +358,7 @@ t('버스: 달리는 중(motion)은 오버레이의 이동중 표시를, 서 있
   assert.ok(stops.every(x => !/\(이동중\)$/.test(x || '')), '서 있는데 이동중 표시: ' + JSON.stringify(stops.filter(x => /\(이동중\)$/.test(x || ''))));
 });
 t('다음 호출 간격: 표시 도착 시각 앞 30초~뒤 40초 안에는 2.5초, 그 밖에는 5초, 승차 전에는 5초', () => {
-  const st = mkState();
+  const st = mkState(); st.eta.opts = { planSecOffset: 50 };      // s294: 도착 초는 기본이 노드마다 20~30초 난수 — 이 시험은 고정 :50 약속으로 짠 것
   st.eta.nodes = st.eta.nodes.map(n => n.isBus ? Object.assign({}, n, { isBus: false, isSub: true, lineName: '인천1호선' }) : n);      // s268: 지하철 구간(시각표 우선) 기준 — 앞선 버스 시험이 공용 nodes 를 버스로 바꿔 둔다
   // 3번 역 도착 12:56:00 (etaMs 가 없으면 stops.arrMs)
   const near = [at(12, 55, 31), at(12, 56, 0), at(12, 56, 39)], far = [at(12, 55, 10), at(12, 56, 45)];      // s266: 승차 노드(12:52 쯤) 앞뒤 3분(환승·탑승 확인 창)도 짧은 간격이라 12:55:00 은 '가까움'
@@ -929,7 +929,7 @@ const { rsRtPick, rsRtAsk, rsRtApply } = require(path.join(__dirname, '..', 'eng
 function longState(lineName) {
   const nd = [{ name: '출발', isOrigin: true }], stops = [], P = [];
   for (let i = 1; i <= 8; i++) { P[i] = 12 * 60 + 50 + 2 * i; nd.push({ name: 'L' + (i - 1), isSub: true, lineName: lineName, planMin: P[i] }); stops.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + P[i] * 60000, pass: i > 1, fin: i === 8 }); }
-  return { v: 1, tripSig: 'T9', eta: { nodes: nd, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }], boarded: true, notDeparted: false, timetableFirst: true, tzOffsetMin: 540 },
+  return { v: 1, tripSig: 'T9', eta: { nodes: nd, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }], boarded: true, notDeparted: false, timetableFirst: true, tzOffsetMin: 540, opts: { planSecOffset: 50 } },
     stops: stops, trail: [], cfg: { targets: [{ seqPos: 7, nodeIdx: 8, name: 'L7', kind: 'dest' }], seq: [1, 2, 3, 4, 5, 6, 7, 8], allowed: {}, destName: 'L7' }, fired: {} };
 }
 const stepL = (st, ms, fixes, extra) => rideStandby(Object.assign({ nowMs: ms, fixes: fixes || [], state: JSON.parse(JSON.stringify(st)) }, extra || {}));
@@ -963,6 +963,16 @@ t('s267 버스→지하철 환승 뒤에도 역 사이 중간 위치(pos)가 매
 });
 // ★ 2026-10-28 s268 (YJ: 지하철 규칙 2가지 — 서울 실시간 노선은 영점 연속 3회 실패 시 API 로 내 열차 맞추기, API 없는 노선(인천1호선)은 GPS 만 · 하차까지 반복 · 영점 실패 중에도 마커는 시각표대로 전진)
 const lastPos = (o) => o.r.pos.from + o.r.pos.ratio;
+t('s294 도착이 판정된 역은 되돌아가지 못한다 — 새 계산이 앞 역을 가리켜도 마커는 닿은 가장 앞 역 이후 구간에 머문다 · 되돌리기(사용자)만 푼다', () => {
+  const st = longState('인천1호선');
+  const r1 = stepL(st, at(12, 57, 40)), f1 = r1.pos.from;
+  assert.ok(f1 >= 2 && r1.state.mkFloor && r1.state.mkFloor.n === f1, '닿은 역을 붙잡는다 ' + f1 + ' ' + JSON.stringify(r1.state.mkFloor));
+  const hacked = JSON.parse(JSON.stringify(r1.state)); hacked.mkFloor.n = f1 + 2; delete hacked.mk;        // 어떤 이유로 새 계산이 f1 을 가리켜도(가정)
+  const r2 = stepL(hacked, at(12, 57, 45));
+  assert.ok(r2.pos.from >= f1 + 2, '붙잡은 역(' + (f1 + 2) + ') 앞으로는 가지 않는다 ' + r2.pos.from + ' ' + r2.notes.filter(n => /되돌아감/.test(n)));
+  assert.ok(r2.notes.some(n => /도착 확정 역 되돌아감 방지/.test(n)), '이유가 notes 에 남는다');
+  const r3 = stepL(r1.state, at(12, 57, 50)); assert.ok(r3.pos.from >= f1, '평소에도 줄지 않는다');
+});
 t('s268 영점이 계속 없어도 마커는 역 앞에서 멈추지 않고 시각표대로 간다 · 실패 역은 pos.miss 로 센다(첫 역부터, 예정 +60초 뒤)', () => {
   const o1 = runUntil(longState('인천1호선'), at(12, 52, 5), at(12, 54, 50), null);
   assert.strictEqual(o1.st.xf || 0, 0, '2번 역 예정 직후엔 아직 실패가 아니다(60초 여유) ' + o1.st.xf);

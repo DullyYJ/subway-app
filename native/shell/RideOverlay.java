@@ -131,7 +131,7 @@ final class RideOverlay {
         pillT.setVisibility(pill ? View.VISIBLE : View.GONE);
         boolean wt = "wait".equals(v.rsSt) || "board".equals(v.rsSt);
         SpannableString ps = new SpannableString("●  " + OvCore.pillText(v));
-        ps.setSpan(new ForegroundColorSpan(v.moving && !wt ? 0xFF0A84FF : 0xFFF0A500), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);   // 웹 PillView: 달리는 중 파랑 · 그 밖 주황
+        ps.setSpan(new ForegroundColorSpan(OvCore.stateRgb(v)), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);   // s295: 달리는 중 파랑 · 역에 서 있는 동안 노랑 · 승차 대기 주황
         pillT.setText(ps); pillT.setTextColor(fg);
         col.setVisibility(pill ? View.GONE : View.VISIBLE);
         strip.setVisibility(hasStrip ? View.VISIBLE : View.GONE);
@@ -446,11 +446,12 @@ final class RideOverlay {
                 if (c.hasL) { p.setColor((c.lc & 0x00FFFFFF) | ((dim && i == cur.cur + 1 ? 70 : 255) << 24)); cv.drawRect(cx - cw / 2f, yAx - lw / 2f, cx, yAx + lw / 2f, p); }
                 if (c.hasR) { p.setColor((c.rc & 0x00FFFFFF) | ((dim && i == cur.cur ? 70 : 255) << 24)); cv.drawRect(cx, yAx - lw / 2f, cx + cw / 2f, yAx + lw / 2f, p); }
                 if (here) {
-                    int hc = cur.moving ? 0x000A84FF : 0x00F0A500;
+                    int hc = OvCore.stateRgb(cur) & 0x00FFFFFF;
                     p.setColor((Math.round(0x70 * (1f - 0.6f * pulse)) << 24) | hc);
                     cv.drawCircle(cx, yAx, dp(9) + dp(4) * pulse, p);
                     p.setColor((Math.round(255 * (1f - 0.55f * pulse)) << 24) | hc);
                     cv.drawCircle(cx, yAx, dp(7), p);
+                    if (!cur.moving && !OvCore.waiting(cur)) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(dp(1.2f)); p.setColor(0xCCB38600); cv.drawCircle(cx, yAx, dp(7), p); p.setStyle(Paint.Style.FILL); }      // s295: 노랑은 밝은 바탕에서 묻히지 않게 짙은 노랑 테두리
                 } else if (c.dk == 2) { p.setColor(c.dc); cv.drawCircle(cx, yAx, dp(7), p); }
                 else if (c.dk == 1) { p.setColor(c.dc); cv.drawCircle(cx, yAx, dp(6), p); p.setColor(bgc); cv.drawCircle(cx, yAx, dp(3), p); }
                 else if (c.dk == 3) { p.setColor(c.dc); cv.drawCircle(cx, yAx, dp(3), p); }

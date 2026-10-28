@@ -4203,9 +4203,24 @@ public class ShellActivity extends Activity {
         } });
     }
     static boolean recoPopup(String title, String text, RideCore.RecoAd ad, double[] loc) { ShellActivity a = live; return a != null && a.recoPop(title, text, ad, loc); }
+    /** s295: 다른 창(탑승 시트·결과 창 등)이 떠 있어 추천 팝업을 못 띄울 때 — 0.75초마다 닫혔는지 보고, 끝내 안 닫히면 알림으로 보낸다. */
+    private void recoPopWait(final String title, final String text, final RideCore.RecoAd ad, final double[] loc, final int left) {
+        main.postDelayed(new Runnable() { @Override public void run() {
+            try {
+                if (isFinishing() || !resumed) { RideService.recoRoute += " → 기다리다 앱 화면 벗어남"; RecoNotify.show(getApplicationContext(), title, text); return; }
+                if (dlgD == null) { RideService.recoRoute += " → 다른 창이 닫혀 팝업"; recoPop(title, text, ad, loc); return; }
+                if (left <= 0) { RideService.recoRoute += " → 다른 창이 안 닫혀 알림"; RecoNotify.show(getApplicationContext(), title, text); return; }
+                recoPopWait(title, text, ad, loc, left - 1);
+            } catch (Throwable t) { try { RecoNotify.show(getApplicationContext(), title, text); } catch (Throwable ignored) { } }
+        } }, 750L);
+    }
     private boolean recoPop(final String title, final String text, final RideCore.RecoAd ad, final double[] loc) {
         {
-            if (!resumed || isFinishing() || dlgD != null) return false;
+            if (!resumed || isFinishing()) { RideService.recoRoute += " → 팝업 못 띄움(앱 화면이 아님)"; return false; }
+            if (dlgD != null) {                                                              // s295: 다른 창이 떠 있으면 알림으로 새지 않고 창이 닫히길(최대 12초) 기다렸다 띄운다
+                recoPopWait(title, text, ad, loc, 16);
+                return true;
+            }
             final android.content.Context app = getApplicationContext();
             final String body = "{\"cap\":" + ShellCore.CAP + ",\"f\":{\"kind\":\"reco\",\"title\":" + ShellCore.q(title) + ",\"body\":" + ShellCore.q(text) + ",\"go\":" + ShellCore.q(ad != null && ad.a.length() > 0 ? ad.go : "") + ",\"ok\":\"확인\"}}";
             new Thread(new Runnable() { @Override public void run() {
@@ -4214,7 +4229,20 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     Runnable go = new Runnable() { @Override public void run() { recoPopOpen = false; RideService.recoDone(); try { ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(RecoNotify.RECO_ID); } catch (Throwable ignored) { } OvCore.Row row = new OvCore.Row(); row.a = ad == null ? "" : ad.a; RecoGo.open(ShellActivity.this, ad, loc, row); } };
                     Runnable no = new Runnable() { @Override public void run() { recoPopOpen = false; RideService.recoDone(); try { ((android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE)).cancel(RecoNotify.RECO_ID); } catch (Throwable ignored) { } } };       // s258: 확인·닫기도 처리한 것 — 오버레이 줄·알림이 같이 사라진다
-                    if (resumed && txt.length() > 2 && dlgOpen(txt, go, no, 0L)) { recoPopOpen = true; return; }
+                    if (resumed && txt.length() > 2 && dlgOpen(txt, go, no, 0L)) { recoPopOpen = true; RideService.recoRoute += " → 팝업 떴음"; return; }
+                    // s295 (YJ: 도착인데 알림만 오고 팝업이 안 떴다): 팝업 화면을 못 받았거나(서버 응답 " + r.status + ") 열지 못했어도 앱이 보이는 중이면 기본 확인창으로라도 띄운다 — 알림도 같이 둔다
+                    RideService.recoRoute += " → 팝업 화면 못 받음/못 염(응답 " + r.status + ")";
+                    try { ErrLog.record(app, new IllegalStateException("RIDE_RECO 팝업 실패 응답=" + r.status + " 화면길이=" + txt.length() + " resumed=" + resumed + " " + RideService.recoRoute), false); } catch (Throwable ignored) { }
+                    if (resumed && !isFinishing()) {
+                        try {
+                            android.app.AlertDialog.Builder ab = new android.app.AlertDialog.Builder(ShellActivity.this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle(title).setMessage(text).setCancelable(true);
+                            if (ad != null && ad.a.length() > 0) ab.setPositiveButton(ad.go.length() > 0 ? ad.go : "보기", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface di, int w) { go.run(); } });
+                            ab.setNegativeButton("확인", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface di, int w) { no.run(); } });
+                            ab.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) { no.run(); } });
+                            ab.show();
+                            return;
+                        } catch (Throwable ignored) { }
+                    }
                     RecoNotify.show(app, title, text);                                // 팝업을 못 띄웠다 — 추천은 한 여정에 한 번뿐이라 알림으로라도 보낸다
                 } });
             } }, "shell-reco-pop").start();
@@ -4871,7 +4899,7 @@ public class ShellActivity extends Activity {
             : "erl".equals(setPage) ? ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(store))
             : ShellCore.isPolPage(setPage) ? ShellCore.pageUrlPlain(setPage, null)
             : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.withPerf(DevCore.pageFacts(devPh, devLeft(), devStopped), PerfLog.snapshot()))
-            : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage, RideService.recoStageAt)
+            : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage + (RideService.recoRoute.length() > 0 ? " · " + RideService.recoRoute : ""), RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         final String hit = "cm".equals(setPage) && cm.pop ? tpCache.get(url) : null;                     // 미리 받아 둔 시각 고르기 화면이면 기다리지 않고 바로 올린다
         if (hit != null) { present(sheetView, hit, true); return; }

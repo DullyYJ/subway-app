@@ -68,6 +68,23 @@ public class RideService extends Service {
     }
     static void rsNotify() { Runnable l = rsListener; if (l != null) mainH.post(l); }
     static volatile long recoStageAt = 0L;
+    /** s295 (YJ: 도착인데 추천이 알림으로만 오고 팝업·오버레이가 안 떴다 — 이유를 남긴다): 마지막 추천을 어디로 보냈고 왜 거기였는지/실패했는지 한 줄. 설정 '상태 확인'과 오류 기록에 붙는다. */
+    static volatile String recoRoute = "";
+    /** 오버레이 추천 줄이 실제로 그려진 적이 있나 — 줄로 보냈는데 끝내 안 그려지면 알림으로 대신 보낸다. */
+    static volatile boolean recoRowSeen = false;
+    /** 추천을 오버레이 줄로 보냈다 — 20초 안에 줄이 한 번도 안 그려졌으면(권한·창 문제 등) 알림으로 대신 보낸다. */
+    static void watchRecoRow(final Context c, final String title, final String text) {
+        recoRowSeen = false;
+        final Context app = c.getApplicationContext();
+        mainH.postDelayed(new Runnable() { @Override public void run() {
+            try {
+                if (recoRowSeen) return;
+                recoRoute += " → 20초 안에 오버레이 줄이 안 그려져 알림으로";
+                RecoNotify.show(app, title, text);
+                ErrLog.record(app, new IllegalStateException("RIDE_RECO 오버레이 줄 안 그려짐 " + recoRoute), false);
+            } catch (Throwable ignored) { }
+        } }, 20000L);
+    }
 
     private HandlerThread ht;
     private Handler h;
@@ -271,6 +288,7 @@ public class RideService extends Service {
             if (ov == null) { ov = new RideOverlay(this); ov.setHost(ovHost); }
             boolean on = ShellCore.ovlOn(getSharedPreferences(ShellActivity.PREFS, MODE_PRIVATE).getString(ShellCore.K_OVL, ""));
             on = on && !appFront;
+            try { if (on && core.ovActive && core.ov != null && core.ov.row != null && core.ov.row.kind == 1) recoRowSeen = true; } catch (Throwable ignored) { }      // s295: 추천 줄이 실제로 그려질 상태가 됐다
             if (core.ov != null && core.ov.cells.length > 0) ov.show(on && core.ovActive, core.ov);
             else ov.update(on && core.ovActive, core.ovLine1, core.ovLine2, core.ovBanner, core.ovAlert);
         } catch (Throwable ignored) { }
@@ -374,7 +392,7 @@ public class RideService extends Service {
         final Context app = getApplicationContext();
         boolean ok = recoCacheResp.length() > 0 && RideLocal.cacheMatches(recoCacheBody, body) && RecoNotify.sendCached(app, recoCacheResp, core, jnum(body, "arrMs"), jnum(body, "nowMs"));
         if (ok) recoSentOk = true;
-        recoStage = ok ? "받아 둔 문구로 알림 보냄" : "받아 둔 문구 없음/시간대 다름 — 바로 받는 중"; recoStageAt = System.currentTimeMillis();
+        recoStage = ok ? "받아 둔 문구로 보냄" : "받아 둔 문구 없음/시간대 다름 — 바로 받는 중"; recoStageAt = System.currentTimeMillis();
         if (ok || recoLive) return;
         // s237(YJ: 도착 전 맛집·카페·쿠팡이 안 나온다): 받아 둔 글이 없거나 시간대가 달라졌어도 추천은 한 여정에 한 번뿐이라 다시 안 온다 → 지금 서버에서 바로 받아 알림과 오버레이 추천 줄에 쓴다.
         recoLive = true;
@@ -383,7 +401,7 @@ public class RideService extends Service {
                 boolean sent = false;
                 try { sent = RecoNotify.send(app, body, core); } catch (Throwable ignored) { }
                 if (sent) recoSentOk = true;
-                recoStage = sent ? "바로 받아 알림 보냄" : "바로 받기 실패/보낼 시간대 아님"; recoStageAt = System.currentTimeMillis();
+                recoStage = sent ? "바로 받아 보냄" : "바로 받기 실패/보낼 시간대 아님"; recoStageAt = System.currentTimeMillis();
                 recoLive = false;
                 if (!sent && !recoSentOk && recoRetryN < 2 && core != null) { recoRetryN++; core.retryReco(); }          // s258·s259: 못 보냈으면(통신 실패) 도착 전 창이 열려 있는 동안 다시 판정한다 — 처음 + 다시 2번 = 모두 3번까지, 한 번이라도 성공하면 그만
                 try { if (!sent) ErrLog.record(RideService.this, new IllegalStateException("RIDE_RECO 보내기 실패(시도 " + (recoRetryN + 1) + "/3) 단계=" + recoStage + " 이유=" + (core == null ? "?" : core.recoWhy())), false); } catch (Throwable ignored) { }

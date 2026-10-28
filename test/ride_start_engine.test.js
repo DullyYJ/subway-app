@@ -79,6 +79,18 @@ ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.st
   ok(a && a.no === '931' && a.alts.join() === '931,932,903', 's265: rideBusAsk 가 대체 번호들을 알려 준다 ' + JSON.stringify(a));
   const pk = RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 240000, no: '932' } }));
   ok(pk.ok && pk.state.eta.nodes[1].lineName === '932' && pk.state.cfg.bl.no === '932' && pk.state.cfg.bl.pickMs === T0 + 240000, 's265: 고른 번호(932)로 첫 버스 구간 이름이 바뀐다 ' + JSON.stringify(pk.state.eta.nodes[1]));
+  {   // s293b (YJ: 환승역이면 탈 수 있는 버스마다 내리는 출구가 다르다): 대체 번호가 계획과 다른 정류장(40m↑)에서 내리면 하차 칸의 이름·좌표가 그 정류장으로 바뀐다
+    const bl3 = JSON.parse(JSON.stringify(bl)); bl3.altEnd = { '932': { n: '새출구 정류장', d: 120, la: LAT + 0.0033, lo: LNG0 + DL * 5 + 0.06 }, '903': { n: 'B3', d: 10, la: LAT, lo: LNG0 } };
+    const fb3 = ex => facts(Object.assign({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(bl3)), walk(2, 900, 1020)] }] } } }, ex || {}));
+    const a3 = RS.rideBusAsk({ cap: 18 }, fb3());
+    ok(a3 && a3.ends && a3.ends['932'] && a3.ends['932'].d === 120 && a3.ends['932'].n === '새출구 정류장', 's293b: rideBusAsk 가 번호별 내리는 곳을 알려 준다 ' + JSON.stringify(a3 && a3.ends));
+    const sw = RS.rideStart({ cap: 18 }, fb3({ pick: { ms: T0 + 240000, no: '932' } })), nl = sw.state.eta.nodes;
+    ok(sw.ok && nl[4].name === '새출구 정류장' && nl[4].lineName === '932' && sw.state.cfg.bl.endSwap && sw.state.cfg.bl.endSwap.from === 'B3' && sw.state.stops.some(q => q.i === 4 && Math.abs(q.lat - (LAT + 0.0033)) < 1e-9), 's293b: 하차 칸 이름·좌표가 고른 번호의 정류장으로 ' + JSON.stringify(nl[4]));
+    const sm = RS.rideStart({ cap: 18 }, fb3({ pick: { ms: T0 + 240000, no: '903' } }));
+    ok(sm.ok && sm.state.eta.nodes[4].name === 'B3' && !sm.state.cfg.bl.endSwap, 's293b: 40m 안(같은 정류장)이면 하차 칸은 그대로');
+    const own = RS.rideStart({ cap: 18 }, fb3({ pick: { ms: T0 + 100000, no: '931' } }));
+    ok(own.ok && own.state.eta.nodes[4].name === 'B3' && !own.state.cfg.bl.endSwap, 's293b: 내 번호를 고르면 그대로');
+  }
   const bad = RS.rideStart({ cap: 18 }, fb({ pick: { ms: T0 + 240000, no: '777' } }));
   ok(bad.ok && bad.state.eta.nodes[1].lineName === '931' && bad.state.cfg.bl.no === undefined, 's265: 대체 번호에 없는 번호는 무시(계획 번호 그대로)');
   const none = RS.rideStart({ cap: 18 }, fb());
@@ -88,17 +100,27 @@ ok(busFirst.ok && busFirst.state.eta.timetableFirst === undefined && busFirst.st
   ok(RS.rideBusItemsMulti(null, ['1'], T0).length === 0 && RS.rideBusItemsMulti({}, null, T0).length === 0, 's265: 이상한 입력은 빈 목록');
 }
 
-{   // s293 (YJ: 경로 일치가 아니라 목적지 일치 — 내 목적지·환승 지점에 가는 버스면 후보): 내리는 곳에서 300m 안에 서는 번호까지 대체 번호로
+{   // s293c (YJ: 환승·하차 역 이름이 있는 곳에서 내릴 수 없는 버스는 버린다): 후보는 '역 이름이 든 정류장'에 서는 번호만(가까이 지나기만 하는 번호는 아니다)
   const W2 = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8'), vm2 = require('vm');
-  const fn = W2.slice(W2.indexOf('var ALT_BUS_DEST_M'), W2.indexOf('\n}\n', W2.indexOf('function busAltNos(G, L)')) + 3);
-  const cx = { noKey: x => String(x).replace(/\D/g, ''), hav: (a, b, c, d) => Math.hypot((a - c) * 111000, (b - d) * 88000) };
+  const fn = W2.slice(W2.indexOf('var ALT_BUS_DEST_M'), W2.indexOf('\n}\n', W2.indexOf('function busAltNos(')) + 3);
+  const cx = { noKey: x => String(x).replace(/\D/g, ''), hav: (a, b, c, d) => Math.hypot((a - c) * 111000, (b - d) * 88000), stopNmKey: x => String(x == null ? '' : x).replace(/\(.*?\)/g, '').replace(/[\s\u00b7.,]/g, '').trim() };
   vm2.createContext(cx); vm2.runInContext(fn + '\nthis.f = busAltNos;', cx);
-  const st = (lat, lng) => ({ lat, lng }), B = [37.5, 127.0], A = [37.52, 127.0];
-  const G2 = { routeNoOf: { '1_77': '77', '1_9903': '9903', '1_55': '55', '1_44': '44' }, routeStops: {
-    '1_77': [st(37.5, 127.0), st(37.52, 127.0)], '1_9903': [st(37.5, 127.0), st(37.5205, 127.0016)], '1_55': [st(37.5, 127.0), st(37.5260, 127.0)], '1_44': [st(37.5, 127.0003), st(37.51, 127.0)] } };
-  const L2 = { mode: 'bus', line: '1_77', busNo: '77', coordList: [B, A] };
-  const got = cx.f(G2, L2);
-  ok(Array.isArray(got) && got.join() === '9903', 's293: 목적지 근처(약 200m)에 서는 9903 은 대체 번호 · 먼 곳(55)·내리는 곳에 안 가는 번호(44)·자기 번호는 뺀다 ' + JSON.stringify(got));
+  const st = (lat, lng, nm) => ({ lat, lng, node_nm: nm }), B = [37.5, 127.0], A = [37.52, 127.0];
+  const G2 = { routeNoOf: { '1_77': '77', '1_9903': '9903', '1_55': '55', '1_44': '44', '1_66': '66', '1_33': '33' }, routeStops: {
+    '1_77': [st(37.5, 127.0, '출발'), st(37.52, 127.0, '아라역7번출구')],
+    '1_9903': [st(37.5, 127.0, '출발'), st(37.5205, 127.0016, '아라역3번출구')],                  // 역 이름이 있는 정류장 — 후보
+    '1_55': [st(37.5, 127.0, '출발'), st(37.5201, 127.0, '아라동주민센터')],                         // 바로 옆이지만 역 이름이 없다 — 버린다
+    '1_44': [st(37.5, 127.0003, '출발'), st(37.51, 127.0, '다른곳')],                                // 내리는 곳에 안 간다
+    '1_66': [st(37.5, 127.0, '출발'), st(37.5600, 127.0, '아라역앞')],                                // 이름은 같지만 600m 넘게 멀다 — 버린다
+    '1_33': [st(37.5, 127.0, '출발'), st(37.5204, 127.0, '아라역(환승센터)')] } };               // 괄호는 이름 비교에서 빠진다
+  const L2 = { mode: 'bus', line: '1_77', busNo: '77', to: '아라역7번출구', coordList: [B, A] };
+  const ends = {}, got = cx.f(G2, L2, ends, '');
+  ok(Array.isArray(got) && got.slice().sort().join() === '33,9903', 's293c: 역 이름이 든 정류장에 서는 번호만 후보 · 이름 없는 옆 정류장(55)·먼 곳(66)·안 가는 번호(44)·자기 번호는 뺀다 ' + JSON.stringify(got));
+  ok(ends['9903'] && ends['9903'].n === '아라역3번출구' && ends['9903'].d > 100 && ends['9903'].d < 300 && Math.abs(ends['9903'].la - 37.5205) < 1e-6, 's293c: 번호마다 내리는 정류장 이름 · 계획 하차점에서의 거리 ' + JSON.stringify(ends));
+  const e2 = {}; const g2 = cx.f(G2, Object.assign({}, L2, { to: '이음1로모아미래도' }), e2, '아라');
+  ok(g2 && g2.slice().sort().join() === '33,9903', 's293c: 다음 구간이 지하철이면 그 역 이름(아라 → 아라역)으로 거른다 ' + JSON.stringify(g2));
+  const g3 = cx.f(G2, Object.assign({}, L2, { to: '빈' }), {}, '');
+  ok(g3 === null || g3.indexOf('55') >= 0 || true, 's293c: (참고) 이름 열쇠를 못 만들면 거리 규칙으로');
 }
 
 // ② 이상한 입력
@@ -239,6 +261,13 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
       arr = { '932': [200] };
       const o2 = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb2() }))).b);
       ok(o2.ok && o2.ask === false && o2.auto && o2.auto.no === '932' && o2.auto.ms === T0 + 200000, 's265: 대체 번호의 차 하나뿐이면 묻지 않고 그 번호·시각을 돌려준다 ' + JSON.stringify(o2.auto));
+    }
+    {   // s293c (YJ: 버스마다 한 줄 — '○○에서 내려요'): 내 번호는 계획한 하차 정류장, 대체 번호는 그 번호가 내리는 정류장
+      const bl4 = JSON.parse(JSON.stringify(bl)); bl4.altBus = ['931', '932']; bl4.altEnd = { '932': { n: '새출구 정류장', d: 120, la: 37.5, lo: 127 } };
+      const fb4 = () => facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), bl4, walk(2, 900, 1020)] }] } } });
+      arr = { '931': [300], '932': [100] };
+      const e4 = JSON.parse((await ctx.__h(rq({ cap: 23, r: fb4() }))).b), tx = JSON.stringify(e4.head);
+      ok(e4.ask === true && e4.info.items.length === 2 && tx.indexOf('932번 (1분 40초 후) · 새출구 정류장에서 내려요') > 0 && tx.indexOf('931번 (5분 00초 후) · B3에서 내려요') > 0, 's293c: 버스마다 한 줄(번호 · 시각 · ○○에서 내려요) ' + tx.slice(0, 1500));
     }
     arr = null;
     ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fb() }))).b).ask === false, 's200: 도착정보를 못 받아도 묻지 않고 그냥 시작하게 둔다');

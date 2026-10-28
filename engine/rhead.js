@@ -551,7 +551,7 @@ function rheadTrkCells(pts, th, ea) {
   return cells;
 }
 // 내 위치 마커: 웹이 알려 준 '몇 번째 칸 → 몇 번째 칸, 구간 비율' 과 대기 거리 원자료로 어디에·무슨 색으로·어떤 글로 그릴지 정한다(앱은 그리기만)
-var RTRK_MK = { cap: 0.7, hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9 };
+var RTRK_MK = { cap: 0.7, hh: 0.9, ms: 3000, d: 14, c: '#0a84ff', bc: '#ffffff', bw: 2, hc: 'rgba(10,132,255,.85)', hw: 6, bms: 1300, ring: 'rgba(10,132,255,.7)', rms: 1400, wc: '#ff9f0a', whc: 'rgba(255,159,10,.28)', whw: 4, wms: 1600, bz: 9, dc: '#ffd60a', dhc: 'rgba(255,214,10,.9)', dring: 'rgba(255,214,10,.75)', dd: 16 };      // s295: dc·dhc·dring = 역에 서 있는 동안(도착~출발 20초) 노란 마커 · dd = 그때 점 지름
 function rheadTrkMark(lv, cells) {
   var p = lv && lv.p;
   if (!p || typeof p !== 'object') return null;
@@ -562,8 +562,10 @@ function rheadTrkMark(lv, cells) {
   if (tj < 0 || tj === fi) { tj = fi; r = 0; }
   r = Math.round(Math.max(0, Math.min(1, r == null ? 0 : r)) * 100) / 100;
   var w = lv.w && typeof lv.w === 'object' ? lv.w : null, d = w ? rheadTrkNum(w.d) : null;
+  var dw = !w && !p.sn && (tj === fi || r <= 0);                       // s295 (YJ: 역에 도착하면 노란 마커를 그대로 두었다가 대기 20초 뒤 파란 이동 마커로): 역에 서 있다 = 승차 대기가 아니고 · 실제 추적 값이며 · 구간 시작(비율 0)이거나 한 칸에 머문다(마커가 역 자리에 닿은 뒤에 앱이 색을 바꾼다)
   if (!w && tj !== fi && !p.sn && r > RTRK_MK.cap) r = RTRK_MK.cap;      // s258 (YJ 선택 1번: 구간의 70%까지만 부드럽게, 그 뒤는 다음 역 도착이 확정(또는 시각표 도착 시각)될 때까지 대기 — 열차가 늦을 때 마커가 앞서가지 않게)
   var K = RTRK_MK, mk = { f: fi, t: tj, r: r, ms: p.sn ? 0 : K.ms, d: K.d, c: w ? K.wc : K.c, bc: K.bc, bw: K.bw, hh: K.hh, pu: w ? 'w' : 'b', pms: w ? K.wms : K.bms, hc: w ? K.whc : K.hc, hw: w ? K.whw : K.hw, ring: K.ring, rms: K.rms };
+  if (dw) { mk.dw = 1; mk.dc = K.dc; mk.dhc = K.dhc; mk.dring = K.dring; mk.dd = K.dd; }
   if (w) {
     mk.bt = d == null ? '대기 중' : (d >= 1000 ? '대기 중 · ' + (d / 1000).toFixed(1) + 'km' : '대기 중 · ' + Math.round(d) + 'm');
     mk.bg = K.wc; mk.btc = '#ffffff'; mk.bz = K.bz;
