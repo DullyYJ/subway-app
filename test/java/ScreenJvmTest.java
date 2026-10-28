@@ -92,6 +92,18 @@ public class ScreenJvmTest {
             sc.onScreen(ScreenCore.load(mk.apply(3)), "community");        // 사회 화면이 왔다 — 그 화면의 칸으로 맞춘다
             ok("사회".equals(sc.current()) && "전체".equals(sc.pick(-1, "community", "news").v), "새 화면이 오면 그 칸으로 맞춘다");
             ok(sc.pick(-1, "shop", "news") == null && sc.pick(-1, "community", "chat") == null, "다른 탭 · 다른 화면의 표는 쓰지 않는다");
+            // s286: 늦게 온 옛 방 화면이 칸을 되돌리지 못한다(want = 지금 고른 방)
+            SwipeCore sw2 = new SwipeCore();
+            sw2.onScreen(ScreenCore.load(mk.apply(0)), "community", "전체");
+            sw2.note(sw2.pick(-1, "community", "news"));                                           // 증시로 넘겼다
+            sw2.onScreen(ScreenCore.load(mk.apply(0)), "community", "증시");                         // 전체 방 화면이 뒤늦게 왔다
+            ok("증시".equals(sw2.current()) && "경제".equals(sw2.pick(-1, "community", "news").v), "옛 방 화면이 늦게 와도 지금 방(증시)에서 이어서 넘긴다");
+            sw2.onScreen(ScreenCore.load(mk.apply(1)), "community", "증시");                         // 증시 화면이 왔다
+            ok("증시".equals(sw2.current()), "맞는 방 화면이 오면 그대로 받아들인다");
+            sw2.onScreen(ScreenCore.load(mk.apply(0)), "community", "없는방");                       // 표에 없는 방 — 칸을 억지로 바꾸지 않는다(그 화면은 무시)
+            ok("증시".equals(sw2.current()), "표에 없는 want 는 칸을 건드리지 않는다");
+            sw2.onScreen(ScreenCore.load(mk.apply(2)), "shop", "");                                // want 가 비면 예전처럼 화면의 칸을 따른다
+            ok("경제".equals(sw2.current()), "want 가 비면 예전과 같다");
             sc.note(new ScreenCore.Act()); sc.note(null);
             ScreenCore.Act call = new ScreenCore.Act(); call.a = "call"; call.v = "경제"; sc.note(call);
             ok("사회".equals(sc.current()), "칩(cat)이 아닌 행동은 칸을 바꾸지 않는다");

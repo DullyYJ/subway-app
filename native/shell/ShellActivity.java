@@ -758,7 +758,7 @@ public class ShellActivity extends Activity {
             if (my != seq[si]) return;                               // 그 사이 다른 탭 · 더 새 요청이 시작됐다 — 이 받기는 보내지 않는다
             if (ShellCore.S_HOME.equals(screen)) { loadHome(v, keep); return; }
             if (ShellCore.S_BOARD.equals(screen)) { loadBoard(v, keep, true); return; }
-            if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); chatWarmSoon(); return; }
+            if (ShellCore.S_CHAT.equals(screen)) { loadChat(v, keep, true); chatWarmSoon(); chatBgKick(); return; }
             if (ShellCore.S_FOOD.equals(screen)) { loadFood(v, keep, false); return; }
             if (ShellCore.S_MAPH.equals(screen)) { loadMapHead(v, keep, null, null); return; }
             if (ShellCore.S_MAPB.equals(screen)) { if (keep && !keep0 && busReturnQuiet()) return; loadMapBodyFast(v, keep); return; }
@@ -1438,7 +1438,7 @@ public class ShellActivity extends Activity {
             skelViews.remove(v);
             if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); if (ck != null && ck.startsWith(ShellCore.S_SETTINGS + "|")) cmPrefetchTp(); }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
-            if (!keep && v != sheetView) fadeIn(v);
+            if (!keep && v != sheetView && !(ck != null && ck.startsWith(ShellCore.S_CHAT + "|"))) fadeIn(v);          // 소통방은 흐릿하게 떠오르지 않고 바로 또렷하게(s286)
         } catch (Throwable e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
         }
@@ -1519,7 +1519,7 @@ public class ShellActivity extends Activity {
         if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab)) || (dir != -1 && dir != 1)) return false;
         ScreenCore.Screen sc = body.currentScreen();
         if (sc == null) return true;
-        if (sc != swSeen) { swSeen = sc; swc.onScreen(sc, tab); }                // 새 화면이 왔다 — 그 화면의 칸·순환표로 맞춘다(뼈대·오류 화면은 앞의 표를 둔다)
+        if (sc != swSeen) { swSeen = sc; swc.onScreen(sc, tab, "community".equals(tab) ? chat.sel() : ""); }                // 새 화면이 왔다 — 그 화면의 칸·순환표로 맞춘다(뼈대·오류 화면은 앞의 표를 둔다)
         ScreenCore.Act a = dir == -1 ? sc.swL : sc.swR;
         boolean headHost = dir == -1 ? sc.swLh : sc.swRh;
         String cat = dir == -1 ? sc.swLc : sc.swRc;
@@ -1619,10 +1619,12 @@ public class ShellActivity extends Activity {
 
     // ───────────── 실시간소통 ─────────────
     private static final long CHAT_POLL_MS = 6000L;
+    private long chatSwipeAt, chatWarmAt, chatBgAt;               // 방을 마지막으로 넘긴 때 · 이웃 방을 마지막으로 미리 받은 때 · 모든 방을 마지막으로 훑은 때(uptime)
     private final Runnable chatTick = new Runnable() {
         @Override public void run() {
             chatPolling = false;
             if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
+            if (android.os.SystemClock.uptimeMillis() - chatSwipeAt < 1500L) { chatPolling = true; main.postDelayed(this, 1600L); return; }          // 방을 넘기는 중에는 6초 새로고침이 끼어들지 않는다(s286)
             loadChat(body, true, true);
             chatPolling = true; main.postDelayed(this, CHAT_POLL_MS);
         }
@@ -1640,6 +1642,7 @@ public class ShellActivity extends Activity {
                 final String txt = screenCall(ShellCore.S_CHAT + "|" + sel, false, ShellCore.BASE + "/screen/chat", body, null, 10000); warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqChat) return;
+                    if (!sel.equals(chat.sel())) return;                       // 방을 넘기는 사이 늦게 온 옛 방 화면 — 올리지 않는다(방이 되돌아가고 글 올릴 방이 어긋나던 문제 · s286). 받은 화면은 캐시에 이미 들어갔다
                     present(v, txt, keep);
                     if (txt.length() > 0 && !isNotMod(txt)) chat.onScreen(txt);
                 } });
@@ -1674,8 +1677,13 @@ public class ShellActivity extends Activity {
      */
     private static final long CHAT_NEAR_FRESH_MS = 45000L;
     private ChatCore pfChatN, pfChatB;
+    private final java.util.HashSet<String> chatWarmBusy = new java.util.HashSet<String>();
     private void chatWarmSoon() {
-        deb.trailing("chatwarm", 700L, new Runnable() { @Override public void run() {
+        long n = android.os.SystemClock.uptimeMillis();
+        if (n - chatWarmAt >= 500L) { chatWarmAt = n; chatWarmRun(); return; }          // 0.5초에 한 번은 바로(계속 밀 때도 이웃 방이 받아진다)
+        deb.trailing("chatwarm", 500L, new Runnable() { @Override public void run() { chatWarmAt = android.os.SystemClock.uptimeMillis(); chatWarmRun(); } });
+    }
+    private void chatWarmRun() {
             if (!ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "") || !resumed) return;
             int[] oi = new int[1];
             ScreenCore.Act[] inner = body.chipActs(oi);
@@ -1683,16 +1691,16 @@ public class ShellActivity extends Activity {
             final String theme = ShellCore.theme(store);
             if (pfChatN == null) pfChatN = new ChatCore(store);
             final ArrayList<String> sec = new ArrayList<String>(chat.routeSec);
-            for (int dk : new int[] { 1, -1, 2, -2 }) {
+            for (int dk : new int[] { 1, -1, 2, -2, 3, -3 }) {
                 int i = oi[0] + dk;
                 if (i < 0 || i >= inner.length || inner[i] == null || !"cat".equals(inner[i].a)) continue;
                 final String sel = inner[i].v, key = ShellCore.S_CHAT + "|" + sel;
                 final String c = cacheGet(key, false);
                 if (c != null) ioExec.execute(new Runnable() { @Override public void run() { warm(c); try { final ScreenCore.Screen n = parsedGet(c); main.post(new Runnable() { @Override public void run() { try { body.preLayout(n); } catch (Throwable ignored) { } } }); } catch (Throwable ignored) { } } });          // 글 읽기 + 배치를 미리(밀 때 주 스레드가 안 읽고 안 재도록)
                 if (cacheAge(key) < CHAT_NEAR_FRESH_MS) continue;
-                pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { return pfChatRoom(sel, theme, sec); } });
+                synchronized (chatWarmBusy) { if (!chatWarmBusy.add(sel)) continue; }          // 이미 받는 중인 방은 또 줄 세우지 않는다(0.5초마다 불러도 겹치지 않게)
+                pfAdd(0, new PfJob() { @Override public boolean run() throws Exception { try { return pfChatRoom(sel, theme, sec); } finally { synchronized (chatWarmBusy) { chatWarmBusy.remove(sel); } } } });
             }
-        } });
     }
     /** (뒤 스레드) 방 하나를 고스트 상태기로 받아 캐시에 둔다. 받았으면 true. */
     private boolean pfChatRoom(String sel, String theme, ArrayList<String> sec) {
@@ -1722,9 +1730,11 @@ public class ShellActivity extends Activity {
     private final Runnable chatBg = new Runnable() { @Override public void run() {
         chatBgOn = false;
         if (isFinishing()) return;
-        if (resumed) chatBgSweep();
+        if (resumed) { chatBgAt = android.os.SystemClock.uptimeMillis(); chatBgSweep(); }
         chatBgOn = true; main.postDelayed(this, CHAT_BG_MS);
     } };
+    /** 소통방을 열 때(첫 진입 · 오래 뒤 복귀) 다른 모든 방도 바로 훑어 받는다 — 20초 주기를 기다리지 않고(s286). */
+    private void chatBgKick() { long n = android.os.SystemClock.uptimeMillis(); if (n - chatBgAt < 15000L) return; chatBgAt = n; chatBgSweep(); }
     private void chatBgStart() { if (!chatBgOn) { chatBgOn = true; main.postDelayed(chatBg, 4000L); } }
     /** 방마다 엔진이 만든 '불러오는 중' 화면(방 → 화면 글). 칩 줄·테마·탄 노선이 바뀌면(sig) 다시 받는다. */
     private volatile java.util.Map<String, String> chatLoad = new java.util.HashMap<String, String>();
@@ -1766,10 +1776,11 @@ public class ShellActivity extends Activity {
 
     private void chatAct(ScreenCore.Act a, final ScreenView src) {
         if ("cat".equals(a.a)) {
-            chat.select(a.v);
+            chat.select(a.v); chatSwipeAt = android.os.SystemClock.uptimeMillis();
             final boolean shown = keyedShow(body, ShellCore.S_CHAT);
             if (!shown) showSkeleton(body, ShellCore.S_CHAT);                    // 아직 못 받은 방: 받는 동안 옛 방이 그대로 멈춰 보이지 않게 바로 뼈대로 넘긴다(밀기 모션도 곧장 시작)
-            deb.trailing("chatsel", 220L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); } });      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
+            chatWarmSoon();                                                      // 이웃 방은 멈출 때까지 기다리지 않고 지금부터 받는다(계속 밀어도 앞 방이 이미 받아져 있게 · s286)
+            deb.trailing("chatsel", shown ? 220L : 60L, new Runnable() { @Override public void run() { loadChat(body, shown, true); chatWarmSoon(); } });      // 받아 둔 방은 화면이 이미 떠 있으니 220ms · 못 받은 방은 기다릴 까닭이 없어 60ms      // 연달아 밀면 마지막 방만 새로 받는다(밀기 모션과 겹쳐 버벅이지 않게 · 통신도 줄인다)
             return;
         }
         if (!"call".equals(a.a)) return;

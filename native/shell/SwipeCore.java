@@ -15,8 +15,18 @@ final class SwipeCore {
     private String tblId = "", tblTab = "", cur = "";
 
     /** 화면이 바뀌었을 때(밀기 직전에 한 번 읽는다). 표가 있으면 그 화면의 표·칸으로 맞추고, 표 없는 sw 화면이면 표를 버린다. 뼈대·오류 화면(sw 없음)은 앞의 표를 그대로 둔다. */
-    void onScreen(ScreenCore.Screen sc, String tab) {
+    void onScreen(ScreenCore.Screen sc, String tab) { onScreen(sc, tab, ""); }
+
+    /**
+     * want: 앱이 지금 진짜로 골라 둔 칸(커뮤니티는 고른 방). 늦게 도착한 옛 방 화면(sw.k 가 want 와 다름)은 '지금 칸'을 되돌리지 못하게 무시하고,
+     * 표에 want 가 있으면 지금 칸을 want 로 맞춘다(옛 화면이 칸을 옛 방으로 되돌려 방이 제멋대로 오가던 문제 · s286). want 가 비면 예전과 같다.
+     */
+    void onScreen(ScreenCore.Screen sc, String tab, String want) {
         if (sc == null) return;
+        if (want != null && want.length() > 0 && sc.swK != null && sc.swK.length() > 0 && !want.equals(sc.swK)) {
+            if (tbl != null && tbl.containsKey(want)) cur = want;
+            return;
+        }
         if (sc.swT != null && !sc.swT.isEmpty()) { tbl = sc.swT; tblId = sc.id == null ? "" : sc.id; tblTab = tab == null ? "" : tab; cur = sc.swK == null ? "" : sc.swK; return; }
         if (sc.swL != null || sc.swR != null) { tbl = null; cur = ""; }
     }

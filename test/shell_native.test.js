@@ -722,7 +722,7 @@ function findAndroidJar() {
     assert.ok(/if \(ShellCore\.S_FOOD\.equals\(screen\)\) foodSyncSig\(\);/.test(a) && /private void foodSyncSig\(\)/.test(a) && /ShellCore\.K_FOODSIG/.test(a), '맛집을 열 때 장소 표시를 맞춘다');
     assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
     assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
-    assert.ok(/deb\.trailing\("chatsel", 220L/.test(a) && /if \(!shown\) showSkeleton\(body, ShellCore\.S_CHAT\)/.test(a) && /private void chatWarmSoon\(\)/.test(a) && /new int\[\] \{ 1, -1, 2, -2 \}/.test(a) && /CHAT_NEAR_FRESH_MS = 45000L/.test(a) && /private boolean pfChatRoom\(/.test(a), '호선 방 밀기: 뼈대 먼저 · 연달아 밀면 마지막만 받기 · 앞뒤 2칸 미리');
+    assert.ok(/deb\.trailing\("chatsel", shown \? 220L : 60L/.test(a) && /if \(!shown\) showSkeleton\(body, ShellCore\.S_CHAT\)/.test(a) && /private void chatWarmSoon\(\)/.test(a) && /new int\[\] \{ 1, -1, 2, -2, 3, -3 \}/.test(a) && /CHAT_NEAR_FRESH_MS = 45000L/.test(a) && /private boolean pfChatRoom\(/.test(a), '호선 방 밀기: 뼈대 먼저 · 연달아 밀면 마지막만 받기 · 앞뒤 3칸 미리(s286)');
   });
   await t('s206: 맛집 공공데이터 — 공유 저장소(/food-pub) 먼저, 실패하면 예전 3쪽 직접', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), f = fs.readFileSync(N('FoodCore.java'), 'utf8');
@@ -898,6 +898,14 @@ function findAndroidJar() {
     assert.ok(/deb\.trailing\("cmq", 40L/.test(a), '40ms');
     assert.ok(/"\,\\"eta\\":1"/.test(fs.readFileSync(N('CmCore.java'), 'utf8')), 'CmCore eta');
     assert.ok(/CmCore\.briefBody\(st, kind, System\.currentTimeMillis\(\), gps, true\)/.test(fs.readFileSync(N('CommuteAlarm.java'), 'utf8')), '알림은 eta 요청');
+  });
+  await t('s286: 소통방 좌우 밀기 안전장치 — 늦게 온 옛 방 화면은 올리지 않고 · 칸 기억은 지금 고른 방 기준 · 넘기는 중엔 6초 새로고침이 끼지 않고 · 흐릿한 떠오름 없이 바로 · 이웃 방은 밀자마자 받는다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sw = fs.readFileSync(N('SwipeCore.java'), 'utf8');
+    assert.ok(/if \(my != seqChat\) return;\s*if \(!sel\.equals\(chat\.sel\(\)\)\) return;[^\n]*\n\s*present\(v, txt, keep\);/.test(a), '옛 방 화면은 올리지 않는다');
+    assert.ok(/swc\.onScreen\(sc, tab, "community"\.equals\(tab\) \? chat\.sel\(\) : ""\)/.test(a) && /void onScreen\(ScreenCore\.Screen sc, String tab, String want\)/.test(sw) && /!want\.equals\(sc\.swK\)\) \{\s*if \(tbl != null && tbl\.containsKey\(want\)\) cur = want;\s*return;/.test(sw), '칸 기억은 지금 고른 방 기준');
+    assert.ok(/chat\.select\(a\.v\); chatSwipeAt = android\.os\.SystemClock\.uptimeMillis\(\);/.test(a) && /uptimeMillis\(\) - chatSwipeAt < 1500L\) \{ chatPolling = true; main\.postDelayed\(this, 1600L\); return; \}/.test(a), '넘기는 중에는 새로고침이 끼지 않는다');
+    assert.ok(/!\(ck != null && ck\.startsWith\(ShellCore\.S_CHAT \+ "\|"\)\)\) fadeIn\(v\)/.test(a), '소통방은 흐릿하게 떠오르지 않는다');
+    assert.ok(/chatWarmSoon\(\);\s*\/\/ 이웃 방은 멈출 때까지/.test(a) && /n - chatWarmAt >= 500L\) \{ chatWarmAt = n; chatWarmRun\(\); return; \}/.test(a) && /chatWarmBusy\.add\(sel\)/.test(a) && /chatWarmSoon\(\); chatBgKick\(\); return;/.test(a), '이웃 방은 밀자마자 · 열 때 모든 방을 바로');
   });
   await t('s241: 반응 속도 기록 · 글자 폭 기억 — 숫자 몇 개만 모으고(내용 없음) 개발자 도구에서 읽는다', () => {
     const np = fs.readFileSync(N('NetPost.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), pl = fs.readFileSync(N('PerfLog.java'), 'utf8');
