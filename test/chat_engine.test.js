@@ -39,6 +39,16 @@ const G = [['빨간모자', '안녕하세요', NOW - 5 * MIN, 0, '2호선'], ['�
 const Rm = [['m1', NOW - 5 * MIN, '출근러', '지금 지연이에요', 'delay'], ['m2', NOW - 3 * MIN, '나', '저도요', ''], ['m3', NOW - 9 * MIN, '혼잡러', '사람 많아요', 'crowd'], ['m4', NOW - 2 * MIN, '숨김', '숨길 글', ''], ['m5', NOW, 'x', '', '']];
 const base = { sel: 'all', mine: ['2호선', '9호선'], lc: { '2호선': '#00a84d', '9호선': '#bdb092', '1호선': 'bad' }, tzo: -540, me: '나', hid: ['m4'] };
 const chat = (f, d) => E.chatScreen({ cap: 6, now: NOW }, Object.assign({}, base, f), d);
+
+// s273: 순환표(sw.t · sw.k) — 칸마다의 다음·이전이 칩 순서와 같고, 이 화면의 l·r 과 같은 표에서 나온다(앱은 '고른 칸'으로 찾아보기만 한다)
+function swTableOk(S, chips, m) {
+  const n = chips.length, t = S.sw && S.sw.t, on = chips.find(c => c.on);
+  ok(!!t && Object.keys(t).length === n && S.sw.k === on.act.v, m + ': 표 크기 · 이 화면의 칸(k)');
+  ok(chips.every((c, i) => t[c.act.v] && t[c.act.v].l.v === chips[(i + 1) % n].act.v && t[c.act.v].r.v === chips[(i - 1 + n) % n].act.v && t[c.act.v].l.a === 'cat'), m + ': 칸마다 왼쪽 = 다음 · 오른쪽 = 이전(끝없이 돈다)');
+  ok(S.sw.l.v === t[S.sw.k].l.v && S.sw.r.v === t[S.sw.k].r.v, m + ': l·r 은 표의 k 칸과 같다');
+  // 다음 칸 화면이 오기 전에 계속 밀어도 한 바퀴 돌아 제자리
+  let k = S.sw.k; for (let i = 0; i < n; i++) k = t[k].l.v; ok(k === S.sw.k, m + ': 왼쪽으로 n 번 = 제자리');
+}
 // ── s241 좌우 밀기(sw): 호선 칩을 끝없이 돈다 — 마지막 호선에서 왼쪽으로 밀면 전체, 전체에서 오른쪽으로 밀면 마지막 호선 ──
 {
   const labels = c => c.head.find(n => n.t === 'chips').items;
@@ -47,6 +57,7 @@ const chat = (f, d) => E.chatScreen({ cap: 6, now: NOW }, Object.assign({}, base
   const lastSel = chat({ sel: last.act.v }, {});
   ok(lastSel.sw.l.v === 'all' && lastSel.sw.r.v === its[its.length - 2].act.v, 'sw: 마지막 호선(' + last.act.v + ')에서 왼쪽으로 밀면 전체');
   ok(!lastSel.sw.lh && !lastSel.sw.rh && !('lc' in lastSel.sw), 'sw: 본문 쪽 행동(머리 탭 아님)');
+  swTableOk(all0, its, 'chat 전체'); swTableOk(lastSel, labels(lastSel), 'chat 마지막 호선');
 }
 
 // ── ① ③ ──

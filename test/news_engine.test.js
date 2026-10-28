@@ -70,6 +70,8 @@ const S = E.newsScreen({ cap: 5, now: NOW }, { cat: '전체' }, ROWS);
   const lastC = cats[cats.length - 1];
   ok(at(lastC).l.v === cats[0] && at(lastC).l.a === 'cat' && at(lastC).r.v === cats[cats.length - 2], 'sw: ' + lastC + ' 에서 왼쪽으로 밀면 ' + cats[0] + '(멈추지 않고 돈다)');
   ok(at(cats[0]).r.v === lastC && at(cats[0]).l.v === cats[1], 'sw: 전체에서 오른쪽으로 밀면 마지막 카테고리');
+  // s273: 순환표 — 다음 카테고리 화면이 오기 전에 계속 밀어도 이어서 돈다(앱은 '고른 칸'으로 표를 찾아볼 뿐)
+  cats.forEach((c, i) => { const w = at(c), n = cats.length; ok(w.k === c && Object.keys(w.t).length === n && w.l.v === w.t[c].l.v && w.r.v === w.t[c].r.v && cats.every((x, j) => w.t[x].l.v === cats[(j + 1) % n] && w.t[x].r.v === cats[(j - 1 + n) % n]), 'sw.t: ' + c + ' 화면의 순환표 · 칸 k'); });
 }
 const newsN = o => o.body.filter(x => x.t === 'news');
 ok(E.newsScreen({ cap: 4, now: NOW }, {}, ROWS).ok === false && E.newsScreen({}, {}, ROWS).ok === false && E.newsScreen(null, null, null).ok === false, 'cap 5 미만이면 만들지 않는다');

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s272";
+var ENGINE_VERSION = "route-v2-2026-10-28s273";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13326,6 +13326,8 @@ function shopScreenOf(inp, pick, cat) {
   if (si >= 0 && chips.length > 1) {                                       // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4(\ub9e8 \ub05d\uc5d0\uc11c \ucc98\uc74c\uc73c\ub85c \u00b7 \ucc98\uc74c\uc5d0\uc11c \ub9e8 \ub05d\uc73c\ub85c \u2014 \ub9db\uc9d1\u00b7\uc18c\uc2dd\uacfc \uac19\ub2e4)
     sw.l = chips[(si + 1) % chips.length].act;
     sw.r = chips[(si - 1 + chips.length) % chips.length].act;
+    sw.k = chips[si].act.v; sw.t = {};                                      // t = \uce78\ub9c8\ub2e4\uc758 \ub2e4\uc74c\u00b7\uc774\uc804(\ub2e4\uc74c \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0\ub3c4 \uc774\uc5b4 \ub118\uae34\ub2e4) \u00b7 k = \uc774 \ud654\uba74\uc758 \uce78
+    chips.forEach(function (c, k) { sw.t[c.act.v] = { l: chips[(k + 1) % chips.length].act, r: chips[(k - 1 + chips.length) % chips.length].act }; });
   }
   var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,
@@ -14275,7 +14277,11 @@ function foodScreenOf(f, all, allP) {
   }
   var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
   var fi = FOOD_CHIPS.indexOf(f.flt);
-  if (fi >= 0 && FOOD_CHIPS.length > 1) out.sw = { l: { a: 'cat', v: FOOD_CHIPS[(fi + 1) % FOOD_CHIPS.length] }, r: { a: 'cat', v: FOOD_CHIPS[(fi - 1 + FOOD_CHIPS.length) % FOOD_CHIPS.length] } };      // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4
+  if (fi >= 0 && FOOD_CHIPS.length > 1) {                                  // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4 \u00b7 t = \uce78\ub9c8\ub2e4\uc758 \ub2e4\uc74c\u00b7\uc774\uc804(\ub2e4\uc74c \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0\ub3c4 \uc774\uc5b4 \ub118\uae34\ub2e4) \u00b7 k = \uc774 \ud654\uba74\uc758 \uce78
+    var fn = FOOD_CHIPS.length, ft = {};
+    FOOD_CHIPS.forEach(function (c, i) { ft[c] = { l: { a: 'cat', v: FOOD_CHIPS[(i + 1) % fn] }, r: { a: 'cat', v: FOOD_CHIPS[(i - 1 + fn) % fn] } }; });
+    out.sw = { l: ft[FOOD_CHIPS[fi]].l, r: ft[FOOD_CHIPS[fi]].r, k: FOOD_CHIPS[fi], t: ft };
+  }
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
 }
@@ -14860,6 +14866,14 @@ function nwPick(all, cat, now) {
   return items;
 }
 
+// \uc88c\uc6b0 \ubc00\uae30 \ud45c(s273): l\u00b7r \uc740 \uc774 \ud654\uba74 \uae30\uc900\uc758 \ub2e4\uc74c\u00b7\uc774\uc804 \uce78, t \ub294 '\uce78\ub9c8\ub2e4 \uadf8 \uce78\uc5d0\uc11c \ubc00\uba74 \uc5b4\ub514\ub85c \uac00\ub294\uac00'(\uc21c\ud658 \uc804\ubd80), k \ub294 \uc774 \ud654\uba74\uc758 \uce78.
+//   \ub2e4\uc74c \uce78 \ud654\uba74\uc774 \uc544\uc9c1 \uc624\uc9c0 \uc54a\uc544 \uc61b \ud654\uba74\uc774 \ub0a8\uc544 \uc788\uc744 \ub54c\ub3c4 \uc571\uc740 '\uc9c0\uae08 \uace0\ub978 \uce78'\uc73c\ub85c \ud45c\ub97c \ucc3e\uc544 \uc774\uc5b4\uc11c \ub118\uae34\ub2e4(\uacc4\uc0b0\uc740 \uc5d4\uc9c4 \u00b7 \uc571\uc740 \ucc3e\uc544\ubcf4\uae30\ub9cc).
+function nwSwipe(ni) {
+  var n = NW_CATS.length, t = {};
+  NW_CATS.forEach(function (c, i) { t[c] = { l: { a: 'cat', v: NW_CATS[(i + 1) % n] }, r: { a: 'cat', v: NW_CATS[(i - 1 + n) % n] } }; });
+  return { l: t[NW_CATS[ni]].l, r: t[NW_CATS[ni]].r, k: NW_CATS[ni], t: t };
+}
+
 // \ud55c \uce69(f.cat) \ubd84\uc758 \ud654\uba74. all = nwList \ub85c \uc774\ubbf8 \ubd84\ub958\u00b7\uc815\ub9ac\ud55c \uae30\uc0ac(\uac19\uc740 \ubaa9\ub85d\uc758 \ub2e4\ub978 \uce69\uc744 \ub9cc\ub4e4 \ub54c \ub2e4\uc2dc \ubd84\ub958\ud558\uc9c0 \uc54a\uc73c\ub824\uace0 \ub530\ub85c \ube90\ub2e4)
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
@@ -14881,7 +14895,7 @@ function nwScreenOf(now, f, all) {
   }
   var out = { ok: true, v: 1, screen: 'news', cover: 'tab', head: head, body: body, info: { cat: f.cat, n: items.length, all: all.length } };
   var ni = NW_CATS.indexOf(f.cat);
-  if (ni >= 0) out.sw = { l: { a: 'cat', v: NW_CATS[(ni + 1) % NW_CATS.length] }, r: { a: 'cat', v: NW_CATS[(ni - 1 + NW_CATS.length) % NW_CATS.length] } };      // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4(IT \ub2e4\uc74c\uc740 \uc804\uccb4)
+  if (ni >= 0) out.sw = nwSwipe(ni);      // \uc88c\uc6b0 \ubc00\uae30: \uce74\ud14c\uace0\ub9ac\ub97c \ub05d\uc5c6\uc774 \ub3c8\ub2e4(IT \ub2e4\uc74c\uc740 \uc804\uccb4)
   out.rev = 'n' + NEWS_SCREEN_V + ':' + nwHash(JSON.stringify([head, body]));
   return out;
 }
@@ -15353,7 +15367,11 @@ function chatScreen(inp, factsIn, dataIn) {
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
-  if (chips.length > 1 && ci >= 0) out.sw = { l: chips[(ci + 1) % chips.length].act, r: chips[(ci - 1 + chips.length) % chips.length].act };      // \uc88c\uc6b0 \ubc00\uae30: \ud638\uc120 \uce69\uc744 \ub05d\uc5c6\uc774 \ub3c8\ub2e4(\ub9c8\uc9c0\ub9c9 \ud638\uc120 \u2192 \uc804\uccb4 \u2192 \u2026 \ucc98\uc74c\uc758 \uc624\ub978\ucabd \ubc00\uae30\ub294 \ub9c8\uc9c0\ub9c9 \ud638\uc120)
+  if (chips.length > 1 && ci >= 0) {                                       // t = \uce78\ub9c8\ub2e4\uc758 \ub2e4\uc74c\u00b7\uc774\uc804(\ub2e4\uc74c \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0\ub3c4 \uc774\uc5b4 \ub118\uae34\ub2e4) \u00b7 k = \uc774 \ud654\uba74\uc758 \uce78
+    var cn = chips.length, ct = {};
+    chips.forEach(function (c, k) { ct[c.act.v] = { l: chips[(k + 1) % cn].act, r: chips[(k - 1 + cn) % cn].act }; });
+    out.sw = { l: chips[(ci + 1) % cn].act, r: chips[(ci - 1 + cn) % cn].act, k: chips[ci].act.v, t: ct };
+  }      // \uc88c\uc6b0 \ubc00\uae30: \ud638\uc120 \uce69\uc744 \ub05d\uc5c6\uc774 \ub3c8\ub2e4(\ub9c8\uc9c0\ub9c9 \ud638\uc120 \u2192 \uc804\uccb4 \u2192 \u2026 \ucc98\uc74c\uc758 \uc624\ub978\ucabd \ubc00\uae30\ub294 \ub9c8\uc9c0\ub9c9 \ud638\uc120)
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }

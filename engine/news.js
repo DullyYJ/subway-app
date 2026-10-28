@@ -216,6 +216,14 @@ function nwPick(all, cat, now) {
   return items;
 }
 
+// 좌우 밀기 표(s273): l·r 은 이 화면 기준의 다음·이전 칸, t 는 '칸마다 그 칸에서 밀면 어디로 가는가'(순환 전부), k 는 이 화면의 칸.
+//   다음 칸 화면이 아직 오지 않아 옛 화면이 남아 있을 때도 앱은 '지금 고른 칸'으로 표를 찾아 이어서 넘긴다(계산은 엔진 · 앱은 찾아보기만).
+function nwSwipe(ni) {
+  var n = NW_CATS.length, t = {};
+  NW_CATS.forEach(function (c, i) { t[c] = { l: { a: 'cat', v: NW_CATS[(i + 1) % n] }, r: { a: 'cat', v: NW_CATS[(i - 1 + n) % n] } }; });
+  return { l: t[NW_CATS[ni]].l, r: t[NW_CATS[ni]].r, k: NW_CATS[ni], t: t };
+}
+
 // 한 칩(f.cat) 분의 화면. all = nwList 로 이미 분류·정리한 기사(같은 목록의 다른 칩을 만들 때 다시 분류하지 않으려고 따로 뺐다)
 function nwScreenOf(now, f, all) {
   var items = nwPick(all, f.cat, now);
@@ -237,7 +245,7 @@ function nwScreenOf(now, f, all) {
   }
   var out = { ok: true, v: 1, screen: 'news', cover: 'tab', head: head, body: body, info: { cat: f.cat, n: items.length, all: all.length } };
   var ni = NW_CATS.indexOf(f.cat);
-  if (ni >= 0) out.sw = { l: { a: 'cat', v: NW_CATS[(ni + 1) % NW_CATS.length] }, r: { a: 'cat', v: NW_CATS[(ni - 1 + NW_CATS.length) % NW_CATS.length] } };      // 좌우 밀기: 카테고리를 끝없이 돈다(IT 다음은 전체)
+  if (ni >= 0) out.sw = nwSwipe(ni);      // 좌우 밀기: 카테고리를 끝없이 돈다(IT 다음은 전체)
   out.rev = 'n' + NEWS_SCREEN_V + ':' + nwHash(JSON.stringify([head, body]));
   return out;
 }

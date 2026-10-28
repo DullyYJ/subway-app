@@ -253,6 +253,8 @@ public final class ScreenCore {
         public Act swL, swR;                               // 좌우 밀기(엔진이 정한다): 왼쪽으로 밀면 swL · 오른쪽으로 밀면 swR(없으면 아무 일 없음). 어디로 넘길지 계산은 엔진, 앱은 이 행동을 그대로 실행한다
         public boolean swLh, swRh;                         // 그 행동이 머리(탭 칩) 쪽 것인가(아니면 이 화면 본문 쪽)
         public String swLc = "", swRc = "";                // (뉴스로 넘어갈 때) 먼저 켤 카테고리 — 엔진이 정한다
+        public String swK = "";                            // 이 화면이 지금 서 있는 칸(칩 행동의 v) — 엔진이 정한다
+        public Map<String, Act[]> swT;                     // 칸마다 {왼쪽으로 밀면, 오른쪽으로 밀면}(엔진이 순환 전부를 준다) — 다음 칸 화면이 오기 전에도 이어 넘기려고. 없으면 null
         public Node fitNode;                               // 남는 세로를 채우는 장면 노드(웹 _sceneFit) — 엔진이 fit 을 켠 것만
         public List<Node> foldRows = new ArrayList<Node>();   // 작은 폰에서 오래된 것부터 접히는 실시간 대화 줄(fo 1~3)
     }
@@ -1037,6 +1039,19 @@ public final class ScreenCore {
             sc.swL = act(wm.get("l"), false); sc.swR = act(wm.get("r"), false);
             sc.swLh = optBool(wm, "lh", false); sc.swRh = optBool(wm, "rh", false);
             sc.swLc = optStr(wm, "lc", "", 20); sc.swRc = optStr(wm, "rc", "", 20);
+            sc.swK = optStr(wm, "k", "", 60);
+            if (wm.get("t") != null) {
+                Map<String, Object> tm = asObj(wm.get("t"), "sw.t");
+                if (tm.size() <= 40) {
+                    Map<String, Act[]> tt = new java.util.LinkedHashMap<String, Act[]>();
+                    for (Map.Entry<String, Object> e : tm.entrySet()) {
+                        if (e.getKey() == null || e.getKey().length() == 0 || e.getKey().length() > 60 || !(e.getValue() instanceof Map)) continue;
+                        Map<String, Object> em = asObj(e.getValue(), "sw.t");
+                        tt.put(e.getKey(), new Act[] { act(em.get("l"), false), act(em.get("r"), false) });
+                    }
+                    if (!tt.isEmpty()) sc.swT = tt;
+                }
+            }
         }
         Object fabO = m.get("fab");
         if (fabO != null) {                                                          // 떠 있는 단추: 글 · (아이콘) · 행동 — 자리·색은 앱이 웹 .fab 과 같게 그린다

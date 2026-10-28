@@ -25,7 +25,7 @@ function findAndroidJar() {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'scrjvm-'));
   await t('ScreenCore 를 JVM 에서 컴파일하고 자체 점검(ScreenJvmTest)이 모두 통과한다', async () => {
     const core = path.join(out, 'core'); fs.mkdirSync(core);
-    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('NetPost.java'), N('PerfLog.java'), N('TileMapCore.java'), path.join(__dirname, 'java', 'ScreenJvmTest.java')], { env: ENV, encoding: 'utf8' });
+    let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', core, N('ScreenCore.java'), N('NetPost.java'), N('PerfLog.java'), N('TileMapCore.java'), N('SwipeCore.java'), path.join(__dirname, 'java', 'ScreenJvmTest.java')], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 1500));
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', core, 'com.dullyyj.subway.ScreenJvmTest'], { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stdout || '').split('\n').filter(l => /^FAIL/.test(l)).join('\n') || r.stderr);

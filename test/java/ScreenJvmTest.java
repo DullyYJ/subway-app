@@ -66,6 +66,39 @@ public class ScreenJvmTest {
             ok(no.swL == null && no.swR == null, "sw 없으면 밀어도 아무 일 없음(멈춤)");
             ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"l\":{\"a\":\"zzz\"}}}"), "sw 행동이 엉터리면 거절");
         }
+        {   // s273 다음 칸 화면이 안 와도 이어 넘긴다 — 엔진이 준 순환표(sw.t · sw.k)를 '지금 고른 칸'으로 찾아본다
+            String[] ring = { "전체", "증시", "경제", "사회" };
+            java.util.function.Function<Integer, String> mk = new java.util.function.Function<Integer, String>() { public String apply(Integer i) {
+                StringBuilder t = new StringBuilder();
+                for (int k = 0; k < ring.length; k++) t.append(k > 0 ? "," : "").append("\"" + ring[k] + "\":{\"l\":{\"a\":\"cat\",\"v\":\"" + ring[(k + 1) % 4] + "\"},\"r\":{\"a\":\"cat\",\"v\":\"" + ring[(k + 3) % 4] + "\"}}");
+                return "{\"ok\":true,\"v\":1,\"screen\":\"news\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"l\":{\"a\":\"cat\",\"v\":\"" + ring[(i + 1) % 4] + "\"},\"r\":{\"a\":\"cat\",\"v\":\"" + ring[(i + 3) % 4] + "\"},\"k\":\"" + ring[i] + "\",\"t\":{" + t + "}}}"; } };
+            ScreenCore.Screen a0 = ScreenCore.load(mk.apply(0));
+            ok(a0.swK.equals("전체") && a0.swT != null && a0.swT.size() == 4 && "경제".equals(a0.swT.get("증시")[0].v) && "전체".equals(a0.swT.get("증시")[1].v), "sw.t: 칸마다 왼쪽·오른쪽 행동을 읽는다");
+            SwipeCore sc = new SwipeCore();
+            sc.onScreen(a0, "community");
+            ScreenCore.Act g1 = sc.pick(-1, "community", "news");
+            ok(g1 != null && "증시".equals(g1.v), "첫 밀기: 전체 → 증시");
+            sc.note(g1);
+            ScreenCore.Act g2 = sc.pick(-1, "community", "news");        // 증시 화면이 아직 안 왔다(옛 화면 그대로) — 예전엔 증시를 또 요청했다
+            ok(g2 != null && "경제".equals(g2.v), "옛 화면이 남아 있어도 이어서: 증시 → 경제");
+            sc.note(g2);
+            sc.onScreen(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"skel\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]}"), "community");     // 뼈대 화면
+            ScreenCore.Act g3 = sc.pick(-1, "community", "news");
+            ok(g3 != null && "사회".equals(g3.v), "뼈대 화면이어도 이어서: 경제 → 사회");
+            ScreenCore.Act back = sc.pick(1, "community", "news");
+            ok(back != null && "증시".equals(back.v), "오른쪽으로 밀면 고른 칸 기준 앞 칸: 경제 → 증시");
+            sc.note(g3);
+            ok(sc.pick(-1, "community", "news").v.equals("전체"), "끝에서 처음으로 돈다: 사회 → 전체");
+            sc.onScreen(ScreenCore.load(mk.apply(3)), "community");        // 사회 화면이 왔다 — 그 화면의 칸으로 맞춘다
+            ok("사회".equals(sc.current()) && "전체".equals(sc.pick(-1, "community", "news").v), "새 화면이 오면 그 칸으로 맞춘다");
+            ok(sc.pick(-1, "shop", "news") == null && sc.pick(-1, "community", "chat") == null, "다른 탭 · 다른 화면의 표는 쓰지 않는다");
+            sc.note(new ScreenCore.Act()); sc.note(null);
+            ScreenCore.Act call = new ScreenCore.Act(); call.a = "call"; call.v = "경제"; sc.note(call);
+            ok("사회".equals(sc.current()), "칩(cat)이 아닌 행동은 칸을 바꾸지 않는다");
+            sc.onScreen(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"board\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"l\":{\"a\":\"call\",\"v\":\"cc.news\"},\"lh\":true}}"), "community");
+            ok(sc.pick(-1, "community", "news") == null, "표 없는 sw 화면(게시판 · 옛 엔진)이 오면 표를 버리고 그 화면 sw 를 쓴다");
+            ok(bad("{\"ok\":true,\"v\":1,\"screen\":\"t\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}],\"sw\":{\"t\":{\"x\":{\"l\":{\"a\":\"zzz\"}}}}}"), "sw.t 행동이 엉터리면 거절");
+        }
         ScreenCore.Screen s2 = ScreenCore.load(screen(2).replace("{\"t\":\"spacer\",\"h\":10}", "{\"t\":\"hologram\",\"x\":1},{\"t\":\"spacer\",\"h\":10}"));
         ok(s2.skipped == 1 && s2.body.size() == 5, "모르는 노드 종류는 건너뛴다(앞으로 늘려도 옛 앱이 안 깨진다)");
         ScreenCore.Screen s3 = ScreenCore.load(screen(1).replace("https://img/a.jpg", "file:///etc/passwd"));

@@ -18,11 +18,22 @@ const places = n => n.filter(x => x.t === 'place');
 // ① cap
 ok(E.foodScreen({ cap: 3 }, {}, {}).ok === false && E.foodScreen({}, {}, {}).ok === false && E.foodScreen(null, null, null).ok === false, 'cap 4 미만이면 만들지 않는다');
 ok(S.ok && S.v === 1 && S.screen === 'food' && S.cover === 'tab' && /^f3:/.test(S.rev), '기본 모양');
+
+// s273: 순환표(sw.t · sw.k) — 칸마다의 다음·이전이 칩 순서와 같고, 이 화면의 l·r 과 같은 표에서 나온다(앱은 '고른 칸'으로 찾아보기만 한다)
+function swTableOk(S, chips, m) {
+  const n = chips.length, t = S.sw && S.sw.t, on = chips.find(c => c.on);
+  ok(!!t && Object.keys(t).length === n && S.sw.k === on.act.v, m + ': 표 크기 · 이 화면의 칸(k)');
+  ok(chips.every((c, i) => t[c.act.v] && t[c.act.v].l.v === chips[(i + 1) % n].act.v && t[c.act.v].r.v === chips[(i - 1 + n) % n].act.v && t[c.act.v].l.a === 'cat'), m + ': 칸마다 왼쪽 = 다음 · 오른쪽 = 이전(끝없이 돈다)');
+  ok(S.sw.l.v === t[S.sw.k].l.v && S.sw.r.v === t[S.sw.k].r.v, m + ': l·r 은 표의 k 칸과 같다');
+  // 다음 칸 화면이 오기 전에 계속 밀어도 한 바퀴 돌아 제자리
+  let k = S.sw.k; for (let i = 0; i < n; i++) k = t[k].l.v; ok(k === S.sw.k, m + ': 왼쪽으로 n 번 = 제자리');
+}
 { // s241 좌우 밀기(sw): 카테고리를 끝없이 돈다
   const chips = S.head.find(n => n.t === 'chips').items, lastV = chips[chips.length - 1].act.v;
   ok(S.sw.l.v === chips[1].act.v && S.sw.r.v === lastV, 'sw: 첫 칩에서 왼쪽 = 다음 · 오른쪽 = 마지막으로 돈다');
   const L = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: lastV }, { c: C, p: P });
   ok(L.sw.l.v === chips[0].act.v && L.sw.r.v === chips[chips.length - 2].act.v, 'sw: 마지막 칩(' + lastV + ')에서 왼쪽 = 처음으로 돈다');
+  swTableOk(S, chips, 'food'); swTableOk(L, L.head.find(n => n.t === 'chips').items, 'food 마지막 칩');
 }
 
 // ② 분류 = 웹 _foodKind (index.html 에서 함수를 꺼내 같은 표본을 넣어 본다)

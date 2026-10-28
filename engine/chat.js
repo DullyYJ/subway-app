@@ -183,7 +183,11 @@ function chatScreen(inp, factsIn, dataIn) {
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
   var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
-  if (chips.length > 1 && ci >= 0) out.sw = { l: chips[(ci + 1) % chips.length].act, r: chips[(ci - 1 + chips.length) % chips.length].act };      // 좌우 밀기: 호선 칩을 끝없이 돈다(마지막 호선 → 전체 → … 처음의 오른쪽 밀기는 마지막 호선)
+  if (chips.length > 1 && ci >= 0) {                                       // t = 칸마다의 다음·이전(다음 화면이 오기 전에도 이어 넘긴다) · k = 이 화면의 칸
+    var cn = chips.length, ct = {};
+    chips.forEach(function (c, k) { ct[c.act.v] = { l: chips[(k + 1) % cn].act, r: chips[(k - 1 + cn) % cn].act }; });
+    out.sw = { l: chips[(ci + 1) % cn].act, r: chips[(ci - 1 + cn) % cn].act, k: chips[ci].act.v, t: ct };
+  }      // 좌우 밀기: 호선 칩을 끝없이 돈다(마지막 호선 → 전체 → … 처음의 오른쪽 밀기는 마지막 호선)
   out.rev = 'c' + CHAT_SCREEN_V + ':' + chtHash(JSON.stringify([head, body, foot]));
   return out;
 }

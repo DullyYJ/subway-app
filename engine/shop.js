@@ -268,6 +268,8 @@ function shopScreenOf(inp, pick, cat) {
   if (si >= 0 && chips.length > 1) {                                       // 좌우 밀기: 카테고리를 끝없이 돈다(맨 끝에서 처음으로 · 처음에서 맨 끝으로 — 맛집·소식과 같다)
     sw.l = chips[(si + 1) % chips.length].act;
     sw.r = chips[(si - 1 + chips.length) % chips.length].act;
+    sw.k = chips[si].act.v; sw.t = {};                                      // t = 칸마다의 다음·이전(다음 화면이 오기 전에도 이어 넘긴다) · k = 이 화면의 칸
+    chips.forEach(function (c, k) { sw.t[c.act.v] = { l: chips[(k + 1) % chips.length].act, r: chips[(k - 1 + chips.length) % chips.length].act }; });
   }
   var out = {
     ok: true, v: 1, screen: 'shop', cat: cat, seed: pick.seed,

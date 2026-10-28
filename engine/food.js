@@ -201,7 +201,11 @@ function foodScreenOf(f, all, allP) {
   }
   var out = { ok: true, v: 1, screen: 'food', cover: 'tab', head: head, body: body, info: { cur: cur.length, pub: pub.length, flt: f.flt, stn: f.stn, ctr: f.ctr || null, go: go } };
   var fi = FOOD_CHIPS.indexOf(f.flt);
-  if (fi >= 0 && FOOD_CHIPS.length > 1) out.sw = { l: { a: 'cat', v: FOOD_CHIPS[(fi + 1) % FOOD_CHIPS.length] }, r: { a: 'cat', v: FOOD_CHIPS[(fi - 1 + FOOD_CHIPS.length) % FOOD_CHIPS.length] } };      // 좌우 밀기: 카테고리를 끝없이 돈다
+  if (fi >= 0 && FOOD_CHIPS.length > 1) {                                  // 좌우 밀기: 카테고리를 끝없이 돈다 · t = 칸마다의 다음·이전(다음 화면이 오기 전에도 이어 넘긴다) · k = 이 화면의 칸
+    var fn = FOOD_CHIPS.length, ft = {};
+    FOOD_CHIPS.forEach(function (c, i) { ft[c] = { l: { a: 'cat', v: FOOD_CHIPS[(i + 1) % fn] }, r: { a: 'cat', v: FOOD_CHIPS[(i - 1 + fn) % fn] } }; });
+    out.sw = { l: ft[FOOD_CHIPS[fi]].l, r: ft[FOOD_CHIPS[fi]].r, k: FOOD_CHIPS[fi], t: ft };
+  }
   out.rev = 'f' + FOOD_SCREEN_V + ':' + foodHash(JSON.stringify([head, body]));
   return out;
 }

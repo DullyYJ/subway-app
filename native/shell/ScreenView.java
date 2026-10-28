@@ -566,6 +566,12 @@ public class ScreenView extends View {
     private boolean pressInFoot;
     private static final float PG_FLING = 500f;
     /** 분류 칩을 누르면 새 화면이 오기 전에 먼저 그 칩을 켜 보인다(같은 줄의 다른 칩은 끈다) — 엔진 화면이 오면 그것으로 덮어쓴다. */
+    /** 좌우 밀기로 넘긴 칸의 칩을 새 화면이 오기 전에 먼저 켜 보인다(칩을 눌렀을 때와 같다) — 같은 행동을 가진 칩이 없으면 아무것도 안 한다. */
+    public void lightChip(ScreenCore.Act a) {
+        if (lay == null || a == null || a.v == null || !"cat".equals(a.a)) return;
+        for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.act != null && "cat".equals(it.act.a) && a.v.equals(it.act.v)) { pickChip(it); return; }
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_CHIP && it.act != null && "cat".equals(it.act.a) && a.v.equals(it.act.v)) { pickChip(it); return; }
+    }
     private void pickChip(ScreenCore.Item pi) {
         if (lay == null) return;
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.y == pi.y) it.on = it == pi;

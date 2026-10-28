@@ -1379,15 +1379,21 @@ public class ShellActivity extends Activity {
         if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab)) || (dir != -1 && dir != 1)) return false;
         ScreenCore.Screen sc = body.currentScreen();
         if (sc == null) return true;
+        if (sc != swSeen) { swSeen = sc; swc.onScreen(sc, tab); }                // 새 화면이 왔다 — 그 화면의 칸·순환표로 맞춘다(뼈대·오류 화면은 앞의 표를 둔다)
         ScreenCore.Act a = dir == -1 ? sc.swL : sc.swR;
         boolean headHost = dir == -1 ? sc.swLh : sc.swRh;
         String cat = dir == -1 ? sc.swLc : sc.swRc;
+        ScreenCore.Act cont = swc.pick(dir, tab, ShellCore.expectId(viewKey.get(body)));       // 다음 칸 화면이 아직 안 왔어도(옛 화면 · 뼈대) '지금 고른 칸'에서 이어 넘긴다 — 같은 칸을 되풀이하지 않는다
+        if (cont != null) { a = cont; headHost = false; cat = ""; }
         if (a == null) return true;                                              // 엔진이 넘길 곳을 주지 않았다 = 이 끝에서 멈춘다
         if (cat.length() > 0) store.put(ShellCore.K_NEWS_CAT, cat);              // 뉴스로 넘어갈 때 먼저 켤 카테고리(엔진이 정함)
+        swc.note(a); body.lightChip(a);                                          // 넘긴 칸을 적고, 위 칩 줄도 새 화면을 기다리지 않고 그 칸을 켠다(칩을 눌렀을 때와 같다)
         body.slideNext(dir);
         (headHost ? hostHead : hostBody).handle(a, false);
         return true;
     }
+    private final SwipeCore swc = new SwipeCore();
+    private ScreenCore.Screen swSeen;
     private final class Host implements ScreenView.Listener {
         private final int which;                      // 0 머리 · 1 본문 · 2 탭 막대
         Host(int which) { this.which = which; }
@@ -1416,6 +1422,7 @@ public class ShellActivity extends Activity {
 
         void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
+            if (which != 2) swc.note(a);                          // 칩을 눌러 고른 칸도 적어 둔다 — 그 칸 화면이 오기 전에 밀어도 거기서부터 넘어간다
             if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
             if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { if (deb.gate("retry", 600L)) showTab(ShellCore.currentTab(store)); return; }
             ShellCore.Effect e;

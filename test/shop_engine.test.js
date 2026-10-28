@@ -132,6 +132,19 @@ console.log('동등성 대조 ' + cases.length + '건');
   ok(s2.seed === s.seed, '같은 시각이면 같은 시드(카테고리 바꿔도 순서 일관)');
   const s3 = E.shopScreen({ nowMs: t, cat: '없는카테고리' }, data, null, null);
   ok(s3.cat === '추천', '없는 카테고리는 추천');
+  { // s273 순환표
+
+    // s273: 순환표(sw.t · sw.k) — 칸마다의 다음·이전이 칩 순서와 같고, 이 화면의 l·r 과 같은 표에서 나온다(앱은 '고른 칸'으로 찾아보기만 한다)
+    function swTableOk(S, chips, m) {
+      const n = chips.length, t = S.sw && S.sw.t, on = chips.find(c => c.on);
+      ok(!!t && Object.keys(t).length === n && S.sw.k === on.act.v, m + ': 표 크기 · 이 화면의 칸(k)');
+      ok(chips.every((c, i) => t[c.act.v] && t[c.act.v].l.v === chips[(i + 1) % n].act.v && t[c.act.v].r.v === chips[(i - 1 + n) % n].act.v && t[c.act.v].l.a === 'cat'), m + ': 칸마다 왼쪽 = 다음 · 오른쪽 = 이전(끝없이 돈다)');
+      ok(S.sw.l.v === t[S.sw.k].l.v && S.sw.r.v === t[S.sw.k].r.v, m + ': l·r 은 표의 k 칸과 같다');
+      // 다음 칸 화면이 오기 전에 계속 밀어도 한 바퀴 돌아 제자리
+      let k = S.sw.k; for (let i = 0; i < n; i++) k = t[k].l.v; ok(k === S.sw.k, m + ': 왼쪽으로 n 번 = 제자리');
+    }
+    swTableOk(s3, s3.head[0].items, 'shop 추천'); swTableOk(s2, s2.head[0].items, 'shop 가운데 칩');
+  }
   { // s264 좌우 밀기(sw): 끝없이 돈다(처음에서 오른쪽 = 마지막 칩 · 끝에서 왼쪽 = 처음 칩)
     ok(s3.sw && s3.sw.l && s3.sw.l.a === 'cat' && s3.sw.r && s3.sw.r.a === 'cat' && s3.sw.r.v === s.head[0].items[s.head[0].items.length - 1].act.v && s3.sw.l.v === s.head[0].items[1].act.v, 'sw: 처음 칩(추천)에서는 왼쪽 = 다음 칩 · 오른쪽 = 마지막 칩(돈다)');
     { const it = s.head[0].items, k2 = it.findIndex(c => c.on === false && c.act.v === c1); ok(s2.sw && s2.sw.r && s2.sw.r.v === it[k2 - 1].act.v && s2.sw.l.v === it[k2 + 1].act.v, 'sw: 가운데 칩에서 오른쪽 = 앞 칩 · 왼쪽 = 뒤 칩'); }
