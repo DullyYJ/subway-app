@@ -396,6 +396,12 @@ t('추천 줄 버튼 글(go)은 엔진이 정한 대로 7~8자 안에서 그대�
   assert.strictEqual(g({ a: 'x', b: 'y' }), '맛집 보기');
   assert.strictEqual(g({ a: 'x', b: 'y', go: '아주아주 길고 긴 버튼 이름' }).length, 8);
 });
+t('s295: 가게·상품 없이 글만 있는 추천(rc.n=1)은 [보기] 없이 — go 가 빈 값', () => {
+  const g = (rc) => stepO(withOvl(mkState()), at(12, 50, 0), { rc: rc }).state.rcAd.go;
+  assert.strictEqual(g({ a: '🚇 하차 7분 전 · 캠퍼스타운 ☕', b: '하차 7분 전이에요.', go: '', n: 1 }), '');
+  assert.strictEqual(g({ a: 'x', b: 'y', go: '쿠팡 보기', n: 1 }), '');
+  assert.strictEqual(g({ a: 'x', b: 'y', go: '쿠팡 보기', n: 0 }), '쿠팡 보기');
+});
 t('s258 추천 동기화: rcDis -1 = 지금 보이는 추천 줄 닫기(앱 팝업·알림에서 처리하면 오버레이 줄도 사라진다) · rcRetry 는 못 보낸 추천을 다시 판정하게 한다', () => {
   let st = withOvl(mkState());
   let r = stepO(st, at(12, 50, 0), { rc: { a: '맛있는집', b: '점심 한 끼', m: '120m · 한식', go: '맛집 보기' } }); st = r.state;

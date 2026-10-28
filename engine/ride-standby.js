@@ -529,7 +529,7 @@ function rsActs(st, req, now, notes) {
   if (st.rsUndo && now >= st.rsUndo.until) delete st.rsUndo;
   if (rc && typeof rc === 'object' && String(rc.a || '').length) {
     var sig = String(rc.a) + '|' + String(rc.b || '');
-    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rsClampTxt(rc.go, 8) || '맛집 보기' };
+    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: (rc.n ? '' : (rsClampTxt(rc.go, 8) || '맛집 보기')) };      // s295: rc.n=1 = 가게·상품 없는 글만 추천 — [보기] 없이 [확인]만(go 빈 값)
   }
   if (isFinite(req.rcDis)) { if (+req.rcDis > 0) st.rcDis = +req.rcDis; else if (+req.rcDis < 0 && st.rcAd) st.rcDis = st.rcAd.at; }      // s258: -1 = '지금 보이는 추천 줄 닫기'(앱 팝업·알림에서 확인·보기를 눌렀으면 오버레이 줄도 사라지게 — 한쪽에서 처리하면 다른 쪽도 사라진다)
   if (+req.rcRetry === 1 && st.recoKey) { st.recoKey = ''; st.recoAt = 0; }      // s258: 추천을 보내지 못했으면(통신 실패) 창이 열려 있는 동안 다시 판정하게 — 예전엔 한 번 실패하면 그 여정엔 영영 안 떴다

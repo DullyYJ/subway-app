@@ -132,7 +132,15 @@ final class RideOverlay {
         boolean wt = "wait".equals(v.rsSt) || "board".equals(v.rsSt);
         SpannableString ps = new SpannableString("●  " + OvCore.pillText(v));
         ps.setSpan(new ForegroundColorSpan(OvCore.stateRgb(v)), 0, 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);   // s295: 달리는 중 파랑 · 역에 서 있는 동안 노랑 · 승차 대기 주황
-        pillT.setText(ps); pillT.setTextColor(fg);
+        if (pill && v.alert > 0 && v.banner.length() > 0) {            // s295 (YJ: 알약 상태에서도 도착 전 하이라이트 똑같이): 알약에도 펼친 카드와 같은 경고 줄(1정거장 전 빨강 · 2정거장 전 주황)을 붙인다 — 둘레 무지개는 그대로
+            android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder(ps);
+            int from = sb.length(); sb.append('\n').append(v.banner);
+            sb.setSpan(new ForegroundColorSpan(v.alert == 1 ? 0xFFFF453A : 0xFFFF9F0A), from, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), from, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.setSpan(new android.text.style.RelativeSizeSpan(0.9f), from, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            pillT.setText(sb);
+        } else pillT.setText(ps);
+        pillT.setTextColor(fg);
         col.setVisibility(pill ? View.GONE : View.VISIBLE);
         strip.setVisibility(hasStrip ? View.VISIBLE : View.GONE);
         t1.setVisibility(hasStrip ? View.GONE : View.VISIBLE);
@@ -581,7 +589,8 @@ final class RideOverlay {
         @Override protected void onMeasure(int w, int h) { setMeasuredDimension(MeasureSpec.getSize(w), dp(64)); }
         private void layoutBtns() {
             float w = getWidth(), top = dp(17), bot = dp(47);
-            if (row.kind == 1) { b2.set(w - dp(8) - dp(42), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(100), top, b2.left - dp(6), bot); }
+            if (row.kind == 1 && row.go.length() == 0) { b2.set(w - dp(8) - dp(64), top, w - dp(8), bot); b1.setEmpty(); }      // s295: 글만 있는 추천은 [보기] 없이 [확인]만
+            else if (row.kind == 1) { b2.set(w - dp(8) - dp(42), top, w - dp(8), bot); b1.set(b2.left - dp(6) - dp(100), top, b2.left - dp(6), bot); }
             else { b1.set(w - dp(8) - dp(84), top, w - dp(8), bot); b2.setEmpty(); }
         }
         /** 화면 좌표(rx, ry)가 어느 버튼인가: 1 첫 버튼 · 2 둘째 버튼 · 0 글 부분 · -1 줄 밖. */
@@ -630,11 +639,11 @@ final class RideOverlay {
                 cv.restore();
                 x0 += dp(58);
             }
-            float right = b1.left - dp(6), w = Math.max(dp(40), right - x0);
+            float right = (b1.isEmpty() ? b2.left : b1.left) - dp(6), w = Math.max(dp(40), right - x0);
             draw(cv, row.a, x0, dp(24), 13f, true, fg, w);
             draw(cv, row.b, x0, dp(41), 11f, false, sub, w);
             if (row.kind == 1 && row.m.length() > 0) draw(cv, row.m, x0, dp(56), 10f, false, sub, w);
-            if (row.kind == 1) { btn(cv, b1, row.go, true); btn(cv, b2, row.ok, false); }
+            if (row.kind == 1) { if (!b1.isEmpty()) btn(cv, b1, row.go, true); btn(cv, b2, row.ok, b1.isEmpty()); }
             else btn(cv, b1, row.end, true);
             cv.restore();
         }

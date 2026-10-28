@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s295";
+var ENGINE_VERSION = "route-v2-2026-10-29s296";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10533,7 +10533,7 @@ function rsActs(st, req, now, notes) {
   if (st.rsUndo && now >= st.rsUndo.until) delete st.rsUndo;
   if (rc && typeof rc === 'object' && String(rc.a || '').length) {
     var sig = String(rc.a) + '|' + String(rc.b || '');
-    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: rsClampTxt(rc.go, 8) || '\ub9db\uc9d1 \ubcf4\uae30' };
+    if (!st.rcAd || st.rcAd.sig !== sig) st.rcAd = { sig: sig, at: now, a: rsClampTxt(rc.a, 40), b: rsClampTxt(rc.b, 64), m: rsClampTxt(rc.m, 32), go: (rc.n ? '' : (rsClampTxt(rc.go, 8) || '\ub9db\uc9d1 \ubcf4\uae30')) };      // s295: rc.n=1 = \uac00\uac8c\u00b7\uc0c1\ud488 \uc5c6\ub294 \uae00\ub9cc \ucd94\ucc9c \u2014 [\ubcf4\uae30] \uc5c6\uc774 [\ud655\uc778]\ub9cc(go \ube48 \uac12)
   }
   if (isFinite(req.rcDis)) { if (+req.rcDis > 0) st.rcDis = +req.rcDis; else if (+req.rcDis < 0 && st.rcAd) st.rcDis = st.rcAd.at; }      // s258: -1 = '\uc9c0\uae08 \ubcf4\uc774\ub294 \ucd94\ucc9c \uc904 \ub2eb\uae30'(\uc571 \ud31d\uc5c5\u00b7\uc54c\ub9bc\uc5d0\uc11c \ud655\uc778\u00b7\ubcf4\uae30\ub97c \ub20c\ub800\uc73c\uba74 \uc624\ubc84\ub808\uc774 \uc904\ub3c4 \uc0ac\ub77c\uc9c0\uac8c \u2014 \ud55c\ucabd\uc5d0\uc11c \ucc98\ub9ac\ud558\uba74 \ub2e4\ub978 \ucabd\ub3c4 \uc0ac\ub77c\uc9c4\ub2e4)
   if (+req.rcRetry === 1 && st.recoKey) { st.recoKey = ''; st.recoAt = 0; }      // s258: \ucd94\ucc9c\uc744 \ubcf4\ub0b4\uc9c0 \ubabb\ud588\uc73c\uba74(\ud1b5\uc2e0 \uc2e4\ud328) \ucc3d\uc774 \uc5f4\ub824 \uc788\ub294 \ub3d9\uc548 \ub2e4\uc2dc \ud310\uc815\ud558\uac8c \u2014 \uc608\uc804\uc5d4 \ud55c \ubc88 \uc2e4\ud328\ud558\uba74 \uadf8 \uc5ec\uc815\uc5d4 \uc601\uc601 \uc548 \ub5b4\ub2e4

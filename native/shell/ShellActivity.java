@@ -4236,7 +4236,7 @@ public class ShellActivity extends Activity {
                     if (resumed && !isFinishing()) {
                         try {
                             android.app.AlertDialog.Builder ab = new android.app.AlertDialog.Builder(ShellActivity.this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle(title).setMessage(text).setCancelable(true);
-                            if (ad != null && ad.a.length() > 0) ab.setPositiveButton(ad.go.length() > 0 ? ad.go : "보기", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface di, int w) { go.run(); } });
+                            if (ad != null && ad.a.length() > 0 && ad.go.length() > 0) ab.setPositiveButton(ad.go, new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface di, int w) { go.run(); } });
                             ab.setNegativeButton("확인", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface di, int w) { no.run(); } });
                             ab.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) { no.run(); } });
                             ab.show();

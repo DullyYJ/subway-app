@@ -57,7 +57,17 @@ public final class RideCore {
     public boolean quit;
 
     /** 하차 추천 줄(/reco-text 의 ad) — 오버레이 [보기]가 열 곳. url 이 있으면 그 주소(쿠팡 상품), 없으면 가게 이름으로 찾는다. */
-    public static final class RecoAd { public String a = "", b = "", m = "", go = "맛집 보기", url = ""; }
+    public static final class RecoAd { public String a = "", b = "", m = "", go = "맛집 보기", url = ""; public boolean n; }      // n = 가게·상품 없이 글만 있는 추천(s295)
+    /** s295 (YJ: 알림만 오고 오버레이·앱에 안 떴다): 서버가 가게·상품(ad)을 못 골라 글만 보낸 추천도 오버레이 줄·팝업으로 보이게 글(제목·본문)에서 한 줄을 만든다. [보기] 없이 [확인]만. */
+    public static RecoAd textAd(String title, String text) {
+        String t = title == null ? "" : title.replace('\n', ' ').trim();
+        if (t.length() == 0) return null;
+        RecoAd r = new RecoAd();
+        r.a = BoardCore.s(t, 40);
+        r.b = BoardCore.s((text == null ? "" : text).replaceAll("\\s+", " ").trim(), 64);
+        r.go = ""; r.n = true;
+        return r;
+    }
     private volatile RecoAd pendingAd;                 // 엔진에 아직 못 알린 추천 줄
     private volatile RecoAd lastAd;                    // 마지막으로 받은 추천 줄([보기]가 쓴다)
     private volatile String pendingAct = "";           // 오버레이 탑승 줄 손짓(press · undo · open · close · pill) — 한 번만 보낸다
@@ -196,7 +206,7 @@ public final class RideCore {
         }
         b.append("],\"state\":").append(stateJson.length() > 0 ? stateJson : "null");
         RecoAd ad = pendingAd; adInFlight = ad;
-        if (ad != null) b.append(",\"rc\":{\"a\":").append(ShellCore.q(ad.a)).append(",\"b\":").append(ShellCore.q(ad.b)).append(",\"m\":").append(ShellCore.q(ad.m)).append(",\"go\":").append(ShellCore.q(ad.go)).append('}');
+        if (ad != null) b.append(",\"rc\":{\"a\":").append(ShellCore.q(ad.a)).append(",\"b\":").append(ShellCore.q(ad.b)).append(",\"m\":").append(ShellCore.q(ad.m)).append(",\"go\":").append(ShellCore.q(ad.go)).append(ad.n ? ",\"n\":1" : "").append('}');
         if (rcDisAny) b.append(",\"rcDis\":-1"); else if (rcDis > 0) b.append(",\"rcDis\":").append(rcDis);
         if (rcRetry) { b.append(",\"rcRetry\":1"); rcRetry = false; }
         String act = pendingAct; actInFlight = act;

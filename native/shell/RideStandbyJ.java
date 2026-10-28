@@ -389,7 +389,7 @@ final class RideStandbyJ {
             String sig = str(g(rc, "a")) + "|" + str(g(rc, "b"));
             Map<String, Object> ad = mm(st.get("rcAd"));
             if (ad == null || !sig.equals(ad.get("sig")))
-                st.put("rcAd", obj("sig", sig, "at", now, "a", clampTxt(g(rc, "a"), 40), "b", clampTxt(g(rc, "b"), 64), "m", clampTxt(g(rc, "m"), 32), "go", clampTxt(g(rc, "go"), 8).length() > 0 ? clampTxt(g(rc, "go"), 8) : "맛집 보기"));
+                st.put("rcAd", obj("sig", sig, "at", now, "a", clampTxt(g(rc, "a"), 40), "b", clampTxt(g(rc, "b"), 64), "m", clampTxt(g(rc, "m"), 32), "go", (g(rc, "n") != null && num(g(rc, "n")) > 0) ? "" : (clampTxt(g(rc, "go"), 8).length() > 0 ? clampTxt(g(rc, "go"), 8) : "맛집 보기")));
         }
         if (fin(req.get("rcDis"))) { double rd = num(req.get("rcDis")); if (rd > 0) st.put("rcDis", rd); else if (rd < 0 && mm(st.get("rcAd")) != null) st.put("rcDis", mm(st.get("rcAd")).get("at")); }      // s258: -1 = 지금 보이는 추천 줄 닫기(JS 와 같다)
         if (fin(req.get("rcRetry")) && num(req.get("rcRetry")) == 1 && truthy(st.get("recoKey"))) { st.put("recoKey", ""); st.put("recoAt", 0.0); }      // s258: 추천을 못 보냈으면 다시 판정(JS 와 같다)

@@ -56,6 +56,10 @@ function findAndroidJar() {
     assert.ok(/recoPopWait\(title, text, ad, loc, 16\)/.test(v) && /private void recoPopWait\([\s\S]{0,1600}\}, 750L\)/.test(v), 's295: 다른 창이 떠 있으면 알림으로 새지 않고 닫히길 기다렸다 띄운다(최대 12초)');
     assert.ok(/new android\.app\.AlertDialog\.Builder\(ShellActivity\.this[\s\S]{0,200}setTitle\(title\)\.setMessage\(text\)/.test(v) && /RIDE_RECO 팝업 실패/.test(v), 's295: 팝업 화면을 못 받으면 기본 확인창으로 띄우고 오류 기록에 남긴다');
     assert.ok(/RideService\.recoStage \+ \(RideService\.recoRoute\.length\(\) > 0/.test(v), 's295: 설정 상태 확인에 보낸 곳·이유가 같이 보인다');
+    const ov2 = fs.readFileSync(N('RideOverlay.java'), 'utf8');
+    assert.ok((rn.match(/if \(ad == null\) ad = RideCore\.textAd\(t\[0\], t\[1\]\);/g) || []).length === 2, 's295: 가게·상품 없는 글만 추천도 두 길(바로·받아 둔 글) 모두 추천 줄로 만들어 오버레이·팝업이 쓴다');
+    assert.ok(/row\.kind == 1 && row\.go\.length\(\) == 0\) \{ b2\.set/.test(ov2) && /if \(!b1\.isEmpty\(\)\) btn\(cv, b1, row\.go, true\)/.test(ov2), 's295: 오버레이 추천 줄 — go 가 비면 [보기] 없이 [확인]만');
+    assert.ok(/pill && v\.alert > 0 && v\.banner\.length\(\) > 0/.test(ov2) && /v\.alert == 1 \? 0xFFFF453A : 0xFFFF9F0A/.test(ov2), 's295: 알약에도 펼친 카드와 같은 경고 줄(빨강/주황)');
     assert.ok(/static boolean overlayReady\(Context c\)/.test(rs) && /RideOverlay\.allowed\(c\)/.test(rs), '오버레이를 쓸 수 있는지는 서비스가 안다');
   });
   await t('s256: 켜자마자 엔진 경로 계산을 미리 예열(/warm — 뒤 스레드 · 90초 한 번) · 경로 탐색 눌렀을 때 콜드 스타트를 기다리지 않게', () => {

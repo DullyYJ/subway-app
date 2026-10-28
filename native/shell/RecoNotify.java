@@ -41,6 +41,7 @@ final class RecoNotify {
                 String[] t = RideCore.recoText(r.body);
                 if (t == null) return false;
                 RideCore.RecoAd ad = RideCore.recoAd(r.body);
+                if (ad == null) ad = RideCore.textAd(t[0], t[1]);          // s295: 가게·상품이 없는 글만 추천도 오버레이 줄·팝업으로
                 if (core != null) core.setRecoAd(ad);
                 deliver(c, t[0], t[1], ad, core);
                 remember(c, r.body);
@@ -58,6 +59,7 @@ final class RecoNotify {
             String[] t = RideCore.freshenReco(RideCore.recoText(resp), arrMs, nowMs);
             if (t == null) return false;
             RideCore.RecoAd ad = RideCore.recoAd(resp);
+            if (ad == null) ad = RideCore.textAd(t[0], t[1]);          // s295
             if (core != null) core.setRecoAd(ad);
             deliver(c, t[0], t[1], ad, core);
             remember(c, resp);

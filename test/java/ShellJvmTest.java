@@ -1348,6 +1348,8 @@ public class ShellJvmTest {
             ok(OvCore.fromMap(ScreenCore.parse("{\"active\":true,\"line1\":\"a\",\"reco\":{\"on\":false,\"a\":\"x\"},\"getoff\":{\"on\":false}}")).row.kind == 0, "꺼진 줄은 없다");
             RideCore.RecoAd ad1 = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"shop\",\"a\":\"휴대용 선풍기\",\"b\":\"여름 필수\",\"m\":\"\"},\"shopItem\":{\"n\":\"x\",\"u\":\"https://link.coupang.com/a/abc\"}}");
             RideCore.RecoAd ad2 = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"place\",\"a\":\"맛있는집\",\"b\":\"한식\",\"m\":\"120m\"},\"shopItem\":{\"u\":\"http://evil\"}}");
+            RideCore.RecoAd adT = RideCore.textAd("🚇 하차 7분 전 · 캠퍼스타운 ☕", "하차 7분 전이에요.\n캠퍼스타운 도착 예정 07:18\n\n카푸치노");
+            ok(adT != null && adT.n && adT.go.isEmpty() && adT.a.startsWith("🚇 하차 7분 전") && adT.b.equals("하차 7분 전이에요. 캠퍼스타운 도착 예정 07:18 카푸치노") && RideCore.textAd("", "x") == null && RideCore.textAd(null, null) == null && !ad1.n, "s295: 가게·상품 없는 글만 추천도 한 줄(제목+본문)로 만든다 — [보기] 없음(go 빈 값 · n)");
             ok(ad1 != null && ad1.go.equals("쿠팡 보기") && ad1.url.equals("https://link.coupang.com/a/abc") && ad2 != null && ad2.go.equals("맛집 보기") && ad2.url.isEmpty() && RideCore.recoAd("{\"ok\":true}") == null && RideCore.recoAd("x") == null, "추천 줄(ad) 읽기: 쿠팡은 https 주소만");
             {
                 RideCore rcx = new RideCore();
