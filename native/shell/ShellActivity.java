@@ -2268,7 +2268,24 @@ public class ShellActivity extends Activity {
             @Override public void fail(boolean noperm) { cb0.fail(noperm); }
         };
         if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) { locateOnce(reqCode, cb0); return; }
-        locateNow(8000L, 1000L, 0L, cb);
+        final boolean[] done = { false };
+        locateNow(8000L, 1000L, 0L, new LocCb() {
+            @Override public void fix(Location l) { if (done[0]) return; done[0] = true; cb.fix(l); }
+            @Override public void fail(boolean noperm) { if (done[0]) return; done[0] = true; Location b = bestKnownLoc(); if (b != null) cb0.fix(b); else cb.fail(noperm); }
+        });
+        main.postDelayed(new Runnable() { @Override public void run() {                // 3초 약속: 새 위치가 1.3초 안에 안 오면 가장 최근에 아는 위치로 먼저 진행한다(늦게 온 새 위치는 위치 허브가 이어 받는다)
+            if (done[0]) return; done[0] = true;
+            Location b = bestKnownLoc(); if (b != null) cb0.fix(b); else cb.fail(false);
+        } }, LOC_BUDGET_MS);
+    }
+    private static final long LOC_BUDGET_MS = 1300L;
+    /** 새로 못 받았을 때 쓸 가장 최근의 위치(5분 안): 이어 받던 위치 → 위치 허브 → 지금 버스 탭 위치. */
+    private Location bestKnownLoc() {
+        long now = System.currentTimeMillis();
+        if (liveLoc != null && now - liveAt < 300000L) return liveLoc;
+        double[] ll = hubLL != null && now - hubAt < 300000L ? hubLL : map.busLL;
+        if (ll == null) return null;
+        Location l = new Location("known"); l.setLatitude(ll[0]); l.setLongitude(ll[1]); return l;
     }
     // ── 현재 위치(마지막으로 알려진 위치는 쓰지 않는다): 고정밀 현재 위치 + 네트워크 위치를 동시에 · 먼저 오는 것을 바로 반영 · GPS 가 더 정확하면 한 번 더. 화면이 켜져 있는 동안은 가볍게 이어 받는다.
     private LocFused locf;
@@ -2448,7 +2465,7 @@ public class ShellActivity extends Activity {
         // s174: 처음 그릴 때는 '정류장만 먼저(0.3초)' 요청과 '서버가 도착정보까지 한 번에(최대 3.5초 · 보통 1초)' 요청을 동시에 보낸다 — 정류장은 바로 뜨고, 도착정보는 기기가 정류장마다 따로 받는 것보다 훨씬 빨리 온 완성 화면으로 바뀐다. 전체 요청이 실패하면 예전처럼 기기가 이어 받는다.
         final boolean dual = round == 0 && wtxt.length() == 0 && "bus".equals(modeNow) && !busRefreshing;
         String jf = "";
-        if (dual) { map.svb = 3500; jf = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store)); map.svb = 300; }
+        if (dual) { map.svb = 2200; jf = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store)); map.svb = 300; }
         final String jsonFull = jf;
         final boolean[] st = new boolean[3];                                                      // 0: 정류장만 화면을 그렸다 · 1: 전체 요청이 끝났다 · 2: 전체 요청이 성공했다
         new Thread(new Runnable() {
@@ -2468,7 +2485,7 @@ public class ShellActivity extends Activity {
         }, "shell-mapb").start();
         if (dual) new Thread(new Runnable() {
             @Override public void run() {
-                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", jsonFull, 12000);
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", jsonFull, 5000);          // 3초 약속: 서버 대기 2.2초 + 이동 — 못 오면 기기가 정류장별로 이어 받아 먼저 온 곳부터 그린다
                 final String txt = r.status == 200 && r.body != null ? r.body : ""; warm(txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;

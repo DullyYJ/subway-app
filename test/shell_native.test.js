@@ -631,7 +631,7 @@ function findAndroidJar() {
   });
   await t('s174: 처음 그릴 때 정류장만(0.3초)·전체(서버가 도착정보까지) 두 요청을 동시에 · 늦은 정류장만 화면은 버린다 · 전체가 실패하면 예전처럼', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
-    assert.ok(/final boolean dual = round == 0 && wtxt\.length\(\) == 0 && "bus"\.equals\(modeNow\) && !busRefreshing/.test(a) && /map\.svb = 3500; jf = map\.bodyRequest/.test(a) && /"shell-mapfull"/.test(a), '동시에 두 요청(전체는 svb 3500)');
+    assert.ok(/final boolean dual = round == 0 && wtxt\.length\(\) == 0 && "bus"\.equals\(modeNow\) && !busRefreshing/.test(a) && /map\.svb = 2200; jf = map\.bodyRequest/.test(a) && /"shell-mapfull"/.test(a), '동시에 두 요청(전체는 svb 2200 — s283 3초 약속)');
     assert.ok(/if \(dual && st\[2\]\) return;/.test(a) && /mapBodyApply\(v, keep \|\| st\[0\], round, my, txt, false\)/.test(a) && /if \(st\[0\] && !map\.busNeed\.isEmpty\(\)\) fetchBusNeed/.test(a), '늦은 정류장만 화면 버림 · 전체 성공이면 그 화면 · 실패면 기기가 이어 받는다');
     assert.ok(/private void mapBodyApply\(/.test(a) && /if \(deferNeed\) return;/.test(a) && /NetPost\.get\(ShellCore\.BASE \+ "\/health"/.test(a), '응답 반영 분리 · 엔진 연결도 미리');
     assert.ok(/ALT_GATE = new java\.util\.concurrent\.Semaphore\(4\)/.test(np) && /isAlt \? ALT_GATE : BUS_GATE/.test(np), '두 번째 길은 줄을 따로(8곳 동시)');
@@ -790,7 +790,8 @@ function findAndroidJar() {
   });
   await t('s283: 버스 새로고침(당기기 · 🔄 · 📍)은 방금 받은 위치를 쓰지 않고 현재 위치를 다시 확인 · 정류장 목록도 새로 · 즐겨찾기 새로고침도 위치 재확인', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), m = fs.readFileSync(N('MapCore.java'), 'utf8');
-    assert.ok(/private void locateFresh\(/.test(a) && /locateNow\(8000L, 1000L, 0L, cb\)/.test(a) && /locateFresh\(REQ_MAP_LOC, new LocCb\(\) \{[\s\S]{0,160}map\.setBusLocFresh\(/.test(a), '주변 새로고침: 지금 위치를 다시 받아 정류장 목록까지 새로');
+    assert.ok(/private void locateFresh\(/.test(a) && /locateNow\(8000L, 1000L, 0L, new LocCb\(\)/.test(a) && /locateFresh\(REQ_MAP_LOC, new LocCb\(\) \{[\s\S]{0,160}map\.setBusLocFresh\(/.test(a), '주변 새로고침: 지금 위치를 다시 받는다(1.3초 안에 안 오면 아는 위치로)');
+    assert.ok(/LOC_BUDGET_MS = 1300L/.test(a) && /private Location bestKnownLoc\(\)/.test(a) && /map\.svb = 2200; jf =/.test(a) && /jsonFull, 5000\)/.test(a), 's283b: 위치는 1.3초 안에 안 오면 아는 위치로 진행 · 서버 도착정보 대기 2.2초 · 전체 요청 5초(3초 약속)');
     assert.ok(/map\.takeRefLoc\(\) && hasLocPerm\(\)/.test(a) && /public void setBusLocFresh\(/.test(m) && /refLoc = true; return R_BUS_REF/.test(m), '즐겨찾기 새로고침도 위치를 다시 확인(옮겼으면 주변 정류장 갱신)');
   });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
