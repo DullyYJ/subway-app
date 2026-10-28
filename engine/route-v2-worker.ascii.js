@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-28s281";
+var ENGINE_VERSION = "route-v2-2026-10-28s284";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -21710,7 +21710,7 @@ var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
 var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
 var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
 var MAP_STOP_DUP_M = 3;
-var MAP_NEAR_R = 300, MAP_NEAR_CAP = 40;                          // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c 300m \uc774\ub0b4\ub9cc(\ucd5c\ub300 40\uacf3) \u2014 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4(\uc5c6\uc73c\uba74 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694')
+var MAP_NEAR_R = 300, MAP_NEAR_CAP = 8;                           // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c 300m \uc774\ub0b4\ub9cc(\uac00\uae4c\uc6b4 \uc21c \ucd5c\ub300 8\uacf3 \u2014 s284: \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294 \uacf3\uc774 \uc801\uc744\uc218\ub85d \ube68\ub9ac \u00b7 \ub35c \ube44\uac8c) \u2014 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4(\uc5c6\uc73c\uba74 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694')
 var MAP_Q = 1000, MAP_QR = 450;                                    // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
 function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
@@ -21834,7 +21834,7 @@ function mapDedupStops(stops) {
   });
   return out;
 }
-function mapStopOrder(stops) {                       // \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c \ubc18\uacbd 300m \uc774\ub0b4\ub9cc(\uc5ed \ucd9c\uad6c\ub3c4 300m \u2014 \uc608\uc678 \uc5c6\uc74c \u00b7 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4) \u00b7 \uc5ed \ucd9c\uad6c \uba3c\uc800 \u00b7 \uac00\uae4c\uc6b4 \uc21c \u00b7 \ucd5c\ub300 40\uacf3
+function mapStopOrder(stops) {                       // \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c \ubc18\uacbd 300m \uc774\ub0b4\ub9cc(\uc5ed \ucd9c\uad6c\ub3c4 300m \u2014 \uc608\uc678 \uc5c6\uc74c \u00b7 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4) \u00b7 \uc5ed \ucd9c\uad6c \uba3c\uc800 \u00b7 \uac00\uae4c\uc6b4 \uc21c \u00b7 \ucd5c\ub300 8\uacf3
   var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
   stops.forEach(function (s) {
     if (!isFinite(s.dist) || s.dist > MAP_NEAR_R) return;

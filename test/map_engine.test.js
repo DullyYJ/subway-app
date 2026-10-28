@@ -522,15 +522,16 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const cards = mm.body.filter(n => n.t === 'bcard'), r0 = cards[0].rows.find(r => r.act);
     ok(r0 && /^br\.0\.\d+$/.test(r0.act.v) && cards[0].rows.every(r => !r.act || mm.info.rts[0][Number(r.act.v.split('.')[2])][0].length > 0) && mm.info.rts[0].length === cards[0].rows.length, '도착정보 줄을 누르면 노선 상세(br.<정류장>.<줄>) · 노선 id 는 info.rts');
   }
-  // s148→s172: 지금 위치에서 반경 300m 안만(최대 40곳) · 300m 밖은 넣지 않는다 · 같은 열쇠/같은 이름 3m 안만 한 곳
+  // s148→s172→s284: 지금 위치에서 반경 300m 안만(가까운 순 최대 8곳) · 300m 밖은 넣지 않는다 · 같은 열쇠/같은 이름 3m 안만 한 곳
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
   for (let i = 0; i < 6; i++) many.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' });
   const ord = E.mapStopOrder(many);
-  ok(ord.length === 15 && ord.slice(0, 9).every(x => /출구/.test(x.nm)) && ord[9].nm === '일반0', '300m 안은 전부(출구도 300m), 출구가 먼저');
+  ok(ord.length === 8 && ord.every(x => /출구/.test(x.nm)) && ord[0].nm === '아라역1번 출구', 's284: 300m 안 15곳 중 8곳만 — 출구가 먼저, 가까운 순');
+  { const few = []; for (let i = 0; i < 5; i++) few.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' }); few.push({ nm: '아라역1번 출구', la: 37.5, lo: 127, dist: 120, src: 'tago' }); const o2 = E.mapStopOrder(few); ok(o2.length === 6 && /출구/.test(o2[0].nm), 's284: 8곳보다 적으면 있는 만큼'); }
   {
     const mkS = (n, d, nm) => ({ nm: nm || ('정류장' + n), id: 'T' + n, la: 37.5 + n * 1e-5, lo: 127, dist: d, src: 'tago' });
     const big = []; for (let i = 0; i < 55; i++) big.push(mkS(i, 10 + i * 5));                               // 10m … 280m — 55곳 모두 300m 안
-    ok(E.mapStopOrder(big).length === 40, '300m 안이 아무리 많아도 40곳까지');
+    ok(E.mapStopOrder(big).length === 8 && E.mapStopOrder(big)[0].id === 'T0' && E.mapStopOrder(big)[7].id === 'T7', 's284: 300m 안이 아무리 많아도 가까운 8곳까지');
     const mix = [mkS(1, 250), mkS(2, 299), mkS(3, 301), mkS(4, 900)];
     ok(E.mapStopOrder(mix).map(s => s.id).join() === 'T1,T2', '300m 밖은 안에 있는 것이 있으면 뺀다(299m 는 포함 · 301m 는 제외)');
     const none = [mkS(1, 420), mkS(2, 380), mkS(3, 700), mkS(4, 520), mkS(5, 900)];
