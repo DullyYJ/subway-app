@@ -62,7 +62,7 @@ function chtFacts(f) {
   if (sel !== 'all' && CHT_KNOWN.indexOf(sel) < 0) sel = 'all';
   var mine = [];
   if (Array.isArray(f.mine)) f.mine.forEach(function (l) { if (CHT_KNOWN.indexOf(l) >= 0 && mine.indexOf(l) < 0 && mine.length < 8) mine.push(l); });
-  else mine = chtMineLines(f.sec, f.my);                      // 앱은 지금 경로의 지하철 구간 이름(sec)과 탄 기록(my)만 준다 — 앞에 둘 노선은 엔진이 정한다
+  else mine = chtMineLines(f.sec, f.my, f.ride);                      // 앱은 지금 경로의 지하철 구간 이름(sec)과 탄 기록(my)만 준다 — 앞에 둘 노선은 엔진이 정한다
   var lc = {};
   if (f.lc && typeof f.lc === 'object') CHT_KNOWN.forEach(function (l) { var c = chtCssColor(f.lc[l]); if (c) lc[l] = c; });
   var th = f.th === 'pastel' ? 'pastel' : 'dark';
@@ -71,21 +71,43 @@ function chtFacts(f) {
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
   return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
 }
-// 지금 경로의 지하철 노선(웹 _routeSubLines)과 탄 기록(웹 _myLinesList): 경로 순서 노선을 먼저, 그다음 자주 탄 순. 최대 8개.
-//   sec = 경로의 지하철 구간 이름들, my = [{l, n(탄 횟수), t(마지막 시각)}…]
-function chtMineLines(sec, my) {
+// 지금 경로의 지하철 노선(웹 _routeSubLines): 경로 순서 노선만 앞에 둔다(최대 8개). 경로가 없으면 빈 목록 = 호선 순서 원래대로.
+//   sec = 경로의 지하철 구간 이름들, my = 탄 기록(칩 순서에는 더 쓰지 않는다 — 글 붙일 노선(info.pl)만 쓴다)
+//   ride = 탑승 안내 중이면 { here(지금 노드 번호), nodes:[{isSub, lineName}…] } — 이미 지나온 노선은 빼고 '지금 타는 노선부터 남은 노선'만 앞에 둔다
+//          (1호선→2호선→3호선 경로: 1호선 타는 동안 1·2·3 · 2호선으로 갈아타면 2·3 · 3호선이면 3). 안내가 끝나 경로가 없으면 sec 도 비어 와서 원래 순서로 돌아간다.
+function chtLineHit(raw) {
+  var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
+  if (!nm) return '';
+  var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
+  if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+  return hit;
+}
+function chtRideLines(ride) {
+  if (!ride || typeof ride !== 'object' || !Array.isArray(ride.nodes)) return null;
+  var here = Math.floor(Number(ride.here)), out = [];
+  if (!isFinite(here) || here < 1) here = 1;
+  ride.nodes.slice(0, 80).forEach(function (n, i) {
+    if (i < here || !n || typeof n !== 'object' || !n.isSub) return;
+    var h = chtLineHit(n.lineName);
+    if (h && out.indexOf(h) < 0) out.push(h);
+  });
+  return out.length ? out : null;
+}
+function chtMineLines(sec, my, ride) {
   var cur = [];
   if (Array.isArray(sec)) sec.forEach(function (raw) {
-    var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
-    if (!nm) return;
-    var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
-    if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+    var hit = chtLineHit(raw);
     if (hit && cur.indexOf(hit) < 0) cur.push(hit);
   });
-  var st = [];
-  if (Array.isArray(my)) st = my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
+  var rl = cur.length ? chtRideLines(ride) : null;        // 경로가 없으면 탑승 정보도 쓰지 않는다
+  if (rl) cur = rl;
+  return cur.slice(0, 8);                                  // s318(YJ): 탄 기록(my)으로 앞에 붙잡아 두지 않는다 — 경로가 끝나면 호선 순서는 원래대로
+}
+// 탄 기록(웹 _myLinesList): 자주 탄 순 — 글을 붙일 기본 노선(info.pl)을 정할 때만 쓴다
+function chtMyOrder(my) {
+  if (!Array.isArray(my)) return [];
+  return my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
     .sort(function (x, y) { return ((y.n || 0) - (x.n || 0)) || ((y.t || 0) - (x.t || 0)); }).map(function (x) { return x.l; });
-  return cur.concat(st.filter(function (l) { return cur.indexOf(l) < 0; })).slice(0, 8);
 }
 // 칩 순서(웹 _chatItems): 전체 → 내가 탄 노선 → 나머지 호선. 목록 밖 노선(알림 등으로 연 방)이면 맨 뒤에 붙인다.
 function chtItems(f) {
@@ -197,7 +219,7 @@ function chatScreen(inp, factsIn, dataIn) {
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // 웹 .chat-inputbar: 입력 37 + 파란 동그라미 ➤ 38 · 위 1px 줄 + 위아래 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '' } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
   if (chips.length > 1 && ci >= 0) {                                       // t = 칸마다의 다음·이전(다음 화면이 오기 전에도 이어 넘긴다) · k = 이 화면의 칸
     var cn = chips.length, ct = {};
@@ -227,4 +249,4 @@ function chatScreens(inp, factsIn, dataIn, altsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { chtLineNick: chtLineNick, CHT_PERSONAS: CHT_PERSONAS, chtMineLines: chtMineLines, chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };
+if (typeof module !== 'undefined' && module.exports) module.exports = { chtLineNick: chtLineNick, CHT_PERSONAS: CHT_PERSONAS, chtMineLines: chtMineLines, chtMyOrder: chtMyOrder, chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };

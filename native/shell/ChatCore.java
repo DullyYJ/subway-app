@@ -17,6 +17,9 @@ public final class ChatCore {
     private final ShellCore.Store st;
     /** 지금 경로의 지하철 구간 이름들(엔진이 노선으로 바꿔 앞에 둔다). */
     public List<String> routeSec = new ArrayList<String>();
+    /** 탑승 안내 중이면 탑승 서비스의 장면 재료 { here, boarded, nodes[{name,isSub,isBus,lineName}] }(RideCore.sceneJson) — 지금 타는 노선부터 남은 노선만 칩 줄 앞에 두는 재료(엔진이 정한다). 안내 중이 아니면 빈 글. 앱 전체가 하나라 정적으로 둔다. */
+    public static volatile String liveRide = "";
+    private static String rideFact() { String r = liveRide; return r != null && r.length() > 2 && r.charAt(0) == '{' ? ",\"ride\":" + r : ""; }
     public boolean failed = false, loaded = false;
     long sinceG = 0, nowG = 0;                                        // 전체: 마지막 글 시각 · 서버가 알려 준 지금(롱폴의 기준 — 글이 없는 방도 기다릴 수 있게)
     final Map<String, Long> sinceR = new LinkedHashMap<String, Long>();
@@ -114,6 +117,7 @@ public final class ChatCore {
     private String fdFor(String sel, boolean live, String theme, int tzoMin, String me, boolean withG) {
         StringBuilder b = new StringBuilder("\"f\":{\"sel\":").append(ShellCore.q(sel));
         b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
+        b.append(rideFact());
         b.append(",\"my\":").append(st.get(K_MY, "[]"));
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         boolean have = "all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel);          // 이 방의 글을 받아 둔 적이 있나 — 준비됨은 '이 방' 기준이다(다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않게 · s289)
@@ -175,6 +179,7 @@ public final class ChatCore {
     private String factsFor(String sel, String theme, int tzoMin, String me) {
         StringBuilder b = new StringBuilder("{\"sel\":").append(ShellCore.q(sel));
         b.append(",\"sec\":").append(HomeSearchCore.toJson(new ArrayList<Object>(routeSec)));
+        b.append(rideFact());
         b.append(",\"my\":").append(st.get(K_MY, "[]"));
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         b.append(",\"st\":\"loading\",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append('}');

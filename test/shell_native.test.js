@@ -594,7 +594,7 @@ function findAndroidJar() {
         const rf2 = a.slice(a.indexOf('private void rerouteFromHere()'), a.indexOf('// ───────────── 도보 안내 시트'));
         assert.ok(/locateNow\(/.test(rf2) && /home\.setGpsStart\(l\.getLatitude\(\), l\.getLongitude\(\), hc\.dongNow\(\)\)/.test(rf2) && /RideService\.stop\(ShellActivity\.this\)/.test(rf2) && /goRoute\(\);/.test(rf2) && !/startRide\(/.test(rf2), '지금 위치를 출발지로 새로 찾는다(자동 확정은 안 한다)');
         assert.ok(/fail\(boolean noperm\) \{ if \(!once\[0\]\) toast\(/.test(rf2), '위치를 못 잡으면 안내를 그대로 둔다');
-        assert.ok(/rsApply = new Runnable\(\) \{ @Override public void run\(\) \{ rerouteAsk\(\);/.test(a) && /rerouteAsk\(\); \}\s*\}, 1500L\)/.test(a) && /home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) reloadHome\(\);\s*rerouteAsk\(\);/.test(a), '서비스가 알릴 때 · 앱을 다시 열 때 · 홈 5초 틱에서 확인');
+        assert.ok(/rsApply = new Runnable\(\) \{ @Override public void run\(\) \{ rerouteAsk\(\);/.test(a) && /rerouteAsk\(\); \}\s*\}, 1500L\)/.test(a) && /home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) \{ chatRouteSync\(\); reloadHome\(\); \}\s*rerouteAsk\(\);/.test(a), '서비스가 알릴 때 · 앱을 다시 열 때 · 홈 5초 틱에서 확인');
     }
     assert.ok(/private void ovlAuto\(\)/.test(a) && /RideOverlay\.allowed\(this\) && store\.get\(ShellCore\.K_OVL, ""\)\.length\(\) == 0\) store\.put\(ShellCore\.K_OVL, "1"\)/.test(a) && /ovlAuto\(\); if \(home\.riding\(\)/.test(a), '허용만 해 둔 기기는 오버레이를 켠 것으로');
     assert.ok(/private void prefetchIfCold\(\)/.test(a) && /prefetchIfCold\(\); \} \}, 1500L\)/.test(a), '캐시에 없는 탭이 있으면 미리 받기를 다시');
@@ -986,6 +986,12 @@ function findAndroidJar() {
       const mm = fs.readFileSync(N('MetroMapView.java'), 'utf8'), aa = fs.readFileSync(N('ShellActivity.java'), 'utf8');
       assert.ok(/void onEdgeSwipe\(int dir\);/.test(mm) && /cam\.panByLeftoverX\(/.test(mm) && /MetroCamera\.edgeSwipe\(edgeOver, edgeOverY, edgeThr\(\)\)/.test(mm) && /listener\.onEdgeSwipe\(ed\)/.test(mm) && /getTranslationX\(\)/.test(mm), 's318: 노선도가 가로로 더 못 가는 끝에서 더 밀면 onEdgeSwipe');
       assert.ok(/onEdgeSwipe\(int dir\) \{ if \("map"\.equals\(ShellCore\.currentTab\(store\)\) && "metro"\.equals\(map\.view\)\) commSwipe\(dir\); \}/.test(aa), 's318: 끝 밀기는 엔진의 sw 표대로 버스 탭으로(commSwipe)');
+    }
+    {
+      const aa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cc = fs.readFileSync(N('ChatCore.java'), 'utf8');
+      assert.ok(/public static volatile String liveRide = ""/.test(cc) && (cc.match(/b\.append\(rideFact\(\)\)/g) || []).length === 2, 's318: 칩 줄 요청에 탑승 장면 재료(ride)를 싣는다');
+      assert.ok(/private void chatRouteSync\(boolean redraw\)/.test(aa) && /chat\.routeSec = sec; ChatCore\.liveRide = live;/.test(aa) && /boolean has = home\.hasRoute\(\);/.test(aa) && /String live = has && home\.riding\(\) && RideService\.running/.test(aa) && /private void chatDropShown\(\)/.test(aa), 's318: 경로가 없으면 경로 노선 · 탑승 위치를 비운다(호선 순서 원복) · 노선이 바뀌면 옛 칩 줄 화면을 버린다');
+      assert.ok((aa.match(/home\.clearRoute\(\); chatRouteSync\(\);/g) || []).length === 3 && /home\.endJourney\(\); chatRouteSync\(\);/.test(aa) && /home\.onResult\(rsf\); chatRouteSync\(\);/.test(aa) && /if \(home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) \{ chatRouteSync\(\); reloadHome\(\); \}/.test(aa) && /chatRouteSync\(false\);\n        final Latest\.Token my = chatLatest\.begin\(\);/.test(aa), 's318: 경로 종료 · 새로 찾기 · 결과 · 탑승 위치 바뀜 · 소통방 열 때마다 맞춘다');
     }
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);

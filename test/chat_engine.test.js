@@ -199,12 +199,27 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
 {
   const ml = E.chtMineLines;
   ok(JSON.stringify(ml(['수도권1호선', '수도권 2호선', '신분당선', '수도권1호선'], [])) === JSON.stringify(['1호선', '2호선', '신분당선']), '경로 노선: 이름 속 노선을 찾고 순서대로 · 중복 한 번');
-  ok(JSON.stringify(ml(['2호선'], [{ l: '1호선', n: 5, t: 1 }, { l: '9호선', n: 5, t: 9 }, { l: '2호선', n: 9, t: 1 }, { l: '없는선', n: 99, t: 1 }])) === JSON.stringify(['2호선', '9호선', '1호선']), '경로 노선이 앞 · 그다음 많이 탄 순(동률은 최근) · 모르는 노선 제외');
+  ok(JSON.stringify(ml(['2호선'], [{ l: '1호선', n: 5, t: 1 }, { l: '9호선', n: 5, t: 9 }, { l: '2호선', n: 9, t: 1 }])) === JSON.stringify(['2호선']), 's318: 탄 기록은 칩 순서에 끼지 않는다(경로가 끝나면 호선 순서 원래대로)');
   ok(ml(null, null).length === 0 && ml(['x'], 'zz').length === 0, '엉터리 입력은 빈 목록');
-  ok(JSON.stringify(ml([], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => ({ l: i + '호선', n: i, t: 0 }))).length) === '8', '최대 8개');
+  ok(ml(['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '신분당선'], []).length === 8, '최대 8개');
   const o = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', sec: ['수도권 4호선'], my: [{ l: '2호선', n: 3, t: 1 }], th: 'pastel' }, {});
   const chips = o.head.find(n => n.t === 'chips').items;
-  ok(chips[1].label === '📍 4호선' && chips[2].label === '📍 2호선' && /^#/.test(chips[1].c), '칩: 지금 경로 노선이 앞 · 노선 색 기본값 ' + chips[1].c);
+  ok(chips[1].label === '📍 4호선' && chips[2].label === '1호선' && /^#/.test(chips[1].c), '칩: 지금 경로 노선만 앞 · 탄 기록은 앞에 두지 않는다 · 노선 색 기본값 ' + chips[1].c);
+  {                                                                // s318: 탑승 중 지금 타는 노선부터 남은 노선만 앞에 · 끝나면 원래 순서
+    const nodes = [{ isOrigin: true }, { isSub: true, lineName: '1호선', name: 'a' }, { isSub: true, lineName: '1호선', name: 'b' }, { isSub: true, lineName: '2호선', name: 'c' }, { isSub: true, lineName: '2호선', name: 'd' }, { isSub: true, lineName: '3호선', name: 'e' }, { isSub: true, lineName: '3호선', name: 'f' }];
+    const sec = ['수도권1호선', '수도권2호선', '수도권3호선'], R = h => ({ here: h, boarded: true, nodes });
+    const j = x => JSON.stringify(x);
+    ok(j(ml(sec, [], R(1))) === j(['1호선', '2호선', '3호선']) && j(ml(sec, [], R(2))) === j(['1호선', '2호선', '3호선']), '1호선 타는 동안 1·2·3호선');
+    ok(j(ml(sec, [], R(3))) === j(['2호선', '3호선']) && j(ml(sec, [], R(4))) === j(['2호선', '3호선']), '2호선으로 갈아타면 2·3호선');
+    ok(j(ml(sec, [], R(5))) === j(['3호선']) && j(ml(sec, [], R(6))) === j(['3호선']), '3호선이면 3호선만');
+    ok(j(ml(sec, [], R(0))) === j(['1호선', '2호선', '3호선']) && j(ml(sec, [], { here: 'x', nodes })) === j(['1호선', '2호선', '3호선']), '타기 전(0)·엉터리 here 는 전부');
+    ok(j(ml([], [], R(5))) === '[]' && j(ml(null, [], R(5))) === '[]', '경로가 없으면(안내 종료) 탑승 정보가 와도 비어 — 원래 호선 순서');
+    ok(j(ml(sec, [], { here: 3, nodes: 'zz' })) === j(['1호선', '2호선', '3호선']) && j(ml(sec, [], { here: 99, nodes })) === j(['1호선', '2호선', '3호선']), '엉터리 탑승 정보는 경로 순서 그대로');
+    const items = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', sec, ride: R(5), th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.map(x => x.label);
+    ok(items[1] === '📍 3호선' && items[2] === '1호선' && items.indexOf('📍 2호선') < 0, '칩 줄: 3호선만 앞 · 나머지는 원래 순서(' + items.slice(0, 5).join(',') + ')');
+    const none = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', sec: [], ride: R(5), my: [{ l: '인천1호선', n: 9, t: 1 }], th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.map(x => x.label);
+    ok(none[1] === '1호선' && none.every(x => x.indexOf('📍') < 0), '경로 종료 뒤: 앞에 붙은 호선이 없다(탄 기록이 있어도)');
+  }
   ok(o.info.pl === '2호선', '글을 붙일 노선은 많이 탄 노선(경로와 무관)');
   const dk = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'dark' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;
   const pa = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;

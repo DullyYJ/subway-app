@@ -366,7 +366,7 @@ public class ShellActivity extends Activity {
                     closeSheet();
                     home.setStation(HomeCore.START, rt.from.name, "", rt.from.lat, rt.from.lng);
                     home.setStation(HomeCore.DEST, rt.to.name, "", rt.to.lat, rt.to.lng);
-                    home.clearRoute();
+                    home.clearRoute(); chatRouteSync();
                     store.put(ShellCore.K_TAB, "home"); showTab("home");
                     setHomeFields();
                     goRoute();
@@ -1783,6 +1783,7 @@ public class ShellActivity extends Activity {
 
     /** 실시간소통: 이 방의 대화(전체 /talks · 노선 /lroom)와 공식 공지를 받고 엔진에 그릴 화면을 묻는다. */
     private void loadChat(final ScreenView v, final boolean keep, final boolean fetch) {
+        chatRouteSync(false);
         final Latest.Token my = chatLatest.begin();
         final String sel = chat.sel(), me = ShellCore.commId(store);
         if (fetch) { PerfLog.begin("chat.ld"); chatFetching++; }
@@ -1924,6 +1925,37 @@ public class ShellActivity extends Activity {
         pfAdd(2, new PfJob() { @Override public boolean run() throws Exception {
             return !pfChatAll(order, chatShown ? liveSel : "", theme, sec, false).isEmpty();           // 모든 방을 한꺼번에(동시 받기 + 한 번 묻기) — 지금 보는 방은 6초 주기가 받는다
         } });
+    }
+    private String chatRtSig = "", chatRtLive = "";
+    /**
+     * 실시간소통 칩 줄이 쓰는 경로 노선 · 탑승 위치를 지금 경로 상태에 맞춘다(s318, YJ).
+     * 경로가 없으면(안내 종료 · 새로 찾기) 둘 다 비운다 → 호선 순서가 원래대로. 탑승 중이면 탑승 서비스의 장면 재료를 실어 보내
+     * '지금 타는 노선부터 남은 노선'만 앞에 오게 한다(어느 노선을 앞에 둘지는 엔진이 정한다). 경로 노선이 바뀌면 옛 칩 줄로 받아 둔 소통방 화면을 버리고,
+     * 소통방이 보이는 중이면 탑승 위치가 바뀔 때마다 다시 그린다.
+     */
+    private void chatRouteSync() { chatRouteSync(true); }
+    private void chatRouteSync(boolean redraw) {
+        boolean has = home.hasRoute();
+        ArrayList<String> sec = has ? new ArrayList<String>(home.resSec) : new ArrayList<String>();
+        String live = has && home.riding() && RideService.running && RideService.liveScene != null ? RideService.liveScene : "";
+        chat.routeSec = sec; ChatCore.liveRide = live;
+        String sig = sec.toString() + (live.length() > 2 ? "|ride" : "");
+        boolean routeChanged = !sig.equals(chatRtSig);
+        boolean liveChanged = !live.equals(chatRtLive);
+        chatRtSig = sig; chatRtLive = live;
+        if (routeChanged) chatDropShown();
+        if (redraw && (routeChanged || liveChanged) && chatVisible()) reloadChat();
+    }
+    /** 옛 칩 줄로 만든 소통방 화면(메모리 · 파일)을 버린다 — 다음에 열 때 새 칩 줄로 받는다. */
+    private void chatDropShown() {
+        java.util.ArrayList<String> keys = new java.util.ArrayList<String>();
+        keys.add(ShellCore.S_CHAT + "|all");
+        for (String k : scrKeys) if (k.startsWith(ShellCore.S_CHAT + "|") && !keys.contains(k)) keys.add(k);
+        for (String sel : ChatCore.decSels(store.get(ChatCore.K_SELS, ""))) { String k = ShellCore.S_CHAT + "|" + sel; if (!keys.contains(k)) keys.add(k); }
+        for (final String k : keys) {
+            scrCache.remove(k); scrKeys.remove(k); diskPre.remove(k); diskIdx.remove(diskName(k));
+            ioExec.execute(new Runnable() { @Override public void run() { try { diskFile(k).delete(); } catch (Throwable ignored) { } } });
+        }
     }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
@@ -3813,7 +3845,7 @@ public class ShellActivity extends Activity {
                 final String fk = txt0.length() > 0 ? finKey(txt0, rs, cj) : "";
                 String finHit = fk.length() > 0 ? lruGet(finCache, fk) : null;                                   // s315: 탭을 미리 합쳐 둔 화면이 있으면 JSON 을 다시 읽고 이어 붙이지 않는다
                 if (hasRes && txt0.length() > 0) {
-                    if (rs.length() > 0) { final String rsf = rs; main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); maybePrefetchLd(); } }); }
+                    if (rs.length() > 0) { final String rsf = rs; main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chatRouteSync(); maybeFetchNotes(); maybePrefetchLd(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
                 if (finHit == null) {
@@ -4718,7 +4750,7 @@ public class ShellActivity extends Activity {
             try { RideService.start(ShellActivity.this); } catch (Throwable t) { toast("탑승 안내를 켜지 못했어요"); try { ErrLog.record(this, t, false); } catch (Throwable ignored) { } return; }
             home.rideRouteId = rid; rideSeq = seqRoute; lostN = 0;
             rideGraceUntil = System.currentTimeMillis() + 8000L;
-            home.setRide(ride.rideJson(), ride.lvJson());
+            home.setRide(ride.rideJson(), ride.lvJson()); chatRouteSync();
             final boolean inDetail = sheet != null && sheet.isShowing() && ShellCore.S_DETAIL.equals(sheetName);
             toast(HomeCore.optName(home.resTab) + " 경로로 확정했어요");                    // 웹 confirmSelectedRoute 토스트
             ovlHintOnce();
@@ -4762,7 +4794,7 @@ public class ShellActivity extends Activity {
             RideCore live = RideCore.restore(getSharedPreferences(RideService.PREFS, MODE_PRIVATE).getString(RideService.KEY_SAVED, ""), System.currentTimeMillis());
             if (live == null || !home.restoreRide(snap)) return;
             home.rideRouteId = home.routeId;
-            home.setRide(RideService.running ? RideService.liveRide : live.rideJson(), RideService.running ? RideService.liveLv : live.lvJson());
+            home.setRide(RideService.running ? RideService.liveRide : live.rideJson(), RideService.running ? RideService.liveLv : live.lvJson()); chatRouteSync();
             rideGraceUntil = System.currentTimeMillis() + 8000L;
         } catch (Throwable ignored) { }
     }
@@ -4779,7 +4811,7 @@ public class ShellActivity extends Activity {
         RideService.stop(this);
         rideGraceUntil = 0L;
         home.setRide("", "");
-        home.endJourney(); hc.share = false;                                       // s309(YJ): 안내 종료 = 여정 종료 — 도착지를 넣기 전 첫 홈 화면으로(다시 도착지를 넣을 수 있게)
+        home.endJourney(); chatRouteSync(); hc.share = false;                                       // s309(YJ): 안내 종료 = 여정 종료 — 도착지를 넣기 전 첫 홈 화면으로(다시 도착지를 넣을 수 있게)
         ldPf.clear(); ldScr.clear(); ldWant = "";
         setHomeFields();
         reloadHome();
@@ -4806,7 +4838,7 @@ public class ShellActivity extends Activity {
         if (!RideService.running && (System.currentTimeMillis() < rideGraceUntil || reviveRide())) return;       // 서비스가 막 켜지는 중 · 시스템이 서비스를 내렸으면(저장본이 살아 있는 동안) 다시 켜고 기다린다 — 확정이 풀린 것처럼 지우지 않는다
         if (!RideService.running && !("arrive".equals(RideService.endReason) || "user".equals(RideService.endReason)) && resumeLostRide()) return;       // 사용자가 끝내지도 도착하지도 않았는데 서비스가 없다 — 확정을 풀지 않고 다시 켠다
         if (RideService.running && RideService.liveRide.length() < 3) return;                                   // 서비스는 돌지만 첫 값이 아직 안 올라왔다 — 비어 있다고 확정을 지우지 않는다(끝났으면 running 이 먼저 꺼진다)
-        if (home.setRide(RideService.liveRide, RideService.liveLv)) reloadHome();
+        if (home.setRide(RideService.liveRide, RideService.liveLv)) { chatRouteSync(); reloadHome(); }
         rerouteAsk();
     }
     private int lostN = 0; private long lostAt = 0L;
@@ -4863,7 +4895,7 @@ public class ShellActivity extends Activity {
                 RideService.stop(ShellActivity.this); rideGraceUntil = 0L;                    // 사용자가 새로 찾기를 골랐다 — 지난 안내를 조용히 끝낸다(도보 안내 시트 · 토스트 없이)
                 home.setRide("", "");
                 home.setGpsStart(l.getLatitude(), l.getLongitude(), hc.dongNow());
-                home.baseMs = -1; home.clearRoute();
+                home.baseMs = -1; home.clearRoute(); chatRouteSync();
                 setHomeFields();
                 store.put(ShellCore.K_TAB, "home"); showTab("home");
                 goRoute();
@@ -5468,7 +5500,7 @@ public class ShellActivity extends Activity {
                 if (rideLocked()) break;
                 home.setStation(HomeCore.START, g.sName, g.sLine, g.sLa, g.sLo);
                 home.setStation(HomeCore.DEST, g.dName, g.dLine, g.dLa, g.dLo);
-                home.clearRoute();
+                home.clearRoute(); chatRouteSync();
                 store.put(ShellCore.K_TAB, "home"); showTab("home");
                 setHomeFields();
                 goRoute();

@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s311";
+var ENGINE_VERSION = "route-v2-2026-10-29s318";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -15417,7 +15417,7 @@ function chtFacts(f) {
   if (sel !== 'all' && CHT_KNOWN.indexOf(sel) < 0) sel = 'all';
   var mine = [];
   if (Array.isArray(f.mine)) f.mine.forEach(function (l) { if (CHT_KNOWN.indexOf(l) >= 0 && mine.indexOf(l) < 0 && mine.length < 8) mine.push(l); });
-  else mine = chtMineLines(f.sec, f.my);                      // \uc571\uc740 \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(sec)\uacfc \ud0c4 \uae30\ub85d(my)\ub9cc \uc900\ub2e4 \u2014 \uc55e\uc5d0 \ub458 \ub178\uc120\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4
+  else mine = chtMineLines(f.sec, f.my, f.ride);                      // \uc571\uc740 \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(sec)\uacfc \ud0c4 \uae30\ub85d(my)\ub9cc \uc900\ub2e4 \u2014 \uc55e\uc5d0 \ub458 \ub178\uc120\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4
   var lc = {};
   if (f.lc && typeof f.lc === 'object') CHT_KNOWN.forEach(function (l) { var c = chtCssColor(f.lc[l]); if (c) lc[l] = c; });
   var th = f.th === 'pastel' ? 'pastel' : 'dark';
@@ -15426,21 +15426,43 @@ function chtFacts(f) {
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
   return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
 }
-// \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc6f9 _routeSubLines)\uacfc \ud0c4 \uae30\ub85d(\uc6f9 _myLinesList): \uacbd\ub85c \uc21c\uc11c \ub178\uc120\uc744 \uba3c\uc800, \uadf8\ub2e4\uc74c \uc790\uc8fc \ud0c4 \uc21c. \ucd5c\ub300 8\uac1c.
-//   sec = \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984\ub4e4, my = [{l, n(\ud0c4 \ud69f\uc218), t(\ub9c8\uc9c0\ub9c9 \uc2dc\uac01)}\u2026]
-function chtMineLines(sec, my) {
+// \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc6f9 _routeSubLines): \uacbd\ub85c \uc21c\uc11c \ub178\uc120\ub9cc \uc55e\uc5d0 \ub454\ub2e4(\ucd5c\ub300 8\uac1c). \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \ube48 \ubaa9\ub85d = \ud638\uc120 \uc21c\uc11c \uc6d0\ub798\ub300\ub85c.
+//   sec = \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984\ub4e4, my = \ud0c4 \uae30\ub85d(\uce69 \uc21c\uc11c\uc5d0\ub294 \ub354 \uc4f0\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae00 \ubd99\uc77c \ub178\uc120(info.pl)\ub9cc \uc4f4\ub2e4)
+//   ride = \ud0d1\uc2b9 \uc548\ub0b4 \uc911\uc774\uba74 { here(\uc9c0\uae08 \ub178\ub4dc \ubc88\ud638), nodes:[{isSub, lineName}\u2026] } \u2014 \uc774\ubbf8 \uc9c0\ub098\uc628 \ub178\uc120\uc740 \ube7c\uace0 '\uc9c0\uae08 \ud0c0\ub294 \ub178\uc120\ubd80\ud130 \ub0a8\uc740 \ub178\uc120'\ub9cc \uc55e\uc5d0 \ub454\ub2e4
+//          (1\ud638\uc120\u21922\ud638\uc120\u21923\ud638\uc120 \uacbd\ub85c: 1\ud638\uc120 \ud0c0\ub294 \ub3d9\uc548 1\u00b72\u00b73 \u00b7 2\ud638\uc120\uc73c\ub85c \uac08\uc544\ud0c0\uba74 2\u00b73 \u00b7 3\ud638\uc120\uc774\uba74 3). \uc548\ub0b4\uac00 \ub05d\ub098 \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 sec \ub3c4 \ube44\uc5b4 \uc640\uc11c \uc6d0\ub798 \uc21c\uc11c\ub85c \ub3cc\uc544\uac04\ub2e4.
+function chtLineHit(raw) {
+  var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
+  if (!nm) return '';
+  var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
+  if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+  return hit;
+}
+function chtRideLines(ride) {
+  if (!ride || typeof ride !== 'object' || !Array.isArray(ride.nodes)) return null;
+  var here = Math.floor(Number(ride.here)), out = [];
+  if (!isFinite(here) || here < 1) here = 1;
+  ride.nodes.slice(0, 80).forEach(function (n, i) {
+    if (i < here || !n || typeof n !== 'object' || !n.isSub) return;
+    var h = chtLineHit(n.lineName);
+    if (h && out.indexOf(h) < 0) out.push(h);
+  });
+  return out.length ? out : null;
+}
+function chtMineLines(sec, my, ride) {
   var cur = [];
   if (Array.isArray(sec)) sec.forEach(function (raw) {
-    var nm = String(raw == null ? '' : raw).replace(/\s+/g, '');
-    if (!nm) return;
-    var hit = CHT_KNOWN.indexOf(nm) >= 0 ? nm : '';
-    if (!hit) CHT_KNOWN.forEach(function (k) { if (nm.indexOf(k) >= 0 && k.length > hit.length) hit = k; });
+    var hit = chtLineHit(raw);
     if (hit && cur.indexOf(hit) < 0) cur.push(hit);
   });
-  var st = [];
-  if (Array.isArray(my)) st = my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
+  var rl = cur.length ? chtRideLines(ride) : null;        // \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \ud0d1\uc2b9 \uc815\ubcf4\ub3c4 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+  if (rl) cur = rl;
+  return cur.slice(0, 8);                                  // s318(YJ): \ud0c4 \uae30\ub85d(my)\uc73c\ub85c \uc55e\uc5d0 \ubd99\uc7a1\uc544 \ub450\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uacbd\ub85c\uac00 \ub05d\ub098\uba74 \ud638\uc120 \uc21c\uc11c\ub294 \uc6d0\ub798\ub300\ub85c
+}
+// \ud0c4 \uae30\ub85d(\uc6f9 _myLinesList): \uc790\uc8fc \ud0c4 \uc21c \u2014 \uae00\uc744 \ubd99\uc77c \uae30\ubcf8 \ub178\uc120(info.pl)\uc744 \uc815\ud560 \ub54c\ub9cc \uc4f4\ub2e4
+function chtMyOrder(my) {
+  if (!Array.isArray(my)) return [];
+  return my.filter(function (x) { return x && CHT_KNOWN.indexOf(x.l) >= 0; })
     .sort(function (x, y) { return ((y.n || 0) - (x.n || 0)) || ((y.t || 0) - (x.t || 0)); }).map(function (x) { return x.l; });
-  return cur.concat(st.filter(function (l) { return cur.indexOf(l) < 0; })).slice(0, 8);
 }
 // \uce69 \uc21c\uc11c(\uc6f9 _chatItems): \uc804\uccb4 \u2192 \ub0b4\uac00 \ud0c4 \ub178\uc120 \u2192 \ub098\uba38\uc9c0 \ud638\uc120. \ubaa9\ub85d \ubc16 \ub178\uc120(\uc54c\ub9bc \ub4f1\uc73c\ub85c \uc5f0 \ubc29)\uc774\uba74 \ub9e8 \ub4a4\uc5d0 \ubd99\uc778\ub2e4.
 function chtItems(f) {
@@ -15552,7 +15574,7 @@ function chatScreen(inp, factsIn, dataIn) {
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // \uc6f9 .chat-inputbar: \uc785\ub825 37 + \ud30c\ub780 \ub3d9\uadf8\ub77c\ubbf8 \u27a4 38 \u00b7 \uc704 1px \uc904 + \uc704\uc544\ub798 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMineLines(null, f.my)[0] || '' } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '' } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
   if (chips.length > 1 && ci >= 0) {                                       // t = \uce78\ub9c8\ub2e4\uc758 \ub2e4\uc74c\u00b7\uc774\uc804(\ub2e4\uc74c \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0\ub3c4 \uc774\uc5b4 \ub118\uae34\ub2e4) \u00b7 k = \uc774 \ud654\uba74\uc758 \uce78
     var cn = chips.length, ct = {};
