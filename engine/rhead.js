@@ -551,6 +551,7 @@ function rheadTrkPoints(f) {
   return pts;
 }
 // 점 하나 → 그릴 칸 하나
+function rheadTrkKm(m) { return m >= 950 ? (Math.round(m / 100) / 10) + 'km' : (Math.max(0, Math.round(m / 10) * 10)) + 'm'; }
 function rheadTrkCells(pts, th, ea) {
   var cells = [], last = pts.length - 1, ti = 0, dots = RTRK_DOT[th] || RTRK_DOT.dark, tiN = 0;
   pts.forEach(function (pt, pi) { if (pt.type !== 'walk' || pi === 0 || pi === last) tiN++; });
@@ -676,8 +677,23 @@ function rheadTrackScreen(inp) {
     }
   }
   var cells = rheadTrkCells(pts, th, ea), w = 0;
+  // s320 (YJ: 역까지 이동을 누르면 세부경로의 버스 정류장이 사라지고 역까지 몇 km 남았는지 · 예상 시각이 나오게): 역까지 이동 중이면(lv.dt) 첫 지하철 승차역 앞 칸(버스 정류장 · 걷기)을 접고
+  //   '내 위치(남은 거리) → 역(도착 예상 시각)' 으로 보인다. 역에 닿아 이어 붙이면 lv.dt 가 없어져 원래 타임라인으로 돌아가 환승 과정이 이어진다.
+  var dtv = f.lv && f.lv.dt && typeof f.lv.dt === 'object' ? f.lv.dt : null, dtOn = false;
+  if (dtv) {
+    var fi = -1, sawOther = false;
+    pts.forEach(function (pt, pi) { if (fi >= 0 || !pt) return; if (pt.type === 'stn' && pt.sty === 1 && pt.ni === 0 && sawOther) fi = pi; else if (pt.type === 'stn' && pt.sty !== 1) sawOther = true; });
+    var dm = rheadTrkNum(dtv.d), ds = rheadTrkNum(dtv.s);
+    if (fi > 0 && cells[fi] && (dm != null || ds != null)) {
+      var dd = RTRK_DOT[th] || RTRK_DOT.dark, tcell = cells[fi];
+      var me0 = { w: RTRK_W, n: '내 위치', nc: 'text', ns: 10, nb: true, lc: '', rc: RTRK_GREY, dk: 'e', dc: dd.s, t: dm != null ? rheadTrkKm(dm) + ' 남음' : '이동 중', tc: 'gold', ts: 9, tb: true, ti: -1 };
+      tcell.lc = RTRK_GREY;
+      if (ds != null && isFinite(Number(facts.now))) { tcell.t = rheadTrkHM(Number(facts.now) + ds * 1000, facts.tz) + ' 도착'; tcell.tc = 'gold'; }
+      cells = [me0].concat(cells.slice(fi)); dtOn = true; lv = null;
+    }
+  }
   cells.forEach(function (c) { w += c.w; });
-  if (!(lv && lv.p)) {                                    // 탑승 추적이 없어도 웹처럼 '내 위치' 점을 보여 준다(출발이 내 위치면 처음 칸, 아니면 가까운 역·정류장 칸)
+  if (!dtOn && !(lv && lv.p)) {                                    // 탑승 추적이 없어도 웹처럼 '내 위치' 점을 보여 준다(출발이 내 위치면 처음 칸, 아니면 가까운 역·정류장 칸)
     var mi = rheadTrkMeCell(pts, f.me, f.ra);
     if (mi >= 0 && cells[mi] && cells[mi].ti >= 0) lv = { p: { f: cells[mi].ti, t: cells[mi].ti, r: 0, sn: 1 }, w: null, ea: ea };
   }

@@ -697,6 +697,14 @@ function findAndroidJar() {
     assert.ok(/round >= MapCore\.BUS_ROUNDS \|\| map\.needOptionalOnly\(\)/.test(a) && /round < MapCore\.BUS_ROUNDS\) fetchBusNeed\(/.test(a), '앱: 방면만 남았거나 바퀴가 끝나면 지금 화면을 그린다 · 한도까지 계속 받는다');
     assert.ok(!/round < 3\) fetchBusNeed|round < 4; round\+\+\) \{\s*NetPost\.Res (br|r) = NetPost\.post\(ShellCore\.BASE \+ "\/screen\/map", (pfMap|w)\.bodyRequest/.test(a) && (a.match(/MapCore\.BUS_ROUNDS/g) || []).length >= 5, '미리 받기 · 조용한 새로고침도 같은 한도');
   });
+  await t('s320: 경로 이탈 팝업은 엔진 카드(offroute) · 역까지 이동은 dl.bp.0 · 환승 대기 마커', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8');
+    assert.ok(/private void offAskOpen\(/.test(a) && /\\"kind\\":\\"offroute\\"/.test(a) && /ix == 0 && stn\.length\(\) > 0\) \{ RideService\.rsAct\("detour"\)/.test(a) && /ix == 1\) rerouteFromHere\(\)/.test(a) && /private void offAskLegacy\(/.test(a), '엔진 카드로 묻고 못 받으면 옛 창');
+    assert.ok(/get\("xw"\)/.test(rc) && /dtJson/.test(rc), '환승 대기 마커 · 역까지 이동 dt');
+    const sa = a, rs = fs.readFileSync(N('RideService.java'), 'utf8');
+    assert.ok(/rerouteAsk\(\); legAsk\(\);/.test(sa) && /private void legAsk\(\)/.test(sa) && /RideCore\.legBody\(/.test(sa) && /RideService\.busSwap\(HomeSearchCore\.toJson\(p\), ms\.get\(ix\)\)/.test(sa) && /bi < 2\) return/.test(sa), '중간 환승 버스: 환승 대기 때 한 번 묻고 고른 번호의 변경분을 끼운다');
+    assert.ok(/static boolean busSwap\(/.test(rs) && /liveBoardJ = core\.boardJ/.test(rs) && /pendingSwap = ""/.test(rc), '서비스 연결 · 다음 걸음에 끼움');
+  });
   await t('s200: 첫 구간이 버스면 10분 안에 오는 버스를 고르는 팝업 — 엔진이 목록·카드를 만들고 앱은 띄워서 고른 번호의 도착 시각을 시작 엔진에 돌려준다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), rc = fs.readFileSync(N('RideCore.java'), 'utf8');
     assert.ok(/\/ride\/buspick/.test(a) && /tp\.join\(5000\)/.test(a) && /startOk && pick\.length\(\) > 0\) \{ busPickAsk\(/.test(a), '시작 요청과 동시에 /ride/buspick 을 보내고 고를 것이 있을 때만 카드');

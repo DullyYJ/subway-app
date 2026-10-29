@@ -1228,6 +1228,38 @@ public class ShellJvmTest {
                     RideCore wn = new RideCore();
                     wn.onStep("{\"state\":{\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}},\"nextMs\":5000}");
                     ok(wn.lvJson().contains("\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}") && !wn.lvJson().contains("\"me\""), "내 위치를 아직 모르면 me 없이 대기만");
+                    {
+                        RideCore xr = new RideCore();
+                        xr.onStep("{\"state\":{\"xw\":{\"i\":4,\"k\":\"x\"}},\"nextMs\":5000}");
+                        ok(xr.lvJson().contains("\"wait\":{\"i\":4}"), "환승 대기 중(state.xw)이면 마커를 탑승 노드(대기 쪽)에 세운다(s320)");
+                        xr.onStep("{\"state\":{},\"nextMs\":5000}");
+                        ok(!xr.lvJson().contains("wait"), "환승 대기가 끝나면 wait 가 빠진다");
+                    }
+                    {
+                        String nodesJ = "[{\"name\":\"A\",\"isOrigin\":true},{\"name\":\"S1\",\"isSub\":true,\"lineName\":\"1\"},{\"name\":\"B1\",\"isBus\":true,\"lineName\":\"931\"},{\"name\":\"B2\",\"isBus\":true,\"lineName\":\"931\"},{\"name\":\"B3\",\"isBus\":true,\"lineName\":\"931\"}]";
+                        String stJ = "{\"eta\":{\"nodes\":" + nodesJ + "},\"stops\":[{\"i\":4,\"lat\":37.5,\"lng\":127.0}],\"cfg\":{\"targets\":[{\"nodeIdx\":1,\"name\":\"S1\",\"nextLine\":\"931\"},{\"nodeIdx\":4,\"name\":\"B3\"}],\"bl\":{\"kind\":\"bus\",\"i\":2}},\"bl\":{\"ms\":5,\"askAt\":9}}";
+                        RideCore br = new RideCore();
+                        br.onStep("{\"state\":" + stJ + ",\"nextMs\":5000}");
+                        ok(br.boardI == -1, "환승 대기가 아니면 다음 버스 승차 노드 없음");
+                        br.onStep("{\"state\":" + stJ.substring(0, stJ.length() - 1) + ",\"xw\":{\"i\":2,\"mode\":\"bus\"}},\"nextMs\":5000}");
+                        ok(br.boardI == 2 && br.boardJ == 0, "환승 대기(버스) 중이면 승차 노드 2 · 첫 버스 구간(s320)");
+                        br.onStep("{\"state\":" + stJ.substring(0, stJ.length() - 1) + ",\"xw\":{\"i\":2,\"mode\":\"sub\"}},\"nextMs\":5000}");
+                        ok(br.boardI == -1, "환승 대기가 지하철이면 묻지 않는다");
+                        String out = RideCore.applySwap(stJ, "{\"bl\":{\"kind\":\"bus\",\"i\":2,\"no\":\"932\",\"pickMs\":777},\"nodes\":[{\"i\":2,\"lineName\":\"932\"},{\"i\":3,\"lineName\":\"932\"},{\"i\":4,\"lineName\":\"932\",\"name\":\"새출구\"}],\"stops\":[{\"i\":4,\"lat\":37.6,\"lng\":127.1}],\"targets\":[{\"nodeIdx\":4,\"name\":\"새출구\"},{\"nodeIdx\":1,\"nextLine\":\"932\"}]}");
+                        ok(out.contains("\"pickMs\":777") && out.contains("\"no\":\"932\"") && out.contains("새출구") && out.contains("\"lat\":37.6") && out.contains("\"nextLine\":\"932\"") && !out.contains("\"lineName\":\"931\"") && out.contains("\"askAt\":9") && !out.contains("\"ms\":5,"), "고른 번호의 변경분이 상태에 끼워진다(번호 · 하차 정류장 · 좌표 · 환승 대상 · 따라갈 차) — 옛 따라간 차 기록은 버린다");
+                        ok(RideCore.applySwap("{}", "{\"bl\":{}}").equals("{}") && RideCore.applySwap("zz", "{}").equals("zz"), "맞지 않는 상태 · 변경분은 그대로 둔다");
+                        RideCore sw = new RideCore();
+                        sw.onStart("{\"ok\":true,\"v\":1,\"state\":" + stJ + ",\"text\":\"t\"}");
+                        ok(sw.busSwap("{\"bl\":{\"i\":2},\"nodes\":[]}", 99L) && sw.swapPending() && sw.stepBody(1L).contains("\"pickMs\":99") && !sw.swapPending(), "다음 걸음을 보낼 때 끼우고 대기열을 비운다");
+                        ok(RideCore.legBody(18, "{\"a\":1}", 1, "[\"\",\"12:01\"]", 5L).equals("{\"cap\":18,\"r\":{\"a\":1,\"leg\":1,\"now\":5,\"arr\":[\"\",\"12:01\"]}}"), "중간 버스 질문 본문");
+                    }
+                    {
+                        RideCore dr = new RideCore();
+                        dr.onStep("{\"state\":{},\"dt\":{\"n\":\"부평\",\"d\":4200,\"s\":720,\"a\":0},\"nextMs\":5000}");
+                        ok(dr.lvJson().contains("\"dt\":{") && dr.lvJson().contains("\"d\":4200") && dr.dtOn, "역까지 이동 중이면 내 위치 JSON 에 dt(남은 거리 · 예상 초)가 실린다(s320)");
+                        dr.onStep("{\"state\":{},\"nextMs\":5000}");
+                        ok(!dr.lvJson().contains("\"dt\"") && !dr.dtOn, "역에 닿아 이어 붙이면 dt 가 빠진다");
+                    }
                 }
                 {
                     String[] fr = RideCore.freshenReco(new String[] { "🚉 하차 7분 전 · 부평 ☕", "하차 7분 전이에요.\n부평 도착 예정 07:30\n\n카푸치노" }, 1760000000000L, 1760000000000L - 120000L);

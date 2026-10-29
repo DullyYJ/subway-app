@@ -174,7 +174,9 @@ function resLiveFacts(r) {
     if (wd === null && Array.isArray(wt.me) && wt.me.length >= 2 && wt.lat != null && wt.lng != null && isFinite(Number(wt.lat)) && isFinite(Number(wt.lng)) && isFinite(Number(wt.me[0])) && isFinite(Number(wt.me[1]))) wd = Math.round(resMeters(Number(wt.me[0]), Number(wt.me[1]), Number(wt.lat), Number(wt.lng)));     // s271: 탑승 지점까지 거리는 엔진이 잰다(앱은 내 위치 좌표만 보낸다)
     w = { d: wd };
   }
-  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null };
+  var dt = null, dq = (L.dt && typeof L.dt === 'object') ? L.dt : null;                  // s320 역까지 이동 중: 남은 거리(m) · 예상 초 · 이름 — 타임라인이 버스 정류장을 접고 '내 위치 → 역'으로 보인다
+  if (dq && (isFinite(Number(dq.d)) || isFinite(Number(dq.s)))) dt = { n: String(dq.n == null ? '' : dq.n).slice(0, 14), d: isFinite(Number(dq.d)) ? Math.max(0, Math.round(Number(dq.d))) : null, s: isFinite(Number(dq.s)) ? Math.max(0, Math.round(Number(dq.s))) : null, a: dq.a ? 1 : 0 };
+  return { pn: (f != null && f >= 1) ? { f: f, t: t, r: ratio } : null, w: w, na: na.length ? na : null, dt: dt };
 }
 function resMeters(la1, lo1, la2, lo2) {
   var r = Math.PI / 180, dla = (la2 - la1) * r, dlo = (lo2 - lo1) * r;
@@ -552,4 +554,4 @@ function resultScreens(opt, r, alts) {
   if (n) out.alts = made;
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { resultScreens: resultScreens, resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop, resNmFix: resNmFix };
+if (typeof module !== 'undefined' && module.exports) module.exports = { resultScreens: resultScreens,  resLiveFacts: resLiveFacts, resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop, resNmFix: resNmFix };

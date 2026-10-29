@@ -229,6 +229,27 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
 }
 
 // s200: 워커 내장 /ride/buspick — 정류장 도착정보를 받아 10분 안에 오는 버스를 고르는 안내창을 낸다(받아 오는 함수는 흉내)
+{   // s319 (YJ: 중간에 버스로 갈아탈 때 추천 외 다른 번호가 5분 안에 오면 고르게): 몇 번째 버스 구간인지 · 탈 정류장 · 대체 번호 · 후보 줄 거르기
+  const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23'; bl.altBus = ['931', '932', '9 03']; bl.altEnd = { '932': { n: '새출구 정류장', d: 120, la: LAT + 0.0033, lo: LNG0 + DL * 5 + 0.06 } };
+  const fm = ex => facts(Object.assign({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(subLeg)), walk(3, 720, 900), JSON.parse(JSON.stringify(bl)), walk(2, 1380, 1500)] }] } }, leg: 0 }, ex || {}));
+  const a = RS.rideBusLegAsk({ cap: 18 }, fm());
+  { const pt = a.patch, p2 = pt['932'], p0 = pt['931'];
+    ok(Object.keys(pt).sort().join() === '903,931,932' && p2.bl.kind === 'bus' && p2.bl.i === 7 && p2.bl.cc === '23' && p2.bl.sid === 'ICB123' && p2.bl.no === '932' && p2.nodes.map(n => n.lineName).join() === '932,932,932,932' && p2.nodes[3].name === '새출구 정류장' && p2.stops.length === 1 && p2.stops[0].i === 10 && p2.bl.endSwap.n === '새출구 정류장', 's320: 고른 대체 번호의 변경분(번호 · 하차 정류장 · 좌표)을 엔진이 미리 만든다');
+    ok(p0.nodes.every(n => n.lineName === '931' && n.name === undefined) && p0.stops.length === 0 && !p0.bl.endSwap, 's320: 원래 번호를 고르면 이름 · 좌표 변경 없음'); }
+  ok(a && a.no === '931' && a.i === 7 && a.ek === 10 && a.leg === 0 && a.stop === 'B0' && a.end === 'B3' && a.cc === '23' && a.sid === 'ICB123' && a.alts.join() === '931,932,903' && a.ends['932'].d === 120 && a.ends['932'].n === '새출구 정류장' && typeof a.planMs === 'number' && a.planMs > T0, 's319: 중간 버스 구간의 탈 정류장 · 번호 · 대체 번호 · 내리는 곳 · 계획 시각 ' + JSON.stringify(a));
+  ok(RS.rideBusLegAsk({ cap: 18 }, fm({ leg: 1 })) === null && RS.rideBusLegAsk({ cap: 18 }, fm({ leg: -1 })) === null && RS.rideBusLegAsk({ cap: 18 }, fm({ leg: 'x' })) === null && RS.rideBusLegAsk({ cap: 18 }, facts({ leg: 0 })) === null, 's319: 없는 구간 · 엉터리 번호 · 버스가 없는 경로는 null');
+  const bn = JSON.parse(JSON.stringify(bl)); delete bn.altBus; const bs = JSON.parse(JSON.stringify(bl)); delete bs.boardStopId;
+  const mk = x => facts({ data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(subLeg)), walk(3, 720, 900), x, walk(2, 1380, 1500)] }] } }, leg: 0 });
+  ok(RS.rideBusLegAsk({ cap: 18 }, mk(bn)) === null && RS.rideBusLegAsk({ cap: 18 }, mk(bs)) === null, 's319: 대체 번호나 정류장 ID 를 모르면 null(묻지 않는다)');
+  const it = (no, off) => ({ no: no, ms: a.planMs + off * 1000, sec: 60 });
+  const L = RS.rideBusLegItems;
+  ok(L([it('931', 60), it('932', 200), it('903', 400)], a, T0).map(x => x.no).join() === '931,932', 's319: 계획 번호 기준 5분 안(932)만 남기고 넘는 것(903)은 뺀다');
+  ok(L([it('931', 60), it('931', 600)], a, T0).length === 0 && L([], a, T0).length === 0 && L(null, a, T0).length === 0, 's319: 다른 번호가 없으면 [] ');
+  ok(L([it('931', 60), it('932', -200)], a, T0).length === 0, 's319: 내가 닿기 전(계획 시각 90초 전보다 이른)에 떠나는 차는 뺀다');
+  ok(L([it('932', 100), it('903', 250)], a, T0).map(x => x.no).join() === '932,903', 's319: 계획 번호가 안 오면 계획 시각이 기준 — 다른 번호가 둘 이상이면 묻는다');
+  ok(L([it('932', 100)], a, T0).length === 0, 's319: 계획 번호가 안 오고 다른 번호도 하나뿐이면 묻지 않는다');
+}
+
 (async () => {
   const W = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8'), vm = require('vm');
   ok(W.indexOf('if (url.pathname === "/ride/buspick") return handleRideBusPick(request, env);') > 0 && /function rideBusAsk/.test(W) && /function dlgBpick/.test(W), 's200: 워커에 /ride/buspick · rideBusAsk · dlgBpick 가 들어 있다');
@@ -276,6 +297,26 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
     const x = await Promise.all([ctx.__h(rq('{bad')), ctx.__h(rq({}, 'GET')), ctx.__h(rq({}, 'OPTIONS'))]);
     ok(x[0].status === 400 && x[1].status === 405 && x[2].status === 204, 's200: 나쁜 JSON 400 · GET 405 · OPTIONS 204');
   } catch (e) { ok(false, 's200: 워커 /ride/buspick 시험 예외 ' + (e && e.stack || e)); }
+  try {   // s319: 중간 환승 버스 — 워커 /ride/buspick 에 leg 를 실어 묻는다
+    const bl = JSON.parse(JSON.stringify(busLeg)); bl.boardStopId = 'ICB123'; bl.boardCc = '23'; bl.altBus = ['931', '932', '903']; bl.altEnd = { '932': { n: '새출구 정류장', d: 120, la: LAT + 0.0033, lo: LNG0 + DL * 5 + 0.06 } };
+    const NOW = T0 + 420000;                                    // 지하철을 타고 가는 중(탈 정류장에 닿기 8분쯤 전)
+    let fm = ex => facts(Object.assign({ now: NOW, data: { result: { path: [{ info: P.info, subPath: [walk(2, 0, 120), JSON.parse(JSON.stringify(subLeg)), walk(3, 720, 900), JSON.parse(JSON.stringify(bl)), walk(2, 1380, 1500)] }] } }, leg: 0 }, ex || {}));
+    const hmOf = ms => { const d = new Date(ms + 540 * 60000), p2 = n => (n < 10 ? '0' : '') + n; return p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()); };
+    const arrA = []; arrA[7] = hmOf(NOW + 300000);                 // 탑승 서비스가 알려 준 노드별 도착 시각(7번 = 버스 탈 정류장)
+    const fm0 = fm; fm = ex => fm0(Object.assign({ arr: arrA }, ex || {}));
+    const base = (RS.rideBusLegAsk({ cap: 18 }, fm()).planMs - NOW) / 1000;
+    ok(base >= 240 && base <= 360, 's319: 탑승 서비스의 노드 도착 시각(arr)이 있으면 그것이 계획 시각의 기준 ' + base);
+    const rq = (obj) => ({ method: 'POST', text: () => Promise.resolve(JSON.stringify(obj)) });
+    arr = { '931': [base + 60, base + 900], '932': [base + 200], '903': [base + 500] };
+    const w = JSON.parse((await ctx.__h(rq({ cap: 23, r: fm() }))).b);
+    ok(w.ask === true && w.screen === 'dlg' && w.info.items.map(x => x.no).join() === '931,932' && w.leg && w.leg.j === 0 && w.leg.i === 7 && w.leg.ek === 10 && w.leg.cc === '23' && w.leg.sid === 'ICB123' && w.leg.no === '931' && w.leg.ends['932'].d === 120, 's319: 계획 번호와 5분 안에 오는 다른 번호만 묻는다(903 은 5분 넘게 차이) · 카드에 leg 정보 ' + JSON.stringify(w).slice(0, 400));
+    ok(seen[0] === '23' && seen[1] === 'ICB123', 's319: 그 버스 구간의 정류장으로 도착정보를 묻는다');
+    arr = { '931': [base + 60], '903': [base + 700] };
+    ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fm() }))).b).ask === false, 's319: 다른 번호가 5분 안에 안 오면 묻지 않는다');
+    arr = { '931': [base + 60] };
+    ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fm() }))).b).ask === false, 's319: 계획 번호 하나뿐이면 묻지 않는다(첫 구간 버스처럼 auto 로 따라가지도 않는다)');
+    ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fm({ leg: 3 }) }))).b).ask === false && JSON.parse((await ctx.__h(rq({ cap: 23, r: fm({ leg: 'x' }) }))).b).ask === false, 's319: 없는 구간 번호는 묻지 않는다');
+  } catch (e) { ok(false, 's319: 워커 시험 예외 ' + (e && e.stack || e)); }
   console.log(pass + ' 통과 / ' + fail + ' 실패');
   if (fail) process.exit(1);
 })();

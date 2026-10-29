@@ -108,6 +108,21 @@ ok(G({ kind: 'x' }).error === 'kind' && G({}).error === 'kind' && G(null).error 
   ok(n.ok && nb.length === 1 && nb[0].label === '확인' && n.info.go === 0 && G({ kind: 'reco' }, 15).error === 'cap', 'reco: 가게 단추 이름이 없으면 [확인]만');
 }
 
+{
+  const o = G({ kind: 'bpick', no: '931', stop: 'B0', mid: 1, items: [{ sec: 120, ms: 1, no: '931' }, { sec: 200, ms: 2, no: '932' }] }), b = btns(o);
+  ok(JSON.stringify(o).includes('갈아탈 버스를 골라 주세요') && b.length === 3 && b[2].label === '추천대로 탈게요' && b[2].act.v === 'dl.no' && !b.some(x => x.act.v === 'dl.ok'), 'bpick mid: 갈아탈 버스 카드 · 고르지 않으면 추천대로');
+}
+// ④-4 s320: 경로 이탈 확인 카드(테마 · 같은 크기 단추)
+{
+  const o = G({ kind: 'offroute', stn: '테크노파크' }), b = btns(o), row = o.head.find(n => n.t === 'btnrow');
+  ok(o.ok && o.screen === 'dlg' && o.info.kind === 'offroute' && o.dlg.tap.v === 'dl.no' && o.bg === 'card', 'offroute: 카드 모양 · 바깥을 누르면 계속 안내');
+  ok(b.length === 3 && b.map(x => x.label).join('|') === '역까지 이동|계속 안내|다시 찾기' && row.eq === true && b[0].act.v === 'dl.bp.0' && b[1].act.v === 'dl.no' && b[2].act.v === 'dl.bp.1', 'offroute: 세 단추 폭 같게 · 행동');
+  ok(JSON.stringify(o).includes('테크노파크까지') && !EMOJI.test(JSON.stringify(o)), 'offroute: 역 이름 안내 · 이모지 없음');
+  const n = G({ kind: 'offroute' }), nb = btns(n);
+  ok(nb.length === 2 && nb[0].label === '계속 안내' && nb[1].label === '다시 찾기' && nb[1].act.v === 'dl.bp.1' && n.info.stn === 0 && G({ kind: 'offroute' }, 15).error === 'cap', 'offroute: 역이 없으면 두 단추');
+  const rc = screenCheck([o, n]); ok(!rc.err && rc.out.every(l => /^OK/.test(l)), 'offroute: 앱 검증기 통과 ' + (rc.err || rc.out.join(' ')));
+}
+
 // ④-2 s200: 탈 버스 고르기(첫 구간이 버스일 때 10분 안에 오는 버스)
 {
   const it = [{ sec: 45, ms: 1000045 }, { sec: 200, ms: 1000200 }, { sec: 0, ms: 5 }, { sec: 'x', ms: 6 }, { sec: 590, ms: 1000590 }];

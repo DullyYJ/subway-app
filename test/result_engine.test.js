@@ -192,6 +192,8 @@ const flat = ns => { const o = []; (function f(a) { a.forEach(n => { o.push(n); 
   const lvs = call('fast', { lv: { cur: 2, pos: { from: 1, to: 2, ratio: 0.4 }, arr: ['', '12:05', '12:09', '12:20'] } });
   const k1 = flat(lvs.head.concat(lvs.body)).find(n => n.t === 'trk');
   ok(k0 && !k0.mk && k1 && k1.mk && k1.mk.r === 0.4 && k1.cells.some(c => c.t === '12:05'), '탑승 중 내 위치 마커 · 칸별 시각(lv)');
+  { const f1 = E.resLiveFacts({ lv: { cur: 1, dt: { n: '아주아주아주아주긴역이름입니다', d: 4210.4, s: 725 } } }), f2 = E.resLiveFacts({ lv: { cur: 1, dt: { n: 'x' } } }), f3 = E.resLiveFacts({ lv: { cur: 1, dt: { n: '부평', d: -5, s: 'a' } } });
+    ok(f1.dt && f1.dt.n.length === 14 && f1.dt.d === 4210 && f1.dt.s === 725 && f2.dt === null && f3.dt && f3.dt.d === 0 && f3.dt.s === null, 'resLiveFacts: 역까지 이동 dt(거리·초·이름) 정리'); }
   const k2 = flat(call('fast', { lv: { cur: 1, arr: [] } }).body.concat(call('fast', { lv: { cur: 1, arr: [] } }).head)).find(n => n.t === 'trk');
   ok(k2 && k2.mk && k2.mk.r === 0, '위치(pos)를 모르면 현재 노드에 선다');
   const lvw = call('fast', { lv: { cur: 1, pos: { from: 1, to: 2, ratio: 0.4 }, arr: ['', '12:05', '12:09', '12:20'], wait: { i: 1, d: 120 } } });

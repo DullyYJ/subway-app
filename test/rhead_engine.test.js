@@ -327,6 +327,19 @@ const web = new Function(
   ok(!vm.err && vm.out.length === 2 && vm.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(마커·대기 배지) ' + (vm.err || vm.out.join('|')));
   const vr = screenCheck([o, E.rheadScreen({ cap: 12, part: 'k' }, F({ th: 'pastel' }))]);
   ok(!vr.err && vr.out.length === 2 && vr.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(part k) ' + (vr.err || vr.out.join('|')));
+  // s320 역까지 이동: lv.dt 가 있으면 버스 정류장 칸이 접히고 '내 위치 N km 남음 → 역 HH:MM 도착'
+  const dtc = E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { p: null, w: null, ea: null, dt: { n: '부평', d: 4200, s: 720 } } })).head[0].cells;
+  ok(dtc.length < cells.length && dtc[0].n === '내 위치' && dtc[0].t === '4.2km 남음' && dtc[0].dk === 'e' && dtc[0].ti === -1, '역까지 이동: 첫 칸은 내 위치 · 남은 거리 km');
+  ok(dtc[1].n === '부평' && dtc[1].t === '12:12 도착' && dtc[1].lc === dtc[0].rc, '역 칸에 도착 예상 시각(탐색 12:00 + 12분)');
+  ok(!dtc.some(c => c.n === '아라역4번출구' || c.n === '중간'), '버스 정류장 칸은 사라진다');
+  ok(dtc.every(c => c.ti === -1 || c.ti >= 0), '칸 번호 정상');
+  const dtm = E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { dt: { n: '부평', d: 600, s: 0 } } })).head[0].cells;
+  ok(dtm[0].t === '600m 남음' && dtm[1].t === '12:00 도착', '1km 미만은 m · 0초면 지금 시각');
+  const dtn = E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { dt: { n: '부평', d: null, s: null } } })).head[0].cells;
+  ok(dtn.length === cells.length && dtn[0].n !== '내 위치', '거리/시간 모두 없으면 접지 않는다');
+  const dtr = E.rheadScreen({ cap: 12, part: 'k' }, F({ lv: { dt: { n: '부평', d: 4200, s: 720 } } }));
+  const dvc = screenCheck([dtr]);
+  ok(!dvc.err && dvc.out.every(l => l.startsWith('OK ') && Number(l.split(' ')[2]) === 0), '앱 검증기 통과(역까지 이동) ' + (dvc.err || dvc.out.join('|')));
 }
 // ── ⑧ 워커 끝에서 끝까지 ──
 (async () => {

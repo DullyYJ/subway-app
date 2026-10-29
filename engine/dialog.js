@@ -16,7 +16,7 @@
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(경로 탐색 로딩)는 runner 노드를 아는 앱(CAP 19)부터 — 옛 앱은 kind 를 몰라 그냥 쓰지 않는다
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1, offroute: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -75,15 +75,17 @@ function dlgBpick(f) {
   items.forEach(function (x) { if (x.no) nos[x.no] = 1; });
   var multiNo = Object.keys(nos).length > 1;
   var head = [
-    { t: 'text', pad: [22, 24, 22, 6], s: '탈 버스를 골라 주세요', size: 17, bold: true, lh: 1.4, color: 'text' },
-    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (multiNo ? '같은 곳으로 가는 10분 안에 오는 버스' : '10분 안에 오는 버스'), size: 13, lh: 1.55, color: 'sub' }
+    { t: 'text', pad: [22, 24, 22, 6], s: f.mid ? '갈아탈 버스를 골라 주세요' : '탈 버스를 골라 주세요', size: 17, bold: true, lh: 1.4, color: 'text' },
+    { t: 'text', pad: [22, 0, 22, 16], s: (stop ? stop + ' · ' : '') + (f.mid ? '추천 버스와 비슷한 때 오는 버스' : (multiNo ? '같은 곳으로 가는 10분 안에 오는 버스' : '10분 안에 오는 버스')), size: 13, lh: 1.55, color: 'sub' }
   ];
   items.forEach(function (it2, i) {
     head.push({ t: 'btnrow', pad: [22, 0, 22, 8], gap: 10, h: 50, eq: true, bsize: it2.en ? 13 : 15, r: 12, items: [
       { label: ((it2.no || no) ? (it2.no || no) + '번 ' : (i + 1) + '번째 ') + '(' + dlgBpickLabel(it2.sec).replace(' 도착', '') + ')' + (it2.en ? ' · ' + it2.en + '에서 내려요' : ''), fill: 'card2', line: 'border', tc: 'text', act: { a: 'call', v: 'dl.bp.' + i } }       // s250: '순환43번 (9분 36초 후)' — 버스 번호(예상 시간)
     ] });
   });
-  head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: [
+  head.push({ t: 'btnrow', pad: [22, 8, 22, 22], gap: 10, h: 44, eq: true, bsize: 14, r: 11, items: f.mid ? [
+    { label: '추천대로 탈게요', fill: 'card2', line: 'border', tc: 'sub', act: nope }
+  ] : [
     { label: '취소', fill: 'card2', line: 'border', tc: 'sub', act: nope },
     { label: '고르지 않고 시작', fill: 'card2', line: 'border', tc: 'sub', act: { a: 'call', v: 'dl.ok' } }
   ] });
@@ -102,6 +104,29 @@ function dlgReco(f) {
   if (body) head.push({ t: 'text', pad: [22, 0, 22, 18], s: body, size: 14, lh: 1.65, color: 'text' });
   head.push({ t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: items });
   return { dlg: { w: 340, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card', head: head, body: [{ t: 'spacer', h: 0 }], foot: null, info: { go: go ? 1 : 0 } };
+}
+
+// ★ s320 (YJ: 경로를 벗어났어요 팝업을 테마에 맞게 · 단추 크기를 똑같이 고르게): 경로 이탈 확인 카드.
+//   f = { stn(경로 첫 지하철역 이름 — 있으면 [역까지 이동]을 함께 보인다) }. 단추 폭은 모두 같다(btnrow eq).
+//   행동: dl.bp.0 = 역까지 이동(stn 이 있을 때만) · dl.bp.1 = 다시 찾기 · dl.no = 계속 안내(바깥을 눌러도 같다).
+function dlgOff(f) {
+  var stn = dlgClean(f.stn, 14), no = { a: 'call', v: 'dl.no' };
+  var body = stn
+    ? '지금 위치에서 ' + stn + '까지 이동하면 남은 거리와 도착 예상 시각을 보여 드리고, 닿으면 환승 안내로 이어져요. 도착지까지 경로를 다시 찾을 수도 있어요.'
+    : '지금 있는 곳에서 도착지까지 경로를 다시 찾을까요?\n다시 찾으면 지금 안내는 끝나고, 새 경로를 확정할 수 있어요.';
+  var items = [];
+  if (stn) items.push({ label: '역까지 이동', fill: 'gold', line: 'gold', tc: '#121214', act: { a: 'call', v: 'dl.bp.0' } });
+  items.push({ label: '계속 안내', fill: 'card2', line: 'border', tc: 'sub', act: no });
+  items.push({ label: '다시 찾기', fill: stn ? 'card2' : 'gold', line: stn ? 'border' : 'gold', tc: stn ? 'text' : '#121214', act: { a: 'call', v: 'dl.bp.1' } });
+  return {
+    dlg: { w: 350, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 20, tap: no }, bg: 'card',
+    head: [
+      { t: 'text', pad: [22, 24, 22, 8], s: '경로를 벗어났어요', size: 17, bold: true, lh: 1.4, color: 'text' },
+      { t: 'text', pad: [22, 0, 22, 20], s: body, size: 14, lh: 1.6, color: 'sub' },
+      { t: 'btnrow', pad: [22, 0, 22, 22], gap: 8, h: 46, eq: true, bsize: 13, r: 11, items: items }
+    ],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: { stn: stn ? 1 : 0 }
+  };
 }
 
 function dlgExit() {
@@ -228,10 +253,10 @@ function dialogScreen(inp, f) {
   inp = inp || {};
   if (!(Number(inp.cap) >= DLG_CAP)) return { ok: false, error: 'cap' };
   f = (f && typeof f === 'object') ? f : {};
-  var kind = dlgStr(f.kind, 8);
+  var kind = dlgStr(f.kind, 10);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : dlgPop(f)))))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : (kind === 'offroute' ? dlgOff(f) : dlgPop(f))))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;

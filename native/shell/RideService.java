@@ -42,6 +42,8 @@ public class RideService extends Service {
     /** 서비스가 끝난 까닭 — "user"(사용자가 끝냄) · "arrive"(도착) 만 확정을 풀어도 되는 끝이다. 그 밖("engine-done" · "no-saved" · 시스템이 내림)은 뜻밖의 끝 — 앱은 확정을 풀지 않고 다시 켠다. */
     static volatile String endReason = "";
     static volatile String liveOffStn = "";                  // s229: 이탈 때 첫 지하철역 이름(없으면 "")
+    static volatile int liveBoardI = -1, liveBoardJ = -1;     // s320: 다음에 탈 버스 승차 노드 · 몇 번째 버스 구간(없으면 -1)
+    static volatile String liveArr = "null";                  // 칸별 시각(중간 버스 질문 요청에 싣는다)
     static volatile long liveOff = 0L;                       // 엔진이 알린 이탈 시작 시각(없으면 0)
     static volatile String liveRide = "", liveLv = "", liveScene = "", livePos = "", liveReco = "", recoStage = "";
     static volatile ShareCore.Share liveShare;
@@ -57,6 +59,8 @@ public class RideService extends Service {
     private static volatile RideService inst;
     private static final Handler mainH = new Handler(Looper.getMainLooper());
     /** 앱 탑승 시트의 손짓(press · undo · open · close · pill)을 엔진의 다음 걸음에 알린다 — 오버레이 줄과 같은 길. */
+    /** s320: 중간 환승 버스 고르기 — 엔진이 만든 변경분을 달리는 안내에 끼운다(다음 걸음 때). 서비스가 없으면 false. */
+    static boolean busSwap(String patchJson, long pickMs) { RideService s = inst; return s != null && s.core != null && s.core.busSwap(patchJson, pickMs); }
     static void rsAct(String a) { RideService s = inst; if (s != null) s.ovHost.act(a); }
     /** 확정 · [탑승]을 눌렀을 때의 짧은 진동(s228) — 손끝으로 눌렸다는 걸 알리려는 것이라 짧고(45ms) 한 번뿐이다. 진동이 없거나 끈 기기에서는 조용히 넘어간다. */
     static void buzz(Context c) {
@@ -120,7 +124,7 @@ public class RideService extends Service {
     static void stop(Context c) {
         endReason = "user";
         clearSaved(c);
-        running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        running = false; liveOff = 0L; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveBoardI = -1; liveBoardJ = -1; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         c.stopService(new Intent(c, RideService.class));
     }
 
@@ -295,7 +299,7 @@ public class RideService extends Service {
     }
 
     private void publish() {
-        liveOff = core.offAt; liveOffStn = core.offStn; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveScene = core.sceneJson(); livePos = core.posJson; liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
+        liveOff = core.offAt; liveOffStn = core.offStn; liveRide = core.rideJson(); liveRowSlot = core.rowSlot; liveRowCan = core.rowCan; liveLv = core.lvJson(); liveBoardI = core.boardI; liveBoardJ = core.boardJ; liveArr = core.arrJson; liveScene = core.sceneJson(); livePos = core.posJson; liveReco = core.recoStatJson(); liveShare = core.ovShare; liveOv = core.ov; liveRev++; rsNotify();
         try { RideWidget.update(this, core.title, core.text); } catch (Throwable ignored) { }
     }
 
@@ -305,7 +309,7 @@ public class RideService extends Service {
         if (ov != null) ov.hide();
         if (legit) clearSaved(this);                                                          // 사용자가 끝냈거나 도착했다 — 저장본을 지운다. 뜻밖의 끝은 남겨 두어 앱이 다시 켠다
         else { try { ErrLog.record(this, new IllegalStateException("RIDE_END " + reason), false); } catch (Throwable ignored) { } }
-        liveOff = 0L; liveOffStn = ""; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
+        liveOff = 0L; liveOffStn = ""; liveRide = ""; liveRowSlot = ""; liveRowCan = false; liveLv = ""; liveBoardI = -1; liveBoardJ = -1; liveScene = ""; livePos = ""; liveReco = ""; liveShare = null; liveOv = null; liveRev++; rsNotify();
         try { RideWidget.update(this, "길동무", arrived ? "안내가 끝났어요" : ""); } catch (Throwable ignored) { }
         try { if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE); else stopForeground(true); } catch (Throwable ignored) { }
         stopSelf();

@@ -157,6 +157,89 @@ function rideBusAsk(opt, r) {
   if (nds[ek] && nds[ek].name) end = String(nds[ek].name);
   return { cc: String(b.cc), sid: String(b.sid), no: no, stop: nd.name ? String(nd.name) : '', end: end, alts: Array.isArray(b.alts) ? b.alts.slice(0, 6) : [], ends: (b.ends && typeof b.ends === 'object') ? b.ends : {} };
 }
+// ★ s319 (YJ: 중간에 버스로 환승할 때도, 내려서 타는 추천 버스 말고 비슷한 시각에 오는 다른 번호가 있으면 고르게): 경로의 j 번째 버스 구간(0부터, 연달아 같은 번호는 한 구간)의 탈 정류장 · 대체 번호 · 내리는 곳.
+//   r = /ride/start 본문의 r 과 같다 + leg(j) + arr(탑승 서비스의 노드별 도착 시각 HH:MM — 있으면 계획 시각의 기준으로 쓴다). 첫 구간이 버스인 경우(시작 때 묻는다)는 rideBusAsk 가 맡고, 이것은 지하철 등을 타고 가다 갈아타는 버스를 위한 것이다.
+//   답: { cc, sid, no, stop, end, alts, ends, i(탈 정류장 노드 번호), ek(내리는 노드 번호), leg, planMs(계획상 그 정류장에 닿는 시각 ms | null) } | null
+function rideBusLegAsk(opt, r) {
+  var j = Math.floor(Number(r && r.leg));
+  if (!isFinite(j) || j < 0 || j > 8) return null;
+  var s = rideStart(opt, r);
+  if (!s || !s.ok || !s.state || !s.state.eta || !Array.isArray(s.state.eta.nodes)) return null;
+  var nds = s.state.eta.nodes, runs = [], k;
+  for (k = 1; k < nds.length; k++) {
+    var n = nds[k];
+    if (!n || !n.isBus || n.isSub) continue;
+    var pv = nds[k - 1];
+    if (pv && pv.isBus && !pv.isSub && String(pv.lineName || '') === String(n.lineName || '') && runs.length) { runs[runs.length - 1].ek = k; continue; }
+    runs.push({ i: k, ek: k, no: String(n.lineName || '') });
+  }
+  var run = runs[j];
+  if (!run || !run.no) return null;
+  var D = rstDeps(), data = (r.data && typeof r.data === 'object') ? r.data : {}, raw = ((data.result || {}).path);
+  raw = Array.isArray(raw) ? raw : [];
+  var tab = ['fast', 'less', 'sub', 'bus', 'longdist'].indexOf(r.tab) >= 0 ? r.tab : 'fast', pk = D.pick(D.apply(data, raw));
+  var rawSub = (pk[tab] && Array.isArray(pk[tab].subPath)) ? pk[tab].subPath : [], buses = [], q;
+  for (q = 0; q < rawSub.length; q++) if (rawSub[q] && rawSub[q].trafficType === 2) buses.push(rawSub[q]);
+  var sp = buses[j];
+  if (!sp || !sp.boardStopId) return null;
+  var cc = String(sp.boardCc || sp.line || '').split('_')[0];
+  if (!/^[0-9]{2,5}$/.test(cc)) return null;
+  var alts = Array.isArray(sp.altBus) ? sp.altBus.map(function (x) { return String(x).replace(/\s+/g, ''); }).filter(function (x) { return x.length > 0 && x.length <= 14; }).slice(0, 6) : [];
+  if (!alts.length) return null;
+  var ends = {};
+  if (sp.altEnd && typeof sp.altEnd === 'object') Object.keys(sp.altEnd).slice(0, 6).forEach(function (kk) {
+    var e0 = sp.altEnd[kk], no0 = String(kk).replace(/\s+/g, '').slice(0, 14);
+    if (!no0 || !e0 || typeof e0 !== 'object') return;
+    var d0 = Number(e0.d), la0 = Number(e0.la), lo0 = Number(e0.lo);
+    ends[no0] = { n: String(e0.n == null ? '' : e0.n).slice(0, 24), d: isFinite(d0) && d0 >= 0 && d0 <= 400 ? Math.round(d0) : 0, la: isFinite(la0) && Math.abs(la0) <= 90 ? la0 : null, lo: isFinite(lo0) && Math.abs(lo0) <= 180 ? lo0 : null };
+  });
+  var pm = null, tzm = isFinite(Number(r.tz)) ? Number(r.tz) : 540, nowM = Number(r.now);
+  if (Array.isArray(r.arr) && typeof r.arr[run.i] === 'string' && isFinite(nowM)) {      // 탑승 중 실시간으로 고쳐진 그 정류장 도착 시각(HH:MM) — 경로를 찾은 때 기준 계획은 시간이 흐르면 어긋난다
+    var hm = rstHmMin(r.arr[run.i]);
+    if (hm != null) { var loc = nowM + tzm * 60000, d0 = Math.floor(loc / 86400000) * 86400000, c = d0 + hm * 60000 - tzm * 60000; if (c < nowM - 6 * 3600000) c += 86400000; pm = Math.round(c); }
+  }
+  if (pm == null && s.state.etaMs && s.state.etaMs[run.i] != null && isFinite(+s.state.etaMs[run.i])) pm = Math.round(+s.state.etaMs[run.i]);
+  var patch = {};
+  [run.no].concat(alts).forEach(function (no1) { if (no1 && !patch[no1]) patch[no1] = rideBusLegPatch(s.state, run, no1, cc, String(sp.boardStopId), ends); });
+  return { cc: cc, sid: String(sp.boardStopId), no: run.no, stop: nds[run.i].name ? String(nds[run.i].name) : '', end: nds[run.ek] && nds[run.ek].name ? String(nds[run.ek].name) : '', alts: alts, ends: ends, i: run.i, ek: run.ek, leg: j, planMs: pm, patch: patch };
+}
+// s319: 달리는 안내(state)에 옮길 '고른 번호' 변경분 — 엔진이 번호마다 미리 만들고, 앱은 그대로 끼워 넣기만 한다(계산 없음).
+//   { bl:{kind,i,cc,sid,no[,ends][,endSwap]}, nodes:[{i,lineName[,name]}], stops:[{i,lat,lng}], targets:[{nodeIdx,name?,nextLine?}] }. 앱은 bl.pickMs(고른 차 도착 ms)만 더한다.
+function rideBusLegPatch(state, run, no, cc, sid, ends) {
+  var nds = state.eta.nodes, out = { bl: { kind: 'bus', i: run.i, cc: cc, sid: sid, no: no }, nodes: [], stops: [], targets: [] }, k;
+  var en = no !== run.no ? ends[no] : null, endSwap = null;
+  if (Object.keys(ends).length) out.bl.ends = ends;
+  if (en && en.n && en.la != null && en.lo != null && (en.d >= 40 || en.n !== (nds[run.ek] && nds[run.ek].name))) endSwap = { n: en.n, d: en.d, from: nds[run.ek] ? String(nds[run.ek].name || '') : '' };
+  for (k = run.i; k <= run.ek; k++) out.nodes.push({ i: k, lineName: no });
+  if (endSwap) {
+    out.bl.endSwap = endSwap;
+    out.nodes[out.nodes.length - 1].name = en.n;
+    out.stops.push({ i: run.ek, lat: en.la, lng: en.lo });
+  }
+  var tgs = (state.cfg && state.cfg.targets) || [], pre = null;
+  tgs.forEach(function (t) {
+    if (!t) return;
+    if (endSwap && t.nodeIdx === run.ek) out.targets.push({ nodeIdx: t.nodeIdx, name: en.n });
+    if (no !== run.no && t.nextLine != null && String(t.nextLine) === String(run.no) && t.nodeIdx < run.i && (!pre || t.nodeIdx > pre.nodeIdx)) pre = t;
+  });
+  if (pre) out.targets.push({ nodeIdx: pre.nodeIdx, nextLine: no });
+  return out;
+}
+// 중간 환승 버스의 후보 줄: 계획한 번호(ask.no)와 비슷한 때(5분 이내)에 오는 다른 번호만 남긴다. 사용자가 그 정류장에 닿기 전에 떠나는 차(계획 시각 90초 전보다 이른 것)는 뺀다.
+//   기준 = 계획 번호의 가장 이른(그 시각 이후) 도착 — 없으면 계획 시각. 다른 번호가 하나도 안 남으면 [] (묻지 않는다).
+var RST_LEG_NEAR_MS = 5 * 60000, RST_LEG_MISS_MS = 90000;
+function rideBusLegItems(items, ask, nowMs) {
+  if (!Array.isArray(items) || !ask) return [];
+  var plan = ask.planMs != null && isFinite(+ask.planMs) ? +ask.planMs : null, now = Number(nowMs);
+  var floor = plan != null ? plan - RST_LEG_MISS_MS : (isFinite(now) ? now : 0);
+  var live = items.filter(function (it) { return it && isFinite(+it.ms) && +it.ms >= floor; });
+  var own = live.filter(function (it) { return String(it.no || '') === String(ask.no || ''); }), base = own.length ? +own[0].ms : (plan != null ? plan : (live.length ? +live[0].ms : null));
+  if (base == null) return [];
+  var keep = live.filter(function (it) { return String(it.no || '') === String(ask.no || '') || Math.abs(+it.ms - base) <= RST_LEG_NEAR_MS; });
+  var nos = {}; keep.forEach(function (it) { nos[String(it.no || '')] = 1; });
+  if (Object.keys(nos).length < 2) return [];
+  return keep.slice(0, 6);
+}
 function rideBusItems(list, nowMs) {
   var out = [], k, n = Number(nowMs);
   if (!Array.isArray(list) || !isFinite(n)) return out;
@@ -178,4 +261,4 @@ function rideBusItemsMulti(map, nos, nowMs, noOf) {
   return out.slice(0, 6);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V, rideBusAsk: rideBusAsk, rideBusItems: rideBusItems, rideBusItemsMulti: rideBusItemsMulti };
+if (typeof module !== 'undefined' && module.exports) module.exports = { rideStart: rideStart, RST_V: RST_V, rideBusAsk: rideBusAsk, rideBusLegAsk: rideBusLegAsk, rideBusLegItems: rideBusLegItems, rideBusItems: rideBusItems, rideBusItemsMulti: rideBusItemsMulti };

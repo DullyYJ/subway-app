@@ -41,7 +41,7 @@ public class ShellActivity extends Activity {
     private ShellCore.Store store;
     private LinearLayout root;
     private RsSheetView rs, rsF;                      // rs = 하단 탭 아래에 올라오는 탑승 시트, rsF = 탭 위에 뜨는 대기 알약 · 되돌리기 캡슐
-    private final Runnable rsApply = new Runnable() { @Override public void run() { rerouteAsk(); if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
+    private final Runnable rsApply = new Runnable() { @Override public void run() { rerouteAsk(); legAsk(); if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
@@ -4191,6 +4191,13 @@ public class ShellActivity extends Activity {
         if (r.status == 200 && r.body != null && r.body.length() > 2) dlgJson.put(kind, r.body);
         return true;
     }
+    /** s320: 매개(역 이름 등)가 붙는 카드 — 열쇠 key 로 담아 둔다(같은 매개는 다시 받지 않는다). fJson 은 f 객체 전체. */
+    private boolean dlgFetchF(String key, String fJson) {
+        if (dlgJson.containsKey(key)) return false;
+        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/dlg", "{\"cap\":" + ShellCore.CAP + ",\"f\":" + fJson + "}", 8000);
+        if (r.status == 200 && r.body != null && r.body.length() > 2) dlgJson.put(key, r.body);
+        return true;
+    }
     /** 미리 받아 둔 고정 카드를 띄운다. 못 띄웠으면(아직 못 받음 · 이미 떠 있음) false — 부르는 쪽이 이전 방식으로 대신한다. */
     private boolean dlgKind(String kind, Runnable ok, Runnable no) {
         String js = dlgJson.get(kind);
@@ -4858,6 +4865,53 @@ public class ShellActivity extends Activity {
         }
         return true;
     }
+    private String legAsked = "";
+    /** s320 (YJ: 중간에 버스로 환승할 때, 추천 버스와 5분 안에 오는 다른 번호가 있으면 사용자가 고르게): 환승 대기 · 승차 대기 중인 버스 구간을 한 번만 엔진(/ride/buspick + leg)에 묻는다.
+     *  엔진이 고를 것이 있다고 하면 탈 버스 고르기 카드를 띄우고, 고른 번호의 변경분(엔진이 번호마다 만든 patch)을 달리는 안내에 끼운다. 앱은 계산하지 않는다. */
+    @SuppressWarnings("unchecked")
+    private void legAsk() {
+        if (!resumed || isFinishing() || !home.riding() || !RideService.running || !home.hasRoute()) return;
+        final int bj = RideService.liveBoardJ, bi = RideService.liveBoardI;
+        if (bj < 0 || bi < 2) return;                                                     // 첫 구간 버스는 시작 때 이미 물었다
+        final String key = home.routeId + "#" + bj;
+        if (key.equals(legAsked) || (dlgD != null && dlgD.isShowing())) return;
+        legAsked = key;
+        final String body = RideCore.legBody(ShellCore.CAP, home.resultFacts(homeEnv(), ShellCore.theme(store)), bj, RideService.liveArr, System.currentTimeMillis());
+        final int rid = home.routeId;
+        Thread t = new Thread(new Runnable() { @Override public void run() {
+            NetPost.Res b = NetPost.post(ShellCore.BASE + "/ride/buspick", body, 7000);
+            final String txt = b.status == 200 && b.body != null ? b.body : "";
+            if (txt.length() < 3) return;
+            main.post(new Runnable() { @Override public void run() { if (rid == home.routeId && home.riding()) legOpen(txt); } });
+        } }, "shell-legpick");
+        t.setDaemon(true); t.start();
+    }
+    @SuppressWarnings("unchecked")
+    private void legOpen(String txt) {
+        final List<Long> ms = new ArrayList<Long>();
+        final List<String> nos = new ArrayList<String>();
+        final Map<String, Object> patches = new java.util.HashMap<String, Object>();
+        try {
+            Object o = ScreenCore.parse(txt);
+            if (!(o instanceof Map)) return;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!Boolean.TRUE.equals(m.get("ask")) || !(m.get("leg") instanceof Map) || !(((Map<String, Object>) m.get("leg")).get("patch") instanceof Map)) return;
+            patches.putAll((Map<String, Object>) ((Map<String, Object>) m.get("leg")).get("patch"));
+            Object inf = m.get("info");
+            if (inf instanceof Map && ((Map<String, Object>) inf).get("items") instanceof List)
+                for (Object x : (List<Object>) ((Map<String, Object>) inf).get("items")) if (x instanceof Map && ((Map<String, Object>) x).get("ms") instanceof Number) { ms.add(((Number) ((Map<String, Object>) x).get("ms")).longValue()); Object n = ((Map<String, Object>) x).get("no"); nos.add(n == null ? "" : String.valueOf(n)); }
+        } catch (Throwable ignored) { return; }
+        if (ms.isEmpty()) return;
+        dlgPick = -1;
+        boolean shown = dlgOpen(txt, new Runnable() { @Override public void run() {
+            int ix = dlgPick; dlgPick = -1;
+            if (ix < 0 || ix >= ms.size() || ix >= nos.size()) return;                        // 고르지 않음 — 계획대로
+            Object p = patches.get(nos.get(ix));
+            if (p == null) return;
+            if (RideService.busSwap(HomeSearchCore.toJson(p), ms.get(ix))) toast(nos.get(ix) + "번 버스를 따라갈게요");
+        } }, new Runnable() { @Override public void run() { dlgPick = -1; } }, 0L);
+        if (!shown) legAsked = "";                                                          // 다른 카드가 떠 있었다 — 다음에 다시 묻는다
+    }
     private long offAskedAt = 0L;
     private android.app.Dialog offDlg;
     /** 확정한 경로를 오차 범위 넘게 벗어났다고 엔진이 알리면(RideService.liveOff) 한 번 묻는다 — 지금 위치에서 도착지까지 다시 찾을지. 같은 이탈에는 다시 묻지 않고, 경로로 돌아왔다 또 벗어나면 다시 묻는다. */
@@ -4865,15 +4919,41 @@ public class ShellActivity extends Activity {
         if (!resumed || isFinishing() || !home.riding() || !RideService.running) return;
         final long at = RideService.liveOff;
         if (at <= 0L || at == offAskedAt || (offDlg != null && offDlg.isShowing())) return;
+        if (dlgD != null && dlgD.isShowing()) return;                                   // 다른 안내창이 떠 있으면 닫힌 뒤 다음 단계에서 묻는다
         offAskedAt = at;
+        final String stn = RideService.liveOffStn == null ? "" : RideService.liveOffStn;
+        final String key = "offroute|" + stn;
+        String js = dlgJson.get(key);
+        if (js != null) { offAskOpen(stn, js); return; }
+        Thread t = new Thread(new Runnable() { @Override public void run() {                    // 엔진 카드를 받아 오는 동안은 기다리고, 못 받으면 옛 창으로 대신한다
+            try { dlgFetchF(key, "{\"kind\":\"offroute\",\"stn\":" + ShellCore.q(stn) + "}"); } catch (Throwable ignored) { }
+            main.post(new Runnable() { @Override public void run() {
+                if (!resumed || isFinishing() || !home.riding() || RideService.liveOff != at) return;
+                String got = dlgJson.get(key);
+                if (got != null) offAskOpen(stn, got); else offAskLegacy(stn);
+            } });
+        } }, "shell-offdlg");
+        t.setDaemon(true); t.start();
+    }
+    /** s320 (YJ: 경로를 벗어났어요 팝업을 테마에 맞게 · 단추 크기를 같게): 엔진 카드. [역까지 이동]=dl.bp.0 · [다시 찾기]=dl.bp.1 · [계속 안내]=취소 쪽. */
+    private void offAskOpen(final String stn, String js) {
+        dlgPick = -1;
+        boolean shown = dlgOpen(js, new Runnable() { @Override public void run() {
+            int ix = dlgPick; dlgPick = -1;
+            if (ix == 0 && stn.length() > 0) { RideService.rsAct("detour"); toast(stn + "까지 안내할게요"); }
+            else if (ix == 1) rerouteFromHere();
+        } }, new Runnable() { @Override public void run() { dlgPick = -1; } }, 0L);
+        if (!shown) offAskLegacy(stn);
+    }
+    /** 엔진 카드를 못 받았을 때만 쓰는 옛 창(같은 세 선택). */
+    private void offAskLegacy(final String stn) {
         try {
-            final String stn = RideService.liveOffStn;
             AlertDialog.Builder ob = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert)
                 .setTitle("경로를 벗어났어요")
                 .setMessage("지금 있는 곳에서 도착지까지 경로를 다시 찾을까요?\n다시 찾으면 지금 안내는 끝나고, 새 경로를 확정할 수 있어요.")
                 .setPositiveButton("다시 찾기", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface d, int w) { rerouteFromHere(); } })
                 .setNegativeButton("계속 안내", null);
-            if (stn != null && stn.length() > 0)                                       // s229: 자차 등으로 이동 중 — 경로 첫 지하철역까지 GPS 로 안내받고, 닿으면 그 시각 가장 빠른 열차로 조용히 이어 붙인다
+            if (stn != null && stn.length() > 0)
                 ob.setNeutralButton("역까지 이동", new android.content.DialogInterface.OnClickListener() { @Override public void onClick(android.content.DialogInterface d, int w) { RideService.rsAct("detour"); toast(stn + "까지 안내할게요"); } });
             offDlg = ob.show();
         } catch (Throwable t) { offAskedAt = 0L; }

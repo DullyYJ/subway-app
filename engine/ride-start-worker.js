@@ -28,8 +28,8 @@ async function handleRideBusPick(request, env) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var nil = function () { return new Response(JSON.stringify({ ok: true, v: 1, ask: false, ver: ENGINE_VERSION }), { headers: H }); };
-  var cap = Number(body.cap) || 0, ask = null;
-  try { ask = rideBusAsk({ cap: cap }, body.r); } catch (e2) { ask = null; }
+  var cap = Number(body.cap) || 0, ask = null, legMode = !!(body.r && typeof body.r === 'object' && body.r.leg != null);      // s319: r.leg = 중간에 갈아타는 버스 구간(0부터) — 없으면 첫 구간 버스(시작 때)
+  try { ask = legMode ? rideBusLegAsk({ cap: cap }, body.r) : rideBusAsk({ cap: cap }, body.r); } catch (e2) { ask = null; }
   if (!ask) return nil();
   var m = null;
   try {
@@ -40,14 +40,16 @@ async function handleRideBusPick(request, env) {
   } catch (e3) { m = null; }
   var items = [];
   try { items = rideBusItemsMulti(m, [ask.no].concat(ask.alts || []), body.r && body.r.now, typeof noKey === "function" ? noKey : null); } catch (e5) { items = []; }
+  if (legMode) { try { items = rideBusLegItems(items, ask, body.r && body.r.now); } catch (e6) { items = []; } }      // s319: 계획 번호와 5분 안에 오는 다른 번호가 있을 때만 묻는다
   if (!items.length) return nil();
   items.forEach(function (it) { var e = ask.ends && ask.ends[it.no]; it.en = (e && e.n) ? e.n : (it.no === ask.no ? ask.end : ''); });      // s293c: 버스마다 한 줄 — '○○에서 내려요'(대체 번호는 그 번호가 내리는 정류장, 내 번호는 계획한 하차 정류장)
-  if (items.length === 1) {          // s250 (YJ: "어차피 버스 오는 게 하나뿐이면 묻지 말고 그 버스를 타게"): 하나뿐이면 묻지 않는다 — 그 버스를 따라가도록 도착 시각(ms)만 돌려준다(s265: 번호도)
+  if (items.length === 1 && !legMode) {          // s250 (YJ: "어차피 버스 오는 게 하나뿐이면 묻지 말고 그 버스를 타게"): 하나뿐이면 묻지 않는다 — 그 버스를 따라가도록 도착 시각(ms)만 돌려준다(s265: 번호도)
     return new Response(JSON.stringify({ ok: true, v: 1, ask: false, auto: { ms: items[0].ms, sec: items[0].sec, no: items[0].no }, ver: ENGINE_VERSION }), { headers: H });
   }
   var card;
-  try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items }); } catch (e4) { card = null; }
+  try { card = dialogScreen({ cap: cap }, { kind: "bpick", no: ask.no, stop: ask.stop, items: items, mid: legMode ? 1 : 0 }); } catch (e4) { card = null; }
   if (!card || !card.ok) return nil();
   card.ask = true; card.ver = ENGINE_VERSION;
+  if (legMode) card.leg = { j: ask.leg, i: ask.i, ek: ask.ek, cc: ask.cc, sid: ask.sid, no: ask.no, end: ask.end, ends: ask.ends, patch: ask.patch };      // 앱이 고른 번호를 달리는 안내(state)에 옮길 때 쓴다
   return new Response(JSON.stringify(card), { headers: H });
 }

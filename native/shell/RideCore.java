@@ -25,6 +25,7 @@ public final class RideCore {
     public boolean done;
     /** 엔진이 알린 '경로 이탈 중' — 벗어나기 시작한 시각(ms), 아니면 0. 앱이 '지금 위치에서 다시 찾을까요?'를 한 번 묻는 데 쓴다(이탈 판정과 오차 범위는 엔진이 정한다). */
     public long offAt;
+    public String dtJson = "";              // s320: 역까지 이동 중 엔진이 알린 { n(역), d(남은 m), s(예상 초), a(닿음) } — 결과 카드 타임라인이 '내 위치 → 역'으로 접힌다
     public boolean dtOn;                      // s229: 역까지 이동 중(엔진 dt) — 결과 카드에 남은 거리 · 시간 글을 보인다
     public String offStn = "";                // s229: 이탈 때 경로 첫 지하철역 이름(엔진 off.stn) — 있으면 [역까지 이동]을 고를 수 있다
     public int cur = -1, rev = 0;
@@ -167,7 +168,7 @@ public final class RideCore {
             stateJson = HomeSearchCore.toJson(m.get("state"));
             Object t = m.get("text");
             text = t instanceof String ? (String) t : "";
-            title = "길동무 경로 안내 중"; done = false; offAt = 0L; cur = -1; posJson = "null"; arrJson = "null";
+            title = "길동무 경로 안내 중"; done = false; offAt = 0L; cur = -1; posJson = "null"; arrJson = "null"; dtJson = ""; dtOn = false;
             synchronized (fixes) { fixes.clear(); }
             lastSentTs = 0L; lastFixTs = 0L; nextMs = STEP_DEFAULT_MS; rev++;
             return "";
@@ -191,7 +192,92 @@ public final class RideCore {
 
     // ═════════════ 5초마다 ═════════════
     /** 엔진 POST /ride-standby 본문 { nowMs, fixes, state }. 위치는 가장 새 SEND_FIX 개만 싣는다. */
+    /** s320: 다음에 탈 버스 구간(환승 대기 · 승차 대기 중인 버스 승차 노드 boardI 와 그 버스가 몇 번째 버스 구간인지 boardJ, 없으면 -1). 엔진 state 의 xw · wait · eta.nodes 를 읽을 뿐이다. */
+    public int boardI = -1, boardJ = -1;
+    @SuppressWarnings("unchecked")
+    private void boardCalc(Map<String, Object> st) {
+        boardI = -1; boardJ = -1;
+        try {
+            Object eo = st.get("eta");
+            if (!(eo instanceof Map) || !(((Map<String, Object>) eo).get("nodes") instanceof List)) return;
+            List<Object> nodes = (List<Object>) ((Map<String, Object>) eo).get("nodes");
+            Object wo = st.get("wait"), xo = st.get("xw");
+            int bi = -1;
+            if (wo instanceof Map && ((Map<String, Object>) wo).get("i") instanceof Number) bi = ((Number) ((Map<String, Object>) wo).get("i")).intValue();
+            else if (xo instanceof Map && ((Map<String, Object>) xo).get("i") instanceof Number && "bus".equals(((Map<String, Object>) xo).get("mode"))) bi = ((Number) ((Map<String, Object>) xo).get("i")).intValue();
+            if (bi < 1 || bi >= nodes.size() || !busNode(nodes.get(bi))) return;
+            int j = -1;
+            for (int k = 1; k <= bi; k++) {
+                if (!busNode(nodes.get(k))) continue;
+                Object pv = nodes.get(k - 1);
+                if (k > 1 && busNode(pv) && String.valueOf(((Map<String, Object>) pv).get("lineName")).equals(String.valueOf(((Map<String, Object>) nodes.get(k)).get("lineName"))) && j >= 0) continue;
+                j++;
+            }
+            Object pb = nodes.get(bi - 1);
+            if (bi > 1 && busNode(pb) && String.valueOf(((Map<String, Object>) pb).get("lineName")).equals(String.valueOf(((Map<String, Object>) nodes.get(bi)).get("lineName")))) return;      // 승차 노드가 아니다(같은 버스를 타는 중)
+            boardI = bi; boardJ = j;
+        } catch (Throwable t) { boardI = -1; boardJ = -1; }
+    }
+    @SuppressWarnings("unchecked")
+    private static boolean busNode(Object n) { return n instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) n).get("isBus")) && !Boolean.TRUE.equals(((Map<String, Object>) n).get("isSub")); }
+    // ── s320: 중간 환승 버스 고르기 — 엔진이 번호마다 만든 변경분(patch)을 달리는 안내(state)에 끼운다(계산 없음). 걸음이 돌고 있는 중에 상태를 바꾸면 그 답이 덮어쓰므로 다음 걸음을 보낼 때 끼운다. ──
+    private volatile String pendingSwap = "";
+    public boolean swapPending() { return pendingSwap.length() > 0; }
+    @SuppressWarnings("unchecked")
+    public boolean busSwap(String patchJson, long pickMs) {
+        try {
+            Object o = ScreenCore.parse(patchJson);
+            if (!(o instanceof Map)) return false;
+            Map<String, Object> p = (Map<String, Object>) o;
+            if (!(p.get("bl") instanceof Map)) return false;
+            if (pickMs > 0L) ((Map<String, Object>) p.get("bl")).put("pickMs", Long.valueOf(pickMs));
+            pendingSwap = HomeSearchCore.toJson(p);
+            return true;
+        } catch (Throwable t) { return false; }
+    }
+    @SuppressWarnings("unchecked")
+    static String applySwap(String stateJson, String patchJson) {
+        try {
+            Object so = ScreenCore.parse(stateJson), po = ScreenCore.parse(patchJson);
+            if (!(so instanceof Map) || !(po instanceof Map)) return stateJson;
+            Map<String, Object> st = (Map<String, Object>) so, p = (Map<String, Object>) po;
+            Object co = st.get("cfg"), eo = st.get("eta");
+            if (!(co instanceof Map) || !(eo instanceof Map) || !(p.get("bl") instanceof Map)) return stateJson;
+            Map<String, Object> cfg = (Map<String, Object>) co, eta = (Map<String, Object>) eo;
+            cfg.put("bl", p.get("bl"));
+            mergeBy(eta.get("nodes"), p.get("nodes"), "i", true);
+            mergeBy(st.get("stops"), p.get("stops"), "i", false);
+            mergeBy(cfg.get("targets"), p.get("targets"), "nodeIdx", false);
+            if (st.get("bl") instanceof Map) { ((Map<String, Object>) st.get("bl")).remove("ms"); ((Map<String, Object>) st.get("bl")).remove("arr"); }      // 지난 구간에서 따라간 차 기록은 버린다 — 고른 차를 따라가게
+            return HomeSearchCore.toJson(st);
+        } catch (Throwable t) { return stateJson; }
+    }
+    /** 목록(dst)의 칸을 변경분(src) 항목의 key 값과 같은 것에 덮어쓴다. byPos 면 key 값을 목록 위치로 본다(노드는 번호 = 위치). */
+    @SuppressWarnings("unchecked")
+    private static void mergeBy(Object dst, Object src, String key, boolean byPos) {
+        if (!(dst instanceof List) || !(src instanceof List)) return;
+        List<Object> d = (List<Object>) dst;
+        for (Object x : (List<Object>) src) {
+            if (!(x instanceof Map)) continue;
+            Map<String, Object> m = (Map<String, Object>) x;
+            if (!(m.get(key) instanceof Number)) continue;
+            int kv = ((Number) m.get(key)).intValue();
+            Map<String, Object> hit = null;
+            if (byPos) { if (kv >= 0 && kv < d.size() && d.get(kv) instanceof Map) hit = (Map<String, Object>) d.get(kv); }
+            else for (Object y : d) if (y instanceof Map && ((Map<String, Object>) y).get(key) instanceof Number && ((Number) ((Map<String, Object>) y).get(key)).intValue() == kv) { hit = (Map<String, Object>) y; break; }
+            if (hit == null) continue;
+            for (Map.Entry<String, Object> e : m.entrySet()) if (!e.getKey().equals(key)) hit.put(e.getKey(), e.getValue());
+        }
+    }
+    /** 중간 환승 버스 질문 요청 본문: 확정 때 쓴 경로 사실에 leg(몇 번째 버스 구간) · arr(칸별 시각) · now 를 더한다. */
+    public static String legBody(int cap, String facts, int leg, String arrJson, long nowMs) {
+        String f = facts == null || facts.length() < 2 ? "null" : facts;
+        if (!"null".equals(f) && f.endsWith("}")) f = f.substring(0, f.length() - 1) + ",\"leg\":" + leg + ",\"now\":" + nowMs + (arrJson != null && arrJson.length() > 2 && !"null".equals(arrJson) ? ",\"arr\":" + arrJson : "") + "}";
+        return "{\"cap\":" + cap + ",\"r\":" + f + "}";
+    }
     public String stepBody(long nowMs) {
+        String sw = pendingSwap;
+        if (sw.length() > 0) { pendingSwap = ""; if (stateJson.length() > 0) stateJson = applySwap(stateJson, sw); }
         StringBuilder b = new StringBuilder("{\"nowMs\":").append(nowMs).append(",\"fixes\":[");
         synchronized (fixes) {
             int from = Math.max(0, fixes.size() - SEND_FIX);
@@ -232,7 +318,12 @@ public final class RideCore {
                 waitI = ((Number) wm.get("i")).intValue();
                 waitLat = wm.get("lat") instanceof Number ? ((Number) wm.get("lat")).doubleValue() : Double.NaN;
                 waitLng = wm.get("lng") instanceof Number ? ((Number) wm.get("lng")).doubleValue() : Double.NaN;
-            } else waitI = -1;
+            } else {
+                Object xo = ((Map<String, Object>) m.get("state")).get("xw");        // s320 (YJ: 환승대기 중이면 마커가 대기 쪽에): 환승역에서 다음 열차를 기다리는 중(엔진 state.xw.i = 탑승 노드) — 마커를 그 탑승 칸에 세운다
+                if (xo instanceof Map && ((Map<String, Object>) xo).get("i") instanceof Number) { waitI = ((Number) ((Map<String, Object>) xo).get("i")).intValue(); waitLat = Double.NaN; waitLng = Double.NaN; }
+                else waitI = -1;
+            }
+            boardCalc((Map<String, Object>) m.get("state"));
             synchronized (fixes) {                                   // 보낸 위치는 지운다(그 뒤 들어온 것은 남긴다)
                 for (int i = fixes.size() - 1; i >= 0; i--) if (fixes.get(i)[0] <= lastSentTs) fixes.remove(i);
             }
@@ -267,6 +358,7 @@ public final class RideCore {
             offAt = offO instanceof Map && ((Map<String, Object>) offO).get("at") instanceof Number ? ((Number) ((Map<String, Object>) offO).get("at")).longValue() : 0L;
             offStn = offO instanceof Map && ((Map<String, Object>) offO).get("stn") instanceof String ? BoardCore.s(((Map<String, Object>) offO).get("stn"), 24) : "";
             dtOn = m.get("dt") instanceof Map;
+            dtJson = dtOn ? HomeSearchCore.toJson(m.get("dt")) : "";
             quit = done && Boolean.TRUE.equals(m.get("quit"));
             Object al = m.get("alert");
             if (al instanceof Map) {
@@ -395,7 +487,7 @@ public final class RideCore {
         } catch (ScreenCore.ParseError e) { return ""; }
     }
     /** 결과 카드의 내 위치 { cur, pos, arr } (엔진 r.lv). */
-    public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + waitJson() + "}"; }
+    public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + waitJson() + (dtJson.length() > 2 ? ",\"dt\":" + dtJson : "") + "}"; }
     /** 승차 대기 중이면 ,"wait":{"i":노드[,"lat":탑승 지점,"lng":…][,"me":[내 위도,경도]]} — 아니면 "". 거리(m)는 엔진(result.js)이 이 값으로 잰다(s271). */
     private String waitJson() {
         if (waitI < 1) return "";
