@@ -555,7 +555,7 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), hc = fs.readFileSync(N('HomeCore.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8');
     assert.ok(/autoGo = okc && !riding\(\) && bothSet\(\)/.test(hc) && /public boolean takeAutoGo\(\)/.test(hc) && /home\.takeAutoGo\(\)\) \{ goRoute\(\); break; \}/.test(a), '후보를 골라 출발·도착이 다 찼으면(확정 중 아님) 바로 찾는다');
     assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,400}food\.showPanelSkeleton\(\);[\s\S]{0,300}foodRedraw\(\);/.test(a) && /public void showPanelSkeleton\(\)/.test(fc) && /panelSkel = false;/.test(fc), '눌린 순간 뼈대부터 펼친다');
-    assert.ok(/applyPanel\(my, key, hit\); return;/.test(a) && /private void panelCachePut\(/.test(a) && /food\.goKeys\(4\)/.test(a) && /panelRequestFor\(ShellCore\.CAP, k\)/.test(a) && /foodPfRun, 1200L/.test(a), '목록이 뜨면 위쪽 4곳 펼침을 미리 받아 둔다(5분)');
+    assert.ok(/applyPanel\(my, key, hit\); return;/.test(a) && /private void panelCachePut\(/.test(a) && /food\.goKeys\(PANEL_PF_MAX\)/.test(a) && /panelRequestFor\(ShellCore\.CAP, k\)/.test(a) && /foodPfRun, 1200L/.test(a), '목록이 뜨면 목록의 가게 펼침(16곳까지)을 미리 받아 둔다(5분)');
     assert.ok(/public String panelRequestFor\(int cap, String k\)/.test(fc) && /withRes && !panelRes\.isEmpty\(\)/.test(fc), '미리 받기 본문 = 눌렀을 때 첫 왕복 본문과 같다');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
