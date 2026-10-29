@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s333";
+var ENGINE_VERSION = "route-v2-2026-10-30s334";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10203,9 +10203,13 @@ function rsPickLive(list, q, nowMs, dk) {
       if (to) for (k = 0; k < same.length; k++) { var m = /[-\u2013\u2014]\s*([^\s]+?)\s*\ubc29\uba74/.exec(String(same[k].trainLineNm || '')); if (m && rsStnKey(m[1]) === to) byTo.push(same[k]); }
       c = byTo.length ? byTo : same;
     }
-    c = c.slice().sort(function (a, b) { return parseInt(a.barvlDt || 9999, 10) - parseInt(b.barvlDt || 9999, 10); });
-    var t = c[0], cd = parseInt(t.arvlCd || '99', 10), bv = parseInt(t.barvlDt || '0', 10);
-    return (cd === 0 || cd === 1) ? nowMs : nowMs + Math.max(0, (isFinite(bv) ? bv : 0) * 1000);
+    // \u2605 s334: \ub0a8\uc740 \ucd08(barvlDt)\uac00 0 \uc778 \uc5f4\ucc28(\uac00\uae4c\uc774 \uc628 \ucc28 \u00b7 \uc704\uce58\ub9cc \uc544\ub294 \ucc28)\ub97c '\uc9c0\uae08'\uc73c\ub85c \uc7a1\ub358 \uac83 \u2192 rsArrivalMs \ub85c \ub3c4\ucc29 \uc2dc\uac01\uc744 \uc5b4\ub9bc\ud574 \uac00\uc7a5 \ube60\ub978 \uc5f4\ucc28(\ubbff\uc744 \uc218 \uc5c6\ub294 \ud56d\ubaa9\uc740 \ube80\ub2e4)
+    var best = null;
+    for (k = 0; k < c.length; k++) {
+      var cd0 = parseInt(c[k].arvlCd, 10), ar = (cd0 === 0 || cd0 === 1) ? nowMs : rsArrivalMs(c[k], nowMs);
+      if (ar != null && (best == null || ar < best)) best = ar;
+    }
+    return best == null ? null : Math.max(nowMs, best);
   } catch (e) { return null; }
 }
 // \uc704 \uacb0\uacfc\ub97c req.pressTT.liveMs \ub85c \ubd99\uc778\ub2e4(\uc2dc\uac01\ud45c\uac00 \uc5c6\uc5b4\ub3c4 \ub9cc\ub4e0\ub2e4). \ubd99\uc600\uc73c\uba74 true
@@ -11316,10 +11320,9 @@ function rsRtPick(list, q, nt) {
     for (k = 0; k < list.length; k++) {
       it = list[k]; if (!it || String(it.subwayId || '') !== sid) continue;
       cd = parseInt(it.arvlCd, 10); if (cd === 1 || cd === 2) continue;
-      sec = parseInt(it.barvlDt, 10); if (!isFinite(sec) || sec <= 0) continue;
+      var arr = rsArrivalMs(it, q.nowMs); if (arr == null) continue;                    // s334: \ub0a8\uc740 \ucd08 0(\uc804\uc5ed \ucd9c\ubc1c\u00b7\uc9c4\uc785\u00b7\ub3c4\ucc29)\ub3c4 \uae00\uc790\ub85c \uc5b4\ub9bc\ud574 \uc4f4\ub2e4
       term = String(it.bstatnNm || '');
       if (q.prev && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.prev, q.from, term); if (fw === false) continue; }
-      var arr = q.nowMs + sec * 1000;
       if (best == null || arr < best) best = arr;
     }
     return best;
