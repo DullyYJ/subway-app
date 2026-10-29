@@ -296,7 +296,13 @@ function mapScreen(inp, factsIn, dataIn) {
   if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
   else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
   else { var bb = mapBusBody(f, info); body = bb.body; bhead = bb.head; info.view = 'bus'; }
-  return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: bhead, body: body, info: info }, 'b' + f.mode + f.reg);
+  var out = mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: bhead, body: body, info: info }, 'b' + f.mode + f.reg);
+  // ★ 2026-10-29 (YJ: "노선도 탭에서 좌우로 밀면 버스 ↔ 지하철이 끝없이 돌게"): 본문을 좌우로 밀면 안쪽 탭(버스 · 지하철)이 서로 바뀐다 — 둘뿐이라 어느 쪽으로 밀어도 반대편으로 넘어간다(순환).
+  //   표(sw.t)는 새 화면이 오기 전에 연달아 밀어도 맞게 넘어가려고 둔다(커뮤니티 · 쇼핑 · 맛집과 같은 규칙). 머리의 지도·칩 줄에서 시작한 몸짓은 앱이 가로채지 않는다(지도 끌기).
+  var toBus = { a: 'cat', v: 'm:bus' }, toSub = { a: 'cat', v: 'm:subway' };
+  out.sw = f.mode === 'subway' ? { l: toBus, r: toBus, k: 'm:subway' } : { l: toSub, r: toSub, k: 'm:bus' };
+  out.sw.t = { 'm:bus': { l: toSub, r: toSub }, 'm:subway': { l: toBus, r: toBus } };
+  return out;
 }
 // ── 버스: 근처 정류장 + 도착정보(웹 loadMapNearStops / _fetchNearStops / _renderBusStop 의 규칙) ──
 // 엔진은 "어느 주소를 받아 와라(need)" 만 말하고, 앱은 그 주소의 본문을 그대로 res 에 넣어 다시 보낸다. 해석은 모두 여기서 한다.

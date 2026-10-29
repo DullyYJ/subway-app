@@ -22,7 +22,7 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
   });
   await t('경로 없음 → idle(혼잡도 없음), 시간(한국 시각)·날씨·문구', () => {
     const a = decide({ nowMs: ms('2026-10-15T12:30:00'), locked: false }, { temp: 12.4, rain: 5, txt: '맑음' });
-    assert.strictEqual(a.mode, 'idle'); assert.strictEqual(a.look.slot, 'noon'); assert.strictEqual(a.look.wk, 'clear'); assert.strictEqual(a.look.season, 'autumn'); assert.strictEqual(a.cong.kind, null); assert.strictEqual(a.hint, hint);
+    assert.strictEqual(a.mode, 'idle'); assert.strictEqual(a.look.slot, 'noon'); assert.strictEqual(a.look.wk, 'clear'); assert.strictEqual(a.look.season, 'autumn'); assert.strictEqual(a.cong.kind, null); assert.strictEqual(a.hint, null);          // (YJ 10-29) 평소(경로 없음)엔 "지하철을 타면…" 글을 달지 않는다
     assert.strictEqual(a.tag, '', 's253: 홈 장면 왼쪽 위 날씨 알약은 없다(길동무 브리핑과 겹침)'); assert(a.look.slotKo === '점심' && a.look.wxKo === '맑음' && a.look.temp === 12, '시간대·날씨는 장면 look 에 그대로');
     const b = decide({ nowMs: ms('2026-12-20T05:10:00'), locked: false }, { temp: -3, rain: 90, txt: '눈' });
     assert.strictEqual(b.look.slot, 'dawn'); assert.strictEqual(b.look.wk, 'snow'); assert.strictEqual(b.look.season, 'winter'); assert(b.look.hidesSun && b.look.lit);
@@ -79,7 +79,7 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
   const BUS = [O, W1, B('A정류장'), B('B정류장'), B('C정류장'), B('D정류장'), W1];
   await t('버스: 혼잡도는 어느 단계에서도 없다 — 타기 전 wait → 타고 가는 중 ride → 내리기 직전 nearEnd → 내림 alight → 도보 alight', () => {
     const at = (h, boarded) => decide({ locked: true, here: h, boarded: !!boarded, nodes: BUS }, null);
-    let r = at(1); assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'bus'); assert.strictEqual(r.cong.kind, null); assert.strictEqual(r.hint, hint); assert.strictEqual(hint, '지하철을 타면 혼잡도가 표시돼요'); assert(/6659 버스를 기다리는/.test(r.tag), r.tag);
+    let r = at(1); assert.strictEqual(r.mode, 'wait'); assert.strictEqual(r.venue, 'bus'); assert.strictEqual(r.cong.kind, null); assert.strictEqual(r.hint, null); assert.strictEqual(hint, '지하철을 타면 혼잡도가 표시돼요'); assert(/6659 버스를 기다리는/.test(r.tag), r.tag);
     r = at(2, false); assert.strictEqual(r.mode, 'wait');                      // 정류장에 도착, 아직 안 탔다
     r = at(2, true); assert.strictEqual(r.mode, 'ride');                       // 승차 확정
     r = at(3, false); assert.strictEqual(r.mode, 'ride'); assert.strictEqual(r.nearEnd, false);
@@ -192,6 +192,12 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert.strictEqual(later.cong.idx, 4, '혼잡도 칸은 지금 역을 따라간다');
     const busR = decide({ nowMs: ms('2026-10-26T12:00:00'), tzOffsetMin: 540, locked: true, here: 1, boarded: true, key: 'b', nodes: [O, B('A'), B('B'), N({ name: '도착' })] }, null);
     assert(!busR.train, '버스에는 객실 계획이 없다');
+  });
+  await t('안내 글(지하철을 타면 혼잡도가 표시돼요) — 지하철 탑승 대기 장면에서만(YJ 10-29): 평소·버스·내림·탑승 중엔 없다', () => {
+    for (let h = 0; h < SUB.length; h++) for (const bd of [false, true]) { const r = decide({ locked: true, here: h, boarded: bd, nodes: SUB }, null); assert.strictEqual(r.hint, (r.mode === 'wait' && r.venue === 'sub') ? hint : null, 'SUB here=' + h + ' boarded=' + bd + ' mode=' + r.mode); }
+    for (let h = 0; h < BUS.length; h++) for (const bd of [false, true]) { const r = decide({ locked: true, here: h, boarded: bd, nodes: BUS }, null); assert.strictEqual(r.hint, null, 'BUS here=' + h); }
+    assert.strictEqual(decide({ locked: false }, null).hint, null);
+    assert(['wait'].some(k => decide({ locked: true, here: 1, boarded: false, nodes: SUB }, null).hint === hint), '지하철 탑승 대기엔 있다');
   });
   await t('잘못된 입력에도 죽지 않는다', () => {
     assert.strictEqual(decide({ locked: true, nodes: [] }, null).mode, null); assert.strictEqual(decide({ locked: true, here: 99, nodes: BUS }, null).mode, 'alight'); assert.strictEqual(decide(null, null).mode, 'idle');

@@ -81,7 +81,18 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
 {
   const s = chat({}, { g: G }), m = s.body.filter(n => n.t === 'msg');
   ok(m.length === 3 && s.info.n === 3, '전체 방: 빈 글·이상한 줄 제외 ' + m.length);
-  ok(m[0].s === '닉 없는 글' && m[0].nick === '익명' && m[1].nick === '빨간모자' && m[1].pre === '(2호선)' && m[2].mine === true && m[2].nick === undefined, '시간순 · 닉 없으면 익명 · (노선) 접두 · 내 글');
+  ok(m[0].s === '닉 없는 글' && m[0].nick === '익명' && m[1].nick === '빨간모자' && m[1].pre === undefined && m[2].mine === true && m[2].nick === undefined, '시간순 · 닉 없으면 익명 · 전체 방에선 (노선) 접두를 달지 않는다(YJ 10-29) · 내 글');
+{   // 2026-10-29 (YJ): 아이디는 호선마다 다르고(겹치지 않음) · 같은 호선 안에선 사람마다 다르며 같은 사람은 늘 같고 · 직접 정한 아이디는 그대로
+  const L = E.CHT_KNOWN, P = E.CHT_PERSONAS, seen = new Map(); let dupe = '', stable = true, inLine = true, len = true;
+  for (const ln of L) { const inL = new Set(); for (const p of P) { const d = E.chtLineNick(ln, p); if (seen.has(d)) dupe = d + ' (' + seen.get(d) + ' / ' + ln + ')'; seen.set(d, ln); if (inL.has(d)) inLine = false; inL.add(d); if (E.chtLineNick(ln, p) !== d) stable = false; if (d.length < 3 || d.length > 16 || d === p) len = false; } }
+  ok(!dupe && inLine && seen.size === L.length * P.length, '아이디: ' + L.length + '개 호선 × ' + P.length + '명 = ' + seen.size + '개가 하나도 겹치지 않는다 ' + dupe);
+  ok(stable && len, '아이디: 같은 호선·같은 사람은 늘 같은 아이디 · 길이 3~16 · 옛 공용 이름이 남지 않는다');
+  ok(E.chtLineNick('2호선', '빨간모자') === '빨간모자' && E.chtLineNick('', '지하철폐인') === '지하철폐인' && E.chtLineNick('없는선', '지하철폐인') === '지하철폐인', '아이디: 이용자가 직접 정한 이름·알 수 없는 노선은 그대로');
+  const gm = chat({ sel: 'all' }, { g: [['지하철폐인', 'a', NOW - 3 * MIN, 0, '2호선'], ['지하철폐인', 'b', NOW - 2 * MIN, 0, '7호선'], ['신입사원1일차', 'c', NOW - 1 * MIN, 0, '3호선'], ['신입사원1일차', 'd', NOW, 0, '2호선']] }).body.filter(x => x.t === 'msg');
+  ok(gm.length === 4 && gm.every(x => x.pre === undefined) && gm[0].nick !== gm[1].nick && gm[2].nick !== gm[3].nick && gm[0].nick === E.chtLineNick('2호선', '지하철폐인') && gm.every(x => x.nick !== '지하철폐인' && x.nick !== '신입사원1일차'), '전체 방: 같은 사람이 다른 호선에서 말해도 아이디가 다르고, 호선 접두는 없다');
+  const rm = chat({ sel: '2호선', me: '나' }, { r: [['q1', NOW - 3 * MIN, '지하철폐인', '가', ''], ['q2', NOW - 2 * MIN, '신입사원1일차', '나', ''], ['q3', NOW - 1 * MIN, '지하철폐인', '다', ''], ['q4', NOW, '나', '내글', '']] }).body.filter(x => x.t === 'msg');
+  ok(rm.length === 4 && rm[0].nick === rm[2].nick && rm[0].nick !== rm[1].nick && rm[0].nick === E.chtLineNick('2호선', '지하철폐인') && rm[3].mine === true && rm[3].nick === undefined, '호선 방: 같은 사람은 같은 아이디, 다른 사람은 다른 아이디, 내 글은 그대로 · 전체 방과 같은 이름');
+}
   ok(m[1].time === '11:55' && m[2].time === '11:56', '시각: 기기 시간대(tzo=-540 → KST) ' + m[1].time);
   ok(m.every(x => x.act === undefined), '전체 방 글에는 신고 없음');
   ok(s.body[0].t === 'spacer' && s.body[s.body.length - 1].t === 'spacer', '위아래 여백');

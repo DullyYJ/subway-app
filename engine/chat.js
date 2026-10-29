@@ -24,6 +24,22 @@ var CHT_ALTS_MAX = 24;                // 한 요청에 실을 수 있는 '다른
 var CHT_COMMON = ['1호선', '2호선', '3호선', '4호선', '5호선', '6호선', '7호선', '8호선', '9호선', '신분당선', '수인분당선', '경의중앙선', '공항철도', '경춘선', 'GTX-A'];   // 웹 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['인천1호선', '인천2호선', '김포골드라인']);                                                                                          // 웹 _LR_KNOWN
 var CHT_MAX_G = 120, CHT_MAX_R = 150, CHT_IN_G = 300, CHT_IN_R = 400;
+// ★ 2026-10-29 (YJ: "커뮤니티 아이디 호선별로 다 다르게, 같은 호선에는 같은 아이디 불가. 전체 탭에선 아이디 앞의 호선은 지워줘"):
+//   서버(board-writer)가 대화를 채우는 AI 말투 30명(NICKS)의 이름은 모든 호선이 똑같이 쓰고 있어 같은 이름이 호선마다 나왔다.
+//   그래서 엔진이 보여 줄 때 (호선, 이름) → 그 호선만의 아이디로 바꾼다: 같은 호선 안에서 한 사람은 늘 같은 아이디(같은 사람이 계속 말한다), 서로 다른 사람은 다른 아이디,
+//   호선이 다르면 아이디가 하나도 겹치지 않는다(18개 호선 × 30명 = 540개를 1,600가지 조합에서 겹치지 않게 뽑는다). 이용자가 직접 정한 아이디(내 것·남의 것)는 그대로 둔다.
+var CHT_PERSONAS = ['회식거절마스터', '지하철덕후', '지하철폐인', '대학원노예', '출근지옥러', '자취N년차', '삼성역출퇴근', '판교셔틀버스', '여의도금융맨', '구로공단아재', '성수동힙스터', '칼퇴요정', '월급루팡꿈나무', '환승의달인', '급행만타는사람',
+  '막차의전설', '첫차타는사람', '9호선생존자', '점심메뉴고민중', '퇴사각재는중', '신입사원1일차', '부장님피하기달인', '재택희망자', '야근수당러버', '주말출근싫어', '불금기다림', '카페인수혈중', '다이어트내일부터', '운동간다말만', '집이최고야'];
+var CHT_ID_ADJ = ['졸린', '배고픈', '지친', '신난', '바쁜', '느긋한', '수다쟁이', '조용한', '퇴근하는', '출근하는', '야근하는', '막차탄', '첫차탄', '급행탄', '환승하는', '서있는', '앉고싶은', '졸고있는', '늦잠잔', '일찍온',
+  '커피마신', '도시락싼', '우산든', '패딩입은', '이어폰낀', '책읽는', '게임하는', '음악듣는', '창밖보는', '손잡이잡은', '가방멘', '마스크쓴', '모자쓴', '안경쓴', '운동하는', '산책하는', '웃는', '투덜대는', '꿈꾸는', '기다리는'];
+var CHT_ID_NOUN = ['직장인', '대학생', '승객', '곰돌이', '여우', '고양이', '다람쥐', '펭귄', '너구리', '햄스터', '토끼', '거북이', '고래', '부엉이', '두더지', '코알라', '판다', '수달', '오리', '참새',
+  '강아지', '사슴', '라쿤', '하마', '기린', '알파카', '쿼카', '돌고래', '병아리', '고슴도치', '미어캣', '치타', '오소리', '청설모', '물개', '비버', '양', '염소', '당나귀', '주민'];
+function chtLineNick(line, nick) {
+  var pi = CHT_PERSONAS.indexOf(nick), li = CHT_KNOWN.indexOf(line);
+  if (pi < 0 || li < 0) return nick;
+  var c = ((li * CHT_PERSONAS.length + pi) * 37) % (CHT_ID_ADJ.length * CHT_ID_NOUN.length);      // 37 과 1600 은 서로소 → (호선, 사람) 마다 다른 조합
+  return CHT_ID_ADJ[c % CHT_ID_ADJ.length] + CHT_ID_NOUN[Math.floor(c / CHT_ID_ADJ.length)];
+}
 
 function chtStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' && isFinite(v) ? String(v).slice(0, n) : ''); }
 function chtHash(s) {                               // djb2 — 같은 화면이면 같은 rev
@@ -128,7 +144,7 @@ function chtMsgG(a, f) {
   if (!text) return null;
   var line = chtStr(a[4], 20), ts = Number(a[2]) || 0, mine = a[3] === 1 || a[3] === true;
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = chtStr(a[0], 40) || '익명'; if (line) n.pre = '(' + line + ')'; }
+  if (mine) n.mine = true; else n.nick = chtLineNick(line, chtStr(a[0], 40) || '익명');           // 전체 방: 아이디 앞의 (호선) 표기는 없앴다(YJ 10-29) — 아이디가 호선마다 달라 구분된다
   return { ts: ts, node: n };
 }
 function chtMsgR(a, i, f) {
@@ -137,7 +153,7 @@ function chtMsgR(a, i, f) {
   if (!text || f.hid[id]) return null;
   var ts = Number(a[1]) || 0, nick = chtStr(a[2], 40) || '익명', mine = !!(f.me && nick === f.me), kind = chtStr(a[4], 10);
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = nick; n.go = '신고'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
+  if (mine) n.mine = true; else { n.nick = chtLineNick(f.sel, nick); n.go = '신고'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
   if (kind === 'delay') { n.badge = '지연'; n.bc = '#ff453a'; } else if (kind === 'crowd') { n.badge = '혼잡'; n.bc = '#ff9f0a'; }
   return { ts: ts, i: i, node: n };
 }
@@ -211,4 +227,4 @@ function chatScreens(inp, factsIn, dataIn, altsIn) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { chtMineLines: chtMineLines, chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };
+if (typeof module !== 'undefined' && module.exports) module.exports = { chtLineNick: chtLineNick, CHT_PERSONAS: CHT_PERSONAS, chtMineLines: chtMineLines, chatScreen: chatScreen, chatScreens: chatScreens, chtFacts: chtFacts, chtItems: chtItems, chtTime: chtTime, chtOfficial: chtOfficial, chtAlert: chtAlert, CHT_KNOWN: CHT_KNOWN };

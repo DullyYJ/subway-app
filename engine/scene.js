@@ -190,7 +190,7 @@ function sceneDecide(inp, wx) {
   var day = Math.floor((nowMs + tz * 6e4) / 864e5), seedStr = String(inp.key || sigBase) + "#" + day;
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
   // fill: 경로가 없고(경로 결과도 안 나온 때) 홈 화면을 한 화면에 꽉 채워 보일 때만 true. 경로 결과가 나오기 시작하면(확정 전이라도) false → 앱은 평소 크기로 돌린다
-  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; return out; }                     // (YJ 10-29) 평소엔 안내 글(지하철을 타면…)을 달지 않는다
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;
@@ -213,7 +213,8 @@ function sceneDecide(inp, wx) {
     out.train = sceneTrain(nodes, first, last, out.hero, out.cast, seedL);
     return out;
   }
-  out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
+  out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n);
+  if (!bus && phase === "wait") out.hint = SCENE_HINT_BUS;                                   // (YJ 10-29) "지하철을 타면 혼잡도가 표시돼요"는 지하철 탑승 대기 장면에서만(탑승하면 혼잡도가 실제로 나온다 · 평소·버스·내리는 중엔 없음)
   // ★ 2026-10-27 (YJ: "버스 기다릴 때는 버스정류장, 지하철 기다릴 때는 역 안에서 지하철을 기다리는 걸로 · 역 안은 내부니까 바람 등 기상현상에 영향 받으면 안 돼"):
   //   지하철을 기다리는 장면은 '역 안 승강장'이다. inside:true 면 앱은 하늘·비·눈·바람·낙엽·햇빛 같은 날씨 효과를 그리지 않는다(venue 는 옛 앱과 맞추려고 'sub' 그대로).
   //   sta = 기다리는 역 이름(승강장 간판에 쓴다)

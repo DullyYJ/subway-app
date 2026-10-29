@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s303";
+var ENGINE_VERSION = "route-v2-2026-10-29s306";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -13071,7 +13071,7 @@ function sceneDecide(inp, wx) {
   var day = Math.floor((nowMs + tz * 6e4) / 864e5), seedStr = String(inp.key || sigBase) + "#" + day;
   var out = { ok: true, fill: false, mode: null, venue: "street", line: "", nearEnd: false, hint: null, tag: "", look: look, hero: SCENE_CHARS[sceneHash(seedStr) % SCENE_CHARS.length], cast: sceneShuffle(SCENE_CHARS, sceneHash(seedStr + "/" + Math.floor(nowMs / 6e5))), traits: sceneTraits(look, seedStr, nowMs), cong: { kind: null, idx: -1, sig: "" } };
   // fill: \uacbd\ub85c\uac00 \uc5c6\uace0(\uacbd\ub85c \uacb0\uacfc\ub3c4 \uc548 \ub098\uc628 \ub54c) \ud648 \ud654\uba74\uc744 \ud55c \ud654\uba74\uc5d0 \uaf49 \ucc44\uc6cc \ubcf4\uc77c \ub54c\ub9cc true. \uacbd\ub85c \uacb0\uacfc\uac00 \ub098\uc624\uae30 \uc2dc\uc791\ud558\uba74(\ud655\uc815 \uc804\uc774\ub77c\ub3c4) false \u2192 \uc571\uc740 \ud3c9\uc18c \ud06c\uae30\ub85c \ub3cc\ub9b0\ub2e4
-  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; out.hint = SCENE_HINT_BUS; return out; }
+  if (!locked) { out.mode = "idle"; look.place = scenePlace(look, seedStr, nowMs); look.placeKo = SCENE_PLACE_KO[look.place]; look.pdir = scenePanDir(seedStr, nowMs); out.tag = ""; out.fill = inp.routeShown !== true; return out; }                     // (YJ 10-29) \ud3c9\uc18c\uc5d4 \uc548\ub0b4 \uae00(\uc9c0\ud558\ucca0\uc744 \ud0c0\uba74\u2026)\uc744 \ub2ec\uc9c0 \uc54a\ub294\ub2e4
   if (!nodes.length) return out;
   var here = Math.max(0, Math.min(isFinite(inp.here) ? inp.here | 0 : 0, nodes.length - 1)), leg = sceneLegNode(nodes, here), j;
   if (!leg) return out;
@@ -13094,7 +13094,8 @@ function sceneDecide(inp, wx) {
     out.train = sceneTrain(nodes, first, last, out.hero, out.cast, seedL);
     return out;
   }
-  out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n); out.hint = SCENE_HINT_BUS;
+  out.mode = phase; out.venue = bus ? "bus" : "sub"; out.line = sceneLineLabel(n);
+  if (!bus && phase === "wait") out.hint = SCENE_HINT_BUS;                                   // (YJ 10-29) "\uc9c0\ud558\ucca0\uc744 \ud0c0\uba74 \ud63c\uc7a1\ub3c4\uac00 \ud45c\uc2dc\ub3fc\uc694"\ub294 \uc9c0\ud558\ucca0 \ud0d1\uc2b9 \ub300\uae30 \uc7a5\uba74\uc5d0\uc11c\ub9cc(\ud0d1\uc2b9\ud558\uba74 \ud63c\uc7a1\ub3c4\uac00 \uc2e4\uc81c\ub85c \ub098\uc628\ub2e4 \u00b7 \ud3c9\uc18c\u00b7\ubc84\uc2a4\u00b7\ub0b4\ub9ac\ub294 \uc911\uc5d4 \uc5c6\uc74c)
   // \u2605 2026-10-27 (YJ: "\ubc84\uc2a4 \uae30\ub2e4\ub9b4 \ub54c\ub294 \ubc84\uc2a4\uc815\ub958\uc7a5, \uc9c0\ud558\ucca0 \uae30\ub2e4\ub9b4 \ub54c\ub294 \uc5ed \uc548\uc5d0\uc11c \uc9c0\ud558\ucca0\uc744 \uae30\ub2e4\ub9ac\ub294 \uac78\ub85c \u00b7 \uc5ed \uc548\uc740 \ub0b4\ubd80\ub2c8\uae4c \ubc14\ub78c \ub4f1 \uae30\uc0c1\ud604\uc0c1\uc5d0 \uc601\ud5a5 \ubc1b\uc73c\uba74 \uc548 \ub3fc"):
   //   \uc9c0\ud558\ucca0\uc744 \uae30\ub2e4\ub9ac\ub294 \uc7a5\uba74\uc740 '\uc5ed \uc548 \uc2b9\uac15\uc7a5'\uc774\ub2e4. inside:true \uba74 \uc571\uc740 \ud558\ub298\u00b7\ube44\u00b7\ub208\u00b7\ubc14\ub78c\u00b7\ub099\uc5fd\u00b7\ud587\ube5b \uac19\uc740 \ub0a0\uc528 \ud6a8\uacfc\ub97c \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(venue \ub294 \uc61b \uc571\uacfc \ub9de\ucd94\ub824\uace0 'sub' \uadf8\ub300\ub85c).
   //   sta = \uae30\ub2e4\ub9ac\ub294 \uc5ed \uc774\ub984(\uc2b9\uac15\uc7a5 \uac04\ud310\uc5d0 \uc4f4\ub2e4)
@@ -15378,6 +15379,22 @@ var CHT_ALTS_MAX = 24;                // \ud55c \uc694\uccad\uc5d0 \uc2e4\uc744 
 var CHT_COMMON = ['1\ud638\uc120', '2\ud638\uc120', '3\ud638\uc120', '4\ud638\uc120', '5\ud638\uc120', '6\ud638\uc120', '7\ud638\uc120', '8\ud638\uc120', '9\ud638\uc120', '\uc2e0\ubd84\ub2f9\uc120', '\uc218\uc778\ubd84\ub2f9\uc120', '\uacbd\uc758\uc911\uc559\uc120', '\uacf5\ud56d\ucca0\ub3c4', '\uacbd\ucd98\uc120', 'GTX-A'];   // \uc6f9 _LR_COMMON
 var CHT_KNOWN = CHT_COMMON.concat(['\uc778\ucc9c1\ud638\uc120', '\uc778\ucc9c2\ud638\uc120', '\uae40\ud3ec\uace8\ub4dc\ub77c\uc778']);                                                                                          // \uc6f9 _LR_KNOWN
 var CHT_MAX_G = 120, CHT_MAX_R = 150, CHT_IN_G = 300, CHT_IN_R = 400;
+// \u2605 2026-10-29 (YJ: "\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514 \ud638\uc120\ubcc4\ub85c \ub2e4 \ub2e4\ub974\uac8c, \uac19\uc740 \ud638\uc120\uc5d0\ub294 \uac19\uc740 \uc544\uc774\ub514 \ubd88\uac00. \uc804\uccb4 \ud0ed\uc5d0\uc120 \uc544\uc774\ub514 \uc55e\uc758 \ud638\uc120\uc740 \uc9c0\uc6cc\uc918"):
+//   \uc11c\ubc84(board-writer)\uac00 \ub300\ud654\ub97c \ucc44\uc6b0\ub294 AI \ub9d0\ud22c 30\uba85(NICKS)\uc758 \uc774\ub984\uc740 \ubaa8\ub4e0 \ud638\uc120\uc774 \ub611\uac19\uc774 \uc4f0\uace0 \uc788\uc5b4 \uac19\uc740 \uc774\ub984\uc774 \ud638\uc120\ub9c8\ub2e4 \ub098\uc654\ub2e4.
+//   \uadf8\ub798\uc11c \uc5d4\uc9c4\uc774 \ubcf4\uc5ec \uc904 \ub54c (\ud638\uc120, \uc774\ub984) \u2192 \uadf8 \ud638\uc120\ub9cc\uc758 \uc544\uc774\ub514\ub85c \ubc14\uafbc\ub2e4: \uac19\uc740 \ud638\uc120 \uc548\uc5d0\uc11c \ud55c \uc0ac\ub78c\uc740 \ub298 \uac19\uc740 \uc544\uc774\ub514(\uac19\uc740 \uc0ac\ub78c\uc774 \uacc4\uc18d \ub9d0\ud55c\ub2e4), \uc11c\ub85c \ub2e4\ub978 \uc0ac\ub78c\uc740 \ub2e4\ub978 \uc544\uc774\ub514,
+//   \ud638\uc120\uc774 \ub2e4\ub974\uba74 \uc544\uc774\ub514\uac00 \ud558\ub098\ub3c4 \uacb9\uce58\uc9c0 \uc54a\ub294\ub2e4(18\uac1c \ud638\uc120 \u00d7 30\uba85 = 540\uac1c\ub97c 1,600\uac00\uc9c0 \uc870\ud569\uc5d0\uc11c \uacb9\uce58\uc9c0 \uc54a\uac8c \ubf51\ub294\ub2e4). \uc774\uc6a9\uc790\uac00 \uc9c1\uc811 \uc815\ud55c \uc544\uc774\ub514(\ub0b4 \uac83\u00b7\ub0a8\uc758 \uac83)\ub294 \uadf8\ub300\ub85c \ub454\ub2e4.
+var CHT_PERSONAS = ['\ud68c\uc2dd\uac70\uc808\ub9c8\uc2a4\ud130', '\uc9c0\ud558\ucca0\ub355\ud6c4', '\uc9c0\ud558\ucca0\ud3d0\uc778', '\ub300\ud559\uc6d0\ub178\uc608', '\ucd9c\uadfc\uc9c0\uc625\ub7ec', '\uc790\ucde8N\ub144\ucc28', '\uc0bc\uc131\uc5ed\ucd9c\ud1f4\uadfc', '\ud310\uad50\uc154\ud2c0\ubc84\uc2a4', '\uc5ec\uc758\ub3c4\uae08\uc735\ub9e8', '\uad6c\ub85c\uacf5\ub2e8\uc544\uc7ac', '\uc131\uc218\ub3d9\ud799\uc2a4\ud130', '\uce7c\ud1f4\uc694\uc815', '\uc6d4\uae09\ub8e8\ud321\uafc8\ub098\ubb34', '\ud658\uc2b9\uc758\ub2ec\uc778', '\uae09\ud589\ub9cc\ud0c0\ub294\uc0ac\ub78c',
+  '\ub9c9\ucc28\uc758\uc804\uc124', '\uccab\ucc28\ud0c0\ub294\uc0ac\ub78c', '9\ud638\uc120\uc0dd\uc874\uc790', '\uc810\uc2ec\uba54\ub274\uace0\ubbfc\uc911', '\ud1f4\uc0ac\uac01\uc7ac\ub294\uc911', '\uc2e0\uc785\uc0ac\uc6d01\uc77c\ucc28', '\ubd80\uc7a5\ub2d8\ud53c\ud558\uae30\ub2ec\uc778', '\uc7ac\ud0dd\ud76c\ub9dd\uc790', '\uc57c\uadfc\uc218\ub2f9\ub7ec\ubc84', '\uc8fc\ub9d0\ucd9c\uadfc\uc2eb\uc5b4', '\ubd88\uae08\uae30\ub2e4\ub9bc', '\uce74\ud398\uc778\uc218\ud608\uc911', '\ub2e4\uc774\uc5b4\ud2b8\ub0b4\uc77c\ubd80\ud130', '\uc6b4\ub3d9\uac04\ub2e4\ub9d0\ub9cc', '\uc9d1\uc774\ucd5c\uace0\uc57c'];
+var CHT_ID_ADJ = ['\uc878\ub9b0', '\ubc30\uace0\ud508', '\uc9c0\uce5c', '\uc2e0\ub09c', '\ubc14\uc05c', '\ub290\uae0b\ud55c', '\uc218\ub2e4\uc7c1\uc774', '\uc870\uc6a9\ud55c', '\ud1f4\uadfc\ud558\ub294', '\ucd9c\uadfc\ud558\ub294', '\uc57c\uadfc\ud558\ub294', '\ub9c9\ucc28\ud0c4', '\uccab\ucc28\ud0c4', '\uae09\ud589\ud0c4', '\ud658\uc2b9\ud558\ub294', '\uc11c\uc788\ub294', '\uc549\uace0\uc2f6\uc740', '\uc878\uace0\uc788\ub294', '\ub2a6\uc7a0\uc794', '\uc77c\ucc0d\uc628',
+  '\ucee4\ud53c\ub9c8\uc2e0', '\ub3c4\uc2dc\ub77d\uc2fc', '\uc6b0\uc0b0\ub4e0', '\ud328\ub529\uc785\uc740', '\uc774\uc5b4\ud3f0\ub080', '\ucc45\uc77d\ub294', '\uac8c\uc784\ud558\ub294', '\uc74c\uc545\ub4e3\ub294', '\ucc3d\ubc16\ubcf4\ub294', '\uc190\uc7a1\uc774\uc7a1\uc740', '\uac00\ubc29\uba58', '\ub9c8\uc2a4\ud06c\uc4f4', '\ubaa8\uc790\uc4f4', '\uc548\uacbd\uc4f4', '\uc6b4\ub3d9\ud558\ub294', '\uc0b0\ucc45\ud558\ub294', '\uc6c3\ub294', '\ud22c\ub35c\ub300\ub294', '\uafc8\uafb8\ub294', '\uae30\ub2e4\ub9ac\ub294'];
+var CHT_ID_NOUN = ['\uc9c1\uc7a5\uc778', '\ub300\ud559\uc0dd', '\uc2b9\uac1d', '\uacf0\ub3cc\uc774', '\uc5ec\uc6b0', '\uace0\uc591\uc774', '\ub2e4\ub78c\uc950', '\ud3ad\uadc4', '\ub108\uad6c\ub9ac', '\ud584\uc2a4\ud130', '\ud1a0\ub07c', '\uac70\ubd81\uc774', '\uace0\ub798', '\ubd80\uc5c9\uc774', '\ub450\ub354\uc9c0', '\ucf54\uc54c\ub77c', '\ud310\ub2e4', '\uc218\ub2ec', '\uc624\ub9ac', '\ucc38\uc0c8',
+  '\uac15\uc544\uc9c0', '\uc0ac\uc2b4', '\ub77c\ucfe4', '\ud558\ub9c8', '\uae30\ub9b0', '\uc54c\ud30c\uce74', '\ucffc\uce74', '\ub3cc\uace0\ub798', '\ubcd1\uc544\ub9ac', '\uace0\uc2b4\ub3c4\uce58', '\ubbf8\uc5b4\ucea3', '\uce58\ud0c0', '\uc624\uc18c\ub9ac', '\uccad\uc124\ubaa8', '\ubb3c\uac1c', '\ube44\ubc84', '\uc591', '\uc5fc\uc18c', '\ub2f9\ub098\uadc0', '\uc8fc\ubbfc'];
+function chtLineNick(line, nick) {
+  var pi = CHT_PERSONAS.indexOf(nick), li = CHT_KNOWN.indexOf(line);
+  if (pi < 0 || li < 0) return nick;
+  var c = ((li * CHT_PERSONAS.length + pi) * 37) % (CHT_ID_ADJ.length * CHT_ID_NOUN.length);      // 37 \uacfc 1600 \uc740 \uc11c\ub85c\uc18c \u2192 (\ud638\uc120, \uc0ac\ub78c) \ub9c8\ub2e4 \ub2e4\ub978 \uc870\ud569
+  return CHT_ID_ADJ[c % CHT_ID_ADJ.length] + CHT_ID_NOUN[Math.floor(c / CHT_ID_ADJ.length)];
+}
 
 function chtStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' && isFinite(v) ? String(v).slice(0, n) : ''); }
 function chtHash(s) {                               // djb2 \u2014 \uac19\uc740 \ud654\uba74\uc774\uba74 \uac19\uc740 rev
@@ -15482,7 +15499,7 @@ function chtMsgG(a, f) {
   if (!text) return null;
   var line = chtStr(a[4], 20), ts = Number(a[2]) || 0, mine = a[3] === 1 || a[3] === true;
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = chtStr(a[0], 40) || '\uc775\uba85'; if (line) n.pre = '(' + line + ')'; }
+  if (mine) n.mine = true; else n.nick = chtLineNick(line, chtStr(a[0], 40) || '\uc775\uba85');           // \uc804\uccb4 \ubc29: \uc544\uc774\ub514 \uc55e\uc758 (\ud638\uc120) \ud45c\uae30\ub294 \uc5c6\uc574\ub2e4(YJ 10-29) \u2014 \uc544\uc774\ub514\uac00 \ud638\uc120\ub9c8\ub2e4 \ub2ec\ub77c \uad6c\ubd84\ub41c\ub2e4
   return { ts: ts, node: n };
 }
 function chtMsgR(a, i, f) {
@@ -15491,7 +15508,7 @@ function chtMsgR(a, i, f) {
   if (!text || f.hid[id]) return null;
   var ts = Number(a[1]) || 0, nick = chtStr(a[2], 40) || '\uc775\uba85', mine = !!(f.me && nick === f.me), kind = chtStr(a[4], 10);
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else { n.nick = nick; n.go = '\uc2e0\uace0'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
+  if (mine) n.mine = true; else { n.nick = chtLineNick(f.sel, nick); n.go = '\uc2e0\uace0'; n.act = { a: 'call', v: 'ch.x.' + i, id: id }; }
   if (kind === 'delay') { n.badge = '\uc9c0\uc5f0'; n.bc = '#ff453a'; } else if (kind === 'crowd') { n.badge = '\ud63c\uc7a1'; n.bc = '#ff9f0a'; }
   return { ts: ts, i: i, node: n };
 }
@@ -21857,7 +21874,13 @@ function mapScreen(inp, factsIn, dataIn) {
   if (f.mode === 'subway' && f.reg === 'seoul') { body = [{ t: 'spacer', h: 1 }]; info.view = 'metro'; }
   else if (f.mode === 'subway') { body = mapRegionBody(f, ctx); info.view = 'list'; info.rs = ctx.regionStns || []; }
   else { var bb = mapBusBody(f, info); body = bb.body; bhead = bb.head; info.view = 'bus'; }
-  return mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: bhead, body: body, info: info }, 'b' + f.mode + f.reg);
+  var out = mapFinish({ ok: true, v: 1, screen: 'map', cover: 'tab', head: bhead, body: body, info: info }, 'b' + f.mode + f.reg);
+  // \u2605 2026-10-29 (YJ: "\ub178\uc120\ub3c4 \ud0ed\uc5d0\uc11c \uc88c\uc6b0\ub85c \ubc00\uba74 \ubc84\uc2a4 \u2194 \uc9c0\ud558\ucca0\uc774 \ub05d\uc5c6\uc774 \ub3cc\uac8c"): \ubcf8\ubb38\uc744 \uc88c\uc6b0\ub85c \ubc00\uba74 \uc548\ucabd \ud0ed(\ubc84\uc2a4 \u00b7 \uc9c0\ud558\ucca0)\uc774 \uc11c\ub85c \ubc14\ub010\ub2e4 \u2014 \ub458\ubfd0\uc774\ub77c \uc5b4\ub290 \ucabd\uc73c\ub85c \ubc00\uc5b4\ub3c4 \ubc18\ub300\ud3b8\uc73c\ub85c \ub118\uc5b4\uac04\ub2e4(\uc21c\ud658).
+  //   \ud45c(sw.t)\ub294 \uc0c8 \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0 \uc5f0\ub2ec\uc544 \ubc00\uc5b4\ub3c4 \ub9de\uac8c \ub118\uc5b4\uac00\ub824\uace0 \ub454\ub2e4(\ucee4\ubba4\ub2c8\ud2f0 \u00b7 \uc1fc\ud551 \u00b7 \ub9db\uc9d1\uacfc \uac19\uc740 \uaddc\uce59). \uba38\ub9ac\uc758 \uc9c0\ub3c4\u00b7\uce69 \uc904\uc5d0\uc11c \uc2dc\uc791\ud55c \ubab8\uc9d3\uc740 \uc571\uc774 \uac00\ub85c\ucc44\uc9c0 \uc54a\ub294\ub2e4(\uc9c0\ub3c4 \ub04c\uae30).
+  var toBus = { a: 'cat', v: 'm:bus' }, toSub = { a: 'cat', v: 'm:subway' };
+  out.sw = f.mode === 'subway' ? { l: toBus, r: toBus, k: 'm:subway' } : { l: toSub, r: toSub, k: 'm:bus' };
+  out.sw.t = { 'm:bus': { l: toSub, r: toSub }, 'm:subway': { l: toBus, r: toBus } };
+  return out;
 }
 // \u2500\u2500 \ubc84\uc2a4: \uadfc\ucc98 \uc815\ub958\uc7a5 + \ub3c4\ucc29\uc815\ubcf4(\uc6f9 loadMapNearStops / _fetchNearStops / _renderBusStop \uc758 \uaddc\uce59) \u2500\u2500
 // \uc5d4\uc9c4\uc740 "\uc5b4\ub290 \uc8fc\uc18c\ub97c \ubc1b\uc544 \uc640\ub77c(need)" \ub9cc \ub9d0\ud558\uace0, \uc571\uc740 \uadf8 \uc8fc\uc18c\uc758 \ubcf8\ubb38\uc744 \uadf8\ub300\ub85c res \uc5d0 \ub123\uc5b4 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4. \ud574\uc11d\uc740 \ubaa8\ub450 \uc5ec\uae30\uc11c \ud55c\ub2e4.

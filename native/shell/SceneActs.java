@@ -60,7 +60,7 @@ final class SceneActs {
             }
         }, null);
         A_(S, "mirror", 3.8, (a, t, A) -> {
-            A.mx = S.aheadX(a, S.HH(a) * .85); A.g = S.addGfx(S.gfx("mirror", A.mx, a.z, 3.8 + .3)); a.dir = A.mx >= a.x ? 1 : -1;
+            A.mx = S.aheadX(a, S.HH(a) * .85); A.g = S.addGfx(S.gfx("mirror", A.mx, a.z, 3.8 + .3)); A.g.own = a; a.dir = A.mx >= a.x ? 1 : -1;
         }, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t; S.standF(a); a.dir = A.mx >= a.x ? 1 : -1;
             double b = Math.abs(Math.sin(T * 8)); a.y = -b * h * .26; a.sy = 1 + (b < .15 ? -.08 : .04); a.ang = Math.sin(T * 8) * .1 * a.dir * -1;

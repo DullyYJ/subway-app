@@ -48,7 +48,7 @@ public final class SceneCore {
     static final class Feather { double x, y, vy, ph; boolean land, got; }
     static final class Chip { double dx, dy, r; int col; }
     static final class Gfx {
-        String k; double x, z, life, t0, r, bump; boolean front, snow; Chip[] cs;
+        String k; double x, z, life, t0, r, bump; boolean front, snow; Chip[] cs; Actor own;      // own: 거울을 보는 주인(얼굴이 거울에 비친다)
     }
     static final class Pt { String type, txt = ""; double x, y, vx, vy, age, life, g = 90, r, rot; int col; boolean hasCol; }
     static final class Traffic { int lane; boolean bus; double L, x, v, rot; int dir; int color; String no; }
@@ -721,6 +721,7 @@ public final class SceneCore {
             } else if (k.equals("mirror")) {
                 double mw = hh * .6, mh = hh * 1.2; c.fillStyle("#8a6a4a"); rr(c, x - mw / 2 - 2, y - mh - 2, mw + 4, mh + 2, 5); c.fill();
                 SceneCv.Grad mg = c.linear(x - mw / 2, y - mh, x + mw / 2, y).stop(0, css("#e6f3ff")).stop(1, css("#b9d6ee")); c.fillGrad(mg); rr(c, x - mw / 2, y - mh, mw, mh - 1, 4); c.fill();
+                if (gg.own != null) drawReflect(c, gg.own, x, y - mh, mw, mh - 1, hh, al);                        // 거울 보며 짖는 친구의 얼굴이 거울에 살짝 비친다(YJ 10-29)
                 c.fillStyle("rgba(255,255,255,.65)"); c.beginPath(); c.moveTo(x - mw * .3, y - mh + 2); c.lineTo(x - mw * .05, y - mh + 2); c.lineTo(x - mw * .35, y - mh * .45); c.lineTo(x - mw * .45, y - mh * .45); c.closePath(); c.fill();
             } else if (k.equals("boxb")) {
                 double bw = hh * BOX_W, bh = hh * BOX_H; c.fillStyle("#7a5530"); c.beginPath(); c.ellipse(x, y - bh, bw * .5, bw * .17, 0, 0, PI2); c.fill();
@@ -745,6 +746,19 @@ public final class SceneCore {
             }
             c.restore();
         }
+    }
+    /** 거울 속 얼굴: 친구가 지금 그리는 그림(칸)에서 머리만 오려(자른 칸 = 한 칸의 오른쪽 위) 좌우로 뒤집어 유리 안에 옅게 그린다 — 얼굴만 살짝. 유리 사각형 (x 가운데, gTop 위, gw 폭, gh 높이). */
+    void drawReflect(SceneCv c, Actor a, double x, double gTop, double gw, double gh, double hh, double al) {
+        if (a.D == null || !a.vis) return;
+        SceneCv.Img sheet = a.sk != null && host.sheet(a.sk) != null ? host.sheet(a.sk) : host.sheet(a.id); if (sheet == null) return;
+        int idx = (int) Math.floorMod((long) Math.floor(a.fr), 16L);
+        double sx = (idx % 4) * 256 + 112, sy = Math.floor(idx / 4) * 256 + 56, cw = 118, d = Math.min(gw * .9, gh * .62);      // 머리 칸(원본 기준 오른쪽 위)
+        c.save(); rr(c, x - gw / 2, gTop, gw, gh, 4); c.clip();
+        c.globalAlpha(al * .5);
+        c.translate(x, gTop + gh * .1 + d * .5); if (a.dir > 0) c.scale(-1, 1);       // 보는 쪽이 오른쪽이면 거울에서는 반대
+        c.drawImage(sheet, sx, sy, cw, cw, -d * .5, -d * .5, d, d);
+        c.restore();
+        c.fillStyle("rgba(225,240,255,.2)"); rr(c, x - gw / 2, gTop, gw, gh, 4); c.fill();             // 유리 한 겹(얼굴이 옅게 비치도록)
     }
     void drawActor(SceneCv c, Actor a) {
         if (!a.vis) return;

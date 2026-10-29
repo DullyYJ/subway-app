@@ -159,6 +159,17 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(/아직 받지 못했어요/.test(strs(t.body)), '자료 없는 노선은 지어내지 않는다');
 }
 
+// ⑥-b (YJ 10-29) 노선도 좌우 밀기: 버스 ↔ 지하철이 끝없이 돈다 — 본문 화면에만 sw(l·r 둘 다 반대편 · k = 지금 칸 · t = 칸마다의 표), 머리·시트엔 없다
+{
+  const bus = call({ part: 'b', mode: 'bus' }), sub = call({ part: 'b', mode: 'subway', reg: 'seoul' }), reg = call({ part: 'b', mode: 'subway', reg: 'busan' });
+  ok(bus.sw && bus.sw.k === 'm:bus' && bus.sw.l.v === 'm:subway' && bus.sw.r.v === 'm:subway' && bus.sw.l.a === 'cat', '노선도 버스: 어느 쪽으로 밀어도 지하철로');
+  ok(sub.sw && sub.sw.k === 'm:subway' && sub.sw.l.v === 'm:bus' && sub.sw.r.v === 'm:bus', '노선도 지하철: 어느 쪽으로 밀어도 버스로(끝없이 순환)');
+  ok(reg.sw && reg.sw.k === 'm:subway' && reg.sw.t['m:bus'].l.v === 'm:subway' && reg.sw.t['m:bus'].r.v === 'm:subway' && reg.sw.t['m:subway'].l.v === 'm:bus' && reg.sw.t['m:subway'].r.v === 'm:bus' && Object.keys(reg.sw.t).length === 2, '표(sw.t): 새 화면이 오기 전에 연달아 밀어도 맞게 번갈아 넘어간다(지방 지하철 포함)');
+  const toggles = call({ part: 'h', mode: 'bus' }).head[0].items.map(i => i.act.v);
+  ok(toggles.indexOf(bus.sw.l.v) >= 0 && toggles.indexOf(sub.sw.l.v) >= 0, '밀기 행동이 머리의 [버스]/[지하철] 탭을 누른 것과 같은 행동(m:bus · m:subway)');
+  ok(!call({ part: 'h', mode: 'bus' }).sw && !call({ part: 'stn', stn: '강남' }).sw && !call({ part: 'tt', stn: '강남' }).sw, '머리줄·역 시트·시간표 시트에는 밀기가 없다');
+}
+
 // ⑥ 지방 노선 목록
 {
   const b = call({ part: 'b', mode: 'subway', reg: 'busan', th: 'dark' });

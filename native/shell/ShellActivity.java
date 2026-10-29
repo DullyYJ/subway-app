@@ -193,7 +193,7 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         hostBody = new Host(1);
         body.setListener(hostBody);
-        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct); } });          // 커뮤니티 좌우 밀기(웹 _commSwipeStep)
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct) || "map".equals(ct); } });          // 커뮤니티 · 쇼핑 · 맛집 · 노선도(버스 ↔ 지하철) 좌우 밀기(웹 _commSwipeStep)
         body.setPullHost(new ScreenView.PullHost() {                  // 아래로 당겨 새로고침(YJ: 버스가 계속 안 나올 때 · 스프링처럼 튀어오르며) — 노선도 버스 · 맛집
             @Override public boolean canPull() { String ct = ShellCore.currentTab(store); return ("map".equals(ct) && "bus".equals(map.mode())) || "food".equals(ct); }
             @Override public void onPull() {
@@ -1551,7 +1551,7 @@ public class ShellActivity extends Activity {
      */
     private boolean commSwipe(int dir) {
         String tab = ShellCore.currentTab(store);
-        if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab)) || (dir != -1 && dir != 1)) return false;
+        if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab) || "map".equals(tab)) || (dir != -1 && dir != 1)) return false;
         ScreenCore.Screen sc = body.currentScreen();
         if (sc == null) return true;
         if (sc != swSeen) { swSeen = sc; swc.onScreen(sc, tab, "community".equals(tab) ? chat.sel() : ""); }                // 새 화면이 왔다 — 그 화면의 칸·순환표로 맞춘다(뼈대·오류 화면은 앞의 표를 둔다)
