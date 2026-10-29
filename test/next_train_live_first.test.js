@@ -90,5 +90,30 @@ const outOf = (legs, acc) => ({ minTime: { legs, accessWalkMin: acc || 0, totalM
   ok(pStale.subPath[1].ttLive !== true && pStale.subPath[1].ttWaitMs === waitTable, '캐시된 경로에 남은 옛 값은 지운다');
   const pShift = mkPath(false); pShift.info.svcWarn = [{ shift: 120 }]; W.ntAttachPath(nt, pShift, BASE, false, live);
   ok(!pShift.subPath[1].ttLive, '운행 종료 보정(다음 날 첫차)이 걸린 경로는 실시간을 쓰지 않는다');
+  // ── s332: 서울 도착정보가 barvlDt=0 으로만 알려 주는 '곧 들어오는 연착 열차' (YJ: 38분 열차가 40분에 왔는데 다다음 차를 안내) ──
+  {
+    const kst = (ms) => new Date(ms + 9 * 3600000).toISOString().replace('T', ' ').slice(0, 19);
+    const nowM = tblMs - 120000;                                    // 시각표 다음 차 2분 전 — 접근 0(역 안)
+    const out0 = outOf([subLeg('1호선', ['서울역', '시청', '종각'])], 0);
+    const k0 = W.ntLiveKey('1호선', '서울역', '시청', 0);
+    const z = (cd, msg, recOff, extra) => Object.assign({ subwayId: '1001', barvlDt: '0', arvlCd: String(cd), arvlMsg2: msg, bstatnNm: term, trainLineNm: term + '행', recptnDt: kst(nowM + (recOff == null ? -5000 : recOff)) }, extra || {});
+    ok(RS.rsArrivalMs(z(5, '전역 도착'), nowM) === nowM - 5000 + 100000, '전역 도착(0초) = 받은 시각 + 약 100초');
+    ok(RS.rsArrivalMs(z(99, '[2]번째 전역 (종각)'), nowM) === nowM - 5000 + 220000, '[2]번째 전역 = 두 역 × 110초');
+    ok(RS.rsArrivalMs(z(2, '출발'), nowM) === null && RS.rsArrivalMs(z(99, '알 수 없음'), nowM) === null, '출발한 차 · 글을 못 읽는 항목은 뺀다');
+    ok(RS.rsArrivalMs(z(5, '전역 도착', -600000), nowM) === null, '10분 넘게 묵은 항목은 믿지 않는다');
+    ok(RS.rsArrivalMs({ subwayId: '1001', barvlDt: '150', recptnDt: kst(nowM - 20000) }, nowM) === nowM - 20000 + 150000, '남은 초가 있으면 받은 시각 기준');
+    ok(RS.rsArrivalMs({ subwayId: '1001', barvlDt: '150' }, nowM) === nowM + 150000, '받은 시각이 없으면 지금 기준(예전 그대로)');
+    let r0 = await W.ntLiveFirst({}, out0, nowM, nowM, mk(fetchOf([z(5, '전역 도착'), z(99, '[4]번째 전역 (서대문)', -5000, { bstatnNm: rev, trainLineNm: rev + '행' })])));
+    ok(r0[k0] && r0[k0].src === 'realtime' && r0[k0].ms === nowM + 95000, '곧 들어오는(전역 도착) 연착 열차를 고른다 — 다다음 차가 아니라: ' + JSON.stringify(r0));
+    r0 = await W.ntLiveFirst({}, out0, nowM, nowM, mk(fetchOf([z(2, '출발'), z(99, '알 수 없음')])));
+    ok(!r0[k0], '떠난 차 · 위치 모르는 차뿐이면 시각표');
+    // 못 받음(중계 준비 중) → miss 로 알려 앱이 다시 묻게 한다
+    r0 = await W.ntLiveFirst({}, out0, nowM, nowM, mk(fetchOf(null)));
+    ok(r0.miss === 1 && Object.keys(r0).length === 0, '실시간을 못 받은 첫 지하철 구간 수를 miss 로(열쇠로는 세지지 않는다): ' + r0.miss);
+    r0 = await W.ntLiveFirst({}, out0, nowM, nowM, mk(fetchOf([z(5, '전역 도착')])));
+    ok(r0.miss === 0, '받았으면 miss 0');
+    r0 = await W.ntLiveFirst({}, far, BASE, BASE, mk(fetchOf(null)));
+    ok(!r0.miss, '20분 넘게 먼 승차는 못 받아도 miss 로 세지 않는다(다시 물어도 시각표)');
+  }
   console.log('next_train_live_first: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FAIL', e && e.stack || e); process.exit(1); });
