@@ -9,7 +9,8 @@ import java.util.Map;
  *
  * 앱을 켜면 길동무 친구들이 2초쯤 나와 인사한다(시간대 7칸 · 칸마다 다른 짧은 움직임). 무엇을 어떻게 움직일지는 엔진(engine/open.js)이 정한 대본이고,
  * 네트워크를 기다리지 않으려고 그 대본을 앱 assets/open.json 에 넣어 두었다. 이 클래스는 그 JSON 을 읽어
- *   ① 지금 시(時)가 속한 칸을 찾고(자정을 넘기는 23-07 포함) ② 날마다 번갈아 나오는 두 가지 중 하나를 고르고 ③ 시각 t(ms)에서 친구마다 어디서 무엇을 하는지 돌려준다.
+ *   ① 지금 시(時)가 속한 칸을 찾고(자정을 넘기는 23-07 포함) ② 켤 때마다 8마리 중 셋을 무작위로 고르고(방금 나온 조합은 피한다) ③ 칸의 자리별 연기를 그 셋에 입히고
+ *   ④ 시각 t(ms)에서 친구마다 어디서 무엇을 하는지 돌려준다.
  * 글·색·움직임은 모두 대본에 있다 — 여기에는 없다.
  */
 public final class OpenCore {
@@ -17,16 +18,23 @@ public final class OpenCore {
 
     public static final class Seg { public double t0, t1, x0, x1, hop, hz; public String k = "pose", say = "", fx = ""; public int p, f = 1; }
     public static final class Actor { public String id = ""; public Seg[] tr = new Seg[0]; }
+    /** 자리(왼쪽·가운데·오른쪽)마다의 연기 — 누가 서든 이 연기를 한다. t0 은 나타나는 시각. */
+    public static final class Role { public double t0, hop, hz; public int p; public String say = "", fx = ""; }
     public static final class Slot {
-        public String id = "", ko = "";
+        public String id = "", ko = "", kind = "pose";
         public double h0, h1;
-        public int sky0, sky1, sky2, ground, hill, tc;
-        public double[] sun;        // {x, y 처음, y 끝, 반지름(화면 폭 비), 색(0xAARRGGBB 를 double 로)} · 없으면 null
+        public int sky0, sky1, sky2, ground, hill;
+        public double[] sun;        // {x, y 처음, y 끝, 반지름(판 폭 비), 색(0xAARRGGBB 를 double 로)} · 없으면 null
         public double[] moon;       // {x, y, 반지름} · 없으면 null
         public int stars, clouds;
-        public Actor[][] variants = new Actor[0][];
+        public Role[] roles = new Role[0];
+        public Map<String, Seg[]> special = new java.util.HashMap<String, Seg[]>();
     }
-    public static final class Script { public int dur = 2700, fade = 700; public String brand = ""; public Slot[] slots = new Slot[0]; }
+    public static final class Script {
+        public int dur = 2700, fade = 700; public String brand = ""; public int bg = 0xFFFAF9F7, ink = 0xFF2B2F4A;
+        public String[] chars = new String[0]; public double[] x = {.30, .50, .70}, xs = {.27, .50, .73};
+        public Slot[] slots = new Slot[0];
+    }
 
     /** 친구 한 마리의 지금 모습. on=false 면 아직 안 나왔다. */
     public static final class St {
@@ -43,47 +51,60 @@ public final class OpenCore {
             if (!(o instanceof Map)) return null;
             Map<String, Object> m = (Map<String, Object>) o;
             Script sc = new Script(); sc.dur = (int) num(m.get("dur"), 2700); sc.fade = (int) num(m.get("fade"), 700); sc.brand = SceneModel.Json.strOr(m.get("brand"), "");
+            if (m.get("bg") instanceof String) sc.bg = col(m.get("bg"));
+            if (m.get("ink") instanceof String) sc.ink = col(m.get("ink"));
+            sc.x = three(m.get("x"), sc.x); sc.xs = three(m.get("xs"), sc.xs);
+            Object co = m.get("chars"); List<String> cl = new ArrayList<String>();
+            if (co instanceof List) for (Object c : (List<Object>) co) if (c instanceof String && ((String) c).length() > 0 && !cl.contains(c)) cl.add((String) c);
+            if (cl.size() < 3) return null;
+            sc.chars = cl.toArray(new String[0]);
             Object so = m.get("slots"); if (!(so instanceof List)) return null;
             List<Slot> out = new ArrayList<Slot>();
             for (Object e : (List<Object>) so) {
                 if (!(e instanceof Map)) continue;
                 Map<String, Object> s = (Map<String, Object>) e; Slot sl = new Slot();
-                sl.id = SceneModel.Json.strOr(s.get("id"), ""); sl.ko = SceneModel.Json.strOr(s.get("ko"), "");
-                                sl.h0 = num(s.get("h0"), 0); sl.h1 = num(s.get("h1"), 0);
+                sl.id = SceneModel.Json.strOr(s.get("id"), ""); sl.ko = SceneModel.Json.strOr(s.get("ko"), ""); sl.kind = "sleep".equals(SceneModel.Json.strOr(s.get("kind"), "pose")) ? "sleep" : "pose";
+                sl.h0 = num(s.get("h0"), 0); sl.h1 = num(s.get("h1"), 0);
                 Object sk = s.get("sky");
                 if (sk instanceof List && ((List<Object>) sk).size() >= 3) { List<Object> k = (List<Object>) sk; sl.sky0 = col(k.get(0)); sl.sky1 = col(k.get(1)); sl.sky2 = col(k.get(2)); }
                 else return null;
-                sl.ground = col(s.get("ground")); sl.hill = col(s.get("hill")); sl.tc = col(s.get("tc"));
+                sl.ground = col(s.get("ground")); sl.hill = col(s.get("hill"));
                 Object su = s.get("sun"); if (su instanceof Map) { Map<String, Object> q = (Map<String, Object>) su; sl.sun = new double[] { num(q.get("x"), .5), num(q.get("y0"), .3), num(q.get("y1"), .3), num(q.get("r"), .08), col(q.get("c")) & 0xFFFFFFFFL }; }
                 Object mo = s.get("moon"); if (mo instanceof Map) { Map<String, Object> q = (Map<String, Object>) mo; sl.moon = new double[] { num(q.get("x"), .5), num(q.get("y"), .2), num(q.get("r"), .06) }; }
                 sl.stars = (int) num(s.get("stars"), 0); sl.clouds = (int) num(s.get("clouds"), 0);
-                Object vo = s.get("variants"); List<Actor[]> vs = new ArrayList<Actor[]>();
-                if (vo instanceof List) for (Object v : (List<Object>) vo) {
-                    if (!(v instanceof Map)) continue;
-                    Object co = ((Map<String, Object>) v).get("cast"); if (!(co instanceof List)) continue;
-                    List<Actor> cast = new ArrayList<Actor>();
-                    for (Object a : (List<Object>) co) {
-                        if (!(a instanceof Map)) continue;
-                        Map<String, Object> am = (Map<String, Object>) a; Actor ac = new Actor(); ac.id = SceneModel.Json.strOr(am.get("id"), "");
-                        Object to = am.get("tr"); List<Seg> sg = new ArrayList<Seg>();
-                        if (to instanceof List) for (Object t : (List<Object>) to) {
-                            if (!(t instanceof Map)) continue;
-                            Map<String, Object> tm = (Map<String, Object>) t; Seg g = new Seg();
-                            g.t0 = num(tm.get("t0"), 0); g.t1 = num(tm.get("t1"), g.t0); g.x0 = num(tm.get("x0"), .5); g.x1 = num(tm.get("x1"), g.x0);
-                            g.hop = num(tm.get("hop"), 0); g.hz = num(tm.get("hz"), 2); g.p = (int) num(tm.get("p"), 0); g.f = num(tm.get("f"), 1) < 0 ? -1 : 1;
-                            g.k = SceneModel.Json.strOr(tm.get("k"), "pose"); g.say = SceneModel.Json.strOr(tm.get("say"), ""); g.fx = SceneModel.Json.strOr(tm.get("fx"), "");
-                            sg.add(g);
-                        }
-                        ac.tr = sg.toArray(new Seg[0]); if (ac.id.length() > 0 && ac.tr.length > 0) cast.add(ac);
-                    }
-                    if (!cast.isEmpty()) vs.add(cast.toArray(new Actor[0]));
+                Object ro = s.get("roles"); List<Role> rl = new ArrayList<Role>();
+                if (ro instanceof List) for (Object r : (List<Object>) ro) {
+                    if (!(r instanceof Map)) continue;
+                    Map<String, Object> rm = (Map<String, Object>) r; Role rr = new Role();
+                    rr.t0 = num(rm.get("t0"), 0); rr.p = (int) num(rm.get("p"), 0); rr.hop = num(rm.get("hop"), 0); rr.hz = num(rm.get("hz"), 2);
+                    rr.say = SceneModel.Json.strOr(rm.get("say"), ""); rr.fx = SceneModel.Json.strOr(rm.get("fx"), "");
+                    rl.add(rr);
                 }
-                sl.variants = vs.toArray(new Actor[0][]);
-                if (sl.variants.length > 0) out.add(sl);
+                if (rl.size() < 3) continue;
+                sl.roles = rl.toArray(new Role[0]);
+                Object spo = s.get("special");
+                if (spo instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) spo).entrySet()) {
+                    if (!(en.getValue() instanceof List)) continue;
+                    List<Seg> sg = new ArrayList<Seg>();
+                    for (Object t : (List<Object>) en.getValue()) {
+                        if (!(t instanceof Map)) continue;
+                        Map<String, Object> tm = (Map<String, Object>) t; Seg g = new Seg();
+                        g.t0 = num(tm.get("t0"), 0); g.t1 = num(tm.get("t1"), g.t0);
+                        g.hop = num(tm.get("hop"), 0); g.hz = num(tm.get("hz"), 2); g.p = (int) num(tm.get("p"), 0); g.f = num(tm.get("f"), 1) < 0 ? -1 : 1;
+                        g.k = SceneModel.Json.strOr(tm.get("k"), "pose"); g.say = SceneModel.Json.strOr(tm.get("say"), ""); g.fx = SceneModel.Json.strOr(tm.get("fx"), "");
+                        sg.add(g);
+                    }
+                    if (!sg.isEmpty()) sl.special.put(en.getKey(), sg.toArray(new Seg[0]));
+                }
+                out.add(sl);
             }
             if (out.isEmpty()) return null;
             sc.slots = out.toArray(new Slot[0]); return sc;
         } catch (RuntimeException e) { return null; }
+    }
+    private static double[] three(Object o, double[] d) {
+        if (o instanceof List && ((List<?>) o).size() >= 3) { List<?> l = (List<?>) o; double[] r = new double[3]; for (int i = 0; i < 3; i++) r[i] = num(l.get(i), d[i]); return r; }
+        return d;
     }
     private static double num(Object o, double d) { return o instanceof Number ? ((Number) o).doubleValue() : d; }
     /** '#rrggbb' · '#rgb' → 0xFFRRGGBB (잘못된 글은 검정). 대본의 색은 모두 이 두 모양이다. */
@@ -102,8 +123,50 @@ public final class OpenCore {
         for (Slot s : sc.slots) if (s.h0 < s.h1 ? (h >= s.h0 && h < s.h1) : (h >= s.h0 || h < s.h1)) return s;
         return sc.slots[0];
     }
-    /** 날(dayKey: 예를 들어 1970-01-01 부터의 날 수)마다 번갈아 나오는 두 가지 중 하나. */
-    public static Actor[] cast(Slot s, long dayKey) { return s.variants[(int) Math.floorMod(dayKey, (long) s.variants.length)]; }
+    /**
+     * 켤 때마다 나올 세 친구(왼쪽·가운데·오른쪽 순서)를 무작위로 고른다. 8마리 중 서로 다른 셋 — 방금 나온 조합(prev: "a,b,c")은 되도록 피한다.
+     * seed 는 켠 순간의 값(System.nanoTime 등) — 시험은 정해진 값을 넣어 결과를 확인한다.
+     */
+    public static String[] pickIds(Script sc, long seed, String prev) {
+        int n = sc.chars.length; java.util.Random rnd = new java.util.Random(mix(seed));
+        String[] best = null;
+        for (int tries = 0; tries < 8; tries++) {
+            List<String> pool = new ArrayList<String>(); for (String c : sc.chars) pool.add(c);
+            String[] pick = new String[3];
+            for (int i = 0; i < 3; i++) pick[i] = pool.remove(rnd.nextInt(pool.size()));
+            best = pick;
+            if (prev == null || !sameTrio(pick, prev)) break;
+        }
+        return best;
+    }
+    private static boolean sameTrio(String[] a, String prev) {
+        String[] pv = prev.split(","); if (pv.length != 3) return false;
+        for (String x : a) { boolean f = false; for (String y : pv) if (x.equals(y.trim())) f = true; if (!f) return false; }
+        return true;
+    }
+    private static long mix(long z) { z += 0x9E3779B97F4A7C15L; z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L; z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL; return z ^ (z >>> 31); }
+
+    /** 칸의 자리별 연기를 고른 친구 셋에 입힌다. 죽순이·뽀송처럼 전용 동작이 있는 친구는 칸의 special 로 자기 자리의 연기를 바꾼다(말풍선은 자리의 것을 이어받는다). */
+    public static Actor[] cast(Script sc, Slot s, String[] ids) {
+        double[] xs = "sleep".equals(s.kind) ? sc.xs : sc.x; Actor[] out = new Actor[3];
+        for (int i = 0; i < 3; i++) {
+            Role r = s.roles[i]; Actor a = new Actor(); a.id = ids[i]; Seg[] sp = s.special.get(ids[i]);
+            if (sp != null) {
+                Seg[] tr = new Seg[sp.length];
+                for (int j = 0; j < sp.length; j++) {
+                    Seg q = sp[j], g = new Seg(); g.t0 = q.t0 + (j == 0 ? r.t0 : 0); g.t1 = q.t1; g.x0 = g.x1 = xs[i]; g.hop = q.hop; g.hz = q.hz; g.k = q.k; g.p = q.p; g.f = q.f; g.fx = q.fx; g.say = q.say;
+                    if (j == 0 && g.say.length() == 0) g.say = r.say;
+                    tr[j] = g;
+                }
+                a.tr = tr;
+            } else {
+                Seg g = new Seg(); g.t0 = r.t0; g.t1 = sc.dur; g.x0 = g.x1 = xs[i]; g.k = s.kind; g.p = r.p; g.hop = r.hop; g.hz = r.hz; g.fx = r.fx; g.say = r.say;
+                a.tr = new Seg[] { g };
+            }
+            out[i] = a;
+        }
+        return out;
+    }
 
     // ───────────── 시각 t(ms) 의 모습 ─────────────
     /** 전체 진하기: 끝나기 fade ms 전부터 서서히 사라지고, dur 이 지나면 0. */

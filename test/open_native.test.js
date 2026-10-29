@@ -17,14 +17,21 @@ t('엔진 대본: 사용자가 정한 7칸(07-09 · 09-11 · 11-13 · 13-17 · 1
   E.OPEN_SLOTS.forEach(s => assert.deepStrictEqual([s.h0, s.h1], want[s.id], s.id));
   for (let m = 0; m < 24 * 60; m += 5) { const h = m / 60, hit = E.OPEN_SLOTS.filter(s => s.h0 < s.h1 ? (h >= s.h0 && h < s.h1) : (h >= s.h0 || h < s.h1)); assert.strictEqual(hit.length, 1, h + ' 시에 칸이 ' + hit.length + '개'); assert.strictEqual(E.OPEN_SLOTS[E.openSlotIndex(h)].id, hit[0].id); }
 });
-t('엔진 대본: 칸마다 두 가지 · 친구 셋 · 알려진 친구 · 구간이 오프닝 시간 안 · 가운데 친구가 인사한다', () => {
+t('엔진 대본: 칸마다 자리 셋의 연기 · 가운데 자리만 인사 · 제자리·콩콩 5% 안쪽 · 친구는 8마리(나올 사람은 앱이 무작위로 고른다)', () => {
+  assert.deepStrictEqual(E.OPEN_CHARS, ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'juksun', 'bbosong']);
+  assert.ok(/^#[0-9A-Fa-f]{6}$/.test(E.OPEN_BG) && /^#[0-9A-Fa-f]{6}$/.test(E.OPEN_INK));
+  const lum = c => { const n = parseInt(c.slice(1), 16); return ((n >> 16) & 255) * .299 + ((n >> 8) & 255) * .587 + (n & 255) * .114; };
+  assert.ok(lum(E.OPEN_BG) > 235 && lum(E.OPEN_INK) < 100, '파스텔 화이트 바탕 + 어두운 글');
   E.OPEN_SLOTS.forEach(s => {
-    assert.strictEqual(s.variants.length, 2, s.id); assert.ok(s.sky.length === 3 && s.tc, s.id + ' 하늘·글 색');
-    s.variants.forEach(v => { assert.strictEqual(v.cast.length, 3, s.id); assert.strictEqual(new Set(v.cast.map(a => a.id)).size, 3);
-      assert.ok(v.cast.every(a => a.tr.every(g => g.k !== 'walk' && g.x0 === g.x1 && (g.hop || 0) <= 0.05)), s.id + ' 제자리 · 걷지 않음 · 콩콩 5% 안쪽');
-      assert.strictEqual(v.cast.filter(a => a.tr.some(g => g.say)).length, 1, s.id + ' 말풍선은 가운데 친구 하나'); assert.ok(v.cast[1].tr.some(g => g.say), s.id + ' 가운데 친구가 인사');
-      v.cast.forEach(a => { assert.ok(E.OPEN_CHARS.includes(a.id), a.id); a.tr.forEach(g => assert.ok(g.t0 >= 0 && g.t1 <= E.OPEN_DUR && g.t1 >= g.t0, s.id + ' 구간')); }); });
+    assert.ok(s.sky.length === 3 && (s.sun || s.moon) && !(s.sun && s.moon), s.id + ' 하늘 · 해 또는 달');
+    assert.strictEqual(s.roles.length, 3, s.id); assert.ok(!s.variants && !s.cast, s.id + ' 옛 고정 출연진은 없다');
+    assert.strictEqual(s.roles.filter(r => r.say).length, 1, s.id + ' 말풍선은 하나'); assert.ok(s.roles[1].say, s.id + ' 가운데 자리가 인사');
+    s.roles.forEach(r => assert.ok((r.hop || 0) <= 0.05 && r.p <= 2, s.id + ' 콩콩 5% 안쪽 · 기본 자세 0~2'));
+    assert.strictEqual(s.kind, s.id === 'sleep' ? 'sleep' : 'pose');
+    Object.keys(s.special).forEach(id => { assert.ok(['juksun', 'bbosong'].includes(id)); s.special[id].forEach(g => assert.ok(g.t0 >= 0 && g.t1 <= E.OPEN_DUR && g.k !== 'walk', s.id + ' 전용 구간')); });
   });
+  ['greet', 'lunch'].forEach(id => assert.ok(E.OPEN_SLOTS.find(s => s.id === id).special.juksun, id + ': 죽순이는 먹는다'));
+  assert.ok(E.OPEN_SLOTS.find(s => s.id === 'afternoon').special.bbosong && E.OPEN_SLOTS.find(s => s.id === 'greet').special.bbosong, '뽀송 전용 동작');
   assert.ok(E.OPEN_DUR - E.OPEN_FADE >= 2000 && E.OPEN_DUR <= 3000, '또렷이 2초 + 녹아듦');
   assert.strictEqual(E.OPEN_BRAND, '우리들의 길동무');
 });
@@ -42,21 +49,25 @@ t('OpenCore 는 안드로이드를 쓰지 않는다(순수 계산) · 대본에 
   const c = fs.readFileSync(N('OpenCore.java'), 'utf8'); assert.ok(!/import android\./.test(c));
   const v = fs.readFileSync(N('OpenView.java'), 'utf8');
   assert.ok(!v.includes(E.OPEN_BRAND) && !/좋은 아침|수고했어요|푹 자요|편안한 밤|점심 먹을/.test(v + c), '글은 대본에만');
-  E.OPEN_SLOTS.forEach(s => s.variants.forEach(w => w.cast.forEach(a => a.tr.forEach(g => g.say && assert.ok(!(v + c).includes(g.say), g.say)))));
+  E.OPEN_SLOTS.forEach(s => s.roles.forEach(r => r.say && assert.ok(!(v + c).includes(r.say), r.say)));
 });
 t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱은 열고 · 누르거나 뒤로 가기로 닫는다', () => {
   const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
   assert.ok(/if \(b == null\) showOpening\(\)/.test(a), '회전 같은 다시 만들기(b != null)에는 안 띄움');
-  assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(a) && /OpenCore\.slotFor\(/.test(a) && /OpenCore\.cast\(/.test(a) && /addContentView\(openV/.test(a), '대본을 읽어 칸·그날 것을 고른다');
+  assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(a) && /OpenCore\.slotFor\(/.test(a) && /OpenCore\.cast\(sc, sl, ids\)/.test(a) && /OpenCore\.pickIds\(/.test(a) && /"open_last"/.test(a) && /addContentView\(openV/.test(a), '대본을 읽어 칸을 고르고 · 친구 셋은 켤 때마다 무작위(방금 조합 기억)');
   assert.ok(/catch \(Throwable ignored\) \{ openV = null; \}/.test(a), '실패해도 앱은 연다');
   assert.ok(/if \(openV != null\) \{ openV\.finish\(\); return; \}/.test(a), '뒤로 가기는 오프닝만 닫는다');
-  const v = fs.readFileSync(N('OpenView.java'), 'utf8');
+  const v = fs.readFileSync(N('OpenView.java'), 'utf8'), c0 = fs.readFileSync(N('OpenCore.java'), 'utf8');
   assert.ok(/ACTION_UP\) finish\(\)/.test(v) && /OpenCore\.done\(sc, t\)/.test(v), '누르면 닫고 · 시간이 되면 닫는다');
   assert.ok(/Chars\.file\(k\)/.test(v), '뽀송 신발 시트');
   assert.ok(/new Thread\(/.test(v) && !/\.join\(\)/.test(v), '시트는 뒤 스레드에서 읽고 기다리지 않는다');
   assert.ok(/\* 0\.70f/.test(v), '친구 키는 처음보다 30% 작게(0.70배)');
   assert.ok(/saveLayerAlpha\(0, 0, W, H, bgA\)/.test(v) && /saveLayerAlpha\(0, 0, W, H, fgA\)/.test(v) && !/setAlpha\(\(float\)/.test(v), '배경과 글·친구를 따로 흐리게(앱 화면으로 녹아듦)');
-  assert.ok(/sc\.brand/.test(v), '상단 글은 대본의 brand');
+  assert.ok(/sc\.brand/.test(v) && /panelTop - 22f \* dp/.test(v), '제목은 대본의 brand · 친구들이 있는 판 바로 위');
+  assert.ok(/drawRect\(0, 0, W, H, p\)/.test(v) && /sc\.bg/.test(v) && /clipPath\(path\)/.test(v), '화면 전체는 불투명 파스텔 화이트 · 배경 그림은 둥근 판 안에만');
+  const ds = v.slice(v.indexOf('private void drawSky'), v.indexOf('p.setShader(sky)'));
+  assert.ok(/p\.setColor\(0xFF000000\); p\.setAlpha\(255\)/.test(ds), '하늘 셰이더를 그리기 전에 붓 투명도를 되돌린다(앱 화면이 비치던 문제)');
+  assert.ok(!/slot\.tc/.test(v + c0), '옛 상단 글 색(tc) 없음');
   // 켜는 준비(위치·정류장·탭 미리 받기)는 오프닝 호출보다 앞에서 이미 시작돼 있다
   const o = a.indexOf('showOpening();'); for (const k of ['launchLocate();', 'prefetchTabs();', 'preloadDisk();', 'preconnectBus();', 'gwSync(false);']) assert.ok(a.indexOf(k) > -1 && a.indexOf(k) < o, k + ' 가 오프닝보다 먼저 시작');
 });

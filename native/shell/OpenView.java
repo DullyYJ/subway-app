@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * 오프닝 화면 — 앱을 켜면 2초쯤 길동무 친구들이 나와 인사한다(2026-10-29 s299, YJ). 안드로이드 전용(그리기만).
  *
- *   무엇을 · 언제 · 어디서 하는지는 모두 OpenCore(= 엔진 대본 assets/open.json)가 정한다. 이 뷰는 받은 모습대로 하늘 · 해/달 · 땅 · 친구 · 말풍선 · 작은 효과를 그릴 뿐이다.
+ *   무엇을 · 언제 · 어디서 하는지는 모두 OpenCore(= 엔진 대본 assets/open.json)가 정한다. 이 뷰는 받은 모습대로 하늘 · 해/달 · 땅 · 친구 · 말풍선 · 작은 효과를 그릴 뿐이다. 화면 전체는 불투명 파스텔 화이트이고 배경 그림은 친구들이 선 둥근 판 안에만 있다.
  *   그리는 동안 앱은 뒤에서 위치 · 정류장 · 탭 화면 받기를 이미 하고 있다(이 뷰는 아무것도 기다리지 않고, 아무것도 막지 않는다 — 터치를 누르면 바로 닫힌다).
  *   시트(걷기 · 자세 · 잠)는 필요한 것만 뒤 스레드에서 읽는다. 아직 못 읽었으면 그 친구만 잠시 안 보일 뿐 시간표는 그대로 흐른다.
  */
@@ -91,27 +91,37 @@ final class OpenView extends View {
         long t = now - t0;
         if (OpenCore.done(sc, t)) { finish(); return; }
         float W = getWidth(), H = getHeight(); if (W < 8 || H < 8) { postInvalidateOnAnimation(); return; }
-        float gy = H * 0.58f, charH = Math.min(W * 0.30f, 108f * dp) * 0.70f;          // 친구는 화면 가운데에 모여 선다 · 키는 처음보다 30% 작게
-        // 사라질 때: 글·친구가 먼저 흐려지고 배경(하늘·땅)이 뒤따라 앱 화면으로 녹아든다 → 겹쳐 보이는 시간이 짧고 자연스럽다
+        // 화면 전체는 불투명 파스텔 화이트. 하늘·땅 배경은 친구들이 서 있는 둥근 판 안에만 있고, 제목은 그 판 바로 위에 있다.
+        float pw = Math.min(W - 40f * dp, 420f * dp), ph = Math.min(H * 0.31f, 240f * dp), pl = (W - pw) / 2f, pt = H * 0.50f - ph / 2f;
+        float gy = ph * 0.70f, charH = Math.min(pw * 0.30f, 108f * dp) * 0.70f;          // 친구는 판 가운데에 모여 선다 · 키는 처음보다 30% 작게
+        // 사라질 때: 판·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
         if (bgA <= 0) { finish(); return; }
         int sb = cv.saveLayerAlpha(0, 0, W, H, bgA);
-        drawSky(cv, W, H, t); drawGround(cv, W, H, gy);
+        p.setShader(null); p.setStyle(Paint.Style.FILL); p.setColor(sc.bg); cv.drawRect(0, 0, W, H, p);          // 불투명 바탕
         cv.restoreToCount(sb);
         if (fgA > 0) {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
-            drawTitle(cv, W, H);
+            drawTitle(cv, W, pt);
+            cv.save(); cv.translate(pl, pt);
+            path.reset(); rf.set(0, 0, pw, ph); path.addRoundRect(rf, 22f * dp, 22f * dp, Path.Direction.CW);
+            cv.save(); cv.clipPath(path);
+            drawSky(cv, pw, ph, t); drawGround(cv, pw, ph, gy);
+            cv.restore();
+            rf.set(0, 0, pw, ph); p.setShader(null); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f * dp); p.setColor(0x1A000000); cv.drawRoundRect(rf, 22f * dp, 22f * dp, p); p.setStyle(Paint.Style.FILL);
             int i = 0;
-            for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), W, gy, charH, i++); }
+            for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), pw, gy, charH, i++); }
+            cv.restore();
             cv.restoreToCount(sf);
         }
         postInvalidateOnAnimation();
     }
 
-    // ───────────── 하늘 · 해 · 달 · 별 · 구름 ─────────────
+    // ───────────── 하늘 · 해 · 달 · 별 · 구름 (판 안 좌표) ─────────────
     private void drawSky(Canvas cv, float W, float H, long t) {
         if (sky == null || skyW != (int) W || skyH != (int) H) { sky = new LinearGradient(0, 0, 0, H * 0.82f, new int[] { slot.sky0, slot.sky1, slot.sky2 }, new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP); skyW = (int) W; skyH = (int) H; }
-        p.setShader(sky); p.setStyle(Paint.Style.FILL); cv.drawRect(0, 0, W, H, p); p.setShader(null);
+        p.setStyle(Paint.Style.FILL); p.setColor(0xFF000000); p.setAlpha(255);       // ★ 붓의 투명도가 셰이더에도 곱해진다 — 앞에서 쓴 옅은 색이 남아 하늘이 비치던 문제를 막는다
+        p.setShader(sky); cv.drawRect(0, 0, W, H, p); p.setShader(null);
         float tt = t / 1000f;
         for (int k = 0; k < slot.stars; k++) {                                   // 별(자리는 번호로 고정, 반짝임만 시간으로)
             float sx = frac(k * 0.6180339f + 0.13f) * W, sy = frac(k * 0.4142135f + 0.07f) * H * 0.55f, tw = 0.45f + 0.55f * (float) Math.abs(Math.sin(tt * 2.1 + k * 1.7));
@@ -131,7 +141,7 @@ final class OpenView extends View {
             p.setColor(0x33FFF3C4); cv.drawCircle(mx, my, r, p);
         }
         for (int k = 0; k < slot.clouds; k++) {                                   // 구름: 천천히 흘러간다
-            float cy = H * (0.14f + 0.10f * k + (k % 2) * 0.05f), cx = ((frac(k * 0.37f + 0.1f) * 1.3f * W + tt * (8f + 5f * k) * dp) % (W * 1.4f)) - W * 0.2f, s = (46f + 14f * (k % 3)) * dp;
+            float cy = H * (0.14f + 0.12f * k + (k % 2) * 0.05f), cx = ((frac(k * 0.37f + 0.1f) * 1.3f * W + tt * (8f + 5f * k) * dp) % (W * 1.4f)) - W * 0.2f, s = (40f + 12f * (k % 3)) * dp;
             int a = slot.id.equals("evening") ? 0x66 : 0xB0; p.setColor((a << 24) | (slot.id.equals("evening") ? 0xFFD9C0 : 0xFFFFFF));
             cv.drawCircle(cx, cy, s * 0.32f, p); cv.drawCircle(cx + s * 0.30f, cy - s * 0.10f, s * 0.38f, p); cv.drawCircle(cx + s * 0.62f, cy, s * 0.30f, p);
             rf.set(cx - s * 0.2f, cy, cx + s * 0.85f, cy + s * 0.30f); cv.drawRoundRect(rf, s * 0.15f, s * 0.15f, p);
@@ -146,11 +156,11 @@ final class OpenView extends View {
         p.setColor(0x22000000); cv.drawRect(0, gy, W, gy + 2f * dp, p);
     }
 
-    /** 상단에는 대본의 brand 글 한 줄만. */
-    private void drawTitle(Canvas cv, float W, float H) {
+    /** 제목: 대본의 brand 글 한 줄 — 친구들이 있는 판 바로 위에, 대본의 글 색으로. */
+    private void drawTitle(Canvas cv, float W, float panelTop) {
         if (sc.brand.length() == 0) return;
-        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(slot.tc); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
-        cv.drawText(sc.brand, W / 2f, H * 0.115f, tp);
+        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(sc.ink); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
+        cv.drawText(sc.brand, W / 2f, panelTop - 22f * dp, tp);
     }
 
     // ───────────── 친구 ─────────────
@@ -201,7 +211,7 @@ final class OpenView extends View {
         float tx = Math.max(l + 14f * dp, Math.min(l + bw - 14f * dp, cx));
         path.reset(); path.moveTo(tx - 5f * dp, t + bh - 1f); path.lineTo(tx + 5f * dp, t + bh - 1f); path.lineTo(tx, t + bh + 7f * dp); path.close(); cv.drawPath(path, p);
         tp.setColor(((int) (255 * al) << 24) | 0x2B2B3A); cv.drawText(txt, l + bw / 2f, t + bh / 2f + 4.5f * dp, tp);
-        tp.setColor(slot.tc);
+        tp.setColor(sc.ink);
     }
 
     /** 작은 효과: 머리 위로 떠오르는 하트 · 반짝이 · 음표 · 잎 · 음식 · zzz. 시각만으로 계산한다. */
@@ -218,6 +228,6 @@ final class OpenView extends View {
             else if ("food".equals(fx)) { tp.setTextSize(15f * dp); tp.setColor(((int) (255 * a) << 24) | 0xFFFFFF); cv.drawText(k == 0 ? "🍙" : k == 1 ? "🥕" : "🍖", fx0, fy0, tp); }
             else if ("zzz".equals(fx)) { tp.setColor(((int) (255 * a) << 24) | 0x8A96FF); tp.setTextSize((10f + 4f * ph + k) * dp); cv.drawText("Z", x + charH * 0.10f + ph * charH * 0.30f, top + charH * 0.10f - ph * charH * 0.55f, tp); }
         }
-        tp.setColor(slot.tc);
+        tp.setColor(sc.ink);
     }
 }

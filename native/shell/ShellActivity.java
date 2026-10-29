@@ -271,7 +271,7 @@ public class ShellActivity extends Activity {
         if (b == null) showOpening();                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
     }
 
-    // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸과 그날의 한 가지를 고른다 ──
+    // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸을 고르고, 나올 친구 셋은 켤 때마다 무작위로 고른다 ──
     private OpenView openV;
     private void showOpening() {
         try {
@@ -280,9 +280,11 @@ public class ShellActivity extends Activity {
             if (sc == null) return;
             java.util.Calendar cal = java.util.Calendar.getInstance();
             double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
-            long day = (cal.getTimeInMillis() + cal.getTimeZone().getOffset(cal.getTimeInMillis())) / 86400000L;
             OpenCore.Slot sl = OpenCore.slotFor(sc, hour);
-            openV = new OpenView(this, sc, sl, OpenCore.cast(sl, day), new OpenView.Done() { @Override public void onDone() { closeOpening(); } });
+            String prev = ""; try { prev = store.get("open_last", ""); } catch (Throwable ignored) { }
+            String[] ids = OpenCore.pickIds(sc, System.nanoTime() ^ cal.getTimeInMillis(), prev);          // 켤 때마다 친구 셋이 무작위로(방금 나온 조합은 피한다)
+            try { store.put("open_last", ids[0] + "," + ids[1] + "," + ids[2]); } catch (Throwable ignored) { }
+            openV = new OpenView(this, sc, sl, OpenCore.cast(sc, sl, ids), new OpenView.Done() { @Override public void onDone() { closeOpening(); } });
             addContentView(openV, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         } catch (Throwable ignored) { openV = null; }                                  // 오프닝이 실패해도 앱은 그대로 연다
     }
