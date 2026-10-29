@@ -106,6 +106,10 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   ok(wn && wn.look.wk === 'clear' && wn.look.wxKnown === false, '위치를 모르면 경로 출발역 날씨로 대신하지 않는다(날씨 모름)');
   ok(wg.look.pdir === 1 || wg.look.pdir === -1, '장소가 바뀔 때 걸어 나갈 쪽(pdir)을 엔진이 보낸다: ' + wg.look.pdir);
   ok(E.hcSceneNode(now, 540, false, null, '').sc.indexOf('"wxKnown":false') > 0, '날씨를 모르면 모른다고 보낸다(지어내지 않는다)');
+  // s327 (YJ): 경로 탐색 전(홈 첫 화면)에서만 장면 세로를 180 으로 고정(예전 최소 90 의 2배) · 채우기/접기 없음. 경로가 나온 화면은 150 그대로
+  const idle = E.hcSceneNode(now, 540, false, null, ''), shown = E.hcSceneNode(now, 540, true, null, '');
+  ok(idle.h === 180 && !idle.fit && idle.fmin === undefined, '경로 탐색 전 장면은 세로 180 고정(채우기 없음): ' + idle.h);
+  ok(shown.h === 150 && !shown.fit, '경로가 나온 화면의 장면 높이는 그대로 150: ' + shown.h);
 }
 // 탑승 중 장면: 앱이 보낸 탑승 재료(rd)로 기다림 · 버스 타고 가는 중 · 내림, 지하철 타고 가는 동안은 장면 없음(혼잡도 카드)
 {
