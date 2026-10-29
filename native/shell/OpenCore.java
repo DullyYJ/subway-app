@@ -18,7 +18,7 @@ public final class OpenCore {
     public static final class Seg { public double t0, t1, x0, x1, hop, hz; public String k = "pose", say = "", fx = ""; public int p, f = 1; }
     public static final class Actor { public String id = ""; public Seg[] tr = new Seg[0]; }
     public static final class Slot {
-        public String id = "", ko = "", title = "", sub = "";
+        public String id = "", ko = "";
         public double h0, h1;
         public int sky0, sky1, sky2, ground, hill, tc;
         public double[] sun;        // {x, y 처음, y 끝, 반지름(화면 폭 비), 색(0xAARRGGBB 를 double 로)} · 없으면 null
@@ -26,7 +26,7 @@ public final class OpenCore {
         public int stars, clouds;
         public Actor[][] variants = new Actor[0][];
     }
-    public static final class Script { public int dur = 2400, fade = 350; public Slot[] slots = new Slot[0]; }
+    public static final class Script { public int dur = 2700, fade = 700; public String brand = ""; public Slot[] slots = new Slot[0]; }
 
     /** 친구 한 마리의 지금 모습. on=false 면 아직 안 나왔다. */
     public static final class St {
@@ -42,15 +42,14 @@ public final class OpenCore {
             Object o = SceneModel.Json.parse(json);
             if (!(o instanceof Map)) return null;
             Map<String, Object> m = (Map<String, Object>) o;
-            Script sc = new Script(); sc.dur = (int) num(m.get("dur"), 2400); sc.fade = (int) num(m.get("fade"), 350);
+            Script sc = new Script(); sc.dur = (int) num(m.get("dur"), 2700); sc.fade = (int) num(m.get("fade"), 700); sc.brand = SceneModel.Json.strOr(m.get("brand"), "");
             Object so = m.get("slots"); if (!(so instanceof List)) return null;
             List<Slot> out = new ArrayList<Slot>();
             for (Object e : (List<Object>) so) {
                 if (!(e instanceof Map)) continue;
                 Map<String, Object> s = (Map<String, Object>) e; Slot sl = new Slot();
                 sl.id = SceneModel.Json.strOr(s.get("id"), ""); sl.ko = SceneModel.Json.strOr(s.get("ko"), "");
-                sl.title = SceneModel.Json.strOr(s.get("title"), ""); sl.sub = SceneModel.Json.strOr(s.get("sub"), "");
-                sl.h0 = num(s.get("h0"), 0); sl.h1 = num(s.get("h1"), 0);
+                                sl.h0 = num(s.get("h0"), 0); sl.h1 = num(s.get("h1"), 0);
                 Object sk = s.get("sky");
                 if (sk instanceof List && ((List<Object>) sk).size() >= 3) { List<Object> k = (List<Object>) sk; sl.sky0 = col(k.get(0)); sl.sky1 = col(k.get(1)); sl.sky2 = col(k.get(2)); }
                 else return null;
@@ -112,6 +111,10 @@ public final class OpenCore {
         if (tMs >= sc.dur) return 0; if (tMs <= sc.dur - sc.fade) return 1;
         return Math.max(0, Math.min(1, (sc.dur - tMs) / (double) Math.max(1, sc.fade)));
     }
+    /** 배경(하늘·땅)의 진하기: 전체 진하기를 부드럽게(ease) 다듬은 값 — 앱 화면이 그라데이션으로 비쳐 나온다. */
+    public static double bgAlpha(Script sc, long tMs) { double a = alpha(sc, tMs); return a * a * (3 - 2 * a); }
+    /** 글·친구·해/달의 진하기: 사라지는 구간의 앞쪽 절반에 먼저 사라진다(앱 화면과 겹쳐 보이는 시간을 줄인다). */
+    public static double fgAlpha(Script sc, long tMs) { double a = Math.max(0, Math.min(1, (alpha(sc, tMs) - 0.5) / 0.5)); return a * a * (3 - 2 * a); }
     public static boolean done(Script sc, long tMs) { return tMs >= sc.dur; }
     /** 해의 높이(화면 높이의 0~1): 처음→끝으로 천천히 움직인다. */
     public static double sunY(Slot s, long tMs, Script sc) {
@@ -119,7 +122,7 @@ public final class OpenCore {
         double e = u * u * (3 - 2 * u); return s.sun[1] + (s.sun[2] - s.sun[1]) * e;
     }
 
-    private static final double SAY_MS = 1500;
+    private static final double SAY_MS = 1700;
     public static St at(Actor a, long tMs) {
         St r = new St(); r.id = a.id; Seg first = a.tr[0]; double t = tMs;
         if (t < first.t0) { r.on = true; r.x = first.x0; r.k = first.k; r.face = first.f; r.pose = first.p; r.alpha = 0; return r; }       // 아직 안 나왔다(걷는 동작은 화면 밖에서 시작한다)
@@ -129,7 +132,7 @@ public final class OpenCore {
         double span = Math.max(1, cur.t1 - cur.t0), u = Math.max(0, Math.min(1, (t - cur.t0) / span));
         r.x = cur.x0 + (cur.x1 - cur.x0) * u; r.segT = (t - cur.t0) / 1000.0; r.tSec = tMs / 1000.0;
         if (cur.hop > 0) r.hop = Math.abs(Math.sin(Math.PI * cur.hz * r.segT)) * cur.hop;
-        r.alpha = "sleep".equals(cur.k) ? Math.min(1, (t - cur.t0) / 300.0) : 1;
+        r.alpha = Math.min(1, (t - first.t0) / 320.0);                                                                         // 처음 나타날 때 조용히 떠오른다(걸어 들어오지 않는다)
         for (Seg s : a.tr) if (s.say.length() > 0 && t >= s.t0 && t - s.t0 < SAY_MS) {                      // 말풍선: 말하기 시작한 뒤 1.5초 동안(가장 나중 것)
             r.say = s.say; double ts = t - s.t0; r.sayA = Math.min(1, ts / 160.0) * Math.min(1, (SAY_MS - ts) / 260.0);
         }

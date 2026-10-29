@@ -90,14 +90,21 @@ final class OpenView extends View {
         long now = SystemClock.uptimeMillis(); if (t0 < 0) t0 = now;          // 시계는 처음 그린 순간부터(켜는 준비가 길어도 2초를 다 보여 준다)
         long t = now - t0;
         if (OpenCore.done(sc, t)) { finish(); return; }
-        setAlpha((float) OpenCore.alpha(sc, t));
         float W = getWidth(), H = getHeight(); if (W < 8 || H < 8) { postInvalidateOnAnimation(); return; }
-        drawSky(cv, W, H, t);
-        float gy = H * 0.80f, charH = Math.min(W * 0.30f, 108f * dp);
-        drawGround(cv, W, H, gy);
-        drawTitle(cv, W, H);
-        int i = 0;
-        for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), W, gy, charH, i++); }
+        float gy = H * 0.58f, charH = Math.min(W * 0.30f, 108f * dp) * 0.70f;          // 친구는 화면 가운데에 모여 선다 · 키는 처음보다 30% 작게
+        // 사라질 때: 글·친구가 먼저 흐려지고 배경(하늘·땅)이 뒤따라 앱 화면으로 녹아든다 → 겹쳐 보이는 시간이 짧고 자연스럽다
+        int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
+        if (bgA <= 0) { finish(); return; }
+        int sb = cv.saveLayerAlpha(0, 0, W, H, bgA);
+        drawSky(cv, W, H, t); drawGround(cv, W, H, gy);
+        cv.restoreToCount(sb);
+        if (fgA > 0) {
+            int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
+            drawTitle(cv, W, H);
+            int i = 0;
+            for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), W, gy, charH, i++); }
+            cv.restoreToCount(sf);
+        }
         postInvalidateOnAnimation();
     }
 
@@ -139,12 +146,11 @@ final class OpenView extends View {
         p.setColor(0x22000000); cv.drawRect(0, gy, W, gy + 2f * dp, p);
     }
 
+    /** 상단에는 대본의 brand 글 한 줄만. */
     private void drawTitle(Canvas cv, float W, float H) {
-        tp.setColor(slot.tc); tp.setTextAlign(Paint.Align.CENTER);
-        tp.setTextSize(13f * dp); tp.setAlpha(170); cv.drawText("길 동 무", W / 2f, H * 0.135f, tp);
-        tp.setColor(slot.tc); tp.setTextSize(Math.min(28f * dp, W * 0.075f)); cv.drawText(slot.title, W / 2f, H * 0.19f, tp);
-        tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(15f * dp); tp.setAlpha(210); cv.drawText(slot.sub, W / 2f, H * 0.19f + 28f * dp, tp);
-        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setAlpha(255);
+        if (sc.brand.length() == 0) return;
+        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(slot.tc); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
+        cv.drawText(sc.brand, W / 2f, H * 0.115f, tp);
     }
 
     // ───────────── 친구 ─────────────
@@ -156,7 +162,7 @@ final class OpenView extends View {
         float footY, top;
         if (sleep) {
             float[] sl = WidgetSim.sleepCfg(a.id); Bitmap b = sheets.get(a.id + "_sleep");
-            float cell = sl[0] * charH * 0.78f, left = x - sl[1] * cell, tp0 = footBase - sl[2] * cell;
+            float cell = sl[0] * charH * 1.0f, left = x - sl[1] * cell, tp0 = footBase - sl[2] * cell;
             p.setColor((int) (0x33 * s.alpha) << 24); rf.set(x - cell * 0.32f, footBase - 3f * dp, x + cell * 0.32f, footBase + 4f * dp); cv.drawOval(rf, p);
             if (b != null) {
                 int fr = ((int) Math.floor(s.segT * sl[3] + idx * 5f) % 16 + 16) % 16, col = fr % 4, row = fr / 4;
@@ -165,6 +171,7 @@ final class OpenView extends View {
             }
             float ax = x - sl[1] * cell + sl[4] * cell, ay = footBase - sl[2] * cell + sl[5] * cell;       // 잠든 입가(위젯과 같은 기준점) 에서 Z 가 떠오른다
             effects(cv, s, ax - charH * 0.04f, ay - charH * 0.10f, charH, idx, a.id);
+            if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, tp0 + cell * 0.10f - charH * 0.30f, W, (float) s.sayA);
             return;
         }
         float sc2 = charH * f[5] / (f[1] - f[0]); lift = f[4] * charH / 58f;
@@ -183,7 +190,7 @@ final class OpenView extends View {
             bmp.setAlpha((int) (255 * s.alpha)); cv.drawBitmap(b, src, dst, bmp); bmp.setAlpha(255); cv.restore();
         }
         effects(cv, s, x, top, charH, idx, a.id);
-        if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, top - 6f * dp - (idx % 2) * 30f * dp, W, (float) s.sayA);
+        if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, top - 6f * dp - (s.fx.length() > 0 ? charH * 0.30f : 0f), W, (float) s.sayA);      // 떠오르는 효과가 글을 가리지 않게 효과가 있으면 한 뼘 위로
     }
 
     /** 말풍선: 머리 위(바닥점 x, 위 끝 y)에 둥근 상자 + 꼬리. 가장자리에서 잘리지 않게 안으로 민다. */
