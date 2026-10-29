@@ -125,6 +125,7 @@ function hcSec(label, o) {
   o = o || {};
   var n = { t: 'sec', s: label, pad: [14, 0, 14, HC_SEC_GAP] };
   if (o.badge) { n.badge = o.badge; n.bc = o.bc || HC_ARROW; }
+  if (o.alt) n.s2 = o.alt;                                  // 두 번째 제목(두 쪽 카드의 둘째 쪽이 보일 때): 앱이 옆으로 미는 정도에 맞춰 첫째 제목이 사라지며 이 글이 나타난다
   if (o.hint) n.hint = o.hint;
   if (o.btn) { n.btn = o.btn; n.act = o.act; }
   return n;
@@ -236,12 +237,14 @@ function hcardsScreen(inp, f) {
     var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
-    body.push(hcSec('혼잡도', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD 위치 공유', act: HC_SHARE }));
+    var trn0 = scn ? null : hcTrainJs(sc0);
+    // (YJ 2026-10-29) 장면 카드의 제목은 '길동무 친구들'. 지하철을 타고 갈 땐 혼잡도 쪽이 '혼잡도', 옆으로 밀어 객실 친구들이 나오면 '길동무 친구들(이동중)' — 밀리는 정도에 맞춰 글이 바뀐다(앱)
+    body.push(hcSec(scn ? '길동무 친구들' : '혼잡도', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', alt: trn0 ? '길동무 친구들(이동중)' : '', btn: '\uD83D\uDCCD 위치 공유', act: HC_SHARE }));
     var pvBt = f.r && typeof f.r === 'object' && f.r.bt != null ? hcNum(f.r.bt, null) : null, pvMetro = f.r && typeof f.r === 'object' && f.r.metro === true;
     var pvC = hcPvl ? hcPvl('cong', pvBt, pvMetro, now, tz) : null, pvA = hcPvl ? hcPvl('ai', pvBt, pvMetro, now, tz) : null;
     if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // 장면만 보일 땐 안쪽 여백을 줄여 장면에 자리를 더 준다(웹 .cs-on)
     else {
-      var cp = hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }), trn = hcTrainJs(sc0);
+      var cp = hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }), trn = trn0;
       if (trn) cp.sc2 = trn;                                                                // 옆으로 밀면 보이는 객실 장면(앱은 두 쪽을 가로로 밀어 넘기기만 한다)
       body.push(cp);
     }

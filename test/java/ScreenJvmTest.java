@@ -1028,6 +1028,13 @@ public class ScreenJvmTest {
                 ScreenCore.Layout hwAg = ScreenCore.layout(hwS, 411f, M, null, 0f);
                 ok(near(hwAg.bodyH, hwB0.bodyH), "scene fit: 높이를 모르면(0) 접힘·키움 없이 원래대로");
             } catch (Exception ex) { ok(false, "홈 웹 치수 노드: " + ex); }
+            try {                                                                                              // 둘째 제목(s2): 두 쪽 카드에서 밀리는 정도에 맞춰 바뀌는 제목 — 둘 다 레이아웃에 남는다
+                ScreenCore.Screen t2 = ScreenCore.load(H + "{\"t\":\"sec\",\"s\":\"혼잡도\",\"s2\":\"길동무 친구들(이동중)\"},{\"t\":\"sec\",\"s\":\"길동무 친구들\"}]}");
+                ScreenCore.Layout t2L = ScreenCore.layout(t2, 360f, M, null, 0f);
+                ScreenCore.Item a0 = null, a1 = null; for (ScreenCore.Item q : t2L.body) if (q.kind == ScreenCore.K_SEC) { if (a0 == null) a0 = q; else a1 = q; }
+                ok(a0 != null && a0.lines.length == 2 && "혼잡도".equals(a0.lines[0]) && "길동무 친구들(이동중)".equals(a0.lines[1]), "sec: s2 가 있으면 제목 둘이 레이아웃에 남는다");
+                ok(a1 != null && a1.lines.length == 1, "sec: s2 가 없으면 제목 하나(옛 모양 그대로)");
+            } catch (Exception ex) { ok(false, "sec s2: " + ex); }
             boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"sec\",\"s\":\"\"}]}"); } catch (Exception ex) { threw = true; } ok(threw, "sec: s 가 없으면 거부");
         }
 

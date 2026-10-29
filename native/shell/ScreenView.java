@@ -743,6 +743,11 @@ public class ScreenView extends View {
         if (pgPos != tgt) { pgPos += (tgt - pgPos) * Math.min(1f, dt / 70f); if (Math.abs(tgt - pgPos) < 0.004f) pgPos = tgt; pgAnim = pgPos != tgt; }
         return pgPos;
     }
+    /** 두 쪽 카드에서 객실 장면(둘째 쪽)이 보이는 정도(0~1) — 미는 위치(pgPos)에서 바로 계산한다. 제목줄이 이 값으로 글을 바꿔 보인다. */
+    private float pgSceneShare() {
+        float o = pgPos; int base = (int) Math.floor(o); float fr = o - base; int pa = ((base % 2) + 2) % 2;
+        return Math.max(0f, Math.min(1f, pa == 1 ? 1f - fr : fr));
+    }
     /** 두 쪽 카드 그리기: 틀(둥근 카드)은 그대로 두고 안쪽만 가로로 민다. 0쪽=원래 칸들(혼잡도), 1쪽=객실 장면. 두 쪽이 끝없이 돈다(왼쪽·오른쪽 어느 쪽으로 밀어도 다음 쪽). 반환: 건너뛸 칸 수. */
     private int drawPager(Canvas cv, ScreenCore.Item pn, int i, long now) {
         float o = pgStep(now);
@@ -2335,14 +2340,17 @@ public class ScreenView extends View {
 
     /** 카드 위 제목줄(웹 .sec): 제목(글자 사이 0.4) · 알약 · 가운데 작은 글 · 오른쪽 테두리 단추. */
     private void drawSec(Canvas cv, ScreenCore.Item it) {
-        setText(it.size, false, pal[R_SUB]); tp.setLetterSpacing(0.4f / it.size);
-        cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0), tp);
+        // 제목이 둘이면(두 쪽 카드: 혼잡도 ↔ 객실 친구들) 옆으로 미는 정도에 맞춰 첫째 글이 사라지며 둘째 글이 나타난다(손가락을 따라 되돌아가기도 한다)
+        float sw = it.lines.length > 1 ? pgSceneShare() : 0f, keep = 1f - sw;
+        tp.setLetterSpacing(0.4f / it.size);
+        if (keep > 0.003f) { setText(it.size, false, alpha(pal[R_SUB], keep)); tp.setLetterSpacing(0.4f / it.size); cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0) - 3f * sw, tp); }
+        if (sw > 0.003f) { setText(it.size, false, alpha(pal[R_SUB], sw)); tp.setLetterSpacing(0.4f / it.size); cv.drawText(it.lines[1], it.textX, base(it.y, it.h, 0) + 3f * keep, tp); }
         tp.setLetterSpacing(0f);
-        if (it.badge.length() > 0) {
+        if (it.badge.length() > 0 && keep > 0.003f) {                                  // 알약은 첫째 제목(혼잡도)에 딸려 있다 — 함께 사라진다
             float ph = 18f, py = it.y + (it.h - ph) / 2f;
             rf.set(it.bx, py, it.bx + it.badgeW, py + ph);
-            p.setStyle(Paint.Style.FILL); p.setColor(cc(it.ac, pal[R_GOLD])); cv.drawRoundRect(rf, 6f, 6f, p);
-            setText(ScreenCore.SEC_PILL, true, pal[R_WHITE]); tp.setTextAlign(Paint.Align.CENTER);
+            p.setStyle(Paint.Style.FILL); p.setColor(alpha(cc(it.ac, pal[R_GOLD]), keep)); cv.drawRoundRect(rf, 6f, 6f, p);
+            setText(ScreenCore.SEC_PILL, true, alpha(pal[R_WHITE], keep)); tp.setTextAlign(Paint.Align.CENTER);
             cv.drawText(it.badge, it.bx + it.badgeW / 2f, base(py, ph, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
         }
         if (it.label.length() > 0) {

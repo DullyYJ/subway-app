@@ -93,9 +93,9 @@ final class OpenView extends View {
         float W = getWidth(), H = getHeight(); if (W < 8 || H < 8) { postInvalidateOnAnimation(); return; }
         // 화면 전체는 불투명 파스텔 화이트. 하늘·땅 배경은 친구들이 서 있는 가로 꽉 찬 띠 안에만 있고, 띠의 위쪽 가장자리는 바탕색으로 서서히 번져 경계가 안 보인다.
         // 띠는 화면 맨 아래에 닿고(아래쪽 번짐 없음), 제목은 바닥에서 65% 높이에 있다.
-        float pw = W, fh = 40f * dp, ph = Math.min(H * 0.36f, 280f * dp), pl = 0f;
+        float pw = W, fh = 40f * dp, ph = H * 0.40f, pl = 0f;          // 띠는 화면 아래 40%(YJ: 하늘을 위로 늘려 달라 — 친구 크기·자리는 그대로)
         float pt = H - ph;          // 띠는 화면 맨 아래 바닥에 닿는다(제목은 바닥에서 65% 높이)
-        float gy = ph * 0.62f, charH = Math.min(Math.min(W, 420f * dp) * 0.30f, 108f * dp) * 0.70f;          // 친구는 띠 가운데에 모여 선다 · 키는 처음보다 30% 작게
+        float gy = ph - 106f * dp, charH = Math.min(Math.min(W, 420f * dp) * 0.30f, 108f * dp) * 0.70f;          // 친구는 띠 가운데에 모여 선다 · 키는 처음보다 30% 작게
         // 사라질 때: 띠·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
         if (bgA <= 0) { finish(); return; }
@@ -106,7 +106,7 @@ final class OpenView extends View {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
             drawTitle(cv, W, H);
             cv.save(); cv.translate(pl, pt); cv.clipRect(0, 0, pw, ph);
-            drawSky(cv, pw, ph, t); drawGround(cv, pw, ph, gy);
+            drawSky(cv, pw, ph, gy, t); drawGround(cv, pw, ph, gy);
             feather(cv, pw, ph, fh);
             cv.restore();
             cv.save(); cv.translate(pl, pt);
@@ -131,30 +131,31 @@ final class OpenView extends View {
     }
 
     // ───────────── 하늘 · 해 · 달 · 별 · 구름 (판 안 좌표) ─────────────
-    private void drawSky(Canvas cv, float W, float H, long t) {
+    private void drawSky(Canvas cv, float W, float H, float gy, long t) {
+        float R = gy / 0.62f;                                                      // 해·달·구름 높이의 기준(하늘 높이에 비례 — 하늘이 늘어도 같은 비율로 놓인다)
         if (sky == null || skyW != (int) W || skyH != (int) H) { sky = new LinearGradient(0, 0, 0, H * 0.82f, new int[] { slot.sky0, slot.sky1, slot.sky2 }, new float[] { 0f, 0.55f, 1f }, Shader.TileMode.CLAMP); skyW = (int) W; skyH = (int) H; }
         p.setStyle(Paint.Style.FILL); p.setColor(0xFF000000); p.setAlpha(255);       // ★ 붓의 투명도가 셰이더에도 곱해진다 — 앞에서 쓴 옅은 색이 남아 하늘이 비치던 문제를 막는다
         p.setShader(sky); cv.drawRect(0, 0, W, H, p); p.setShader(null);
         float tt = t / 1000f;
         for (int k = 0; k < slot.stars; k++) {                                   // 별(자리는 번호로 고정, 반짝임만 시간으로)
-            float sx = frac(k * 0.6180339f + 0.13f) * W, sy = frac(k * 0.4142135f + 0.07f) * H * 0.55f, tw = 0.45f + 0.55f * (float) Math.abs(Math.sin(tt * 2.1 + k * 1.7));
+            float sx = frac(k * 0.6180339f + 0.13f) * W, sy = frac(k * 0.4142135f + 0.07f) * gy * 0.9f, tw = 0.45f + 0.55f * (float) Math.abs(Math.sin(tt * 2.1 + k * 1.7));
             p.setColor(((int) (200 * tw) << 24) | 0xFFFFFF); cv.drawCircle(sx, sy, (1.0f + (k % 3) * 0.5f) * dp, p);
         }
         if (slot.sun != null) {
-            float sy = (float) OpenCore.sunY(slot, t, sc) * H, sx = (float) slot.sun[0] * W, r = (float) slot.sun[3] * W; int c = (int) (long) slot.sun[4];
+            float sy = (float) OpenCore.sunY(slot, t, sc) * R, sx = (float) slot.sun[0] * W, r = (float) slot.sun[3] * W; int c = (int) (long) slot.sun[4];
             p.setColor((0x33 << 24) | (c & 0xFFFFFF)); cv.drawCircle(sx, sy, r * 1.7f, p);
             p.setColor((0x55 << 24) | (c & 0xFFFFFF)); cv.drawCircle(sx, sy, r * 1.3f, p);
             p.setColor(c); cv.drawCircle(sx, sy, r, p);
         }
         if (slot.moon != null) {
-            float mx = (float) slot.moon[0] * W, my = (float) slot.moon[1] * H, r = (float) slot.moon[2] * W;
+            float mx = (float) slot.moon[0] * W, my = (float) slot.moon[1] * R, r = (float) slot.moon[2] * W;
             p.setColor(0x33FFF3C4); cv.drawCircle(mx, my, r * 1.8f, p);
             p.setColor(0xFFFFF3C4); cv.drawCircle(mx, my, r, p);
             p.setColor(slot.sky0 | 0xFF000000); cv.drawCircle(mx + r * 0.42f, my - r * 0.18f, r * 0.86f, p);       // 초승달
             p.setColor(0x33FFF3C4); cv.drawCircle(mx, my, r, p);
         }
         for (int k = 0; k < slot.clouds; k++) {                                   // 구름: 천천히 흘러간다
-            float cy = H * (0.12f + 0.09f * (k % 4) + (k % 2) * 0.03f), cx = ((frac(k * 0.37f + 0.1f) * 1.3f * W + tt * (8f + 5f * k) * dp) % (W * 1.4f)) - W * 0.2f, s = (40f + 12f * (k % 3)) * dp;
+            float cy = 40f * dp + (gy - 40f * dp) * (0.04f + 0.15f * (k % 4) + (k % 2) * 0.03f), cx = ((frac(k * 0.37f + 0.1f) * 1.3f * W + tt * (8f + 5f * k) * dp) % (W * 1.4f)) - W * 0.2f, s = (40f + 12f * (k % 3)) * dp;
             int a = slot.id.equals("evening") ? 0x66 : 0xB0; p.setColor((a << 24) | (slot.id.equals("evening") ? 0xFFD9C0 : 0xFFFFFF));
             cv.drawCircle(cx, cy, s * 0.32f, p); cv.drawCircle(cx + s * 0.30f, cy - s * 0.10f, s * 0.38f, p); cv.drawCircle(cx + s * 0.62f, cy, s * 0.30f, p);
             rf.set(cx - s * 0.2f, cy, cx + s * 0.85f, cy + s * 0.30f); cv.drawRoundRect(rf, s * 0.15f, s * 0.15f, p);

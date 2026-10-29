@@ -184,6 +184,7 @@ public final class ScreenCore {
     /** 노드 하나(chips·grid·text·button·spacer) 또는 그 안의 항목(chip·card). */
     public static final class Node {
         public String t = "";
+        public String s2 = "";                          // sec: 두 번째 제목(두 쪽 카드의 둘째 쪽이 보일 때) — 밀리는 정도에 맞춰 첫째 제목과 바뀐다
         public String sc2 = "";                          // panel: 옆으로 밀면 보이는 두 번째 쪽(지하철 객실 장면)의 엔진 글(JSON). 없으면 한 쪽짜리 카드
         public float padL, padT, padR, padB;
         public float gap = 6f, h = 0f, size = 12f, lh = 1.35f, alpha = 1f;
@@ -599,6 +600,7 @@ public final class ScreenCore {
         } else if ("sec".equals(t)) {                                                                       // 카드 위 제목줄(웹 .sec): 제목 · (알약) · (가운데 작은 글) · (오른쪽 테두리 단추)
             pad(m, n);
             n.s = optStr(m, "s", "", 30); if (n.s.length() == 0) throw new ParseError("sec: s 없음");
+            n.s2 = optStr(m, "s2", "", 30);
             n.badge = optStr(m, "badge", "", 12); n.accent = roleOrCss(m, "bc", "#1d9bf0"); if (n.accent.length() == 0) n.accent = "#1d9bf0";
             n.hint = optStr(m, "hint", "", 80); n.label = optStr(m, "btn", "", 16);
             n.size = optNum(m, "size", 12f, 8f, 20f); n.h = optNum(m, "h", 0f, 0f, 60f);
@@ -2177,7 +2179,7 @@ public final class ScreenCore {
             float btnW = n.label.length() > 0 ? m.width(n.label, SEC_BTN, true) + SEC_BTN_PX * 2f : 0f;
             float h = n.h > 0f ? n.h : (btnW > 0f ? SEC_BTN_H : (float) Math.floor(n.size * 1.42f));
             Item it = new Item(); it.kind = K_SEC; it.x = ox; it.y = y; it.w = innerW; it.h = h; it.act = n.act;
-            it.lines = new String[] { n.s }; it.size = n.size; it.textX = ox; it.size2 = SEC_HINT;
+            it.lines = n.s2.length() > 0 ? new String[] { n.s, n.s2 } : new String[] { n.s }; it.size = n.size; it.textX = ox; it.size2 = SEC_HINT;
             float cx = ox + lw + SEC_GAP, right = ox + innerW - (btnW > 0f ? btnW + SEC_GAP : 0f);
             if (n.badge.length() > 0) {
                 float bw = m.width(n.badge, SEC_PILL, true) + SEC_PILL_PX * 2f;

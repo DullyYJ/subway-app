@@ -86,6 +86,7 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   assert.ok(/p\.setColor\(0xFF000000\); p\.setAlpha\(255\)/.test(ds), '하늘 셰이더를 그리기 전에 붓 투명도를 되돌린다(앱 화면이 비치던 문제)');
   assert.ok(/private void feather\(/.test(v) && /sc\.bg & 0x00FFFFFF/.test(v) && /feather\(cv, pw, ph, fh\)/.test(v), '띠의 위·아래 가장자리가 바탕색으로 번진다');
   assert.ok(/float pt = H - ph;/.test(v) && !/fadeB/.test(v), '띠는 화면 맨 아래 바닥에 닿는다(아래쪽 번짐 없음)');
+  assert.ok(/ph = H \* 0\.40f/.test(v) && /gy = ph - 106f \* dp/.test(v), '띠는 화면 아래 40%까지(하늘을 위로 늘림) · 친구 발 자리는 바닥에서 고정(크기·자리 그대로)');
   assert.ok(/private void nameTag\(/.test(v) && /sc\.names\.get\(id\)/.test(v) && (v.match(/nameTag\(cv, a\.id/g) || []).length === 2, '자는 모습·깬 모습 모두 이름표');
   assert.ok(!/slot\.tc/.test(v + c0), '옛 상단 글 색(tc) 없음');
   // 켜는 준비(위치·정류장·탭 미리 받기)는 오프닝 호출보다 앞에서 이미 시작돼 있다

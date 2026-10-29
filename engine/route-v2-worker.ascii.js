@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s298";
+var ENGINE_VERSION = "route-v2-2026-10-29s300";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23296,6 +23296,7 @@ function hcSec(label, o) {
   o = o || {};
   var n = { t: 'sec', s: label, pad: [14, 0, 14, HC_SEC_GAP] };
   if (o.badge) { n.badge = o.badge; n.bc = o.bc || HC_ARROW; }
+  if (o.alt) n.s2 = o.alt;                                  // \ub450 \ubc88\uc9f8 \uc81c\ubaa9(\ub450 \ucabd \uce74\ub4dc\uc758 \ub458\uc9f8 \ucabd\uc774 \ubcf4\uc77c \ub54c): \uc571\uc774 \uc606\uc73c\ub85c \ubbf8\ub294 \uc815\ub3c4\uc5d0 \ub9de\ucdb0 \uccab\uc9f8 \uc81c\ubaa9\uc774 \uc0ac\ub77c\uc9c0\uba70 \uc774 \uae00\uc774 \ub098\ud0c0\ub09c\ub2e4
   if (o.hint) n.hint = o.hint;
   if (o.btn) { n.btn = o.btn; n.act = o.act; }
   return n;
@@ -23407,12 +23408,14 @@ function hcardsScreen(inp, f) {
     var bar = hcCssColor(congS.info && congS.info.bc), sceneHint = '';
     if (scn) { try { sceneHint = hcStr(JSON.parse(scn.sc).hint, 60); } catch (e) { sceneHint = ''; } }
     var bd = congS.info && typeof congS.info.badge === 'string' ? congS.info.badge : '';
-    body.push(hcSec('\ud63c\uc7a1\ub3c4', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', btn: '\uD83D\uDCCD \uc704\uce58 \uacf5\uc720', act: HC_SHARE }));
+    var trn0 = scn ? null : hcTrainJs(sc0);
+    // (YJ 2026-10-29) \uc7a5\uba74 \uce74\ub4dc\uc758 \uc81c\ubaa9\uc740 '\uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4'. \uc9c0\ud558\ucca0\uc744 \ud0c0\uace0 \uac08 \ub550 \ud63c\uc7a1\ub3c4 \ucabd\uc774 '\ud63c\uc7a1\ub3c4', \uc606\uc73c\ub85c \ubc00\uc5b4 \uac1d\uc2e4 \uce5c\uad6c\ub4e4\uc774 \ub098\uc624\uba74 '\uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4(\uc774\ub3d9\uc911)' \u2014 \ubc00\ub9ac\ub294 \uc815\ub3c4\uc5d0 \ub9de\ucdb0 \uae00\uc774 \ubc14\ub010\ub2e4(\uc571)
+    body.push(hcSec(scn ? '\uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4' : '\ud63c\uc7a1\ub3c4', { badge: scn ? '' : bd, bc: hcCssColor(congS.info && congS.info.bbg), hint: scn ? sceneHint : '', alt: trn0 ? '\uae38\ub3d9\ubb34 \uce5c\uad6c\ub4e4(\uc774\ub3d9\uc911)' : '', btn: '\uD83D\uDCCD \uc704\uce58 \uacf5\uc720', act: HC_SHARE }));
     var pvBt = f.r && typeof f.r === 'object' && f.r.bt != null ? hcNum(f.r.bt, null) : null, pvMetro = f.r && typeof f.r === 'object' && f.r.metro === true;
     var pvC = hcPvl ? hcPvl('cong', pvBt, pvMetro, now, tz) : null, pvA = hcPvl ? hcPvl('ai', pvBt, pvMetro, now, tz) : null;
     if (scn) body.push(hcPanel([scn], { ip: [15, 10, 10, 10], lb: 4, lc: bar, pv: pvC }));          // \uc7a5\uba74\ub9cc \ubcf4\uc77c \ub550 \uc548\ucabd \uc5ec\ubc31\uc744 \uc904\uc5ec \uc7a5\uba74\uc5d0 \uc790\ub9ac\ub97c \ub354 \uc900\ub2e4(\uc6f9 .cs-on)
     else {
-      var cp = hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }), trn = hcTrainJs(sc0);
+      var cp = hcPanel(ck, { ip: [17, 14, 14, 14], lb: 4, lc: bar, pv: pvC }), trn = trn0;
       if (trn) cp.sc2 = trn;                                                                // \uc606\uc73c\ub85c \ubc00\uba74 \ubcf4\uc774\ub294 \uac1d\uc2e4 \uc7a5\uba74(\uc571\uc740 \ub450 \ucabd\uc744 \uac00\ub85c\ub85c \ubc00\uc5b4 \ub118\uae30\uae30\ub9cc \ud55c\ub2e4)
       body.push(cp);
     }
