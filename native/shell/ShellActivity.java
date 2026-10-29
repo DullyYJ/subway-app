@@ -412,8 +412,7 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -2580,8 +2579,20 @@ public class ShellActivity extends Activity {
         if (l == null) return;
         final double la = l.getLatitude(), lo = l.getLongitude();
         hubLL = new double[] { la, lo }; hubAt = System.currentTimeMillis();
-        hcFixFrom(la, lo);
-        busLocFollow(la, lo);
+        placesFollow(la, lo);
+    }
+    /** 위치가 크게 바뀌었다(백그라운드에서 돌아왔을 때 등): 출발지가 '내 위치'로 잡혀 있고 경로를 보는 중이 아니면 출발칸을 새 자리(동 이름 포함)로, 맛집(내 위치 주변)은 새 자리로 다시 받는다. 경로 안내 중에는 건드리지 않는다. */
+    private void placesFollow(double la, double lo) {
+        if (home.riding()) return;
+        HomeCore.Loc cur = home.loc[HomeCore.START];
+        if (cur != null && "gps".equals(cur.type) && !home.gps && !home.hasRoute() && home.active != HomeCore.START && farLL(new double[] { cur.lat, cur.lng }, la, lo, 0.0008)) {
+            home.setGpsStart(la, lo, hc.dongNow());
+            setHomeFields(); reloadHome();
+        }
+        if (food.dest.length() == 0 && food.gps != null && !food.locating && farLL(food.gps, la, lo, 0.003)) {
+            food.setGps(la, lo);                                                         // 목록을 비우고(invalidate) 새 자리 기준으로 — 맛집 탭을 보는 중이면 바로, 아니면 다음에 열 때
+            reloadFood();
+        }
     }
     /** 버스 탭이 새 위치를 따라간다: 55m 안이면 그대로 · 버스 탭이 아니면 조용히 위치만 바꿔(다음에 열면 그 동네 화면이 바로) · 보는 중이면 165m 넘게는 곧바로 그 동네 화면(캐시 → 뼈대 → 새로 받기), 그 안쪽은 보던 화면을 두고 뒤에서 바꿔 끼운다. 탑승 중엔 하지 않는다. */
     private void busLocFollow(double la, double lo) {
@@ -2656,7 +2667,11 @@ public class ShellActivity extends Activity {
                 }
             }
             @Override public void fail() { }
-        });
+    }
+    /** 앞으로 돌아왔다: 15초 · 30m 이어받기를 기다리지 않고 지금 위치를 한 번 바로 받아 허브(출발칸 · 맛집 · 브리핑 · 버스)가 따라가게 한다. */
+    private void resumeLocate() {
+        if (!hasLocPerm() || !deb.gate("reslocate", 3000L)) return;
+        locateNow(8000L, 1000L, 2500L, 60000L, new LocCb() { @Override public void fix(Location l) { } @Override public void fail(boolean noperm) { } });
     }
     private void trackStop() { if (locf != null) locf.untrack(); }                       // 한 번짜리 요청은 제한 시간(최대 12초)에 스스로 끝난다 — 연속 요청만 즉시 해제
     private void locateForFood() {
