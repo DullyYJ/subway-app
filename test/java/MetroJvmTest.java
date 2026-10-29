@@ -180,6 +180,21 @@ public class MetroJvmTest {
             c.setView(1080f, 900f, 55f);
             ok(c.scale >= c.minScale && c.tx <= 0f, "화면 높이가 줄면 범위를 다시 맞춘다");
         }
+        // 가장자리 밀기(노선도 → 버스 탭)
+        {
+            MetroCamera c = new MetroCamera(2551.18f, 2551.18f);
+            c.setView(1080f, 1800f, 55f); c.fit(); c.tx = 0f;
+            ok(c.panByLeftoverX(-30f, 0f) == 0f && c.tx == -30f, "움직일 수 있으면 남는 양 0");
+            ok(c.panByLeftoverX(50f, 0f) == 20f && c.tx == 0f, "왼쪽 끝에서 오른쪽으로 더 밀면 못 간 양이 남는다(" + c.tx + ")");
+            ok(c.panByLeftoverX(40f, 0f) == 40f, "끝에 붙은 채 더 밀면 전부 남는다");
+            c.tx = c.viewW - c.svgW * c.scale;
+            ok(c.panByLeftoverX(-25f, 3f) == -25f, "오른쪽 끝에서 왼쪽으로 더 밀면 음수로 남는다");
+            ok(MetroCamera.edgeSwipe(80f, 0f, 72f) == 1 && MetroCamera.edgeSwipe(-80f, 10f, 72f) == -1, "문턱을 넘으면 손가락이 간 쪽 방향");
+            ok(MetroCamera.edgeSwipe(60f, 0f, 72f) == 0, "문턱 미만이면 넘기지 않는다");
+            ok(MetroCamera.edgeSwipe(100f, 90f, 72f) == 0, "세로로 더 많이 움직였으면 넘기지 않는다");
+            MetroCamera w = new MetroCamera(2551.18f, 2551.18f); w.setView(4000f, 1800f, 55f); w.fit();
+            ok(w.panByLeftoverX(90f, 0f) == 90f, "지도가 화면보다 좁으면 어느 쪽이든 전부 남는다(바로 넘길 수 있다)");
+        }
         System.out.println(fails == 0 ? "ALL OK" : ("FAILS " + fails));
         System.exit(fails == 0 ? 0 : 1);
     }

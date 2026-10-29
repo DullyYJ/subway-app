@@ -67,6 +67,24 @@ public final class MetroCamera {
         clamp();
     }
 
+    /** 밀었는데 지도가 가로로 더 못 가서 남은(잘려 나간) 양. 0 이면 그만큼 다 움직였다. 부호는 손가락이 간 쪽. */
+    public float panByLeftoverX(float dx, float dy) {
+        float before = tx;
+        panBy(dx, dy);
+        float left = dx - (tx - before);
+        return Math.abs(left) < 0.01f ? 0f : left;
+    }
+
+    /**
+     * 지도 가장자리에서 더 밀어 다른 탭(버스)으로 넘길지. over = 가장자리에서 더 밀린 가로 양(px, 부호 = 손가락이 간 쪽),
+     * overY = 그 사이 세로로 움직인 양(px, 절댓값 합), thr = 문턱(px). 넘기면 손가락이 간 쪽(-1 왼쪽 · +1 오른쪽), 아니면 0.
+     */
+    public static int edgeSwipe(float over, float overY, float thr) {
+        float a = Math.abs(over);
+        if (!(a >= thr) || a < 1.5f * Math.abs(overY)) return 0;
+        return over < 0f ? -1 : 1;
+    }
+
     /** 화면 한 점(fx,fy) 아래의 지도 위치를 그대로 둔 채 배율만 바꾼다. */
     public void zoomAbout(float fx, float fy, float newScale) {
         float ns = clampScale(newScale);

@@ -3167,6 +3167,7 @@ public class ShellActivity extends Activity {
                             openMapSheet(S_STN_H);
                         }
                         @Override public void onGestureStart() { if (ShellCore.S_MAPSTN.equals(sheetName) || ShellCore.S_MAPTT.equals(sheetName)) closeSheet(); }
+                        @Override public void onEdgeSwipe(int dir) { if ("map".equals(ShellCore.currentTab(store)) && "metro".equals(map.view)) commSwipe(dir); }          // 노선도가 가로로 더 못 가는 끝에서 더 밀면 버스 탭으로(엔진이 준 sw 표 그대로)
                         @Override public void onReady() { }
                         @Override public void onError(String msg) { toast("노선도를 그리지 못했어요"); }
                         @Override public void onCentered(int op) { map.tapStation(mapData.labelName(op)); openMapSheet(S_STN_H); }

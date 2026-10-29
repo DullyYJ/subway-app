@@ -982,6 +982,11 @@ function findAndroidJar() {
     assert.ok(/ShellCore\.homeKey\(json\)/.test(a) && /lruPut\(homeCache, ShellCore\.homeKey\(json\)/.test(a) && /lruGet\(homeCache, ShellCore\.homeKey\(home\.request/.test(a), 's316: 홈 화면 캐시는 now 를 뺀 열쇠로 — 탭 전환 때 /screen/home 을 다시 받지 않는다');
     assert.ok(/ui\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(swipeHost != null\) swipeHost\.onSwipe\(ScreenView\.this, sdir\); \} \}, SW_OUT_MS\)/.test(sv) && /swHold = 450L \+ SW_OUT_MS/.test(sv), 's316: 나가는 그림이 끝난 뒤 새 화면을 부른다');
     assert.ok(/hcFor = ""/.test(a) && /final String hcSig = \(hasRes \? "r" \+ home\.routeId : "n"\) \+ ":" \+ home\.resTab;/.test(a) && /staleCards = hBody\.length\(\) > 0 && hcJson\.length\(\) > 0 && hcSig\.equals\(hcFor\)/.test(a) && (a.match(/hcFor = /g) || []).length >= 5, 's317: 경로 탐색 직후엔 경로 없을 때의 옛 브리핑 카드를 먼저 보이지 않고 결과 + 합친 브리핑을 한 번에 그린다');
+    {
+      const mm = fs.readFileSync(N('MetroMapView.java'), 'utf8'), aa = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+      assert.ok(/void onEdgeSwipe\(int dir\);/.test(mm) && /cam\.panByLeftoverX\(/.test(mm) && /MetroCamera\.edgeSwipe\(edgeOver, edgeOverY, edgeThr\(\)\)/.test(mm) && /listener\.onEdgeSwipe\(ed\)/.test(mm) && /getTranslationX\(\)/.test(mm), 's318: 노선도가 가로로 더 못 가는 끝에서 더 밀면 onEdgeSwipe');
+      assert.ok(/onEdgeSwipe\(int dir\) \{ if \("map"\.equals\(ShellCore\.currentTab\(store\)\) && "metro"\.equals\(map\.view\)\) commSwipe\(dir\); \}/.test(aa), 's318: 끝 밀기는 엔진의 sw 표대로 버스 탭으로(commSwipe)');
+    }
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

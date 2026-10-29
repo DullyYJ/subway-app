@@ -44,6 +44,8 @@ public class MetroMapView extends View {
         void onStation(int op, float sx, float sy);
         /** 손가락이 닿았다 — 웹 쪽 팝업을 닫게 한다 */
         void onGestureStart();
+        /** 지도가 가로로 더 못 가는 끝에서 더 밀어 놓았다 — 버스 탭으로 넘긴다. dir = 손가락이 간 쪽(-1 왼쪽 · +1 오른쪽) */
+        void onEdgeSwipe(int dir);
         /** 첫 그림이 나왔다(비어 있지 않음을 확인한 뒤) */
         void onReady();
         void onError(String msg);
@@ -83,6 +85,7 @@ public class MetroMapView extends View {
     private long downT;
     private int activeId = -1;
     private boolean moved, pinching, tapOk;
+    private float edgeOver, edgeOverY;          // 가장자리에서 더 밀린 가로·세로 양(px)
     private float pStartDist, pStartScale, pFx, pFy;
     private VelocityTracker vt;
     private final OverScroller scroller;
@@ -254,6 +257,7 @@ public class MetroMapView extends View {
                 downX = lastX = e.getX(); downY = lastY = e.getY(); downT = e.getEventTime();
                 activeId = e.getPointerId(0);
                 moved = false; pinching = false; tapOk = true;
+                edgeOver = 0f; edgeOverY = 0f; animate().cancel(); setTranslationX(0f);
                 if (vt != null) vt.recycle();
                 vt = VelocityTracker.obtain(); vt.addMovement(e);
                 if (listener != null) listener.onGestureStart();
@@ -269,13 +273,18 @@ public class MetroMapView extends View {
                 if (pinching && e.getPointerCount() >= 2) { updatePinch(e); return true; }
                 int idx = e.findPointerIndex(activeId);
                 if (idx < 0) return true;
-                float x = e.getX(idx), y = e.getY(idx);
+                float x = e.getX(idx) + getTranslationX(), y = e.getY(idx);          // 끝 밀기로 View 가 딸려 가 있어도 손가락 위치는 화면 기준으로 같게
                 if (!moved) {
                     if (Math.hypot(x - downX, y - downY) <= slop) return true;
                     moved = true; tapOk = false; lastX = x; lastY = y;     // 슬롭을 넘은 순간부터 움직인다
                     return true;
                 }
-                cam.panBy(x - lastX, y - lastY);
+                float ddy = y - lastY;
+                float left = cam.panByLeftoverX(x - lastX, ddy);
+                if (left != 0f) { if (edgeOver != 0f && (left < 0f) != (edgeOver < 0f)) { edgeOver = 0f; edgeOverY = 0f; } edgeOver += left; edgeOverY += Math.abs(ddy); }
+                else { edgeOver = 0f; edgeOverY = 0f; }
+                float pull = Math.abs(edgeOver) >= edgeThr() * 0.35f && Math.abs(edgeOver) >= 1.5f * edgeOverY ? edgeOver * 0.4f : 0f;      // 끝에서 더 밀면 지도가 살짝 딸려 가며 '넘어간다'를 알려 준다
+                setTranslationX(pull);
                 lastX = x; lastY = y;
                 invalidate();
                 considerRender();
@@ -302,12 +311,16 @@ public class MetroMapView extends View {
                 float x = idx >= 0 ? e.getX(idx) : e.getX(), y = idx >= 0 ? e.getY(idx) : e.getY();
                 if (pinching) { pinching = false; scheduleRender(0L); }
                 else if (tapOk && !moved && (e.getEventTime() - downT) < 500L) { handleTap(x, y); }
-                else if (moved) { startFling(); }
+                else if (moved) {
+                    int ed = MetroCamera.edgeSwipe(edgeOver, edgeOverY, edgeThr());
+                    if (ed != 0 && listener != null) { edgeReset(); recycleVt(); scheduleRender(0L); listener.onEdgeSwipe(ed); return true; }
+                    edgeReset(); startFling();
+                }
                 recycleVt();
                 return true;
             }
             case MotionEvent.ACTION_CANCEL: {
-                pinching = false; recycleVt(); scheduleRender(0L);
+                pinching = false; edgeReset(); recycleVt(); scheduleRender(0L);
                 return true;
             }
             default:
@@ -315,11 +328,19 @@ public class MetroMapView extends View {
         }
     }
 
+    private float edgeThr() { return 72f * density; }
+    /** 끝 밀기 표시를 되돌린다(딸려 갔던 지도가 제자리로) */
+    private void edgeReset() {
+        edgeOver = 0f; edgeOverY = 0f;
+        if (getTranslationX() != 0f) animate().translationX(0f).setDuration(160L).start();
+    }
+
     private void recycleVt() { if (vt != null) { vt.recycle(); vt = null; } }
 
     private void startPinch(MotionEvent e) { startPinchExcluding(e, -1); }
 
     private void startPinchExcluding(MotionEvent e, int skip) {
+        edgeReset();
         int a = -1, b = -1;
         for (int i = 0; i < e.getPointerCount(); i++) {
             if (i == skip) continue;
