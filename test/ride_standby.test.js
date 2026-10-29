@@ -921,6 +921,30 @@ const blHttp = async () => {
   } finally { if (prev) global.ntEnsure = prev; else delete global.ntEnsure; if (prevF) global.fetchStopArrivalsAny = prevF; else delete global.fetchStopArrivalsAny; if (prevL) global.liveCityOk = prevL; else delete global.liveCityOk; }
 };
 
+// ── s334: 내 열차 기억(st.mt) — 서버는 번호로 찾고, 엔진 상태가 번호를 들고 있다 ─────────────────────────────────────────
+const { rsRtPickX, rsBlLivePickX, rsPickLiveX, rsMtFor, rsRtGate, rsTlErr } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const TNI = (no, o) => Object.assign({ subwayId: '1001', arvlCd: '99', barvlDt: '120', bstatnNm: 'OK', btrainNo: no }, o || {});
+const mtHttp = async () => {
+  const prev = global.ntEnsure; global.ntEnsure = async () => ntFwd('반대');
+  try {
+    const mk = (lst) => ({ BUSAPI: { fetch: async () => new Response(JSON.stringify({ realtimeArrivalList: lst }), { status: 200 }) } });
+    const N = at(12, 55, 0), lst = [TNI('2143', { barvlDt: '30' }), TNI('2145', { barvlDt: '200' }), TNI('2147', { barvlDt: '330' })];
+    const q = (o) => Object.assign({ kind: 'subrt', i: 5, nowMs: N, fromMs: N, line: '1호선', from: 'L4', prev: 'L3' }, o || {});
+    let r = await rsBoardLive(mk(lst), q({ tn: '2145' }));
+    assert.deepStrictEqual([r.ms, r.tn, r.src], [N + 200000, '2145', 'realtime'], '번호가 같은 열차(앞차 2143 · 뒤차 2147 이 아니라) ' + JSON.stringify(r));
+    r = await rsBoardLive(mk(lst), q());
+    assert.deepStrictEqual([r.ms, r.tn], [N + 30000, '2143'], '번호가 없으면 예전 규칙(가장 먼저 닿는 열차) + 고른 열차 번호를 알려 준다');
+    r = await rsBoardLive(mk([lst[0], lst[2]]), q({ tn: '2145' }));
+    assert.ok(r.ms === null && r.tn === undefined, '내 열차가 목록에 없으면 앞뒤 열차로 대신하지 않는다 ' + JSON.stringify(r));
+    // 승차 대기 답: 실시간이 채택되면 고른 열차 번호가 실리고, 시각표로 가면 실리지 않는다
+    const sq = () => JSON.parse(JSON.stringify(Object.assign({ kind: 'sub', i: 1, allowEarlier: true, maxWait: 30 }, BQ)));
+    r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '300', bstatnNm: '신도림', btrainNo: '2145' }]), sq());
+    assert.deepStrictEqual([r.src, r.tn], ['realtime', '2145'], JSON.stringify(r));
+    r = await rsBoardLive(mk([{ subwayId: '1002', barvlDt: '900', bstatnNm: '신도림', btrainNo: '2145' }]), sq());
+    assert.ok(r.src === 'table' && r.tn === undefined, '시각표를 쓰면 번호를 기억할 근거가 없다 ' + JSON.stringify(r));
+  } finally { if (prev) global.ntEnsure = prev; else delete global.ntEnsure; }
+};
+
 const httpTest = async () => {
   const zlib = require('zlib');
   const body = JSON.stringify({ nowMs: at(12, 55, 0), fixes: [], state: withOvl(mkState()) });
@@ -1111,6 +1135,7 @@ const liveHttpTest = async () => {
 };
 liveHttpTest().then(() => { pass++; console.log('  ok   HTTP 처리: 서울 실시간 도착을 받으면 먼저 쓰고, 못 받거나 늦으면(3초) 시각표로'); }, (e) => { fail++; console.log('  FAIL HTTP 서울 실시간', String(e && e.message).split('\n')[0]); })
   .then(() => blHttp()).then(() => { pass++; console.log('  ok   HTTP 처리: /board-live — 실시간 ↔ 시각표 맞춤 · 20분 넘게 남으면 시각표 · 응답 없으면 3초 안에 시각표 · 버스'); }, (e) => { fail++; console.log('  FAIL HTTP board-live', String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); })
+  .then(() => mtHttp()).then(() => { pass++; console.log('  ok   HTTP 처리: s334 /board-live — 내 열차 번호(tn)로 찾기 · 승차 대기 답에 고른 열차 번호'); }, (e) => { fail++; console.log('  FAIL HTTP s334 mt', String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); })
   .then(() => httpTest()).then(() => { pass++; console.log('  ok   HTTP 처리: 평문 JSON 도 gzip 으로 눌러 보낸 JSON 도 같은 답을 준다(데이터 절약)'); }, (e) => { fail++; console.log('  FAIL HTTP 처리', String(e && e.message).split('\n')[0]); })
   .then(() => { console.log('ride_standby: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0); });
 
@@ -1123,4 +1148,174 @@ t('s266: 환승 하차·탑승 전후 3분은 승차 대기 중이어도 2.5초 
   assert.strictEqual(rideStandby({ nowMs: bi + 170000, fixes: [], state: JSON.parse(JSON.stringify(st)) }).nextMs, 2500, '환승 탑승 3분 뒤');
   const far = rideStandby({ nowMs: (ai + bi) / 2 + 600000, fixes: [], state: JSON.parse(JSON.stringify(st)) }).nextMs;
   assert.ok(far === 5000 || far === 2500, '창 밖 값은 기본 또는 정류장 근처 규칙 ' + far);
+});
+
+// ── s334: 내 열차 기억 — 엔진 상태(st.mt) ──
+t('s334 서버 고르기: rsRtPickX — 번호(tn)가 있으면 같은 번호만(방향·순서 무관) · 떠났거나 들어온 열차는 지금 · 0초 열차는 어림 · 목록에 없으면 null · tn 없으면 예전 규칙', () => {
+  const q = { line: '1호선', prev: 'A', from: 'B', nowMs: 1000000 }, nt = { forward: (l, a, b, term) => term !== 'BAD' };
+  const L = [TNI('2143', { barvlDt: '30' }), TNI('2145', { barvlDt: '200' }), TNI('2147', { barvlDt: '330', bstatnNm: 'BAD' })];
+  assert.deepStrictEqual(rsRtPickX(L, Object.assign({ tn: '2145' }, q), nt), { ms: 1200000, tn: '2145', by: 'tn' });
+  assert.strictEqual(rsRtPickX(L, Object.assign({ tn: '2147' }, q), nt).ms, 1330000, '반대 방향 표시(BAD)여도 번호가 같으면 같은 열차');
+  assert.strictEqual(rsRtPickX(L, Object.assign({ tn: '9999' }, q), nt), null, '목록에 없으면 앞뒤 열차로 튀지 않는다');
+  assert.strictEqual(rsRtPickX([TNI('2145', { subwayId: '1002' })], Object.assign({ tn: '2145' }, q), nt), null, '다른 호선의 같은 번호는 아니다');
+  assert.strictEqual(rsRtPickX([TNI('2145', { arvlCd: '2', barvlDt: '0' })], Object.assign({ tn: '2145' }, q), nt).ms, 1000000, '이미 떠났다(출발) → 지금');
+  assert.strictEqual(rsRtPickX([TNI('2145', { arvlCd: '1', barvlDt: '0' })], Object.assign({ tn: '2145' }, q), nt).ms, 1000000, '도착 → 지금');
+  assert.strictEqual(rsRtPickX([TNI('2145', { arvlCd: '3', barvlDt: '0' })], Object.assign({ tn: '2145' }, q), nt).ms, 1130000, '전역 출발(남은 초 0) → +130초 어림');
+  assert.strictEqual(rsRtPickX([TNI('2145', { arvlCd: '99', barvlDt: '0' })], Object.assign({ tn: '2145' }, q), nt), null, '어림도 못 하면 null');
+  const f = rsRtPickX(L, q, nt); assert.deepStrictEqual([f.ms, f.tn, f.by], [1030000, '2143', 'first']);
+  assert.strictEqual(rsRtPick(L, q, nt), 1030000, 'rsRtPick 은 시각만(예전 모양)'); assert.strictEqual(rsRtPick(L, Object.assign({ tn: '2145' }, q), nt), 1200000);
+});
+t('s334 서버 고르기: 승차 대기·탑승 버튼 답에 고른 열차 번호가 실린다(실시간이 채택될 때만)', () => {
+  const q = { line: '1호선', from: 'B', to: 'C', nowMs: 1000000, fromMs: 1000000 };
+  const L = [TNI('2143', { barvlDt: '30' }), TNI('2145', { barvlDt: '200' })];
+  const pk = rsBlLivePickX(L, q, null); assert.deepStrictEqual([pk.ms, pk.tn], [1030000, '2143']);
+  assert.strictEqual(rsBlLivePick(L, q, null), 1030000);
+  assert.deepStrictEqual(rsBlReconcile(1030000, { ms: 1000000, dk: '상' }, '2143'), { ms: 1030000, src: 'realtime', dk: '상', tn: '2143' });
+  assert.deepStrictEqual(rsBlReconcile(1500000, { ms: 1000000, dk: '상' }, '2143'), { ms: 1000000, src: 'table', dk: '상' }, '시각표를 쓰면 번호 없음');
+  assert.deepStrictEqual(rsBlReconcile(1030000, { ms: 1000000, dk: '상' }), { ms: 1030000, src: 'realtime', dk: '상' }, '번호를 모르면 예전 모양 그대로');
+  const x0 = stepX(xferState(), at(12, 55, 0)), pq = rsPressQuery(pressReq(x0.state, at(12, 55, 20))), NN = at(12, 55, 20);
+  const pr = rsPickLiveX([LV({ btrainNo: '3001', barvlDt: '90' }), LV({ btrainNo: '3003', barvlDt: '300' })], pq, NN, '하');
+  assert.deepStrictEqual([pr.ms, pr.tn], [NN + 90000, '3001']);
+  const rq = pressReq(x0.state, NN); assert.ok(rsAttachPressLive(rq, [LV({ btrainNo: '3001', barvlDt: '90' })]) && rq.pressTT.liveTn === '3001' && rq.pressTT.liveMs === NN + 90000, JSON.stringify(rq.pressTT));
+  const rq2 = pressReq(x0.state, NN); assert.ok(rsAttachPressLive(rq2, [LV({ barvlDt: '90' })]) && rq2.pressTT.liveTn === undefined, '번호가 없는 항목은 번호 없음');
+});
+t('s334 엔진 상태: 승차 대기 중 실시간 답이 가린 열차 번호를 탑승 확정(수동 [탑승])에 기억한다 · 탄 시각이 열차 도착과 안 맞거나 시각표 답이면 기억하지 않는다', () => {
+  const T = at(12, 50, 5), ans = (o) => blAns(Object.assign({ at: T, ms: at(12, 52, 10), tn: '2145', fromMs: T }, o || {}));
+  let r = blStep(blState(), T, 100, { bl: ans() });
+  assert.strictEqual(r.state.bl.tn, '2145', '답의 열차 번호를 승차 대기가 들고 있다');
+  const p = blStep(r.state, at(12, 52, 20), 20, { act: 'press' });
+  assert.ok(!p.state.wait && p.state.mt && p.state.mt.tn === '2145' && p.state.mt.line === '2호선' && p.state.mt.i === 1 && p.state.mt.src === 'board', JSON.stringify(p.state.mt) + ' ' + p.notes);
+  assert.ok(p.notes.some(n => /내 열차 기억: 2145번/.test(n)), p.notes.join('|'));
+  const late = blStep(r.state, at(12, 58, 0), 20, { act: 'press' });
+  assert.ok(!late.state.mt && late.notes.some(n => /내 열차 기억 안 함/.test(n)), '열차 도착 5분 50초 뒤에 탔다면 그 열차가 아니다 ' + JSON.stringify(late.state.mt));
+  const tbl = blStep(blStep(blState(), T, 100, { bl: ans({ src: 'table', tn: '2145' }) }).state, at(12, 52, 20), 20, { act: 'press' });
+  assert.ok(!tbl.state.mt, '시각표로 맞춘 답은 번호를 기억하지 않는다(서버도 실지 않지만 엔진이 한 번 더 막는다)');
+  const noTn = blStep(blStep(blState(), T, 100, { bl: ans({ tn: undefined }) }).state, at(12, 52, 20), 20, { act: 'press' });
+  assert.ok(!noTn.state.mt, '번호 없는 답');
+  const un = blStep(p.state, at(12, 52, 25), 20, { act: 'undo' });
+  assert.ok(un.state.wait && !un.state.mt, '되돌리면 기억도 지운다');
+});
+t('s334 엔진 상태: GPS 로 탄 것이 감지돼도(승차 감지) 그 열차를 기억한다', () => {
+  const T0 = at(12, 51, 30); let st = blState(), mt = null;
+  for (let ms = T0; ms <= at(12, 54, 0); ms += 5000) {
+    const dist = ms <= at(12, 52, 40) ? 10 : 10 + 12 * (ms - at(12, 52, 40)) / 1000;
+    const r = blStep(st, ms, dist, ms === T0 ? { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) } : {});
+    st = r.state; if (!st.wait) { mt = st.mt; break; }
+  }
+  assert.ok(mt && mt.tn === '2145' && mt.i === 1, '감지로 확정되면서 기억 ' + JSON.stringify(mt));
+});
+t('s334 엔진 상태: 환승 [탑승] — 누른 순간 서버가 가린 열차 번호를 기억한다(예약은 번호도 예약에 적어 두었다가 확정 때)', () => {
+  const x0 = stepX(xferState(), at(12, 55, 0)), NN = at(12, 55, 20);
+  const pend = stepX(x0.state, NN, { act: 'press', pressTT: { i: 4, nowM: 12 * 60 + 55, depMin: null, late: null, liveMs: at(12, 58, 40), liveTn: '7777' } });
+  assert.ok(pend.state.xPend && pend.state.xPend.ltn === '7777' && pend.state.xPend.lv === at(12, 58, 40), JSON.stringify(pend.state.xPend));
+  const done = stepX(pend.state, at(12, 58, 0), {});
+  assert.ok(done.state.mt && done.state.mt.tn === '7777' && done.state.mt.i === 4 && done.state.mt.line === '2호선', JSON.stringify(done.state.mt) + done.notes);
+  const dir = stepX(x0.state, at(12, 58, 30), { act: 'press', pressTT: { i: 4, nowM: 12 * 60 + 58, depMin: null, late: null, liveMs: at(12, 58, 40), liveTn: '8888' } });
+  assert.ok(dir.state.mt && dir.state.mt.tn === '8888', '바로 확정 ' + JSON.stringify(dir.state.mt) + dir.notes);
+  const un = stepX(dir.state, at(12, 58, 35), { act: 'undo' });
+  assert.ok(!un.state.mt, '되돌리면 기억도 지운다');
+  const noLive = stepX(x0.state, at(12, 58, 30), { act: 'press', pressTT: { i: 4, nowM: 12 * 60 + 58, depMin: null, late: null } });
+  assert.ok(!noLive.state.mt, '서버가 열차를 못 가렸으면(번호 없음) 기억하지 않는다');
+  const xs = JSON.parse(JSON.stringify(x0.state)); xs.bl = { x: { i: 4, n: 1, ms: at(12, 58, 40), src: 'realtime', tn: '6666' } };
+  const viaBl = stepX(xs, at(12, 58, 50), { act: 'press', pressTT: { i: 4, nowM: 12 * 60 + 58, depMin: null, late: null } });
+  assert.ok(viaBl.state.mt && viaBl.state.mt.tn === '6666', '누를 때 번호가 없으면 환승 대기가 받아 둔 열차 ' + JSON.stringify(viaBl.state.mt));
+  const xs2 = JSON.parse(JSON.stringify(xs)); xs2.bl.x.ms = at(13, 5, 0);
+  const far = stepX(xs2, at(12, 58, 50), { act: 'press', pressTT: { i: 4, nowM: 12 * 60 + 58, depMin: null, late: null } });
+  assert.ok(!far.state.mt, '받아 둔 열차 시각과 탄 시각이 어긋나면 기억하지 않는다');
+});
+t('s334 엔진 상태: 영점 연속 실패 뒤 실시간 보정은 기억한 번호를 서버에 실어 보낸다 · 기억이 없으면 번호 없이 묻고 답에 실린 번호를 늦게 기억한다 · 환승하면 옛 기억은 쓰지 않는다', () => {
+  const withMt = longState('1호선'); withMt.mt = { tn: '2145', line: '1호선', i: 1, at: at(12, 52, 0), src: 'board' };
+  const o = runUntil(withMt, at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
+  assert.ok(o.r.ask && o.r.ask.body.kind === 'subrt' && o.r.ask.body.tn === '2145', JSON.stringify(o.r.ask));
+  const none = runUntil(longState('1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
+  assert.ok(none.r.ask && none.r.ask.body.tn === undefined, '기억이 없으면 번호 없이');
+  // 답: 내 열차를 못 찾으면(ms 없음) 번호를 알리는 메모, 직전 값은 그대로
+  const nf = stepL(o.st, o.ms + 16000, [], { bl: { ok: true, kind: 'subrt', i: 5, ms: null, at: o.ms + 16000 } });
+  assert.ok(nf.notes.some(n => /내 열차\(2145번\)를 못 찾음/.test(n)) && !nf.state.eta.live, nf.notes.join('|'));
+  // 늦게 기억: 처음 맞출 때 서버가 알려 준 번호
+  const late = stepL(none.st, none.ms + 20000, [], { bl: { ok: true, kind: 'subrt', i: 5, ms: none.ms + 20000 + 150000, tn: '2151', src: 'realtime', at: none.ms + 20000 } });
+  assert.ok(late.state.mt && late.state.mt.tn === '2151' && late.state.mt.src === 'late' && late.state.mt.i === 4, JSON.stringify(late.state.mt));
+  assert.ok(rsMtFor(late.state, 6, '1호선') && !rsMtFor(late.state, 6, '2호선'), '같은 노선 구간 안에서만');
+  const tf = JSON.parse(JSON.stringify(late.state)); tf.eta.nodes[6].lineName = '2호선';
+  assert.strictEqual(rsMtFor(tf, 7, '1호선'), null, '사이에 다른 노선(환승)이 끼면 옛 기억이다');
+  const hit = stepL(withMt, 0, []);      // 형태 점검: 상태에 mt 가 그대로 따라다닌다
+  assert.strictEqual(hit.state.mt.tn, '2145');
+  // 반복 보정: 두 번째 보정(다음 실패 3회)도 같은 번호를 쓴다
+  const a = stepL(o.st, o.ms + 20000, [], { bl: { ok: true, kind: 'subrt', i: 5, ms: o.ms + 20000 + 150000, tn: '2145', src: 'realtime', at: o.ms + 20000 } });
+  const again = runUntil(a.state, o.ms + 25000, at(13, 14, 0), (r) => r.state.rt && r.state.rt.i0 > 4 && r.ask);
+  assert.ok(again.r.ask && again.r.ask.body.tn === '2145' && again.r.ask.body.i > 5, '두 번째 보정도 같은 열차 번호 ' + JSON.stringify(again.r.ask));
+});
+
+// ── s334: 로컬 시각표 우선 — 평상시 API 0회, 로컬 타임라인과 GPS 가 어긋날 때만 1회(쿨타임) ──
+const posOnPlan = (st, ms) => { const sp = st.stops; if (ms <= sp[0].arrMs) return [sp[0].lat, sp[0].lng]; for (let i = 1; i < sp.length; i++) if (ms <= sp[i].arrMs) { const a = sp[i - 1], b = sp[i], f = (ms - a.arrMs) / (b.arrMs - a.arrMs); return [a.lat + (b.lat - a.lat) * f, a.lng + (b.lng - a.lng) * f]; } const z = sp[sp.length - 1]; return [z.lat, z.lng]; };
+// 시각표(계획)대로 가는 열차를 lagMs 만큼 늦게 따라가는 GPS(gaps 구간은 신호 없음). 답(answer)이 있으면 첫 질문에 바로 돌려준다.
+function lagRun(lagMs, gaps, opt) {
+  opt = opt || {}; let st = longState('1호선'); if (opt.mt) st.mt = { tn: '2145', line: '1호선', i: 1, at: at(12, 52, 0), src: 'board' };
+  const base = JSON.parse(JSON.stringify(st)), asks = [], notes = []; let pending = null;
+  for (let ms = at(12, 52, 5); ms <= (opt.to || at(13, 6, 0)); ms += 5000) {
+    const gap = (gaps || []).some(g => ms >= g[0] && ms < g[1]), p = posOnPlan(base, ms - lagMs);
+    const extra = pending ? { bl: pending } : {}; pending = null;
+    const r = stepL(st, ms, gap ? [] : [[ms, p[0], p[1], 15]], extra); st = r.state;
+    if (r.ask) { asks.push({ s: Math.round((ms - at(12, 52, 0)) / 1000), b: r.ask.body }); if (opt.answer) pending = { ok: true, kind: 'subrt', i: r.ask.body.i, ms: opt.answer(ms, r.ask.body), tn: '2145', src: 'realtime', at: ms }; }
+    r.notes.filter(n => /로컬 시각표|실시간 보정|내 열차/.test(n)).forEach(n => notes.push(Math.round((ms - at(12, 52, 0)) / 1000) + 's ' + n));
+  }
+  return { asks: asks, notes: notes, st: st };
+}
+t('s334 로컬 우선: 시각표대로 가는 평상시(GPS 가 시각표와 맞음·1분 늦음)에는 실시간 API 를 한 번도 부르지 않는다', () => {
+  for (const lag of [0, 60000]) { const o = lagRun(lag); assert.strictEqual(o.asks.length, 0, 'lag ' + lag + ' ' + JSON.stringify(o.asks)); assert.ok(!o.st.rt, '보정 시작도 없다'); assert.ok(!o.st.rtc || !o.st.rtc.n, 'n ' + JSON.stringify(o.st.rtc)); }
+});
+t('s334 로컬 우선: GPS 신호가 4분 끊겼다 돌아와도 로컬 시각표와 맞으면 API 를 부르지 않는다 (복구 자체는 호출 사유가 아니다)', () => {
+  const o = lagRun(0, [[at(12, 54, 0), at(12, 58, 0)]]);
+  assert.strictEqual(o.asks.length, 0, JSON.stringify(o.asks)); assert.ok(o.st.rtc && o.st.rtc.rec, '복구 순간은 상태가 안다(1분 동안 더 민감): ' + JSON.stringify(o.st.rtc));
+});
+t('s334 예외 호출: 로컬 시각표와 GPS 위치가 2분 반 넘게 어긋나면 그때만 API(내 열차 번호 포함) · 구간 비율로 어긋남을 잰다 · 쿨타임 1분 · 한 보정 안에서는 15초 간격 최대 2번', () => {
+  const o = lagRun(240000, null, { mt: true });
+  assert.ok(o.asks.length >= 2 && o.asks[0].b.kind === 'subrt' && o.asks[0].b.tn === '2145' && o.asks[0].b.i === 2, JSON.stringify(o.asks));
+  assert.ok(o.asks[0].s >= 140 && o.asks[0].s <= 175, '2분 반(150초) 어긋나는 순간 ' + o.asks[0].s);
+  assert.strictEqual(o.asks[1].s - o.asks[0].s, 15, '재시도는 15초 간격 ' + JSON.stringify(o.asks));
+  assert.ok(o.notes.some(n => /로컬 시각표와 GPS 위치가 \d+초 어긋남 — 실시간/.test(n)), o.notes.join('|'));
+  for (let k = 1; k < o.asks.length; k++) if (o.asks[k].s - o.asks[k - 1].s > 15) assert.ok(o.asks[k].s - o.asks[k - 1].s >= 60, '새 보정은 쿨타임(1분) 뒤 ' + JSON.stringify(o.asks));
+});
+t('s334 예외 호출: 답이 오면 로컬 타임라인이 그 시각으로 맞춰져 어긋남이 풀리고 더는 부르지 않는다(보정 1회로 끝)', () => {
+  const o = lagRun(240000, null, { mt: true, answer: (ms, b) => at(12, 50 + 2 * b.i, 0) + 240000 });      // 늦은 열차의 실제 도착(계획 + 4분)
+  assert.ok(o.asks.length >= 1 && o.asks.length <= 2, '한 번의 보정 ' + JSON.stringify(o.asks));
+  assert.ok(o.st.eta.live && o.st.eta.live.some(x => x.fix === true), JSON.stringify(o.st.eta.live));
+});
+t('s334 예외 호출: GPS 가 3분 넘게 끊겼다 돌아온 뒤 1분 안에 로컬 시각표와 1분 넘게 어긋나 있으면 호출(복구 직후는 임계값을 낮춘다)', () => {
+  const o = lagRun(200000, [[at(12, 54, 0), at(12, 58, 0)]], { mt: true });
+  assert.ok(o.asks.length >= 1 && o.notes.some(n => /신호 복구 직후/.test(n)), JSON.stringify(o.asks) + o.notes.join('|'));
+  assert.strictEqual(o.st.rtc.why, 'recover');
+  const lag90 = lagRun(90000, [[at(12, 54, 0), at(12, 58, 0)]], { mt: true });
+  assert.ok(lag90.notes.some(n => /신호 복구 직후/.test(n)), '90초 어긋남은 평소(150초)면 안 부르지만 복구 직후(60초)엔 부른다 ' + lag90.notes.join('|'));
+  const noGap = lagRun(90000, null, { mt: true }); assert.strictEqual(noGap.asks.length, 0, '신호가 안 끊겼으면 90초 어긋남은 그냥 둔다');
+});
+t('s334 쿨타임·한도: rsRtGate — 직전 호출 1분 안에는 새 보정을 시작하지 않고, 한 여정 24번을 넘기지 않는다', () => {
+  const N = 1e12;
+  assert.strictEqual(rsRtGate({}, N), true); assert.strictEqual(rsRtGate({ rtc: { n: 0 } }, N), true);
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 30000 } }, N), false, '30초 전에 불렀다');
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 60000 } }, N), true, '1분 지났다');
+  assert.strictEqual(rsRtGate({ rtc: { n: 24, at: N - 600000 } }, N), false, '한 여정 한도');
+});
+t('s334 쿨타임: 영점 연속 3회 실패(기존 사유)도 같은 쿨타임·한도를 지킨다 — 막혀 있으면 실패 표시(mb)를 남기지 않고 쿨타임 뒤에 다시 시도한다', () => {
+  const o = runUntil(longState('1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
+  assert.ok(o.st.rt && o.st.mb === 4 && o.st.rtc && o.st.rtc.why === 'loss', JSON.stringify(o.st.rtc));
+  const blocked = JSON.parse(JSON.stringify(longState('1호선'))); blocked.rtc = { n: 24, at: at(12, 50, 0) };
+  const b = runUntil(blocked, at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
+  assert.ok(!b.st.rt && b.st.mb == null, '여정 한도에 막히면 부르지 않는다');
+});
+t('s334 로컬 대조: rsTlErr — 이웃한 두 역 사이 위치를 구간 비율로 보간한 시각과 q 의 시각 차 · 경로에서 400m 넘게 멀면 null · 타임라인 사본(tl)은 etaMs 에 값이 없는 역에 대신 쓴다', () => {
+  const st = longState('1호선'), sp = st.stops, mid = [sp[1].lat, (sp[1].lng + sp[2].lng) / 2];      // 2번과 3번 역(노드 2·3) 한가운데
+  const arr = (i) => sp[i - 1].arrMs, eta = []; sp.forEach(q => { eta[q.i] = q.arrMs; });
+  const tMid = (arr(2) + arr(3)) / 2, e = rsTlErr(st, [tMid + 200000, mid[0], mid[1], 10], eta);
+  assert.ok(e && e.i === 2 && Math.abs(e.err - 200000) < 3000, JSON.stringify(e));
+  assert.strictEqual(rsTlErr(st, [tMid, mid[0] + 0.02, mid[1], 10], eta), null, '경로에서 먼 위치');
+  const eta2 = eta.slice(); eta2[3] = null; st.mt = { tn: '1', line: '1호선', i: 1, tl: [[3, arr(3)]] };
+  const e2 = rsTlErr(st, [tMid, mid[0], mid[1], 10], eta2); assert.ok(e2 && Math.abs(e2.err) < 3000, '로컬 타임라인에 없으면 탄 순간의 사본으로 ' + JSON.stringify(e2));
+  assert.strictEqual(rsTlErr(longState('1호선'), [tMid, mid[0], mid[1], 10], eta2), null, '사본도 없으면 비교하지 않는다');
+});
+t('s334 타임라인 사본: 탑승 확정 때 같은 노선으로 이어지는 뒤 역들의 도착 시각을 st.mt.tl 에 보관한다', () => {
+  const T = at(12, 50, 5);
+  let r = blStep(blState(), T, 100, { bl: blAns({ at: T, ms: at(12, 52, 10), tn: '2145', fromMs: T }) });
+  const p = blStep(r.state, at(12, 52, 20), 20, { act: 'press' });
+  assert.ok(p.state.mt && Array.isArray(p.state.mt.tl) && p.state.mt.tl.length >= 3 && p.state.mt.tl.every(x => x[0] > 1 && isFinite(x[1])), JSON.stringify(p.state.mt));
 });
