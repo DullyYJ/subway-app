@@ -434,6 +434,7 @@ final class RideStandbyJ {
         } else if ("undo".equals(a) && st.get("rsUndo") != null && now < num(mm(st.get("rsUndo")).get("until")) && !truthy(mm(st.get("rsUndo")).get("x"))) doUndo(st, now, notes);
     }
     // ★ 2026-10-27 s257 (JS rsMonoPos 와 같은 계산): 새 시각표가 지난번 마커 자리보다 뒤로 가면 그 구간의 출발 시각만 당겨 자리를 유지한다(도착 시각 t1 은 그대로).
+    static final double DOOR_M = 250, DOOR_ACC_M = 80, DOOR_LOST_MS = 10000, DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — engine/ride-standby.js 와 같은 값
     static final double DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(RideEtaJ stopDwellSec 와 같은 값)
     static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
         Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
@@ -501,10 +502,34 @@ final class RideStandbyJ {
                 boolean gone = fin(prevP) && prevP > dwf + (dwG ? 0.12 : 0.002);
                 dw = obj("key", key, "i", (double) dwf, "s", gone ? 0.0 : (dwG ? now : Math.min(now, tt)), "g", dwG ? 1.0 : 0.0); st.put("dw", dw);
             } else if (dwG && num(dw.get("g")) == 0) dw.put("g", 1.0);
-            double dwEnd = num(dw.get("s")) + DWELL_MS; Map<String, Object> g0s = mm(segs.get(0));
-            if (now < dwEnd && num(g0s.get("t0")) < dwEnd && dwEnd < num(g0s.get("t1")) - 1000) {
-                g0s.put("t0", dwEnd); pos.put("t0", dwEnd); pos.put("ratio", 0.0); pos.put("moving", Boolean.FALSE);
-                notes.add("마커 정차 " + dwf + "번 — " + ns(round((dwEnd - now) / 1000)) + "초 더(" + (num(dw.get("g")) != 0 ? "GPS 확정" : "시각표") + ")");
+            // s322 — engine/ride-standby.js 와 같은 '문 열림(역 근처 GPS) 동안 서 있기': 마지막으로 들어온 시각을 dw.h 에 붙잡고 끊긴 뒤 10초가 지나면 출발
+            Map<String, Object> dwStop = stopOf(st, dwf); List<Object> dwTr = trailOf(st);
+            double dwEnd; Map<String, Object> g0s = mm(segs.get(0));
+            if (dw.get("e") != null) dwEnd = num(dw.get("e"));            // 이미 출발로 굳은 정차 — 끝 시각 고정(다시 세우지 않는다)
+            else {
+                if (dwStop != null && fin(dwStop.get("lat")) && fin(dwStop.get("lng"))) {
+                    for (int qi = dwTr.size() - 1; qi >= 0; qi--) {
+                        Object tq = dwTr.get(qi); if (tq == null || !fin(at(tq, 0)) || num(at(tq, 0)) < num(dw.get("s"))) break;
+                        if (num(at(tq, 0)) > now + 1000 || !fin(at(tq, 1)) || !fin(at(tq, 2)) || (at(tq, 3) != null && fin(at(tq, 3)) && num(at(tq, 3)) > DOOR_ACC_M)) continue;
+                        if (rsHav(num(at(tq, 1)), num(at(tq, 2)), num(dwStop.get("lat")), num(dwStop.get("lng"))) <= DOOR_M) { if (dw.get("h") == null || num(at(tq, 0)) > num(dw.get("h"))) dw.put("h", num(at(tq, 0))); break; }
+                    }
+                }
+                dwEnd = num(dw.get("s")) + DWELL_MS;
+                if (dw.get("h") != null) dwEnd = Math.max(dwEnd, Math.min(num(dw.get("h")) + DOOR_LOST_MS, num(dw.get("s")) + DOOR_MAX_MS));
+                if (now >= dwEnd) dw.put("e", dwEnd);
+            }
+            double dwT0 = Math.min(dwEnd, num(g0s.get("t1")) - 1000);
+            if (num(g0s.get("t0")) < dwT0) {
+                g0s.put("t0", dwT0); pos.put("t0", dwT0);
+                if (now < dwEnd) {
+                    pos.put("ratio", 0.0); pos.put("moving", Boolean.FALSE);
+                    notes.add("마커 정차 " + dwf + "번 — " + ns(round((dwEnd - now) / 1000)) + "초 더(" + (dw.get("h") != null && now - num(dw.get("h")) <= DOOR_LOST_MS ? "문 열림 · GPS 추적 중" : (num(dw.get("g")) != 0 ? "GPS 확정" : "시각표")) + ")");
+                } else {
+                    double g0 = num(g0s.get("t0")), g1 = num(g0s.get("t1"));
+                    double dwR = g1 > g0 ? Math.max(0, Math.min(1, (now - g0) / (g1 - g0))) : 0, dwRp = fin(prevP) ? prevP - dwf : -1;
+                    if (dwRp > dwR + 0.001 && dwRp < 0.999 && g1 > now) { double nt0 = (now - dwRp * g1) / (1 - dwRp); g0s.put("t0", nt0); pos.put("t0", nt0); dwR = dwRp; }
+                    pos.put("ratio", Math.floor(dwR * 1000 + 0.5) / 1000); pos.put("moving", dwR > 0 && dwR < 1);
+                }
             }
         }
         List<Object> keep = new ArrayList<Object>();

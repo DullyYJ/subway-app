@@ -70,5 +70,36 @@ t('s321: 지하라 GPS 가 늦게 들어와 시각표보다 일찍 도착을 확
   assert.ok(conf && conf >= at(12, 53, 40), '확정(GPS 가 들어온 뒤)에 선다');
   assert.ok(still.length >= 3 && still[still.length - 1] - conf >= 10000 && still[still.length - 1] - conf <= 15000, '확정부터 15초 정차 ' + still.length);
 });
+t('s322: 역 근처 GPS 가 잡히는 동안(문 열림)은 계속 서 있고, 끊기면 10초 뒤 출발 — 마커가 앞으로 튀지 않는다 · 기존 15초는 바닥', () => {
+  let st = mkState(), rows = [];
+  const stn = LNG0 + DL;                                  // S1(노드 2) 좌표
+  for (let ms = at(12, 52, 5); ms <= at(12, 54, 50); ms += 5000) {
+    const open = ms >= at(12, 53, 40) && ms <= at(12, 54, 10);       // 문이 열려 GPS 가 잡히는 구간
+    const fx = open ? [[ms, LAT, stn, 12]] : [];
+    const r = rideStandby({ nowMs: ms, fixes: fx, state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    rows.push({ ms, from: r.pos.from, ratio: r.pos.ratio, moving: r.pos.moving });
+  }
+  const at2 = rows.filter(x => x.from === 2), still = at2.filter(x => x.ratio === 0 && !x.moving);
+  assert.ok(still.some(x => x.ms === at(12, 54, 10)), '문 열림(마지막 GPS) 때까지 서 있다');
+  assert.ok(still.some(x => x.ms === at(12, 54, 15)), '끊긴 직후 10초 안에는 아직 선다(깜빡임 방지)');
+  const first = at2.find(x => x.ms > at(12, 54, 10) && x.moving);
+  assert.ok(first && first.ms >= at(12, 54, 20) && first.ms <= at(12, 54, 30), '끊긴 뒤 10초쯤 뒤에 출발 ' + (first && first.ms - at(12, 54, 0)));
+  assert.ok(first.ratio < 0.12, '출발할 때 앞으로 튀지 않는다 ' + first.ratio);
+  const lurch = at2.filter(x => x.ms > first.ms).every((x, i, a) => i === 0 || x.ratio >= a[i - 1].ratio - 0.001);
+  assert.ok(lurch, '그 뒤 계속 앞으로');
+});
+t('s322: 오래 GPS 가 잡혀도(지상 역 등) 3분이 최대 — 그 뒤엔 출발한다 · 출발한 뒤 역 근처 GPS 가 더 들어와도 다시 서지 않는다', () => {
+  let st = mkState(), rel = null, after = [];
+  const stn = LNG0 + DL;
+  for (let k = 2; k < 5; k++) st.stops[k].arrMs += 30 * 60000;                       // 다음 역 도착이 한참 뒤인 긴 구간 — 정차 상한만 시험한다
+  for (let k = 3; k < 6; k++) st.eta.nodes[k].planMin += 30;
+  for (let ms = at(12, 52, 5); ms <= at(12, 59, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: ms >= at(12, 53, 0) ? [[ms, LAT, stn, 10]] : [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (rel == null && st.dw && st.dw.i === 2 && st.dw.e != null) rel = { ms: ms, dw: JSON.parse(JSON.stringify(st.dw)) };
+    else if (rel) after.push(r.pos.from + r.pos.ratio);
+  }
+  assert.ok(rel && rel.dw.e - rel.dw.s <= 180000, '정차 최대 3분 ' + JSON.stringify(rel));
+  assert.ok(after.length > 3 && after.every((x, i, a) => i === 0 || x >= a[i - 1] - 0.001), '출발 뒤 계속 앞으로(다시 서지 않음)');
+});
 
 console.log('ride_dwell: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

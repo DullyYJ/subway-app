@@ -567,6 +567,7 @@ function rsActs(st, req, now, notes) {
 //   엔진이 시각표를 다시 맞추면(GPS 도착 확정·재동기·대기 해제) 새 구간 시각이 '지금 마커 자리'보다 뒤일 수 있다 → 마커가 뒤로 튄다.
 //   지난 호출에서 앱이 그리던 위치(지난 시각표를 지금 시각으로 읽은 값)보다 새 위치가 뒤면, 그 구간의 출발 시각만 당겨 지금 자리를 그대로 이어 간다(도착 시각 t1 은 그대로 → 남은 거리를 그 시간에 간다).
 //   마커는 멈추거나 느려질 수는 있어도 뒤로 가지 않는다. 승차 되돌리기·다른 여정이면 풀린다.
+var RS_DOOR_M = 250, RS_DOOR_ACC_M = 80, RS_DOOR_LOST_MS = 10000, RS_DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — 반경 · 최대 오차 · 끊김으로 보는 시간 · 최대 정차
 var RS_DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
 function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
@@ -626,10 +627,34 @@ function rsMonoPos(st, r, now, notes) {
       var dwTt = r.etaMs && r.etaMs[dwf] != null && isFinite(+r.etaMs[dwf]) ? +r.etaMs[dwf] : now, dwGone = prevP != null && prevP > dwf + (dwG ? 0.12 : 0.002);      // GPS 확정이 시각표보다 조금(구간의 12% 안) 늦으면 그 역으로 되돌려 서게 한다 — 그보다 멀리 갔으면 서지 않는다(되돌아감 방지)
       dw = st.dw = { key: key, i: dwf, s: dwGone ? 0 : (dwG ? now : Math.min(now, dwTt)), g: dwG ? 1 : 0 };
     } else if (dwG && !dw.g) dw.g = 1;
-    var dwEnd = dw.s + RS_DWELL_MS, g0s = segs[0];
-    if (now < dwEnd && +g0s.t0 < dwEnd && dwEnd < +g0s.t1 - 1000) {
-      g0s.t0 = dwEnd; pos.t0 = dwEnd; pos.ratio = 0; pos.moving = false;
-      notes.push('마커 정차 ' + dwf + '번 — ' + Math.round((dwEnd - now) / 1000) + '초 더(' + (dw.g ? 'GPS 확정' : '시각표') + ')');
+    // ★ s322 (YJ: "GPS 가 잡혔다는 건 문이 열려서다 — 잡히는 동안은 계속 추적하다가 끊기면 열차가 출발했다고 판단"): 역 근처(RS_DOOR_M) 좋은 위치(정확도 RS_DOOR_ACC_M 이하)가 정차 시작 뒤에 들어오는 동안은 문이 열린 것으로 보고 마커를 세워 둔다.
+    //   마지막으로 들어온 시각을 dw.h 에 붙잡고, 끊긴 뒤 RS_DOOR_LOST_MS 가 지나면 출발로 본다(dw.h 는 그대로라 그 시각이 정차 끝으로 굳어 마커가 튀지 않는다). 기존 15초 정차는 바닥(최소) — GPS 가 없으면 예전 그대로. 길게 서 있어도 RS_DOOR_MAX_MS 에서 끝낸다.
+    var dwStop = rsStopOf(st, dwf), dwTr = st.trail || [], dwEnd, g0s = segs[0];
+    if (dw.e != null) dwEnd = dw.e;                                  // 이미 출발로 굳은 정차 — 끝 시각을 고정(그 뒤 역 근처에서 GPS 가 더 들어와도 마커를 다시 세우지 않는다 = 되돌아감 방지)
+    else {
+      if (dwStop && isFinite(dwStop.lat) && isFinite(dwStop.lng)) {
+        for (i = dwTr.length - 1; i >= 0; i--) {
+          var tq = dwTr[i]; if (!tq || !isFinite(tq[0]) || tq[0] < dw.s) break;
+          if (tq[0] > now + 1000 || !isFinite(tq[1]) || !isFinite(tq[2]) || (tq[3] != null && isFinite(tq[3]) && tq[3] > RS_DOOR_ACC_M)) continue;
+          if (rsHav(tq[1], tq[2], dwStop.lat, dwStop.lng) <= RS_DOOR_M) { if (dw.h == null || tq[0] > dw.h) dw.h = tq[0]; break; }
+        }
+      }
+      dwEnd = dw.s + RS_DWELL_MS;
+      if (dw.h != null) dwEnd = Math.max(dwEnd, Math.min(dw.h + RS_DOOR_LOST_MS, dw.s + RS_DOOR_MAX_MS));
+      if (now >= dwEnd) dw.e = dwEnd;
+    }
+    // 정차 끝 시각부터 구간이 시작하도록 t0 를 미룬다(끝난 뒤에도 유지 → 마커가 0 에서 출발, 앞으로 튀지 않는다)
+    var dwT0 = Math.min(dwEnd, +g0s.t1 - 1000);
+    if (+g0s.t0 < dwT0) {
+      g0s.t0 = dwT0; pos.t0 = dwT0;
+      if (now < dwEnd) {
+        pos.ratio = 0; pos.moving = false;
+        notes.push('마커 정차 ' + dwf + '번 — ' + Math.round((dwEnd - now) / 1000) + '초 더(' + (dw.h != null && now - dw.h <= RS_DOOR_LOST_MS ? '문 열림 · GPS 추적 중' : (dw.g ? 'GPS 확정' : '시각표')) + ')');
+      } else {
+        var dwR = g0s.t1 > g0s.t0 ? Math.max(0, Math.min(1, (now - g0s.t0) / (g0s.t1 - g0s.t0))) : 0, dwRp = prevP != null ? prevP - dwf : -1;
+        if (dwRp > dwR + 0.001 && dwRp < 0.999 && g0s.t1 > now) { g0s.t0 = pos.t0 = (now - dwRp * g0s.t1) / (1 - dwRp); dwR = dwRp; }          // 이미 지나간 자리보다 뒤로 가지 않는다(시각표가 늦게 맞춰져도)
+        pos.ratio = Math.round(dwR * 1000) / 1000; pos.moving = dwR > 0 && dwR < 1;
+      }
     }
   }
   st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
