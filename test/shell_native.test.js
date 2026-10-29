@@ -220,7 +220,7 @@ function findAndroidJar() {
   });
   await t('맛집 가게 지도 펼침(웹 _foodShowMap): 가게를 누르면 팝업 대신 카드 바로 아래 펼침 · 경로 주소는 엔진이 정하고 앱은 받아 오기만 · 같은 카드를 또 누르면 접음 · 목록 캐시에는 펼침을 넣지 않음', async () => {
     const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');
-    assert.ok(/case FoodCore\.R_PANEL: foodPanelRound\(\)/.test(sa) && !/case FoodCore\.R_SHEET: openFoodSheet/.test(sa), '가게 누름은 펼침(팝업 아님)');
+    assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,500}foodPanelRound\(\)/.test(sa) && !/case FoodCore\.R_SHEET: openFoodSheet/.test(sa), '가게 누름은 펼침(팝업 아님)');
     assert.ok(/R_UNPANEL/.test(sa) && /k\.equals\(openKey\)/.test(fc), '같은 카드를 또 누르면 접는다');
     assert.ok(/food\.panelNeed/.test(sa) && /NetPost\.get\(nd\[1\]/.test(sa) && /u\.startsWith\("https:\/\/"\)/.test(fc), '경로 주소는 엔진이 준 https 만 받아 온다');
     assert.ok(!/valhalla|osrm/i.test(sa + fc), '앱에는 경로 서버 주소·계산이 없다(엔진이 정한다)');
@@ -550,6 +550,13 @@ function findAndroidJar() {
     assert.ok(/fetchBusNeed\(v, keep, 0, \+\+seqMapB, true\)/.test(a) && !/fetchBusNeed\(v, keep, 0, \+\+seqMapB, false\)/.test(a), '처음 들어올 때도 정류장마다 오는 대로 그린다');
     assert.ok(/k >= 1 \|\| !busEmpty\(r\.body\)/.test(np), '비어 있음은 한 번만 더');
     assert.ok(/public float yo; public long yt;/.test(sc) && /cardY\.get\(it\.key\)/.test(sv) && /it\.yo \* \(1f - spring\(fy/.test(sv), '카드 자리가 바뀌면 옛 자리에서 스프링으로');
+  });
+  await t('s328: 도착지를 고르면 바로 경로 탐색 · 맛집 가게 지도는 눌린 순간 뼈대부터 · 미리 받아 둔 펼침은 서버 없이 바로', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), hc = fs.readFileSync(N('HomeCore.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8');
+    assert.ok(/autoGo = okc && !riding\(\) && bothSet\(\)/.test(hc) && /public boolean takeAutoGo\(\)/.test(hc) && /home\.takeAutoGo\(\)\) \{ goRoute\(\); break; \}/.test(a), '후보를 골라 출발·도착이 다 찼으면(확정 중 아님) 바로 찾는다');
+    assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,400}food\.showPanelSkeleton\(\);[\s\S]{0,300}foodRedraw\(\);/.test(a) && /public void showPanelSkeleton\(\)/.test(fc) && /panelSkel = false;/.test(fc), '눌린 순간 뼈대부터 펼친다');
+    assert.ok(/applyPanel\(my, key, hit\); return;/.test(a) && /private void panelCachePut\(/.test(a) && /food\.goKeys\(4\)/.test(a) && /panelRequestFor\(ShellCore\.CAP, k\)/.test(a) && /foodPfRun, 1200L/.test(a), '목록이 뜨면 위쪽 4곳 펼침을 미리 받아 둔다(5분)');
+    assert.ok(/public String panelRequestFor\(int cap, String k\)/.test(fc) && /withRes && !panelRes\.isEmpty\(\)/.test(fc), '미리 받기 본문 = 눌렀을 때 첫 왕복 본문과 같다');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
