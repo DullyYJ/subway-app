@@ -657,6 +657,10 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_PANEL && it.swp) { any = true; if (x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return false; }
         return any;
     }
+    /** 밀리는 영역(밀기 카드 안 · 타임라인 아래)의 칸인가 — 단추 줄 · 카드 자신은 제자리. */
+    private static boolean swIn(ScreenCore.Item it, float l, float r, float t, float b) {
+        return it.kind != ScreenCore.K_PANEL && it.kind != ScreenCore.K_BUTTON && it.kind != ScreenCore.K_SWAP && it.x >= l - 2f && it.x < r && it.y >= t - 0.5f && it.y < b;
+    }
     private boolean pressInFoot;
     private static final float PG_FLING = 500f;
     /** 분류 칩을 누르면 새 화면이 오기 전에 먼저 그 칩을 켜 보인다(같은 줄의 다른 칩은 끈다) — 엔진 화면이 오면 그것으로 덮어쓴다. */
@@ -2075,7 +2079,12 @@ public class ScreenView extends View {
             if (pt >= 0.95f) { pullY = 0f; pullRelT = 0L; pullNow = 0f; }
             else { pullY = pullNow = Math.max(-26f, pullFrom * springF(pt, 0.42f, 11f)); moving = true; }
         }
-        final boolean swLayer = swOx != 0f || swAl < 1f;
+        // s314(YJ: 전체가 왼쪽으로 이동해 — 브리핑 박스 부분만 개별적으로 부드럽게): 화면에 밀기 카드(panel swp)가 있으면 본문 전체가 아니라 그 카드 안의 '타임라인 아래 글 영역'(경로 · 브리핑 글)만 밀리고 카드 가장자리에서 잘린다
+        boolean swReg = false; float rgL = 0f, rgR = 0f, rgT = 0f, rgB = 0f;
+        if (swOx != 0f || swAl < 1f) for (ScreenCore.Item si : lay.body) if (si.kind == ScreenCore.K_PANEL && si.swp) {
+            rgL = si.x + 1f; rgR = si.x + si.w - 1f; rgB = si.y + si.h; rgT = lay.bandBot >= si.y && lay.bandBot <= rgB ? lay.bandBot : si.y + 80f; swReg = true; break;
+        }
+        final boolean swLayer = !swReg && (swOx != 0f || swAl < 1f);
         if (swLayer) { cv.saveLayerAlpha(0f, lay.headH, w, h - lay.footH, Math.round(255f * swAl), Canvas.ALL_SAVE_FLAG); cv.translate(swOx, 0f); }
         if (pullNow > 8f) {                                                                 // 당겨서 드러난 자리: 둥근 화살표 고리(당길수록 차오르고, 새로고침 중엔 돈다)
             float pr = Math.min(1f, pullNow / PULL_TRIG), cy = lay.headH + Math.min(pullNow, 100f) * 0.5f, rad = 9f;
@@ -2100,6 +2109,7 @@ public class ScreenView extends View {
         for (int i = r[0]; i < r[1]; i++) {
             ScreenCore.Item bit = lay.body[i];
             if (bit.kind == ScreenCore.K_SWAP) continue;
+            if (swReg && swIn(bit, rgL, rgR, rgT, rgB)) continue;                          // 밀리는 영역의 칸은 아래에서 따로 그린다
             if (!sceneFailed && isPager(bit)) { i += drawPager(cv, bit, i, now); continue; }
             float sdy = 0f, gh = 0f;
             if (foldOn && bit.kind != ScreenCore.K_PICKL) { if (bit.y >= foldBot - 0.5f) sdy = foldDy; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= foldY && bit.y + bit.h >= foldBot - 0.5f) gh = foldDy; }
@@ -2109,6 +2119,12 @@ public class ScreenView extends View {
             else drawItem(cv, bit);
             if (gh != 0f) bit.h -= gh;
             if (sdy != 0f) cv.restore();
+        }
+        if (swReg) {
+            cv.save(); cv.clipRect(rgL, rgT, rgR, rgB);
+            cv.saveLayerAlpha(rgL, rgT, rgR, rgB, Math.round(255f * swAl), Canvas.ALL_SAVE_FLAG); cv.translate(swOx, 0f);
+            for (int i = r[0]; i < r[1]; i++) { ScreenCore.Item bit = lay.body[i]; if (swIn(bit, rgL, rgR, rgT, rgB)) drawItem(cv, bit); }
+            cv.restore(); cv.restore();
         }
         boolean pulsingB = false;
         if (lay.mkBody && lay.bandTop >= 0f && lay.bandTop + 100f >= scrollY - 4f && lay.bandTop <= scrollY + (h - lay.headH - lay.footH) + 4f) {     // 그 줄 위의 내 위치 마커(칸과 같이 밀린다)
