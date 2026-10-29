@@ -86,7 +86,7 @@ public final class WidgetArt {
             } else if (c.rot != 0f) {
                 s.translate(cx, footY); s.rotate(c.rot); s.translate(-cx, -footY);
             }
-            if (c.sq > 0f) { s.translate(cx, footY); s.scale(1f, 1f - c.sq); s.translate(-cx, -footY); }
+            if (c.sq > 0f || c.sx != 0f) { s.translate(cx, footY); s.scale(1f + c.sx, 1f - c.sq); s.translate(-cx, -footY); }
             if (c.face < 0) { s.translate(cx, 0f); s.scale(-1f, 1f); s.translate(-cx, 0f); }
             float left = cx - f[2] * sc, top = footY - f[1] * sc, sz = 256f * sc;
             s.cell(c.id, ((c.frame % 16) + 16) % 16, left, top, left + sz, top + sz, c.alpha);
@@ -121,6 +121,9 @@ public final class WidgetArt {
                 float r = 2.4f * u;
                 s.circle(p.x - r * 0.55f, p.y, r * 0.62f, a | 0xFF5C8A); s.circle(p.x + r * 0.55f, p.y, r * 0.62f, a | 0xFF5C8A);
                 s.poly(new float[] { p.x - r * 1.12f, p.y + r * 0.25f, p.x + r * 1.12f, p.y + r * 0.25f, p.x, p.y + r * 1.6f }, a | 0xFF5C8A);
+            } else if (p.type == 2) {                                         // 먼지: 옅은 흙빛 방울이 커지며 사라진다
+                float k = p.age / p.life, rr = (1.1f + 1.9f * k) * u; int da = (int) (al * 0.55f * 255f) << 24;
+                s.circle(p.x, p.y, rr, da | 0xD8CEBF); s.circle(p.x + rr * 0.9f, p.y - rr * 0.3f, rr * 0.7f, da | 0xD8CEBF);
             } else s.circle(p.x, p.y, 1.5f * u, a | 0xFFE58A);
         }
     }

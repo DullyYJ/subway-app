@@ -12,9 +12,10 @@ import java.util.Random;
  */
 public final class WidgetSim {
     public static final int NORMAL = 0, COMMUTE = 1;
-    public static final int WALK = 0, REST = 1, HOP = 2, TO_SIDE = 3, JUMP = 4, TOP_WALK = 5, TOP_REST = 6, POOP = 7, HANG = 8, GATHER = 9, CHEER = 10, BED_WALK = 11, ENTER = 12, SLEEP = 13, EXIT = 14;
+    public static final int WALK = 0, REST = 1, HOP = 2, TO_SIDE = 3, JUMP = 4, TOP_WALK = 5, TOP_REST = 6, POOP = 7, HANG = 8, GATHER = 9, CHEER = 10, BED_WALK = 11, ENTER = 12, SLEEP = 13, EXIT = 14,
+        LOOK = 15, STRETCH = 16, WIGGLE = 17, DASH = 18, SPIN = 19, BOUNCE = 20, VISIT = 21, WAITP = 22, GREET = 23, CHASE = 24, FLEE = 25;     // s305: 새 동작(같은 그림 시트·같은 프레임 주기 — 계산만 늘어 배터리는 그대로)
     public static final String[] ORDER = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong" };
-    public static final String[] ST_NAME = { "walk", "rest", "hop", "toSide", "jump", "topWalk", "topRest", "poop", "hang", "gather", "cheer", "bedWalk", "enter", "sleep", "exit" };
+    public static final String[] ST_NAME = { "walk", "rest", "hop", "toSide", "jump", "topWalk", "topRest", "poop", "hang", "gather", "cheer", "bedWalk", "enter", "sleep", "exit", "look", "stretch", "wiggle", "dash", "spin", "bounce", "visit", "waitp", "greet", "chase", "flee" };
 
     /** 시트(256px 칸 4×4)의 값: {칸 안 머리 위 끝, 발 높이, 몸 가로 중심, 초당 프레임, 띄울 높이(키 58 기준 dp), 몸 높이 비율} */
     public static float[] cfg(String id) {
@@ -109,7 +110,8 @@ public final class WidgetSim {
         public float ph;              // 걷는 동작 시계(초)
         public float tx;              // 걷는 목표 x
         public int zone;              // 0 바닥 · 1 시계 위 · 2 매달림
-        public float rot, sq;         // 기울기(도) · 쪼그림(0~1)
+        public float rot, sq, sx;     // 기울기(도) · 쪼그림(0~1) · 옆으로 늘어남(0~, 기지개)
+        public Ch pal; public int cnt, last = -1; public float mark;   // 짝(인사·술래잡기 상대) · 센 횟수 · 지난 동작(연속 방지) · 동작 안의 표시 시각
         public float x0, y0, x1, y1, arc; public int nextSt, nextZone; // 뛰어오르기·내리기
         public int face0 = 1; public boolean pooped; public float lastPoop = -99f, lastTop = -99f;
         public int frame = 0;         // 그릴 프레임(0~15)
@@ -125,7 +127,7 @@ public final class WidgetSim {
     public static final class House { public final Ch owner; public final String kind; public float x, w, h, a = 0f; public boolean want = true;
         House(Ch o, String k) { owner = o; kind = k; } }
     public static final class Poop { public float x, y, born; }
-    public static final class Spark { public float x, y, vx, vy, age, life; public int type; }   // 0 별 · 1 하트
+    public static final class Spark { public float x, y, vx, vy, age, life; public int type; }   // 0 별 · 1 하트 · 2 먼지
 
     public final WidgetGeo geo;
     public final List<Ch> cs = new ArrayList<Ch>();
@@ -170,7 +172,7 @@ public final class WidgetSim {
         if (m == mode && (mood_ == null || mood_.equals(mood))) return;
         mode = m; if (mood_ != null) mood = mood_;
         for (House h : houses) h.want = false;
-        for (Ch c : cs) { c.pooped = false; c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; c.sq = 0f; if (mode == COMMUTE) startGather(c); else { c.st = REST; c.t0 = time; c.until = time + 0.3f; } }
+        for (Ch c : cs) { c.pooped = false; c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; c.sq = 0f; c.sx = 0f; c.pal = null; if (mode == COMMUTE) startGather(c); else { c.st = REST; c.t0 = time; c.until = time + 0.3f; } }
     }
     /** 이제 멈출 것: 하던 동작을 마치고 바닥에서 가만히 선다(isSettled 가 true 가 되면 그림 갱신을 멈춰도 된다). */
     public void requestSettle() { settling = true; }
@@ -179,7 +181,7 @@ public final class WidgetSim {
     /** 잘 시간: 종류별 집이 무작위 자리에 생기고 모두 자기 집으로 걸어가 들어가 잔다. 출퇴근 중엔 자지 않는다. */
     public void bed(boolean untilTapped) {
         if (mode == COMMUTE) return;
-        forever = untilTapped; houses.clear();
+        forever = untilTapped; houses.clear(); for (Ch c0 : cs) c0.pal = null;
         float hwid = geo.charH * 1.35f, lo = hwid * 0.5f + 1f, hi = geo.W - hwid * 0.5f - 1f;
         List<Ch> order = new ArrayList<Ch>(cs); java.util.Collections.shuffle(order, rnd);
         float[] xs = new float[order.size()]; int n = 0;
@@ -233,7 +235,7 @@ public final class WidgetSim {
     /** 모든 것을 바닥의 쉬는 자세로 즉시 되돌린다(화면이 꺼질 때). */
     public void snapSettled() {
         houses.clear(); forever = false;
-        for (Ch c : cs) { if (mode == COMMUTE) { c.zone = 0; c.off = 0; c.rot = 0; c.frame = 0; continue; } c.zone = 0; c.y = geo.ground; c.off = 0; c.rot = 0; c.sq = 0; c.st = REST; c.t0 = time; c.until = time + 5f; c.x = clampX(c.x, 0); c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; }
+        for (Ch c : cs) { c.pal = null; c.sx = 0f; if (mode == COMMUTE) { c.zone = 0; c.off = 0; c.rot = 0; c.frame = 0; continue; } c.zone = 0; c.y = geo.ground; c.off = 0; c.rot = 0; c.sq = 0; c.st = REST; c.t0 = time; c.until = time + 5f; c.x = clampX(c.x, 0); c.alpha = 1f; c.mix = 0f; c.zz = 0f; c.home = null; }
         poops.clear(); sparks.clear();
     }
 
@@ -262,7 +264,7 @@ public final class WidgetSim {
         }
         for (int i = poops.size() - 1; i >= 0; i--) if (time - poops.get(i).born > 8f) poops.remove(i);
         for (int i = sparks.size() - 1; i >= 0; i--) {
-            Spark s = sparks.get(i); s.age += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += (s.type == 1 ? -4f : 30f) * dt;
+            Spark s = sparks.get(i); s.age += dt; s.x += s.vx * dt; s.y += s.vy * dt; s.vy += (s.type == 1 ? -4f : s.type == 2 ? 0f : 30f) * dt;
             if (s.age >= s.life) sparks.remove(i);
         }
         if (mode == COMMUTE && "comfort".equals(mood) && rnd.nextFloat() < dt * 1.2f) {
@@ -271,6 +273,10 @@ public final class WidgetSim {
         if (mode == COMMUTE && "cheer".equals(mood) && rnd.nextFloat() < dt * 0.7f) {
             Ch c = cs.get(rnd.nextInt(cs.size())); spark(c.x, c.y - geo.charH * 1.05f, 0);
         }
+    }
+    private void dust(float x, float y) {                  // 먼지 한 톨(발밑에서 옅게 번지다 사라진다)
+        Spark s = new Spark(); s.x = x; s.y = y; s.type = 2; s.vx = rnd(-3f, 3f); s.vy = rnd(-2f, 0f); s.life = 0.5f;
+        sparks.add(s); if (sparks.size() > 24) sparks.remove(0);
     }
     private void spark(float x, float y, int type) {
         Spark s = new Spark(); s.x = x; s.y = y; s.type = type; s.vx = rnd(-8f, 8f); s.vy = type == 1 ? rnd(-16f, -9f) : rnd(-20f, -8f); s.life = type == 1 ? 1.5f : 0.8f;
@@ -312,10 +318,72 @@ public final class WidgetSim {
             go(c, TO_SIDE, 6f); return;
         }
         if (poopOk && r < 0.34f) { go(c, POOP, 2.6f); return; }
-        if (r < 0.62f) { c.tx = groundWalkTarget(c); go(c, WALK, 7f); return; }
-        if (r < 0.80f) { go(c, REST, rnd(1.6f, 3.4f)); return; }
-        go(c, HOP, rnd(0.8f, 1.4f));
+        pickExtra(c);
     }
+    /**
+     * 바닥에서 다음 동작 고르기(s305). 캐릭터마다 성격 가중치가 달라 같은 위젯이라도 마리마다 다른 짓을 한다.
+     * 순서: 걷기 · 쉬기 · 콩콩 · 질주 · 두리번 · 기지개 · 흔들흔들 · 빙글 · 통통(높이 3번) · 인사(친구에게 가기) · 술래잡기.
+     * 새 동작은 모두 같은 그림 시트(걷기 16칸)를 기울이고·늘이고·뒤집어 그린다 — 시트를 더 읽지 않고 그림 주기도 그대로라 배터리 쓰임이 같다.
+     */
+    static float[] mood(String id) {
+        if ("dolsom".equals(id)) return new float[] { 18, 6, 8, 12, 5, 3, 5, 10, 6, 7, 12 };      // 신나는 개: 질주 · 술래잡기 · 빙글
+        if ("ppopu".equals(id)) return new float[] { 20, 8, 8, 6, 6, 3, 12, 6, 5, 14, 6 };       // 붙임성: 인사 · 흔들흔들
+        if ("lovel".equals(id)) return new float[] { 20, 18, 4, 4, 14, 14, 3, 2, 2, 5, 4 };       // 도도한 고양이: 쉬기 · 두리번 · 기지개
+        if ("dudung".equals(id)) return new float[] { 20, 14, 3, 2, 16, 6, 12, 3, 3, 8, 3 };      // 느긋한 두더지: 두리번 · 흔들흔들
+        if ("sul".equals(id)) return new float[] { 14, 10, 10, 6, 14, 8, 4, 5, 14, 6, 6 };        // 독수리: 높이 통통 · 두리번
+        if ("chaeng".equals(id)) return new float[] { 14, 6, 14, 6, 5, 3, 6, 14, 14, 6, 8 };      // 올챙이: 통통 · 빙글
+        if ("juksun".equals(id)) return new float[] { 20, 20, 4, 1, 8, 14, 6, 2, 2, 8, 2 };      // 느린 판다: 쉬기 · 기지개
+        if ("bbosong".equals(id)) return new float[] { 18, 10, 6, 3, 6, 6, 14, 4, 4, 14, 4 };     // 다정한 하마: 인사 · 흔들흔들
+        return new float[] { 20, 12, 8, 4, 8, 6, 6, 5, 5, 8, 5 };
+    }
+    private static final int[] EX_ST = { WALK, REST, HOP, DASH, LOOK, STRETCH, WIGGLE, SPIN, BOUNCE, VISIT, CHASE };
+    /** 짝이 될 수 있는 친구: 바닥에서 한가한(걷기·쉬기·콩콩·두리번…) 다른 마리. 없으면 null. */
+    private Ch findPal(Ch me) {
+        List<Ch> ok = new ArrayList<Ch>();
+        for (Ch o : cs) {
+            if (o == me || o.pal != null || o.zone != 0 || o.home != null || o.alpha < 0.99f) continue;
+            if (o.st == WALK || o.st == REST || o.st == HOP || o.st == LOOK || o.st == STRETCH || o.st == WIGGLE) ok.add(o);
+        }
+        return ok.isEmpty() ? null : ok.get(rnd.nextInt(ok.size()));
+    }
+    private void pickExtra(Ch c) {
+        float[] w = mood(c.id); float tot = 0f; float[] v = new float[EX_ST.length];
+        Ch pal = (mode == NORMAL && !settling) ? findPal(c) : null;
+        for (int i = 0; i < v.length; i++) {
+            v[i] = w[i];
+            if (EX_ST[i] == c.last) v[i] *= 0.25f;                          // 같은 동작을 연달아 하지 않게
+            if ((EX_ST[i] == VISIT || EX_ST[i] == CHASE) && pal == null) v[i] = 0f;
+            if (EX_ST[i] == DASH && geo.W < hw() * 6f) v[i] = 0f;           // 좁은 위젯에선 달릴 자리가 없다
+            tot += v[i];
+        }
+        float r = rnd.nextFloat() * tot; int pick = 0;
+        for (int i = 0; i < v.length; i++) { if (r < v[i]) { pick = i; break; } r -= v[i]; pick = i; }
+        int st = EX_ST[pick]; c.last = st;
+        switch (st) {
+            case WALK: c.tx = groundWalkTarget(c); go(c, WALK, 7f); return;
+            case REST: go(c, REST, rnd(1.6f, 3.4f)); return;
+            case HOP: go(c, HOP, rnd(0.8f, 1.4f)); return;
+            case DASH: {
+                float lo = hw() * 0.85f, hi = geo.W - hw() * 0.85f, x = rnd(lo, hi);
+                for (int k = 0; k < 6 && Math.abs(x - c.x) < geo.W * 0.3f; k++) x = rnd(lo, hi);
+                c.tx = x; go(c, DASH, 5f); c.mark = time; return; }
+            case LOOK: go(c, LOOK, rnd(1.8f, 2.8f)); return;
+            case STRETCH: go(c, STRETCH, rnd(1.8f, 2.4f)); return;
+            case WIGGLE: go(c, WIGGLE, rnd(1.4f, 2.2f)); return;
+            case SPIN: go(c, SPIN, rnd(1.2f, 1.8f)); return;
+            case BOUNCE: go(c, BOUNCE, 2.4f); c.cnt = 0; return;
+            case VISIT: {                                                   // 친구 곁으로 가서 인사
+                c.pal = pal; pal.pal = c; float side = c.x < pal.x ? -1f : 1f;
+                c.tx = clampX(pal.x + side * hw() * 1.15f, 0); go(c, VISIT, 9f);
+                pal.st = WAITP; pal.t0 = time; pal.until = time + 10f; pal.off = 0f; pal.face = c.x < pal.x ? -1 : 1; return; }
+            default: {                                                      // 술래잡기: c 가 술래, 친구는 도망
+                c.pal = pal; pal.pal = c; c.cnt = 0; pal.cnt = 0;
+                go(c, CHASE, 4.6f); go(pal, FLEE, 4.6f); pal.until = c.until; return; }
+        }
+    }
+    /** 짝 동작이 끝났거나 깨졌다(짝이 다른 일로 빠졌다): 짝 연결을 풀고 쉰다. */
+    private void freePal(Ch c, int next, float dur) { Ch o = c.pal; c.pal = null; if (o != null && o.pal == c) o.pal = null; go(c, next, dur); }
+    private boolean palIn(Ch c, int a, int b, int d) { Ch o = c.pal; return o != null && o.pal == c && (o.st == a || o.st == b || o.st == d); }
     private void pickTop(Ch c) {
         if (settling || mode == COMMUTE) { dropDown(c); return; }
         float onTop = time - c.t0;
@@ -352,7 +420,7 @@ public final class WidgetSim {
     private void stepChar(Ch c, float dt) {
         float u = (c.until > c.t0) ? Math.min(1f, (time - c.t0) / (c.until - c.t0)) : 1f;
         float sy = c.zone == 1 ? topY() : geo.ground;
-        c.rot = 0; c.sq = 0; c.alpha = 1f;
+        c.rot = 0; c.sq = 0; c.sx = 0f; c.alpha = 1f;
         switch (c.st) {
             case WALK:
                 c.y = geo.ground; c.off = 0; c.ph += dt;
@@ -397,6 +465,7 @@ public final class WidgetSim {
                 break;
             case TOP_REST:
                 c.y = topY(); c.off = 0; c.frame = 0;
+                c.rot = (float) Math.sin((time - c.t0) * 2.4f + c.x) * 3.5f;                  // 시계 위에 앉아 몸을 살랑살랑(s305)
                 if (time >= c.until) pickTop(c);
                 break;
             case POOP: {
@@ -431,6 +500,83 @@ public final class WidgetSim {
                 else if ("comfort".equals(mood)) { c.off = 0; c.frame = 0; c.rot = (float) Math.sin(tt * 1.8f) * 4f; }
                 else { c.off = (tt % 1.6f) < 0.18f ? geo.charH * 0.12f : 0f; c.frame = 0; c.face = (((int) (tt / 1.6f)) % 2 == 0) ? c.face0 : -c.face0; }
                 break; }
+            case LOOK: {                                                       // 두리번: 서서 좌우를 번갈아 본다
+                c.y = geo.ground; c.off = 0; c.frame = 0;
+                if (c.cnt == 0) { c.cnt = 1; c.face0 = c.face; }
+                int k = (int) (u * 4.6f); c.face = (k % 2 == 0) ? c.face0 : -c.face0;
+                c.rot = (float) Math.sin(time * 5f) * 2.5f;
+                if (time >= c.until) { c.cnt = 0; pickGround(c); }
+                break; }
+            case STRETCH: {                                                    // 기지개: 앞으로 쭉 기울어 늘어났다가 돌아온다
+                c.y = geo.ground; c.off = 0; c.frame = 0;
+                float bell = u < 0.2f ? u / 0.2f : u > 0.8f ? (1f - u) / 0.2f : 1f; bell = bell * bell * (3f - 2f * bell);
+                c.rot = c.face * 9f * bell; c.sx = 0.13f * bell; c.sq = 0.05f * bell + (u > 0.3f && u < 0.7f ? (float) Math.sin(time * 18f) * 0.01f : 0f);
+                if (time >= c.until) pickGround(c);
+                break; }
+            case WIGGLE: {                                                     // 흔들흔들: 제자리에서 몸을 좌우로 턴다(엉덩이춤)
+                c.y = geo.ground; c.off = 0; c.frame = 0;
+                float env = u < 0.15f ? u / 0.15f : u > 0.85f ? (1f - u) / 0.15f : 1f;
+                c.rot = (float) Math.sin((time - c.t0) * 15f) * 7.5f * env; c.sx = (float) Math.sin((time - c.t0) * 15f + 1.6f) * 0.04f * env;
+                if (time >= c.until) pickGround(c);
+                break; }
+            case DASH: {                                                       // 질주: 평소의 2.3배 속도로 달리며 뒤에 먼지
+                c.y = geo.ground; c.off = Math.abs((float) Math.sin(time * 14f)) * geo.charH * 0.04f; c.ph += dt * 1.7f; c.rot = c.face * 4f;
+                if (time - c.mark > 0.22f) { c.mark = time; dust(c.x - c.face * hw() * 0.5f, c.y - 2f); }
+                if (moveToward(c, c.tx, c.spd * 2.3f * dt) || time >= c.until) { dust(c.x - c.face * hw() * 0.6f, c.y - 2f); go(c, REST, rnd(0.8f, 1.6f)); c.mark = 0f; }
+                break; }
+            case SPIN: {                                                       // 빙글: 작게 콩콩 뛰며 좌우를 휙휙 돌아본다
+                c.y = geo.ground; c.ph += dt; c.off = Math.abs((float) Math.sin(u * Math.PI * 5f)) * geo.charH * 0.12f;
+                if (c.cnt == 0) { c.cnt = 1; c.face0 = c.face; }
+                c.face = ((int) ((time - c.t0) / 0.14f)) % 2 == 0 ? c.face0 : -c.face0; c.sq = 0.04f * (float) Math.abs(Math.sin(time * 22f));
+                if (time >= c.until) { c.cnt = 0; c.face = c.face0; go(c, REST, rnd(0.5f, 1.2f)); }
+                break; }
+            case BOUNCE: {                                                     // 통통: 높이 세 번 뛰고, 닿을 때마다 납작해지며 먼지
+                c.y = geo.ground; c.ph += dt * 1.2f;
+                float v = Math.abs((float) Math.sin(u * Math.PI * 3f)); c.off = v * geo.charH * 0.6f; c.sq = (1f - v) < 0.12f ? 0.12f * (1f - (1f - v) / 0.12f) : 0f;
+                int land = (int) (u * 3f + 0.0001f);
+                if (land > c.cnt) { c.cnt = land; dust(c.x, c.y - 2f); }
+                if (time >= c.until) { c.off = 0f; c.cnt = 0; go(c, REST, rnd(0.6f, 1.4f)); }
+                break; }
+            case VISIT: {                                                      // 친구 곁으로 걸어가 인사하러 간다
+                c.y = geo.ground; c.off = 0; c.ph += dt;
+                if (!palIn(c, WAITP, WAITP, WAITP)) { freePal(c, REST, rnd(0.4f, 1f)); break; }
+                if (moveToward(c, c.tx, c.spd * 1.1f * dt)) {
+                    Ch o = c.pal; c.face = c.x < o.x ? 1 : -1; o.face = -c.face;
+                    go(c, GREET, 1.9f); go(o, GREET, 1.9f); c.mark = time; o.mark = time; spark((c.x + o.x) / 2f, c.y - geo.charH * 1.05f, 1);
+                } else if (time >= c.until) freePal(c, REST, 0.6f);
+                break; }
+            case WAITP: {                                                      // 친구가 오는 걸 기다리며 그쪽을 쳐다본다
+                c.y = geo.ground; c.off = 0; c.frame = 0; c.rot = (float) Math.sin(time * 4f) * 1.5f;
+                if (!palIn(c, VISIT, GREET, GREET) || time >= c.until) { freePal(c, REST, 0.3f); }
+                break; }
+            case GREET: {                                                      // 인사: 마주 보고 번갈아 콩콩 + 하트
+                c.y = geo.ground; c.ph += dt * 1.2f;
+                boolean first = cs.indexOf(c) < (c.pal == null ? 0 : cs.indexOf(c.pal));
+                float ph2 = (time - c.t0) * 6.5f + (first ? 0f : (float) Math.PI * 0.5f);
+                c.off = Math.max(0f, (float) Math.sin(ph2)) * geo.charH * 0.2f * (u < 0.85f ? 1f : 0.4f);
+                if (u > 0.5f && time - c.mark > 0.7f) { c.mark = time; if (first) spark((c.x + (c.pal != null ? c.pal.x : c.x)) / 2f, c.y - geo.charH * 1.05f, 1); }
+                if (time >= c.until) { c.off = 0f; c.last = HOP; freePal(c, HOP, rnd(0.6f, 1f)); }
+                break; }
+            case CHASE: {                                                      // 술래: 친구를 쫓아간다 — 잡으면 술래가 바뀐다(두 번까지)
+                c.y = geo.ground; c.off = Math.abs((float) Math.sin(time * 13f)) * geo.charH * 0.035f; c.ph += dt * 1.6f;
+                if (!palIn(c, FLEE, FLEE, FLEE)) { freePal(c, REST, rnd(0.5f, 1.2f)); break; }
+                Ch o = c.pal;
+                if (time >= c.until) { c.off = 0f; c.last = HOP; Ch p2 = o; freePal(c, HOP, 1.2f); if (p2.st == FLEE || p2.st == CHASE) go(p2, HOP, 1.4f); break; }
+                moveToward(c, o.x, c.spd * 1.7f * dt);
+                if (Math.abs(c.x - o.x) < hw() * 0.95f) {
+                    spark((c.x + o.x) / 2f, c.y - geo.charH * 1.0f, 0); dust(c.x, c.y - 2f);
+                    if (c.cnt >= 2) { c.off = 0f; c.last = HOP; Ch p2 = o; freePal(c, HOP, 1.2f); if (p2.st == FLEE || p2.st == CHASE) go(p2, HOP, 1.4f); break; }
+                    int n = c.cnt + 1; float un = c.until; c.st = FLEE; o.st = CHASE; c.cnt = n; o.cnt = n; c.until = un; o.until = un; o.t0 = time; c.t0 = time;
+                    c.x += (c.x < o.x ? -1 : 1) * hw() * 0.3f;                 // 잡힌 쪽이 살짝 밀려 나며 곧바로 도망
+                }
+                break; }
+            case FLEE: {                                                       // 도망: 술래 반대쪽으로 달린다(끝에 닿으면 반대로 꺾어 달린다)
+                c.y = geo.ground; c.off = Math.abs((float) Math.sin(time * 13f)) * geo.charH * 0.035f; c.ph += dt * 1.6f;
+                if (!palIn(c, CHASE, CHASE, CHASE)) { freePal(c, REST, rnd(0.5f, 1.2f)); break; }
+                Ch o = c.pal; float away = c.x >= o.x ? 1f : -1f, lo = hw() * 0.85f, hi = geo.W - hw() * 0.85f;
+                if ((away > 0f && c.x > hi - hw() * 0.4f) || (away < 0f && c.x < lo + hw() * 0.4f)) away = -away;     // 벽에 몰리면 술래 옆을 스쳐 반대로
+                c.face = away > 0f ? 1 : -1; c.x = clampX(c.x + away * c.spd * 1.55f * dt, 0);
+                break; }
             case BED_WALK:
                 c.y = geo.ground; c.off = 0; c.ph += dt; c.alpha = 1f;
                 if (c.home == null) { go(c, REST, 0.3f); break; }
@@ -453,8 +599,8 @@ public final class WidgetSim {
                 break; }
             default: break;
         }
-        if (c.st == WALK || c.st == TO_SIDE || c.st == TOP_WALK || c.st == JUMP || c.st == GATHER || c.st == BED_WALK) c.frame = (int) (c.ph * c.cfg[3]) % 16;
-        else if (c.st == HOP) c.frame = (int) (c.ph * c.cfg[3]) % 16;
+        if (c.st == WALK || c.st == TO_SIDE || c.st == TOP_WALK || c.st == JUMP || c.st == GATHER || c.st == BED_WALK || c.st == DASH || c.st == VISIT || c.st == CHASE || c.st == FLEE) c.frame = (int) (c.ph * c.cfg[3]) % 16;
+        else if (c.st == HOP || c.st == BOUNCE || c.st == SPIN || c.st == GREET) c.frame = (int) (c.ph * c.cfg[3]) % 16;
         if (c.frame < 0) c.frame = 0;
     }
 }

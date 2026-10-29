@@ -286,6 +286,63 @@ public class WidgetJvmTest {
         ok(WidgetSim.roamMs(2) == 120000L && WidgetSim.roamMs(6) == 360000L && WidgetSim.roamMs(10) == 600000L && WidgetSim.roamMs(1) == 360000L && WidgetSim.roamMs(11) == 360000L && WidgetSim.roamMs(0) == 360000L && WidgetSim.roamMs(-5) == 360000L && WidgetSim.ROAM_LEN_MS == 360000L, "돌아다니는 시간: 2~10분은 그대로, 범위 밖·이상한 값은 기본 6분");
         ok(WidgetGeo.bmpScale(2.75f, 250f, 110f) == 2.75f && WidgetGeo.bmpScale(3.5f, 250f, 110f) == 3f && WidgetGeo.bmpScale(1f, 250f, 110f) == 1f && WidgetGeo.bmpScale(0.5f, 250f, 110f) == 1f, "위젯 그림판 배율: 화면 밀도 그대로(1~3배) — 예전 1.6배 상한 없음");
         ok(WidgetGeo.bmpScale(3f, 250f, 110f) * 250f * WidgetGeo.bmpScale(3f, 250f, 110f) * 110f <= 1200000f && WidgetGeo.bmpScale(3f, 600f, 400f) < 3f && WidgetGeo.bmpScale(3f, 600f, 400f) * 600f * WidgetGeo.bmpScale(3f, 600f, 400f) * 400f <= 1200001f, "위젯 그림판: 아주 큰 위젯은 120만 화소 안으로 배율을 낮춘다(메모리 보호)");
+        {   // s305: 새 동작(두리번·기지개·흔들·질주·빙글·통통·인사·술래잡기) — 시트·그림 주기는 그대로, 마리마다 성격이 다르다
+            WidgetGeo gx = WidgetGeo.of(false, 250f, 110f);
+            int[] seen = new int[WidgetSim.ST_NAME.length]; boolean fin = true, inb = true, palOk = true, noSheet = true; int greetHearts = 0, dust = 0; float maxSx = 0f;
+            java.util.Set<String> cellIds = new java.util.HashSet<String>();
+            WidgetArt.Surface idSf = new WidgetArt.Surface() {
+                public void save() { } public void restore() { } public void translate(float x, float y) { } public void rotate(float d) { } public void scale(float a, float b) { }
+                public void cell(String id, int f, float l, float t, float r, float b, float al) { cellIds.add(id); }
+                public void ellipse(float a, float b, float c, float d, int e) { } public void circle(float a, float b, float c, int d) { } public void poly(float[] a, int b) { } public void polyGrad(float[] a, float b, float c, int d, int e) { } };
+            for (long seed = 1; seed <= 6; seed++) {
+                WidgetSim sm = new WidgetSim(gx, seed, new String[] { "dolsom", "lovel", "ppopu" });
+                for (int i = 0; i < 4000; i++) {
+                    sm.step(0.1f);
+                    for (WidgetSim.Spark sp : sm.sparks) { if (sp.type == 2) dust++; if (sp.type == 1) greetHearts++; }
+                    for (WidgetSim.Ch c : sm.cs) {
+                        seen[c.st]++;
+                        if (!(fin(c.x) && fin(c.y) && fin(c.off) && fin(c.rot) && fin(c.sq) && fin(c.sx))) fin = false;
+                        float hw = gx.charH * 0.55f;
+                        if (c.x < hw * 0.5f - 0.01f || c.x > gx.W - hw * 0.5f + 0.01f || c.y - c.off - gx.charH < -3f || c.y > gx.H + 0.5f) inb = false;
+                        maxSx = Math.max(maxSx, c.sx);
+                        if (c.pal != null && c.pal.pal != c) palOk = false;                                  // 짝 연결은 늘 서로 맞물려 있다
+                        boolean pairSt = c.st == WidgetSim.VISIT || c.st == WidgetSim.WAITP || c.st == WidgetSim.GREET || c.st == WidgetSim.CHASE || c.st == WidgetSim.FLEE;
+                        if (pairSt && c.pal == null && c.st != WidgetSim.GREET) palOk = false;
+                    }
+                    if (i % 50 == 0) { WidgetArt.draw(sm, idSf, false); }
+                }
+            }
+            for (String id : cellIds) if (!(id.equals("dolsom") || id.equals("lovel") || id.equals("ppopu") || id.endsWith("_sleep"))) noSheet = false;
+            ok(fin && inb, "s305: 새 동작에서도 값이 유한하고 위젯 밖으로 나가지 않는다");
+            ok(seen[WidgetSim.LOOK] > 0 && seen[WidgetSim.STRETCH] > 0 && seen[WidgetSim.WIGGLE] > 0 && seen[WidgetSim.DASH] > 0 && seen[WidgetSim.SPIN] > 0 && seen[WidgetSim.BOUNCE] > 0, "s305: 두리번 · 기지개 · 흔들 · 질주 · 빙글 · 통통이 나온다");
+            ok(seen[WidgetSim.VISIT] > 0 && seen[WidgetSim.WAITP] > 0 && seen[WidgetSim.GREET] > 0 && seen[WidgetSim.CHASE] > 0 && seen[WidgetSim.FLEE] > 0, "s305: 친구에게 가서 인사하고(방문·기다림·인사) 술래잡기(술래·도망)를 한다");
+            ok(palOk, "s305: 짝 동작은 서로 맞물린다(한쪽만 짝 상태로 남지 않는다)");
+            ok(greetHearts > 0 && dust > 0 && maxSx > 0.05f, "s305: 하트(인사) · 먼지(질주·통통) · 기지개 늘어남이 실제로 생긴다");
+            ok(noSheet, "s305: 새 그림 시트를 읽지 않는다(걷기 시트 + 자는 시트만) — 배터리·메모리 쓰임 그대로 " + cellIds);
+            // 성격: 신난 돌솜은 질주·술래잡기가, 느린 죽순은 쉬기·기지개가 더 잦다
+            int[] dd = new int[2], jj = new int[2];
+            for (long seed = 1; seed <= 8; seed++) {
+                WidgetSim sa = new WidgetSim(gx, seed, new String[] { "dolsom", "juksun" });
+                for (int i = 0; i < 6000; i++) {
+                    sa.step(0.1f);
+                    WidgetSim.Ch d0 = sa.cs.get(0), j0 = sa.cs.get(1);
+                    if (d0.st == WidgetSim.DASH || d0.st == WidgetSim.CHASE || d0.st == WidgetSim.SPIN) dd[0]++; if (j0.st == WidgetSim.DASH || j0.st == WidgetSim.CHASE || j0.st == WidgetSim.SPIN) jj[0]++;
+                    if (d0.st == WidgetSim.REST || d0.st == WidgetSim.STRETCH) dd[1]++; if (j0.st == WidgetSim.REST || j0.st == WidgetSim.STRETCH) jj[1]++;
+                }
+            }
+            ok(dd[0] > jj[0] * 1.5 && jj[1] > dd[1], "s305: 캐릭터마다 성격이 다르다(돌솜 활발 " + dd[0] + "/" + jj[0] + " · 죽순 느긋 " + jj[1] + "/" + dd[1] + ")");
+            // 멈추기 요청이 오면 짝 동작 중이어도 모두 바닥에서 쉰다
+            boolean settled = true;
+            for (long seed = 11; seed <= 16; seed++) {
+                WidgetSim sa = new WidgetSim(gx, seed, new String[] { "dolsom", "ppopu", "lovel" });
+                for (int i = 0; i < 700 + (int) seed * 37; i++) sa.step(0.1f);
+                sa.requestSettle(); int n = 0; while (!sa.isSettled() && n < 600) { sa.step(0.1f); n++; }
+                if (!sa.isSettled()) settled = false;
+                sa.setMode(WidgetSim.COMMUTE, "cheer"); for (int i = 0; i < 200; i++) sa.step(0.1f);
+                for (WidgetSim.Ch c : sa.cs) if (c.pal != null || c.st != WidgetSim.CHEER) settled = false;
+            }
+            ok(settled, "s305: 멈추기·출퇴근 전환 때 짝 동작도 깔끔히 끝난다(짝 연결 없음 · 모두 제자리)");
+        }
         System.out.println(fails == 0 ? "ALL OK" : (fails + " FAIL"));
     }
 
