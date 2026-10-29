@@ -556,6 +556,7 @@ function findAndroidJar() {
     assert.ok(/autoGo = okc && !riding\(\) && bothSet\(\)/.test(hc) && /public boolean takeAutoGo\(\)/.test(hc) && /home\.takeAutoGo\(\)\) \{ goRoute\(\); break; \}/.test(a), '후보를 골라 출발·도착이 다 찼으면(확정 중 아님) 바로 찾는다');
     assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,400}food\.showPanelSkeleton\(\);[\s\S]{0,300}foodRedraw\(\);/.test(a) && /public void showPanelSkeleton\(\)/.test(fc) && /panelSkel = false;/.test(fc), '눌린 순간 뼈대부터 펼친다');
     assert.ok(/applyPanel\(my, key, hit\); return;/.test(a) && /private void panelCachePut\(/.test(a) && /food\.goKeys\(PANEL_PF_MAX\)/.test(a) && /panelRequestFor\(ShellCore\.CAP, k\)/.test(a) && /foodPfRun, 1200L/.test(a), '목록이 뜨면 목록의 가게 펼침(16곳까지)을 미리 받아 둔다(5분)');
+    assert.ok(/foodWatch\(150L\);/.test(a) && /pfFood\.goKeys\(PANEL_PF_MAX\)/.test(a) && /if \(destOk\) \{ double\[\] fg = food\.gps;/.test(a), '경로를 찾는 즉시 도착지 주변 맛집 목록 · 가게 지도 16곳을 뒤에서 받아 둔다(내 위치 글자까지 같게)');
     assert.ok(/public String panelRequestFor\(int cap, String k\)/.test(fc) && /withRes && !panelRes\.isEmpty\(\)/.test(fc), '미리 받기 본문 = 눌렀을 때 첫 왕복 본문과 같다');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
@@ -746,8 +747,8 @@ function findAndroidJar() {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/size\(\) > 180; if \(over\) scrKeys\.remove/.test(a) && /PARSED_MAX = 100; private static final long PARSED_CHARS = 6000000L/.test(a), '화면 캐시 180(s275: 120 → 180) · 읽어 둔 화면 100칸 · 600만 글자(s277: 48 → 글자 수 한도, 미리 받은 화면이 밀려나지 않게)');
     assert.ok(/if \(ShellCore\.S_FOOD\.equals\(screen\)\) foodSyncSig\(\);/.test(a) && /private void foodSyncSig\(\)/.test(a) && /ShellCore\.K_FOODSIG/.test(a), '맛집을 열 때 장소 표시를 맞춘다');
-    assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /cacheAge\(key\) < FOOD_PF_FRESH_MS\) return false/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
-    assert.ok(/private void foodWatch\(\)/.test(a) && /deb\.trailing\("foodwarm", 1200L/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
+    assert.ok(/FOOD_PF_FRESH_MS = 30L \* 60000L/.test(a) && /FOOD_PF_GPS_GAP_MS = 10L \* 60000L/.test(a) && /boolean fresh = cacheAge\(key\) < FOOD_PF_FRESH_MS/.test(a) && /prefetchPut\(key, r2\.body, false\)/.test(a), '맛집 미리받기: 같은 장소 30분 · 위치 기반은 10분에 한 번(공공데이터 호출 보호)');
+    assert.ok(/private void foodWatch\(\) \{ foodWatch\(1200L\); \}/.test(a) && /deb\.trailing\("foodwarm", gapMs/.test(a) && /foodWatchStart\(\); resumed = true|resumed = true; foodWatchStart\(\)/.test(a) && /if \(!resumed\) return; foodWatch\(\);/.test(a), '도착지가 정해지면 1.2초 뒤 맛집을 미리 받는다(켜져 있을 때만 확인)');
     assert.ok(/deb\.trailing\("chatsel", shown \? 220L : 60L/.test(a) && /if \(!shown\) showSkeleton\(body, ShellCore\.S_CHAT\)/.test(a) && /private void chatWarmSoon\(\)/.test(a) && /new int\[\] \{ 1, -1, 2, -2, 3, -3 \}/.test(a) && /CHAT_NEAR_FRESH_MS = 45000L/.test(a) && /private boolean pfChatRoom\(/.test(a), '호선 방 밀기: 뼈대 먼저 · 연달아 밀면 마지막만 받기 · 앞뒤 3칸 미리(s286)');
   });
   await t('s206: 맛집 공공데이터 — 공유 저장소(/food-pub) 먼저, 실패하면 예전 3쪽 직접', () => {
