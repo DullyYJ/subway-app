@@ -92,9 +92,9 @@ final class OpenView extends View {
         if (OpenCore.done(sc, t)) { finish(); return; }
         float W = getWidth(), H = getHeight(); if (W < 8 || H < 8) { postInvalidateOnAnimation(); return; }
         // 화면 전체는 불투명 파스텔 화이트. 하늘·땅 배경은 친구들이 서 있는 가로 꽉 찬 띠 안에만 있고, 띠의 위·아래 가장자리는 바탕색으로 서서히 번져 경계가 안 보인다.
-        // 띠는 화면 아래쪽에 놓고, 제목은 띠 바로 위에 둔다.
+        // 제목은 화면 한가운데, 띠는 그 바로 아래에 놓는다.
         float pw = W, fh = 40f * dp, ph = Math.min(H * 0.36f, 280f * dp), pl = 0f;
-        float pt = Math.max(60f * dp, Math.min(H * 0.72f - ph / 2f, H - ph - 20f * dp));
+        float tSize = Math.min(24f * dp, W * 0.068f), pt = Math.min(H * 0.5f + tSize * 0.35f + 6f * dp, H - ph - 8f * dp);          // 제목은 화면 세로 한가운데, 띠는 그 바로 아래
         float gy = ph * 0.62f, charH = Math.min(Math.min(W, 420f * dp) * 0.30f, 108f * dp) * 0.70f;          // 친구는 띠 가운데에 모여 선다 · 키는 처음보다 30% 작게
         // 사라질 때: 띠·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
@@ -104,7 +104,7 @@ final class OpenView extends View {
         cv.restoreToCount(sb);
         if (fgA > 0) {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
-            drawTitle(cv, W, pt);
+            drawTitle(cv, W, H);
             cv.save(); cv.translate(pl, pt); cv.clipRect(0, 0, pw, ph);
             drawSky(cv, pw, ph, t); drawGround(cv, pw, ph, gy);
             feather(cv, pw, ph, fh);
@@ -171,11 +171,11 @@ final class OpenView extends View {
         p.setColor(0x22000000); cv.drawRect(0, gy, W, gy + 2f * dp, p);
     }
 
-    /** 제목: 대본의 brand 글 한 줄 — 친구들이 있는 판 바로 위에, 대본의 글 색으로. */
-    private void drawTitle(Canvas cv, float W, float panelTop) {
+    /** 제목: 대본의 brand 글 한 줄 — 화면 가로·세로 한가운데에, 대본의 글 색으로(띠는 그 바로 아래). */
+    private void drawTitle(Canvas cv, float W, float H) {
         if (sc.brand.length() == 0) return;
         tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(sc.ink); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
-        cv.drawText(sc.brand, W / 2f, panelTop - 4f * dp, tp);
+        cv.drawText(sc.brand, W / 2f, H * 0.5f + tp.getTextSize() * 0.35f, tp);
     }
 
     // ───────────── 친구 ─────────────

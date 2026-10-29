@@ -69,12 +69,12 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   assert.ok(/new Thread\(/.test(v) && !/\.join\(\)/.test(v), '시트는 뒤 스레드에서 읽고 기다리지 않는다');
   assert.ok(/\* 0\.70f/.test(v), '친구 키는 처음보다 30% 작게(0.70배)');
   assert.ok(/saveLayerAlpha\(0, 0, W, H, bgA\)/.test(v) && /saveLayerAlpha\(0, 0, W, H, fgA\)/.test(v) && !/setAlpha\(\(float\)/.test(v), '배경과 글·친구를 따로 흐리게(앱 화면으로 녹아듦)');
-  assert.ok(/sc\.brand/.test(v) && /panelTop - 4f \* dp/.test(v), '제목은 대본의 brand · 친구들이 있는 띠 바로 위');
+  assert.ok(/sc\.brand/.test(v) && /H \* 0\.5f \+ tp\.getTextSize\(\) \* 0\.35f/.test(v) && /Align\.CENTER/.test(v), '제목은 대본의 brand · 화면 가로·세로 한가운데');
   assert.ok(/drawRect\(0, 0, W, H, p\)/.test(v) && /sc\.bg/.test(v) && /clipRect\(0, 0, pw, ph\)/.test(v) && /float pw = W,/.test(v) && !/drawRoundRect\(rf, 22f/.test(v) && !/STROKE/.test(v), '화면 전체는 불투명 파스텔 화이트 · 배경 그림은 가로 꽉 찬 띠 안에만(둥근 모서리·윤곽선 없음)');
   const ds = v.slice(v.indexOf('private void drawSky'), v.indexOf('p.setShader(sky)'));
   assert.ok(/p\.setColor\(0xFF000000\); p\.setAlpha\(255\)/.test(ds), '하늘 셰이더를 그리기 전에 붓 투명도를 되돌린다(앱 화면이 비치던 문제)');
   assert.ok(/private void feather\(/.test(v) && /sc\.bg & 0x00FFFFFF/.test(v) && /feather\(cv, pw, ph, fh\)/.test(v), '띠의 위·아래 가장자리가 바탕색으로 번진다');
-  assert.ok(/H \* 0\.72f/.test(v), '띠는 화면 아래쪽에');
+  assert.ok(/H \* 0\.5f \+ tSize \* 0\.35f \+ 6f \* dp/.test(v), '띠는 한가운데 제목 바로 아래');
   assert.ok(/private void nameTag\(/.test(v) && /sc\.names\.get\(id\)/.test(v) && (v.match(/nameTag\(cv, a\.id/g) || []).length === 2, '자는 모습·깬 모습 모두 이름표');
   assert.ok(!/slot\.tc/.test(v + c0), '옛 상단 글 색(tc) 없음');
   // 켜는 준비(위치·정류장·탭 미리 받기)는 오프닝 호출보다 앞에서 이미 시작돼 있다
