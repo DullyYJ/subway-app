@@ -143,6 +143,7 @@ function findAndroidJar() {
     const lf = fs.readFileSync(N('LocFused.java'), 'utf8');
     assert.ok(/lastLocFresh\(store, 30L \* 60000L/.test(v) && /locf\.lastKnown\(5L \* 60000L/.test(v) && /void lastKnown\(final long maxAgeMs/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /getLastLocation\(\)/.test(fs.readFileSync(N('LocFused.java'), 'utf8')) && /BUS_MOVE_DEG = 0\.0005/.test(v), 's148: 버스 첫 화면은 방금 안 위치(30분 안 저장값 · Fused 마지막 위치 5분 안)로 위치 대기 없이 그리고, 새 위치가 55m 넘게 다르면 바로잡는다');
     assert.ok(/map\.svFail > 0 && round == 0 && map\.fillFromStash\(\) > 0/.test(v) && /spec\.isEmpty\(\)\) \{ loadMapBodyRound\(body, true, 0\)/.test(v) && /"bus"\.equals\(modeNow\) \? 12000 : 8000/.test(v), 's148: 서버가 한 번에 받아 주면 기기가 따로 받지 않고· 못 받은 곳만 보던 값으로 채워 갱신이 막히지 않는다');
+    assert.ok(/getCurrentLocation\(/.test(lf) && /PRIORITY_HIGH_ACCURACY/.test(lf) && /setMaxUpdateAgeMillis\(0L\)/.test(lf) && /setDurationMillis\(fastMs\)/.test(lf) && /NETWORK_PROVIDER/.test(lf) && !/getLastKnownLocation/.test(lf), '고정밀 현재 위치(캐시 0 · 제한 시간) + 네트워크 위치 동시 · 마지막 알려진 위치는 쓰지 않는다');
     assert.ok(/void untrack\(\)/.test(lf) && /removeLocationUpdates\(trackCb\)/.test(lf) && /trackStop\(\); if \(vec != null\) vec\.onPause\(\)/.test(v) && /trackStart\(\); resumeLocate\(\); refreshPower/.test(v), '화면이 켜진 동안만 연속 위치 · 벗어나면 즉시 해제');
   });
   await t('고유 id 행동 · 우선순위 큐 · 배치 · 조건부 요청(ETag/304): 앱은 엔진이 준 id/ETag 를 따르기만 한다', async () => {
@@ -565,6 +566,7 @@ function findAndroidJar() {
     assert.ok(/if \(panelSkel \|\| panelNodes == null\) return R_NONE;/.test(fc), '펼침을 받는 중에 또 눌러도 닫지 않는다');
     assert.ok(/altGo\.put\(e\.getKey\(\)/.test(fc) && /Map<String, Object> g = altGo\.get\(flt\);/.test(fc), '칩을 바꾸면 눌림 번호표도 그 칩 것으로');
     assert.ok(/foodRender\.execute\(new Runnable\(\) \{ @Override public void run\(\) \{\s+\/\/ 목록 화면에 펼침을 끼우는/.test(a) && /foodNet\.execute/.test(a) && !/ioExec\.execute\(new Runnable\(\) \{ @Override public void run\(\) \{\s+for \(String rq : reqs\)/.test(a), '카드 뼈대 그리기와 미리 받기 통신은 디스크 IO 줄 밖에서 달린다');
+  });
   await t('s331: 백그라운드에서 돌아와 위치가 바뀌면 출발칸(내 위치)과 맛집(내 위치 주변)도 새 자리로 따라간다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/hcFixFrom\(la, lo\);\s+placesFollow\(la, lo\);/.test(a), '위치 허브가 출발칸 · 맛집도 따라가게 한다');
@@ -645,6 +647,7 @@ function findAndroidJar() {
     assert.ok(/public static String busBust\(String url, int attempt\)/.test(np) && /get\(busBust\(url, a\), a == 0 \? firstMs : retryMs\)/.test(np) && /once\(busBust\(useAlt \? alt : url, a\)/.test(np), 'getBus · getBus2 의 다시 묻기에 일회용 글자');
   });
   await t('s179: 위치 허브 — 어디서 위치를 받든 홈 카드 · 버스 탭에 즉시 · 버스 화면 캐시는 위치 칸마다 · 미리받기도 그 칸 열쇠', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/private void locHub\(Location l\)[\s\S]{0,260}hcFixFrom\(la, lo\);\s*placesFollow\(la, lo\);\s*busLocFollow\(la, lo\);/.test(a), '허브: 홈 카드 위치와 버스 탭을 한 곳에서');
     assert.ok(/saveLoc\(l\); locHub\(l\);/.test(a) && /got\[0\] = true; locHub\(l\);/.test(a), '현재 위치(1초) · 기기가 알던 위치(0.1초) 둘 다 허브로');
     const f = a.slice(a.indexOf('private void busLocFollow'), a.indexOf('private static final double BUS_FAR_DEG'));
