@@ -100,26 +100,43 @@ public final class MapCore {
     }
     public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
-    private static final long STOPS_TTL_MS = 24L * 3600L * 1000L;
+    private static final long STOPS_TTL_MS = 72L * 3600L * 1000L;
     private boolean stopsSaved;
     /** 지금 위치가 속한 정류장 칸(약 110m) 이름 — 정류장 뼈대를 그 칸 것만 쓰게 하는 열쇠(위치를 모르면 빈 글). */
     public String stopsCell() { return stopsKey(); }
     private String stopsKey() { return busLL == null ? "" : cellOf(busLL[0], busLL[1]); }
+    private long stopsT;                                                                        // 이웃 칸에서 빌려 온 보관본의 원래 저장 시각(0 = 빌린 게 아니다) — 되저장해도 신선해지지 않게 한다
+    private static final long STOPS_NEAR_TTL_MS = 72L * 3600L * 1000L;                       // 이웃 칸 보관본은 더 길게(정류장 목록은 며칠 안 바뀐다) — 첫 화면을 비우지 않는 것이 목적
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readStops(String key, long ttl) {
+        try {
+            String raw = st.get(key, "");
+            if (raw.length() == 0) return null;
+            Object o = ScreenCore.parse(raw);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("t") instanceof Double) || System.currentTimeMillis() - ((Double) m.get("t")).longValue() > ttl || !(m.get("r") instanceof Map)) return null;
+            return m;
+        } catch (Exception e) { return null; }
+    }
     @SuppressWarnings("unchecked")
     private void loadStopsCache() {
+        stopsT = 0;
         String k = stopsKey();
         if (k.length() == 0) return;
-        try {
-            String raw = st.get(k, "");
-            if (raw.length() == 0) return;
-            Object o = ScreenCore.parse(raw);
-            if (!(o instanceof Map)) return;
-            Map<String, Object> m = (Map<String, Object>) o;
-            if (!(m.get("t") instanceof Double) || System.currentTimeMillis() - ((Double) m.get("t")).longValue() > STOPS_TTL_MS || !(m.get("r") instanceof Map)) return;
-            for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("r")).entrySet())
-                if (e.getKey().matches("tp|gg|tn|d1") && e.getValue() instanceof String) busRes.put(e.getKey(), (String) e.getValue());
-            stopsSaved = true;                                                                  // 방금 읽은 것을 다시 쓰지 않는다
-        } catch (Exception e) { /* 못 읽으면 새로 받는다 */ }
+        Map<String, Object> m = readStops(k, STOPS_TTL_MS);
+        boolean exact = m != null;
+        if (m == null) {                                                                        // 같은 칸에 없으면 이웃 칸(위·경도 1칸 이내, 약 110m) 보관본 — 실내 GPS 가 흔들리거나 마지막 위치로 켜져 칸이 달라져도 첫 화면이 비지 않게
+            String idx = st.get("bsc_idx", "");
+            String[] ids = idx.length() == 0 ? new String[0] : idx.split(",");
+            for (int i = ids.length - 1; i >= 0 && m == null; i--)
+                if (!ids[i].equals(k) && cellsNear(ids[i], k, 1)) m = readStops(ids[i], STOPS_NEAR_TTL_MS);
+        }
+        if (m == null) return;
+        for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("r")).entrySet())
+            if (e.getKey().matches("tp|gg|tn|d1") && e.getValue() instanceof String) busRes.put(e.getKey(), (String) e.getValue());
+        if (exact) stopsSaved = true;                                                           // 방금 읽은 것을 다시 쓰지 않는다
+        else stopsT = ((Double) m.get("t")).longValue();                                        // 이웃 칸 것은 이 칸에도 적어 두되 원래 시각 그대로
     }
     /** 정류장 목록을 다 받았다 — 이 자리 칸에 보관한다(처음 한 번). 호출하는 쪽이 정류장이 있는 화면일 때만 부른다. */
     public int stopCount() { return stopJson.size(); }
@@ -134,7 +151,7 @@ public final class MapCore {
         if (!VW_NEAR.equals(busView()) || stopJson.isEmpty()) return false;
         String k = stopsKey();
         if (k.length() == 0 || stopsSaved) return false;
-        StringBuilder b = new StringBuilder("{\"t\":").append(System.currentTimeMillis()).append(",\"r\":{");
+        StringBuilder b = new StringBuilder("{\"t\":").append(stopsT > 0 ? stopsT : System.currentTimeMillis()).append(",\"r\":{");
         boolean first = true; int total = 0;
         for (String key : new String[] { "tp", "gg", "tn", "d1" }) {
             String v = busRes.get(key);
@@ -274,6 +291,7 @@ public final class MapCore {
         return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
     }
     public void addBusRes(String k, String body) {
+        if (k != null && body != null && body.length() > 0 && k.matches("tp|gg|tn|d1")) stopsT = 0;      // 서버가 새 정류장 목록을 줬다 — 빌려 온 시각은 버린다
         boolean arr = k != null && k.matches(ARR_KEY);
         if (arr) {
             long now = System.currentTimeMillis();

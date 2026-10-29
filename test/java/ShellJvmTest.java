@@ -988,6 +988,26 @@ public class ShellJvmTest {
             ok(!sm.bodyRequest(23, "dark").contains("\"a0\"") && !sm.bodyRequest(23, "dark").contains("\"f1\"") && sm.bodyRequest(23, "dark").contains("\"tn\"") && sm.busNeed.isEmpty(), "처음 그리기: 옛 도착정보는 비우고 정류장 목록은 둔다");
             ok(sm.stopsCell().equals("bsc_37500_127000") && ShellCore.busSkelKey(sv).equals("mapb|busskel|seoul|ALL") && ShellCore.diskTtl(ShellCore.busSkelKey(sv)) >= 3600000L && ShellCore.BUS_STALE_MS == ShellCore.BUS_FRESH_MS && ShellCore.diskTtl("mapb|bus|seoul|ALL") == ShellCore.BUS_FRESH_MS, "뼈대는 24시간 · 도착정보 화면은 8초(옛 숫자를 남기지 않는다)");
             ok(ShellCore.warmKeys(sv, "home").contains(ShellCore.busSkelKey(sv)), "뼈대도 켤 때 미리 읽는다");
+            // s325: 같은 칸에 정류장 보관본이 없으면 이웃 칸(1칸 이내) 것을 빌려 쓴다 — 원래 저장 시각은 그대로, 더 먼 칸·72시간 지난 것은 안 쓴다
+            {
+                ShellCore.MemStore ns = new ShellCore.MemStore(); MapCore na = new MapCore(ns);
+                na.setBusLoc(37.5, 127.0); na.addBusRes("tn", "{\"response\":9}");
+                na.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"s\",\"id\":\"SEOUL:1\"}],\"bus\":{\"st\":\"need\",\"need\":[]}}}");
+                boolean saved = na.saveStopsCache();
+                MapCore nb = new MapCore(ns); nb.setBusLoc(37.5011, 127.0);
+                MapCore nc = new MapCore(ns); nc.setBusLoc(37.503, 127.0);
+                ok(saved && nb.bodyRequest(23, "dark").contains("\"tn\":\"{\\\"response\\\":9}\"") && !nc.bodyRequest(23, "dark").contains("\"tn\""), "s325: 이웃 칸(약 110m) 정류장 보관본은 빌려 쓰고, 더 먼 칸은 쓰지 않는다");
+                String old = ns.get("bsc_37500_127000", "").replaceFirst("\"t\":\\d+", "\"t\":" + (System.currentTimeMillis() - 60L * 3600L * 1000L));
+                ns.put("bsc_37500_127000", old);
+                MapCore nd2 = new MapCore(ns); nd2.setBusLoc(37.5011, 127.0);
+                boolean borrowed = nd2.bodyRequest(23, "dark").contains("\"tn\"");
+                nd2.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"s\",\"id\":\"SEOUL:1\"}],\"bus\":{\"st\":\"need\",\"need\":[]}}}");
+                nd2.saveStopsCache();
+                String copy = ns.get("bsc_37501_127000", "");
+                ns.put("bsc_37500_127000", ns.get("bsc_37500_127000", "").replaceFirst("\"t\":\\d+", "\"t\":" + (System.currentTimeMillis() - 80L * 3600L * 1000L)));
+                MapCore ne = new MapCore(ns); ne.setBusLoc(37.4989, 127.0);
+                ok(borrowed && copy.contains("\"t\":" + old.replaceAll(".*\"t\":(\\d+).*", "$1")) && !ne.bodyRequest(23, "dark").contains("\"tn\""), "s325: 빌려 온 보관본은 원래 시각으로 되저장(신선해지지 않음) · 72시간 넘으면 안 씀");
+            }
             StringBuilder big = new StringBuilder("{\"info\":{\"view\":\"bus\",\"stops\":["), nd = new StringBuilder();
             for (int i = 0; i < 45; i++) { if (i > 0) { big.append(','); nd.append(','); } big.append("{\"nm\":\"s").append(i).append("\",\"id\":\"SEOUL:").append(i).append("\"}"); nd.append("{\"k\":\"a").append(i).append("\",\"url\":\"http://ws.bus.go.kr/").append(i).append("\"}"); }
             sm.onScreen(big.append("],\"bus\":{\"st\":\"need\",\"need\":[").append(nd).append("]}}}").toString());
