@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s327";
+var ENGINE_VERSION = "route-v2-2026-10-29s330";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14498,9 +14498,19 @@ function foodHash(s) {                             // djb2 \u2014 \uac19\uc740 \
 }
 
 function foodMsgN(s) { return { t: 'text', s: s, size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] }; }
+// \ub20c\ub9bc\uc5d0 \uac00\uac8c \uc0ac\uc2e4\uc744 \uadf8\ub300\ub85c \uc2e3\ub294\ub2e4 \u2014 [\uc774\ub984, \uc5c5\uc885, \uc8fc\uc18c, \uc704\ub3c4, \uacbd\ub3c4] \uae00(act.id, 400\uc790 \uc548). \uc571\uc740 \ubc88\ud638\ud45c(info.go)\ub97c \ub530\ub85c \uc950\uace0 \uc788\ub2e4\uac00 \uce69\u00b7\ubaa9\ub85d\uc774 \ubc14\ub00c\uba70 \uc5b4\uae0b\ub098\ub294 \uc77c \uc5c6\uc774 \uc774 \uae00\uc744 \uadf8\ub300\ub85c \ub418\ub3cc\ub824 \ubcf4\ub0b8\ub2e4.
+function foodSelId(p) {
+  if (p.la == null || p.lo == null || !isFinite(p.la) || !isFinite(p.lo)) return '';
+  var a = [String(p.n || ''), String(p.c || ''), String(p.a || ''), p.la, p.lo], s = JSON.stringify(a);
+  if (s.length > 380) { a[2] = a[2].slice(0, 40); s = JSON.stringify(a); }
+  if (s.length > 380) { a[0] = a[0].slice(0, 60); a[1] = a[1].slice(0, 40); s = JSON.stringify(a); }
+  return s.length <= 390 ? s : '';
+}
 function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var addr = p.a ? ' \u00b7 ' + p.a.split(' ').slice(-2).join(' ') : '';
-  var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: '\uae38\ucc3e\uae30 \u00b7 \uc9c0\ub3c4 \u2192', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  var sid = foodSelId(p);
+  var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: sid ? '\uae38\ucc3e\uae30 \u00b7 \uc9c0\ub3c4 \u2192' : '\uc704\uce58 \uc815\ubcf4 \uc5c6\uc74c', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  if (sid) n.act.id = sid;
   if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
   if (pub) { n.pub = true; n.badge = '\uacf5\uacf5\ub370\uc774\ud130'; } else n.stars = foodStars(Number(rank) - 1);
   return n;
@@ -15508,6 +15518,22 @@ function chtTime(ts, tzo) {
 // \uc6f9 _offAgo \uc640 \uac19\ub2e4
 function chtOffAgo(ts, now) { var m = Math.max(0, Math.round((now - ts) / 60000)); return m < 1 ? '\ubc29\uae08' : (m < 60 ? m + '\ubd84 \uc804' : Math.round(m / 60) + '\uc2dc\uac04 \uc804'); }
 
+// s330(YJ: \ub0b4\uac00 \uce5c \ub300\ud654\uac00 \ub108\ubb34 \ub2a6\uac8c \ub5a0 \u00b7 0.1\ucd08 \uc548\uc5d0): \uc571\uc774 \ubc29\uae08 \ubcf4\ub0b8 \uae00(\uc804\uc1a1 \uc911)\uc744 [\uae00, \uc2dc\uac01] \ub85c \uc54c\ub824 \uc8fc\uba74 \uc11c\ubc84 \uae00\uc5d0 \uc544\uc9c1 \uc5c6\uc744 \ub54c\ub9cc \ub0b4 \ub9d0\ud48d\uc120\uc73c\ub85c \ub9e8 \ub05d\uc5d0 \ubcf4\ud0e0\ub2e4.
+//   \uc11c\ubc84 \uae00\uc5d0 \uac19\uc740 \uae00(\ub0b4 \uac83 \u00b7 \uc2dc\uac01\uc774 \ube44\uc2b7)\uc774 \uc0dd\uae30\uba74 \uc790\uc5f0\ud788 \ube60\uc9c4\ub2e4 \u2014 \ud310\ub2e8\uc740 \uc5d4\uc9c4, \uc571\uc740 \ubcf4\ub0b8 \uae00\uc744 \uc801\uc5b4 \ub450\uae30\ub9cc \ud55c\ub2e4.
+var CHT_PEND_TIME = '\uc804\uc1a1 \uc911';
+function chtPend(a) {
+  var out = [];
+  if (Array.isArray(a)) a.slice(0, 5).forEach(function (x) { if (Array.isArray(x)) { var t = chtStr(x[0], 400).trim(), ts = Number(x[1]) || 0; if (t) out.push({ t: t, ts: ts }); } });
+  return out;
+}
+function chtPendNodes(f, mineMsgs) {            // mineMsgs: \uc11c\ubc84 \uae00 \uc911 \ub0b4 \uac83 [{ s, ts }]
+  var out = [];
+  f.pend.forEach(function (p) {
+    var done = mineMsgs.some(function (m) { return m.s === p.t && (!p.ts || !m.ts || m.ts >= p.ts - 90000); });
+    if (!done) out.push({ t: 'msg', pad: [12, 0, 12, 10], s: p.t, time: CHT_PEND_TIME, mine: true });
+  });
+  return out;
+}
 function chtFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var sel = chtStr(f.sel, 30) || 'all';
@@ -15521,7 +15547,7 @@ function chtFacts(f) {
   if (chtTrkColor) CHT_KNOWN.forEach(function (l) { if (!lc[l]) lc[l] = chtTrkColor(1, l, th); });   // \ub178\uc120 \uc0c9\uc740 \ud0c0\uc784\ub77c\uc778\uacfc \uac19\uc740 \ud45c(rhead)\uc5d0\uc11c
   var hid = {};
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
-  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid, pend: chtPend(f.pend) };
 }
 // \uc9c0\uae08 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc6f9 _routeSubLines): \uacbd\ub85c \uc21c\uc11c \ub178\uc120\ub9cc \uc55e\uc5d0 \ub454\ub2e4(\ucd5c\ub300 8\uac1c). \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \ube48 \ubaa9\ub85d = \ud638\uc120 \uc21c\uc11c \uc6d0\ub798\ub300\ub85c.
 //   sec = \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984\ub4e4, my = \ud0c4 \uae30\ub85d(\uce69 \uc21c\uc11c\uc5d0\ub294 \ub354 \uc4f0\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae00 \ubd99\uc77c \ub178\uc120(info.pl)\ub9cc \uc4f4\ub2e4)
@@ -15653,8 +15679,9 @@ function chatScreen(inp, factsIn, dataIn) {
     if (Array.isArray(d.g)) for (i = Math.max(0, d.g.length - CHT_IN_G); i < d.g.length; i++) { var g = chtMsgG(d.g[i], f); if (g) gs.push(g); }
     gs.sort(function (a, b) { return a.ts - b.ts; });
     gs = gs.slice(-CHT_MAX_G); n = gs.length;
+    var pn = chtPendNodes(f, gs.filter(function (x) { return x.node.mine; }).map(function (x) { return { s: x.node.s, ts: x.ts }; }));
     if (!gs.length) body.push({ t: 'text', s: f.st === 'fail' ? '\uc5f0\uacb0\uc774 \ubd88\uc548\uc815\ud574\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \ubd88\ub7ec\uc62c\uac8c\uc694.' : '\ub300\ud654\ub97c \ubd88\ub7ec\uc624\ub294 \uc911...', size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
-    body = [{ t: 'spacer', h: 4 }].concat(gs.length ? gs.map(function (x) { return x.node; }).concat([{ t: 'spacer', h: 4 }]) : body);
+    body = [{ t: 'spacer', h: 4 }].concat(gs.length || pn.length ? gs.map(function (x) { return x.node; }).concat(pn, [{ t: 'spacer', h: 4 }]) : body);
   } else {
     var off = chtOfficial(f.sel, d, now), al = chtAlert(d.al);
     if (off) head.push(off);
@@ -15663,15 +15690,16 @@ function chatScreen(inp, factsIn, dataIn) {
     if (Array.isArray(d.r)) for (i = 0; i < d.r.length && i < CHT_IN_R; i++) { var r = chtMsgR(d.r[i], i, f); if (r) rs.push(r); }
     rs.sort(function (a, b) { return (a.ts - b.ts) || (a.i - b.i); });
     rs = rs.slice(-CHT_MAX_R); n = rs.length;
-    if (!rs.length) {
+    var pn = chtPendNodes(f, rs.filter(function (x) { return x.node.mine; }).map(function (x) { return { s: x.node.s, ts: x.ts }; }));
+    if (!rs.length && !pn.length) {
       var s = f.st === 'loading' ? '\ubd88\ub7ec\uc624\ub294 \uc911\u2026' : f.st === 'fail' ? '\uc5f0\uacb0\uc774 \ubd88\uc548\uc815\ud574\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \ubd88\ub7ec\uc62c\uac8c\uc694.'
         : '\uc544\uc9c1 ' + f.sel + ' \ubc29\uc5d0 \uae00\uc774 \uc5c6\uc5b4\uc694.\n\uccab \uae00\uc744 \ub0a8\uaca8\ubcf4\uc138\uc694! \uc9c0\uae08 \ud0c0\uace0 \uacc4\uc2e0\ub2e4\uba74 \ud55c\ub9c8\ub514 \uc5b4\ub54c\uc694?';
       body.push({ t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
-    } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
+    } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), pn, [{ t: 'spacer', h: 4 }]);
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '\uba54\uc2dc\uc9c0\ub97c \uc785\ub825\ud558\uc138\uc694...' : '\uc774 \ub178\uc120 \uc774\uc6a9\uc790\uc5d0\uac8c \ud55c\ub9c8\ub514\u2026', btn: '\uc804\uc1a1', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // \uc6f9 .chat-inputbar: \uc785\ub825 37 + \ud30c\ub780 \ub3d9\uadf8\ub77c\ubbf8 \u27a4 38 \u00b7 \uc704 1px \uc904 + \uc704\uc544\ub798 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '' } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '', echo: { t: 'msg', pad: [12, 0, 12, 10], s: '', time: CHT_PEND_TIME, mine: true } } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
   if (chips.length > 1 && ci >= 0) {                                       // t = \uce78\ub9c8\ub2e4\uc758 \ub2e4\uc74c\u00b7\uc774\uc804(\ub2e4\uc74c \ud654\uba74\uc774 \uc624\uae30 \uc804\uc5d0\ub3c4 \uc774\uc5b4 \ub118\uae34\ub2e4) \u00b7 k = \uc774 \ud654\uba74\uc758 \uce78
     var cn = chips.length, ct = {};
