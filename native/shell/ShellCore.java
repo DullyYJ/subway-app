@@ -535,6 +535,8 @@ public final class ShellCore {
             return;
         }
     }
+    /** 홈 화면 응답 캐시 열쇠: 요청 글에서 밀리초 단위 '지금'(now)을 뺀다 — 예전엔 열쇠에 그대로 들어 있어 한 번도 맞지 않았고, 탭을 밀 때마다 /screen/home 을 다시 받느라 0.4~0.5초씩 기다렸다(s316). */
+    public static String homeKey(String json) { return json == null ? "" : json.replaceFirst("\"now\":\\d+", "\"now\":0"); }
     /** 요청 본문(…}}) 끝에 alts(첫 탭 뒤의 탭들)를 단다 — 요청 자체가 첫 탭이다. 모양이 다르면 null. (s311: 경로 응답을 한 번만 올려 여러 탭 화면을 받는다) */
     public static String altsBody(String body, List<String> tabs) {
         if (body == null || body.length() < 4 || body.charAt(body.length() - 1) != '}' || tabs == null || tabs.isEmpty()) return null;

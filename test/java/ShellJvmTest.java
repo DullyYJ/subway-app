@@ -1134,6 +1134,7 @@ public class ShellJvmTest {
                     ok(ap311.size() == 2 && ap311.get("less").contains("\"tab\":\"less\"") && !ap311.get("less").contains("alts") && ap311.get("sub").contains("\"tab\":\"sub\"") && !ap311.containsKey("bus"), "s311: 여러 탭 답을 탭마다 나눈다(alts 는 뺀다 · ok 아닌 화면은 넣지 않는다)");
                     ok(ShellCore.altsParse("zzz", tl311).isEmpty() && ShellCore.altsParse("{\"ok\":false}", tl311).isEmpty(), "s311: 못 읽는 답 · 실패 답은 저장하지 않는다");
                 }
+                ok(ShellCore.homeKey("{\"f\":{\"base\":{\"ms\":null,\"now\":1761723456789}},\"d\":{}}").equals(ShellCore.homeKey("{\"f\":{\"base\":{\"ms\":null,\"now\":1761723999999}},\"d\":{}}")) && !ShellCore.homeKey("{\"f\":{\"start\":\"a\",\"now\":5}}").equals(ShellCore.homeKey("{\"f\":{\"start\":\"b\",\"now\":5}}")) && ShellCore.homeKey(null).isEmpty(), "s316: 홈 화면 응답 캐시 열쇠는 밀리초 now 를 보지 않는다(예전엔 한 번도 안 맞아 탭을 밀 때마다 서버를 다시 불렀다)");
                 hh.onResult("zzz"); ok(hh.resHas.isEmpty(), "s311: 못 읽는 결과면 탭 목록을 비운다");
             }
             String rf = h2.resultFacts(new HomeCore.Env(), "dark");

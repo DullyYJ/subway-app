@@ -605,7 +605,11 @@ public class ScreenView extends View {
                     float vx9 = vt.getXVelocity() / dpr;
                     boolean fire = Math.abs(sdx) >= SW_MIN_DP * dpr || (Math.abs(vx9) >= SW_FLING_DP && Math.abs(sdx) >= SW_FLING_MIN_DP * dpr && vx9 * sdx > 0f);          // 빠르게 쓸기만 해도 넘긴다
                     swRelFrom = swShift; swRelT = SystemClock.uptimeMillis(); swHold = 0L; swFire = false;
-                    if (fire && swipeHost != null) { swHold = 450L; swFire = true; swipeHost.onSwipe(this, sdx < 0f ? -1 : 1); }          // 새 화면이 오면 그 자리에서 미끄러져 들어온다(안 오면 450ms 뒤 되돌아온다)
+                    if (fire && swipeHost != null) {
+                        swHold = 450L + SW_OUT_MS; swFire = true;
+                        final int sdir = sdx < 0f ? -1 : 1;                                                          // s316: 나가는 그림(0.11초)이 끝난 뒤에 새 화면을 부른다 — 미리 받아 둔 화면이 바로 와도 반쯤 사라지던 옛 글이 툭 끊기지 않고, 나가고 → 들어오는 한 동작으로 이어진다
+                        ui.postDelayed(new Runnable() { @Override public void run() { if (swipeHost != null) swipeHost.onSwipe(ScreenView.this, sdir); } }, SW_OUT_MS);
+                    }          // 새 화면이 오면 그 자리에서 미끄러져 들어온다(안 오면 450ms 뒤 되돌아온다)
                     pressed = null; ui.removeCallbacks(lpRun); finishTouch(); invalidate(); return true;
                 }
                 if (mode == 3 && fabDown) { fabDown = false; if (SystemClock.uptimeMillis() - downT < 600 && listener != null && lay != null && lay.fabAct != null) { blurInput(); listener.onAction(lay.fabAct); } finishTouch(); invalidate(); return true; }

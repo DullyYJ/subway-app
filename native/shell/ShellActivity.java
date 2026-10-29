@@ -118,7 +118,7 @@ public class ShellActivity extends Activity {
     private MetroMapData mapData;
     private boolean mapDataLoading;
     private final HcardsCore hc = new HcardsCore();         // 홈 카드 묶음(AI 승무원 · 혼잡도 · 실시간 대화)
-    private volatile String hcKey = "", hcJson = "";
+    private volatile String hcKey = "", hcJson = "", hcFor = "";                  // hcFor = 그 홈 카드를 받은 때의 경로 상태(경로 없음 / 몇 번째 탐색 · 고른 탭) — 다른 상태의 옛 카드를 먼저 보이지 않으려는 표시
     private FavCore fav;                                   // 즐겨찾기 시트(저장 목록·엔진이 돌려준 새 목록)
     private final FoodCore food = new FoodCore();         // 맛집 탭(도착지·기기 위치·받은 원자료)
     private int seqFood = 0;
@@ -150,7 +150,7 @@ public class ShellActivity extends Activity {
     private void premerge() {
         if (!home.hasRoute() || home.riding()) return;
         final String th = ShellCore.theme(store);
-        final String hj = lruGet(homeCache, home.request(homeEnv(), ShellCore.CAP));
+        final String hj = lruGet(homeCache, ShellCore.homeKey(home.request(homeEnv(), ShellCore.CAP)));
         if (hj == null || hj.length() == 0) return;
         final java.util.ArrayList<String[]> jobs = new java.util.ArrayList<String[]>();
         for (String tb : new java.util.ArrayList<String>(home.resHas)) {
@@ -3763,17 +3763,18 @@ public class ShellActivity extends Activity {
         hc.share = RideService.running && RideService.liveShare != null;
         final String hKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
         final String hcTk = hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark());
+        final String hcSig = (hasRes ? "r" + home.routeId : "n") + ":" + home.resTab;
         if (!hKey.equals(hcKey)) {                                                    // 이 탭의 브리핑을 미리 받아 둔 게 있으면 그것을 곧바로 쓴다(방금 받은 것이면 다시 묻지도 않는다)
             String pre = lruGet(hcTab, hcTk);
-            if (pre != null && pre.length() > 0) { hcJson = pre; if (hcTabFresh(hcTk, 50000L)) hcKey = hKey; }
+            if (pre != null && pre.length() > 0) { hcJson = pre; hcFor = hcSig; if (hcTabFresh(hcTk, 50000L)) hcKey = hKey; }
         }
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         warmTabs();                                                                  // 경로가 있는 다른 탭의 결과 화면 · 홈 카드를 요청 하나씩으로 미리 받아 둔다(밀어서 탭을 바꿀 때 즉시)
         new Thread(new Runnable() {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
-                final boolean staleCards = hBody.length() > 0 && hcJson.length() > 0;                              // 지난 카드가 있으면 그것을 0초에 먼저 그리고, 새 카드는 뒤에서 받아 바뀐 것만 다시 그린다(SWR)
-                final String cachedHome = chip ? lruGet(homeCache, json) : null;
+                final boolean staleCards = hBody.length() > 0 && hcJson.length() > 0 && hcSig.equals(hcFor);                              // 지난 카드가 있으면 그것을 0초에 먼저 그리고, 새 카드는 뒤에서 받아 바뀐 것만 다시 그린다(SWR)
+                final String cachedHome = chip ? lruGet(homeCache, ShellCore.homeKey(json)) : null;
                 final String[] rsBox = { cachedRes == null ? "" : cachedRes }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
                 Thread tr = null, tc = null;
                 if (hasRes && rsBox[0].length() == 0) {
@@ -3790,11 +3791,11 @@ public class ShellActivity extends Activity {
                         String nj = cr.status == 200 && cr.body != null ? cr.body : "";
                         if (nj.length() > 0) hcTabPut(hcTk, nj);
                         if (staleCards) {
-                            if (nj.length() > 0) { boolean same = nj.equals(hcJson); hcKey = hKey; hcJson = nj; if (!same) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } }); }
+                            if (nj.length() > 0) { boolean same = nj.equals(hcJson); hcKey = hKey; hcJson = nj; hcFor = hcSig; if (!same) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } }); }
                             return;
                         }
                         cjBox[0] = nj;
-                        if (cjBox[0].length() > 0) { hcKey = hKey; hcJson = cjBox[0]; }
+                        if (cjBox[0].length() > 0) { hcKey = hKey; hcJson = cjBox[0]; hcFor = hcSig; }
                     } }, "shell-home-cards");
                     tc.start();
                 }
@@ -3803,7 +3804,7 @@ public class ShellActivity extends Activity {
                 else {
                     NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/home", json, 8000);
                     txt = r.status == 200 && r.body != null ? r.body : "";
-                    if (txt.length() > 0) lruPut(homeCache, json, txt, 6);
+                    if (txt.length() > 0) lruPut(homeCache, ShellCore.homeKey(json), txt, 6);
                 }
                 try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
                 final String txt0 = txt;
@@ -4589,7 +4590,7 @@ public class ShellActivity extends Activity {
             long nowH = System.currentTimeMillis(); String th = ShellCore.theme(store);
             resPut(home.dataRev + ":" + home.resTab + ":" + th, sc[0]);
             hc.ensureNext(nowH); hc.rideScene = RideService.running ? RideService.liveScene : ""; hc.share = RideService.running && RideService.liveShare != null;
-            hcJson = sc[1]; hcKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark()); hcTabPut(hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark()), sc[1]);
+            hcJson = sc[1]; hcFor = "r" + home.routeId + ":" + home.resTab; hcKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark()); hcTabPut(hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark()), sc[1]);
         }
         reloadHome();
     }
