@@ -47,6 +47,17 @@ ok(nodes.some(n => n.t === 'ltr' && n.nick === '하늘') && nodes.some(n => n.t 
   const c = screenCheck([f25, f24]);
   ok(!c.err && c.out.every(l => l.startsWith('OK ')), '앱 검증기 통과 ' + (c.err || c.out.join('|')));
 }
+// s307(YJ): 장거리 '다른 편'을 고르면(ld2) 브리핑도 그 편 기준으로 바뀐다
+{
+  const ldp = (name, tot) => ({ info: { totalTime: tot, longDist: true, ldMode: 'train', ldGrade: name, ldDepTs: now + 600000, candidates: [], distKm: 300 }, subPath: [{ trafficType: 4, lane: [{ name }], sectionTime: tot, distance: 300000, startName: '서울', endName: '부산', passStopList: { stations: [{ stationName: '서울' }, { stationName: '부산' }] } }] });
+  const D1 = { result: { path: [ldp('KTX', 180)] } }, D2 = { result: { path: [ldp('무궁화호', 300)] } };
+  const lf = (extra) => base({ r: Object.assign({ data: D1, tab: 'longdist', a: '서울', b: '부산', bt: null, rb: now }, extra) });
+  const t1 = txt(E.hcardsScreen({ cap: 25 }, lf({})).body), t2 = txt(E.hcardsScreen({ cap: 25 }, lf({ ld2: D2 })).body);
+  ok(/서울에서 KTX 탑승 후 부산 하차\. \(3시간 소요\)/.test(t1) && !/무궁화호/.test(t1), '장거리 브리핑: 처음 고른 편(KTX)');
+  ok(/서울에서 무궁화호 탑승 후 부산 하차\. \(5시간 소요\)/.test(t2) && !/KTX/.test(t2), '다른 편(ld2)을 고르면 브리핑도 그 편(무궁화호 5시간)');
+  const t3 = txt(E.hcardsScreen({ cap: 25 }, lf({ ld2: D2, tab: 'fast' })).body);
+  ok(!/무궁화호/.test(t3), '장거리 탭이 아니면 ld2 는 브리핑에 안 끼어든다');
+}
 // 기준시각을 정한 탐색 → 예상 브리핑
 o = call(base({ r: { data: mk([sub('부평', '강남', '수도권 1호선', 18)]), tab: 'fast', a: '부평', b: '강남', bt: now + 3 * 3600000, rb: now } }));
 ok(o.info.ai === 'preview' && /예상/.test(flat(o.body).find(n => n.t === 'aih').s), '기준시각을 정하면 예상 브리핑');

@@ -204,6 +204,7 @@ public final class ScreenCore {
         public boolean ps, hr;                             // trk 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public boolean glow;                               // panel: 무지개 테두리가 도는 카드(웹 preview-glow, 예상 경로·혼잡도·브리핑)
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
+        public boolean fold, open;                          // pickl(s307): 처음엔 고른 한 줄만 보이고 눌러 펼친다(fold) · 지금 펼쳐져 있나(open — 앱이 배치 전에 정한다)
         public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
         public String[] mp = null; public int cm = 0;   // post: 닉네임 뒤에 점(·)으로 이어 그리는 조각들 · 댓글 수(0 이면 숨김)
         public boolean nobtn; public String grp = "";                                  // inbar: 단추 없이 입력칸만(엔터 = act) — 출퇴근 장소 칸
@@ -696,6 +697,7 @@ public final class ScreenCore {
             }
         } else if ("pickl".equals(t)) {                                                                    // s303: 위아래로 밀어 고르는 목록 — 최대 vis 줄이 보이고 더 있으면 안에서 민다(수단 · 출발 시각 · 소요)
             pad(m, n); n.h = optNum(m, "h", 38f, 28f, 60f); n.cols = (int) optNum(m, "vis", 5f, 1f, 8f); n.key = optStr(m, "key", "pick", 40);
+            n.fold = optBool(m, "fold", false);
             for (Object io : asArr(m.get("rows"), "pickl.rows")) {
                 Map<String, Object> im = asObj(io, "row");
                 Node c = new Node(); c.t = "prow";
@@ -1152,6 +1154,7 @@ public final class ScreenCore {
     public static final class Item {
         public int kind;
         public List<Item> rows; public float pickMax;     // pickl: 고르기 목록의 줄들(칸 안 좌표) · 줄 높이 · 안에서 밀 수 있는 최대 거리
+        public boolean fold, open; public int onIdx; public float collH, openH;       // pickl 접기(s307): 접을 수 있나 · 펼쳐 있나 · 고른 줄 번호 · 접힌 높이 · 펼친 높이
         public float x, y, w, h;
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
@@ -2357,6 +2360,11 @@ public final class ScreenCore {
             }
             int vis = Math.min(n.items.size(), Math.max(1, n.cols));
             it.h = vis * n.h - 4f; it.pickMax = Math.max(0f, n.items.size() * n.h - 4f - it.h);
+            if (n.fold && n.items.size() > 1) {                                       // s307: 접힌 채로는 고른 줄 하나만, 눌러 펼치면 vis 줄(밀어 고르기)
+                it.fold = true; it.open = n.open; it.openH = it.h; it.collH = n.h - 4f;
+                for (int i = 0; i < n.items.size(); i++) if (n.items.get(i).on) { it.onIdx = i; break; }
+                if (!n.open) { it.h = it.collH; it.pickMax = 0f; }
+            }
             out.add(it); return y + it.h + n.padB;
         }
         if ("btnrow".equals(t0(n))) {
@@ -2649,6 +2657,40 @@ public final class ScreenCore {
 
     // ═════════════ ⑤ 스크롤 물리(손가락 따라가기·관성) ═════════════
     /** 스크롤 위치를 [0, max] 로. */
+    /**
+     * s307: 접을 수 있는 고르기 목록(pickl fold)의 펼침 상태를 배치 전에 노드에 넣는다. 고른 줄이 바뀐 새 화면이면(sigs 와 다르면) 접힌 채로 시작한다.
+     * open: 펼친 목록의 열쇠 모음 · sigs: 목록 열쇠 → 마지막으로 본 "고른 줄:줄 수". 화면이 없거나 접을 목록이 없으면 아무것도 안 한다.
+     */
+    public static void applyFold(Screen sc, java.util.Set<String> open, java.util.Map<String, String> sigs) {
+        if (sc == null) return;
+        applyFoldList(sc.head, open, sigs); applyFoldList(sc.body, open, sigs); applyFoldList(sc.foot, open, sigs);
+    }
+    /** s307: 사용자가 펼친 목록에서 줄을 골랐다 — 새 화면이 오기 전에도 접힌 모습이 그 줄을 보이도록 노드의 고른 줄을 바꾼다. */
+    public static void pickSelect(Screen sc, String key, int idx) {
+        if (sc == null) return;
+        pickSelectList(sc.head, key, idx); pickSelectList(sc.body, key, idx); pickSelectList(sc.foot, key, idx);
+    }
+    private static void pickSelectList(List<Node> ns, String key, int idx) {
+        if (ns == null) return;
+        for (Node n : ns) {
+            if (n == null) continue;
+            if ("pickl".equals(n.t) && key.equals(n.key)) for (int i = 0; i < n.items.size(); i++) n.items.get(i).on = i == idx;
+            if (n.kids != null && !n.kids.isEmpty()) pickSelectList(n.kids, key, idx);
+        }
+    }
+    private static void applyFoldList(List<Node> ns, java.util.Set<String> open, java.util.Map<String, String> sigs) {
+        if (ns == null) return;
+        for (Node n : ns) {
+            if (n == null) continue;
+            if ("pickl".equals(n.t) && n.fold) {
+                int on = -1; for (int i = 0; i < n.items.size(); i++) if (n.items.get(i).on) { on = i; break; }
+                String sg = on + ":" + n.items.size(), old = sigs.get(n.key);
+                if (!sg.equals(old)) { sigs.put(n.key, sg); open.remove(n.key); }
+                n.open = open.contains(n.key);
+            }
+            if (n.kids != null && !n.kids.isEmpty()) applyFoldList(n.kids, open, sigs);
+        }
+    }
     public static float clamp(float v, float max) { return v < 0f ? 0f : (v > max ? max : v); }
     /** 가장자리를 넘어 끌 때의 저항(넘은 만큼의 절반이 보인다). */
     public static float rubber(float v, float max) {

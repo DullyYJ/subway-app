@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s306";
+var ENGINE_VERSION = "route-v2-2026-10-29s307";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -5106,7 +5106,7 @@ function ldPickBest(items, mode, fareFields, noFields, accessMin, gradeFields, g
     if (depTs < minDepTs && depTs !== depWant) continue;
     var arrT0 = ldParseDT(ldPickField(it, ["arrPlandTime", "arrplandtime", "arriveTime", "arrTime", "arrPlandTm"]));
     var rk = arrT0 != null && arrT0 > depTs ? arrT0 : Infinity;
-    if (depWant != null && depTs === depWant) rk = -1;      // s303: 사용자가 고른 편은 다시 물었을 때 버스 대기 변동으로 타기 빠듯해 보여도 그대로 두다(누를 때마다 편이 바뀌지 않게)
+    if (depWant != null && depTs === depWant) rk = -1;      // s303: \uc0ac\uc6a9\uc790\uac00 \uace0\ub978 \ud3b8\uc740 \ub2e4\uc2dc \ubb3c\uc5c8\uc744 \ub54c \ubc84\uc2a4 \ub300\uae30 \ubcc0\ub3d9\uc73c\ub85c \ud0c0\uae30 \ube60\ub4ef\ud574 \ubcf4\uc5ec\ub3c4 \uadf8\ub300\ub85c \ub450\ub2e4(\ub204\ub97c \ub54c\ub9c8\ub2e4 \ud3b8\uc774 \ubc14\ub00c\uc9c0 \uc54a\uac8c)
     if (!best || rk < best.rk || rk === best.rk && depTs < best.depTs) best = { depTs, item: it, rk };
   }
   if (!best) return null;
@@ -19281,6 +19281,7 @@ var RHEAD_LD_MODE = { train: '\uc5f4\ucc28', expbus: '\uace0\uc18d\ubc84\uc2a4',
 function rheadWon(n) { return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }      // 12300 \u2192 '12,300'
 function rheadNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
 var RHEAD_PICKL_CAP = 27;                                   // \uc138\ub85c\ub85c \ubbf8\ub294 \uace0\ub974\uae30 \ubaa9\ub85d(pickl)\uc744 \uc544\ub294 \uc571
+var RHEAD_FOLD_CAP = 28;                                    // s307: \uace0\ub978 \ud55c \uc904\ub9cc \ubcf4\uc774\ub2e4\uac00 \ub20c\ub7ec \uc544\ub798\ub85c \ud3bc\uce58\ub294 \uace0\ub974\uae30 \ubaa9\ub85d(pickl fold)\uc744 \uc544\ub294 \uc571
 var RHEAD_LD_ORDER = { train: 0, expbus: 1, subbus: 2 };
 // \uc7a5\uac70\ub9ac \ud6c4\ubcf4\ub97c \uc2dc\uac04\uc21c \ud55c \ubaa9\ub85d\uc73c\ub85c: \uc218\ub2e8 \ud6c4\ubcf4(rh.ld.m.<\ubc88\ud638>) + \uac19\uc740 \uc218\ub2e8\uc758 \ub2e4\ub978 \ub4f1\uae09(rh.ld.g.<\ubc88\ud638>) \u2014 \uac19\uc740 \ud3b8\uc740 \ud55c \uc904. \uc18c\uc694\ub294 \uc6d0\uc790\ub8cc\uc758 \ucd1d \uc18c\uc694(\uc5c6\uc73c\uba74 \ub4f1\uae09 \uac12\uc73c\ub85c \uc5b4\ub9bc, \uadf8\ub798\ub3c4 \uc5c6\uc73c\uba74 \uc694\uae08).
 function rheadLdRows(lg, cands, opts, mode, grade, cur) {
@@ -19326,7 +19327,9 @@ function rheadLdNodes(f) {
   if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): \uc7a5\uac70\ub9ac\ub294 \uc904\uc904\uc774 \ub2e8\ucd94 \ub300\uc2e0 '\uc2dc\uac04\uc21c \uc138\ub85c \ubaa9\ub85d' \u2014 \ucd5c\ub300 5\uc904\uc774 \ubcf4\uc774\uace0 \ub354 \uc788\uc73c\uba74 \uc704\uc544\ub798\ub85c \ubc00\uc5b4 \uace0\ub978\ub2e4
     var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
     if (rws.length > 1) {
-      out.push({ t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] });
+      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] };
+      if (f.cap >= RHEAD_FOLD_CAP) pk.fold = true;                 // s307(YJ): \ucc98\uc74c\uc5d4 \uace0\ub978(\uac00\uc7a5 \ube60\ub978) \ud3b8 \ud55c \uc904 \u2014 \ub204\ub974\uba74 \uce74\ub4dc\uac00 \uc544\ub798\ub85c \ud3bc\uccd0\uc9c0\uace0 \uace0\ub974\uba74 \ub2e4\uc2dc \uc811\ud78c\ub2e4
+      out.push(pk);
       return out.concat(rheadLdNote(lg));
     }
   }
@@ -19611,7 +19614,8 @@ function rheadTrkPoints(f) {
   // \ub2e8\uc77c \uc2dc\uac04\ucd95
   var sh = 0;
   if (f.bt == null) for (i = 0; i < f.sw.length; i++) { var v = f.sw[i]; if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { sh = v * 60000; break; } }
-  var base = f.bt != null ? f.bt : ((f.rb != null && f.now - f.rb <= 300000) ? f.rb + sh : f.now + sh);
+  var hasLd = segs.some(function (sg) { return sg.ty === 4; });      // s307(YJ): \uc7a5\uac70\ub9ac \ud3b8\uc774 \ub4e0 \uacbd\ub85c\ub294 \ucc98\uc74c \ucc3e\uc740 \uc2dc\uac01\uc744 \ub05d\uae4c\uc9c0 \uae30\uc900\uc73c\ub85c \uace0\uc815 \u2014 5\ubd84\uc774 \uc9c0\ub0ac\ub2e4\uace0 \uc9c0\uae08 \uc2dc\uac01\uc73c\ub85c \uc62e\uaca8 \ud0c0\ub294 \ubc29\ubc95\u00b7\uc2dc\uac01\uc774 \ud5f7\uac08\ub9ac\uac8c \ubc14\ub00c\uc9c0 \uc54a\uac8c
+  var base = f.bt != null ? f.bt : ((f.rb != null && (hasLd || f.now - f.rb <= 300000)) ? f.rb + sh : f.now + sh);
   var cum = base, shift = 0;
   var segMs = segs.map(function (sg) {
     var t = cum;
@@ -21551,7 +21555,9 @@ function resultScreen(opt, r) {
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldView ? resLdQuery(ldView) : null } };
+  var ldInfo = ldView;                                            // s307: \uc7a5\uac70\ub9ac \ud0ed\uc774 \uc544\ub2c8\uc5b4\ub3c4 \uc9c8\uc758 \ubaa9\ub85d\uc744 \uc54c\ub824 \uc571\uc774 \ubaa8\ub4e0 \ud3b8\uc758 \uacbd\ub85c\u00b7\ube0c\ub9ac\ud551\uc744 \ubbf8\ub9ac \ubc1b\uc544 \ub454\ub2e4(\ub204\ub974\uba74 \ubc14\ub85c \ubc14\ub00c\uac8c)
+  if (!ldInfo && has.longdist) { var lr0 = resConvertPath(pick.longdist); if (lr0 && lr0.ld) ldInfo = resLdView(lr0, ldOrigPath ? resConvertPath(ldOrigPath) : null); }
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldInfo ? resLdQuery(ldInfo) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }
@@ -23339,6 +23345,10 @@ function hcRoute(r, now, tz) {
   var data = (r.data && typeof r.data === 'object') ? r.data : null;
   if (!data) return null;
   var paths = hcRes.rv(data, hcArr((data.result || {}).path)), pick = hcRes.pick(paths);
+  if (r.ld2 && typeof r.ld2 === 'object') {                  // s307(YJ): \uc7a5\uac70\ub9ac '\ub2e4\ub978 \ud3b8' \uc744 \uace0\ub974\uba74 \ube0c\ub9ac\ud551\ub3c4 \uadf8 \ud3b8 \uae30\uc900\uc73c\ub85c(\uacb0\uacfc \uce74\ub4dc engine/result.js \uc640 \uac19\uc740 \ubc14\uafd4 \ub07c\uc6b0\uae30 \u2014 \uc608\uc804\uc5d4 \ube0c\ub9ac\ud551\uc774 \ucc98\uc74c \ud3b8\uc5d0 \uba38\ubb3c\ub800\ub2e4)
+    var p2 = hcArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
+    if (p2) pick.longdist = p2;
+  }
   var tab = ['fast', 'less', 'sub', 'bus', 'longdist'].indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var p = pick[tab] || pick.fast, route = p ? hcRes.conv(p) : null;
   if (!route) return null;

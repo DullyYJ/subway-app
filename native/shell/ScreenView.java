@@ -91,6 +91,13 @@ public class ScreenView extends View {
     private final java.util.HashMap<String, Float> pickOff = new java.util.HashMap<String, Float>();
     private final java.util.HashMap<String, String> pickSig = new java.util.HashMap<String, String>();
     private ScreenCore.Item pickHit; private String flingKey; private float flingMax;
+    // s307: 접었다 펼치는 고르기 목록(pickl fold) — 펼친 목록의 열쇠 · 마지막으로 본 선택 줄 · 펼침/접힘 스프링(어느 목록 · 시작 시각 · 시작 때 보이던 높이 · 시작 때 안쪽 밀린 정도)
+    private final java.util.HashSet<String> foldOpen = new java.util.HashSet<String>();
+    private final java.util.HashMap<String, String> foldSig = new java.util.HashMap<String, String>();
+    private String foldKey; private long foldT0; private float foldH0, foldOff0;
+    private float foldY, foldBot, foldDy; private boolean foldOn, bodyDraw;       // 이번에 그리는 동안의 값: 목록 위·아래 끝(본문 좌표) · 아래 칸들이 내려가 있는 정도
+    private static final float FOLD_MS = 640f;
+    private final Path pickChev = new Path();                                    // ▾/▴ 한 번 만들어 재사용(그릴 때 새 객체 없음)
     private VelocityTracker vt;
     private final int slop, minFling, maxFling;
     private float downX, downY, lastX, lastY, downBodyY;
@@ -304,7 +311,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; bandX = 0f; bandSig = ""; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { foldOpen.clear(); foldSig.clear(); foldKey = null; msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; bandX = 0f; bandSig = ""; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -403,7 +410,7 @@ public class ScreenView extends View {
         } });
     }
     private ScreenCore.Layout takePre(float w, float h) {
-        if (openKey != null) return null;
+        if (openKey != null || !foldOpen.isEmpty()) return null;
         synchronized (preLay) { PreLay p = preLay.remove(screen); if (p != null && p.w == w && p.h == h && p.d == dpr) return p.lay; }
         return null;
     }
@@ -411,6 +418,7 @@ public class ScreenView extends View {
         if (screen == null || getWidth() <= 0) { lay = null; invalidate(); syncLater(); return; }
         try { int wh = getRootView().getHeight(); if (wh > 0) ScreenCore.winH = wh / dpr; } catch (Throwable ignored) { }                  // 웹 vh 높이(버스 지도 24vh)는 창 높이 기준
         final long plt0 = PerfLog.now();
+        ScreenCore.applyFold(screen, foldOpen, foldSig);                                           // s307: 접힌 고르기 목록은 이번 배치에 접힌 채로 · 고른 줄이 바뀐 새 화면이면 다시 접는다
         { ScreenCore.Layout pl = takePre(getWidth() / dpr, getHeight() / dpr); lay = pl != null ? pl : ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr); }
         PerfLog.layout(plt0);
         if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; }
@@ -2070,17 +2078,29 @@ public class ScreenView extends View {
         cv.save();
         cv.clipRect(0f, lay.headH, w, h - lay.footH);
         cv.translate(0f, lay.headH - scrollY + pullNow);
-        int[] r = lay.bodyRange(scrollY - 4f, scrollY + (h - lay.headH - lay.footH) + 4f);
+        foldOn = false; foldDy = 0f;
+        if (foldKey != null) {                                                              // s307: 접었다 펼치는 중 — 목록 아래 칸들이 스프링으로 내려가고(펼침) 올라온다(접힘)
+            if ((now - foldT0) / FOLD_MS >= 1f) foldKey = null;
+            else for (ScreenCore.Item fi : lay.body) if (fi.kind == ScreenCore.K_PICKL && foldKey.equals(fi.key)) { foldY = fi.y; foldBot = fi.y + fi.h; foldDy = pickVisH(fi) - fi.h; foldOn = Math.abs(foldDy) > 0.2f; spAnim = true; break; }
+        }
+        float fmg = foldOn ? Math.abs(foldDy) : 0f;
+        int[] r = lay.bodyRange(scrollY - 4f - fmg, scrollY + (h - lay.headH - lay.footH) + 4f + fmg);
         for (int i = r[0]; i < r[1]; i++) {
             ScreenCore.Item bit = lay.body[i];
             if (bit.kind == ScreenCore.K_SWAP) continue;
             if (!sceneFailed && isPager(bit)) { i += drawPager(cv, bit, i, now); continue; }
+            float sdy = 0f, gh = 0f;
+            if (foldOn && bit.kind != ScreenCore.K_PICKL) { if (bit.y >= foldBot - 0.5f) sdy = foldDy; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= foldY && bit.y + bit.h >= foldBot - 0.5f) gh = foldDy; }
+            if (sdy != 0f) { cv.save(); cv.translate(0f, sdy); }
+            if (gh != 0f) bit.h += gh;
             if (bit.band) { cv.save(); cv.clipRect(bit.cl, bit.y - 4f, bit.cr, bit.y + bit.h + 4f); cv.translate(-bandX, 0f); drawItem(cv, bit); cv.restore(); }      // 카드 안 타임라인: 틀 안에서 가로로 밀린다
             else drawItem(cv, bit);
+            if (gh != 0f) bit.h -= gh;
+            if (sdy != 0f) cv.restore();
         }
         boolean pulsingB = false;
         if (lay.mkBody && lay.bandTop >= 0f && lay.bandTop + 100f >= scrollY - 4f && lay.bandTop <= scrollY + (h - lay.headH - lay.footH) + 4f) {     // 그 줄 위의 내 위치 마커(칸과 같이 밀린다)
-            cv.save(); cv.clipRect(lay.bandL, lay.bandTop - 6f, lay.bandL + lay.bandView, lay.bandBot + 6f); cv.translate(-bandX, 0f);
+            cv.save(); if (foldOn && lay.bandTop >= foldBot - 0.5f) cv.translate(0f, foldDy); cv.clipRect(lay.bandL, lay.bandTop - 6f, lay.bandL + lay.bandView, lay.bandBot + 6f); cv.translate(-bandX, 0f);
             pulsingB = drawMk(cv, now); cv.restore();
         }
         for (int i = r[0]; i < r[1]; i++) if (lay.body[i].kind == ScreenCore.K_SWAP) drawItem(cv, lay.body[i]);       // 두 줄 경계에 얹는 둥근 단추는 맨 위에(웹 z-index 20) — 그 밑의 구분선이 단추를 가로지르지 않게
@@ -2962,36 +2982,80 @@ public class ScreenView extends View {
         for (int i = r[1] - 1; i >= r[0]; i--) { ScreenCore.Item it = lay.body[i]; if (it.kind == ScreenCore.K_PICKL && x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return it; }
         return null;
     }
+    /** 지금 목록 안쪽이 밀려 있는 정도: 접힌 목록은 고른 줄이 맨 위에 오도록(펼침·접힘 도중엔 스프링으로 그 사이를). */
+    private float pickOffNow(ScreenCore.Item it) {
+        if (!it.fold) return pickGet(it);
+        float tgt = it.open ? pickGet(it) : Math.min(it.onIdx * it.rowH, Math.max(0f, it.rows.size() * it.rowH - 4f - it.collH));
+        if (foldKey != null && foldKey.equals(it.key)) {
+            float f = (SystemClock.uptimeMillis() - foldT0) / FOLD_MS;
+            if (f < 1f) { float sp = Math.max(0f, Math.min(1f, spring(f < 0f ? 0f : f))); return foldOff0 + (tgt - foldOff0) * sp; }
+        }
+        return tgt;
+    }
+    /** 지금 보이는 목록 높이: 펼침·접힘 도중엔 시작 높이에서 끝 높이로 스프링(살짝 지나쳤다 되돌아). */
+    private float pickVisH(ScreenCore.Item it) {
+        if (!it.fold || foldKey == null || !foldKey.equals(it.key)) return it.h;
+        float f = (SystemClock.uptimeMillis() - foldT0) / FOLD_MS;
+        if (f >= 1f) return it.h;
+        return it.h + (foldH0 - it.h) * (1f - spring(f < 0f ? 0f : f));
+    }
+    /** 접었다 펼치기: 배치를 다시 하고(아래 칸들이 새 자리로) 시작 높이·밀림을 기억해 스프링으로 옮긴다. */
+    private void toggleFold(ScreenCore.Item it, boolean open) {
+        if (!it.fold) return;
+        final String key = it.key;
+        float h0 = pickVisH(it), off0 = pickOffNow(it);
+        if (open) {                                                                       // 펼칠 때 안쪽은 고른 줄이 맨 위에 오게(접힌 모습 그대로 시작해 아래로 펼쳐진다)
+            foldOpen.add(key);
+            pickOff.put(key, Math.max(0f, Math.min(it.onIdx * it.rowH, Math.max(0f, it.rows.size() * it.rowH - 4f - it.openH))));
+        } else foldOpen.remove(key);
+        foldKey = key; foldT0 = SystemClock.uptimeMillis(); foldH0 = h0; foldOff0 = off0;
+        relayout();
+        invalidate();
+    }
     private void tapPick(ScreenCore.Item it, float px, float py) {
-        float by = py / dpr - lay.headH + scrollY, ry = by - it.y + pickGet(it);
+        float by = py / dpr - lay.headH + scrollY, ry = by - it.y + pickOffNow(it);
         int i = (int) Math.floor(ry / it.rowH);
         if (it.rows == null || i < 0 || i >= it.rows.size()) return;
         ScreenCore.Item r = it.rows.get(i); if (r.act == null || ry - i * it.rowH > r.h) return;
+        if (it.fold && !it.open) { blurInput(); toggleFold(it, true); return; }          // 접힌 한 줄을 누르면 아래로 펼친다
+        boolean same = r.on;
         for (ScreenCore.Item q : it.rows) q.on = q == r;                                  // 새 화면이 오기 전에 먼저 그 줄을 켜 보인다
-        blurInput(); invalidate();
+        blurInput();
+        if (it.fold) { it.onIdx = i; ScreenCore.pickSelect(screen, it.key, i); toggleFold(it, false); if (same) return; }          // 고르면 펼친 목록이 위로 접히며 고른 줄만 남는다(이미 고른 줄이면 접기만)
+        else invalidate();
         if (listener != null) listener.onAction(r.act);
     }
     private void drawPick(Canvas cv, ScreenCore.Item it) {
         if (it.rows == null || it.rows.isEmpty()) return;
         int on = -1; for (int i = 0; i < it.rows.size(); i++) if (it.rows.get(i).on) { on = i; break; }
-        String sg = on + ":" + it.rows.size(), old = pickSig.get(it.key);
-        if (!sg.equals(old)) {                                                            // 고른 줄이 바뀌었으면(새 화면) 그 줄이 보이게만 맞춘다 — 사용자가 민 자리는 그대로 둔다
-            pickSig.put(it.key, sg); float o = pickGet(it);
-            if (on >= 0) { float top = on * it.rowH; if (top < o || top + it.rowH > o + it.h + 4f) pickOff.put(it.key, ScreenCore.clamp(top - (it.h - it.rowH) / 2f, it.pickMax)); }
+        if (!it.fold) {
+            String sg = on + ":" + it.rows.size(), old = pickSig.get(it.key);
+            if (!sg.equals(old)) {                                                            // 고른 줄이 바뀌었으면(새 화면) 그 줄이 보이게만 맞춘다 — 사용자가 민 자리는 그대로 둔다
+                pickSig.put(it.key, sg); float o = pickGet(it);
+                if (on >= 0) { float top = on * it.rowH; if (top < o || top + it.rowH > o + it.h + 4f) pickOff.put(it.key, ScreenCore.clamp(top - (it.h - it.rowH) / 2f, it.pickMax)); }
+            }
         }
-        float off = pickGet(it);
-        cv.save(); cv.clipRect(it.x, it.y, it.x + it.w, it.y + it.h);
+        float off = pickOffNow(it), vh = pickVisH(it);
+        if (it.fold && foldKey != null && foldKey.equals(it.key) && vh != it.h) spAnim = true;
+        cv.save(); cv.clipRect(it.x, it.y, it.x + it.w, it.y + Math.max(1f, vh));
         for (ScreenCore.Item r : it.rows) {
-            float ry = it.y + r.y - off; if (ry + r.h < it.y || ry > it.y + it.h) continue;
+            float ry = it.y + r.y - off; if (ry + r.h < it.y || ry > it.y + vh) continue;
             rf.set(it.x, ry, it.x + it.w, ry + r.h);
             p.setStyle(Paint.Style.FILL); p.setColor(r.on ? pal[R_GOLD] : pal[R_CARD2]); cv.drawRoundRect(rf, 9f, 9f, p);
             if (!r.on) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER2]); rf2.set(it.x + 0.5f, ry + 0.5f, it.x + it.w - 0.5f, ry + r.h - 0.5f); cv.drawRoundRect(rf2, 8.5f, 8.5f, p); p.setStyle(Paint.Style.FILL); }
             int tc = r.on ? 0xFFFFFFFF : pal[R_TEXT], sc = r.on ? 0xE6FFFFFF : pal[R_SUB];
+            float rgt = it.fold && r.on ? 30f : 12f;                                           // 접을 수 있는 목록은 고른 줄 오른쪽 끝에 ▾/▴ 자리
             setText(r.size, true, tc); cv.drawText(r.label, it.x + 12f, base(ry, r.h, 0), tp);
-            setText(r.size - 1f, false, sc); cv.drawText(r.value, it.x + it.w * 0.5f, base(ry, r.h, 0), tp);
-            if (r.lines != null && r.lines.length > 0 && r.lines[0].length() > 0) { setText(r.size, true, tc); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(r.lines[0], it.x + it.w - 12f, base(ry, r.h, 0), tp); tp.setTextAlign(Paint.Align.LEFT); }
+            setText(r.size - 1f, false, sc); cv.drawText(r.value, it.x + it.w * 0.5f - (it.fold && r.on ? 8f : 0f), base(ry, r.h, 0), tp);
+            if (r.lines != null && r.lines.length > 0 && r.lines[0].length() > 0) { setText(r.size, true, tc); tp.setTextAlign(Paint.Align.RIGHT); cv.drawText(r.lines[0], it.x + it.w - rgt, base(ry, r.h, 0), tp); tp.setTextAlign(Paint.Align.LEFT); }
+            if (it.fold && r.on) {                                                             // ▾(접힘) / ▴(펼침) — 목록이 접힌다는 표시
+                float cx = it.x + it.w - 16f, cy = ry + r.h / 2f, k = 4.2f; boolean up = it.open;
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(2f); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND); p.setColor(tc);
+                android.graphics.Path ph = pickChev; ph.reset(); ph.moveTo(cx - k, cy + (up ? k * .5f : -k * .5f)); ph.lineTo(cx, cy + (up ? -k * .5f : k * .5f)); ph.lineTo(cx + k, cy + (up ? k * .5f : -k * .5f));
+                cv.drawPath(ph, p); p.setStrokeCap(Paint.Cap.BUTT); p.setStrokeJoin(Paint.Join.MITER); p.setStyle(Paint.Style.FILL);
+            }
         }
-        if (it.pickMax > 0f) {                                                            // 더 있다는 표시: 오른쪽 가는 막대
+        if (it.pickMax > 0f && it.open || (it.pickMax > 0f && !it.fold)) {                // 더 있다는 표시: 오른쪽 가는 막대
             float th = Math.max(16f, it.h * it.h / (it.h + it.pickMax)), ty = it.y + (it.h - th) * (off / it.pickMax);
             p.setStyle(Paint.Style.FILL); p.setColor(alpha(pal[R_SUB], 0.45f)); rf.set(it.x + it.w - 3f, ty, it.x + it.w - 1f, ty + th); cv.drawRoundRect(rf, 1f, 1f, p);
         }

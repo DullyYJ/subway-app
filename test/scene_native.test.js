@@ -94,5 +94,12 @@ const { sceneDecide } = require('../engine/scene.js');
     assert.ok(sc.includes('"train".equals(mode)') && /SceneTrain\.(step|draw|setup)/.test(sc), 'SceneCore 가 train 장면을 그린다');
     assert.ok(!/Math\.random|new java\.util\.Random\(\)|new Random\(\)/.test(tr.replace(/new java\.util\.Random\(z\.seed[^)]*\)/, '')), '객실 장면의 자리·승하차 무작위는 엔진이 준 시드로만(앱이 따로 뽑지 않는다)');
   });
+  await t('둘숑 거울(s306): 거울을 보며 짖을 때 거울 유리에 둘숑 얼굴이 옅게 비친다 — 거울이 주인을 알고(own) · 유리 안에서만(clip) 뒤집어 그린다', async () => {
+    const sc = fs.readFileSync(N('SceneCore.java'), 'utf8'), ac = fs.readFileSync(N('SceneActs.java'), 'utf8');
+    assert.ok(/Actor own;/.test(sc) && /A\.g\.own = a;/.test(ac), '거울 그림(Gfx)이 주인을 기억한다');
+    const rf = sc.slice(sc.indexOf('void drawReflect('), sc.indexOf('void drawActor('));
+    assert.ok(/c\.clip\(\)/.test(rf) && /c\.scale\(-1, 1\)/.test(rf) && /globalAlpha\(al \* \.5\)/.test(rf) && !/new /.test(rf), '유리 안에서만 · 좌우 뒤집어 · 옅게 · 새 객체 없이');
+    assert.ok(/gg\.own != null\) drawReflect/.test(sc), '거울을 그릴 때 얼굴도 그린다');
+  });
   console.log(pass + ' 통과 / ' + fail + ' 실패'); if (fail) process.exit(1);
 })();

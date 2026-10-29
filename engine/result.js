@@ -516,7 +516,9 @@ function resultScreen(opt, r) {
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldView ? resLdQuery(ldView) : null } };
+  var ldInfo = ldView;                                            // s307: 장거리 탭이 아니어도 질의 목록을 알려 앱이 모든 편의 경로·브리핑을 미리 받아 둔다(누르면 바로 바뀌게)
+  if (!ldInfo && has.longdist) { var lr0 = resConvertPath(pick.longdist); if (lr0 && lr0.ld) ldInfo = resLdView(lr0, ldOrigPath ? resConvertPath(ldOrigPath) : null); }
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldInfo ? resLdQuery(ldInfo) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }

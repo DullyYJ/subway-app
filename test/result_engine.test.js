@@ -306,6 +306,17 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   const many = []; for (let i = 0; i < 8; i++) many.push(cand(i % 2 ? 'expbus' : 'train', 1000 + i * 10, '1' + i + ':00', 200 + i, i % 2 ? '일반' : 'KTX'));
   const P3 = pl(E.resultScreen({ cap: 27 }, { data: { result: { path: [mk('train', 'KTX', 1000, 200, many, [])] } }, tab: 'longdist', a: 'a', b: 'b', now, tz: 540, th: 'dark' }));
   ok(P3 && P3.rows.length === 8 && P3.vis === 5, '5개보다 많으면 목록 안에서 밀어 고른다(줄 8 · 보이는 줄 5)');
+  // s307(YJ): 규격 28 — 처음엔 고른(가장 빠른) 한 줄만 보이고 눌러 펼친다(fold) · 27 앱은 예전 그대로
+  ok(pl(c(28)).fold === true && pl(c(27)).fold === undefined, '규격 28 은 접었다 펴는 목록(fold) · 27 은 그대로');
+  { const chk28 = screenCheck([c(28)]); ok(!chk28.err && chk28.out.every(l => /^OK/.test(l)), '앱 검증기가 fold 를 받는다: ' + (chk28.err || chk28.out.join('|'))); }
+  // s307: 장거리가 아닌 탭에서도 질의 목록을 알려 앱이 모든 편을 미리 받아 둘 수 있다(경로 응답에 장거리 경로가 있을 때만)
+  { const sub = { info: { totalTime: 200, transferCount: 1 }, subPath: [{ trafficType: 1, lane: [{ name: '1호선' }], sectionTime: 200, distance: 20000, startName: '서울', endName: '수원', passStopList: { stations: [{ stationName: '서울' }, { stationName: '수원' }] } }] };
+    const D2 = { result: { path: [sub, mk('train', 'KTX', 100, 180, cands0, opts)] } };
+    const ft = E.resultScreen({ cap: 28 }, { data: D2, tab: 'fast', a: '서울', b: '부산', now, tz: 540, th: 'dark' });
+    ok(ft.info.tab === 'fast' && ft.info.has.longdist === true && ft.info.ld && ft.info.ld.m.length === 4 && ft.info.ld.g.length === 2, '다른 탭에서도 info.ld 가 온다: ' + JSON.stringify(ft.info.ld));
+    ok(c(28).info.ld.m.length === 4, '장거리 탭의 info.ld 는 그대로');
+    const nl = E.resultScreen({ cap: 28 }, { data: { result: { path: [sub] } }, tab: 'fast', a: '서울', b: '수원', now, tz: 540, th: 'dark' });
+    ok(nl.info.ld === null, '장거리 경로가 없는 응답엔 info.ld 가 null'); }
   const chk = screenCheck([c(27)]);
   ok(!chk.err && chk.out.every(l => /^OK/.test(l)) && chk.out.every(l => Number(l.split(' ')[2]) === 0), '앱 검증기가 pickl 을 받는다: ' + (chk.err || chk.out.join('|')));
   const sd = { data: { result: { path: [P2raw()] } } };

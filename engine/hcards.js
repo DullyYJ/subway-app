@@ -88,6 +88,10 @@ function hcRoute(r, now, tz) {
   var data = (r.data && typeof r.data === 'object') ? r.data : null;
   if (!data) return null;
   var paths = hcRes.rv(data, hcArr((data.result || {}).path)), pick = hcRes.pick(paths);
+  if (r.ld2 && typeof r.ld2 === 'object') {                  // s307(YJ): 장거리 '다른 편' 을 고르면 브리핑도 그 편 기준으로(결과 카드 engine/result.js 와 같은 바꿔 끼우기 — 예전엔 브리핑이 처음 편에 머물렀다)
+    var p2 = hcArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
+    if (p2) pick.longdist = p2;
+  }
   var tab = ['fast', 'less', 'sub', 'bus', 'longdist'].indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var p = pick[tab] || pick.fast, route = p ? hcRes.conv(p) : null;
   if (!route) return null;

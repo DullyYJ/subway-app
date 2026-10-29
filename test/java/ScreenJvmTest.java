@@ -881,6 +881,29 @@ public class ScreenJvmTest {
             ScreenCore.Layout pk3l = ScreenCore.layout(ScreenCore.load(pk3), 340f, M);
             ok(near(pk3l.body[0].h, 3 * 38f - 4f) && pk3l.body[0].pickMax == 0f, "pickl: 5줄 이하면 밀 거리 0 · 높이는 줄 수만큼");
             ok(bad(pk7.replace(pr7.toString(), "")) && bad("{\"ok\":true,\"v\":1,\"screen\":\"pk\",\"head\":[],\"body\":[{\"t\":\"pickl\"}]}"), "pickl: 줄이 없으면 화면을 거절");
+            // s307: 접었다 펴는 목록(fold) — 접힌 채로는 고른 줄 한 줄 높이 · 펼치면 vis 줄 · 고른 줄이 바뀐 새 화면은 다시 접는다
+            String pkf = pk7.replace("\"key\":\"ldpick\"", "\"key\":\"ldpick\",\"fold\":true");
+            ScreenCore.Screen pfs = ScreenCore.load(pkf);
+            java.util.HashSet<String> fog = new java.util.HashSet<String>(); java.util.HashMap<String, String> fsg = new java.util.HashMap<String, String>();
+            ScreenCore.applyFold(pfs, fog, fsg);
+            ScreenCore.Item fc = ScreenCore.layout(pfs, 340f, M).body[0];
+            ok(fc.fold && !fc.open && near(fc.h, 34f) && fc.pickMax == 0f && fc.onIdx == 2 && near(fc.openH, 5 * 38f - 4f) && near(fc.collH, 34f), "pickl fold: 접힌 높이는 한 줄 · 고른 줄 번호 · 펼친 높이 기억 " + fc.h);
+            fog.add("ldpick"); ScreenCore.applyFold(pfs, fog, fsg);
+            ScreenCore.Item fe = ScreenCore.layout(pfs, 340f, M).body[0];
+            ok(fe.fold && fe.open && near(fe.h, 5 * 38f - 4f) && near(fe.pickMax, 7 * 38f - 4f - fe.h), "pickl fold: 펼치면 5줄 높이 · 안에서 밀기");
+            StringBuilder pr7b = new StringBuilder();
+            for (int i = 0; i < 7; i++) pr7b.append(i > 0 ? "," : "").append("{\"a\":\"열차 KTX\",\"b\":\"1" + i + ":00 출발\",\"c\":\"180분\",\"on\":" + (i == 3) + ",\"act\":{\"a\":\"call\",\"v\":\"rh.ld.m." + i + "\"}}");
+            ScreenCore.Screen pfs2 = ScreenCore.load(pkf.replace(pr7.toString(), pr7b.toString()));
+            ScreenCore.applyFold(pfs2, fog, fsg);
+            ok(!fog.contains("ldpick") && !ScreenCore.layout(pfs2, 340f, M).body[0].open, "pickl fold: 고른 줄이 바뀐 새 화면은 접힌 채로 시작");
+            ScreenCore.Screen pfs3 = ScreenCore.load(pkf); fog.add("ldpick"); fsg.put("ldpick", "2:7"); ScreenCore.applyFold(pfs3, fog, fsg);
+            ok(fog.contains("ldpick") && ScreenCore.layout(pfs3, 340f, M).body[0].open, "pickl fold: 고른 줄이 같으면(같은 화면 갱신) 펼침 그대로");
+            ScreenCore.Item f3 = ScreenCore.layout(ScreenCore.load(pk3.replace("\"key\":\"ldpick\"", "\"key\":\"ldpick\",\"fold\":true")), 340f, M).body[0];
+            ok(f3.fold && !f3.open && near(f3.h, 34f), "pickl fold: 줄이 둘 이상이면 3줄도 접을 수 있다");
+            ok(!ScreenCore.layout(pks, 340f, M).body[0].fold, "pickl fold: fold 표시가 없으면 예전 그대로(접지 않음)");
+            ScreenCore.pickSelect(pfs, "ldpick", 4); fog.remove("ldpick"); ScreenCore.applyFold(pfs, fog, fsg);
+            ScreenCore.Item fsel = ScreenCore.layout(pfs, 340f, M).body[0];
+            ok(fsel.onIdx == 4 && fsel.rows.get(4).on && !fsel.rows.get(2).on && !fsel.open, "pickl fold: 펼친 목록에서 고르면 새 화면이 오기 전에도 접힌 모습이 그 줄(pickSelect)");
         }
 
         // ── 알약 글자(pill: 미리보기 라벨) ──

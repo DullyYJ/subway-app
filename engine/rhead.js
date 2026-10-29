@@ -165,6 +165,7 @@ var RHEAD_LD_MODE = { train: '열차', expbus: '고속버스', subbus: '시외�
 function rheadWon(n) { return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }      // 12300 → '12,300'
 function rheadNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
 var RHEAD_PICKL_CAP = 27;                                   // 세로로 미는 고르기 목록(pickl)을 아는 앱
+var RHEAD_FOLD_CAP = 28;                                    // s307: 고른 한 줄만 보이다가 눌러 아래로 펼치는 고르기 목록(pickl fold)을 아는 앱
 var RHEAD_LD_ORDER = { train: 0, expbus: 1, subbus: 2 };
 // 장거리 후보를 시간순 한 목록으로: 수단 후보(rh.ld.m.<번호>) + 같은 수단의 다른 등급(rh.ld.g.<번호>) — 같은 편은 한 줄. 소요는 원자료의 총 소요(없으면 등급 값으로 어림, 그래도 없으면 요금).
 function rheadLdRows(lg, cands, opts, mode, grade, cur) {
@@ -210,7 +211,9 @@ function rheadLdNodes(f) {
   if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): 장거리는 줄줄이 단추 대신 '시간순 세로 목록' — 최대 5줄이 보이고 더 있으면 위아래로 밀어 고른다
     var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
     if (rws.length > 1) {
-      out.push({ t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] });
+      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] };
+      if (f.cap >= RHEAD_FOLD_CAP) pk.fold = true;                 // s307(YJ): 처음엔 고른(가장 빠른) 편 한 줄 — 누르면 카드가 아래로 펼쳐지고 고르면 다시 접힌다
+      out.push(pk);
       return out.concat(rheadLdNote(lg));
     }
   }
@@ -495,7 +498,8 @@ function rheadTrkPoints(f) {
   // 단일 시간축
   var sh = 0;
   if (f.bt == null) for (i = 0; i < f.sw.length; i++) { var v = f.sw[i]; if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { sh = v * 60000; break; } }
-  var base = f.bt != null ? f.bt : ((f.rb != null && f.now - f.rb <= 300000) ? f.rb + sh : f.now + sh);
+  var hasLd = segs.some(function (sg) { return sg.ty === 4; });      // s307(YJ): 장거리 편이 든 경로는 처음 찾은 시각을 끝까지 기준으로 고정 — 5분이 지났다고 지금 시각으로 옮겨 타는 방법·시각이 헷갈리게 바뀌지 않게
+  var base = f.bt != null ? f.bt : ((f.rb != null && (hasLd || f.now - f.rb <= 300000)) ? f.rb + sh : f.now + sh);
   var cum = base, shift = 0;
   var segMs = segs.map(function (sg) {
     var t = cum;

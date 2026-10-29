@@ -55,6 +55,9 @@ public final class HomeCore {
     /** 탭만 바꿔 본 결과 요청(미리 받기용). 상태는 건드리지 않는다. */
     public String resultRequestTab(Env env, int cap, String theme, String tab) { String keep = resTab; resTab = tab; try { return resultRequest(env, cap, theme, 0); } finally { resTab = keep; } }
     public boolean hasRoute() { return routeRaw.length() > 2; }
+    private static final java.util.regex.Pattern LD_PATH = java.util.regex.Pattern.compile("\"longDist\"\\s*:\\s*true");
+    /** 받은 경로 응답에 장거리(열차·고속버스·시외버스) 경로가 들어 있나. 있으면 처음 찾은 결과를 고정한다(실시간으로 다시 받아 타는 방법이 바뀌지 않게). */
+    public boolean hasLdRoute() { return routeRaw.length() > 2 && LD_PATH.matcher(routeRaw).find(); }
     // 결과 카드의 보조 사실: 지난 탐색 질의(장거리 다시 고르기에 쓴다) · 다시 받은 장거리 응답 · 공지/제보 원자료(서버가 준 글 그대로)
     public String lastQs = "", ld2Raw = "", offRaw = "", alRaw = "", noteKey = "";
     public long noteAt = 0;

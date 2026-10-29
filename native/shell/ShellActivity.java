@@ -3788,7 +3788,7 @@ public class ShellActivity extends Activity {
                 try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
                 if (hasRes && txt.length() > 0) {
                     String rs = rsBox[0];
-                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); } }); }
+                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); maybePrefetchLd(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
                 if (txt.length() > 0 && cjBox[0].length() > 0) txt = ShellCore.mergeBodies(txt, cjBox[0]);        // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
@@ -4402,12 +4402,13 @@ public class ShellActivity extends Activity {
     @SuppressWarnings("unchecked")
     private void retryEstimated(final int my, String url, Map<String, Object> fo) {
         if (fo == null || !(fo.get("retry") instanceof List)) return;
+        if (home.hasLdRoute()) return;                                      // s307(YJ): 장거리 편이 든 결과는 처음 찾은 것으로 고정 — 다시 받아 타는 방법·시각이 계속 바뀌지 않게
         List<Object> delays = (List<Object>) fo.get("retry");
         int miss = RouteFetchCore.num(fo, "miss"), applied = RouteFetchCore.num(fo, "applied");
         for (Object dobj : delays) {
             if (miss <= 0 || !(dobj instanceof Number)) return;
             try { Thread.sleep(Math.max(1000, Math.min(60000, ((Number) dobj).longValue()))); } catch (InterruptedException e) { return; }
-            if (my != seqRoute || !home.hasRoute()) return;
+            if (my != seqRoute || !home.hasRoute() || home.hasLdRoute()) return;
             String u = url.replaceFirst("baseMs=\\d+", "baseMs=" + System.currentTimeMillis()) + "&pm=" + miss + "&pa=" + applied;
             NetPost.Res r = NetPost.get(u, 30000);
             String body = r.status == 200 && r.body != null ? r.body.trim() : "";
@@ -4445,9 +4446,43 @@ public class ShellActivity extends Activity {
             }
         }, "shell-notes").start();
     }
+    // s307(YJ): 장거리 모든 편의 경로를 찾은 직후 뒤에서 하나씩 미리 받아 둔다 — 편을 누르면 곧바로 그 편의 경로·브리핑이 보인다. 서버 부담을 줄이려 한 번에 하나씩·최대 6편.
+    private final java.util.concurrent.ConcurrentHashMap<String, String> ldPf = new java.util.concurrent.ConcurrentHashMap<String, String>();      // "탐색번호|질의" → 그 편으로 다시 받은 경로 응답
+    private String ldPfSig = "";
+    private void maybePrefetchLd() {
+        if (!home.hasRoute() || home.lastQs.length() == 0 || home.riding()) return;
+        final java.util.ArrayList<String> qs = new java.util.ArrayList<String>();
+        for (String q : home.ldM) if (q != null && q.length() > 0 && !qs.contains(q)) qs.add(q);
+        for (String q : home.ldG) if (q != null && q.length() > 0 && !qs.contains(q)) qs.add(q);
+        if (qs.isEmpty()) return;
+        while (qs.size() > 6) qs.remove(qs.size() - 1);
+        final int rid = home.routeId;
+        final String sig = rid + "|" + home.lastQs + "|" + qs;
+        if (sig.equals(ldPfSig)) return;
+        if (ldPfSig.length() > 0 && !ldPfSig.startsWith(rid + "|")) ldPf.clear();
+        ldPfSig = sig;
+        final String base = home.lastQs;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                for (final String q : qs) {
+                    if (rid != home.routeId) return;                                                // 그 사이 다른 경로를 찾았다
+                    final String key = rid + "|" + q;
+                    if (ldPf.containsKey(key)) continue;
+                    NetPost.Res r = NetPost.get(HomeCore.routeUrl(base + q), 30000);
+                    final String b = r.status == 200 && r.body != null ? r.body.trim() : "";
+                    if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}' && b.length() < 3000000 && rid == home.routeId) ldPf.put(key, b);
+                    try { Thread.sleep(400L); } catch (InterruptedException e) { return; }           // 서버에 한꺼번에 몰리지 않게 사이를 둔다
+                }
+            }
+        }, "shell-ldpf").start();
+    }
     /** 장거리 '다른 편' 고르기: 엔진이 만든 질의를 덧붙여 다시 받고, 엔진이 장거리 경로만 바꿔 끼운다. */
     private void ldReselect() {
         if (home.lastQs.length() == 0) return;
+        final String hit = ldPf.get(home.routeId + "|" + home.ldPending);
+        if (hit != null) {                                                       // s307: 미리 받아 둔 편 — 통신 없이 바로 바꾼다(경로 · 브리핑이 같이 바뀐다)
+            ++seqRoute; home.ld2Raw = hit; home.touch(); reloadHome(); return;
+        }
         final String url = HomeCore.routeUrl(home.lastQs + home.ldPending);
         final int my = ++seqRoute;
         toast("다른 편을 찾는 중이에요");

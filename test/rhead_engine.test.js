@@ -260,6 +260,12 @@ const web = new Function(
   ok(dep && arr && dep.w === 108 && arr.w === 108 && dep.n === '광명' && arr.n === '부산' && dep.nc === '#ff9500' && dep.gk === 'p' && dep.gx === 5, '장거리: 출발/도착 알약 · 넓은 칸 · 주황');
   ok(/^\d\d:\d\d · 총 3시간5분$/.test(arr.t) && dep.t === '12:15' && arr.tc === 'gold' && arr.t.startsWith('15:20'), '장거리: 도착 시각 + 총 소요(3시간5분) · 금색');
   ok(ld.filter(c => c.n === '광명').length === 2, '장거리 앞 지하철의 마지막 역과 같은 이름이어도 승차역을 지우지 않는다');
+  // s307(YJ): 장거리 편이 든 경로는 처음 찾은 시각(rb)이 오래돼도(5분 초과) 지금 시각으로 옮기지 않는다 — 타는 시각·방법이 실시간으로 바뀌어 헷갈리지 않게
+  { const LS = [{ ty: 3, nm: '', du: 120, di: 100, ss: 0, es: 120, st: [] }, { ty: 4, nm: 'KTX', du: 11100, di: 400000, ss: 900, es: 12000, st: [['광명'], ['부산']] }, { ty: 3, nm: '', du: 300, di: 400, ss: 12000, es: 12300, st: [] }];
+    const dp = (f) => E.rheadScreen({ cap: 12, part: 'k' }, F(Object.assign({ xf: [], secs: JSON.parse(JSON.stringify(LS)) }, f))).head[0].cells.find(c => c.g === 'KTX 출발').t;
+    ok(dp({ rb: now - 600000 }) !== dp({ rb: null }), '장거리 경로: 오래된 탐색 시각도 기준으로 쓴다(지금 시각으로 옮기지 않음)');
+    const sub2 = (f) => E.rheadScreen({ cap: 12, part: 'k' }, F(f)).head[0].cells.map(c => c.t)[1];
+    ok(sub2({ rb: now - 600000, sw: [30] }) === '12:34', '장거리가 없는 경로는 예전처럼 5분 지나면 기기 시계'); }
   // 같은 이름 역 중복 제거(바로 이어 탐) · 급행 환승 · 버스끼리 환승
   const ch = E.rheadScreen({ cap: 12, part: 'k' }, F({ xf: [{ k: 'train' }, { k: 'x', si: 2 }], secs: [
     { ty: 2, nm: '8', du: 300, di: 1500, ss: 60, es: 360, ar: 30, st: st(['정류장A', '부평역']) },
