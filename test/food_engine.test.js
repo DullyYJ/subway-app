@@ -84,6 +84,17 @@ function swTableOk(S, chips, m) {
   ok(sc.head[0].title === '🍽️ 주변 맛집' && sc.head[0].sub === '내 위치 주변' && sc.info.ctr[0] === 37.4979, '도착지 없음 → 주변 맛집 · 내 위치 주변(중심 = 내 위치)');
   ok(places(sc.body).length === 3 + 3, '서버 3곳(중복 뺀) + 공공 3곳');
   ok(sc.info.go['c.0'] && sc.info.go['c.0'][0] === '나 나' && sc.info.go['p.0'][0] === '공공A', '눌림 번호 → 가게 사실(info.go)');
+  // s329: 눌림에 가게 사실을 그대로 싣는다 — 앱이 번호표를 따로 쥐지 않아도 어떤 칩에서든 눌린 가게가 맞는다
+  {
+    const ps2 = places(sc.body), wi = ps2.filter(p => p.act.id), wo = ps2.filter(p => !p.act.id);
+    ok(wi.length > 0 && wi.every(p => { const a = JSON.parse(p.act.id); return a.length === 5 && typeof a[3] === 'number' && typeof a[4] === 'number' && p.act.id.length <= 390 && p.go === '길찾기 · 지도 →'; }), '좌표가 있는 가게는 눌림(act.id)에 [이름·업종·주소·위도·경도]가 실린다(400자 안)');
+    ok(wo.every(p => p.go === '위치 정보 없음'), '좌표가 없는 가게는 눌림 글 없이 위치 정보 없음');
+    const k0 = Object.keys(sc.info.go)[0], p0 = ps2.find(p => p.act.v === 'fm.' + k0), a0 = JSON.parse(p0.act.id);
+    ok(a0[0] === sc.info.go[k0][0] && a0[3] === sc.info.go[k0][3] && a0[4] === sc.info.go[k0][4], '눌림 글 = 번호표(info.go, 옛 앱용)와 같은 가게');
+    const long = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체' }, { s: [{ n: '가'.repeat(100), c: '나'.repeat(100), a: '다'.repeat(150), la: 37.5, lo: 127.0, d: 10 }], u: [] });
+    const lp = places(long.body)[0];
+    ok(lp.act.id && lp.act.id.length <= 390 && JSON.parse(lp.act.id)[3] === 37.5, '이름·주소가 길어도 눌림 글은 400자 안(줄여 싣는다)');
+  }
   const none = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체' }, { s: [], u: [] });
   ok(/등록 음식점 정보가 없어요/.test(JSON.stringify(none.body)), 'done + 빈 목록 → 정보 없음');
   const failS = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'done', flt: '전체', fail: 1 }, { s: [], u: [] });
@@ -134,7 +145,7 @@ function swTableOk(S, chips, m) {
   ok(cur.map(p => p.rank).join() === '1,2,3,4,5,6', '순위는 1부터 차례로');
   ok(cur[0].stars === '★★★★★' && cur[3].stars === '★★★★' && cur[5].stars === '★★★★', '별점: 앞 3 → 5개, 6 미만 → 4개');
   ok(cur[5].name === '태그 식당', '이름의 태그는 걷는다');
-  ok(cur[0].sub === '국밥 · 12 1층' && cur[0].dist === '120m' && cur[0].go === '길찾기 · 지도 →', '업종 끝말 · 주소 끝 두 마디(웹과 같다) · 거리 · 길찾기 글');
+  ok(cur[0].sub === '국밥 · 12 1층' && cur[0].dist === '120m' && cur[0].go === (cur[0].act.id ? '길찾기 · 지도 →' : '위치 정보 없음'), '업종 끝말 · 주소 끝 두 마디(웹과 같다) · 거리 · 길찾기 글(좌표가 없으면 위치 정보 없음)');
   ok(E.foodDist(1200) === '1.2km' && E.foodDist('999') === '999m' && E.foodDist(null) === '0m' && E.foodDist(1000) === '1.0km', '거리 글');
   ok(cur[5].sub === '분식' && !/·/.test(cur[5].sub), '주소가 없으면 업종만');
   ok(cur[0].act.v === 'fm.c.0' && cur[4].act.v === 'fm.c.4' && cur[5].act.v === 'fm.c.5', '번호 = 앱이 보낸 배열의 원래 위치(이름 없는 항목이 있어도 밀리지 않는다)');
