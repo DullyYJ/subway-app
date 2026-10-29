@@ -2337,18 +2337,19 @@ public class ShellActivity extends Activity {
         }
     }
     // ── 가게 지도 펼침 미리 받기: 목록이 올라오면 위쪽 몇 곳의 첫 펼침을 뒤에서 받아 둔다 → 눌렀을 때 서버를 기다리지 않는다(5분) ──
+    private static final int PANEL_PF_MAX = 16;                                  // 목록에 뜬 가게는 (위에서부터) 16곳까지 전부 미리 받아 둔다
     private final java.util.LinkedHashMap<String, String[]> panelCache = new java.util.LinkedHashMap<String, String[]>();
     private String panelCacheGet(String json) {
         synchronized (panelCache) { String[] e = panelCache.get(json); return e != null && System.currentTimeMillis() - Long.parseLong(e[0]) < 300000L ? e[1] : null; }
     }
     private void panelCachePut(String json, String txt) {
-        synchronized (panelCache) { panelCache.put(json, new String[] { String.valueOf(System.currentTimeMillis()), txt }); while (panelCache.size() > 24) { String k0 = panelCache.keySet().iterator().next(); panelCache.remove(k0); } }
+        synchronized (panelCache) { panelCache.put(json, new String[] { String.valueOf(System.currentTimeMillis()), txt }); while (panelCache.size() > 64) { String k0 = panelCache.keySet().iterator().next(); panelCache.remove(k0); } }
     }
     private final Runnable foodPfRun = new Runnable() { @Override public void run() {
         try {
             if (!"food".equals(ShellCore.currentTab(store)) || !resumed || !food.loaded) return;
             final java.util.ArrayList<String> reqs = new java.util.ArrayList<String>();
-            for (String k : food.goKeys(4)) { String rq = food.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
+            for (String k : food.goKeys(PANEL_PF_MAX)) { String rq = food.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
             if (reqs.isEmpty()) return;
             ioExec.execute(new Runnable() { @Override public void run() {
                 for (String rq : reqs) {
