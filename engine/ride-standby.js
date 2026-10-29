@@ -568,12 +568,37 @@ function rsActs(st, req, now, notes) {
 //   지난 호출에서 앱이 그리던 위치(지난 시각표를 지금 시각으로 읽은 값)보다 새 위치가 뒤면, 그 구간의 출발 시각만 당겨 지금 자리를 그대로 이어 간다(도착 시각 t1 은 그대로 → 남은 거리를 그 시간에 간다).
 //   마커는 멈추거나 느려질 수는 있어도 뒤로 가지 않는다. 승차 되돌리기·다른 여정이면 풀린다.
 var RS_DOOR_M = 250, RS_DOOR_ACC_M = 80, RS_DOOR_LOST_MS = 10000, RS_DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — 반경 · 최대 오차 · 끊김으로 보는 시간 · 최대 정차
+var RS_GO_WIN_MS = 12000, RS_GO_SPAN_MS = 6000, RS_GO_MOVE_M = 40;      // s323: 신호가 안 끊겨도(지상 · 고가) 움직이기 시작하면 출발 — 최근 12초(4점 이상 · 6초 이상)의 앞 절반→뒤 절반 무게중심이 RS_XGO_MPS 이상 · 40m 이상 역에서 멀어짐
 var RS_DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
+// s323: 구간이 서로 겹치지 않게 뒤 구간을 밀어 이어 붙인다(앞 구간 도착 t1 보다 일찍 시작하는 구간만 그만큼 민다 — 엔진이 이미 늦어짐을 알면 밀지 않는다)
+function rsChainSegs(segs, k0) {
+  for (var i = k0 + 1; i < segs.length; i++) {
+    var pv = segs[i - 1], sg = segs[i];
+    if (+sg.a < +pv.t1) { var sh = +pv.t1 - +sg.a; sg.a = +sg.a + sh; sg.t0 = +sg.t0 + sh; sg.t1 = +sg.t1 + sh; }
+  }
+}
+// pos 를 segs 의 지금 구간으로 다시 맞춘다(구간이 밀렸을 때)
+function rsPosFromSegs(pos, segs, now) {
+  for (var i = 0; i < segs.length; i++) if (now < +segs[i].t1) {
+    var g = segs[i], rt = now < +g.t0 ? 0 : (+g.t1 > +g.t0 ? Math.max(0, Math.min(1, (now - g.t0) / (g.t1 - g.t0))) : 0);
+    pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt * 1000) / 1000; pos.moving = rt > 0 && rt < 1;
+    return;
+  }
+}
 function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
   var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
   if (!segs || !segs.length) { delete st.mk; return; }
+  // ★ s323 (YJ: "실측 출발 시각을 기준으로 다음 역 도착을 출발 + 시간표상 구간 소요로 다시 이어 붙여 마커가 가속해 달리지 않게"): 늦게 출발한 구간(st.dly = 지연 d)은 도착도 같은 만큼 늦춘다(정속 유지). 뒤 구간은 겹칠 때만 민다.
+  var dly = st.dly && st.dly.key === key ? st.dly : null;
+  if (dly && +dly.d > 0) {
+    var dk = -1; for (i = 0; i < segs.length; i++) if (+segs[i].from === +dly.i) { dk = i; break; }
+    if (dk >= 0) {
+      segs[dk].t0 = +segs[dk].t0 + dly.d; segs[dk].t1 = +segs[dk].t1 + dly.d; dly.to = +segs[dk].to; dly.arr = segs[dk].t1;
+      rsChainSegs(segs, dk); rsPosFromSegs(pos, segs, now);
+    } else if (+pos.from > +dly.i && dly.to != null && +pos.from > +dly.to) delete st.dly;
+  }
   var prevP = null;
   if (mk && mk.s && mk.s.length) {
     prevP = mk.s[mk.s.length - 1][1];
@@ -625,6 +650,7 @@ function rsMonoPos(st, r, now, notes) {
     var dw = st.dw && st.dw.key === key && st.dw.i === dwf ? st.dw : null;
     if (!dw) {
       var dwTt = r.etaMs && r.etaMs[dwf] != null && isFinite(+r.etaMs[dwf]) ? +r.etaMs[dwf] : now, dwGone = prevP != null && prevP > dwf + (dwG ? 0.12 : 0.002);      // GPS 확정이 시각표보다 조금(구간의 12% 안) 늦으면 그 역으로 되돌려 서게 한다 — 그보다 멀리 갔으면 서지 않는다(되돌아감 방지)
+      if (st.dly && st.dly.key === key && st.dly.to === dwf && isFinite(+st.dly.arr)) { dwTt = Math.max(dwTt, +st.dly.arr); delete st.dly; }          // s323: 늦게 출발해 늦게 닿았으면 정차는 마커가 닿은 때부터
       dw = st.dw = { key: key, i: dwf, s: dwGone ? 0 : (dwG ? now : Math.min(now, dwTt)), g: dwG ? 1 : 0 };
     } else if (dwG && !dw.g) dw.g = 1;
     // ★ s322 (YJ: "GPS 가 잡혔다는 건 문이 열려서다 — 잡히는 동안은 계속 추적하다가 끊기면 열차가 출발했다고 판단"): 역 근처(RS_DOOR_M) 좋은 위치(정확도 RS_DOOR_ACC_M 이하)가 정차 시작 뒤에 들어오는 동안은 문이 열린 것으로 보고 마커를 세워 둔다.
@@ -639,11 +665,35 @@ function rsMonoPos(st, r, now, notes) {
           if (rsHav(tq[1], tq[2], dwStop.lat, dwStop.lng) <= RS_DOOR_M) { if (dw.h == null || tq[0] > dw.h) dw.h = tq[0]; break; }
         }
       }
+      // ★ s323 (YJ: "GPS 가 안 끊기는 지상 · 고가 구간은 기존 이탈 판정(RS_XGO — 역에서 멀어지며 4m/s 이상)을 결합해 움직이기 시작하면 즉시 출발"): 정차 뒤 들어온 좋은 위치 중 최근 12초 안에서 6초 이상 떨어진 두 점이 4m/s 이상 · 40m 이상 역에서 멀어졌으면 지금 출발.
+      if (dw.go == null && dwStop && isFinite(dwStop.lat) && isFinite(dwStop.lng)) {
+        var gw = [];                                                     // 최근 12초 · 좋은 위치(시간 오름차순)
+        for (i = dwTr.length - 1; i >= 0; i--) {
+          var tz = dwTr[i]; if (!tz || !isFinite(tz[0])) continue;
+          if (tz[0] < dw.s || now - tz[0] > RS_GO_WIN_MS) break;
+          if (tz[0] > now + 1000 || !isFinite(tz[1]) || !isFinite(tz[2]) || (tz[3] != null && isFinite(tz[3]) && tz[3] > RS_DOOR_ACC_M)) continue;
+          gw.unshift(tz);
+        }
+        if (gw.length >= 4 && gw[gw.length - 1][0] - gw[0][0] >= RS_GO_SPAN_MS) {       // 앞 절반 · 뒤 절반의 무게중심으로 본다 — 제자리 흔들림은 서로 상쇄된다
+          var gh = Math.floor(gw.length / 2), ga = [0, 0, 0], gb = [0, 0, 0];
+          for (i = 0; i < gw.length; i++) { var gz = i < gh ? ga : gb; gz[0] += gw[i][0]; gz[1] += gw[i][1]; gz[2] += gw[i][2]; }
+          var na = gh, nb = gw.length - gh, ta = ga[0] / na, tb = gb[0] / nb;
+          var gsp = tb > ta ? rsHav(ga[1] / na, ga[2] / na, gb[1] / nb, gb[2] / nb) / ((tb - ta) / 1000) : 0;
+          var gd0 = rsHav(ga[1] / na, ga[2] / na, dwStop.lat, dwStop.lng), gd1 = rsHav(gb[1] / nb, gb[2] / nb, dwStop.lat, dwStop.lng);
+          if (gsp >= RS_XGO_MPS && gd1 - gd0 >= RS_GO_MOVE_M) { dw.go = now; notes.push('출발 판정(속도) ' + dwf + '번 — 역에서 ' + Math.round(gd1) + 'm · ' + gsp.toFixed(1) + 'm/s'); }
+        }
+      }
       dwEnd = dw.s + RS_DWELL_MS;
-      if (dw.h != null) dwEnd = Math.max(dwEnd, Math.min(dw.h + RS_DOOR_LOST_MS, dw.s + RS_DOOR_MAX_MS));
+      if (dw.go != null) dwEnd = Math.max(dwEnd, dw.go);
+      else if (dw.h != null) dwEnd = Math.max(dwEnd, Math.min(dw.h + RS_DOOR_LOST_MS, dw.s + RS_DOOR_MAX_MS));
       if (now >= dwEnd) dw.e = dwEnd;
     }
     // 정차 끝 시각부터 구간이 시작하도록 t0 를 미룬다(끝난 뒤에도 유지 → 마커가 0 에서 출발, 앞으로 튀지 않는다)
+    if (now >= dwEnd && !dw.dl) {                                    // s323: 실측 출발(dwEnd)이 계획 출발보다 늦으면 그만큼 구간 끝(다음 역 도착)도 늦춘다 — 남은 거리를 같은 속도로
+      dw.dl = 1;
+      var dlt = dwEnd - +g0s.t0;
+      if (dlt > 1000) { g0s.t1 = +g0s.t1 + dlt; st.dly = { key: key, i: dwf, d: dlt, to: +g0s.to, arr: g0s.t1 }; rsChainSegs(segs, 0); notes.push('출발 ' + Math.round(dlt / 1000) + '초 늦음 → 다음 역 도착도 그만큼 늦춤'); }
+    }
     var dwT0 = Math.min(dwEnd, +g0s.t1 - 1000);
     if (+g0s.t0 < dwT0) {
       g0s.t0 = dwT0; pos.t0 = dwT0;
@@ -663,7 +713,7 @@ function rsMonoPos(st, r, now, notes) {
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
-  delete st.mk; delete st.mkFloor; delete st.dw;                     // 되돌리면 마커도 되돌아갈 수 있다(사용자가 직접 되돌린 것만)
+  delete st.mk; delete st.mkFloor; delete st.dw; delete st.dly;                     // 되돌리면 마커도 되돌아갈 수 있다(사용자가 직접 되돌린 것만)
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {

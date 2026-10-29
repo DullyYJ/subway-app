@@ -92,6 +92,7 @@ t('s322: 오래 GPS 가 잡혀도(지상 역 등) 3분이 최대 — 그 뒤엔 
   let st = mkState(), rel = null, after = [];
   const stn = LNG0 + DL;
   for (let k = 2; k < 5; k++) st.stops[k].arrMs += 30 * 60000;                       // 다음 역 도착이 한참 뒤인 긴 구간 — 정차 상한만 시험한다
+  st.eta.nodes = st.eta.nodes.map(n => Object.assign({}, n));                        // nodes 는 모듈 공용 — 복사해서 바꾼다
   for (let k = 3; k < 6; k++) st.eta.nodes[k].planMin += 30;
   for (let ms = at(12, 52, 5); ms <= at(12, 59, 0); ms += 5000) {
     const r = rideStandby({ nowMs: ms, fixes: ms >= at(12, 53, 0) ? [[ms, LAT, stn, 10]] : [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
@@ -100,6 +101,62 @@ t('s322: 오래 GPS 가 잡혀도(지상 역 등) 3분이 최대 — 그 뒤엔 
   }
   assert.ok(rel && rel.dw.e - rel.dw.s <= 180000, '정차 최대 3분 ' + JSON.stringify(rel));
   assert.ok(after.length > 3 && after.every((x, i, a) => i === 0 || x >= a[i - 1] - 0.001), '출발 뒤 계속 앞으로(다시 서지 않음)');
+});
+// ★ s323
+t('s323: 늦게 출발하면 다음 역 도착도 같은 만큼 늦어진다 — 마커 속도가 출발 전 계획 속도와 같다(가속 없음)', () => {
+  const stn = LNG0 + DL, run = (withGps) => {
+    let st = mkState(), rows = [];
+    for (let ms = at(12, 52, 5); ms <= at(12, 57, 0); ms += 5000) {
+      const open = withGps && ms >= at(12, 53, 40) && ms <= at(12, 54, 40);                        // 문이 길게 열려 있다
+      const r = rideStandby({ nowMs: ms, fixes: open ? [[ms, LAT, stn, 12]] : [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+      rows.push({ ms: ms, from: r.pos.from, ratio: r.pos.ratio, t0: r.pos.t0, t1: r.pos.t1, moving: r.pos.moving });
+    }
+    return rows;
+  };
+  const base = run(false), late = run(true);
+  const b0 = base.find(x => x.from === 2 && x.moving), l0 = late.find(x => x.from === 2 && x.moving);
+  assert.ok(b0 && l0 && l0.ms > b0.ms + 20000, '문이 길게 열려 늦게 출발 ' + (l0 && b0 && (l0.ms - b0.ms)));
+  const bd = base.find(x => x.from === 2 && x.t1).t1 - base.find(x => x.from === 2 && x.moving).t0, ld = l0.t1 - l0.t0;
+  assert.ok(Math.abs(ld - bd) <= 2000, '구간 소요(출발→도착)는 시각표와 같다 ' + bd + ' vs ' + ld);
+  const seg = late.filter(x => x.from === 2 && x.moving), inc = seg.slice(1, 6).map((x, i) => x.ratio - seg[i].ratio);
+  assert.ok(inc.every(d => Math.abs(d - inc[0]) <= 0.004), '정속 ' + inc.join(','));
+  const sp0 = (base.filter(x => x.from === 2 && x.moving)[2].ratio - base.filter(x => x.from === 2 && x.moving)[1].ratio);
+  assert.ok(Math.abs(inc[0] - sp0) <= 0.004, '늦게 출발해도 속도는 계획과 같다 ' + inc[0] + ' vs ' + sp0);
+});
+t('s323: 늦게 닿은 다음 역에서도 마커가 15초 선다(정차가 시각표 도착으로 끝나 있지 않다)', () => {
+  const stn = LNG0 + DL;
+  let st = mkState(), still3 = 0, ever3 = false;
+  for (let ms = at(12, 52, 5); ms <= at(12, 58, 30); ms += 5000) {
+    const open = ms >= at(12, 53, 40) && ms <= at(12, 54, 40);
+    const r = rideStandby({ nowMs: ms, fixes: open ? [[ms, LAT, stn, 12]] : [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (r.pos.from === 3) { ever3 = true; if (r.pos.ratio === 0 && !r.pos.moving) still3++; }
+  }
+  assert.ok(ever3 && still3 >= 2 && still3 <= 4, '다음 역에서도 15초쯤 정차 ' + still3);
+});
+t('s323: GPS 가 안 끊겨도(지상) 역에서 멀어지며 4m/s 이상이면 곧바로 출발한다', () => {
+  const stn = LNG0 + DL, M = 1 / 111320 / Math.cos(LAT * Math.PI / 180);                // 경도 1m
+  let st = mkState(), rel = null, rows = [];
+  for (let ms = at(12, 52, 5); ms <= at(12, 56, 0); ms += 2000) {
+    let fx = [];
+    if (ms >= at(12, 53, 40)) { const mv = ms >= at(12, 54, 10) ? (ms - at(12, 54, 10)) / 1000 * 15 : 0; fx = [[ms, LAT, stn + mv * M, 8]]; }       // 54:10 부터 15m/s 로 떠난다
+    const r = rideStandby({ nowMs: ms, fixes: fx, state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    rows.push({ ms: ms, from: r.pos.from, moving: r.pos.moving, ratio: r.pos.ratio });
+    if (rel == null && st.dw && st.dw.i === 2 && st.dw.go != null) rel = ms;
+  }
+  assert.ok(rel != null && rel <= at(12, 54, 25), '움직이기 시작한 지 15초 안에 출발 판정 ' + (rel && (rel - at(12, 54, 10)) / 1000));
+  const m = rows.find(x => x.from === 2 && x.moving && x.ms >= rel);
+  assert.ok(m && m.ms <= rel + 4000 && m.ratio < 0.1, '판정 직후 파랑으로 이동 · 튀지 않음 ' + JSON.stringify(m));
+  assert.ok(st.dw.go != null, '속도 판정이 h(끊김 대기)를 대신한다');
+});
+t('s323: 걷는 속도(1.2m/s)나 제자리 흔들림은 출발로 보지 않는다', () => {
+  const stn = LNG0 + DL, M = 1 / 111320 / Math.cos(LAT * Math.PI / 180);
+  let st = mkState(), go = false;
+  for (let ms = at(12, 53, 40); ms <= at(12, 54, 8); ms += 2000) {
+    const jit = ((ms / 2000) % 2 ? 1 : -1) * 30 * M, walk = (ms - at(12, 53, 40)) / 1000 * 1.2 * M;
+    const r = rideStandby({ nowMs: ms, fixes: [[ms, LAT, stn + jit + walk, 10]], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (st.dw && st.dw.go != null) go = true;
+  }
+  assert.ok(!go, '출발 오판 없음');
 });
 
 console.log('ride_dwell: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

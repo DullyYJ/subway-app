@@ -435,7 +435,23 @@ final class RideStandbyJ {
     }
     // ★ 2026-10-27 s257 (JS rsMonoPos 와 같은 계산): 새 시각표가 지난번 마커 자리보다 뒤로 가면 그 구간의 출발 시각만 당겨 자리를 유지한다(도착 시각 t1 은 그대로).
     static final double DOOR_M = 250, DOOR_ACC_M = 80, DOOR_LOST_MS = 10000, DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — engine/ride-standby.js 와 같은 값
+    static final double GO_WIN_MS = 12000, GO_SPAN_MS = 6000, GO_MOVE_M = 40;      // s323: 속도 기반 출발 — engine/ride-standby.js 와 같은 값
     static final double DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(RideEtaJ stopDwellSec 와 같은 값)
+    // s323: 구간이 겹치지 않게 뒤 구간을 민다 / pos 를 지금 구간으로 다시 맞춘다(engine rsChainSegs · rsPosFromSegs)
+    static void chainSegs(List<Object> segs, int k0) {
+        for (int i = k0 + 1; i < segs.size(); i++) {
+            Map<String, Object> pv = mm(segs.get(i - 1)), sg = mm(segs.get(i));
+            if (num(sg.get("a")) < num(pv.get("t1"))) { double sh = num(pv.get("t1")) - num(sg.get("a")); sg.put("a", num(sg.get("a")) + sh); sg.put("t0", num(sg.get("t0")) + sh); sg.put("t1", num(sg.get("t1")) + sh); }
+        }
+    }
+    static void posFromSegs(Map<String, Object> pos, List<Object> segs, double now) {
+        for (int i = 0; i < segs.size(); i++) {
+            Map<String, Object> g = mm(segs.get(i)); if (!(now < num(g.get("t1")))) continue;
+            double g0 = num(g.get("t0")), g1 = num(g.get("t1")), rt = now < g0 ? 0 : (g1 > g0 ? Math.max(0, Math.min(1, (now - g0) / (g1 - g0))) : 0);
+            pos.put("from", g.get("from")); pos.put("to", g.get("to")); pos.put("t0", g.get("t0")); pos.put("t1", g.get("t1")); pos.put("ratio", Math.floor(rt * 1000 + 0.5) / 1000); pos.put("moving", rt > 0 && rt < 1);
+            return;
+        }
+    }
     static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
         Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
         Map<String, Object> eta = mm(st.get("eta")); List<Object> nd = eta == null ? null : l(eta.get("nodes")); if (nd == null) nd = new ArrayList<Object>();
@@ -444,6 +460,15 @@ final class RideStandbyJ {
         Map<String, Object> mk = mm(st.get("mk")); if (mk != null && !key.equals(mk.get("key"))) mk = null;
         List<Object> segs = l(pos.get("segs")); int i;
         if (segs == null || segs.isEmpty()) { st.remove("mk"); return; }
+        // s323 — 늦게 출발한 구간(st.dly)은 도착도 같은 만큼 늦춘다(정속). 뒤 구간은 겹칠 때만 민다.
+        Map<String, Object> dly = mm(st.get("dly")); if (dly != null && !key.equals(dly.get("key"))) dly = null;
+        if (dly != null && num(dly.get("d")) > 0) {
+            int dk = -1; for (i = 0; i < segs.size(); i++) if (num(mm(segs.get(i)).get("from")) == num(dly.get("i"))) { dk = i; break; }
+            if (dk >= 0) {
+                Map<String, Object> sk = mm(segs.get(dk)); sk.put("t0", num(sk.get("t0")) + num(dly.get("d"))); sk.put("t1", num(sk.get("t1")) + num(dly.get("d")));
+                dly.put("to", num(sk.get("to"))); dly.put("arr", sk.get("t1")); chainSegs(segs, dk); posFromSegs(pos, segs, now);
+            } else if (num(pos.get("from")) > num(dly.get("i")) && dly.get("to") != null && num(pos.get("from")) > num(dly.get("to"))) st.remove("dly");
+        }
         double prevP = Double.NaN; List<Object> ms = mk == null ? null : l(mk.get("s"));
         if (ms != null && !ms.isEmpty()) {
             prevP = num(at(l(ms.get(ms.size() - 1)), 1));
@@ -499,6 +524,8 @@ final class RideStandbyJ {
             if (dw == null || !key.equals(dw.get("key")) || (int) num(dw.get("i")) != dwf) {
                 List<Object> em = l(r.get("etaMs")); double tt = now;
                 if (em != null && dwf < em.size() && em.get(dwf) != null && fin(em.get(dwf))) tt = num(em.get(dwf));
+                Map<String, Object> dl0 = mm(st.get("dly"));
+                if (dl0 != null && key.equals(dl0.get("key")) && dl0.get("to") != null && (int) num(dl0.get("to")) == dwf && fin(dl0.get("arr"))) { tt = Math.max(tt, num(dl0.get("arr"))); st.remove("dly"); }          // s323
                 boolean gone = fin(prevP) && prevP > dwf + (dwG ? 0.12 : 0.002);
                 dw = obj("key", key, "i", (double) dwf, "s", gone ? 0.0 : (dwG ? now : Math.min(now, tt)), "g", dwG ? 1.0 : 0.0); st.put("dw", dw);
             } else if (dwG && num(dw.get("g")) == 0) dw.put("g", 1.0);
@@ -514,9 +541,33 @@ final class RideStandbyJ {
                         if (rsHav(num(at(tq, 1)), num(at(tq, 2)), num(dwStop.get("lat")), num(dwStop.get("lng"))) <= DOOR_M) { if (dw.get("h") == null || num(at(tq, 0)) > num(dw.get("h"))) dw.put("h", num(at(tq, 0))); break; }
                     }
                 }
+                // s323 — 속도 기반 출발(engine 과 같은 계산): 최근 12초(4점 이상 · 6초 이상) 앞 절반→뒤 절반 무게중심이 4m/s 이상 · 40m 이상 역에서 멀어지면 지금 출발
+                if (dw.get("go") == null && dwStop != null && fin(dwStop.get("lat")) && fin(dwStop.get("lng"))) {
+                    List<Object[]> gw = new ArrayList<Object[]>();
+                    for (int qi = dwTr.size() - 1; qi >= 0; qi--) {
+                        Object tz = dwTr.get(qi); if (tz == null || !fin(at(tz, 0))) continue;
+                        if (num(at(tz, 0)) < num(dw.get("s")) || now - num(at(tz, 0)) > GO_WIN_MS) break;
+                        if (num(at(tz, 0)) > now + 1000 || !fin(at(tz, 1)) || !fin(at(tz, 2)) || (at(tz, 3) != null && fin(at(tz, 3)) && num(at(tz, 3)) > DOOR_ACC_M)) continue;
+                        gw.add(0, new Object[] { num(at(tz, 0)), num(at(tz, 1)), num(at(tz, 2)) });
+                    }
+                    if (gw.size() >= 4 && (Double) gw.get(gw.size() - 1)[0] - (Double) gw.get(0)[0] >= GO_SPAN_MS) {
+                        int gh = gw.size() / 2; double[] ga = new double[3], gb = new double[3];
+                        for (int qi = 0; qi < gw.size(); qi++) { double[] gz = qi < gh ? ga : gb; gz[0] += (Double) gw.get(qi)[0]; gz[1] += (Double) gw.get(qi)[1]; gz[2] += (Double) gw.get(qi)[2]; }
+                        int na = gh, nb = gw.size() - gh; double ta = ga[0] / na, tb = gb[0] / nb;
+                        double gsp = tb > ta ? rsHav(ga[1] / na, ga[2] / na, gb[1] / nb, gb[2] / nb) / ((tb - ta) / 1000) : 0;
+                        double gd0 = rsHav(ga[1] / na, ga[2] / na, num(dwStop.get("lat")), num(dwStop.get("lng"))), gd1 = rsHav(gb[1] / nb, gb[2] / nb, num(dwStop.get("lat")), num(dwStop.get("lng")));
+                        if (gsp >= RS_XGO_MPS && gd1 - gd0 >= GO_MOVE_M) { dw.put("go", now); notes.add("출발 판정(속도) " + dwf + "번 — 역에서 " + Math.round(gd1) + "m · " + String.format(java.util.Locale.US, "%.1f", gsp) + "m/s"); }
+                    }
+                }
                 dwEnd = num(dw.get("s")) + DWELL_MS;
-                if (dw.get("h") != null) dwEnd = Math.max(dwEnd, Math.min(num(dw.get("h")) + DOOR_LOST_MS, num(dw.get("s")) + DOOR_MAX_MS));
+                if (dw.get("go") != null) dwEnd = Math.max(dwEnd, num(dw.get("go")));
+                else if (dw.get("h") != null) dwEnd = Math.max(dwEnd, Math.min(num(dw.get("h")) + DOOR_LOST_MS, num(dw.get("s")) + DOOR_MAX_MS));
                 if (now >= dwEnd) dw.put("e", dwEnd);
+            }
+            if (now >= dwEnd && dw.get("dl") == null) {                       // s323: 실측 출발이 계획보다 늦으면 구간 끝(다음 역 도착)도 그만큼 늦춘다
+                dw.put("dl", 1.0);
+                double dlt = dwEnd - num(g0s.get("t0"));
+                if (dlt > 1000) { g0s.put("t1", num(g0s.get("t1")) + dlt); st.put("dly", obj("key", key, "i", (double) dwf, "d", dlt, "to", num(g0s.get("to")), "arr", g0s.get("t1"))); chainSegs(segs, 0); notes.add("출발 " + Math.round(dlt / 1000) + "초 늦음 → 다음 역 도착도 그만큼 늦춤"); }
             }
             double dwT0 = Math.min(dwEnd, num(g0s.get("t1")) - 1000);
             if (num(g0s.get("t0")) < dwT0) {
@@ -538,7 +589,7 @@ final class RideStandbyJ {
     }
     static void doUndo(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")), ux = mm(st.get("rsUndo"));
-        st.remove("mk"); st.remove("mkFloor"); st.remove("dw");                   // 되돌리면 마커도 되돌아갈 수 있다
+        st.remove("mk"); st.remove("mkFloor"); st.remove("dw"); st.remove("dly");                   // 되돌리면 마커도 되돌아갈 수 있다
         List<Object> pxs = l(eta.get("passes")); if (pxs == null) pxs = new ArrayList<Object>();
         if (ux == null) return;
         double wi = num(mm(ux.get("w")).get("i")); int ki;
