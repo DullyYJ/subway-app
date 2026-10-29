@@ -268,6 +268,27 @@ public class ShellActivity extends Activity {
         } }, 1500L);
         captureLastLoc();
         ioExec.execute(new Runnable() { @Override public void run() { main.post(new Runnable() { @Override public void run() { prefetchTabs(); } }); } });     // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다 — 캐시 파일 목록 훑기가 끝난 뒤(주 스레드가 파일을 확인하지 않게)
+        if (b == null) showOpening();                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
+    }
+
+    // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸과 그날의 한 가지를 고른다 ──
+    private OpenView openV;
+    private void showOpening() {
+        try {
+            OpenCore.Script sc; java.io.InputStream in = getAssets().open("open.json");
+            try { java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); sc = OpenCore.parse(bo.toString("UTF-8")); } finally { in.close(); }
+            if (sc == null) return;
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
+            long day = (cal.getTimeInMillis() + cal.getTimeZone().getOffset(cal.getTimeInMillis())) / 86400000L;
+            OpenCore.Slot sl = OpenCore.slotFor(sc, hour);
+            openV = new OpenView(this, sc, sl, OpenCore.cast(sl, day), new OpenView.Done() { @Override public void onDone() { closeOpening(); } });
+            addContentView(openV, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        } catch (Throwable ignored) { openV = null; }                                  // 오프닝이 실패해도 앱은 그대로 연다
+    }
+    private void closeOpening() {
+        OpenView v = openV; openV = null; if (v == null) return;
+        try { ViewGroup pr = (ViewGroup) v.getParent(); if (pr != null) pr.removeView(v); } catch (Throwable ignored) { }
     }
 
     /** 앱을 켜면 출발지를 내 위치로 자동으로 잡는다(이미 경로를 보고 있거나 출발지를 골랐으면 건드리지 않는다). 권한 안내는 처음 한 번만 묻는다. */
@@ -363,6 +384,7 @@ public class ShellActivity extends Activity {
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
     @Override public void onBackPressed() {
+        if (openV != null) { openV.finish(); return; }                                  // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
         String t = ShellCore.currentTab(store);
         if (!ShellCore.DEFAULT_TAB.equals(t)) {
             store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);
