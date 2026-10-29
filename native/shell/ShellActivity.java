@@ -412,6 +412,7 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
+    @Override protected void onDestroy() { if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
     @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
 
@@ -2579,7 +2580,9 @@ public class ShellActivity extends Activity {
         if (l == null) return;
         final double la = l.getLatitude(), lo = l.getLongitude();
         hubLL = new double[] { la, lo }; hubAt = System.currentTimeMillis();
+        hcFixFrom(la, lo);
         placesFollow(la, lo);
+        busLocFollow(la, lo);
     }
     /** 위치가 크게 바뀌었다(백그라운드에서 돌아왔을 때 등): 출발지가 '내 위치'로 잡혀 있고 경로를 보는 중이 아니면 출발칸을 새 자리(동 이름 포함)로, 맛집(내 위치 주변)은 새 자리로 다시 받는다. 경로 안내 중에는 건드리지 않는다. */
     private void placesFollow(double la, double lo) {
@@ -2667,6 +2670,7 @@ public class ShellActivity extends Activity {
                 }
             }
             @Override public void fail() { }
+        });
     }
     /** 앞으로 돌아왔다: 15초 · 30m 이어받기를 기다리지 않고 지금 위치를 한 번 바로 받아 허브(출발칸 · 맛집 · 브리핑 · 버스)가 따라가게 한다. */
     private void resumeLocate() {
