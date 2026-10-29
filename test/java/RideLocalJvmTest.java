@@ -23,6 +23,7 @@ public class RideLocalJvmTest {
     static void cmp(Object a, Object b, String path) {
         if (diffs > 12) return;
         if (a == null && b == null) return;
+        if (b == null && path.endsWith(".state.rtc")) return;      // s334: 녹화본 중 s334 이전에 녹화한 답에는 실시간 호출 장부(state.rtc)가 없다 — 새 녹화(s334 줄)는 있으면 모두 비교한다
         if (a instanceof Map || b instanceof Map) {
             Map<String, Object> ma = a instanceof Map ? (Map<String, Object>) a : new HashMap<String, Object>(), mb = b instanceof Map ? (Map<String, Object>) b : new HashMap<String, Object>();
             if (!(a instanceof Map) && a != null || !(b instanceof Map) && b != null) { note(path, a, b); return; }
