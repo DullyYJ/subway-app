@@ -643,6 +643,13 @@ public class ShellActivity extends Activity {
     private final java.util.concurrent.ExecutorService ioExec = java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
         @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "shell-io"); t.setDaemon(true); t.setPriority(Thread.NORM_PRIORITY - 1); return t; }
     });
+    /** 맛집 전용 — 눌렀을 때 펼침을 끼우는 글 만들기(foodRender)와 가게 지도 미리 받기 통신(foodNet)은 디스크 IO 줄과 따로 달린다: 미리 받는 통신이 길어도 누른 카드의 뼈대가 그 뒤에 서지 않는다. */
+    private final java.util.concurrent.ExecutorService foodRender = java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+        @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "shell-foodrender"); t.setDaemon(true); return t; }
+    });
+    private final java.util.concurrent.ExecutorService foodNet = java.util.concurrent.Executors.newFixedThreadPool(3, new java.util.concurrent.ThreadFactory() {
+        @Override public Thread newThread(Runnable r) { Thread t = new Thread(r, "shell-foodnet"); t.setDaemon(true); t.setPriority(Thread.NORM_PRIORITY - 1); return t; }
+    });
     private final java.util.concurrent.ConcurrentHashMap<String, String> diskPre = new java.util.concurrent.ConcurrentHashMap<String, String>();
     private final java.util.Set<String> diskAsked = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
     private void diskWarmAsync(final String key) {
@@ -1099,13 +1106,13 @@ public class ShellActivity extends Activity {
             reqs = new java.util.ArrayList<String>();
             for (String k : pfFood.goKeys(PANEL_PF_MAX)) { String rq = pfFood.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
         }
-        for (String rq : reqs) {                                               // 도착지 주변 가게 지도(펼침)까지 전부 — 눌렀을 때 서버를 기다리지 않는다
+        for (final String rq : reqs) foodNet.execute(new Runnable() { @Override public void run() {            // 도착지 주변 가게 지도(펼침)까지 전부 — 눌렀을 때 서버를 기다리지 않는다(위에서부터 3곳씩)
             try {
+                if (panelCacheGet(rq) != null) return;
                 NetPost.Res pr = NetPost.post(ShellCore.BASE + "/screen/food", rq, 8000);
                 if (pr.status == 200 && pr.body != null && pr.body.indexOf("\"ok\":true") >= 0) panelCachePut(rq, pr.body);
-                Thread.sleep(150L);
-            } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; } catch (Throwable ignored) { }
-        }
+            } catch (Throwable ignored) { }
+        } });
         return true;
     }
     /** (주 스레드) 지금 맛집 탭이 쓸 장소 표시를 저장값에 맞춘다: 도착지가 있으면 도착지, 없으면 기기 위치. */
@@ -1975,6 +1982,22 @@ public class ShellActivity extends Activity {
     }
     private void reloadChat() { if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) loadChat(body, true, false); }
 
+    /** 방금 친 글을 지금 보이는 대화 화면 끝에 바로 보탠다: 엔진이 화면에 담아 준 내 말풍선 틀(info.echo)에 글만 채운다 — 통신 없이 그려, 보내자마자 뜬다. 진짜 화면은 곧 서버 글로 바뀐다. */
+    private void chatEcho(final String text, final String sel) {
+        final String cur = shownJson.get(body);
+        if (cur == null || cur.length() < 20) return;
+        Thread t = new Thread(new Runnable() { @Override public void run() {
+            final String nj = ChatCore.withEcho(cur, text);
+            if (nj == null) return;
+            final ScreenCore.Screen scr;
+            try { scr = parsedGet(nj); } catch (Throwable e) { return; }
+            main.post(new Runnable() { @Override public void run() {
+                if (!sel.equals(chat.sel()) || !cur.equals(shownJson.get(body)) || !ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) return;       // 그 사이 방이 바뀌었거나 새 화면이 올라왔다
+                body.setScreen(scr, true); shownJson.put(body, nj); body.scrollToEnd();
+            } });
+        } }, "shell-chat-echo");
+        t.setPriority(Thread.MAX_PRIORITY - 1); t.start();
+    }
     private void chatAct(ScreenCore.Act a, final ScreenView src) {
         if ("cat".equals(a.a)) {
             chat.select(a.v); chatSwipeAt = android.os.SystemClock.uptimeMillis();
@@ -1995,15 +2018,22 @@ public class ShellActivity extends Activity {
                 final String line = "all".equals(chat.pendingLine) ? chat.postLine : chat.pendingLine, text = chat.pendingText;
                 final String json = ChatCore.sendBody(me, text, line);
                 final String fk = "all".equals(chat.pendingLine) ? "chat.all" : "chat.room";
+                final String vsel = chat.sel();
+                chat.addPend(vsel, text, System.currentTimeMillis());                          // s330: 보낸 즉시 내 말풍선(전송 중)을 그린다 — 서버 · 검사 답을 기다리지 않는다(0.1초)
+                src.setField(fk, "");
+                chatEcho(text, vsel);
                 new Thread(new Runnable() {
                     @Override public void run() {
                         final String bad = rulesCheck("chat", "", text);
-                        if (bad.length() > 0) { toastMain(bad); return; }                       // 입력칸은 그대로 둔다
-                        main.post(new Runnable() { @Override public void run() { src.setField(fk, ""); } });
+                        if (bad.length() > 0) {                                                  // 올리지 못하는 글 — 말풍선을 거두고 입력칸을 되돌린다
+                            chat.dropPend(text);
+                            main.post(new Runnable() { @Override public void run() { src.setField(fk, text); toast(bad); loadChat(body, true, false); } });
+                            return;
+                        }
                         NetPost.Res rr = NetPost.post(ShellCore.BOARD_BASE + "/react", json, 9000);
                         final String why = rr.status == 200 && rr.body != null && rr.body.contains("\"stored\"") ? "" : (rr.status == 0 ? "네트워크가 불안정해요" : rr.body != null && rr.body.contains("filtered") ? "부적절한 표현이 있어 올리지 못했어요" : "잠시 후 다시 시도해 주세요");
                         main.post(new Runnable() { @Override public void run() {
-                            if (why.length() > 0) toast(why);
+                            if (why.length() > 0) { chat.dropPend(text); src.setField(fk, text); toast(why); }
                             loadChat(body, true, true);
                             main.postDelayed(new Runnable() { @Override public void run() { loadChat(body, true, true); } }, 1500);
                         } });
@@ -2273,7 +2303,7 @@ public class ShellActivity extends Activity {
             return;
         }
         if (!"call".equals(a.a)) return;
-        switch (food.act(a.v)) {
+        switch (food.act(a.v, a.id)) {                                         // a.id = 엔진이 눌림에 실어 준 가게 사실(없으면 번호표)
             case FoodCore.R_PANEL: {
                 if (panelCacheGet(food.panelRequest(ShellCore.CAP)) == null) {                  // 미리 받아 둔 답이 없으면 자리(뼈대)부터 바로 펼치고 답이 오면 그 자리에서 바뀐다
                     final String pk = food.openKey;
@@ -2302,7 +2332,7 @@ public class ShellActivity extends Activity {
         if (food.openKey.length() == 0 || isNotMod(txt)) { present(v, txt, keep); return; }
         final int my = ++seqFoodP;
         final String base = foodBase;
-        ioExec.execute(new Runnable() { @Override public void run() {                       // 목록 화면에 펼침을 끼우는 읽기·글 만들기는 주 스레드 밖에서
+        foodRender.execute(new Runnable() { @Override public void run() {                       // 목록 화면에 펼침을 끼우는 읽기·글 만들기는 주 스레드 밖에서
             final String withP = food.withPanel(base);
             ScreenCore.Screen pre = null;
             if (!withP.equals(base)) { try { pre = parsedGet(withP); } catch (Throwable e) { pre = null; } }        // 읽기까지 여기서
@@ -2367,14 +2397,12 @@ public class ShellActivity extends Activity {
             final java.util.ArrayList<String> reqs = new java.util.ArrayList<String>();
             for (String k : food.goKeys(PANEL_PF_MAX)) { String rq = food.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
             if (reqs.isEmpty()) return;
-            ioExec.execute(new Runnable() { @Override public void run() {
-                for (String rq : reqs) {
-                    try {
-                        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", rq, 8000);
-                        if (r.status == 200 && r.body != null && r.body.indexOf("\"ok\":true") >= 0) panelCachePut(rq, r.body);
-                        Thread.sleep(150L);
-                    } catch (Throwable ignored) { }
-                }
+            for (final String rq : reqs) foodNet.execute(new Runnable() { @Override public void run() {            // 위에서부터 차례로, 한꺼번에 3곳씩
+                try {
+                    if (panelCacheGet(rq) != null) return;
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", rq, 8000);
+                    if (r.status == 200 && r.body != null && r.body.indexOf("\"ok\":true") >= 0) panelCachePut(rq, r.body);
+                } catch (Throwable ignored) { }
             } });
         } catch (Throwable ignored) { }
     } };
@@ -3866,6 +3894,7 @@ public class ShellActivity extends Activity {
                 final String cachedHome = chip ? lruGet(homeCache, ShellCore.homeKey(json)) : null;
                 final String[] rsBox = { cachedRes == null ? "" : cachedRes }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
                 Thread tr = null, tc = null;
+                final java.util.concurrent.atomic.AtomicBoolean cardsLate = new java.util.concurrent.atomic.AtomicBoolean(false);
                 if (hasRes && rsBox[0].length() == 0) {
                     tr = new Thread(new Runnable() { @Override public void run() {
                         NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", resBody, 15000);
@@ -3885,6 +3914,7 @@ public class ShellActivity extends Activity {
                         }
                         cjBox[0] = nj;
                         if (cjBox[0].length() > 0) { hcKey = hKey; hcJson = cjBox[0]; hcFor = hcSig; }
+                        if (cardsLate.get() && nj.length() > 0) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } });          // 결과를 먼저 올렸다 — 카드가 도착하면 끼운다
                     } }, "shell-home-cards");
                     tc.start();
                 }
@@ -3895,7 +3925,15 @@ public class ShellActivity extends Activity {
                     txt = r.status == 200 && r.body != null ? r.body : "";
                     if (txt.length() > 0) lruPut(homeCache, ShellCore.homeKey(json), txt, 6);
                 }
-                try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
+                try {
+                    if (tr != null) tr.join(16000);
+                    if (tc != null && !staleCards) {
+                        if (hasRes) {                                                                    // s330: 경로 결과가 준비됐는데 홈 카드(AI 승무원 · 대화)가 늦으면 0.5초만 더 기다리고 결과부터 올린다 — 카드는 도착하는 대로 끼운다
+                            tc.join(500L);
+                            if (tc.isAlive()) { cardsLate.set(true); if (!tc.isAlive()) cardsLate.set(false); }
+                        } else tc.join(16000);
+                    }
+                } catch (InterruptedException ignored) { }
                 final String txt0 = txt;
                 final String rs = hasRes ? rsBox[0] : "", cj = cjBox[0];
                 final String fk = txt0.length() > 0 ? finKey(txt0, rs, cj) : "";
@@ -3915,6 +3953,7 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;
                     present(v, fin, keep);
+                    if (rloadWantHide && home.hasRoute()) rloadHide();                                        // 경로 결과가 올라왔다 — 로딩 카드를 닫는다
                     if (txt0.length() > 0) home.onScreen(txt0);                                               // 후보 목록(info.pk.u)은 홈 화면 몫이라 합친 큰 글을 다시 읽지 않는다
                 } });
             }
@@ -4470,8 +4509,17 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { rloadDlg = null; rloadView = null; }
     }
     private static final float RUN_CARD_H = 24f + ScreenCore.RUN_H + 22f;
+    private volatile boolean rloadWantHide;
+    /** 경로 응답을 받았다: 단추의 도는 표시는 지금 끄고(그려질 화면에 안 남게), 카드는 결과가 올라온 직후(loadHome 의 present)에 닫는다. 4초 안에 안 그려져도 닫는다. */
+    private void rloadHideSoon() {
+        home.routing = false;
+        if (rloadDlg == null) { rloadHide(); return; }
+        rloadWantHide = true;
+        main.removeCallbacks(rloadSafety); main.postDelayed(rloadSafety, 4000L);
+    }
     private void rloadHide() {
         main.removeCallbacks(rloadSafety);
+        rloadWantHide = false;
         home.routing = false;
         android.app.Dialog d = rloadDlg; rloadDlg = null; rloadView = null;
         if (d != null) { try { d.dismiss(); } catch (Throwable ignored) { } RunnerArt.release(); }
@@ -5657,7 +5705,7 @@ public class ShellActivity extends Activity {
     private void postRoute(final int my, final String raw, final String a, final String b, final long bt, final long rb, final String sk, final boolean replace) {
         main.post(new Runnable() { @Override public void run() {
             if (my != seqRoute) return;
-            rloadHide();
+            rloadHideSoon();                                                                   // 결과가 화면에 그려지는 순간에 로딩 카드를 닫는다(받자마자 닫으면 그려지기 전 빈 화면이 몇 초 보인다)
             if (my == rideSeq && home.riding()) return;                                       // 이 찾기의 결과를 보고 이미 경로를 확정했다 — 뒤늦게 온 다른 결과(근사 → 전체)가 확정을 풀지 않게 한다
             if (replace && home.hasRoute()) {                                                  // 같은 찾기의 새 응답: 화면을 새로 시작하지 않고 바뀐 칸만 스프링으로 나타낸다
                 if (home.replaceRouteSame(raw, rb)) { if (sk != null) routeSwr.put(sk, rb + "\n" + raw, System.currentTimeMillis()); body.springChanges(5000L); reloadHome(); } else toast("경로 응답을 읽지 못했어요");
