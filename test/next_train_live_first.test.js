@@ -115,5 +115,34 @@ const outOf = (legs, acc) => ({ minTime: { legs, accessWalkMin: acc || 0, totalM
     r0 = await W.ntLiveFirst({}, far, BASE, BASE, mk(fetchOf(null)));
     ok(!r0.miss, '20분 넘게 먼 승차는 못 받아도 miss 로 세지 않는다(다시 물어도 시각표)');
   }
+  // ── s333: 처음 경로에서도 앞당기기 — 역 가까이(걸어서 ≈260초 안)면 걸음 시간 때문에 앞 열차를 건너뛰지 않는다 ──
+  {
+    const nowN = tblMs - 120000;
+    const outNear = outOf([subLeg('1호선', ['서울역', '시청', '종각'])], 2);        // 걸어서 2분
+    const outFar = outOf([subLeg('1호선', ['서울역', '시청', '종각'])], 5);         // 걸어서 5분(260초 넘음)
+    const kN = W.ntLiveKey('1호선', '서울역', '시청', 120), kF = W.ntLiveKey('1호선', '서울역', '시청', 300);
+    const tg = W.ntLiveTargets(outNear, RS.rsSubwayId);
+    ok(tg[0].near === true && W.ntLiveTargets(outFar, RS.rsSubwayId)[0].near === false, '걸어서 260초 안이면 near');
+    let rn = await W.ntLiveFirst({}, outNear, nowN, nowN, mk(fetchOf([item(60, term)])));
+    ok(rn[kN] && rn[kN].ms === nowN + 60000, '역 가까이면 1분 뒤 오는 차(걸음 2분보다 빠름)도 후보: ' + JSON.stringify(rn));
+    rn = await W.ntLiveFirst({}, outFar, nowN, nowN, mk(fetchOf([item(60, term)])));
+    ok(!rn[kF], '5분 걸어야 하면 1분 뒤 차는 못 탄다(예전 그대로)');
+    const mkNear = (walkEnd) => ({ info: { totalTime: 7, trip: { arrSec: 420 } }, subPath: [
+      { trafficType: 3, sectionTime: 2, startSec: 0, arriveSec: 0, endSec: walkEnd },
+      { trafficType: 1, arriveSec: walkEnd, startSec: walkEnd, endSec: 420, stopSec: [walkEnd, 420], lane: [{ name: '1호선' }], passStopList: { stations: [{ stationName: '서울역' }, { stationName: '시청' }] } }
+    ] });
+    const liveN = {}; liveN[W.ntLiveKey('1호선', '서울역', '시청', 120)] = { ms: BASE + 60000, src: 'realtime' };
+    const pN = mkNear(120); W.ntAttachPath(nt, pN, BASE, false, liveN);
+    const [w0, s1] = pN.subPath;
+    ok(s1.ttLive === true && s1.ttWaitMs === 30000, '앞당긴 열차: 승강장에 30초 전 도착 + 대기 30초: ' + s1.ttWaitMs);
+    ok(w0.endSec === 30 && s1.startSec === 30 && s1.arriveSec === 30 && s1.endSec === 330 && s1.stopSec[0] === 30 && s1.stopSec[1] === 330, '걸음과 뒤 구간 시각을 같은 만큼(90초) 당긴다: ' + JSON.stringify([w0.endSec, s1.startSec, s1.endSec, s1.stopSec]));
+    ok(pN.info.totalTime === 5 && pN.info.trip.arrSec === 330 && pN.info.ttHurry === 1, '총 시간 · 도착 초도 당긴다: ' + JSON.stringify(pN.info));
+    const liveFar = {}; liveFar[W.ntLiveKey('1호선', '서울역', '시청', 300)] = { ms: BASE + 120000, src: 'realtime' };
+    const pF = mkNear(300); W.ntAttachPath(nt, pF, BASE, false, liveFar);
+    ok(!pF.subPath[1].ttLive && pF.subPath[0].endSec === 300 && !pF.info.ttHurry, '걸어서 5분이면 앞당기지 않는다(시각표 대기 그대로)');
+    const liveLate = {}; liveLate[W.ntLiveKey('1호선', '서울역', '시청', 120)] = { ms: BASE + 200000, src: 'realtime' };
+    const pL = mkNear(120); W.ntAttachPath(nt, pL, BASE, false, liveLate);
+    ok(pL.subPath[1].ttLive === true && pL.subPath[1].ttWaitMs === 80000 && pL.subPath[0].endSec === 120 && !pL.info.ttHurry, '걸어서 닿은 뒤에 오는 차는 걸음 그대로(앞당김 없음)');
+  }
   console.log('next_train_live_first: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('FAIL', e && e.stack || e); process.exit(1); });
