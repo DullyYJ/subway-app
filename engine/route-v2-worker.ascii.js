@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s302";
+var ENGINE_VERSION = "route-v2-2026-10-29s303";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -5089,7 +5089,7 @@ function ldNormGrade(g) {
 }
 __name(ldNormGrade, "ldNormGrade");
 __name2(ldNormGrade, "ldNormGrade");
-function ldPickBest(items, mode, fareFields, noFields, accessMin, gradeFields, gradeWant, baseMs) {
+function ldPickBest(items, mode, fareFields, noFields, accessMin, gradeFields, gradeWant, baseMs, depWant) {
   if (!Array.isArray(items) || !items.length) return null;
   var now = nowKSTts(baseMs);
   var accessMs = accessMin != null && isFinite(accessMin) ? accessMin * 6e4 : 0;
@@ -5103,9 +5103,10 @@ function ldPickBest(items, mode, fareFields, noFields, accessMin, gradeFields, g
     }
     var depTs = ldParseDT(ldPickField(it, ["depPlandTime", "depplandtime", "departTime", "depTime", "depPlandTm"]));
     if (depTs == null) continue;
-    if (depTs < minDepTs) continue;
+    if (depTs < minDepTs && depTs !== depWant) continue;
     var arrT0 = ldParseDT(ldPickField(it, ["arrPlandTime", "arrplandtime", "arriveTime", "arrTime", "arrPlandTm"]));
     var rk = arrT0 != null && arrT0 > depTs ? arrT0 : Infinity;
+    if (depWant != null && depTs === depWant) rk = -1;      // s303: 사용자가 고른 편은 다시 물었을 때 버스 대기 변동으로 타기 빠듯해 보여도 그대로 두다(누를 때마다 편이 바뀌지 않게)
     if (!best || rk < best.rk || rk === best.rk && depTs < best.depTs) best = { depTs, item: it, rk };
   }
   if (!best) return null;
@@ -5533,7 +5534,7 @@ function ldFinish(fetched, stat, opt) {
     var noFields = r.mode === "train" ? ["traingradename", "trainGradeName", "trainno", "trainNo"] : ["gradeNm", "routeId"];
     var picked = null;
     if (r.mode === "train" || r.mode === "expbus" || r.mode === "subbus") {
-      picked = ldPickBest(r.items, r.mode, fareFields, noFields, accessMin, gradeFields, wantGrade, baseMs);
+      picked = ldPickBest(r.items, r.mode, fareFields, noFields, accessMin, gradeFields, wantGrade, baseMs, modeWant && modeWant === r.mode ? depTsWant : null);
     }
     if (picked) {
       picked.depStop = String(r.dep.t.nm).replace(/^S(?=[\uac00-\ud7a3])/, "");
@@ -19262,6 +19263,34 @@ function rheadOffParts(l, n, now) {
 var RHEAD_LD_MODE = { train: '\uc5f4\ucc28', expbus: '\uace0\uc18d\ubc84\uc2a4', subbus: '\uc2dc\uc678\ubc84\uc2a4' };
 function rheadWon(n) { return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }      // 12300 \u2192 '12,300'
 function rheadNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
+var RHEAD_PICKL_CAP = 27;                                   // \uc138\ub85c\ub85c \ubbf8\ub294 \uace0\ub974\uae30 \ubaa9\ub85d(pickl)\uc744 \uc544\ub294 \uc571
+var RHEAD_LD_ORDER = { train: 0, expbus: 1, subbus: 2 };
+// \uc7a5\uac70\ub9ac \ud6c4\ubcf4\ub97c \uc2dc\uac04\uc21c \ud55c \ubaa9\ub85d\uc73c\ub85c: \uc218\ub2e8 \ud6c4\ubcf4(rh.ld.m.<\ubc88\ud638>) + \uac19\uc740 \uc218\ub2e8\uc758 \ub2e4\ub978 \ub4f1\uae09(rh.ld.g.<\ubc88\ud638>) \u2014 \uac19\uc740 \ud3b8\uc740 \ud55c \uc904. \uc18c\uc694\ub294 \uc6d0\uc790\ub8cc\uc758 \ucd1d \uc18c\uc694(\uc5c6\uc73c\uba74 \ub4f1\uae09 \uac12\uc73c\ub85c \uc5b4\ub9bc, \uadf8\ub798\ub3c4 \uc5c6\uc73c\uba74 \uc694\uae08).
+function rheadLdRows(lg, cands, opts, mode, grade, cur) {
+  var rows = [], seen = {}, omode = rheadStr(lg.optMode || lg.mode, 12);
+  var baseTot = rheadNum(lg.otot), baseDep = rheadNum(lg.odep), baseGr = rheadStr(lg.ogr, 20), baseRide = null, i;
+  for (i = 0; i < opts.length; i++) { var bo = opts[i]; if (bo && typeof bo === 'object' && rheadNum(bo.depTs) === baseDep && rheadStr(bo.grade, 20) === baseGr && rheadNum(bo.rideMin) != null) baseRide = rheadNum(bo.rideMin); }
+  var add = function (m, g, ts, label, tot, fare, act) {
+    var key = m + '|' + g + '|' + ts;
+    if (ts == null || seen[key]) return;
+    seen[key] = 1;
+    var on = (m === mode) && (cur == null || ts === cur) && (!grade || !g || g === grade);
+    var right = tot != null ? rheadInt(tot, 0, 9999) + '\ubd84' : (fare != null ? rheadWon(fare) + '\uc6d0' : '');
+    rows.push({ ts: ts, mo: RHEAD_LD_ORDER[m] != null ? RHEAD_LD_ORDER[m] : 9, a: (RHEAD_LD_MODE[m] || m) + (g ? ' ' + g : ''), b: label ? label + ' \ucd9c\ubc1c' : '', c: right, on: on, act: act });
+  };
+  cands.forEach(function (c, ci) {
+    if (!c || typeof c !== 'object' || !c.mode) return;
+    add(rheadStr(c.mode, 12), rheadStr(c.grade, 20), rheadNum(c.depTs), rheadStr(c.depLabel, 12), rheadNum(c.totalMin), null, { a: 'call', v: 'rh.ld.m.' + ci });
+  });
+  opts.forEach(function (o, oi) {
+    if (!o || typeof o !== 'object' || !o.grade) return;
+    var ts = rheadNum(o.depTs), tot = null, ride = rheadNum(o.rideMin);
+    if (baseTot != null && baseDep != null && ts != null && ride != null && baseRide != null) tot = Math.round(baseTot + (ts - baseDep) / 60000 + (ride - baseRide));
+    add(omode, rheadStr(o.grade, 20), ts, rheadStr(o.depLabel, 12), tot, rheadNum(o.fare), { a: 'call', v: 'rh.ld.g.' + oi });
+  });
+  rows.sort(function (x, y) { return x.ts !== y.ts ? x.ts - y.ts : (x.mo !== y.mo ? x.mo - y.mo : 0); });
+  return rows.map(function (r) { var o = { a: r.a, b: r.b, c: r.c, act: r.act }; if (r.on) o.on = true; return o; });
+}
 function rheadLdNodes(f) {
   var lg = f.lg, out = [];
   if (!lg || !lg.mode) return [{ t: 'spacer', h: 0 }];
@@ -19277,6 +19306,13 @@ function rheadLdNodes(f) {
     });
     if (line.length) out.push({ t: 'btnrow', pad: [0, 0, 0, 6], gap: 6, h: 32, items: line });
   };
+  if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): \uc7a5\uac70\ub9ac\ub294 \uc904\uc904\uc774 \ub2e8\ucd94 \ub300\uc2e0 '\uc2dc\uac04\uc21c \uc138\ub85c \ubaa9\ub85d' \u2014 \ucd5c\ub300 5\uc904\uc774 \ubcf4\uc774\uace0 \ub354 \uc788\uc73c\uba74 \uc704\uc544\ub798\ub85c \ubc00\uc5b4 \uace0\ub978\ub2e4
+    var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
+    if (rws.length > 1) {
+      out.push({ t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] });
+      return out.concat(rheadLdNote(lg));
+    }
+  }
   if (cands.length > 1) {
     var mi = [];
     cands.forEach(function (c, i) {
@@ -19299,6 +19335,13 @@ function rheadLdNodes(f) {
     });
     rows(gi);
   }
+  var nn = rheadLdNote(lg); nn.forEach(function (x) { out.push(x); });
+  if (!out.length) out.push({ t: 'spacer', h: 0 });
+  return out;
+}
+// \uc7a5\uac70\ub9ac \uc544\ub798 \uc548\ub0b4(\ub300\uae30 \uc2dc\uac04 \ube7c\uba74 \u00b7 \uc774\ub3d9\ub9cc \uac00\uc7a5 \ube60\ub978 \ud3b8)
+function rheadLdNote(lg) {
+  var out = [];
   var note = '', nw = rheadNum(lg.noWaitMin);
   if (nw != null) note += '\ub300\uae30 \uc2dc\uac04\uc744 \ube7c\uba74 \uc57d ' + rheadInt(nw, 0, 9999) + '\ubd84 (\ub2e4\ub978 \uc9c0\ub3c4\uc571\uc740 \ub300\uae30\ub97c \ube7c\uace0 \ud45c\uc2dc\ud574\uc694)';
   var fr = (lg.fastRide && typeof lg.fastRide === 'object') ? lg.fastRide : null;
@@ -19306,9 +19349,9 @@ function rheadLdNodes(f) {
     note += (note ? '\n' : '') + '\uc774\ub3d9\ub9cc \uac00\uc7a5 \ube60\ub978 \ud3b8: ' + rheadStr(fr.depLabel, 12) + ' \ucd9c\ubc1c, \uc5f4\ucc28 ' + rheadInt(fr.rideMin, 0, 9999) + '\ubd84' + (rheadNum(fr.noWaitMin) != null ? ' (\ub300\uae30 \uc81c\uc678 \ucd1d ' + rheadInt(fr.noWaitMin, 0, 9999) + '\ubd84)' : '');
   }
   if (note) out.push({ t: 'text', s: note, size: 12, color: 'sub', lh: 1.5, pad: [0, 2, 0, 8] });
-  if (!out.length) out.push({ t: 'spacer', h: 0 });
   return out;
 }
+
 function rheadNoteNodes(f) {
   var now = f.now || 0, out = [], i;
   var offLines = [];
@@ -19751,7 +19794,7 @@ function rheadScreen(inp, factsIn) {
   if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // \ud0c0\uc784\ub77c\uc778 \ub178\ub4dc trk(+\ub0b4 \uc704\uce58 \ub9c8\ucee4 mk)\ub294 \uaddc\uaca9 12
   if (inp.part === 'g' && Number(inp.cap) < 25) return { ok: false, error: 'cap' };      // \uc54c\uc57d \uc904 tags \ub294 \uaddc\uaca9 25
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l' || inp.part === 'g') ? inp.part : 'h';
-  var f = rheadFacts(factsIn);
+  var f = rheadFacts(factsIn); f.cap = Number(inp.cap);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : (part === 'g' ? rheadTagNodes(f) : rheadHeadNodes(f))));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // \uce74\ub4dc \uc548\uc5d0 \ub193\uc774\ub294 \ud654\uba74 \u2014 \ubc14\ud0d5\uc740 \uce74\ub4dc\uc0c9
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
@@ -21186,12 +21229,19 @@ function resTrkFacts(route, r, noGeo) {
 }
 
 // \uc7a5\uac70\ub9ac \uace0\ub974\uae30 \ub20c\ub9bc \u2192 \ub2e4\uc2dc \ubb3c\uc744 \ub54c \ub367\ubd99\uc77c \uc9c8\uc758(\uc6f9 _ldReselect). m = \uc218\ub2e8/\uc2dc\uac01 \uce69, g = \ub4f1\uae09/\uc2dc\uac01 \uce69. \ubc88\ud638\ub294 \uc5d4\uc9c4\uc774 \uce69\uc744 \ub9cc\ub4e0 \uc21c\uc11c\uc640 \uac19\ub2e4.
+// \uc7a5\uac70\ub9ac \uace0\ub974\uae30 \ubaa9\ub85d\uc758 \uc6d0\uc790\ub8cc: \uace0\ub978 \ud3b8(mode\u00b7grade\u00b7depTs)\uc740 \uc9c0\uae08 \uacbd\ub85c \uac83, \ud6c4\ubcf4 \ubaa9\ub85d\u00b7\ub4f1\uae09 \ubaa9\ub85d\u00b7\uc18c\uc694 \uae30\uc900\uc740 \ucc98\uc74c \ubc1b\uc740 \uacbd\ub85c \uac83(\uc5c6\uc73c\uba74 \uc9c0\uae08 \uac83).
+function resLdView(selRoute, origRoute) {
+  var sel = selRoute.ld, base = (origRoute && origRoute.ld) ? origRoute.ld : sel, br = (origRoute && origRoute.ld) ? origRoute : selRoute;
+  return { mode: sel.mode, grade: sel.grade, depTs: sel.depTs, candidates: base.candidates, options: base.options, optMode: base.mode,
+    noWaitMin: sel.noWaitMin, fastRide: sel.fastRide, distKm: sel.distKm,
+    otot: Math.round(resNum(br.summary.duration, 0) / 60), odep: base.depTs, ogr: base.grade };
+}
 function resLdQuery(ld) {
   var enc = function (v) { return encodeURIComponent(String(v == null ? '' : v)); };
   var cands = resArr(ld.candidates).slice(0, 8), opts = resArr(ld.options).slice(0, 8);
   return {
     m: cands.map(function (c) { return (c && c.mode) ? '&ldMode=' + enc(c.mode) + (c.depTs ? '&ldDepTs=' + enc(c.depTs) : '') : ''; }),
-    g: opts.map(function (o) { return (o && o.grade && ld.mode) ? '&ldMode=' + enc(ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
+    g: opts.map(function (o) { return (o && o.grade && (ld.optMode || ld.mode)) ? '&ldMode=' + enc(ld.optMode || ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
   };
 }
 // \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc81c\ubcf4 \uc904(rhead part n)\uc758 \uc0ac\uc2e4. \ub0b4 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \ub178\uc120(\uc55e 6\uac1c)\uc5d0 \ub300\ud574\uc11c\ub9cc, \uc11c\ubc84\uac00 \uc900 \uc6d0\uc790\ub8cc(r.off \u00b7 r.al)\ub97c \uadf8\ub300\ub85c \ub118\uae34\ub2e4.
@@ -21432,15 +21482,16 @@ function resultScreen(opt, r) {
   var data = (r.data && typeof r.data === 'object') ? r.data : {};
   var raw = resArr((data.result || {}).path);
   var paths = resApplyRv(data, raw);
-  var pick = resPickTabs(paths);
+  var pick = resPickTabs(paths), ldOrigPath = null;
   if (r.ld2 && typeof r.ld2 === 'object') {                      // \uc7a5\uac70\ub9ac '\ub2e4\ub978 \ud3b8' \uc744 \uace8\ub77c \ub2e4\uc2dc \ubc1b\uc740 \uc751\ub2f5: \uadf8 \uc548\uc758 \uc7a5\uac70\ub9ac \uacbd\ub85c\ub9cc \ubc14\uafd4 \ub07c\uc6b4\ub2e4(\uc6f9 _ldReselect)
     var p2 = resArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
-    if (p2) pick.longdist = p2;
+    if (p2) { ldOrigPath = pick.longdist || null; pick.longdist = p2; }
   }
   var tab = RESULT_TABS.indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
   var route = has[tab] ? resConvertPath(pick[tab]) : null;
+  var ldView = (route && route.ld && tab === 'longdist') ? resLdView(route, ldOrigPath ? resConvertPath(ldOrigPath) : null) : null;    // s303: \uace0\ub978 \ud3b8\uc774 \ubc14\ub00c\uc5b4\ub3c4 \ubaa9\ub85d\uc740 \ucc98\uc74c \ubc1b\uc740 \ud6c4\ubcf4 \uadf8\ub300\ub85c(\ub204\ub97c \ub54c\ub9c8\ub2e4 \uc5f4\ucc28\u00b7\ubc84\uc2a4 \uc2dc\uac01\uc774 \ubc14\ub00c\uc5b4 \ubcf4\uc774\ub358 \ubb38\uc81c)
   if (r.view === 'detail') return route ? resDetailScreen(route, r, tab, cap) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
@@ -21454,7 +21505,7 @@ function resultScreen(opt, r) {
   if (route) {
     total = Math.round(resNum(route.summary.duration, 0) / 60);
     if (route.ld && tab === 'longdist') {
-      var l = resPart(cap, 'l', { lg: route.ld }); if (l) nodes = nodes.concat(l.body);
+      var l = resPart(cap, 'l', { lg: ldView }); if (l) nodes = nodes.concat(l.body);
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
@@ -21476,13 +21527,14 @@ function resultScreen(opt, r) {
       { t: 'button', s: '\uacbd\ub85c \ud655\uc815', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
     else nodes.push({ t: 'button', s: '\uc138\ubd80\uacbd\ub85c \ubcf4\uae30', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 12, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
+  else if (anyRoute && cap >= RES_TAGS_CAP) nodes.push({ t: 'spacer', h: 0, slot: 'ai', drop: 1 });   // s303(YJ): \uc774 \ud0ed(\uc9c0\ud558\ucca0\ub9cc\u00b7\ubc84\uc2a4\ub9cc \ub4f1)\uc5d0 \uacbd\ub85c\uac00 \uc5c6\uc73c\uba74 \uadf8 \uc544\ub798 AI \ube0c\ub9ac\ud551(\ub2e4\ub978 \uacbd\ub85c\uc758 \ud658\uc2b9\u00b7\ucd94\ucc9c \uae00)\uc744 \ubd99\uc774\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc571\uc774 drop \uc774\uba74 AI \uce74\ub4dc\ub97c \uc9c0\uc6b4\ub2e4
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // \uc608\uc0c1 \uacbd\ub85c \ub77c\ubca8 + \ubb34\uc9c0\uac1c \ud14c\ub450\ub9ac(\uc6f9 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
   var body = nodes.length ? [{ t: 'panel', pad: [14, 4, 14, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];             // \uc88c\uc6b0 14 \u2014 \uc6f9 \ud648\uc740 \uc785\ub825 \uce74\ub4dc \u00b7 \uacb0\uacfc \uce74\ub4dc\uac00 \uac19\uc740 \ubc14\uae65 \uc5ec\ubc31(14)\uc744 \uc4f4\ub2e4(\uc608\uc804\uc5d4 0 \uc774\ub77c \uacb0\uacfc \uce74\ub4dc\ub9cc \ud654\uba74 \ub05d\uae4c\uc9c0 \ub2ff\uc558\ub2e4)
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // \uc9c0\uae08 \ubcf4\uc774\ub294 \uacbd\ub85c\uc758 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc774\ub984(\uc2e4\uc2dc\uac04\uc18c\ud1b5\uc774 '\ub0b4 \ub178\uc120'\uc744 \uc55e\uc5d0 \ub458 \ub54c \uc4f4\ub2e4)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldView ? resLdQuery(ldView) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }

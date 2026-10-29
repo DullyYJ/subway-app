@@ -282,6 +282,38 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   ok(!chk.err && chk.out.every(l => l.startsWith('OK ')) && chk.out.every(l => Number(l.split(' ')[2]) === 0), '앱 검증기 통과 · 건너뛴 노드 없음 ' + (chk.err || chk.out.join('|')));
   ok(E.resNmFix('부산_부산') === '부산' && E.resNmFix('부산역_부산') === '부산역' && E.resNmFix('서울_1호선') === '서울_1호선' && E.resNmFix('서울') === '서울', 'resNmFix');
 }
+// ④-c s303: 장거리 = 시간순 세로 목록(pickl, 규격 27) · 다시 골라도 처음 후보 그대로 · 경로 없는 탭은 AI 브리핑을 붙이지 않는다
+{
+  const cand = (mode, dep, label, tot, grade, opts) => ({ mode, depTs: dep, depLabel: label, totalMin: tot, grade: grade || null, options: opts || [] });
+  const mk = (mode, grade, dep, total, cands, opts) => ({ info: { totalTime: total, longDist: true, ldMode: mode, ldGrade: grade, ldDepTs: dep, ldOptions: opts, candidates: cands, distKm: 300 },
+    subPath: [{ trafficType: 4, lane: [{ name: grade || '열차' }], sectionTime: total, distance: 300000, startName: '서울', endName: '부산' }] });
+  const opts = [{ grade: 'KTX', depTs: 100, depLabel: '10:00', rideMin: 150, fare: 59800 }, { grade: 'ITX', depTs: 160, depLabel: '10:50', rideMin: 200, fare: 40000 }];
+  const cands0 = [cand('train', 100, '10:00', 180, 'KTX'), cand('expbus', 300, '12:30', 330, '우등'), cand('train', 40, '09:10', 250, '무궁화호'), cand('subbus', 90, '09:50', 400, null)];
+  const D = { result: { path: [mk('train', 'KTX', 100, 180, cands0, opts)] } };
+  const c = (cap, extra) => E.resultScreen({ cap }, Object.assign({ data: D, tab: 'longdist', a: '서울', b: '부산', now, tz: 540, th: 'dark' }, extra || {}));
+  const pl = o => flat(o.body).find(n => n.t === 'pickl');
+  const P = pl(c(27));
+  ok(P && P.vis === 5 && P.rows.length === 5, '규격 27: 한 개의 세로 목록(보이는 줄 5) · 같은 편은 한 줄');
+  ok(P.rows.map(r => r.b).join() === '09:10 출발,09:50 출발,10:00 출발,10:50 출발,12:30 출발', '시간순으로 펼쳐진다: ' + P.rows.map(r => r.b).join());
+  ok(P.rows[2].on === true && P.rows.filter(r => r.on).length === 1 && P.rows[2].a === '열차 KTX' && P.rows[2].c === '180분', '지금 고른 편이 켜짐 · 소요');
+  ok(P.rows[3].a === '열차 ITX' && P.rows[3].c === '230분', '같은 수단의 다른 등급은 총 소요를 어림해 같이 보인다(기준 180 + 탑승 시간 차이 50)');
+  ok(!flat(c(27).body).some(n => n.t === 'btnrow'), '규격 27 에는 단추 줄이 없다');
+  ok(flat(c(26).body).some(n => n.t === 'btnrow') && !flat(c(26).body).some(n => n.t === 'pickl'), '규격 26 앱은 옛 단추 줄 그대로');
+  const o2 = c(27, { ld2: { result: { path: [mk('expbus', '우등', 300, 330, [cand('expbus', 300, '12:30', 331, '우등'), cand('train', 190, '11:20', 260, 'ITX')], [])] } } });
+  const P2 = pl(o2);
+  ok(P2 && P2.rows.map(r => r.b).join() === P.rows.map(r => r.b).join() && P2.rows.find(r => r.on).b === '12:30 출발' && P2.rows.filter(r => r.on).length === 1, '다시 골라도 목록(시각·차례)은 처음 후보 그대로, 켜진 줄만 바뀜');
+  ok(o2.info.ld.m[0] === '&ldMode=train&ldDepTs=100' && o2.info.ld.g[1] === '&ldMode=train&ldGrade=ITX&ldDepTs=160', '다시 골라도 누름 번호 → 질의는 처음 후보 기준');
+  const many = []; for (let i = 0; i < 8; i++) many.push(cand(i % 2 ? 'expbus' : 'train', 1000 + i * 10, '1' + i + ':00', 200 + i, i % 2 ? '일반' : 'KTX'));
+  const P3 = pl(E.resultScreen({ cap: 27 }, { data: { result: { path: [mk('train', 'KTX', 1000, 200, many, [])] } }, tab: 'longdist', a: 'a', b: 'b', now, tz: 540, th: 'dark' }));
+  ok(P3 && P3.rows.length === 8 && P3.vis === 5, '5개보다 많으면 목록 안에서 밀어 고른다(줄 8 · 보이는 줄 5)');
+  const chk = screenCheck([c(27)]);
+  ok(!chk.err && chk.out.every(l => /^OK/.test(l)) && chk.out.every(l => Number(l.split(' ')[2]) === 0), '앱 검증기가 pickl 을 받는다: ' + (chk.err || chk.out.join('|')));
+  const sd = { data: { result: { path: [P2raw()] } } };
+  function P2raw() { return { info: { totalTime: 31, transferCount: 0 }, subPath: [{ trafficType: 2, lane: [{ busNo: '6001' }], sectionTime: 31, distance: 8000, startName: 'A', endName: 'B' }] }; }
+  const ns = E.resultScreen({ cap: 26 }, Object.assign({ tab: 'sub', a: 'A', b: 'B', now, tz: 540, th: 'dark' }, sd));
+  ok(flat(ns.body).some(n => n.t === 'spacer' && n.slot === 'ai' && n.drop === 1), '이 탭에 경로가 없으면 AI 브리핑을 떼어 내라는 표시(drop)');
+  ok(!flat(E.resultScreen({ cap: 24 }, Object.assign({ tab: 'sub', a: 'A', b: 'B', now, tz: 540, th: 'dark' }, sd)).body).some(n => n.slot === 'ai'), '옛 앱(규격 25 미만)에는 표시 없음');
+}
 // ⑥ 워커 내장
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');

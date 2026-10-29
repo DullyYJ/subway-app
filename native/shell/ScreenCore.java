@@ -694,6 +694,17 @@ public final class ScreenCore {
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }
+        } else if ("pickl".equals(t)) {                                                                    // s303: 위아래로 밀어 고르는 목록 — 최대 vis 줄이 보이고 더 있으면 안에서 민다(수단 · 출발 시각 · 소요)
+            pad(m, n); n.h = optNum(m, "h", 38f, 28f, 60f); n.cols = (int) optNum(m, "vis", 5f, 1f, 8f); n.key = optStr(m, "key", "pick", 40);
+            for (Object io : asArr(m.get("rows"), "pickl.rows")) {
+                Map<String, Object> im = asObj(io, "row");
+                Node c = new Node(); c.t = "prow";
+                c.label = optStr(im, "a", "", 40); c.sub = optStr(im, "b", "", 30); c.value = optStr(im, "c", "", 16);
+                c.on = optBool(im, "on", false); c.act = act(im.get("act"), true);
+                n.items.add(c); sc.nodes++;
+                if (n.items.size() > 40 || sc.nodes > MAX_NODES) throw new ParseError("pickl: 줄이 너무 많다");
+            }
+            if (n.items.isEmpty()) throw new ParseError("pickl: rows 없음");
         } else if ("inbar".equals(t)) {
             pad(m, n);
             n.key = optStr(m, "key", "", 40); if (!ident(n.key)) throw new ParseError("inbar: key 가 올바르지 않다");
@@ -1091,7 +1102,7 @@ public final class ScreenCore {
     public static final float RUN_TRACK_H = 98f, RUN_TTL_GAP = 8f, RUN_TTL_H = 19f, RUN_SUB_GAP = 4f, RUN_SUB_H = 14f, RUN_H = RUN_TRACK_H + RUN_TTL_GAP + RUN_TTL_H + RUN_SUB_GAP + RUN_SUB_H;      // 경로 탐색 로딩(웹 #transitLoading): 달리는 칸 98 · 제목 14px · 안내 11px
     public static final float LBAR_H = 84f;                       // 불러오는 중 막대 한 줄의 높이(제목 · 막대 · 퍼센트)
     public static final float SKEL_ROW_H = 68f, SKEL_CARD_H = 132f, SKEL_MAP_H = 200f, SKEL_GAP = 10f;
-    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47, K_SHD = 48, K_TAGS = 49, K_LBAR = 50;
+    public static final int K_CHIP = 1, K_CARD = 2, K_TEXT = 3, K_BUTTON = 4, K_BOX = 5, K_SEARCH = 6, K_PANEL = 7, K_TOGGLE = 8, K_NAV = 9, K_SELECT = 10, K_FIELD = 11, K_BAR = 12, K_PLACE = 13, K_DIV = 14, K_NEWS = 15, K_POSTH = 16, K_CMT = 17, K_RBTN = 18, K_INBAR = 19, K_MSG = 20, K_TAB = 21, K_SUG = 22, K_SWAP = 23, K_RHD = 24, K_TRK = 25, K_CGH = 26, K_GAUGE = 27, K_CHART = 28, K_HBAR = 29, K_CARS = 30, K_AIH = 31, K_LTH = 32, K_LTR = 33, K_PILL = 34, K_SCENE = 35, K_TMAP = 36, K_MARQ = 37, K_SKEL = 38, K_BTOG = 39, K_BCARD = 40, K_SEC = 41, K_TROW = 42, K_BRX = 43, K_RUNNER = 44, K_TDROW = 45, K_LPILL = 46, K_ROWANIM = 47, K_SHD = 48, K_TAGS = 49, K_LBAR = 50, K_PICKL = 51;
     /** 노선 알약(웹 _linePillHtml): 글자 13 · 좌우 14(숫자 동그라미가 있으면 왼쪽 6) · 동그라미 22 · 동그라미와 글 사이 6 · 높이 27/34. */
     public static final float LP_FS = 13f, LP_NUM_FS = 12f, LP_PADL = 14f, LP_PADR = 14f, LP_PADL_N = 6f, LP_NUM = 22f, LP_NUM_GAP = 6f, LP_H = 27f, LP_H_NUM = 34f;
     /** 버스 정류장 카드 치수(웹 .map-bus-stop-card / .kbus-row 와 같다) */
@@ -1140,6 +1151,7 @@ public final class ScreenCore {
     /** 그릴 조각 하나. 좌표는 속한 영역(머리 또는 본문) 안의 dp. */
     public static final class Item {
         public int kind;
+        public List<Item> rows; public float pickMax;     // pickl: 고르기 목록의 줄들(칸 안 좌표) · 줄 높이 · 안에서 밀 수 있는 최대 거리
         public float x, y, w, h;
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
@@ -2334,6 +2346,18 @@ public final class ScreenCore {
             it.h = nlh + 2f + tlh * tl.size();
             out.add(it);
             return y + it.h + n.padB;
+        }
+        if ("pickl".equals(t0(n))) {                                                 // 고르기 목록: 보이는 줄 수만큼의 높이, 안은 ScreenView 가 밀어 그린다
+            Item it = new Item(); it.kind = K_PICKL; it.x = ox; it.y = y; it.w = innerW; it.rowH = n.h; it.key = n.key;
+            it.rows = new ArrayList<Item>();
+            for (int i = 0; i < n.items.size(); i++) {
+                Node c = n.items.get(i); Item r = new Item(); r.kind = K_RBTN; r.x = 0f; r.y = i * n.h; r.w = innerW; r.h = n.h - 4f; r.on = c.on; r.act = c.act;
+                r.label = ellipsize(c.label, innerW * .46f, 13f, true, m); r.value = c.sub; r.lines = new String[]{c.value}; r.size = 13f;
+                it.rows.add(r);
+            }
+            int vis = Math.min(n.items.size(), Math.max(1, n.cols));
+            it.h = vis * n.h - 4f; it.pickMax = Math.max(0f, n.items.size() * n.h - 4f - it.h);
+            out.add(it); return y + it.h + n.padB;
         }
         if ("btnrow".equals(t0(n))) {
             float lx = ox, rx = ox + innerW, rowH = n.h, need = 0f;

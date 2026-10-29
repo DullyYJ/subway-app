@@ -211,12 +211,19 @@ function resTrkFacts(route, r, noGeo) {
 }
 
 // 장거리 고르기 눌림 → 다시 물을 때 덧붙일 질의(웹 _ldReselect). m = 수단/시각 칩, g = 등급/시각 칩. 번호는 엔진이 칩을 만든 순서와 같다.
+// 장거리 고르기 목록의 원자료: 고른 편(mode·grade·depTs)은 지금 경로 것, 후보 목록·등급 목록·소요 기준은 처음 받은 경로 것(없으면 지금 것).
+function resLdView(selRoute, origRoute) {
+  var sel = selRoute.ld, base = (origRoute && origRoute.ld) ? origRoute.ld : sel, br = (origRoute && origRoute.ld) ? origRoute : selRoute;
+  return { mode: sel.mode, grade: sel.grade, depTs: sel.depTs, candidates: base.candidates, options: base.options, optMode: base.mode,
+    noWaitMin: sel.noWaitMin, fastRide: sel.fastRide, distKm: sel.distKm,
+    otot: Math.round(resNum(br.summary.duration, 0) / 60), odep: base.depTs, ogr: base.grade };
+}
 function resLdQuery(ld) {
   var enc = function (v) { return encodeURIComponent(String(v == null ? '' : v)); };
   var cands = resArr(ld.candidates).slice(0, 8), opts = resArr(ld.options).slice(0, 8);
   return {
     m: cands.map(function (c) { return (c && c.mode) ? '&ldMode=' + enc(c.mode) + (c.depTs ? '&ldDepTs=' + enc(c.depTs) : '') : ''; }),
-    g: opts.map(function (o) { return (o && o.grade && ld.mode) ? '&ldMode=' + enc(ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
+    g: opts.map(function (o) { return (o && o.grade && (ld.optMode || ld.mode)) ? '&ldMode=' + enc(ld.optMode || ld.mode) + '&ldGrade=' + enc(o.grade) + (o.depTs ? '&ldDepTs=' + enc(o.depTs) : '') : ''; })
   };
 }
 // 공지·지연 제보 줄(rhead part n)의 사실. 내 경로의 지하철 노선(앞 6개)에 대해서만, 서버가 준 원자료(r.off · r.al)를 그대로 넘긴다.
@@ -457,15 +464,16 @@ function resultScreen(opt, r) {
   var data = (r.data && typeof r.data === 'object') ? r.data : {};
   var raw = resArr((data.result || {}).path);
   var paths = resApplyRv(data, raw);
-  var pick = resPickTabs(paths);
+  var pick = resPickTabs(paths), ldOrigPath = null;
   if (r.ld2 && typeof r.ld2 === 'object') {                      // 장거리 '다른 편' 을 골라 다시 받은 응답: 그 안의 장거리 경로만 바꿔 끼운다(웹 _ldReselect)
     var p2 = resArr((r.ld2.result || {}).path).filter(function (q) { return q && q.info && q.info.longDist === true; })[0];
-    if (p2) pick.longdist = p2;
+    if (p2) { ldOrigPath = pick.longdist || null; pick.longdist = p2; }
   }
   var tab = RESULT_TABS.indexOf(r.tab) >= 0 ? r.tab : 'fast';
   var has = {};
   RESULT_TABS.forEach(function (t) { has[t] = !!(pick[t] && resConvertPath(pick[t])); });
   var route = has[tab] ? resConvertPath(pick[tab]) : null;
+  var ldView = (route && route.ld && tab === 'longdist') ? resLdView(route, ldOrigPath ? resConvertPath(ldOrigPath) : null) : null;    // s303: 고른 편이 바뀌어도 목록은 처음 받은 후보 그대로(누를 때마다 열차·버스 시각이 바뀌어 보이던 문제)
   if (r.view === 'detail') return route ? resDetailScreen(route, r, tab, cap) : { ok: false, error: 'route' };
   var nodes = [], total = 0;
   var anyRoute = RESULT_TABS.some(function (t) { return has[t]; });
@@ -479,7 +487,7 @@ function resultScreen(opt, r) {
   if (route) {
     total = Math.round(resNum(route.summary.duration, 0) / 60);
     if (route.ld && tab === 'longdist') {
-      var l = resPart(cap, 'l', { lg: route.ld }); if (l) nodes = nodes.concat(l.body);
+      var l = resPart(cap, 'l', { lg: ldView }); if (l) nodes = nodes.concat(l.body);
     }
     var nf = resNoteFacts(route, r);
     if (nf) { var nn = resPart(cap, 'n', nf); if (nn && nn.body.length && nn.body[0].t !== 'spacer') nodes = nodes.concat(nn.body); }
@@ -501,13 +509,14 @@ function resultScreen(opt, r) {
       { t: 'button', s: '경로 확정', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
     else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 12, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }
+  else if (anyRoute && cap >= RES_TAGS_CAP) nodes.push({ t: 'spacer', h: 0, slot: 'ai', drop: 1 });   // s303(YJ): 이 탭(지하철만·버스만 등)에 경로가 없으면 그 아래 AI 브리핑(다른 경로의 환승·추천 글)을 붙이지 않는다 — 앱이 drop 이면 AI 카드를 지운다
   var pvPill = (nodes.length && resPvl) ? resPvl('route', r.bt == null ? null : resNum(r.bt, null), r.metro === true, resNum(r.now, 0), resNum(r.tz, 540)) : null;   // 예상 경로 라벨 + 무지개 테두리(웹 preview-glow)
   if (pvPill) nodes.unshift(pvPill);
   var body = nodes.length ? [{ t: 'panel', pad: [14, 4, 14, 8], ip: [12, 12, 12, 8], r: 16, kids: nodes }] : [];             // 좌우 14 — 웹 홈은 입력 카드 · 결과 카드가 같은 바깥 여백(14)을 쓴다(예전엔 0 이라 결과 카드만 화면 끝까지 닿았다)
   if (pvPill && body.length) body[0].glow = true;
   var sec = [];                                                  // 지금 보이는 경로의 지하철 구간 이름(실시간소통이 '내 노선'을 앞에 둘 때 쓴다)
   if (route) route.sections.forEach(function (sc) { var tr = (sc && sc.transportation) || {}; if (tr.type === 1 && tr.name && sec.length < 6 && sec.indexOf(String(tr.name)) < 0) sec.push(String(tr.name)); });
-  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: (route && route.ld && tab === 'longdist') ? resLdQuery(route.ld) : null } };
+  var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldView ? resLdQuery(ldView) : null } };
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }

@@ -866,6 +866,23 @@ public class ScreenJvmTest {
         ok(DLL.hitHead(60f, DLL.head[2].y + 20f) != null && "dl.no".equals(DLL.hitHead(60f, DLL.head[2].y + 20f).v) && "dl.ok".equals(DLL.hitHead(300f, DLL.head[2].y + 20f).v) && DLL.hitHead(60f, 10f) == null, "단추 줄: 왼쪽은 취소 · 오른쪽은 설정 열기 · 글 줄은 안 눌린다");
         ok(bad(dlJson.replace("\"w\":340", "\"w\":50")) && bad(dlJson.replace("\"maxh\":0.85", "\"maxh\":0.1")) && bad(dlJson.replace("\"dim\":0.5", "\"dim\":0.99")) && bad(dlJson.replace("\"fill\":\"rgba(20,22,28,0.92)\"", "\"fill\":\"nope\"")) && bad(dlJson.replace("\"dlg\":{", "\"dlg\":[1],\"x\":{")) && bad(dlJson.replace("\"v\":\"dl.no\"}},", "\"v\":\"\"}},")), "안내창: 범위 밖 값 · 읽을 수 없는 색 · 객체가 아닌 dlg · 이름 없는 행동은 거절");
 
+        // ── 고르기 목록(pickl): 시간순 줄 · 최대 5줄 · 더 있으면 안에서 민다 ──
+        {
+            StringBuilder pr7 = new StringBuilder(), pr3 = new StringBuilder();
+            for (int i = 0; i < 7; i++) pr7.append(i > 0 ? "," : "").append("{\"a\":\"열차 KTX\",\"b\":\"1" + i + ":00 출발\",\"c\":\"180분\",\"on\":" + (i == 2) + ",\"act\":{\"a\":\"call\",\"v\":\"rh.ld.m." + i + "\"}}");
+            for (int i = 0; i < 3; i++) pr3.append(i > 0 ? "," : "").append("{\"a\":\"버스\",\"b\":\"0" + i + ":30 출발\",\"c\":\"200분\",\"act\":{\"a\":\"call\",\"v\":\"rh.ld.g." + i + "\"}}");
+            String pk7 = "{\"ok\":true,\"v\":1,\"screen\":\"pk\",\"head\":[],\"body\":[{\"t\":\"pickl\",\"rows\":[" + pr7 + "],\"vis\":5,\"h\":38,\"key\":\"ldpick\"}]}";
+            String pk3 = pk7.replace(pr7.toString(), pr3.toString());
+            ScreenCore.Screen pks = ScreenCore.load(pk7);
+            ScreenCore.Layout pkl = ScreenCore.layout(pks, 340f, M);
+            ok(pkl.body.length == 1 && pkl.body[0].kind == ScreenCore.K_PICKL && pkl.body[0].rows.size() == 7, "pickl: 줄 7개를 읽는다");
+            ok(near(pkl.body[0].h, 5 * 38f - 4f) && near(pkl.body[0].pickMax, 7 * 38f - 4f - pkl.body[0].h), "pickl: 보이는 높이는 5줄 · 나머지 2줄만큼 안에서 민다 " + pkl.body[0].h + "/" + pkl.body[0].pickMax);
+            ok(pkl.body[0].rows.get(2).on && !pkl.body[0].rows.get(0).on && "rh.ld.m.4".equals(pkl.body[0].rows.get(4).act.v) && near(pkl.body[0].rows.get(3).y, 3 * 38f), "pickl: 고른 줄 표시 · 줄 눌림 값 · 줄 간격");
+            ScreenCore.Layout pk3l = ScreenCore.layout(ScreenCore.load(pk3), 340f, M);
+            ok(near(pk3l.body[0].h, 3 * 38f - 4f) && pk3l.body[0].pickMax == 0f, "pickl: 5줄 이하면 밀 거리 0 · 높이는 줄 수만큼");
+            ok(bad(pk7.replace(pr7.toString(), "")) && bad("{\"ok\":true,\"v\":1,\"screen\":\"pk\",\"head\":[],\"body\":[{\"t\":\"pickl\"}]}"), "pickl: 줄이 없으면 화면을 거절");
+        }
+
         // ── 알약 글자(pill: 미리보기 라벨) ──
         String pvJson = "{\"ok\":true,\"v\":1,\"screen\":\"pvl\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":[{\"t\":\"pill\",\"pad\":[0,0,0,10],\"s\":\"예상 경로 · 오후 2:30\",\"size\":11,\"bold\":true,\"tc\":\"#ff9500\",\"fill\":\"rgba(255,149,0,0.14)\",\"ph\":11,\"pv\":4,\"r\":9}],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
         ScreenCore.Layout PVL = ScreenCore.layout(ScreenCore.load(pvJson), 300f, M);

@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 26;
+    public static final int CAP = 27;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
@@ -502,6 +502,8 @@ public final class ShellCore {
      * AI 카드의 내용을 그 자리로 옮겨(위에 가는 선 하나를 두고) 하나의 연속된 카드로 만든다. 한쪽이라도 없으면 아무것도 바꾸지 않는다(AI 카드는 따로 남는다).
      */
     @SuppressWarnings("unchecked")
+    static Boolean isDrop(Object o) { if (!(o instanceof Map)) return false; Object d = ((Map<?, ?>) o).get("drop"); return d instanceof Number ? ((Number) d).intValue() == 1 : Boolean.TRUE.equals(d); }
+    @SuppressWarnings("unchecked")
     static void fuseAi(List<Object> body) {
         int ia = -1;
         for (int i = 0; i < body.size(); i++) {
@@ -520,6 +522,7 @@ public final class ShellCore {
                 if (ko instanceof Map && "ai".equals(((Map<String, Object>) ko).get("slot"))) { si = k; break; }
             }
             if (si < 0) continue;
+            if (Boolean.TRUE.equals(isDrop(kids.get(si)))) { body.remove(ia); return; }      // 이 탭에 경로가 없다 — 다른 경로의 브리핑 글은 보이지 않는다(엔진이 drop 을 달아 준다)
             List<Object> nk = new ArrayList<Object>(kids.subList(0, si));
             Map<String, Object> dv = new java.util.LinkedHashMap<String, Object>();
             dv.put("t", "divider"); dv.put("pad", java.util.Arrays.asList((Object) 0.0, (Object) 6.0, (Object) 0.0, (Object) 12.0));

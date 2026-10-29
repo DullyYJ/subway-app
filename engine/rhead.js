@@ -164,6 +164,34 @@ function rheadOffParts(l, n, now) {
 var RHEAD_LD_MODE = { train: '열차', expbus: '고속버스', subbus: '시외버스' };
 function rheadWon(n) { return String(Math.round(Number(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }      // 12300 → '12,300'
 function rheadNum(v) { return (v == null || v === '' || !isFinite(Number(v))) ? null : Number(v); }
+var RHEAD_PICKL_CAP = 27;                                   // 세로로 미는 고르기 목록(pickl)을 아는 앱
+var RHEAD_LD_ORDER = { train: 0, expbus: 1, subbus: 2 };
+// 장거리 후보를 시간순 한 목록으로: 수단 후보(rh.ld.m.<번호>) + 같은 수단의 다른 등급(rh.ld.g.<번호>) — 같은 편은 한 줄. 소요는 원자료의 총 소요(없으면 등급 값으로 어림, 그래도 없으면 요금).
+function rheadLdRows(lg, cands, opts, mode, grade, cur) {
+  var rows = [], seen = {}, omode = rheadStr(lg.optMode || lg.mode, 12);
+  var baseTot = rheadNum(lg.otot), baseDep = rheadNum(lg.odep), baseGr = rheadStr(lg.ogr, 20), baseRide = null, i;
+  for (i = 0; i < opts.length; i++) { var bo = opts[i]; if (bo && typeof bo === 'object' && rheadNum(bo.depTs) === baseDep && rheadStr(bo.grade, 20) === baseGr && rheadNum(bo.rideMin) != null) baseRide = rheadNum(bo.rideMin); }
+  var add = function (m, g, ts, label, tot, fare, act) {
+    var key = m + '|' + g + '|' + ts;
+    if (ts == null || seen[key]) return;
+    seen[key] = 1;
+    var on = (m === mode) && (cur == null || ts === cur) && (!grade || !g || g === grade);
+    var right = tot != null ? rheadInt(tot, 0, 9999) + '분' : (fare != null ? rheadWon(fare) + '원' : '');
+    rows.push({ ts: ts, mo: RHEAD_LD_ORDER[m] != null ? RHEAD_LD_ORDER[m] : 9, a: (RHEAD_LD_MODE[m] || m) + (g ? ' ' + g : ''), b: label ? label + ' 출발' : '', c: right, on: on, act: act });
+  };
+  cands.forEach(function (c, ci) {
+    if (!c || typeof c !== 'object' || !c.mode) return;
+    add(rheadStr(c.mode, 12), rheadStr(c.grade, 20), rheadNum(c.depTs), rheadStr(c.depLabel, 12), rheadNum(c.totalMin), null, { a: 'call', v: 'rh.ld.m.' + ci });
+  });
+  opts.forEach(function (o, oi) {
+    if (!o || typeof o !== 'object' || !o.grade) return;
+    var ts = rheadNum(o.depTs), tot = null, ride = rheadNum(o.rideMin);
+    if (baseTot != null && baseDep != null && ts != null && ride != null && baseRide != null) tot = Math.round(baseTot + (ts - baseDep) / 60000 + (ride - baseRide));
+    add(omode, rheadStr(o.grade, 20), ts, rheadStr(o.depLabel, 12), tot, rheadNum(o.fare), { a: 'call', v: 'rh.ld.g.' + oi });
+  });
+  rows.sort(function (x, y) { return x.ts !== y.ts ? x.ts - y.ts : (x.mo !== y.mo ? x.mo - y.mo : 0); });
+  return rows.map(function (r) { var o = { a: r.a, b: r.b, c: r.c, act: r.act }; if (r.on) o.on = true; return o; });
+}
 function rheadLdNodes(f) {
   var lg = f.lg, out = [];
   if (!lg || !lg.mode) return [{ t: 'spacer', h: 0 }];
@@ -179,6 +207,13 @@ function rheadLdNodes(f) {
     });
     if (line.length) out.push({ t: 'btnrow', pad: [0, 0, 0, 6], gap: 6, h: 32, items: line });
   };
+  if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): 장거리는 줄줄이 단추 대신 '시간순 세로 목록' — 최대 5줄이 보이고 더 있으면 위아래로 밀어 고른다
+    var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
+    if (rws.length > 1) {
+      out.push({ t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] });
+      return out.concat(rheadLdNote(lg));
+    }
+  }
   if (cands.length > 1) {
     var mi = [];
     cands.forEach(function (c, i) {
@@ -201,6 +236,13 @@ function rheadLdNodes(f) {
     });
     rows(gi);
   }
+  var nn = rheadLdNote(lg); nn.forEach(function (x) { out.push(x); });
+  if (!out.length) out.push({ t: 'spacer', h: 0 });
+  return out;
+}
+// 장거리 아래 안내(대기 시간 빼면 · 이동만 가장 빠른 편)
+function rheadLdNote(lg) {
+  var out = [];
   var note = '', nw = rheadNum(lg.noWaitMin);
   if (nw != null) note += '대기 시간을 빼면 약 ' + rheadInt(nw, 0, 9999) + '분 (다른 지도앱은 대기를 빼고 표시해요)';
   var fr = (lg.fastRide && typeof lg.fastRide === 'object') ? lg.fastRide : null;
@@ -208,9 +250,9 @@ function rheadLdNodes(f) {
     note += (note ? '\n' : '') + '이동만 가장 빠른 편: ' + rheadStr(fr.depLabel, 12) + ' 출발, 열차 ' + rheadInt(fr.rideMin, 0, 9999) + '분' + (rheadNum(fr.noWaitMin) != null ? ' (대기 제외 총 ' + rheadInt(fr.noWaitMin, 0, 9999) + '분)' : '');
   }
   if (note) out.push({ t: 'text', s: note, size: 12, color: 'sub', lh: 1.5, pad: [0, 2, 0, 8] });
-  if (!out.length) out.push({ t: 'spacer', h: 0 });
   return out;
 }
+
 function rheadNoteNodes(f) {
   var now = f.now || 0, out = [], i;
   var offLines = [];
@@ -653,7 +695,7 @@ function rheadScreen(inp, factsIn) {
   if (inp.part === 'k') return Number(inp.cap) >= 12 ? rheadTrackScreen(factsIn) : { ok: false, error: 'cap' };      // 타임라인 노드 trk(+내 위치 마커 mk)는 규격 12
   if (inp.part === 'g' && Number(inp.cap) < 25) return { ok: false, error: 'cap' };      // 알약 줄 tags 는 규격 25
   var part = (inp.part === 't' || inp.part === 'n' || inp.part === 'l' || inp.part === 'g') ? inp.part : 'h';
-  var f = rheadFacts(factsIn);
+  var f = rheadFacts(factsIn); f.cap = Number(inp.cap);
   var body = part === 't' ? rheadTabNodes(f) : (part === 'n' ? rheadNoteNodes(f) : (part === 'l' ? rheadLdNodes(f) : (part === 'g' ? rheadTagNodes(f) : rheadHeadNodes(f))));
   var out = { ok: true, v: 1, screen: 'rhead', cover: 'tab', bg: 'card', head: [], body: body, info: { part: part } };      // 카드 안에 놓이는 화면 — 바탕은 카드색
   out.rev = 'r' + RHEAD_SCREEN_V + part + ':' + rheadHash(JSON.stringify(body));
