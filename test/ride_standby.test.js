@@ -1065,7 +1065,7 @@ t('s231 rsRtPick: 내 방향으로 오는 가장 가까운 열차 — 이미 역
   // s334: 남은 초가 0 으로 오는 전역 출발·진입·도착 열차도 글자로 어림해 '내 열차'로 쓴다(예전엔 버려서 다음 차를 내 차로 잡았다)
   assert.strictEqual(rsRtPick([L({ barvlDt: '0', arvlCd: '4' }), L({ barvlDt: '210' })], q, nt), 1070000, '전역 진입(4) = 70초');
   assert.strictEqual(rsRtPick([L({ barvlDt: '0', arvlCd: '99', arvlMsg2: '[1]번째 전역 (A)' }), L({ barvlDt: '210' })], q, nt), 1110000, '한 역 앞 = 110초');
-  assert.strictEqual(rsRtPick([L({ barvlDt: '0', arvlCd: '99' })], q, nt), null, '어림 못  하면 건너뜀');
+  assert.strictEqual(rsRtPick([L({ barvlDt: '0', arvlCd: '99' })], q, nt), null, '어림 못 하면 건너뜀');
   assert.strictEqual(rsRtPick([L({ barvlDt: '60' })], { line: '인천1호선', prev: 'A', from: 'B', nowMs: 0 }, nt), null, '실시간 위치를 모르는 노선');
 });
 
