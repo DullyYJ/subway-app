@@ -150,9 +150,23 @@ public final class FoodCore {
         return b.toString();
     }
     /** 가게 지도 펼침 본문(엔진 f.pn=1): 고른 가게 · 내 위치 · 도착역 좌표와 이름 · 이미 받은 경로 글. */
-    public String panelRequest(int cap) {
-        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"pn\":1,\"sel\":").append(pendingSel).append(",\"me\":").append(ll(gps)).append(",\"ctr\":").append(ll(ctr)).append(",\"stn\":").append(ShellCore.q(stnName)).append(",\"dst\":").append(dest.length() > 0 ? 1 : 0);
-        if (!panelRes.isEmpty()) {
+    public String panelRequest(int cap) { return panelBody(cap, pendingSel, true); }
+    /** 눌러 보기 전에 미리 받아 둘 펼침 본문(첫 왕복 — 경로 글 없음). 목록에 없는 가게면 "". */
+    public String panelRequestFor(int cap, String k) { String sel = selJson(k); return sel.length() == 0 ? "" : panelBody(cap, sel, false); }
+    /** 목록 순서대로 가게 열쇠 최대 max 개. */
+    public List<String> goKeys(int max) { List<String> r = new ArrayList<String>(); for (String k : go.keySet()) { if (r.size() >= max) break; r.add(k); } return r; }
+    @SuppressWarnings("unchecked")
+    private String selJson(String k) {
+        Object g = go.get(k);
+        if (!(g instanceof List) || ((List<Object>) g).size() < 5) return "";
+        List<Object> l = (List<Object>) g;
+        Map<String, Object> sel = new LinkedHashMap<String, Object>();
+        sel.put("n", l.get(0)); sel.put("c", l.get(1)); sel.put("a", l.get(2)); sel.put("la", l.get(3)); sel.put("lo", l.get(4));
+        return HomeSearchCore.toJson(sel);
+    }
+    private String panelBody(int cap, String selJ, boolean withRes) {
+        StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"pn\":1,\"sel\":").append(selJ).append(",\"me\":").append(ll(gps)).append(",\"ctr\":").append(ll(ctr)).append(",\"stn\":").append(ShellCore.q(stnName)).append(",\"dst\":").append(dest.length() > 0 ? 1 : 0);
+        if (withRes && !panelRes.isEmpty()) {
             b.append(",\"res\":{"); boolean first = true;
             for (Map.Entry<String, String> e : panelRes.entrySet()) { if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
             b.append('}');
@@ -237,7 +251,16 @@ public final class FoodCore {
         openKey = k; panelAfter = "fm." + k; panelNodes = null; panelRes.clear(); panelNeed.clear();
         return R_PANEL;
     }
-    public void closePanel() { openKey = ""; panelAfter = ""; panelNodes = null; panelRes.clear(); panelNeed.clear(); nvApp.clear(); nvWeb.clear(); }
+    /** 눌렀을 때 펼침 답이 오기 전에 자리부터 보이는 뼈대(받으면 그 자리에서 진짜 펼침으로 바뀐다). */
+    public boolean panelSkel;
+    @SuppressWarnings("unchecked")
+    public void showPanelSkeleton() {
+        try {
+            Object o = ScreenCore.parse("{\"t\":\"skel\",\"kind\":\"map\",\"rows\":2,\"pad\":[12,6,12,10]}");
+            List<Object> l = new ArrayList<Object>(); l.add(o); panelNodes = l; panelSkel = true;
+        } catch (Exception e) { panelNodes = null; panelSkel = false; }
+    }
+    public void closePanel() { panelSkel = false; openKey = ""; panelAfter = ""; panelNodes = null; panelRes.clear(); panelNeed.clear(); nvApp.clear(); nvWeb.clear(); }
     /** 엔진의 펼침 화면을 읽는다: 끼울 노드 · 열 주소(info.nv) · 더 받아 올 주소(info.need). 읽을 수 없으면 false. */
     @SuppressWarnings("unchecked")
     public boolean onPanel(String json) {
@@ -246,7 +269,7 @@ public final class FoodCore {
             if (!(o instanceof Map)) return false;
             Map<String, Object> m = (Map<String, Object>) o;
             if (!Boolean.TRUE.equals(m.get("ok")) || !(m.get("body") instanceof List) || ((List<Object>) m.get("body")).isEmpty()) return false;
-            panelNodes = new ArrayList<Object>((List<Object>) m.get("body"));
+            panelNodes = new ArrayList<Object>((List<Object>) m.get("body")); panelSkel = false;
             panelNeed.clear();
             Object i = m.get("info");
             if (i instanceof Map) {
