@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s307";
+var ENGINE_VERSION = "route-v2-2026-10-29s308";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -19327,7 +19327,7 @@ function rheadLdNodes(f) {
   if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): \uc7a5\uac70\ub9ac\ub294 \uc904\uc904\uc774 \ub2e8\ucd94 \ub300\uc2e0 '\uc2dc\uac04\uc21c \uc138\ub85c \ubaa9\ub85d' \u2014 \ucd5c\ub300 5\uc904\uc774 \ubcf4\uc774\uace0 \ub354 \uc788\uc73c\uba74 \uc704\uc544\ub798\ub85c \ubc00\uc5b4 \uace0\ub978\ub2e4
     var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
     if (rws.length > 1) {
-      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] };
+      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 12, 0, 8] };      // s308(YJ): \uc704 \ud0ed \uc904\uacfc \uc544\ub798 \uae00 \uc0ac\uc774 \uac04\uaca9\uc744 \uc704\uc544\ub798 \uac19\uac8c
       if (f.cap >= RHEAD_FOLD_CAP) pk.fold = true;                 // s307(YJ): \ucc98\uc74c\uc5d4 \uace0\ub978(\uac00\uc7a5 \ube60\ub978) \ud3b8 \ud55c \uc904 \u2014 \ub204\ub974\uba74 \uce74\ub4dc\uac00 \uc544\ub798\ub85c \ud3bc\uccd0\uc9c0\uace0 \uace0\ub974\uba74 \ub2e4\uc2dc \uc811\ud78c\ub2e4
       out.push(pk);
       return out.concat(rheadLdNote(lg));

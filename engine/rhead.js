@@ -211,7 +211,7 @@ function rheadLdNodes(f) {
   if (f.cap >= RHEAD_PICKL_CAP) {                          // s303(YJ): 장거리는 줄줄이 단추 대신 '시간순 세로 목록' — 최대 5줄이 보이고 더 있으면 위아래로 밀어 고른다
     var rws = rheadLdRows(lg, cands, opts, mode, grade, cur);
     if (rws.length > 1) {
-      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 0, 0, 8] };
+      var pk = { t: 'pickl', rows: rws, vis: 5, h: 38, key: 'ldpick', pad: [0, 12, 0, 8] };      // s308(YJ): 위 탭 줄과 아래 글 사이 간격을 위아래 같게
       if (f.cap >= RHEAD_FOLD_CAP) pk.fold = true;                 // s307(YJ): 처음엔 고른(가장 빠른) 편 한 줄 — 누르면 카드가 아래로 펼쳐지고 고르면 다시 접힌다
       out.push(pk);
       return out.concat(rheadLdNote(lg));

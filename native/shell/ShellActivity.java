@@ -4446,8 +4446,12 @@ public class ShellActivity extends Activity {
             }
         }, "shell-notes").start();
     }
-    // s307(YJ): 장거리 모든 편의 경로를 찾은 직후 뒤에서 하나씩 미리 받아 둔다 — 편을 누르면 곧바로 그 편의 경로·브리핑이 보인다. 서버 부담을 줄이려 한 번에 하나씩·최대 6편.
+    // s307(YJ): 장거리 모든 편의 경로를 찾은 직후 뒤에서 미리 받아 둔다 — 편을 누르면 곧바로 그 편의 경로·브리핑이 보인다.
+    // s308(YJ: "다른 대중교통 선택시 브리핑 변경이 너무 느려"): 경로만이 아니라 엔진 화면(결과 카드·브리핑)까지 미리 만들어 두고, 3개씩 병렬로 받고, 아직 오는 중인 편을 누르면 그 응답을 기다린다.
     private final java.util.concurrent.ConcurrentHashMap<String, String> ldPf = new java.util.concurrent.ConcurrentHashMap<String, String>();      // "탐색번호|질의" → 그 편으로 다시 받은 경로 응답
+    private final java.util.concurrent.ConcurrentHashMap<String, String[]> ldScr = new java.util.concurrent.ConcurrentHashMap<String, String[]>();   // 같은 열쇠 → { 결과 카드 화면, 홈 카드 묶음 화면, 그 화면을 만든 탭 }
+    private final java.util.Set<String> ldFly = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());   // 지금 받는 중인 열쇠
+    private volatile String ldWant = "";                                         // 사용자가 눌렀는데 아직 오는 중인 열쇠(오면 곧바로 보인다)
     private String ldPfSig = "";
     private void maybePrefetchLd() {
         if (!home.hasRoute() || home.lastQs.length() == 0 || home.riding()) return;
@@ -4455,34 +4459,75 @@ public class ShellActivity extends Activity {
         for (String q : home.ldM) if (q != null && q.length() > 0 && !qs.contains(q)) qs.add(q);
         for (String q : home.ldG) if (q != null && q.length() > 0 && !qs.contains(q)) qs.add(q);
         if (qs.isEmpty()) return;
-        while (qs.size() > 6) qs.remove(qs.size() - 1);
+        while (qs.size() > 8) qs.remove(qs.size() - 1);
         final int rid = home.routeId;
         final String sig = rid + "|" + home.lastQs + "|" + qs;
         if (sig.equals(ldPfSig)) return;
-        if (ldPfSig.length() > 0 && !ldPfSig.startsWith(rid + "|")) ldPf.clear();
+        if (ldPfSig.length() > 0 && !ldPfSig.startsWith(rid + "|")) { ldPf.clear(); ldScr.clear(); }
         ldPfSig = sig;
         final String base = home.lastQs;
-        new Thread(new Runnable() {
+        final java.util.concurrent.atomic.AtomicInteger nx = new java.util.concurrent.atomic.AtomicInteger(0);
+        for (int w = 0; w < 3; w++) new Thread(new Runnable() {
             @Override public void run() {
-                for (final String q : qs) {
+                int k;
+                while ((k = nx.getAndIncrement()) < qs.size()) {
                     if (rid != home.routeId) return;                                                // 그 사이 다른 경로를 찾았다
-                    final String key = rid + "|" + q;
-                    if (ldPf.containsKey(key)) continue;
-                    NetPost.Res r = NetPost.get(HomeCore.routeUrl(base + q), 30000);
-                    final String b = r.status == 200 && r.body != null ? r.body.trim() : "";
-                    if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}' && b.length() < 3000000 && rid == home.routeId) ldPf.put(key, b);
-                    try { Thread.sleep(400L); } catch (InterruptedException e) { return; }           // 서버에 한꺼번에 몰리지 않게 사이를 둔다
+                    final String q = qs.get(k), key = rid + "|" + q;
+                    if (ldPf.containsKey(key) || !ldFly.add(key)) continue;
+                    try {
+                        NetPost.Res r = NetPost.get(HomeCore.routeUrl(base + q), 30000);
+                        final String b = r.status == 200 && r.body != null ? r.body.trim() : "";
+                        if (b.length() > 2 && b.charAt(0) == '{' && b.charAt(b.length() - 1) == '}' && b.length() < 3000000 && rid == home.routeId) {
+                            ldPf.put(key, b);
+                            ldWarmScreens(rid, key, b);                                              // 결과 카드 · 브리핑 화면까지 미리
+                        }
+                    } finally { ldFly.remove(key); }
+                    if (key.equals(ldWant)) main.post(new Runnable() { @Override public void run() { if (key.equals(ldWant) && rid == home.routeId) { ldWant = ""; if (ldPf.containsKey(key)) ldPick(key); else toast("다른 편을 받지 못했어요"); } } });
                 }
             }
-        }, "shell-ldpf").start();
+        }, "shell-ldpf" + w).start();
     }
-    /** 장거리 '다른 편' 고르기: 엔진이 만든 질의를 덧붙여 다시 받고, 엔진이 장거리 경로만 바꿔 끼운다. */
+    /** 미리 받은 편을 골랐다고 가정한 요청 본문을 주 스레드에서 만들어(상태는 되돌린다) 엔진에 결과 카드·홈 카드 묶음 화면을 미리 받아 둔다. */
+    private void ldWarmScreens(final int rid, final String key, final String body) {
+        final String[] bs = new String[3];
+        final java.util.concurrent.CountDownLatch cl = new java.util.concurrent.CountDownLatch(1);
+        main.post(new Runnable() { @Override public void run() {
+            try {
+                if (rid != home.routeId || home.riding()) return;
+                String th = ShellCore.theme(store), sv = home.ld2Raw;
+                home.ld2Raw = body;
+                try {
+                    bs[0] = home.resultRequest(homeEnv(), ShellCore.CAP, th, 0);
+                    bs[1] = hc.request(ShellCore.CAP, th, homeEnv(), home.resultFacts(homeEnv(), th), chat.recentTalksJson(8));
+                    bs[2] = home.resTab;
+                } finally { home.ld2Raw = sv; }
+            } catch (RuntimeException e) { bs[0] = null; } finally { cl.countDown(); }
+        } });
+        try { if (!cl.await(4, java.util.concurrent.TimeUnit.SECONDS) || bs[0] == null) return; } catch (InterruptedException e) { return; }
+        NetPost.Res a = NetPost.post(ShellCore.BASE + "/screen/result", bs[0], 15000);
+        NetPost.Res c = NetPost.post(ShellCore.BASE + "/screen/hcards", bs[1], 15000);
+        if (a.status == 200 && a.body != null && a.body.length() > 0 && c.status == 200 && c.body != null && c.body.length() > 0 && rid == home.routeId) ldScr.put(key, new String[] { a.body, c.body, bs[2] });
+    }
+    /** 미리 받아 둔 편으로 바꾼다(주 스레드): 경로 · 결과 카드 · 브리핑이 통신 없이 한꺼번에 바뀐다. */
+    private void ldPick(String key) {
+        String hit = ldPf.get(key);
+        if (hit == null) return;
+        ++seqRoute; home.ld2Raw = hit; home.touch();
+        String[] sc = ldScr.get(key);
+        if (sc != null && sc[2].equals(home.resTab)) {
+            long nowH = System.currentTimeMillis(); String th = ShellCore.theme(store);
+            resPut(home.dataRev + ":" + home.resTab + ":" + th, sc[0]);
+            hc.ensureNext(nowH); hc.rideScene = RideService.running ? RideService.liveScene : ""; hc.share = RideService.running && RideService.liveShare != null;
+            hcJson = sc[1]; hcKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
+        }
+        reloadHome();
+    }
+    /** 장거리 '다른 편' 고르기: 미리 받아 둔 게 있으면 바로, 오는 중이면 그것을 기다리고, 아니면 엔진이 만든 질의를 덧붙여 다시 받아 장거리 경로만 바꿔 끼운다. */
     private void ldReselect() {
         if (home.lastQs.length() == 0) return;
-        final String hit = ldPf.get(home.routeId + "|" + home.ldPending);
-        if (hit != null) {                                                       // s307: 미리 받아 둔 편 — 통신 없이 바로 바꾼다(경로 · 브리핑이 같이 바뀐다)
-            ++seqRoute; home.ld2Raw = hit; home.touch(); reloadHome(); return;
-        }
+        final String key = home.routeId + "|" + home.ldPending;
+        if (ldPf.containsKey(key)) { ldWant = ""; ldPick(key); return; }
+        if (ldFly.contains(key)) { ldWant = key; toast("다른 편을 불러오는 중이에요"); return; }       // 이미 받는 중 — 새로 묻지 않고 그 응답이 오면 바로 바꾼다
         final String url = HomeCore.routeUrl(home.lastQs + home.ldPending);
         final int my = ++seqRoute;
         toast("다른 편을 찾는 중이에요");

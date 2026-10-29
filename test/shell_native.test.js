@@ -957,7 +957,9 @@ function findAndroidJar() {
     assert.ok(/if \(it\.fold && !it\.open\) \{ blurInput\(\); toggleFold\(it, true\); return; \}/.test(v) && /ScreenCore\.pickSelect\(screen, it\.key, i\); toggleFold\(it, false\)/.test(v), '접힌 한 줄을 누르면 펼치고 · 고르면 접는다');
     assert.ok(/ScreenCore\.applyFold\(screen, foldOpen, foldSig\)/.test(v) && /!foldOpen\.isEmpty\(\)\) return null/.test(v), '배치 전에 펼침 상태를 넣고 · 펼침이 있으면 미리 배치본을 쓰지 않는다');
     assert.ok(!/new Path|new RectF|new Paint/.test(v.slice(v.indexOf('private void drawPick('), v.indexOf('private static final float INBAR_BTN_R'))), '목록을 그릴 때 새 객체 없음');
-    assert.ok(/private void maybePrefetchLd\(\)/.test(a) && /maybeFetchNotes\(\); maybePrefetchLd\(\)/.test(a) && /ldPf\.get\(home\.routeId \+ "\|" \+ home\.ldPending\)/.test(a) && /home\.ld2Raw = hit; home\.touch\(\); reloadHome\(\)/.test(a) && /qs\.size\(\) > 6/.test(a), '모든 편을 뒤에서 미리 받아 두고(최대 6) 누르면 통신 없이 바꾼다');
+    assert.ok(/private void maybePrefetchLd\(\)/.test(a) && /maybeFetchNotes\(\); maybePrefetchLd\(\)/.test(a) && /home\.ld2Raw = hit; home\.touch\(\)/.test(a) && /qs\.size\(\) > 8/.test(a) && /w < 3/.test(a), '모든 편을 뒤에서 3개씩 병렬로 미리 받아 두고(최대 8) 누르면 통신 없이 바꾼다');
+    assert.ok(/private void ldWarmScreens\(/.test(a) && /"\/screen\/result"/.test(a.slice(a.indexOf('private void ldWarmScreens('))) && /ldScr\.put\(key/.test(a) && /resPut\(home\.dataRev \+ ":" \+ home\.resTab/.test(a) && /hcJson = sc\[1\]/.test(a), '결과 카드·브리핑 화면까지 미리 만들어 두었다가 고르면 그 화면을 바로 쓴다(s308)');
+    assert.ok(/ldFly\.contains\(key\)\) \{ ldWant = key;/.test(a), '오는 중인 편을 누르면 새로 묻지 않고 그 응답을 기다린다');
     assert.ok(/public boolean hasLdRoute\(\)/.test(hm) && /if \(home\.hasLdRoute\(\)\) return;/.test(a) && /home\.hasLdRoute\(\)\) return;\s*\n\s*String u = url\.replaceFirst/.test(a), '장거리 결과는 실시간 재조회로 바꾸지 않는다(처음 찾은 것으로 고정)');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
