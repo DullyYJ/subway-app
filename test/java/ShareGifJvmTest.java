@@ -107,7 +107,7 @@ public class ShareGifJvmTest {
                 if (Math.abs(a.pulse[0] - a.pulse[ShareAnim.PULSE]) > 1e-6f) pulseOk = false;
             }
             ok(ShareAnim.N % ShareAnim.PULSE == 0, "ShareAnim: 프레임 수(" + ShareAnim.N + ")가 마커 깜박임 주기(" + ShareAnim.PULSE + ")의 배수 — 반복이 끊기지 않는다");
-            ok(det, "ShareAnim: 같은 씨앗은 같은 계획"); ok(ids.size() == WidgetSim.ORDER.length, "ShareAnim: 친구 6마리가 골고루 뽑힌다(" + ids.size() + "종)");
+            ok(det, "ShareAnim: 같은 씨앗은 같은 계획"); ok(ids.size() == WidgetSim.ORDER.length, "ShareAnim: 친구 여덟 마리가 골고루 뽑힌다(" + ids.size() + "종)");
             ok(loop, "ShareAnim: 마지막 프레임이 첫 프레임 자리로 돌아온다"); ok(bounds, "ShareAnim: 카드 선 범위 안에서만 오간다");
             ok(steps, "ShareAnim: 한 프레임에 3.5 이상 순간이동하지 않는다(최대 " + maxStep + ")"); ok(sheetOk && pulseOk && faceOk, "ShareAnim: 칸 0~15 · 깜박임 위상 0~1 주기 · 방향 ±1"); ok(someWalk, "ShareAnim: 한 바퀴의 절반 가까이는 걷는다");
         }

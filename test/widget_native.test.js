@@ -89,7 +89,7 @@ const RES = path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'res');
     const sim = fs.readFileSync(N('WidgetSim.java'), 'utf8');
     const ord = /ORDER\s*=\s*\{([^}]*)\}/.exec(sim)[1].match(/"(\w+)"/g).map(x => x.replace(/"/g, ''));
     assert.ok(ord.length >= 6, 'ORDER');
-    for (const id of ord) assert.ok(fs.existsSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'assets', 'chars3d', id + '.webp')), id);
+    for (const id of ord) assert.ok(fs.existsSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'assets', 'chars3d', (id === 'bbosong' ? 'bbosong_0' : id) + '.webp')), id);
     assert.ok(!/capacitor|getcapacitor/i.test(wc), 'Capacitor 없음');
   });
   await t('엔진 /widget-say 가 있고 위젯이 부르는 매개변수(kind · baseMs · lat · lng)를 읽는다', async () => {

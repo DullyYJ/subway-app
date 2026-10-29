@@ -24,7 +24,7 @@ const N = n => path.join(ROOT, 'native', 'shell', n);
   });
   await t('ShareArt.gif: 바탕 + 프레임마다 마커(퍼지는 물결 · 깜박이는 점)와 친구(걷는 시트 한 칸)를 그려 GifEnc 로 넘긴다 — 글·역·시각은 새로 짓지 않는다', async () => {
     const s = fs.readFileSync(N('ShareArt.java'), 'utf8');
-    assert.ok(/static byte\[\] gif\(/.test(s) && /new ShareAnim\(/.test(s) && /GifEnc\.encode\(/.test(s) && /chars3d\/" \+ an\.id/.test(s));
+    assert.ok(/static byte\[\] gif\(/.test(s) && /new ShareAnim\(/.test(s) && /GifEnc\.encode\(/.test(s) && /chars3d\/" \+ Chars\.file\(an\.id\)/.test(s));
     assert.ok(/ShareAnim\.N/.test(s) && /an\.pulse\[i\]/.test(s) && /an\.sheet\[i\]/.test(s) && /an\.face\[i\]/.test(s));
     assert.ok(/draw\(d, pal, mk\)/.test(s) && /mk\[0\] = x; mk\[1\] = ly;/.test(s), '바탕은 마커를 빼고 그 자리만 알려 준다');
   });

@@ -56,13 +56,13 @@ const { sceneDecide } = require('../engine/scene.js');
     const drv = fs.readFileSync(N('SceneDriver.java'), 'utf8');
     assert.ok(/DIR = "chars3d\/"/.test(drv), '읽는 폴더가 assets/chars3d 가 아님');
   });
-  await t('자세 시트(s209): 6종 <id>_pose.webp 가 앱 assets 에 있고(4×2 칸), 앱은 없어도 걷기 시트로 그린다 · 날씨 반응 동작 8가지가 등록돼 있다', async () => {
-    for (const id of ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng']) {
+  await t('자세 시트(s209): 8종 <id>_pose.webp 가 앱 assets 에 있고(4×2 칸), 앱은 없어도 걷기 시트로 그린다 · 날씨 반응 동작 8가지가 등록돼 있다', async () => {
+    for (const id of ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'juksun', 'bbosong_0', 'bbosong_1', 'bbosong_2', 'bbosong_3']) {
       const f = path.join(ROOT, 'shell-android/app/src/main/assets/chars3d', id + '_pose.webp'); assert.ok(fs.existsSync(f), id + '_pose 없음');
       const b = fs.readFileSync(f); assert.ok(b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP' && b.length > 10000 && b.length < 120000, id + '_pose 크기·형식');
     }
     const drv = fs.readFileSync(N('SceneDriver.java'), 'utf8'), core = fs.readFileSync(N('SceneCore.java'), 'utf8'), acts = fs.readFileSync(N('SceneActs.java'), 'utf8');
-    assert.ok(/_pose\.webp/.test(drv) && /catch \(Throwable t2\)/.test(drv), '자세 시트는 읽기에 실패해도 장면이 멈추지 않는다');
+    assert.ok(/"_pose"/.test(drv) && /Chars\.file\(/.test(drv) && /catch \(Throwable t2\)/.test(drv), '자세 시트는 읽기에 실패해도 장면이 멈추지 않는다');
     assert.ok(/psh != null/.test(core) && /host\.sheet\(a\.id \+ "_pose"\)/.test(core), '자세 시트가 없으면 걷기 시트');
     for (const n of ['shiver', 'pant', 'squint', 'gust', 'splash', 'shakeoff', 'snowcatch', 'peer']) assert.ok(new RegExp('A_\\(S, "' + n + '"').test(acts), n + ' 동작 등록');
     assert.ok(/wsay\(S, a, "shiver"/.test(acts) && /traits\.get\(a\.id\)/.test(acts), '말은 엔진(traits.say)이 정한 글만 띄운다');

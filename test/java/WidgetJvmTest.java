@@ -173,7 +173,7 @@ public class WidgetJvmTest {
                 if (!sl.allUp()) housesGone = false;
             }
             if (durs.size() < 15) wokeRandom = false;
-            ok(allKinds && kinds.size() == 5, tag2 + ": 잠자리: 개집·바구니·굴·둥지·연못이 동물에 맞게 생긴다(" + kinds + ")");
+            ok(allKinds && kinds.size() == 7, tag2 + ": 잠자리: 개집·바구니·굴·둥지·연못·잎·꽃이 동물에 맞게 생긴다(" + kinds + ")");
             ok(grewSlowly, tag2 + ": 잠자리: 집이 서서히 나타난다(처음엔 안 보임)");
             ok(xsSeen.size() >= 20, tag2 + ": 잠자리: 집 자리가 매번 무작위다(" + xsSeen.size() + "곳)");
             ok(allSlept && hiddenOk, tag2 + ": 잠자리: 모두 자기 자리까지 걸어가 자는 장면으로 바뀐다(걷던 몸은 사라진다)");

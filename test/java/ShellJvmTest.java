@@ -1523,7 +1523,7 @@ public class ShellJvmTest {
             ok(RunnerCore.spec("nope") == null && RunnerCore.spec(null) == null, "로딩 캐릭터: 모르는 이름은 규격 없음");
             boolean rpk = true;
             for (String rprev : RunnerCore.ORDER) for (double r = 0d; r < 1d; r += 0.07d) { String n = RunnerCore.pick(rprev, r); if (n.equals(rprev) || RunnerCore.spec(n) == null) rpk = false; }
-            ok(rpk && RunnerCore.pick("", 0.0).equals("dolsom") && RunnerCore.pick("dolsom", 0.0).equals("lovel") && RunnerCore.pick("dolsom", 5d).equals("chaeng") && RunnerCore.pick("dolsom", -1d).equals("lovel"), "로딩 캐릭터: 방금 나온 것은 다시 안 뽑고, 범위 밖 값도 안전하다");
+            ok(rpk && RunnerCore.pick("", 0.0).equals("dolsom") && RunnerCore.pick("dolsom", 0.0).equals("lovel") && RunnerCore.pick("dolsom", 5d).equals("bbosong") && RunnerCore.pick("dolsom", -1d).equals("lovel"), "로딩 캐릭터: 방금 나온 것은 다시 안 뽑고, 범위 밖 값도 안전하다");
             RunnerCore.Frame rf0 = RunnerCore.at("dolsom", 0L, 236f), rf1 = RunnerCore.at("dolsom", 1350L, 236f), rf2 = RunnerCore.at("dolsom", 2700L, 236f);
             ok(!rf0.done && rf0.x < 0f && rf0.idx == 0 && !rf1.done && rf1.x > 0f && rf1.x < 236f && rf2.done, "로딩 캐릭터: 왼쪽 밖에서 시작해 가로지르고 끝나면 done");
             ok(RunnerCore.at("dolsom", 500L, 236f).idx == (int) (Math.floor(0.5d * 19d) % 16) && RunnerCore.at("dolsom", 100000L, 236f).idx < 16 && RunnerCore.at("dolsom", -50L, 236f).idx == 0, "로딩 캐릭터: 프레임은 fps 로 돌고 0~15 안");

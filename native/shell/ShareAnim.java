@@ -22,7 +22,8 @@ final class ShareAnim {
 
     /** seed: 같은 값이면 같은 계획. lo/hi: 친구가 오갈 수 있는 x 범위. */
     ShareAnim(long seed, float lo, float hi, float charH) {
-        Random r = new Random(seed);
+        long z = seed * 0x9E3779B97F4A7C15L; z ^= (z >>> 31); z *= 0xBF58476D1CE4E5B9L; z ^= (z >>> 29);   // 이어지는 씨앗도 골고루 흩는다(Random 은 이어지는 씨앗의 첫 값이 비슷하다)
+        Random r = new Random(z);
         id = WidgetSim.ORDER[r.nextInt(WidgetSim.ORDER.length)];
         cfg = WidgetSim.cfg(id); this.charH = charH;
         float span = Math.max(20f, hi - lo), d = Math.min(span, 80f + r.nextFloat() * 60f);
