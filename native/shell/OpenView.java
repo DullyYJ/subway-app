@@ -100,7 +100,7 @@ final class OpenView extends View {
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
         if (bgA <= 0) { finish(); return; }
         int sb = cv.saveLayerAlpha(0, 0, W, H, bgA);
-        p.setShader(null); p.setStyle(Paint.Style.FILL); p.setColor(sc.bg); cv.drawRect(0, 0, W, H, p);          // 불투명 바탕
+        p.setShader(null); p.setStyle(Paint.Style.FILL); p.setColor(pageBg()); cv.drawRect(0, 0, W, H, p);          // 불투명 바탕(밤에는 하늘 맨 위색)
         cv.restoreToCount(sb);
         if (fgA > 0) {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
@@ -118,10 +118,13 @@ final class OpenView extends View {
         postInvalidateOnAnimation();
     }
 
+    /** 화면 바탕색 — 칸이 정했으면 그것(밤), 아니면 대본의 파스텔 화이트. */
+    private int pageBg() { return slot.bg != 0 ? slot.bg : sc.bg; }
+
     /** 띠의 위쪽 가장자리를 바탕색으로 번지게 해 하늘이 바탕과 갈라진 느낌을 없앤다(윤곽선 없음). 아래는 화면 바닥에 닿는다. */
     private void feather(Canvas cv, float W, float H, float fh) {
         if (fade == null || fadeW != (int) W || fadeH != (int) H) {
-            int c1 = sc.bg | 0xFF000000, c0 = sc.bg & 0x00FFFFFF;
+            int c1 = pageBg() | 0xFF000000, c0 = pageBg() & 0x00FFFFFF;
             fade = new LinearGradient(0, 0, 0, fh, new int[] { c1, c0 }, null, Shader.TileMode.CLAMP);
             fadeW = (int) W; fadeH = (int) H;
         }
@@ -198,7 +201,7 @@ final class OpenView extends View {
     /** 제목: 대본의 brand 글 한 줄 — 화면 가로 가운데 · 바닥에서 65% 높이에, 대본의 글 색으로. */
     private void drawTitle(Canvas cv, float W, float H) {
         if (sc.brand.length() == 0) return;
-        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(sc.ink); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
+        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(slot.ink != 0 ? slot.ink : sc.ink); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
         cv.drawText(sc.brand, W / 2f, H * 0.35f + tp.getTextSize() * 0.35f, tp);          // 바닥에서 65% 높이 = 위에서 35%
     }
 

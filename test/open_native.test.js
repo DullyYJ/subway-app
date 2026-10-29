@@ -84,7 +84,8 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   assert.ok(/drawRect\(0, 0, W, H, p\)/.test(v) && /sc\.bg/.test(v) && /clipRect\(0, 0, pw, ph\)/.test(v) && /float pw = W,/.test(v) && !/drawRoundRect\(rf, 22f/.test(v) && !/setStrokeWidth\(1f \* dp\)/.test(v), '화면 전체는 불투명 파스텔 화이트 · 배경 그림은 가로 꽉 찬 띠 안에만(둥근 모서리·윤곽선 없음)');
   const ds = v.slice(v.indexOf('private void drawSky'), v.indexOf('p.setShader(sky)'));
   assert.ok(/p\.setColor\(0xFF000000\); p\.setAlpha\(255\)/.test(ds), '하늘 셰이더를 그리기 전에 붓 투명도를 되돌린다(앱 화면이 비치던 문제)');
-  assert.ok(/private void feather\(/.test(v) && /sc\.bg & 0x00FFFFFF/.test(v) && /feather\(cv, pw, ph, fh\)/.test(v), '띠의 위·아래 가장자리가 바탕색으로 번진다');
+  assert.ok(/private int pageBg\(\) \{ return slot\.bg != 0 \? slot\.bg : sc\.bg; \}/.test(v) && /p\.setColor\(pageBg\(\)\); cv\.drawRect\(0, 0, W, H, p\)/.test(v) && /tp\.setColor\(slot\.ink != 0 \? slot\.ink : sc\.ink\)/.test(v), 's326: 밤에는 바탕이 칸의 어두운 색 · 제목은 칸의 밝은 글 색');
+  assert.ok(/private void feather\(/.test(v) && /pageBg\(\) & 0x00FFFFFF/.test(v) && /feather\(cv, pw, ph, fh\)/.test(v), '띠의 위·아래 가장자리가 바탕색으로 번진다');
   assert.ok(/float pt = H - ph;/.test(v) && !/fadeB/.test(v), '띠는 화면 맨 아래 바닥에 닿는다(아래쪽 번짐 없음)');
   assert.ok(/ph = H \* 0\.40f/.test(v) && /gy = ph - 106f \* dp/.test(v), '띠는 화면 아래 40%까지(하늘을 위로 늘림) · 친구 발 자리는 바닥에서 고정(크기·자리 그대로)');
   assert.ok(/private void nameTag\(/.test(v) && /sc\.names\.get\(id\)/.test(v) && (v.match(/nameTag\(cv, a\.id/g) || []).length === 2, '자는 모습·깬 모습 모두 이름표');

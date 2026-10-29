@@ -110,6 +110,11 @@ public final class OpenJvmTest {
         OpenCore.Slot rain = OpenCore.withWeather(sc, noon, "rain"); ck(rain.sun == null && rain.fx.equals("rain") && ((rain.sky0 >> 8) & 255) < ((noon.sky0 >> 8) & 255), "비: 해가 가려지고 하늘이 어두워진다");
         ck(OpenCore.mix(0xFF000000, 0xFFFFFFFF, 0) == 0xFF000000 && OpenCore.mix(0xFF000000, 0xFFFFFFFF, 1) == 0xFFFFFFFF && OpenCore.mix(0xFF102030, 0xFF102030, 0.5) == 0xFF102030, "색 섞기");
         ck(night.dark && !noon.dark, "밤 칸만 dark");
+        // s326 (YJ: 하단 이미지가 어두워지면 하얀 바탕도 하늘 끝색으로 · 제목 글은 흰색): 밤·잠자기 칸만 bg(=하늘 맨 위색) · ink(밝은 글)를 가진다 — 낮 칸은 0(대본의 파스텔 화이트·진한 글)
+        for (OpenCore.Slot q : sc.slots) {
+            ck(q.dark ? (q.bg == q.sky0 && q.ink != 0 && ((q.ink >> 16) & 255) > 200) : (q.bg == 0 && q.ink == 0), q.id + ": 어두운 칸만 어두운 바탕·밝은 글");
+            for (String wk : new String[] { "cloudy", "rain", "snow", "fog" }) { OpenCore.Slot r = OpenCore.withWeather(sc, q, wk); ck(q.dark ? (r.bg == r.sky0 && r.ink == q.ink) : (r.bg == 0 && r.ink == 0), q.id + "/" + wk + ": 날씨가 물들어도 바탕은 하늘 맨 위와 같다"); }
+        }
         // ⑥ 전체 진하기
         ck(OpenCore.alpha(sc, 0) == 1 && OpenCore.alpha(sc, sc.dur - sc.fade) == 1 && OpenCore.alpha(sc, sc.dur) == 0 && OpenCore.alpha(sc, sc.dur - sc.fade / 2) > 0.4 && OpenCore.alpha(sc, sc.dur - sc.fade / 2) < 0.6 && OpenCore.done(sc, sc.dur) && !OpenCore.done(sc, sc.dur - 1), "사라짐: 2초는 또렷이 · 마지막 0.7초에 서서히");
         ck(sc.dur - sc.fade >= 2000, "또렷이 보이는 시간이 2초 이상");

@@ -24,6 +24,7 @@ public final class OpenCore {
         public String id = "", ko = "", kind = "pose", fx = ""; public boolean dark;
         public double h0, h1;
         public int sky0, sky1, sky2, ground, hill;
+        public int bg, ink;          // 칸이 정한 화면 바탕 · 제목 글 색(0xFFRRGGBB) — 0 이면 대본(Script)의 bg · ink (밤 칸만 어두운 바탕 · 밝은 글)
         public double[] sun;        // {x, y 처음, y 끝, 반지름(판 폭 비), 색(0xAARRGGBB 를 double 로)} · 없으면 null
         public double[] moon;       // {x, y, 반지름} · 없으면 null
         public int stars, clouds;
@@ -84,6 +85,8 @@ public final class OpenCore {
                 if (sk instanceof List && ((List<Object>) sk).size() >= 3) { List<Object> k = (List<Object>) sk; sl.sky0 = col(k.get(0)); sl.sky1 = col(k.get(1)); sl.sky2 = col(k.get(2)); }
                 else return null;
                 sl.ground = col(s.get("ground")); sl.hill = col(s.get("hill"));
+                if (s.get("bg") instanceof String) sl.bg = col(s.get("bg"));
+                if (s.get("ink") instanceof String) sl.ink = col(s.get("ink"));
                 Object su = s.get("sun"); if (su instanceof Map) { Map<String, Object> q = (Map<String, Object>) su; sl.sun = new double[] { num(q.get("x"), .5), num(q.get("y0"), .3), num(q.get("y1"), .3), num(q.get("r"), .08), col(q.get("c")) & 0xFFFFFFFFL }; }
                 Object mo = s.get("moon"); if (mo instanceof Map) { Map<String, Object> q = (Map<String, Object>) mo; sl.moon = new double[] { num(q.get("x"), .5), num(q.get("y"), .2), num(q.get("r"), .06) }; }
                 sl.stars = (int) num(s.get("stars"), 0); sl.clouds = (int) num(s.get("clouds"), 0);
@@ -164,8 +167,9 @@ public final class OpenCore {
     /** 마지막으로 받은 날씨(wk: clear·cloudy·overcast·rain·snow·fog)를 칸의 하늘·땅·해/달/별·구름·효과에 입힌 새 칸. 모르는 날씨·맑음·빈 값이면 칸 그대로. */
     public static Slot withWeather(Script sc, Slot s, String wk) {
         Wx w = wk == null ? null : sc.wx.get(wk); if (w == null) return s;
-        Slot r = new Slot(); r.id = s.id; r.ko = s.ko; r.kind = s.kind; r.dark = s.dark; r.h0 = s.h0; r.h1 = s.h1; r.roles = s.roles; r.special = s.special;
+        Slot r = new Slot(); r.id = s.id; r.ko = s.ko; r.kind = s.kind; r.dark = s.dark; r.h0 = s.h0; r.h1 = s.h1; r.roles = s.roles; r.special = s.special; r.ink = s.ink;
         int t = s.dark ? w.tintNight : w.tintDay;
+        r.bg = s.bg == 0 ? 0 : mix(s.bg, t, w.a);                                           // 바탕은 하늘 맨 위와 같은 비율로 물들어 둘의 이음매가 안 보인다
         r.sky0 = mix(s.sky0, t, w.a); r.sky1 = mix(s.sky1, t, w.a); r.sky2 = mix(s.sky2, t, w.a);
         r.ground = w.hasGround ? mix(s.ground, w.ground, w.ga) : mix(s.ground, t, w.a * 0.45);
         r.hill = w.hasGround ? mix(s.hill, w.hill, w.ga) : mix(s.hill, t, w.a * 0.45);

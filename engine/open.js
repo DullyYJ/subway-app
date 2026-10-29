@@ -19,7 +19,8 @@
 //
 // 대본 한 칸의 모양:
 //   { id, ko, h0, h1,                  // 시각 범위 [h0, h1) — 자정을 넘기면 h0 > h1 (23-07)
-//     sky:[위,가운데,아래], ground:"#…", hill:"#…", tc:"#…"(상단 글 색),
+//     sky:[위,가운데,아래], ground:"#…", hill:"#…", ink:"#…"(제목 글 색 — 없으면 대본의 ink),
+//     bg:"#…"(화면 바탕 색 — 없으면 대본의 bg. 밤 칸은 하늘 맨 위 색과 같게 해서 띠와 바탕이 이어진다),
 //     sun:{x,y0,y1,r,c} | moon:{x,y,r} | stars:n | clouds:n,
 //     (해/달/구름/별의 x·y 는 배경 판 안의 비율 0~1),
 //     kind:"pose"|"sleep", roles:[ 왼쪽, 가운데, 오른쪽 자리마다 { t0, p, hop, hz, fx, say } ],
@@ -80,12 +81,12 @@ var OPEN_SLOTS = [
     roles: [_r(0, 2, { hop: 0.03, hz: 0.7 }), _r(120, 2, { hop: 0.03, hz: 0.7, say: "오늘도 수고했어요!", fx: "heart" }), _r(240, 2, { hop: 0.03, hz: 0.7 })], special: {} },
   // ── 20-23 야간 휴식: 달 아래 가운데에 모여 앉아 쉰다 ──
   { id: "night", ko: "야간 휴식", h0: 20, h1: 23, kind: "pose", dark: true,
-    sky: ["#0e1a3f", "#243466", "#3d4a85"], ground: "#41614f", hill: "#365543",
+    sky: ["#0e1a3f", "#243466", "#3d4a85"], ground: "#41614f", hill: "#365543", bg: "#0e1a3f", ink: "#F4F6FF",
     moon: { x: 0.80, y: 0.24, r: 0.07 }, stars: 22, clouds: 0,
     roles: [_r(0, 0, {}), _r(120, 0, { say: "편안한 밤이에요~", fx: "heart" }), _r(240, 0, {})], special: {} },
   // ── 23-07 잠자기: 가운데에 모여 곤히 잔다 ──
   { id: "sleep", ko: "잠자기", h0: 23, h1: 7, kind: "sleep", dark: true,
-    sky: ["#050a1e", "#0f1838", "#1a2650"], ground: "#26394a", hill: "#1f3140",
+    sky: ["#050a1e", "#0f1838", "#1a2650"], ground: "#26394a", hill: "#1f3140", bg: "#050a1e", ink: "#F4F6FF",
     moon: { x: 0.22, y: 0.24, r: 0.065 }, stars: 28, clouds: 0,
     roles: [_r(0, 0, { fx: "zzz" }), _r(120, 0, { fx: "zzz", say: "쿨쿨… 푹 자요" }), _r(240, 0, { fx: "zzz" })], special: {} }
 ];
