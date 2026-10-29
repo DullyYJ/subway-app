@@ -360,8 +360,12 @@ public final class HomeCore {
     public static final int R_NONE = 0, R_RENDER = 1, R_GPS = 2, R_GO = 3, R_PICK_TIME = 4, R_FIELDS = 5, R_NEED_BOTH = 6, R_RESULT = 7, R_FAV = 8, R_LD = 9, R_ROOM = 10, R_DETAIL = 11, R_STOP = 12, R_SLOT = 13, R_CONFIRM = 14, R_LOCK = 15;
     public static final int D_NONE = 0, D_CLOSE = 1, D_RENDER = 2, D_KAKAO = 3, D_NAVER = 4, D_CONFIRM = 5, D_STOP = 6;
 
+    /** 방금 후보를 골라 출발·도착이 모두 정해졌다 — 바로 경로를 찾아야 한다(한 번 읽으면 꺼진다). */
+    public boolean autoGo;
+    public boolean takeAutoGo() { boolean g = autoGo; autoGo = false; return g; }
     /** 홈 화면의 눌림(a:'call' 의 v). R_FIELDS 는 입력칸 글자를 화면에 다시 써야 한다는 뜻. */
     public int act(String v, java.util.Map<String, String> fields) {
+        autoGo = false;
         if (v == null) return R_NONE;
         if (v.startsWith("rh.")) return actResult(v);
         if (fields != null) {                                        // 화면 입력칸의 지금 글자를 먼저 받아 둔다
@@ -371,7 +375,9 @@ public final class HomeCore {
             char kind = v.charAt(3);
             int idx;
             try { idx = Integer.parseInt(v.substring(5)); } catch (NumberFormatException e) { return R_NONE; }
-            return choose(kind, idx) ? R_FIELDS : R_NONE;
+            boolean okc = choose(kind, idx);
+            autoGo = okc && !riding() && bothSet();                       // 후보를 골라 출발·도착이 다 채워졌으면 [경로 탐색]을 안 눌러도 바로 찾는다(앱은 이 신호를 따라 찾기만 한다)
+            return okc ? R_FIELDS : R_NONE;
         }
         if ("rt.gps".equals(v)) return gps ? R_NONE : R_GPS;
         if ("rt.swap".equals(v)) { if (riding()) return R_LOCK; swap(); return R_FIELDS; }
