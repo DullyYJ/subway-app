@@ -150,8 +150,60 @@ final class RideStandbyJ {
         Object q = tr.get(tr.size() - 1);
         return rsHav(num(at(q, 1)), num(at(q, 2)), num(s.get("lat")), num(s.get("lng")));
     }
-    /** 눌러서(또는 예약 시각이 되어) 그 구간 차량을 탔다고 기록한다. 되돌릴 때 쓸 이전 통과 기록을 돌려준다. */
-    static Map<String, Object> xCommit(Map<String, Object> st, double i, double now, double ms) {
+    // ═════════════ s334 — 내 열차 기억(st.mt): engine/ride-standby.js rsMtBind · rsMtFor · rsMtCandWait · rsMtCandX 그대로 ═════════════
+    // 탑승 확정 순간에 '직전 실시간 답이 가리킨 열차 번호(btrainNo)'를 st.mt 에 적는다(도착 시각과 탄 시각이 -90초 ~ +240초 안일 때만). 영점 연속 실패 뒤 실시간 보정(rtAsk)이 이 번호의 열차만 찾는다.
+    static final double MT_EARLY_MS = 90000, MT_LATE_MS = 240000;
+    static boolean mtBind(Map<String, Object> st, double i, double boardMs, double now, Map<String, Object> cand, List<Object> notes) {
+        try {
+            st.remove("mt");
+            Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = eta == null ? null : l(eta.get("nodes"));
+            Object n = nodes == null ? null : at(nodes, (int) i);
+            if (!truthy(n) || !truthy(g(n, "isSub")) || truthy(g(n, "isBus")) || !truthy(g(n, "lineName")) || subwayId(str(g(n, "lineName"))).length() == 0) return false;
+            if (cand == null || !truthy(cand.get("tn")) || str(cand.get("tn")).length() == 0 || cand.get("ms") == null || !fin(cand.get("ms"))) return false;
+            double bm = fin(boardMs) ? boardMs : now, d = bm - num(cand.get("ms"));
+            if (d < -MT_EARLY_MS || d > MT_LATE_MS) { if (notes != null) notes.add("내 열차 기억 안 함(탄 시각이 실시간 열차와 " + ns(round(d / 1000)) + "초 어긋남)"); return false; }
+            st.put("mt", obj("tn", str(cand.get("tn")), "line", str(g(n, "lineName")), "i", i, "at", now, "src", "board", "tl", mtTimeline(st, i, str(g(n, "lineName")))));
+            if (notes != null) notes.add("내 열차 기억: " + str(cand.get("tn")) + "번(" + str(g(n, "lineName")) + ")");
+            return true;
+        } catch (RuntimeException e) { return false; }
+    }
+    /** 탄 순간의 '이 열차의 타임라인' — 같은 노선으로 이어지는 뒤 역들의 도착 시각(ms) 사본 [[노드번호, ms]…](최대 80). engine/ride-standby.js rsMtTimeline 그대로. */
+    static List<Object> mtTimeline(Map<String, Object> st, double i, String line) {
+        List<Object> out = new ArrayList<Object>(); Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = eta == null ? null : l(eta.get("nodes")); Object em = st.get("etaMs");
+        if (nodes == null) return out;
+        for (int j = (int) i + 1; j < nodes.size() && out.size() < 80; j++) {
+            Object nd = nodes.get(j);
+            if (!truthy(nd) || truthy(g(nd, "isBus")) || !truthy(g(nd, "isSub")) || !str(g(nd, "lineName")).equals(line)) break;
+            Object v = at(em, j);
+            if (v != null && fin(v)) { List<Object> pr = new ArrayList<Object>(); pr.add((double) j); pr.add((double) round(num(v))); out.add(pr); }
+        }
+        return out;
+    }
+    static Map<String, Object> mtCandWait(Map<String, Object> st) {
+        Map<String, Object> bl = mm(st.get("bl"));
+        return (bl != null && truthy(bl.get("tn")) && "realtime".equals(bl.get("src")) && bl.get("ms") != null && fin(bl.get("ms"))) ? obj("tn", str(bl.get("tn")), "ms", num(bl.get("ms"))) : null;
+    }
+    static Map<String, Object> mtCandX(Map<String, Object> st, double i) {
+        Map<String, Object> bl = mm(st.get("bl")), bx = bl == null ? null : mm(bl.get("x"));
+        return (bx != null && num(bx.get("i")) == i && truthy(bx.get("tn")) && "realtime".equals(bx.get("src")) && bx.get("ms") != null && fin(bx.get("ms"))) ? obj("tn", str(bx.get("tn")), "ms", num(bx.get("ms"))) : null;
+    }
+    /** 눌렀을 때 서버가 가린 열차(pressTT.liveTn · liveMs) | null */
+    static Map<String, Object> mtCandPress(Map<String, Object> tt) {
+        return (tt != null && truthy(tt.get("liveTn")) && tt.get("liveMs") != null && fin(tt.get("liveMs"))) ? obj("tn", str(tt.get("liveTn")), "ms", num(tt.get("liveMs"))) : null;
+    }
+    /** i0 번 노드(같은 노선 지하철 구간 안)에서 쓸 수 있는 내 열차 기억 | null — 노선이 바뀌었거나 사이에 환승·도보·버스가 끼면 옛 기억이다. */
+    static Map<String, Object> mtFor(Map<String, Object> st, double i0, String line) {
+        Map<String, Object> mt = mm(st.get("mt")); if (mt == null || !truthy(mt.get("tn")) || !str(mt.get("line")).equals(line) || !(num(mt.get("i")) <= i0)) return null;
+        Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = eta == null ? null : l(eta.get("nodes"));
+        for (int k = (int) num(mt.get("i")); k <= (int) i0; k++) {
+            Object nd = nodes == null ? null : at(nodes, k);
+            if (!truthy(nd) || truthy(g(nd, "isBus")) || !truthy(g(nd, "isSub")) || !str(g(nd, "lineName")).equals(line)) return null;
+        }
+        return mt;
+    }
+    static Map<String, Object> xCommit(Map<String, Object> st, double i, double now, double ms) { return xCommit(st, i, now, ms, null); }
+    /** 눌러서(또는 예약 시각이 되어) 그 구간 차량을 탔다고 기록한다. 되돌릴 때 쓸 이전 통과 기록을 돌려준다. cand = 눌렀을 때 가린 열차 { tn, ms } (없으면 환승 대기가 받아 둔 답). */
+    static Map<String, Object> xCommit(Map<String, Object> st, double i, double now, double ms, Map<String, Object> cand) {
         Map<String, Object> eta = mm(st.get("eta"));
         List<Object> passes = l(eta.get("passes")); if (passes == null) { passes = new ArrayList<Object>(); eta.put("passes", passes); }
         int hit = -1;
@@ -161,6 +213,7 @@ final class RideStandbyJ {
         Map<String, Object> done = mm(st.get("rsDone")); if (done == null) { done = obj(); st.put("rsDone", done); }
         done.put(ik(i), 1.0);
         st.remove("xw"); st.remove("xPend"); st.put("rsOpen", 0.0);
+        mtBind(st, i, num(np.get("ms")), now, cand != null ? cand : mtCandX(st, i), null);
         return prev;
     }
     static boolean doneAt(Map<String, Object> st, double bi) { Map<String, Object> d = mm(st.get("rsDone")); return d != null && truthy(d.get(ik(bi))); }
@@ -249,7 +302,7 @@ final class RideStandbyJ {
             if (bx != null && bx.get("ms") == null && num(bx.get("n")) >= BLX_MAXTRY && !(st.get("xFree") != null && num(st.get("xFree")) == L.bi)) { st.put("xFree", (double) L.bi); notes.add("환승 시각표 다음 차를 못 구함 — 위치 판단으로"); }
         }
         if (st.get("xPend") != null && gn(st.get("xPend"), "i") == L.bi && dep - now <= RS_EARLY_MS) {
-            Object lvO = mm(st.get("xPend")).get("lv"); Map<String, Object> pv = xCommit(st, L.bi, now, fin(lvO) ? num(lvO) : Double.NaN); notes.add("환승 예약 확정(" + L.bi + "번)");
+            Object lvO = mm(st.get("xPend")).get("lv"), ltnO = mm(st.get("xPend")).get("ltn"); Map<String, Object> pv = xCommit(st, L.bi, now, fin(lvO) ? num(lvO) : Double.NaN, (fin(lvO) && truthy(ltnO)) ? obj("tn", str(ltnO), "ms", num(lvO)) : null); notes.add("환승 예약 확정(" + L.bi + "번)");
             if (st.get("rsUndo") != null && truthy(mm(st.get("rsUndo")).get("x"))) mm(st.get("rsUndo")).put("prev", pv);
         }
     }
@@ -406,13 +459,15 @@ final class RideStandbyJ {
             double dN = distToStop(st, trailOf(st), num(x.get("i")));
             boolean lateHit = tt != null && tt.get("late") != null && !(!Double.isNaN(dN) && dN > RS_NEAR_M);
             if (!lateHit && x.get("arrMs") != null && num(x.get("arrMs")) - now > RS_EARLY_MS) {
-                st.put("xPend", obj("i", x.get("i"), "at", now)); st.put("rsOpen", 0.0); x.put("seen", Boolean.TRUE);
+                Map<String, Object> xpN = obj("i", x.get("i"), "at", now); st.put("xPend", xpN);
+                if (tt != null && tt.get("liveMs") != null && fin(tt.get("liveMs"))) { xpN.put("lv", num(tt.get("liveMs"))); if (truthy(tt.get("liveTn"))) xpN.put("ltn", str(tt.get("liveTn"))); }      // s192/s334: 실시간으로 가린 열차 시각·번호를 예약에 적어 둔다
+                st.put("rsOpen", 0.0); x.put("seen", Boolean.TRUE);
                 st.put("rsUndo", obj("w", obj("i", x.get("i")), "x", Boolean.TRUE, "pend", Boolean.TRUE, "prev", null, "until", now + 20000));
                 notes.add("환승 예약(" + ns(num(x.get("i"))) + "번 · 도착 " + ns(round((num(x.get("arrMs")) - now) / 1000)) + "초 전)");
             } else {
                 Map<String, Object> ruN = obj("w", obj("i", x.get("i")), "x", Boolean.TRUE, "prev", null, "until", now + 20000);
                 double pk = pickMs(tt != null && (Double.isNaN(dN) || dN <= RS_NEAR_M || tt.get("late") == null) ? tt : null, num(x.get("i")), now);
-                ruN.put("prev", xCommit(st, num(x.get("i")), now, pk));
+                ruN.put("prev", xCommit(st, num(x.get("i")), now, pk, mtCandPress(tt)));
                 st.put("rsUndo", ruN);
                 notes.add("환승 수동 확정(" + ns(num(x.get("i"))) + "번)" + (lateHit ? " · 방금 떠난 차 인정" : ""));
                 pressVerify(st, num(x.get("i")), now, notes);
@@ -428,6 +483,8 @@ final class RideStandbyJ {
             double pk = pickMs(tw != null && !(!Double.isNaN(dW) && dW > RS_NEAR_M && tw.get("late") != null) ? tw : null, num(w.get("i")), now);
             Map<String, Object> np = obj("idx", w.get("i"), "ms", pk, "src", "gps");
             if (hit >= 0) passes.set(hit, np); else passes.add(np);
+            Map<String, Object> cpW = mtCandPress(tw);
+            mtBind(st, num(w.get("i")), pk, now, (cpW != null && pk == num(cpW.get("ms"))) ? cpW : mtCandWait(st), notes);
             eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); blClear(st); st.put("rsOpen", 0.0);
             notes.add("승차 수동 확정(오버레이 탑승 버튼)" + (pk != now ? " · 시각표 " + ns(round((pk - now) / 1000)) + "초" : ""));
             pressVerify(st, num(w.get("i")), now, notes);
@@ -593,6 +650,7 @@ final class RideStandbyJ {
         List<Object> pxs = l(eta.get("passes")); if (pxs == null) pxs = new ArrayList<Object>();
         if (ux == null) return;
         double wi = num(mm(ux.get("w")).get("i")); int ki;
+        { Map<String, Object> mtU = mm(st.get("mt")); if (mtU != null && num(mtU.get("i")) == wi) st.remove("mt"); }      // s334: 되돌리면 그 열차 기억도 지운다
         if (truthy(ux.get("x"))) {
             if (truthy(ux.get("pend"))) st.remove("xPend");
             else {
@@ -1108,6 +1166,7 @@ final class RideStandbyJ {
         for (k = 0; k < passes.size(); k++) if (gn(passes.get(k), "idx") == num(w.get("i"))) { hit = k; break; }
         Map<String, Object> np = obj("idx", w.get("i"), "ms", ms, "src", "gps");
         if (hit >= 0) passes.set(hit, np); else passes.add(np);
+        mtBind(st, num(w.get("i")), ms, now, mtCandWait(st), notes);
         eta.put("boarded", Boolean.TRUE); eta.put("notDeparted", Boolean.FALSE); st.remove("wait"); blClear(st);
         notes.add("승차 확정(" + why + ")");
     }
@@ -1194,6 +1253,7 @@ final class RideStandbyJ {
         if (old != null) for (Object q : old) if (truthy(q) && gn(q, "idx") != num(x.get("i"))) lv.add(q);
         lv.add(obj("idx", x.get("i"), "ms", (double) round(num(b.get("ms")))));
         eta.put("live", lv); bx.put("ms", (double) round(num(b.get("ms")))); bx.put("src", truthy(b.get("src")) ? str(b.get("src")) : "");
+        if ("realtime".equals(b.get("src")) && truthy(b.get("tn")) && str(b.get("tn")).length() > 0) bx.put("tn", str(b.get("tn"))); else bx.remove("tn");      // s334
         notes.add("환승 다음 차(" + (truthy(b.get("src")) ? str(b.get("src")) : "?") + ") " + ns(round((num(b.get("ms")) - now) / 1000)) + "초 뒤");
     }
 
@@ -1209,6 +1269,7 @@ final class RideStandbyJ {
         if (b.get("fromMs") != null && fin(b.get("fromMs"))) eta.put("boardArriveMs", num(b.get("fromMs")));
         Map<String, Object> bl = mm(st.get("bl")); if (bl == null) { bl = obj(); st.put("bl", bl); }
         bl.put("src", truthy(b.get("src")) ? str(b.get("src")) : ""); bl.put("ms", num(b.get("ms"))); bl.put("okAt", now);
+        if ("realtime".equals(b.get("src")) && truthy(b.get("tn")) && str(b.get("tn")).length() > 0) bl.put("tn", str(b.get("tn"))); else bl.remove("tn");      // s334: 실시간이 가린 열차의 번호
         notes.add("실시간 재보정(" + (truthy(b.get("src")) ? str(b.get("src")) : "?") + ") 다음 차 " + ns(round((num(b.get("ms")) - now) / 1000)) + "초 뒤");
     }
 
@@ -1262,6 +1323,63 @@ final class RideStandbyJ {
         return true;
     }
 
+    // ═════════════ s334 — 로컬 시각표 우선 보정: 평상시 API 0회, 로컬 타임라인과 GPS 가 어긋날 때만 1회(쿨타임) — engine/ride-standby.js rsRtGate · rsTlErr · rsRtWatch 그대로 ═════════════
+    static final double RT_COOL_MS = 60000, RT_DEV_MS = 150000, RT_REC_DEV_MS = 60000, RT_LOSS_MS = 180000, RT_TRIP_MAX = 24, RT_CHK_MS = 10000, RT_CORR_M = 400, RT_GOOD_ACC_M = 100, RT_FRESH_MS = 15000, RT_RECWIN_MS = 60000;
+    static boolean rtGate(Map<String, Object> st, double now) {
+        Map<String, Object> c = mm(st.get("rtc")); if (c == null) return true;
+        if (c.get("n") != null && num(c.get("n")) >= RT_TRIP_MAX) return false;
+        return c.get("at") == null || now - num(c.get("at")) >= RT_COOL_MS;
+    }
+    private static double tlAt(Map<String, Object> st, Object etaMs, double j) {
+        Object v = at(etaMs, (int) j); if (v != null && fin(v)) return num(v);
+        Map<String, Object> mt = mm(st.get("mt")); List<Object> tl = mt == null ? null : l(mt.get("tl"));
+        if (tl != null) for (Object e : tl) { if (num(at(e, 0)) == j) return num(at(e, 1)); }
+        return Double.NaN;
+    }
+    /** 위치 q=[ts,lat,lng,acc] 를 이웃한 두 역 구간에 얹어, 그 자리를 지나는 시각과 q 의 시각 차(ms, 양수=늦음) → { err, i, d } | null */
+    static double[] tlErr(Map<String, Object> st, Object q, Object etaMs) {
+        List<Object> stops = l(st.get("stops")); if (stops == null) return null;
+        double qt = num(at(q, 0)), qlat = num(at(q, 1)), qlng = num(at(q, 2)), bd = 1e18, cl = Math.cos(qlat * Math.PI / 180), bT = 0; Object bA = null, bB = null;
+        for (int k = 0; k + 1 < stops.size(); k++) {
+            Object a = stops.get(k), b = stops.get(k + 1);
+            if (!truthy(a) || !truthy(b) || num(g(b, "i")) != num(g(a, "i")) + 1 || !fin(g(a, "lat")) || !fin(g(a, "lng")) || !fin(g(b, "lat")) || !fin(g(b, "lng"))) continue;
+            double ax = (num(g(a, "lng")) - qlng) * cl * 111320, ay = (num(g(a, "lat")) - qlat) * 111320, bx = (num(g(b, "lng")) - qlng) * cl * 111320, by = (num(g(b, "lat")) - qlat) * 111320;
+            double dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; if (l2 < 1) continue;
+            double tt = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)), px = ax + tt * dx, py = ay + tt * dy, d = Math.sqrt(px * px + py * py);
+            if (d < bd) { bd = d; bT = tt; bA = a; bB = b; }
+        }
+        if (bA == null || bd > RT_CORR_M) return null;
+        double ta = tlAt(st, etaMs, num(g(bA, "i"))), tb = tlAt(st, etaMs, num(g(bB, "i")));
+        if (Double.isNaN(ta) || Double.isNaN(tb) || !(tb > ta)) return null;
+        return new double[] { qt - (ta + bT * (tb - ta)), num(g(bA, "i")), bd };
+    }
+    static boolean rtWatch(Map<String, Object> st, List<Object> tr, double now, Object etaMs, List<Object> notes) {
+        try {
+            Map<String, Object> eta = mm(st.get("eta"));
+            if (eta == null || Boolean.FALSE.equals(eta.get("boarded")) || Boolean.TRUE.equals(eta.get("notDeparted")) || st.get("wait") != null || st.get("xw") != null || st.get("xPend") != null || tr.isEmpty()) return false;
+            Map<String, Object> c = mm(st.get("rtc")); if (c == null) { c = obj("n", 0.0); st.put("rtc", c); }
+            Object q = null;
+            for (int k = tr.size() - 1; k >= 0; k--) {
+                Object z = tr.get(k);
+                if (truthy(z) && fin(at(z, 0)) && fin(at(z, 1)) && fin(at(z, 2)) && (at(z, 3) == null || num(at(z, 3)) <= RT_GOOD_ACC_M)) { q = z; break; }
+            }
+            if (q == null) return false;
+            double qt = num(at(q, 0));
+            if (c.get("g") == null || qt > num(c.get("g"))) { if (c.get("g") != null && qt - num(c.get("g")) >= RT_LOSS_MS) c.put("rec", qt); c.put("g", qt); }
+            if (now - qt > RT_FRESH_MS) return false;
+            Map<String, Object> rt = mm(st.get("rt"));
+            if ((rt != null && !truthy(rt.get("done"))) || !rtGate(st, now) || (c.get("chk") != null && now - num(c.get("chk")) < RT_CHK_MS)) return false;
+            c.put("chk", now);
+            double[] e = tlErr(st, q, etaMs); if (e == null) return false;
+            if (c.get("fx") != null && e[1] + 1 == num(c.get("fx"))) return false;
+            boolean recov = c.get("rec") != null && now - num(c.get("rec")) <= RT_RECWIN_MS;
+            if (Math.abs(e[0]) < (recov ? RT_REC_DEV_MS : RT_DEV_MS)) return false;
+            if (!rtArm(st, e[1], now, notes)) return false;
+            c.put("why", recov ? "recover" : "dev");
+            notes.add("로컬 시각표와 GPS 위치가 " + ns(round(e[0] / 1000)) + "초 어긋남" + (recov ? "(신호 복구 직후)" : "") + " — 실시간 도착정보로 내 열차 맞추기(" + ns(e[1]) + "번 역 다음)");
+            return true;
+        } catch (RuntimeException e0) { return false; }
+    }
     static boolean rtArm(Map<String, Object> st, double i, double now, List<Object> notes) {
         try {
             Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = eta == null ? null : l(eta.get("nodes")); if (nodes == null) return false;
@@ -1284,7 +1402,10 @@ final class RideStandbyJ {
         if (num(rt.get("n")) >= RT_MAXTRY) return null;
         if (truthy(rt.get("askAt")) && now - num(rt.get("askAt")) < RT_STEP_MS) return null;
         rt.put("askAt", now); rt.put("n", num(rt.get("n")) + 1);
-        return obj("kind", "subrt", "i", i1, "nowMs", now, "fromMs", now, "line", rt.get("line"), "from", rt.get("stn"), "prev", rt.get("prev"));
+        { Map<String, Object> rc = mm(st.get("rtc")); if (rc == null) { rc = obj("n", 0.0); st.put("rtc", rc); } rc.put("at", now); rc.put("n", (rc.get("n") == null ? 0.0 : num(rc.get("n"))) + 1); }      // s334: 실시간 API 를 부른 시각·횟수(쿨타임·여정 한도)
+        Map<String, Object> ask = obj("kind", "subrt", "i", i1, "nowMs", now, "fromMs", now, "line", rt.get("line"), "from", rt.get("stn"), "prev", rt.get("prev"));
+        Map<String, Object> mtA = mtFor(st, num(rt.get("i0")), str(rt.get("line"))); if (mtA != null) ask.put("tn", mtA.get("tn"));      // s334: 내 열차 번호 — 서버는 이 열차만 찾는다
+        return ask;
     }
 
     static void rtApply(Map<String, Object> st, Map<String, Object> req, double now, List<Object> notes) {
@@ -1294,11 +1415,14 @@ final class RideStandbyJ {
         if (rt.get("lastAt") != null && at0 == num(rt.get("lastAt"))) return;
         if (!fin(at0) || now - at0 > RT_ANS_MS || at0 > now + 5000) return;
         rt.put("lastAt", at0);
-        if (b.get("ms") == null || !fin(b.get("ms")) || num(b.get("ms")) < now - 10000 || num(b.get("ms")) > now + RT_MAXAHEAD_MS) { notes.add("실시간 보정: 내 열차를 못 찾음(" + ns(num(rt.get("n"))) + "회)"); return; }
+        Map<String, Object> mtN = mtFor(st, num(rt.get("i0")), str(rt.get("line")));
+        if (b.get("ms") == null || !fin(b.get("ms")) || num(b.get("ms")) < now - 10000 || num(b.get("ms")) > now + RT_MAXAHEAD_MS) { notes.add("실시간 보정: 내 열차" + (mtN != null ? "(" + str(mtN.get("tn")) + "번)" : "") + "를 못 찾음(" + ns(num(rt.get("n"))) + "회)"); return; }
+        if (mtN == null && truthy(b.get("tn")) && str(b.get("tn")).length() > 0) { st.put("mt", obj("tn", str(b.get("tn")), "line", str(rt.get("line")), "i", num(rt.get("i0")), "at", now, "src", "late")); notes.add("내 열차 기억(늦게): " + str(b.get("tn")) + "번(" + str(rt.get("line")) + ")"); }      // s334
         List<Object> lv = new ArrayList<Object>(); List<Object> old = l(eta.get("live"));
         if (old != null) for (Object x : old) if (truthy(x) && gn(x, "idx") != num(rt.get("i1"))) lv.add(x);
         double ms = round(num(b.get("ms")));
         lv.add(obj("idx", rt.get("i1"), "ms", ms, "fix", Boolean.TRUE)); eta.put("live", lv); rt.put("done", 1.0); rt.put("ms", ms);
+        { Map<String, Object> rc = mm(st.get("rtc")); if (rc == null) { rc = obj("n", 0.0); st.put("rtc", rc); } rc.put("fx", rt.get("i1")); }      // s334: 이 구간(→ i1)은 실시간으로 맞췄다
         notes.add("실시간 보정: " + str(rt.get("stn")) + " 도착 " + ns(round((num(b.get("ms")) - now) / 1000)) + "초 뒤로 맞춤");
     }
 
@@ -1470,11 +1594,12 @@ final class RideStandbyJ {
             double mb = st.get("mb") == null ? -1 : num(st.get("mb")); int nMiss = 0;
             for (int mk = 0; mk < missL.size(); mk++) if (num(missL.get(mk)) > mb) nMiss++;
             Map<String, Object> rt0 = mm(st.get("rt"));
-            if (nMiss >= 3 && !(rt0 != null && !truthy(rt0.get("done")))) {
+            if (nMiss >= 3 && !(rt0 != null && !truthy(rt0.get("done"))) && rtGate(st, now)) {
                 st.put("mb", lastMiss);
-                if (rtArm(st, lastMiss, now, notes)) notes.add("도착 확정 연속 " + ns(nMiss) + "회 실패 — 실시간 도착정보로 내 열차 맞추기(" + ns(lastMiss) + "번 역 다음)");
+                if (rtArm(st, lastMiss, now, notes)) { Map<String, Object> rcL = mm(st.get("rtc")); if (rcL == null) { rcL = obj("n", 0.0); st.put("rtc", rcL); } rcL.put("why", "loss"); notes.add("도착 확정 연속 " + ns(nMiss) + "회 실패 — 실시간 도착정보로 내 열차 맞추기(" + ns(lastMiss) + "번 역 다음)"); }
             }
         }
+        if (ttNow(st, eta, passes)) rtWatch(st, tr, now, etaMs, notes);      // s334: 평상시 0회 — 로컬 시각표와 GPS 가 2분 반 넘게 어긋날 때만(쿨타임 1분)
         Map<String, Object> askRt = rtAsk(st, now);                       // s231 실시간 노선의 영점 강제 직후 한 번(최대 2회) 내 열차를 묻는다
         Al al = alerts(cfg, fired, curIdx, etaMs, now);
         // 경로 이탈
