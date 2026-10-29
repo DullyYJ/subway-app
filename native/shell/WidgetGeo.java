@@ -38,6 +38,16 @@ public final class WidgetGeo {
 
     private static float clamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+    /**
+     * 위젯 그림판(비트맵) 배율 — 화면 밀도(den)를 그대로 따른다(s304). 예전엔 1.6 배로 눌러 두어 밀도 2.75~3 인 폰에서 캐릭터가 늘려 그려져 흐렸다.
+     * 상한: 3.0 배(그 이상은 눈에 차이가 없다) · 그림판 한 장이 120만 화소(≈4.8MB)를 넘지 않게(큰 위젯·RemoteViews 메모리 한도 보호). 최소 1.
+     */
+    public static float bmpScale(float den, float wDp, float hDp) {
+        float s = clamp(den, 1f, 3f), area = Math.max(1f, wDp) * Math.max(1f, hDp);
+        if (area * s * s > 1200000f) s = (float) Math.sqrt(1200000f / area);
+        return Math.max(1f, s);
+    }
+
     public static WidgetGeo of(boolean vertical, float W, float H) {
         WidgetGeo g = new WidgetGeo(vertical, Math.max(60f, W), Math.max(60f, H));
         g.build();

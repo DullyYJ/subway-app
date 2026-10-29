@@ -302,7 +302,7 @@ public final class WidgetCore {
         Inst in = INST.get(id);
         if (in != null && Math.abs(in.wDp - w) < 1f && Math.abs(in.hDp - h) < 1f && in.vertical == v && in.dark == dark) return in;
         Inst n = new Inst(); n.id = id; n.vertical = v; n.dark = dark; n.wDp = w; n.hDp = h; n.den = den;
-        n.S = Math.min(den, 1.6f);
+        n.S = WidgetGeo.bmpScale(den, w, h);                         // 화면 밀도 그대로(최대 3배) — 예전 1.6배 상한은 캐릭터를 흐리게 늘려 그렸다
         n.geo = WidgetGeo.of(v, w, h);
         measureClock(n);
         n.chars = pickChars(id, null);

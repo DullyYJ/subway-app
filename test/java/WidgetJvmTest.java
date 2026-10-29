@@ -284,6 +284,8 @@ public class WidgetJvmTest {
         for (int i = 0; i < 500; i++) { a.step(0.1f); WidgetArt.draw(a, cnt, i % 2 == 0); }
         ok(cells[0] == 500 * 2 && !badFrame[0], "그림 명령: 프레임마다 캐릭터 수만큼 칸을 그리고 칸 번호가 0~15");
         ok(WidgetSim.roamMs(2) == 120000L && WidgetSim.roamMs(6) == 360000L && WidgetSim.roamMs(10) == 600000L && WidgetSim.roamMs(1) == 360000L && WidgetSim.roamMs(11) == 360000L && WidgetSim.roamMs(0) == 360000L && WidgetSim.roamMs(-5) == 360000L && WidgetSim.ROAM_LEN_MS == 360000L, "돌아다니는 시간: 2~10분은 그대로, 범위 밖·이상한 값은 기본 6분");
+        ok(WidgetGeo.bmpScale(2.75f, 250f, 110f) == 2.75f && WidgetGeo.bmpScale(3.5f, 250f, 110f) == 3f && WidgetGeo.bmpScale(1f, 250f, 110f) == 1f && WidgetGeo.bmpScale(0.5f, 250f, 110f) == 1f, "위젯 그림판 배율: 화면 밀도 그대로(1~3배) — 예전 1.6배 상한 없음");
+        ok(WidgetGeo.bmpScale(3f, 250f, 110f) * 250f * WidgetGeo.bmpScale(3f, 250f, 110f) * 110f <= 1200000f && WidgetGeo.bmpScale(3f, 600f, 400f) < 3f && WidgetGeo.bmpScale(3f, 600f, 400f) * 600f * WidgetGeo.bmpScale(3f, 600f, 400f) * 400f <= 1200001f, "위젯 그림판: 아주 큰 위젯은 120만 화소 안으로 배율을 낮춘다(메모리 보호)");
         System.out.println(fails == 0 ? "ALL OK" : (fails + " FAIL"));
     }
 

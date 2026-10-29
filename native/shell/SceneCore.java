@@ -39,6 +39,7 @@ public final class SceneCore {
     static final String[] BUS_NOS = {"146", "3300", "9401", "N61", "472", "6411"};
 
     // ═══ 그릇들 ═══
+    static final double BOX_W = 1.3, BOX_H = .38;          // 러블 상자(폭·높이, 캐릭터 키 대비)
     static final class Prop { String k; boolean abs, front; double x, y, dx, dy, r, s; }
     static final class Stk { String k; double t0, dur; }
     static final class Ball { double x, y, vx, vy; }
@@ -722,10 +723,10 @@ public final class SceneCore {
                 SceneCv.Grad mg = c.linear(x - mw / 2, y - mh, x + mw / 2, y).stop(0, css("#e6f3ff")).stop(1, css("#b9d6ee")); c.fillGrad(mg); rr(c, x - mw / 2, y - mh, mw, mh - 1, 4); c.fill();
                 c.fillStyle("rgba(255,255,255,.65)"); c.beginPath(); c.moveTo(x - mw * .3, y - mh + 2); c.lineTo(x - mw * .05, y - mh + 2); c.lineTo(x - mw * .35, y - mh * .45); c.lineTo(x - mw * .45, y - mh * .45); c.closePath(); c.fill();
             } else if (k.equals("boxb")) {
-                double bw = hh * 1.0, bh = hh * .46; c.fillStyle("#7a5530"); c.beginPath(); c.ellipse(x, y - bh, bw * .5, bw * .17, 0, 0, PI2); c.fill();
+                double bw = hh * BOX_W, bh = hh * BOX_H; c.fillStyle("#7a5530"); c.beginPath(); c.ellipse(x, y - bh, bw * .5, bw * .17, 0, 0, PI2); c.fill();
                 c.fillStyle("#b98a52"); c.fillRect(x - bw * .5, y - bh - 1, bw, 2);
             } else if (k.equals("boxf")) {
-                double bw2 = hh * 1.0, bh2 = hh * .46; c.fillStyle("#c99a62"); c.strokeStyle("#8f6a3c"); c.lineWidth(1); c.fillRect(x - bw2 * .5, y - bh2, bw2, bh2); c.beginPath(); c.rect(x - bw2 * .5, y - bh2, bw2, bh2); c.stroke();
+                double bw2 = hh * BOX_W, bh2 = hh * BOX_H; c.fillStyle("#c99a62"); c.strokeStyle("#8f6a3c"); c.lineWidth(1); c.fillRect(x - bw2 * .5, y - bh2, bw2, bh2); c.beginPath(); c.rect(x - bw2 * .5, y - bh2, bw2, bh2); c.stroke();
                 c.fillStyle("#e9d6a9"); c.fillRect(x - bw2 * .09, y - bh2, bw2 * .18, bh2); c.fillStyle("rgba(0,0,0,.1)"); c.fillRect(x - bw2 * .5, y - 3, bw2, 3);
                 c.fillStyle("#b98a52"); c.beginPath(); c.moveTo(x - bw2 * .5, y - bh2); c.lineTo(x - bw2 * .62, y - bh2 - bh2 * .14); c.lineTo(x - bw2 * .5, y - bh2 - 2); c.closePath(); c.fill();
                 c.beginPath(); c.moveTo(x + bw2 * .5, y - bh2); c.lineTo(x + bw2 * .62, y - bh2 - bh2 * .14); c.lineTo(x + bw2 * .5, y - bh2 - 2); c.closePath(); c.fill();

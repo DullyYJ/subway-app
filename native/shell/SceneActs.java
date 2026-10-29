@@ -133,10 +133,18 @@ final class SceneActs {
             Gfx bf = S.gfx("boxf", A.bx, a.z + .004, 4.8 + .4); bf.front = true; A.b2 = S.addGfx(bf);
         }, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t; S.standF(a);
-            if (u < .3) { if (Double.isNaN(A.s0)) A.s0 = a.x; S.moveX(a, A.bx - (A.bx >= a.x ? 1 : -1) * h * .55, a.spd, dt); if (u > .27) A.s1 = a.x; }
+            double bh = h * SceneCore.BOX_H;                                                  // 상자 앞판 높이 — 이 선 아래의 몸은 그리지 않는다(상자 밖으로 삐져나오지 않게)
+            if (Double.isNaN(A.s0)) A.s0 = a.x;
+            if (u < .3) { S.moveX(a, A.bx - (A.bx >= a.x ? 1 : -1) * h * .55, a.spd, dt); if (u > .27) A.s1 = a.x; }
             else if (u < .46) { double p = (u - .3) / .16; if (Double.isNaN(A.s1)) A.s1 = a.x; a.dir = A.bx >= a.x ? 1 : -1; a.x = A.s1 + (A.bx - A.s1) * ease(p); a.y = -Math.sin(PI * p) * h * .55; }
-            else if (u < .9) { a.x = A.bx; double k2 = ease(clamp((u - .46) / .08, 0, 1)); a.y = h * .14 * k2; a.ox = Math.sin(T * 12) * .8; a.sy = 1 - .04 * k2; }
-            else { double q = (u - .9) / .1; a.x = A.bx; a.y = h * .14 * (1 - ease(Math.min(1, q * 2))) - Math.sin(PI * q) * h * .5; }
+            else if (u < .9) { a.x = A.bx; double k2 = ease(clamp((u - .46) / .08, 0, 1)); a.y = h * .03 * k2; a.ox = Math.sin(T * 12) * .8; a.sy = 1 - .04 * k2; }
+            else {                                                                                // 폴짝 뛰어나와 상자 옆(들어온 쪽)에 내려앉는다
+                double q = (u - .9) / .1; int side = (Double.isNaN(A.s1) || A.s1 >= A.bx) ? 1 : -1;
+                a.x = A.bx + side * h * 1.1 * ease(clamp((q - .12) / .55, 0, 1));
+                a.y = h * .05 * (1 - ease(Math.min(1, q * 2.4))) - Math.sin(PI * q) * h * .62; a.dir = -side;
+            }
+            boolean inBox = u >= .38 && Math.abs(a.x - A.bx) < h * SceneCore.BOX_W * .62 && a.y > -bh * .98;
+            a.cut = inBox ? bh : Double.NaN;
         }, null);
         A_(S, "stretch", 3.4, null, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t; S.standF(a); a.pvx = h * .4;
