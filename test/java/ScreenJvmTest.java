@@ -286,6 +286,13 @@ public class ScreenJvmTest {
         ok(ScreenCore.Layout.hits(tg1, tg1.sx + 4f, tg1.sy + 4f) && !ScreenCore.Layout.hits(tg1, tg1.x + 3f, tg1.sy + 4f), "스위치 줄은 스위치(+8dp) 만 눌린다");
         ok(ScreenCore.Layout.hits(tg1, tg1.sx - 6f, tg1.sy + 4f), "스위치 바깥 8dp 까지 눌림(손가락 여유)");
         ok(nv.act.a.equals("web") && nv.act.v.equals("brief") && nv.label.equals("켜짐") && nv.labelW > 0f && ScreenCore.Layout.hits(nv, nv.x + 5f, nv.y + 5f), "이동 줄: web 행동·오른쪽 글·줄 전체 눌림");
+        {   // s323: navrow 의 vb(아래 여백) — 생략하면 vp 와 같고, 0 이면 아래 여백이 없다
+            ScreenCore.Layout VL = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"settings\",\"rev\":\"x\",\"cover\":\"tab\",\"head\":[],\"body\":["
+                + "{\"t\":\"navrow\",\"title\":\"a\",\"top\":true,\"act\":{\"a\":\"web\",\"v\":\"x\"}},"
+                + "{\"t\":\"navrow\",\"title\":\"b\",\"top\":true,\"vp\":16,\"vb\":0,\"act\":{\"a\":\"web\",\"v\":\"x\"}}]}"), 360f, M);
+            ScreenCore.Item va = null, vb2 = null; for (ScreenCore.Item it : VL.body) if (it.kind == ScreenCore.K_NAV) { if (va == null) va = it; else vb2 = it; }
+            ok(va != null && vb2 != null && near(va.h, 1f + 11f + va.lineH + 11f) && near(vb2.h, 1f + 16f + vb2.lineH + 0f) && near(vb2.textY - vb2.y, 1f + 16f), "navrow vb: 생략=vp 와 같다 · vp 16 vb 0 이면 글자 위 16 · 아래 0");
+        }
         ok(fd.key.equals("commId") && fd.maxlen == 12 && fd.label.equals("아이디 2~12자") && near(fd.h, 44f) && fd.act == null, "입력칸: 키·글자수·힌트·높이 44, 눌림 행동은 앱 내부(편집)");
         ok(sbt.fill.role.equals("gold") && sbt.tc.role == null && sbt.tc.argb == 0xFF121214 && sbt.act.a.equals("call") && sbt.act.v.equals("saveId"), "버튼 변형: 금색 바탕 + CSS 글자색 + call 행동");
         ok(se1.on && !se2.on && se1.act.a.equals("sel") && se1.act.v.equals("dark") && se1.prevC.length == 5 && se2.prevC.length == 0, "고르기 카드: 상태·행동·미리보기 5색");

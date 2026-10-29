@@ -3408,3 +3408,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **④ 유지**: 끊김 허용 10초(`RS_DOOR_LOST_MS`), 반경 250m · 정확도 80m · 최대 3분 그대로 — 실기기 결과 보고 조정.
 - 파일: `engine/ride-standby.js`(rsChainSegs · rsPosFromSegs · rsMonoPos) · `native/shell/RideStandbyJ.java`(chainSegs · posFromSegs · monoPos 쌍둥이). 코퍼스에 s323 시나리오 217건 추가(늦은 출발 · 속도 출발 · 흔들림, `_s323` 표시) → 서버 JS = 폰 자바 888건 일치. 시험 `test/ride_dwell.test.js` 10건(새 4건: 정속 · 다음 역 15초 · 속도 출발 · 오판 없음).
 - 워커 `route-v2-2026-10-29s323`(**재배포 필요**). 한계: 기기 확인 전. 늦은 GPS 확정(`dw.s=now`)도 '늦은 출발'로 보아 다음 도착을 늦춘다(그 뒤 영점이 바로잡음).
+
+## s324 (2026-10-29) — 안내 창 문구·여백 정리 (YJ)
+- 위치 안내 창 맨 아래 '개인정보처리방침 보기' 줄: 글자 위(구분선→글자)와 아래(글자→카드 테두리) 여백을 같게. 카드 안쪽 여백(16)이 줄 아래에 이미 있어 줄 자체는 `vp:16, vb:0`(위 16 · 아래 0)으로 — `ScreenCore` navrow 에 `vb`(아래 여백, 생략하면 vp 와 같음) 추가(옛 앱은 vb 를 모르고 위아래 16 씩 그린다). 엔진 `settingsNavPrivN`.
+- '갤럭시' → '휴대폰': 기기 설정 안내 창 2곳(`settingsPageAskBat` 갤럭시용 · `settingsPageAskSam`)의 제목·본문. (설정 탭의 '갤럭시 백그라운드 유지' 화면 글자는 그대로.)
+- '다른 앱을 보면서도 내 위치 확인' 창: 아래 글을 '· 안내정보를 보여줘요.' 한 줄로(광고 문구 · '나중에 설정 탭의…' 줄 삭제).
+- 워커 `route-v2-2026-10-29s324`(**재배포 필요**) · 앱도 새로 설치해야 방침 줄 여백(vb)이 반영된다. 시험: settings_engine · ScreenJvmTest(navrow vb).

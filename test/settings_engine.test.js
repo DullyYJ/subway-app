@@ -208,12 +208,14 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(tm.includes('오류 로그 32건') && tm.some(x => /최근 2건만 보여 드려요\. 오래된 30건은 \[복사\]로/.test(x)) && !texts(PG('erl', { errs: E1 })).some(x => /건만 보여 드려요/.test(x)), 's266: 오류 로그: 주소 한도로 일부만 받았으면(more) 전체 건수와 안내를 보여 준다'); }
   { const t = texts(PG('locd', {})).join('\n'), a = acts(PG('locd', {})).map(x => x.v).join();
     ok(/백그라운드 위치 데이터를 수집/.test(t) && /하차역·환승역 도착 알림/.test(t) && /저장하지 않습니다/.test(t), '위치 안내: 고지 글');
-    ok(a === 'locd.no,locd.ok,pol.privacy', '위치 안내: 거부 · 동의 · 방침 보기'); }
+    ok(a === 'locd.no,locd.ok,pol.privacy', '위치 안내: 거부 · 동의 · 방침 보기');
+    const pn = JSON.stringify(PG('locd', {})); ok(/"t":"navrow","title":"개인정보처리방침 보기"[^}]*"vp":16,"vb":0/.test(pn) || (/개인정보처리방침 보기/.test(pn) && /"vp":16/.test(pn) && /"vb":0/.test(pn)), 's323 방침 보기 줄: 글자 위 16 · 아래 줄 여백 0(+카드 안쪽 16) = 위아래 같음'); }
   { const tb = texts(PG('askbat', {})).join('\n'), ts = texts(PG('askbat', { sm: 1 })).join('\n'), tm = texts(PG('asksam', {})).join('\n'), to = texts(PG('askovl', {})).join('\n');
     ok(/배터리 최적화에서 길동무를 제외/.test(tb) && !/자동 절전/.test(tb) && /삼성·샤오미/.test(tb), 's180 배터리 안내: 일반 기기 글');
     ok(/자동 절전에서 제외/.test(ts) && /\[설정하기\] 한 번이면 이어서 안내해요/.test(ts) && /One UI/.test(ts), 's180 배터리 안내: 갤럭시는 절전 제외까지 한 창');
     ok(/자동으로 절전하지 않는 앱/.test(tm) && /③ 길동무를 체크/.test(tm), 's180 갤럭시 절전 안내');
-    ok(/현재 역과 남은 시간/.test(to) && /다른 앱 위에 표시를 켬으로/.test(to) && /광고는 넣지 않아요/.test(to), 's180 다른 앱 위에 표시 안내');
+    ok(/현재 역과 남은 시간/.test(to) && /다른 앱 위에 표시를 켬으로/.test(to) && /· 안내정보를 보여줘요\./.test(to) && !/광고|나중에 설정 탭/.test(to), 's323 다른 앱 위에 표시 안내: 안내정보를 보여줘요 한 줄만(나중에 줄 없음)');
+    ok(!/갤럭시/.test(ts + tm) && /휴대폰에서 화면을 꺼도/.test(JSON.stringify(PG('askbat', { sm: 1 }))) && /휴대폰은 며칠 안 쓴 앱/.test(ts) && /휴대폰은 며칠 안 쓴 앱/.test(tm), 's323 안내 창: 갤럭시 → 휴대폰');
     ['askbat', 'asksam', 'askovl'].forEach(n => ok(acts(PG(n, {})).map(x => x.v).join() === 'ask.no,ask.ok', n + ': 나중에 · 설정하기 둘뿐')); }
   // 하차 5분 전 추천 시험
   ok(texts(PG('arr', {})).includes("'상태 확인'을 누르면 감시 상태와 남은 시간이 표시됩니다."), '추천 시험: 처음 안내');

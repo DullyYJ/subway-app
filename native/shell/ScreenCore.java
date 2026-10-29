@@ -22,7 +22,7 @@ import java.util.Map;
  *     search { pad, max, hint, badge, accent, maxlen, act:{a:'search',tpl,empty} } 검색줄(알약). 입력은 기기의 진짜 입력칸(EditText)이 받는다
  *     panel  { pad, ip, fill, line, r, kids:[…] }                                        카드(배경·테두리) 안에 아래 노드들을 쌓는다(중첩은 한 단계)
  *     toggle { pad, title, sub, size, ssize, bold, on, key, onc, big, top, vp }          제목(+설명) 오른쪽에 스위치. 누르면 앱이 바로 뒤집고 {a:'set',key,on} 을 알린다
- *     navrow { pad, title, sub, size, act, top, vp }                                       오른쪽에 › 가 있는 줄(sub = 오른쪽 작은 상태 글자)
+ *     navrow { pad, title, sub, size, act, top, vp, vb }                                       오른쪽에 › 가 있는 줄(sub = 오른쪽 작은 상태 글자)
  *     select { pad, title, sub, on, act:{a:'sel',v}, fill, line, onl, tc, sc, prev:[색×5], chk, ckf }  미리보기 칸이 있는 고르기 카드(테마 등)
  *     field  { pad, key, hint, value, maxlen, h, fill, line, r, size }                    글자 입력칸(누르면 기기의 진짜 입력칸이 그 자리에 뜬다)
  *     bar    { pad, title, sub, btn, act }                                                   머리줄: 제목 + 금색 작은 글(예: '○○역 인근') + 오른쪽 알약 단추(btn 이 있으면 act 필수)
@@ -215,7 +215,7 @@ public final class ScreenCore {
         public boolean bold, on;
         public String color = "text", bg = "", align = "left";
         public String s = "", label = "", badge = "", name = "", tag = "", img = "", fb = "";
-        public float ipL = 12f, ipT = 8f, ipR = 12f, ipB = 8f, r = 10f, max = 340f, vp = 9f, ssize = 11f;
+        public float ipL = 12f, ipT = 8f, ipR = 12f, ipB = 8f, r = 10f, max = 340f, vp = 9f, vb = -1f, ssize = 11f;
         public int maxlen = 60;
         public boolean top, big, spin;                     // spin: inbar 단추에 도는 점(감지 중 · 경로 찾는 중) — dim(흐림)과 따로
         public long ln, ln2;                               // tdrow: 구간 출발·도착 시각(기기 시계 ms)
@@ -552,7 +552,7 @@ public final class ScreenCore {
         } else if ("navrow".equals(t)) {
             pad(m, n);
             n.title = optStr(m, "title", "", 120); if (n.title.length() == 0) throw new ParseError("navrow: title 없음");
-            n.sub = optStr(m, "sub", "", 60); n.size = optNum(m, "size", 13f, 8f, 30f); n.top = optBool(m, "top", false); n.vp = optNum(m, "vp", 11f, 0f, 40f);
+            n.sub = optStr(m, "sub", "", 60); n.size = optNum(m, "size", 13f, 8f, 30f); n.top = optBool(m, "top", false); n.vp = optNum(m, "vp", 11f, 0f, 40f); n.vb = optNum(m, "vb", -1f, -1f, 40f);
             n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub"); n.act = act(m.get("act"), true);
         } else if ("select".equals(t)) {
             pad(m, n);
@@ -2102,7 +2102,7 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_NAV; it.x = ox; it.y = y; it.w = innerW; it.top = n.top; it.act = n.act;
             it.lines = new String[] { ellipsize(n.title, titleW, n.size, false, m) };
             it.size = n.size; it.size2 = 11f; it.lineH = n.size * 1.3f; it.label = n.sub; it.labelW = subW;
-            it.h = top + n.vp + it.lineH + n.vp; it.textX = ox; it.textY = y + top + n.vp;
+            it.h = top + n.vp + it.lineH + (n.vb >= 0f ? n.vb : n.vp); it.textX = ox; it.textY = y + top + n.vp;
             it.sx = ox + innerW - chev;                    // › 자리
             it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));
             out.add(it);
