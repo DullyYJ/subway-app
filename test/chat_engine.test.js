@@ -225,6 +225,22 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   const pa = E.chatScreen({ cap: 6, now: 1 }, { sel: 'all', th: 'pastel' }, {}).head.find(n => n.t === 'chips').items.find(x => x.label === '2호선').c;
   ok(typeof dk === 'string' && typeof pa === 'string', '테마별 색');
 }
+// s330: 방금 보낸 글(전송 중) — 서버 글에 아직 없으면 내 말풍선으로 맨 끝에 · 서버 글에 생기면 빠진다 · 앱은 틀(info.echo)만 쓴다
+{
+  const pend = (sel, p, d) => E.chatScreen({ cap: 6, now: NOW }, Object.assign({}, base, { sel, me: '나', pend: p }), d);
+  const all1 = pend('all', [['방금 친 글', NOW]], { g: [['다른이', '안녕', NOW - 5000, 0, '1호선']] });
+  const msgs = all1.body.filter(n => n.t === 'msg');
+  ok(msgs.length === 2 && msgs[1].s === '방금 친 글' && msgs[1].mine === true && msgs[1].time === '전송 중', '전체 방: 전송 중인 글이 맨 끝 내 말풍선으로');
+  const all2 = pend('all', [['방금 친 글', NOW]], { g: [['다른이', '안녕', NOW - 5000, 0, '1호선'], ['나', '방금 친 글', NOW + 500, 1, '1호선']] });
+  ok(all2.body.filter(n => n.t === 'msg').length === 2 && !all2.body.some(n => n.time === '전송 중'), '서버 글에 같은 글이 생기면 전송 중 말풍선은 빠진다');
+  const room1 = pend('1호선', [['hi', NOW]], { r: [] });
+  ok(room1.body.filter(n => n.t === 'msg').length === 1 && room1.body.find(n => n.t === 'msg').time === '전송 중' && !room1.body.some(n => n.t === 'text'), '빈 노선 방: 안내 글 대신 내 말풍선');
+  const room2 = pend('1호선', [['hi', NOW]], { r: [['m1', NOW + 100, '나', 'hi', 'chat']] });
+  ok(!room2.body.some(n => n.time === '전송 중'), '노선 방: 서버 글(내 아이디 · 같은 글)이 생기면 빠진다');
+  const echo = all1.info.echo;
+  ok(echo && echo.t === 'msg' && echo.mine === true && echo.s === '' && echo.time === '전송 중' && Array.isArray(echo.pad), '화면에 내 말풍선 틀(info.echo)을 담는다 — 앱은 글만 채운다');
+  ok(pend('all', [['x'.repeat(500), NOW], ['a', 1], ['b', 2], ['c', 3], ['d', 4], ['e', 5], ['f', 6]], { g: [] }).body.filter(n => n.time === '전송 중').length === 5, '전송 중 글은 최대 5개 · 400자');
+}
 (async () => {
   const tmp = path.join(os.tmpdir(), 'rv2_chat_' + process.pid + '.mjs');
   fs.copyFileSync(R('engine/route-v2-worker.ascii.js'), tmp);
