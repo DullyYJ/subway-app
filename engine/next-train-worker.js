@@ -79,7 +79,7 @@ function ntLiveTargets(out, id) {
 // 대상별로 실시간 열차 시각(ms)을 가린다 → { key: { ms, src:'realtime' } } (시각표로 가려진 것·못 받은 것은 넣지 않는다)
 //   d = { fetch, id, pick, table, rec, aheadMax } — 기본은 ride-standby 모듈의 같은 함수들. baseMs: 탐색 기준 시각, nowMs: 지금.
 async function ntLiveFirst(env, out, baseMs, nowMs, d) {
-  var res = {};
+  var res = {}, miss = 0;
   try {
     d = d || (typeof rsBlLivePick === 'function' ? { fetch: rsFetchSeoulPath, id: rsSubwayId, pick: rsBlLivePick, table: rsBlTable, rec: rsBlReconcile, aheadMax: RS_BL_AHEAD_MAX_MIN, ms: RS_LIVE_MS } : null);
     if (!d) return res;
@@ -96,7 +96,8 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
     for (j = 0; j < got[1].length; j++) lists[got[1][j][0]] = got[1][j][1];
     for (j = 0; j < tg.length; j++) {
       e = tg[j];
-      var list = lists[e.from]; if (!list) continue;
+      var list = lists[e.from];
+      if (!list) { if ((Math.round(baseMs + e.offSec * 1000) - nowMs) / 60000 <= d.aheadMax) miss++; continue; }      // s332: 못 받음(중계 준비 중 · 시간 초과) — 앱이 3·6·10·15초 뒤 다시 묻는다(liveMissing)
       var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + e.offSec * 1000), tz: 540 };
       if ((q.fromMs - nowMs) / 60000 > d.aheadMax) continue;                                // 20분 넘게 먼 승차는 시각표
       var live = d.pick(list, q, nt); if (live == null) continue;
@@ -104,6 +105,7 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
       if (rc && rc.src === 'realtime') res[e.key] = { ms: Math.round(rc.ms), src: 'realtime' };
     }
   } catch (err) {}
+  try { Object.defineProperty(res, 'miss', { value: miss, enumerable: false }); } catch (e2) { }      // 열쇠로 세지지 않게 — 실시간을 못 받은 첫 지하철 구간 수
   return res;
 }
 
