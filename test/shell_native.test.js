@@ -266,7 +266,7 @@ function findAndroidJar() {
     assert.ok(/kind\\":\\"rload\\"/.test(v) && /private void rloadShow\(\)/.test(v) && /private void rloadHide\(\)/.test(v), 'rload 화면은 엔진에서 받는다');
     assert.ok(/if \(!shown\) \{[^}]*rloadShow\(\);/.test(v), '보여 줄 옛 결과가 없을 때만 카드를 띄운다(SWR 로 이미 보이면 안 띄움)');
     const pr = v.slice(v.indexOf('private void postRoute('), v.indexOf('private void openLink('));
-    assert.ok(/rloadHide\(\);/.test(pr.slice(0, pr.indexOf('private void postFail'))) && /my != seqRoute\) return; rloadHide\(\)/.test(pr), '결과가 오든 실패하든 카드를 닫는다');
+    assert.ok(/rloadHideSoon\(\);/.test(pr.slice(0, pr.indexOf('private void postFail'))) && /my != seqRoute\) return; rloadHide\(\)/.test(pr), '결과가 오든 실패하든 카드를 닫는다');
     assert.ok(/postDelayed\(rloadSafety, 50000L\)/.test(v) && /void onDestroy\(\) \{[^}]*rloadHide\(\)/.test(v) && /setCancelable\(false\)/.test(v), '50초 안전 닫기 · 끝날 때 닫기');
     assert.ok(/setDimAmount\(0\.7f\)/.test(v) && /setCornerRadius\(20f \* dpr\)/.test(v), '웹과 같은 70% 어둡게 · 모서리 20');
     assert.ok(/rloadFetch\(\); \} \}\);\s*\/\/ 경로 탐색 로딩 카드/.test(v) || /return rloadFetch\(\);/.test(v), '켜자마자 미리 받아 둔다(탐색 때 기다리지 않게)');
@@ -558,6 +558,21 @@ function findAndroidJar() {
     assert.ok(/applyPanel\(my, key, hit\); return;/.test(a) && /private void panelCachePut\(/.test(a) && /food\.goKeys\(PANEL_PF_MAX\)/.test(a) && /panelRequestFor\(ShellCore\.CAP, k\)/.test(a) && /foodPfRun, 1200L/.test(a), '목록이 뜨면 목록의 가게 펼침(16곳까지)을 미리 받아 둔다(5분)');
     assert.ok(/foodWatch\(150L\);/.test(a) && /pfFood\.goKeys\(PANEL_PF_MAX\)/.test(a) && /if \(destOk\) \{ double\[\] fg = food\.gps;/.test(a), '경로를 찾는 즉시 도착지 주변 맛집 목록 · 가게 지도 16곳을 뒤에서 받아 둔다(내 위치 글자까지 같게)');
     assert.ok(/public String panelRequestFor\(int cap, String k\)/.test(fc) && /withRes && !panelRes\.isEmpty\(\)/.test(fc), '미리 받기 본문 = 눌렀을 때 첫 왕복 본문과 같다');
+  });
+  await t('s329: 맛집 가게 눌림 — 엔진이 가게 사실을 눌림에 실어 주고(act.id) · 받는 중 연타는 닫지 않고 · 칩 번호표 동기화 · 눌림/미리받기 전용 실행기', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8'), en = fs.readFileSync(path.join(__dirname, '..', 'engine', 'food.js'), 'utf8');
+    assert.ok(/food\.act\(a\.v, a\.id\)/.test(a) && /static List<Object> selOfId\(String id\)/.test(fc) && /public int act\(String v, String id\)/.test(fc), '앱은 눌림에 실린 가게 사실을 그대로 쓴다(번호표는 옛 엔진 대비)');
+    assert.ok(/function foodSelId\(p\)/.test(en) && /n\.act\.id = sid/.test(en) && /위치 정보 없음/.test(en), '엔진이 눌림에 가게 사실을 싣는다');
+    assert.ok(/if \(panelSkel \|\| panelNodes == null\) return R_NONE;/.test(fc), '펼침을 받는 중에 또 눌러도 닫지 않는다');
+    assert.ok(/altGo\.put\(e\.getKey\(\)/.test(fc) && /Map<String, Object> g = altGo\.get\(flt\);/.test(fc), '칩을 바꾸면 눌림 번호표도 그 칩 것으로');
+    assert.ok(/foodRender\.execute\(new Runnable\(\) \{ @Override public void run\(\) \{\s+\/\/ 목록 화면에 펼침을 끼우는/.test(a) && /foodNet\.execute/.test(a) && !/ioExec\.execute\(new Runnable\(\) \{ @Override public void run\(\) \{\s+for \(String rq : reqs\)/.test(a), '카드 뼈대 그리기와 미리 받기 통신은 디스크 IO 줄 밖에서 달린다');
+  });
+  await t('s330: 내가 친 대화는 보낸 즉시(통신 없이) 내 말풍선으로 · 경로 응답은 카드(AI 승무원)를 기다리지 않고 그려진 직후 로딩 카드를 닫는다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cc = fs.readFileSync(N('ChatCore.java'), 'utf8'), ch = fs.readFileSync(path.join(__dirname, '..', 'engine', 'chat.js'), 'utf8');
+    assert.ok(/chat\.addPend\(vsel, text, System\.currentTimeMillis\(\)\);[\s\S]{0,200}src\.setField\(fk, ""\);\s+chatEcho\(text, vsel\);/.test(a) && /ChatCore\.withEcho\(cur, text\)/.test(a) && /public static String withEcho\(/.test(cc), '보내는 즉시 입력칸을 비우고 엔진 틀로 말풍선을 그린다(검사 · 서버 답 전에)');
+    assert.ok(/function chtPendNodes\(/.test(ch) && /echo: \{ t: 'msg'/.test(ch) && /pendJson\(sel\)/.test(cc), '엔진이 전송 중 말풍선 · 틀(info.echo)을 정한다');
+    assert.ok(/rloadHideSoon\(\);/.test(a) && /if \(rloadWantHide && home\.hasRoute\(\)\) rloadHide\(\);/.test(a), '로딩 카드는 결과가 올라온 직후에 닫는다(받자마자 닫아 빈 화면이 보이지 않게)');
+    assert.ok(/tc\.join\(500L\);/.test(a) && /cardsLate\.get\(\) && nj\.length\(\) > 0/.test(a), '경로 결과가 준비됐는데 홈 카드가 늦으면 0.5초만 기다리고 결과부터 올린다(카드는 도착하는 대로 끼운다)');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
