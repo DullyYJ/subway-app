@@ -23617,7 +23617,7 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
   var node = { t: 'scene', h: 150, r: 12, pad: [0, 0, 0, 0], sc: js };
-  if (sc.fill === true) node.h = 180;      // (YJ 2026-10-29) 경로 탐색 전 홈 화면에서만 장면 세로를 고정 180(예전 최소 90 의 2배) — 남는 세로를 채우지도 · 대화 줄을 접지도 않는다. 경로 결과 등 다른 화면은 150 그대로
+  if (sc.fill === true) node.h = 180;      // (YJ 2026-10-29) \uacbd\ub85c \ud0d0\uc0c9 \uc804 \ud648 \ud654\uba74\uc5d0\uc11c\ub9cc \uc7a5\uba74 \uc138\ub85c\ub97c \uace0\uc815 180(\uc608\uc804 \ucd5c\uc18c 90 \uc758 2\ubc30) \u2014 \ub0a8\ub294 \uc138\ub85c\ub97c \ucc44\uc6b0\uc9c0\ub3c4 \u00b7 \ub300\ud654 \uc904\uc744 \uc811\uc9c0\ub3c4 \uc54a\ub294\ub2e4. \uacbd\ub85c \uacb0\uacfc \ub4f1 \ub2e4\ub978 \ud654\uba74\uc740 150 \uadf8\ub300\ub85c
   return node;
 }
 
