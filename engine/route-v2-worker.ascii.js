@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s332";
+var ENGINE_VERSION = "route-v2-2026-10-30s333";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12630,6 +12630,8 @@ function ntCreate(DATA) {
 
 var NT_KV_KEY = "nt:bundle:v1";
 var NT_TTL_MS = 6 * 3600 * 1000;
+var NT_NEAR_SEC = 260;            // s333: \uc2b9\ucc28\uc5ed\uae4c\uc9c0 \uac78\uc5b4\uc11c \uc774 \uc548(\u2248250m \u2014 \uc2b9\ucc28 \ub300\uae30 \uc7ac\ubcf4\uc815 RS_BL_NEAR_M \uacfc \uac19\ub2e4)\uc774\uba74 '\uc5ed \uc548\uc5d0 \uc788\ub2e4'\uace0 \ubcf4\uace0 \uc9c0\uae08 \uc624\ub294 \uc5f4\ucc28\ubd80\ud130 \ud6c4\ubcf4\ub85c \ubcf8\ub2e4(\uac78\uc74c \uc2dc\uac04\uc744 \uba3c\uc800 \ube7c\uc9c0 \uc54a\ub294\ub2e4)
+var NT_HURRY_BUF_MS = 30000;      // \uc55e\ub2f9\uaca8 \ud0c8 \ub54c \uc5f4\ucc28 \ub3c4\ucc29 \uc774\ub9cc\ud07c(30\ucd08) \uc804\uc5d0 \uc2b9\uac15\uc7a5\uc5d0 \ub2ff\ub294 \uac83\uc73c\ub85c \uadf8\ub9b0\ub2e4
 var NT_MAX_WAIT_MIN = 30;         // \uc571\uc758 \uc61b _TT_MAX_WAIT \u2014 \ub300\uae30\uac00 \uc774\ubcf4\ub2e4 \uae38\uba74 \ubc18\uc601\ud558\uc9c0 \uc54a\ub294\ub2e4(\ub9c9\ucc28 \ub4a4\u00b7\uc2dc\uac01\ud45c \uc774\uc0c1)
 var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '', _NT_SRC = '';   // _NT_WHY: \ub9c8\uc9c0\ub9c9 \uc2e4\ud328 \uc0ac\uc720 \u00b7 _NT_SRC: \uc9c0\uae08 \uc4f0\ub294 \uc2dc\uac01\ud45c\uc758 \ucd9c\ucc98(kv|svc|embed) \u2014 \uc9c4\ub2e8\uc6a9
 
@@ -12690,7 +12692,7 @@ function ntLiveTargets(out, id) {
     off = (r.accessWalkMin || 0) * 60;                                     // \uccab \uad6c\uac04\uc5d0 \ub2ff\ub294 \uc2dc\uac01 = \ud0d0\uc0c9 \uc2dc\uac01 + \uc811\uadfc \ub3c4\ubcf4(legsToSubPath \uc758 arriveSec \uc640 \uac19\ub2e4)
     key = ntLiveKey(L.line, sl[0], sl[1], off);
     if (seen[key]) continue; seen[key] = 1;
-    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off });
+    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off, near: off <= NT_NEAR_SEC });
   }
   return res;
 }
@@ -12715,8 +12717,8 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
     for (j = 0; j < tg.length; j++) {
       e = tg[j];
       var list = lists[e.from];
-      if (!list) { if ((Math.round(baseMs + e.offSec * 1000) - nowMs) / 60000 <= d.aheadMax) miss++; continue; }      // s332: \ubabb \ubc1b\uc74c(\uc911\uacc4 \uc900\ube44 \uc911 \u00b7 \uc2dc\uac04 \ucd08\uacfc) \u2014 \uc571\uc774 3\u00b76\u00b710\u00b715\ucd08 \ub4a4 \ub2e4\uc2dc \ubb3b\ub294\ub2e4(liveMissing)
-      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + e.offSec * 1000), tz: 540 };
+      if (!list) { if ((Math.round(baseMs + (e.near ? 0 : e.offSec) * 1000) - nowMs) / 60000 <= d.aheadMax) miss++; continue; }      // s332: \ubabb \ubc1b\uc74c(\uc911\uacc4 \uc900\ube44 \uc911 \u00b7 \uc2dc\uac04 \ucd08\uacfc) \u2014 \uc571\uc774 3\u00b76\u00b710\u00b715\ucd08 \ub4a4 \ub2e4\uc2dc \ubb3b\ub294\ub2e4(liveMissing)
+      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + (e.near ? 0 : e.offSec) * 1000), tz: 540 };      // s333: \uc5ed \uac00\uae4c\uc774(near)\uba74 \uc9c0\uae08\ubd80\ud130 \u2014 \uc55e \uc5f4\ucc28(\uc5f0\ucc29)\ub97c \uac78\uc74c \uc2dc\uac04 \ub54c\ubb38\uc5d0 \uac74\ub108\ub6f0\uc9c0 \uc54a\ub294\ub2e4
       if ((q.fromMs - nowMs) / 60000 > d.aheadMax) continue;                                // 20\ubd84 \ub118\uac8c \uba3c \uc2b9\ucc28\ub294 \uc2dc\uac01\ud45c
       var live = d.pick(list, q, nt); if (live == null) continue;
       var rc = d.rec(live, d.table(q, nt));
@@ -12731,6 +12733,28 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
 //   baseMs: \ud0d0\uc0c9 \uae30\uc900 \uc2dc\uac01(\uc694\uccad\uc758 baseMs).  bf: \uc571\uc774 '\uc608\uc0c1 \uc2dc\uac01 \ubaa8\ub4dc'\ub77c \uc6b4\ud589\uc885\ub8cc \ubcf4\uc815(svcWarn.shift)\uc744 \uc4f0\uc9c0 \uc54a\uc744 \ub54c true.
 //   ttWaitMs \uc758 \uc758\ubbf8 = \uc571\uc758 \uc61b \uacc4\uc0b0\uacfc \uac19\ub2e4: \uadf8 \uad6c\uac04\uc744 \ud0c0\ub7ec \uac00\ub294 \uc2dc\uac01(\ud0d0\uc0c9 \uc2dc\uac01 + \uad6c\uac04 startSec + \uc55e \uad6c\uac04 \ub300\uae30 \ub204\uc801)\uc5d0 \uc2b9\ucc28\uc5ed\uc5d0 \ub2ff\uc73c\uba74
 //   \ub2e4\uc74c \uc5f4\ucc28\uae4c\uc9c0 \uae30\ub2e4\ub9ac\ub294 \uc2dc\uac04. 0~30\ubd84\uc77c \ub54c\ub9cc \ubd99\ub294\ub2e4. \uc55e \uad6c\uac04\uc758 \ub300\uae30\ub294 \ub4a4 \uad6c\uac04 \uc2dc\uac01\uc5d0 \uadf8\ub300\ub85c \uc774\uc5b4\uc9c4\ub2e4(\uc571\uc774 \ud569\uc0b0\ud574 \uadf8\ub9b0\ub2e4).
+// s333: \uccab \uad6c\uac04 \uc55e\uc758 \uac78\uc74c\uc744 shSec \ucd08 \uc904\uc774\uace0(\ub9c8\uc9c0\ub9c9 \ub3c4\ubcf4\uc758 \ub05d) \uadf8 \ub4a4 \ubaa8\ub4e0 \uad6c\uac04\uc758 \uc2dc\uac01(startSec\u00b7arriveSec\u00b7endSec\u00b7stopSec)\uacfc \ucd1d \uc2dc\uac04\uc744 \uac19\uc740 \ub9cc\ud07c \ub2f9\uae34\ub2e4. \uc55e \uad6c\uac04\uc774 \uc804\ubd80 \ub3c4\ubcf4\uc77c \ub54c\ub9cc.
+function ntHurry(path, sub, k, shSec) {
+  var j, w = sub[k - 1];
+  for (j = 0; j < k; j++) if (!sub[j] || sub[j].trafficType !== 3) return false;
+  if (!w || w.endSec == null || w.startSec == null || w.endSec - shSec < w.startSec) return false;
+  w.endSec -= shSec; if (w.arriveSec != null && w.arriveSec > w.endSec) w.arriveSec = w.endSec;
+  w.sectionTime = Math.max(0, Math.round((w.endSec - w.startSec) / 60));
+  for (j = k; j < sub.length; j++) {
+    var g = sub[j]; if (!g) continue;
+    if (g.startSec != null) g.startSec -= shSec;
+    if (g.arriveSec != null) g.arriveSec -= shSec;
+    if (g.endSec != null) g.endSec -= shSec;
+    if (Array.isArray(g.stopSec)) g.stopSec = g.stopSec.map(function (x) { return x - shSec; });
+  }
+  var inf = path.info;
+  if (inf) {
+    if (typeof inf.totalTime === 'number') inf.totalTime = Math.max(1, inf.totalTime - Math.round(shSec / 60));
+    if (inf.trip && typeof inf.trip.arrSec === 'number') inf.trip.arrSec -= shSec;
+    inf.ttHurry = (inf.ttHurry || 0) + 1;
+  }
+  return true;
+}
 function ntAttachPath(nt, path, baseMs, bf, live) {
   var sub = path && path.subPath;
   if (!nt || !sub || !sub.length) return 0;
@@ -12764,6 +12788,11 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
     if (live && k === firstT && shiftMs === 0 && st.length > 1) {
       var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];
       if (lv && lv.ms != null) {
+        if (lv.ms < t && leg.arriveSec != null && leg.arriveSec <= NT_NEAR_SEC && k === firstT && k > 0) {      // s333: \uac78\uc5b4\uc11c \ub2ff\ub294 \uc2dc\uac01(t)\ubcf4\ub2e4 \uc55e\uc11c \uc624\ub294 \uc5f4\ucc28 \u2014 \uc5ed \uac00\uae4c\uc774\uc5d0 \uc788\uc73c\uba74 \uc11c\ub458\ub7ec \uadf8 \ucc28\ub97c \ud0c4\ub2e4: \uac78\uc74c \uc2dc\uac04\uc744 \uc904\uc5ec \uc2b9\uac15\uc7a5\uc5d0 \ub3c4\ucc29 30\ucd08 \uc804\uc5d0 \ub2ff\ub294 \uac83\uc73c\ub85c \uadf8\ub9b0\ub2e4
+          var tNew = Math.max(base0 + leg.startSec * 1000 - Math.round(leg.arriveSec * 1000), lv.ms - NT_HURRY_BUF_MS);
+          var shSec = Math.round((t - tNew) / 1000);
+          if (shSec > 0 && ntHurry(path, sub, k, shSec)) { t = tNew; }
+        }
         var wl = (lv.ms - t) / 60000;
         if (wl > 0 && wl <= NT_MAX_WAIT_MIN) { var wlMs = Math.round(wl * 60000); leg.ttWaitMs = wlMs; leg.ttLive = true; acc += wlMs; n++; if (path.info) path.info.ttLive = (path.info.ttLive || 0) + 1; continue; }
       }
