@@ -1073,23 +1073,38 @@ public class ShellActivity extends Activity {
         final String sig = ShellCore.foodSig(destOk, dLa, dLo, ll);
         if (sig.length() == 0) return false;                                  // 도착지도 위치도 아직 없다(위치가 잡히면 warmLocTabs 가 다시 한다)
         final String key = ShellCore.S_FOOD + "|" + sig;
+        java.util.List<String> reqs = java.util.Collections.emptyList();
         synchronized (pfFood) {
-            if (cacheAge(key) < FOOD_PF_FRESH_MS) return false;               // 이 장소의 맛집은 이미 받아 뒀다
-            long nowMs = System.currentTimeMillis();
-            if (!destOk) { if (foodGpsPfAt != 0L && nowMs - foodGpsPfAt < FOOD_PF_GPS_GAP_MS) return false; foodGpsPfAt = nowMs; }
-            pfFood.setDest(destOk ? dName : "", destOk ? dLa : 0, destOk ? dLo : 0);
-            if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
-            NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
-            if (r.status != 200 || r.body == null) return true;
-            pfFood.onScreen(r.body);
-            if (pfFood.needData()) {
-                String su = pfFood.serverUrl();
-                String[] pu = new String[FoodCore.PUB_PAGES];
-                for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
-                pfFood.setData(foodDataNow(su, pfFood.sharedUrl(), pu));
-                NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
-                if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(key, r2.body, false); }
-            } else prefetchPut(key, r.body, false);
+            final boolean fresh = cacheAge(key) < FOOD_PF_FRESH_MS;              // 이 장소의 맛집 목록은 이미 받아 뒀다 — 목록은 다시 안 받지만, 이 상태기에 같은 도착지 목록이 있으면 가게 지도는 마저 받아 둔다
+            if (fresh && !(destOk && pfFood.loaded && pfFood.dest.equals(dName.trim()))) return false;
+            if (fresh) { double[] fg = food.gps; if (fg != null) pfFood.setGps(fg[0], fg[1]); else pfFood.gps = null; }
+            if (!fresh) {
+                long nowMs = System.currentTimeMillis();
+                if (!destOk) { if (foodGpsPfAt != 0L && nowMs - foodGpsPfAt < FOOD_PF_GPS_GAP_MS) return false; foodGpsPfAt = nowMs; }
+                pfFood.setDest(destOk ? dName : "", destOk ? dLa : 0, destOk ? dLo : 0);
+                if (pfFood.needGps()) { if (ll != null) pfFood.setGps(ll[0], ll[1]); else return false; }
+                if (destOk) { double[] fg = food.gps; if (fg != null) pfFood.setGps(fg[0], fg[1]); else pfFood.gps = null; }          // 도착지가 있으면 눌렀을 때 맛집 화면이 보낼 '내 위치'와 똑같이 — 미리 받은 가게 지도 요청과 글자까지 같아야 서버 없이 바로 열린다
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 12000);
+                if (r.status != 200 || r.body == null) return true;
+                pfFood.onScreen(r.body);
+                if (pfFood.needData()) {
+                    String su = pfFood.serverUrl();
+                    String[] pu = new String[FoodCore.PUB_PAGES];
+                    for (int i = 0; i < pu.length; i++) pu[i] = pfFood.publicUrl(i + 1);
+                    pfFood.setData(foodDataNow(su, pfFood.sharedUrl(), pu));
+                    NetPost.Res r2 = NetPost.post(ShellCore.BASE + "/screen/food", pfFood.request(ShellCore.CAP, true), 20000);
+                    if (r2.status == 200 && r2.body != null) { pfFood.onScreen(r2.body); prefetchPut(key, r2.body, false); }
+                } else prefetchPut(key, r.body, false);
+            }
+            reqs = new java.util.ArrayList<String>();
+            for (String k : pfFood.goKeys(PANEL_PF_MAX)) { String rq = pfFood.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
+        }
+        for (String rq : reqs) {                                               // 도착지 주변 가게 지도(펼침)까지 전부 — 눌렀을 때 서버를 기다리지 않는다
+            try {
+                NetPost.Res pr = NetPost.post(ShellCore.BASE + "/screen/food", rq, 8000);
+                if (pr.status == 200 && pr.body != null && pr.body.indexOf("\"ok\":true") >= 0) panelCachePut(rq, pr.body);
+                Thread.sleep(150L);
+            } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; } catch (Throwable ignored) { }
         }
         return true;
     }
@@ -1104,13 +1119,14 @@ public class ShellActivity extends Activity {
     private String foodWatchSig = "";
     private final Runnable foodWatchTick = new Runnable() { @Override public void run() { if (!resumed) return; foodWatch(); main.postDelayed(this, 1500L); } };       // 앱이 뒤로 가면 멈추고 onResume 이 다시 건다
     private void foodWatchStart() { main.removeCallbacks(foodWatchTick); main.postDelayed(foodWatchTick, 800L); }
-    private void foodWatch() {
+    private void foodWatch() { foodWatch(1200L); }
+    private void foodWatch(final long gapMs) {
         HomeCore.Loc d = home.loc[HomeCore.DEST];
         if (d == null || !d.ok()) { foodWatchSig = ""; return; }
         final String sig = ShellCore.foodSig(true, d.lat, d.lng, null);
         if (sig.equals(foodWatchSig)) return;
         foodWatchSig = sig;
-        deb.trailing("foodwarm", 1200L, new Runnable() { @Override public void run() {
+        deb.trailing("foodwarm", gapMs, new Runnable() { @Override public void run() {
             HomeCore.Loc d2 = home.loc[HomeCore.DEST];
             if (d2 == null || !d2.ok() || !sig.equals(ShellCore.foodSig(true, d2.lat, d2.lng, null))) return;      // 그 사이 또 바뀌었다
             if ("food".equals(ShellCore.currentTab(store))) return;                                            // 맛집 탭을 보는 중이면 그쪽 로더가 받는다
@@ -4489,6 +4505,7 @@ public class ShellActivity extends Activity {
         if (shown && hit.state == Swr.FRESH) { home.lastQs = qs; return; }          // 방금 받은 결과 — 통신 없이 끝
         final int my = ++seqRoute;
         home.lastQs = qs;
+        foodWatch(150L);                                                                  // 도착지가 정해져 경로를 찾는 즉시 그 주변 맛집(목록 · 가게 지도)도 뒤에서 받기 시작한다
         if (!shown) { if (rloadJson.length() == 0) toast("경로를 찾는 중이에요"); home.routing = true; reloadHome(); rloadShow(); }       // 찾는 동안만 단추가 돈다(엔진이 그린다)
         new Thread(new Runnable() {
             @Override public void run() {
