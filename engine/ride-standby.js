@@ -100,7 +100,7 @@ function rsAlerts(cfg, fired, curIdx, etaMs, now, mtFn) {
 // ★ 2026-10-21 (s109): 옛 웹이 만들던 값을 엔진이 만든다. 앱은 /reco-text 의 'ad'(가게·상품 줄)를 req.rc 로 한 번 알려 주고(엔진이 받은 시각을 at 으로 찍는다),
 //   [확인]을 누르면 req.rcDis(=at)를, 오버레이 탑승 줄 손짓은 req.act('press'|'undo'|'open'|'close'|'pill')를 보낸다. 무엇을 언제 보일지는 모두 여기서 정한다.
 function rsCheerFn() { return (typeof reArrCheer === 'function') ? reArrCheer : (function () { try { return require('./ride-eta').reArrCheer; } catch (e) { return null; } })(); }
-var RS_CHARS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
+var RS_CHARS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'juksun', 'bbosong'];
 function rsChar(at) { return RS_CHARS[Math.abs(Math.floor((+at || 0) / 1000)) % RS_CHARS.length]; }
 function rsClampTxt(s, n) { s = String(s == null ? '' : s); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 

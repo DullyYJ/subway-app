@@ -3239,3 +3239,15 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 ### s297 — 오버레이 도착 줄: 캐릭터 줄만 (YJ 07:26)
 - 도착하면 오버레이에 ① 글만 있는 '목적지에 도착했어요 [안내 종료]' 줄(rs)과 ② 캐릭터가 나오는 '도착했어요 [앱 종료]' 줄(getoff, row kind 2)이 둘 다 뜨던 것(②는 도착 3분 뒤)을 정리: ②를 도착 즉시(`RS_END_BTN_MS` 180000→0, JS·자바 쌍둥이)로 올리고, ②가 있으면 ①은 그리지 않는다(`RideOverlay.apply`: `!(ar && v.row.kind == 2)`). 5분 뒤 자동 종료는 그대로. 옛 워커(②가 3분 뒤)면 처음 3분은 ①이 남고 ②가 뜨면 ①이 사라진다.
 - 워커 `route-v2-2026-10-29s297` 재배포. 시험: ride_standby · ride_overlay_level(도착 즉시) · shell_native · 녹화본 재녹화.
+
+### s298 — 새 길동무 친구 둘: 죽순이(판다) · 뽀송(아기 하마) (YJ: "좋아" + 성격)
+- **이름은 임시**: id `juksun`(죽순이) · `bbosong`(뽀송). 이름을 바꾸려면 화면에 보이는 이름만 바꾸면 된다(id·파일은 그대로).
+- **성격**: 죽순이 = 대나무를 늘 들고 다니며 먹는 걸 좋아하는 활발이, 잠꾸러기(잘 땐 대나무를 끌어안고 잔다). 뽀송 = 머리에 데이지, 꽃을 좋아하는 깔끔이 — 깨끗한 걸 좋아해 늘 신발을 신고, 신발 모으기가 취미라 자주 갈아 신는다. 꼬리는 짧고 동글게 말림, 눈은 납작하게(튀어나오지 않게), 얼굴은 무섭지 않게.
+- **시트(앱 assets/chars3d)**: `juksun.webp`(걷기 4×4) · `juksun_pose.webp`(자세 4×2: 앉기·잠·기쁨·떨기·헐떡·찡그림·x1=대나무 먹기(입 닫힘)·x2=먹기(입 벌림)) · `juksun_sleep.webp` / `bbosong_{0..3}.webp` · `bbosong_{0..3}_pose.webp`(x1=데이지 냄새 맡기, x2=신발 자랑 다리 들기) · `bbosong_sleep.webp`. 신발: 0 흰 운동화 · 1 노란 장화 · 2 보라 메리제인 · 3 민트 하이탑.
+- **신발 규칙(`Chars.java`, 순수 자바)**: 20분마다 바뀌고 이어지는 두 칸은 절대 같지 않다(4칸씩 섞어 신고 묶음 이음새만 앞 둘을 맞바꿈). 시트를 읽는 다섯 곳(SceneDriver · RideOverlay · RunnerArt · ShareArt · WidgetCore)이 모두 `Chars.file(key, now)` 를 거친다. 시트를 새로 읽을 때(앱 열기·장면 다시 만들기·위젯 새로 그리기) 바뀐 신발이 반영된다.
+- **목록 끝에 덧붙임**: `SCENE_CHARS`(= 기차 장면 비트마스크 `1<<index`) · `SceneModel.ORDER` · `RunnerCore.ORDER` · `WidgetSim.ORDER` · `RS_CHARS` 모두 끝에 `juksun, bbosong`. 앞 여섯의 번호는 안 바뀐다. `Spec` 은 `SceneModel`↔`RunnerCore` 쌍둥이.
+- **전용 동작**(`SceneActs`): 죽순이 `munch`(냠냠) · `snooze`(꾸벅 졸기) · `hooray`(야호 뛰기), 뽀송 `sniff`(꽃 냄새) · `shoeshow`(신발 자랑) · `sparkle`(반짝). 엔진 `SCENE_ACTS` 에 넣었고 날씨 말풍선(`SCENE_SAY`)도 둘 몫을 추가. 옛 앱은 모르는 동작을 건너뛰므로 워커를 먼저 올려도 안전.
+- **만든 방법**: `tools/chars3d/friends/`(rig.js · render2.html · export2.py · export_sleep2.py · shot2/3.js · walk_meta/sleep_meta.json). three.js 로 봉제 인형 렌더 → Playwright(SwiftShader) 캡처 → webp 시트. three.min.js 는 저장소에 없음(필요하면 npm three).
+- **시험**: `test/chars_native.test.js`(신발 규칙·시트 크기·목록 일치·로더 경유·새 동작/문구) + `test/java/CharsJvmTest.java`. 여덟 마리로 달라진 값은 hcards_engine · scene_engine · 녹화본 등을 갱신.
+- ⚠ **실기기 미확인**: 두 친구의 실제 크기(자동 크기 조정이 `base-8` 기준이라 개 크기 캐릭터보다 조금 작게 보일 수 있음 ~48dp vs ~52dp) · 잠자는 위치 · 위젯 신발 교체. 걷기 중에는 장면을 다시 만들기 전까지 신발이 안 바뀐다.
+- 워커 `route-v2-2026-10-29s298` 재배포 필요 + CI APK 설치.

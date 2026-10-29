@@ -116,10 +116,10 @@ public final class OvCore {
         }
         return v;
     }
-    /** 캐릭터 이름은 자산에 있는 여섯 가지만(아니면 빈 글 → 그림 없이 글만). */
+    /** 캐릭터 이름은 자산에 있는 여덟 가지만(아니면 빈 글 → 그림 없이 글만). */
     static String chId(Object o) {
         String s = BoardCore.s(o, 12);
-        return ("dolsom".equals(s) || "lovel".equals(s) || "dudung".equals(s) || "sul".equals(s) || "ppopu".equals(s) || "chaeng".equals(s)) ? s : "";
+        return ("dolsom".equals(s) || "lovel".equals(s) || "dudung".equals(s) || "sul".equals(s) || "ppopu".equals(s) || "chaeng".equals(s) || "juksun".equals(s) || "bbosong".equals(s)) ? s : "";
     }
 
     /** 평소 막대(칸 줄이 없을 때): 줄 글만 가진 모델(개발자 도구 · 엔진이 칸을 안 준 경우). */

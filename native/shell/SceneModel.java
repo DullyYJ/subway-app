@@ -20,7 +20,7 @@ public final class SceneModel {
             this.fps = fps; this.cell = cell; this.base = base; this.ox = ox; this.lift = lift; this.intro = intro; this.introFps = introFps;
         }
     }
-    public static final String[] ORDER = {"dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng"};
+    public static final String[] ORDER = {"dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"};     // ★ 끝에만 덧붙인다(엔진 지하철 객실 장면의 비트 번호가 이 순서)
     public static final Map<String, Spec> D3 = new HashMap<>();
     static {
         D3.put("dolsom", new Spec(19, 86, 248.5, 120.8, 0, 0, 0));
@@ -29,18 +29,20 @@ public final class SceneModel {
         D3.put("chaeng", new Spec(15, 88, 244.5, 154.5, 12, 0, 0));
         D3.put("sul", new Spec(20, 104, 230.5, 131, 0, 0, 0));
         D3.put("dudung", new Spec(13, 106, 222.5, 128, 0, 14, 14));
+        D3.put("juksun", new Spec(12, 90, 247.5, 118.4, 0, 0, 0));      // 판다 죽순이: 대나무를 든 채 뒤뚱뒤뚱
+        D3.put("bbosong", new Spec(12, 80, 249, 118.5, 0, 0, 0));      // 아기하마 뽀송: 신발(4종)을 신고 종종
     }
     /** 다리를 모은 '서 있는' 프레임 */
     public static int stand(String id) {
         switch (id) {
             case "dolsom": return 13; case "lovel": return 10; case "ppopu": return 13;
-            case "dudung": return 12; case "sul": return 13; case "chaeng": return 4; default: return 0;
+            case "dudung": return 12; case "sul": return 13; case "chaeng": return 4; case "juksun": case "bbosong": return 0; default: return 0;
         }
     }
     public static String kind(String id) {
         switch (id) {
             case "dolsom": case "ppopu": return "dog"; case "lovel": return "cat"; case "dudung": return "mole";
-            case "chaeng": return "tad"; case "sul": return "eagle"; default: return "dog";
+            case "chaeng": return "tad"; case "sul": return "eagle"; case "juksun": return "panda"; case "bbosong": return "hippo"; default: return "dog";
         }
     }
 

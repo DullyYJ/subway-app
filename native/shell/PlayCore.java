@@ -54,6 +54,8 @@ public final class PlayCore {
         if ("dudung".equals(id)) return "mole";
         if ("chaeng".equals(id)) return "tad";
         if ("sul".equals(id)) return "eagle";
+        if ("juksun".equals(id)) return "panda";
+        if ("bbosong".equals(id)) return "hippo";
         return "dog";                                              // dolsom · ppopu
     }
 

@@ -8,7 +8,7 @@ package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한�
 public final class RunnerCore {
     private RunnerCore() {}
 
-    public static final String[] ORDER = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng" };
+    public static final String[] ORDER = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong" };
     public static final float TRACK_W = 236f, TRACK_H = 98f, WHEEL_TRACK_W = 150f, WHEEL_TRACK_H = 26f;
 
     public static final class Spec {
@@ -26,6 +26,8 @@ public final class RunnerCore {
             case "chaeng": return new Spec(15, 88, 244.5, 154.5, 3.2, 0.2, 12, 0, 0, 0);       // 헤엄친다
             case "sul":    return new Spec(20, 104, 230.5, 131, 2.6, 0.2, 0, 0, 0, 0);         // 난다
             case "dudung": return new Spec(13, 106, 222.5, 128, 3.5, 0.34, 0, 14, 14, 0.16);   // 땅에서 솟아 걷는다
+            case "juksun": return new Spec(12, 90, 247.5, 118.4, 3.9, 0.34, 0, 0, 0, 0);     // 대나무를 들고 뒤뚱뒤뚱 걷는다
+            case "bbosong": return new Spec(12, 80, 249, 118.5, 3.6, 0.34, 0, 0, 0, 0);     // 신발을 신고 종종 걷는다
             default: return null;
         }
     }

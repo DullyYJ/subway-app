@@ -82,7 +82,7 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
 {
   const sc = call(base({ gps: [37.5, 127.0], wx: { wF: { temp: -3, txt: '눈', rain: 80 } } })).body[1].kids[0];
   const v = sc && sc.t === 'scene' ? JSON.parse(sc.sc) : null;
-  ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 6 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
+  ok(sc && sc.t === 'scene' && sc.h >= 80 && sc.sc.length < 6000 && v && v.mode === 'idle' && v.cast.length === 8 && v.hero && v.look.wk === 'snow', '혼잡도 카드 맨 위에 장면(idle · 눈) 노드가 있다');
   const a = JSON.stringify(call(base()).body[1].kids[0]), b = JSON.stringify(call(base()).body[1].kids[0]);
   ok(a === b, '같은 사실이면 같은 장면(안 흔들린다)');
   // s246 (YJ: 배경 날씨는 사용자가 있는 곳 날씨): 장면 날씨는 기기 위치(gps) 날씨만 — 위치를 모르면 경로 출발역 날씨로 대신하지 않는다

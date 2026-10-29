@@ -9,19 +9,21 @@
 //         venue:'bus'|'sub'|'street', line(짧은 노선 이름), cong:{ kind:'sub'|null, idx, sig } }   ★ 혼잡도(cong)는 지하철 탑승 확정 뒤(mode:null)에만
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
-var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng"];
+var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"];   // ★ 끝에만 덧붙인다(객실 장면의 비트 번호 = 이 순서) — juksun 판다 죽순이 · bbosong 아기하마 뽀송
 // ★ 캐릭터 특성(YJ 2026-10-16): 어떤 동작을 어떤 순서로 하는지 · 잡았다 놓았을 때 어떤 연출을 하는지는 엔진이 정한다. 앱은 이 이름대로 그리기만 한다.
 //   land: cotton(솜사탕처럼 부풀어 안전 착륙+하트) | pose(두 발 착지 멋진 포즈+씨익 웃음) | dig(땅속으로 숨었다 2초 뒤 나와 화냄) | flip(공중 앞 한 바퀴 안전 착지)
 //         | fly(날개를 펴 날아가 다른 곳에 착지) | puddle(웅덩이가 생기고 첨벙)
 //   acts: 기본(walk·hop·spin·rest)과 캐릭터 전용 동작 이름. 앱은 순서대로 한 동작씩 그린다(끝나면 다음).
-var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle" };
+var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "cotton", bbosong: "pose" };
 var SCENE_ACTS = {
   dolsom: ["shake", "tailchase", "loaf", "ball", "mirror"],
   ppopu: ["dig", "bone", "dance", "slide", "dive"],
   lovel: ["punch", "box", "stretch", "melt", "pounce"],
   dudung: ["shades", "flag", "lens", "dust", "vanish"],
   sul: ["glasses", "stumble", "feather", "binoc", "hover"],
-  chaeng: ["dash", "flop", "hide", "bubbles", "dew"]
+  chaeng: ["dash", "flop", "hide", "bubbles", "dew"],
+  juksun: ["munch", "snooze", "hooray"],          // 대나무 먹기 · 낮잠 · 폴짝폴짝 (활발한 먹보·잠꾸러기)
+  bbosong: ["sniff", "shoeshow", "sparkle"]       // 꽃 향기 · 새 신발 자랑 · 반짝반짝 (꽃과 신발을 사랑하는 깔끔쟁이)
 };
 var SCENE_BASE = ["walk", "hop", "spin", "rest"];
 // ★ 장소(YJ 2026-10-25 "홈 화면 주변 배경도 다양한 장소를 랜덤으로"): 경로가 없을 때(idle)만 바뀐다. 정류장·역 입구가 있는 장면(wait·alight)은 늘 street.
@@ -30,14 +32,14 @@ var SCENE_PLACE_KO = { street: "거리", park: "공원", river: "강변", school
 // ★ 날씨 반응(YJ 2026-10-25 "날씨에 맞춰 비·눈·햇빛·바람 연출, 길동무 친구들 리액션도 달라져야"): 어떤 날씨에 어떤 동작을 끼울지 · 무슨 말을 할지는 엔진이 정한다.
 //   shiver 추위 · pant 더위 · squint 햇빛 · gust 바람 · splash/shakeoff 비 · snowcatch 눈 · peer 안개. 앱은 이 이름대로 그리고 say[동작] 글을 말풍선에 띄운다.
 var SCENE_SAY = {
-  shiver: { dolsom: ["덜덜… 너무 추워요", "으으 추워!"], lovel: ["…춥다냥", "발이 시려워냥"], ppopu: ["으으 꽁꽁!", "추워요!"], chaeng: ["부르르…", "차가워…"], sul: ["바람이 차군…", "으슬으슬…"], dudung: ["굴로 돌아갈까…", "발이 얼겠다"] },
-  pant: { dolsom: ["헥헥… 더워요", "물 마시고 싶어요"], lovel: ["녹는다…", "더워냥…"], ppopu: ["헥헥헥!", "더워요!"], chaeng: ["물… 물 주세요", "마른다…"], sul: ["태양이 뜨겁군", "그늘이 필요하군"], dudung: ["땀이 줄줄…", "헬멧이 뜨거워"] },
-  squint: { dolsom: ["눈부셔요!", "햇빛 좋다!"], lovel: ["눈이 부시다냥", "따뜻하다냥"], ppopu: ["햇빛 최고!", "눈부신 날!"], chaeng: ["반짝반짝!", "눈부신데요"], sul: ["눈부신 날이군", "좋은 하늘이군"], dudung: ["선글라스 어디 갔지", "눈부시네"] },
-  gust: { dolsom: ["으앗 바람!", "날아가겠어요!"], lovel: ["털이 다 날려냥!", "바람 싫다냥"], ppopu: ["날아가겠어요!", "휘이이잉!"], chaeng: ["휘잉~", "날아간다아!"], sul: ["순풍이다!", "바람을 타자"], dudung: ["모자 날아간다!", "단단히 잡아!"] },
-  splash: { dolsom: ["첨벙첨벙!", "물웅덩이다!"], lovel: ["발 젖는다…", "피해 간다냥"], ppopu: ["물웅덩이다!", "첨벙!"], chaeng: ["물이다 야호!", "첨벙첨벙~"], sul: ["비 맞기 싫군", "푸드덕"], dudung: ["장화가 필요해", "질척질척하네"] },
-  shakeoff: { dolsom: ["부르르르!", "털어야지!"], lovel: ["털 말려야지", "털이 젖었냥"], ppopu: ["부르르!", "물 털기!"], chaeng: ["탈탈!", "물방울 탈탈"], sul: ["푸드덕!", "날개를 말려야지"], dudung: ["털어야지…", "후두두두"] },
-  snowcatch: { dolsom: ["눈이다 눈!", "눈 내려요!"], lovel: ["차가워…", "눈이 내린다냥"], ppopu: ["눈 먹어볼까?", "눈이다!"], chaeng: ["눈송이다!", "차갑다!"], sul: ["눈이 내리는군", "하얗게 덮였군"], dudung: ["눈사람 만들자", "눈 시원하네"] },
-  peer: { dolsom: ["앞이 안 보여요", "어디 있어요~?"], lovel: ["안개 속이다냥", "뿌옇다냥"], ppopu: ["어디 있어요~?", "보이지 않아요"], chaeng: ["뿌옜다…", "안개다…"], sul: ["시야가 흐리군", "조심히 날아야지"], dudung: ["랜턴 켜야겠다", "안개가 짙네"] }
+  shiver: { dolsom: ["덜덜… 너무 추워요", "으으 추워!"], lovel: ["…춥다냥", "발이 시려워냥"], ppopu: ["으으 꽁꽁!", "추워요!"], chaeng: ["부르르…", "차가워…"], sul: ["바람이 차군…", "으슬으슬…"], dudung: ["굴로 돌아갈까…", "발이 얼겠다"], juksun: ["으슬으슬… 대나무 안고 싶다", "추워도 대나무는 좋아!"], bbosong: ["으슬… 꽃이 얼겠어요", "신발 속이 시려워요"] },
+  pant: { dolsom: ["헥헥… 더워요", "물 마시고 싶어요"], lovel: ["녹는다…", "더워냥…"], ppopu: ["헥헥헥!", "더워요!"], chaeng: ["물… 물 주세요", "마른다…"], sul: ["태양이 뜨겁군", "그늘이 필요하군"], dudung: ["땀이 줄줄…", "헬멧이 뜨거워"], juksun: ["헥헥… 대나무 시원해!", "더워도 신나요!"], bbosong: ["더워도 깔끔하게!", "꽃에 물 주고 싶어요"] },
+  squint: { dolsom: ["눈부셔요!", "햇빛 좋다!"], lovel: ["눈이 부시다냥", "따뜻하다냥"], ppopu: ["햇빛 최고!", "눈부신 날!"], chaeng: ["반짝반짝!", "눈부신데요"], sul: ["눈부신 날이군", "좋은 하늘이군"], dudung: ["선글라스 어디 갔지", "눈부시네"], juksun: ["햇빛 좋다! 소풍 가자!", "눈부셔도 신나요!"], bbosong: ["꽃 피기 좋은 날!", "눈부셔요, 반짝!"] },
+  gust: { dolsom: ["으앗 바람!", "날아가겠어요!"], lovel: ["털이 다 날려냥!", "바람 싫다냥"], ppopu: ["날아가겠어요!", "휘이이잉!"], chaeng: ["휘잉~", "날아간다아!"], sul: ["순풍이다!", "바람을 타자"], dudung: ["모자 날아간다!", "단단히 잡아!"], juksun: ["대나무 날아간다!", "으앗! 꽉 잡아!"], bbosong: ["꽃잎 날아가요!", "머리 꽃 지켜야 해!"] },
+  splash: { dolsom: ["첨벙첨벙!", "물웅덩이다!"], lovel: ["발 젖는다…", "피해 간다냥"], ppopu: ["물웅덩이다!", "첨벙!"], chaeng: ["물이다 야호!", "첨벙첨벙~"], sul: ["비 맞기 싫군", "푸드덕"], dudung: ["장화가 필요해", "질척질척하네"], juksun: ["첨벙첨벙 신난다!", "비 오는 날도 좋아!"], bbosong: ["내 새 신발! 안 돼요", "깨끗한 신발 지켜야지"] },
+  shakeoff: { dolsom: ["부르르르!", "털어야지!"], lovel: ["털 말려야지", "털이 젖었냥"], ppopu: ["부르르!", "물 털기!"], chaeng: ["탈탈!", "물방울 탈탈"], sul: ["푸드덕!", "날개를 말려야지"], dudung: ["털어야지…", "후두두두"], juksun: ["부르르! 대나무도 털어!", "탈탈탈~"], bbosong: ["털고 깨끗하게!", "신발부터 닦아야지"] },
+  snowcatch: { dolsom: ["눈이다 눈!", "눈 내려요!"], lovel: ["차가워…", "눈이 내린다냥"], ppopu: ["눈 먹어볼까?", "눈이다!"], chaeng: ["눈송이다!", "차갑다!"], sul: ["눈이 내리는군", "하얗게 덮였군"], dudung: ["눈사람 만들자", "눈 시원하네"], juksun: ["눈이다! 눈 위에서 뒹굴자!", "하얀 눈 판다 되겠다!"], bbosong: ["눈꽃이다!", "하얀 눈이 꽃 같아요"] },
+  peer: { dolsom: ["앞이 안 보여요", "어디 있어요~?"], lovel: ["안개 속이다냥", "뿌옇다냥"], ppopu: ["어디 있어요~?", "보이지 않아요"], chaeng: ["뿌옜다…", "안개다…"], sul: ["시야가 흐리군", "조심히 날아야지"], dudung: ["랜턴 켜야겠다", "안개가 짙네"], juksun: ["안개 속 대나무 숲 같아!", "어디 있어? 대나무야~"], bbosong: ["신발이 안 보여요", "꽃 향기 따라가 볼까"] }
 };
 var SCENE_HINT_BUS = "지하철을 타면 혼잡도가 표시돼요";
 var SCENE_SLOT_KO = { dawn: "새벽", morning: "아침", noon: "점심", afternoon: "오후", evening: "저녁", night: "밤" };

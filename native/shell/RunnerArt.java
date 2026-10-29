@@ -42,7 +42,7 @@ final class RunnerArt {
                 try {
                     BitmapFactory.Options o = new BitmapFactory.Options();
                     o.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                    InputStream in = app.getAssets().open("chars3d/" + key + ".webp");
+                    InputStream in = app.getAssets().open("chars3d/" + Chars.file(key) + ".webp");       // 뽀송은 지금 신은 신발 시트
                     try { b = BitmapFactory.decodeStream(in, null, o); } finally { in.close(); }
                 } catch (Throwable ignored) { b = null; }
                 synchronized (RunnerArt.class) { LOADING.remove(key); if (b != null) M.put(key, new SoftReference<Bitmap>(b)); }

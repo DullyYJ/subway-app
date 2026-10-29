@@ -389,14 +389,15 @@ public final class WidgetCore {
     // ───────── 그리기(Canvas) ─────────
     static final Map<String, Bitmap> SHEETS = new HashMap<String, Bitmap>();
     static Bitmap sheet(String id, int cellPx) {
-        String key = id + "@" + cellPx;
+        final String fn = Chars.file(id);                         // 뽀송은 지금 신은 신발 시트(신발이 바뀌면 다른 파일이라 자연스럽게 새로 읽는다)
+        String key = fn + "@" + cellPx;
         Bitmap b = SHEETS.get(key);
         if (b != null) return b;
         try {
             BitmapFactory.Options o = new BitmapFactory.Options();
             int ss = 1; while (256 / (ss * 2) >= cellPx && ss < 8) ss *= 2;           // 칸이 목표 크기보다 작아지지 않는 만큼만 줄여 읽는다
             o.inSampleSize = ss; o.inPreferredConfig = Bitmap.Config.ARGB_8888;
-            InputStream in = app.getAssets().open("chars3d/" + id + ".webp");
+            InputStream in = app.getAssets().open("chars3d/" + fn + ".webp");
             Bitmap raw;
             try { raw = BitmapFactory.decodeStream(in, null, o); } finally { in.close(); }
             if (raw == null) return null;

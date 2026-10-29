@@ -284,6 +284,47 @@ final class SceneActs {
             }
         }, null);
 
+        // ── 판다(죽순이): 활발한 대나무 먹보 · 잠꾸러기 ──
+        A_(S, "munch", 4.4, null, (a, u, dt, A) -> {
+            // 대나무 줄기를 입에 대고 오물오물(자세 6 ↔ 7: 입을 다물었다 벌렸다) 하다가 흡족해서 하트
+            double h = S.HH(a), T = S.t; S.standF(a); boolean eat = u > .08 && u < .86, open = Math.sin(T * 9.5) > 0;
+            a.pose = eat ? (open ? 7 : 6) : 0; a.sy = 1 + (eat && open ? .014 : 0); a.ang = eat ? Math.sin(T * 4.7) * .02 : 0;
+            if (eat && S.every(A, "lf", .5)) S.ptx("leaf", a.x + a.dir * h * .3, S.feetY(a) - h * .85, 1, po().a(-PI * .85, -PI * .15).s(10, 22).g(90).l(.6, 1.0).jx(4).r(.8));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "냠냠! 대나무 최고!", 2.4);
+            if (u > .9 && S.once(A, "hh")) S.ptx("heart", a.x, S.feetY(a) - h * .8, 3, po().a(-PI * .98, -PI * .02).s(24, 54).g(55).l(.9, 1.4).r(1.2).jx(5));
+        }, null);
+        A_(S, "snooze", 4.8, null, (a, u, dt, A) -> {
+            // 앉은 채 꾸벅꾸벅, 대나무를 끌어안고 잠깐 잔다
+            double T = S.t; S.standF(a); boolean zz = u > .12 && u < .93; a.pose = zz ? 1 : 0; a.sy = 1 + (zz ? Math.sin(T * 2.3) * .014 : 0); a.ang = zz ? Math.sin(T * 1.1) * .03 : 0;
+            if (zz && S.every(A, "zz", .6)) S.ptx("zzz", a.x + a.dir * S.HH(a) * .3, S.feetY(a) - S.HH(a) * .85, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.4).r(1));
+            if (u > .94 && S.once(A, "wk")) S.say(a, "음냐… 더 잘래", 1.6);
+        }, null);
+        A_(S, "hooray", 3.2, null, (a, u, dt, A) -> {
+            // 신나서 폴짝폴짝(활발!)
+            double h = S.HH(a), T = S.t; S.standF(a); a.pose = u < .92 ? 2 : -1; a.y = -Math.abs(Math.sin(T * 6.6)) * 9; a.sy = 1 + .03 * Math.sin(T * 13.2);
+            if (S.every(A, "sp", .22)) S.ptx("spark", a.x + (S.rnd() - .5) * h * .9, S.feetY(a) - h * (.5 + S.rnd() * .6), 1, po().a(-PI * .8, -PI * .2).s(8, 16).g(0).l(.3, .5).r(.9));
+            if (u > .05 && S.once(A, "sy")) S.say(a, "야호! 신난다!", 1.8);
+        }, null);
+        // ── 아기하마(뽀송): 꽃을 사랑하는 깔끔쟁이 · 신발 수집가 ──
+        A_(S, "sniff", 3.8, null, (a, u, dt, A) -> {
+            // 데이지 한 송이를 코에 대고 킁킁(자세 6) — 향기가 좋아서 하트
+            double h = S.HH(a), T = S.t; S.standF(a); a.pose = u > .06 && u < .92 ? 6 : 0; a.sy = 1 + (a.pose == 6 ? Math.sin(T * 7) * .012 : 0); a.ang = a.pose == 6 ? Math.sin(T * 3.1) * .025 : 0;
+            if (u > .2 && S.every(A, "hh", .7)) S.ptx("heart", a.x + a.dir * h * .35, S.feetY(a) - h * .85, 1, po().a(-PI * .9, -PI * .1).s(14, 26).g(30).l(.9, 1.3).r(1).jx(5));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "꽃 향기 좋아~", 2.2);
+        }, null);
+        A_(S, "shoeshow", 3.4, null, (a, u, dt, A) -> {
+            // 한 발을 번쩍 들어 새 신발 자랑(자세 7) — 반짝반짝
+            double h = S.HH(a), T = S.t; S.standF(a); boolean sh = u > .08 && u < .9; a.pose = sh ? 7 : 0; a.ang = sh ? Math.sin(T * 5) * .035 : 0; a.y = sh ? -Math.abs(Math.sin(T * 5)) * 1.2 : 0;
+            if (sh && S.every(A, "sp", .16)) S.ptx("spark", a.x + a.dir * h * .45, S.feetY(a) - h * .12 - S.rnd() * h * .12, 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(0).l(.3, .5).jx(4).r(.9));
+            if (u > .12 && S.once(A, "sy")) S.say(a, "새 신발이에요!", 2.2);
+        }, null);
+        A_(S, "sparkle", 3.4, null, (a, u, dt, A) -> {
+            // 깨끗한 게 최고! 몸을 털고 반짝반짝 윤을 낸다
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .06 && u < .9; a.pose = on ? 2 : -1; a.y = on ? -Math.abs(Math.sin(T * 5.4)) * 5 : 0; a.ox = on ? Math.sin(T * 10.8) * 1.2 : 0;
+            if (on && S.every(A, "sp", .12)) S.ptx("spark", a.x + (S.rnd() - .5) * h * .9, S.feetY(a) - h * (.15 + S.rnd() * .8), 1, po().a(-PI * .9, -PI * .1).s(6, 14).g(0).l(.3, .55).r(1));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "깨끗한 게 최고!", 2.0);
+        }, null);
+
         // ── 놓았을 때 연출(land) — 어떤 연출인지는 엔진(traits[id].land) 값 ──
         A_(S, "L_cotton", 1.8, (a, t, A) -> {
             S.ptx("heart", a.x, S.feetY(a) - S.HH(a) * .6, 11, po().a(-PI * .98, -PI * .02).s(36, 80).g(55).l(1.0, 1.6).r(1.5).jx(5)); S.haptic("hearts");

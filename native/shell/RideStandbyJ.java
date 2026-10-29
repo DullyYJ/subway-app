@@ -25,7 +25,7 @@ final class RideStandbyJ {
         waitNearM = 150, waitAwayM = 400, waitMoveMps = 4.0, waitSpanSec = 15, waitWinSec = 60, waitFreshSec = 25, waitStartLateSec = 90, waitGraceSec = 480;
     static final String ongoingTitle = "길동무 경로 안내 중";
     static final double RS_LEAD_MS = 120000, RS_EARLY_MS = 90000, RS_SHRINK_MS = 180000, RS_ALIGHT_M = 150, RS_NEAR_M = 600, RS_LATE_BACK_MIN = 1, RS_PICK_MAX_MIN = 12;
-    private static final String[] RS_CHARS = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng" };
+    private static final String[] RS_CHARS = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong" };
 
     // ── 작은 도우미 ──
     static String clampTxt(Object s0, int n) { String s = s0 == null ? "" : str(s0); return s.length() > n ? s.substring(0, n - 1) + "…" : s; }

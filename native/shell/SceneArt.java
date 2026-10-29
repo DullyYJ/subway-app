@@ -256,7 +256,7 @@ public final class SceneArt {
         c.fillStyle("#2a3142"); c.fillTextC(text, x, y - 6);
     }
     public static void drawUmbrella(SceneCv c, double x, double y, double s, String id) {
-        String col = id.equals("chaeng") ? "#ffb74d" : id.equals("lovel") ? "#ff7aa5" : id.equals("dolsom") ? "#5aa9ff" : id.equals("ppopu") ? "#7bd88f" : id.equals("sul") ? "#ffd54f" : "#b388ff";
+        String col = id.equals("chaeng") ? "#ffb74d" : id.equals("lovel") ? "#ff7aa5" : id.equals("dolsom") ? "#5aa9ff" : id.equals("ppopu") ? "#7bd88f" : id.equals("sul") ? "#ffd54f" : id.equals("juksun") ? "#66bb6a" : id.equals("bbosong") ? "#f48fb1" : "#b388ff";
         double r = 17 * s;
         c.save(); c.translate(x, y - 6 * s);
         c.strokeStyle("#555c6b"); c.lineWidth(1.4); c.beginPath(); c.moveTo(0, -1); c.lineTo(0, 15 * s); c.stroke();

@@ -72,7 +72,7 @@ final class ShareArt {
         if (mk[0] == 0f) throw new java.io.IOException("marker");
         ShareAnim an = new ShareAnim(seed, 36f, W - 36f, 22f);
         Bitmap sheet;
-        java.io.InputStream in = ctx.getAssets().open("chars3d/" + an.id + ".webp");
+        java.io.InputStream in = ctx.getAssets().open("chars3d/" + Chars.file(an.id) + ".webp");
         try { sheet = android.graphics.BitmapFactory.decodeStream(in); } finally { in.close(); }
         if (sheet == null) throw new java.io.IOException("sheet");
         int pw = base.getWidth(), ph = base.getHeight();

@@ -13,7 +13,7 @@ import java.util.Random;
 public final class WidgetSim {
     public static final int NORMAL = 0, COMMUTE = 1;
     public static final int WALK = 0, REST = 1, HOP = 2, TO_SIDE = 3, JUMP = 4, TOP_WALK = 5, TOP_REST = 6, POOP = 7, HANG = 8, GATHER = 9, CHEER = 10, BED_WALK = 11, ENTER = 12, SLEEP = 13, EXIT = 14;
-    public static final String[] ORDER = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng" };
+    public static final String[] ORDER = { "dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong" };
     public static final String[] ST_NAME = { "walk", "rest", "hop", "toSide", "jump", "topWalk", "topRest", "poop", "hang", "gather", "cheer", "bedWalk", "enter", "sleep", "exit" };
 
     /** 시트(256px 칸 4×4)의 값: {칸 안 머리 위 끝, 발 높이, 몸 가로 중심, 초당 프레임, 띄울 높이(키 58 기준 dp), 몸 높이 비율} */
@@ -23,6 +23,8 @@ public final class WidgetSim {
         if ("ppopu".equals(id)) return new float[] { 8f, 248.5f, 120.3f, 19f, 0f, 1f };
         if ("chaeng".equals(id)) return new float[] { 14f, 244.5f, 154.5f, 15f, 6f, 0.9f };
         if ("sul".equals(id)) return new float[] { 27f, 230.5f, 131f, 20f, 16f, 0.76f };
+        if ("juksun".equals(id)) return new float[] { 24.5f, 247.5f, 118.4f, 12f, 0f, 0.9f };
+        if ("bbosong".equals(id)) return new float[] { 27f, 249f, 118.5f, 12f, 0f, 0.86f };
         return new float[] { 15f, 222.5f, 128f, 13f, 0f, 1f };
     }
     /** 캐릭터 셋(6마리 중 3마리)을 무작위로 뽑는다. prev 가 있으면 그것과 다른 구성이 나온다(화면을 켤 때마다 바뀌어 보이도록). */
@@ -49,6 +51,8 @@ public final class WidgetSim {
         if ("lovel".equals(id)) return "cat";
         if ("dudung".equals(id)) return "mole";
         if ("sul".equals(id)) return "nest";
+        if ("juksun".equals(id)) return "leaf";          // 잎 방석 위에서 대나무를 끌어안고 잔다
+        if ("bbosong".equals(id)) return "flower";       // 꽃 침대에서 꽃다발을 안고 잔다
         return "pond";
     }
     /** 걷는 모습은 자는 장면으로 바뀌면서 사라진다(예전엔 개집·굴만 몸이 안 보였다 — 이제 모든 종류가 장면 한 장으로 그려져 몸이 다 나오지 않는다). */
@@ -59,6 +63,7 @@ public final class WidgetSim {
         if ("cat".equals(kind)) return new float[] { 0.95f, 1.1f };
         if ("mole".equals(kind)) return new float[] { 1.2f, 0.9f };
         if ("nest".equals(kind)) return new float[] { 1.2f, 1.1f };
+        if ("leaf".equals(kind) || "flower".equals(kind)) return new float[] { 1.4f, 0.8f };
         return new float[] { 1.2f, 0.6f };
     }
     /** 자는 장면 그림 값(시트 `<id>_sleep.webp`, 256px 칸 4×4 = 16프레임 반복): {칸 한 변이 캐릭터 키의 몇 배인지, 칸 안 바닥 기준점 x(0~1), 바닥 기준점 y(0~1), 초당 프레임, zzz 가 올라오는 자리 x, y(칸 비율)}.
@@ -70,6 +75,8 @@ public final class WidgetSim {
         if ("sul".equals(id)) return new float[] { 3.577f * 0.41f, 136.4f / 256f, 226.1f / 256f, 5f, 172.2f / 256f, 149.0f / 256f };
         if ("dolsom".equals(id)) return new float[] { 2.166f * 0.55f, 128.9f / 256f, 198.8f / 256f, 5f, 138.2f / 256f, 100.4f / 256f };
         if ("ppopu".equals(id)) return new float[] { 2.723f * 0.55f, 128.7f / 256f, 181.4f / 256f, 5f, 151.6f / 256f, 128.7f / 256f };
+        if ("juksun".equals(id)) return new float[] { 5.578f * 0.25f, 132.0f / 256f, 182.7f / 256f, 5f, 63.0f / 256f, 50.4f / 256f };
+        if ("bbosong".equals(id)) return new float[] { 5.496f * 0.23f, 129.4f / 256f, 184.5f / 256f, 5f, 64.1f / 256f, 46.6f / 256f };
         return new float[] { 2.740f * 0.45f, 126.5f / 256f, 189.2f / 256f, 5f, 126.5f / 256f, 143.0f / 256f };
     }
     // ───────── 깨어나 돌아다니는 시간 ─────────

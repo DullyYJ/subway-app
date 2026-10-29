@@ -556,14 +556,15 @@ final class RideOverlay {
     private static final java.util.HashMap<String, android.graphics.Bitmap> SHEETS = new java.util.HashMap<String, android.graphics.Bitmap>();
     /** 캐릭터 시트(assets/chars3d/<id>.webp, 4x4 프레임). 읽기에 실패하면 null → 그림 없이 글만 그린다. */
     private android.graphics.Bitmap sheet(String id) {
-        android.graphics.Bitmap b = SHEETS.get(id);
+        final String fn = Chars.file(id);                                     // 뽀송은 지금 신은 신발 시트
+        android.graphics.Bitmap b = SHEETS.get(fn);
         if (b != null) return b;
         try {
             android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
             o.inSampleSize = 2; o.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;
-            java.io.InputStream in = ctx.getAssets().open("chars3d/" + id + ".webp");
+            java.io.InputStream in = ctx.getAssets().open("chars3d/" + fn + ".webp");
             try { b = android.graphics.BitmapFactory.decodeStream(in, null, o); } finally { in.close(); }
-            if (b != null) SHEETS.put(id, b);
+            if (b != null) SHEETS.put(fn, b);
         } catch (Throwable ignored) { b = null; }
         return b;
     }
