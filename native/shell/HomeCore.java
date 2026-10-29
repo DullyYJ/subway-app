@@ -241,7 +241,7 @@ public final class HomeCore {
         if (v == null || !v.startsWith("rh.")) return R_NONE;
         if ("rh.close".equals(v)) { if (riding()) return R_LOCK; clearRoute(); return R_RENDER; }       // 확정한 경로는 닫아서 풀 수 없다 — [안내 종료]나 도착으로만
         if ("rh.fav".equals(v)) return R_FAV;
-        if ("rh.stop".equals(v)) return riding() ? R_STOP : R_NONE;
+        if ("rh.stop".equals(v)) return riding() || hasRoute() ? R_STOP : R_NONE;          // s309: 경로 확정 전에도 [안내 종료] = 여정 종료(첫 홈 화면으로)
         if ("rh.slot".equals(v)) return riding() ? R_SLOT : R_NONE;
         if ("rh.confirm".equals(v)) return hasRoute() && !riding() ? R_CONFIRM : R_NONE;     // 결과 카드 버튼 줄의 [경로 확정](웹 mainConfirmRouteBtn) — 세부경로 시트의 [이 경로로 탑승 시작]과 같다
         if ("rh.detail".equals(v)) { if (!hasRoute()) return R_NONE; detOpen.clear(); return R_DETAIL; }

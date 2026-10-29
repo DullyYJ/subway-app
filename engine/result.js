@@ -504,8 +504,8 @@ function resultScreen(opt, r) {
       var rowNode = { t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: rowKids };      // s269(YJ: 글자와 버튼이 너무 붙음 — 위 간격을 버튼 아래 간격(4 + 카드 안쪽 8 = 12)과 같게)
       if (typeof r.ride.dt === 'string' && r.ride.dt) nodes.push({ t: 'text', s: r.ride.dt.slice(0, 60), size: 13, bold: true, color: 'gold', lh: 1.4, pad: [8, 6, 0, 4] });      // s229 역까지 이동: 남은 거리·시간(엔진 ongoing.text)
       nodes.push(rowNode);
-    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: [                // 웹 routeActRow(안내 전): [세부경로 보기][경로 확정(파랑)]
-      { t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', act: { a: 'call', v: 'rh.detail' } },
+    } else if (cap >= RES_CONF_CAP) nodes.push({ t: 'row', pad: [8, 12, 0, 4], gap: 8, kids: [                // s309(YJ): 안내 전 [안내 종료][경로 확정(파랑)] — 세부경로는 경로 확정 뒤(탑승 중 버튼 줄)에만 보인다
+      { t: 'button', s: '안내 종료', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'orange', act: { a: 'call', v: 'rh.stop' } },
       { t: 'button', s: '경로 확정', size: 13, h: 42, r: 12, bold: true, fill: '#2f7cf6', line: 'none', tc: '#ffffff', act: { a: 'call', v: 'rh.confirm' } }] });
     else nodes.push({ t: 'button', s: '세부경로 보기', size: 13, h: 42, r: 12, bold: true, fill: 'card2', line: 'border', tc: 'gold', pad: [8, 12, 0, 4], act: { a: 'call', v: 'rh.detail' } });
   }

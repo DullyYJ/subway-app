@@ -1095,7 +1095,7 @@ public class ShellJvmTest {
             String dq = h2.detailRequest(new HomeCore.Env(), 18, "dark");
             ok(dq.contains("\"view\":\"detail\",\"open\":[2]}}") && dq.startsWith("{\"cap\":18,\"r\":{") && new HomeCore().detailRequest(new HomeCore.Env(), 18, "dark").isEmpty(), "세부경로 요청: view/open 을 r 안에 넣는다, 경로가 없으면 보내지 않는다");
             // 탑승 추적: 상태 전달 · 새 탐색이면 탑승 표시가 사라진다
-            ok(h2.actResult("rh.stop") == HomeCore.R_NONE && h2.actDetail("rd.confirm") == HomeCore.D_CONFIRM && h2.actDetail("rd.stop") == HomeCore.D_NONE, "탑승 전: 시작만 가능");
+            ok(h2.actResult("rh.stop") == HomeCore.R_STOP && new HomeCore().actResult("rh.stop") == HomeCore.R_NONE && h2.actDetail("rd.confirm") == HomeCore.D_CONFIRM && h2.actDetail("rd.stop") == HomeCore.D_NONE, "탑승 전: 시트는 시작만 · 결과 카드 [안내 종료] 는 경로가 있으면 여정 종료(s309)");
             h2.rideRouteId = h2.routeId;
             ok(h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && !h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && h2.riding(), "서비스 상태를 받으면 바뀐 때만 true");
             ok(h2.actResult("rh.stop") == HomeCore.R_STOP && h2.actDetail("rd.stop") == HomeCore.D_STOP && h2.actDetail("rd.confirm") == HomeCore.D_NONE, "탑승 중: 종료만 가능");
