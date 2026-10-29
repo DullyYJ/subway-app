@@ -62,7 +62,7 @@ public final class FoodCore {
         gps = new double[] { lat, lng }; locating = false; noperm = false;
         if (far && dest.length() == 0) invalidate();
     }
-    public void invalidate() { loaded = false; failed = false; alts.clear(); go.clear(); ctr = null; centerKey = ""; srv = new ArrayList<Object>(); pub = new ArrayList<Object>(); srvJ = ""; pubJ = ""; }
+    public void invalidate() { loaded = false; failed = false; alts.clear(); altGo.clear(); go.clear(); ctr = null; centerKey = ""; srv = new ArrayList<Object>(); pub = new ArrayList<Object>(); srvJ = ""; pubJ = ""; }
     public void refresh() { closePanel(); invalidate(); loadedAt = 0; if (dest.length() == 0) gps = null; }
 
     /** 위치가 필요한데 아직 없는가(도착지가 없고 기기 위치도 없을 때). */
@@ -181,7 +181,7 @@ public final class FoodCore {
     // ── 받은 화면에서 읽기 ──
     /** 받은 목록 화면에서 읽은 것(무거운 읽기는 통신 스레드에서 하고, 주 스레드는 apply 로 값만 옮긴다). */
     public static final class Parsed {
-        boolean ok; double[] ctr; String stn; Map<String, Object> go = new LinkedHashMap<String, Object>(); Map<String, String> alts = new LinkedHashMap<String, String>();
+        boolean ok; double[] ctr; String stn; Map<String, Object> go = new LinkedHashMap<String, Object>(); Map<String, String> alts = new LinkedHashMap<String, String>(); Map<String, Map<String, Object>> altGo = new LinkedHashMap<String, Map<String, Object>>();
     }
     @SuppressWarnings("unchecked")
     public static Parsed parseScreen(String json) {
@@ -198,7 +198,11 @@ public final class FoodCore {
                 if (im.get("go") instanceof Map) pr.go.putAll((Map<String, Object>) im.get("go"));
                 if (im.get("stn") instanceof String) pr.stn = BoardCore.s(im.get("stn"), 30);
             }
-            if (m.get("alts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("alts")).entrySet()) pr.alts.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
+            if (m.get("alts") instanceof Map) for (Map.Entry<String, Object> e : ((Map<String, Object>) m.get("alts")).entrySet()) {
+                pr.alts.put(e.getKey(), HomeSearchCore.toJson(e.getValue()));
+                Object ai = e.getValue() instanceof Map ? ((Map<String, Object>) e.getValue()).get("info") : null;      // 칩마다 눌림 번호표도 따로 읽어 둔다(통신 스레드에서)
+                if (ai instanceof Map && ((Map<String, Object>) ai).get("go") instanceof Map) pr.altGo.put(e.getKey(), new LinkedHashMap<String, Object>((Map<String, Object>) ((Map<String, Object>) ai).get("go")));
+            }
             pr.ok = true;
         } catch (Exception e) { pr.ok = false; }
         return pr;
@@ -208,11 +212,12 @@ public final class FoodCore {
         go.clear(); go.putAll(pr.go);
         ctr = pr.ctr;
         if (pr.stn != null) stnName = pr.stn;
-        alts.clear(); alts.putAll(pr.alts);
+        alts.clear(); alts.putAll(pr.alts); altGo.clear(); altGo.putAll(pr.altGo);
     }
     public void onScreen(String json) { apply(parseScreen(json)); }
     /** 이 칩의 화면 글(엔진이 한꺼번에 계산해 보낸 것). 없으면 null. */
     public String altOf(String chip) { return alts.get(chip); }
+    final Map<String, Map<String, Object>> altGo = new LinkedHashMap<String, Map<String, Object>>();
 
     @SuppressWarnings("unchecked")
     public void onSheet(String json) {
@@ -231,23 +236,45 @@ public final class FoodCore {
 
     // ── 눌림 ──
     /** 칩: 고른 칩을 기억한다. 엔진이 이미 계산해 둔 화면이 있으면 true(요청 없이 올릴 수 있다). */
-    public boolean pickChip(String chip) { closePanel(); flt = chip == null || chip.length() == 0 ? "전체" : chip; return alts.containsKey(flt); }
+    public boolean pickChip(String chip) {
+        closePanel(); flt = chip == null || chip.length() == 0 ? "전체" : chip;
+        Map<String, Object> g = altGo.get(flt);
+        if (g != null) { go.clear(); go.putAll(g); }                                  // 올리는 화면과 눌림 번호표를 같은 칩으로 맞춘다(옛엔진 눌림 대비)
+        return alts.containsKey(flt);
+    }
 
     /** v: fm.c.<번호> · fm.p.<번호>. 가게 시트를 열 수 있으면 R_SHEET. */
     @SuppressWarnings("unchecked")
-    public int act(String v) {
+    public int act(String v) { return act(v, ""); }
+    /** 눌림에 엔진이 담아 준 가게 사실(act.id = [이름, 업종, 주소, 위도, 경도])을 읽는다. 없거나 깨졌으면 null. */
+    @SuppressWarnings("unchecked")
+    static List<Object> selOfId(String id) {
+        if (id == null || id.length() < 8 || id.charAt(0) != '[') return null;
+        try {
+            Object o = ScreenCore.parse(id);
+            if (!(o instanceof List)) return null;
+            List<Object> l = (List<Object>) o;
+            if (l.size() < 5 || !(l.get(0) instanceof String) || !(l.get(3) instanceof Number) || !(l.get(4) instanceof Number)) return null;
+            return l;
+        } catch (Exception e) { return null; }
+    }
+    @SuppressWarnings("unchecked")
+    public int act(String v, String id) {
         if (v == null || !v.startsWith("fm.")) return R_NONE;
         String k = v.substring(3);
         if ("close".equals(k)) return R_CLOSE;
         if (("nr".equals(k) || "kr".equals(k) || "ni".equals(k) || "ki".equals(k)) && openKey.length() > 0) return R_LINK;
-        Object g = go.get(k);
-        if (!(g instanceof List) || ((List<Object>) g).size() < 5) return R_NONE;
-        List<Object> l = (List<Object>) g;
+        List<Object> l = selOfId(id);                                              // 엔진이 눌림 자체에 실어 준 가게 사실 — 칩이 바뀌어도 어긋나지 않는다
+        if (l == null) { Object g = go.get(k); if (g instanceof List && ((List<Object>) g).size() >= 5) l = (List<Object>) g; }     // 옛 엔진: 번호표(info.go)
+        if (l == null) return R_NONE;
+        if (k.equals(openKey)) {
+            if (panelSkel || panelNodes == null) return R_NONE;                    // 펼침을 받는 중에 또 눌러도 닫지 않는다(조급한 연타가 열고 닫기를 되풀이하던 일)
+            closePanel(); return R_UNPANEL;                                        // 열려 있는 카드를 또 누르면 접는다(웹 토글)
+        }
         Map<String, Object> sel = new LinkedHashMap<String, Object>();
         sel.put("n", l.get(0)); sel.put("c", l.get(1)); sel.put("a", l.get(2)); sel.put("la", l.get(3)); sel.put("lo", l.get(4));
         pendingSel = HomeSearchCore.toJson(sel);
         selName = l.get(0) instanceof String ? (String) l.get(0) : ""; selLa = l.get(3) instanceof Number ? ((Number) l.get(3)).doubleValue() : 0; selLo = l.get(4) instanceof Number ? ((Number) l.get(4)).doubleValue() : 0;
-        if (k.equals(openKey)) { closePanel(); return R_UNPANEL; }                 // 열려 있는 카드를 또 누르면 접는다(웹 토글)
         openKey = k; panelAfter = "fm." + k; panelNodes = null; panelRes.clear(); panelNeed.clear();
         return R_PANEL;
     }
