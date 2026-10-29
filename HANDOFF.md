@@ -3335,3 +3335,6 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **수신부 개선**: 예전엔 다른 탭 결과 화면을 탭마다 따로(경로 응답 통째로 4번 업로드) 받았고 홈 카드는 미리 받지 않았다. 이제 `/screen/result` · `/screen/hcards` 가 `alts:[탭…]` 를 받아 한 번에 여러 탭 화면을 돌려준다(`resultScreens` · `hcardsScreens`; 각 alts[탭] 은 따로 요청한 것과 글자 하나까지 같다 — 시험이 대조, 경로 없는 탭은 결과 쪽에서 뺀다). 앱은 `ShellCore.altsBody`(요청 끝에 alts 를 단다; 요청 자체가 첫 탭) · `altsParse`(답을 탭마다 나눠 저장). 업로드 6회(결과 1+4, 카드 1) → 4회(결과 1+alts 1, 카드 1+alts 1), 연결 수도 줄었다.
 - **하지 않은 것**: 첫 근사 응답(`live=0`)과 전체 응답(`wantsFull`)을 동시에 쏘는 것 — 서버(ODsay·실시간 API) 호출이 모든 탐색에서 두 배가 될 수 있어 보류. 엔진이 '전체가 필요하다'고 할 때만 즉시 이어 받는 지금 방식 유지.
 - 시험: `result_engine`(밀기 표 · swp · 여러 탭 한 번에 대조) · `hcards_engine`(alts 대조) · `ShellJvmTest`(mergeBodies sw · SwipeCore 순환 · tabKey · resHas · altsBody/altsParse) · `ScreenJvmTest`(panel swp) · `shell_native`(소스 점검 · CAP 29). 워커 `route-v2-2026-10-29s311` **재배포 필요**. 기기 체감(밀기 감각 · 슬라이드 · 전환 속도)은 미확인.
+
+## s312 (2026-10-29) — 게시판 글쓰기 단추 = 게시판 칩과 같은 파랑 (YJ)
+- `ScreenView.buildFab/drawFab`: 단추 바탕을 GOLD2→GOLD 그라데이션에서 칩 켠 색과 같은 한 가지 `pal[R_GOLD]` 로, 그림자 띠도 같은 색조(하드코딩 금색 → R_GOLD 반투명), 연필 아이콘은 글자색(`R_ONGOLD`)과 같게. 엔진 · 워커 변경 없음(앱만). 기기 체감 미확인.

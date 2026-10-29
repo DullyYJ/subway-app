@@ -330,7 +330,7 @@ public class ScreenView extends View {
         float w = getWidth() / dpr, h = getHeight() / dpr, fx = (w - lay.fabW) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - ScreenCore.FAB_H;
         if (fabShader != null && fx == fabSX && fy == fabSY && lay.fabW == fabSW) return;
         fabSX = fx; fabSY = fy; fabSW = lay.fabW;
-        fabShader = new android.graphics.LinearGradient(fx, fy, fx + lay.fabW, fy + ScreenCore.FAB_H, pal[R_GOLD2], pal[R_GOLD], android.graphics.Shader.TileMode.CLAMP);
+        fabShader = new android.graphics.LinearGradient(fx, fy, fx + lay.fabW, fy + ScreenCore.FAB_H, pal[R_GOLD], pal[R_GOLD], android.graphics.Shader.TileMode.CLAMP);          // s312(YJ): 글쓰기 단추는 게시판 칩과 같은 한 가지 파랑(칩 켠 색 = 'gold')
     }
     private boolean fabAt(float px, float py) {
         if (lay == null || lay.fabW <= 0f) return false;
@@ -341,7 +341,7 @@ public class ScreenView extends View {
         if (lay == null || lay.fabW <= 0f || fabShader == null) return;
         float fw = lay.fabW, fh = ScreenCore.FAB_H, fx = (w - fw) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - fh, rad = 30f;
         p.setStyle(Paint.Style.FILL); p.setShader(null);
-        for (int i = 5; i >= 1; i--) { p.setColor(0x0AD4AF37); float e = i * 1.4f; rf.set(fx - e, fy + 4f - e, fx + fw + e, fy + fh + 4f + e); cv.drawRoundRect(rf, rad + e, rad + e, p); }       // 웹 box-shadow 0 4px 14px rgba(212,175,55,.4) 흉내
+        for (int i = 5; i >= 1; i--) { p.setColor((pal[R_GOLD] & 0x00FFFFFF) | 0x0A000000); float e = i * 1.4f; rf.set(fx - e, fy + 4f - e, fx + fw + e, fy + fh + 4f + e); cv.drawRoundRect(rf, rad + e, rad + e, p); }       // 웹 box-shadow 0 4px 14px rgba(212,175,55,.4) 흉내
         rf.set(fx, fy, fx + fw, fy + fh);
         p.setShader(fabShader); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); p.setShader(null);
         if (fabDown) { p.setColor(0x22000000); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); }
@@ -349,7 +349,7 @@ public class ScreenView extends View {
         if (lay.fabIcon.length > 0) {
             android.graphics.Path ph = pathOf(lay.fabIcon);
             cv.save(); cv.translate(tx, fy + (fh - ScreenCore.FAB_ICON) / 2f); cv.scale(ScreenCore.FAB_ICON / 24f, ScreenCore.FAB_ICON / 24f);
-            p.setColor(0xFF121214); cv.drawPath(ph, p); cv.restore();
+            p.setColor(pal[R_ONGOLD]); cv.drawPath(ph, p); cv.restore();
             tx += ScreenCore.FAB_ICON + ScreenCore.FAB_GAP;
         }
         setText(ScreenCore.FAB_TXT, true, pal[R_ONGOLD]);
