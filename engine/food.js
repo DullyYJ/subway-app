@@ -154,9 +154,19 @@ function foodHash(s) {                             // djb2 — 같은 화면이�
 }
 
 function foodMsgN(s) { return { t: 'text', s: s, size: 14, color: 'sub', lh: 1.8, align: 'center', pad: [20, 60, 20, 60] }; }
+// 눌림에 가게 사실을 그대로 싣는다 — [이름, 업종, 주소, 위도, 경도] 글(act.id, 400자 안). 앱은 번호표(info.go)를 따로 쥐고 있다가 칩·목록이 바뀌며 어긋나는 일 없이 이 글을 그대로 되돌려 보낸다.
+function foodSelId(p) {
+  if (p.la == null || p.lo == null || !isFinite(p.la) || !isFinite(p.lo)) return '';
+  var a = [String(p.n || ''), String(p.c || ''), String(p.a || ''), p.la, p.lo], s = JSON.stringify(a);
+  if (s.length > 380) { a[2] = a[2].slice(0, 40); s = JSON.stringify(a); }
+  if (s.length > 380) { a[0] = a[0].slice(0, 60); a[1] = a[1].slice(0, 40); s = JSON.stringify(a); }
+  return s.length <= 390 ? s : '';
+}
 function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var addr = p.a ? ' · ' + p.a.split(' ').slice(-2).join(' ') : '';
-  var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: '길찾기 · 지도 →', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  var sid = foodSelId(p);
+  var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: sid ? '길찾기 · 지도 →' : '위치 정보 없음', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
+  if (sid) n.act.id = sid;
   if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
   if (pub) { n.pub = true; n.badge = '공공데이터'; } else n.stars = foodStars(Number(rank) - 1);
   return n;
