@@ -21,7 +21,7 @@ public final class OpenCore {
     /** 자리(왼쪽·가운데·오른쪽)마다의 연기 — 누가 서든 이 연기를 한다. t0 은 나타나는 시각. */
     public static final class Role { public double t0, hop, hz; public int p; public String say = "", fx = ""; }
     public static final class Slot {
-        public String id = "", ko = "", kind = "pose";
+        public String id = "", ko = "", kind = "pose", fx = ""; public boolean dark;
         public double h0, h1;
         public int sky0, sky1, sky2, ground, hill;
         public double[] sun;        // {x, y 처음, y 끝, 반지름(판 폭 비), 색(0xAARRGGBB 를 double 로)} · 없으면 null
@@ -34,7 +34,10 @@ public final class OpenCore {
         public int dur = 2700, fade = 700; public String brand = ""; public int bg = 0xFFFAF9F7, ink = 0xFF2B2F4A;
         public String[] chars = new String[0]; public Map<String, String> names = new java.util.HashMap<String, String>(); public double[] x = {.30, .50, .70}, xs = {.27, .50, .73};
         public Slot[] slots = new Slot[0];
+        public Map<String, Wx> wx = new java.util.HashMap<String, Wx>();
     }
+    /** 날씨 한 종류(엔진 대본 wx): 하늘·땅에 섞을 색(낮/밤) · 정도 · 해/달/별 가림 · 구름 수 · 비·눈·안개 효과 · 땅 색 바꿈(눈). */
+    public static final class Wx { public int tintDay, tintNight, ground, hill; public double a, ga; public boolean sun = true, hasGround; public int clouds; public String fx = ""; }
 
     /** 친구 한 마리의 지금 모습. on=false 면 아직 안 나왔다. */
     public static final class St {
@@ -54,6 +57,16 @@ public final class OpenCore {
             if (m.get("bg") instanceof String) sc.bg = col(m.get("bg"));
             if (m.get("ink") instanceof String) sc.ink = col(m.get("ink"));
             sc.x = three(m.get("x"), sc.x); sc.xs = three(m.get("xs"), sc.xs);
+            Object wo = m.get("wx");
+            if (wo instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) wo).entrySet()) {
+                if (!(en.getValue() instanceof Map)) continue;
+                Map<String, Object> q = (Map<String, Object>) en.getValue(); Wx w = new Wx(); Object ti = q.get("tint");
+                if (!(ti instanceof List) || ((List<Object>) ti).size() < 2) continue;
+                w.tintDay = col(((List<Object>) ti).get(0)); w.tintNight = col(((List<Object>) ti).get(1)); w.a = num(q.get("a"), 0);
+                w.sun = !Boolean.FALSE.equals(q.get("sun")); w.clouds = (int) num(q.get("clouds"), 0); w.fx = SceneModel.Json.strOr(q.get("fx"), "");
+                if (q.get("ground") instanceof String) { w.hasGround = true; w.ground = col(q.get("ground")); w.hill = col(q.get("hill")); w.ga = num(q.get("ga"), 0.8); }
+                sc.wx.put(en.getKey(), w);
+            }
             Object co = m.get("chars"); List<String> cl = new ArrayList<String>();
             if (co instanceof List) for (Object c : (List<Object>) co) if (c instanceof String && ((String) c).length() > 0 && !cl.contains(c)) cl.add((String) c);
             if (cl.size() < 3) return null;
@@ -65,7 +78,7 @@ public final class OpenCore {
             for (Object e : (List<Object>) so) {
                 if (!(e instanceof Map)) continue;
                 Map<String, Object> s = (Map<String, Object>) e; Slot sl = new Slot();
-                sl.id = SceneModel.Json.strOr(s.get("id"), ""); sl.ko = SceneModel.Json.strOr(s.get("ko"), ""); sl.kind = "sleep".equals(SceneModel.Json.strOr(s.get("kind"), "pose")) ? "sleep" : "pose";
+                sl.dark = Boolean.TRUE.equals(s.get("dark")); sl.id = SceneModel.Json.strOr(s.get("id"), ""); sl.ko = SceneModel.Json.strOr(s.get("ko"), ""); sl.kind = "sleep".equals(SceneModel.Json.strOr(s.get("kind"), "pose")) ? "sleep" : "pose";
                 sl.h0 = num(s.get("h0"), 0); sl.h1 = num(s.get("h1"), 0);
                 Object sk = s.get("sky");
                 if (sk instanceof List && ((List<Object>) sk).size() >= 3) { List<Object> k = (List<Object>) sk; sl.sky0 = col(k.get(0)); sl.sky1 = col(k.get(1)); sl.sky2 = col(k.get(2)); }
@@ -147,6 +160,24 @@ public final class OpenCore {
         return true;
     }
     private static long mix(long z) { z += 0x9E3779B97F4A7C15L; z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L; z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL; return z ^ (z >>> 31); }
+
+    /** 마지막으로 받은 날씨(wk: clear·cloudy·overcast·rain·snow·fog)를 칸의 하늘·땅·해/달/별·구름·효과에 입힌 새 칸. 모르는 날씨·맑음·빈 값이면 칸 그대로. */
+    public static Slot withWeather(Script sc, Slot s, String wk) {
+        Wx w = wk == null ? null : sc.wx.get(wk); if (w == null) return s;
+        Slot r = new Slot(); r.id = s.id; r.ko = s.ko; r.kind = s.kind; r.dark = s.dark; r.h0 = s.h0; r.h1 = s.h1; r.roles = s.roles; r.special = s.special;
+        int t = s.dark ? w.tintNight : w.tintDay;
+        r.sky0 = mix(s.sky0, t, w.a); r.sky1 = mix(s.sky1, t, w.a); r.sky2 = mix(s.sky2, t, w.a);
+        r.ground = w.hasGround ? mix(s.ground, w.ground, w.ga) : mix(s.ground, t, w.a * 0.45);
+        r.hill = w.hasGround ? mix(s.hill, w.hill, w.ga) : mix(s.hill, t, w.a * 0.45);
+        r.sun = w.sun ? s.sun : null; r.moon = w.sun ? s.moon : null; r.stars = w.sun ? s.stars : 0;
+        r.clouds = Math.max(s.clouds, w.clouds); r.fx = w.fx; return r;
+    }
+    /** a(0~1)만큼 b 쪽으로 섞은 색(0xFFRRGGBB). */
+    static int mix(int c0, int c1, double a) {
+        a = Math.max(0, Math.min(1, a)); int out = 0xFF000000;
+        for (int sh = 16; sh >= 0; sh -= 8) { double v = ((c0 >> sh) & 255) * (1 - a) + ((c1 >> sh) & 255) * a; out |= (int) Math.round(v) << sh; }
+        return out;
+    }
 
     /** 칸의 자리별 연기를 고른 친구 셋에 입힌다. 죽순이·뽀송처럼 전용 동작이 있는 친구는 칸의 special 로 자기 자리의 연기를 바꾼다(말풍선은 자리의 것을 이어받는다). */
     public static Actor[] cast(Script sc, Slot s, String[] ids) {

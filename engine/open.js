@@ -6,6 +6,7 @@
 //     누가 나올지는 켤 때마다 8마리 중에서 무작위(앱이 고른다 — 방금 나온 조합은 피한다). 죽순이·뽀송만 하는 전용 동작(먹기·냄새 맡기·신발 자랑)은 `special` 로 칸이 정해 둔다.
 //   s299-4 (YJ: "위치 이동(아래로) · 가로로 여백없이 · 테두리는 그라데이션으로 배경과 분리됐다는 느낌 최소화 · 캐릭터 아래 이름표"):
 //     배경 판은 화면 가로를 꽉 채우고(둥근 모서리·윤곽선 없음) 위·아래 가장자리가 바탕색으로 서서히 번져 경계가 안 보인다. 판은 화면 아래쪽으로 내렸고, 친구 발밑에 이름표(OPEN_NAMES)가 붙는다.
+//   s299-6 (YJ: "이미지는 하단 끝 바닥에 닿도록 · 제목은 바닥에서 65% 높이 · 배경도 날씨 연동"): 띠는 화면 맨 아래에 닿고(아래 번짐 없음) 제목은 바닥에서 65% 높이, 배경은 마지막으로 받은 날씨(OPEN_WX)로 바뀐다.
 //     친구 셋은 걸어 들어오지 않고 화면 가운데에 모여 서서 조용히 나타나 인사한다(왼쪽 · 가운데 · 오른쪽 — 가운데 친구가 말풍선으로 인사). 움직임은 작게(콩콩 키의 5% 안쪽).
 //
 // 앱을 켜면 2초쯤 길동무 친구들이 나와 인사한다. 그동안 앱은 뒤에서 위치·정류장·탭 화면을 받아 두며 안정화한다.
@@ -31,6 +32,16 @@ var OPEN_DUR = 2700, OPEN_FADE = 700, OPEN_BRAND = "우리들의 길동무", OPE
 var OPEN_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"];
 // 친구 이름표(YJ 가 정한 이름 — 두더지 두덩 · 독수리 독슐 · 비숑 둘숑 · 푸들 뽀푸 · 올챙이 챙챙 · 판다 쮸르 · 하마 베비히포 · 고양이는 말씀이 없어 기존 이름 러블)
 var OPEN_NAMES = { dolsom: "둘숑", lovel: "러블", dudung: "두덩", sul: "독슐", ppopu: "뽀푸", chaeng: "챙챙", juksun: "쮸르", bbosong: "베비히포" };
+// 날씨(YJ: "배경도 날씨 연동되는지 확인하고 가능하면 연동") — 엔진 장면(/scene)이 정한 날씨 종류(clear·cloudy·overcast·rain·snow·fog, engine/scene.js sceneWxKind)를 앱이 마지막으로 받은 값으로 쓴다.
+// 오프닝은 네트워크를 기다리지 않으므로 '방금 받아 둔 값'(앱이 장면을 받을 때 저장, 6시간 안)만 쓰고, 없으면 맑음(날씨를 지어내지 않는다).
+// 종류마다: tint=[낮, 밤] 하늘·땅에 섞을 색 · a=섞는 정도 · sun=false 면 해·달·별을 가린다 · clouds=구름 수 · fx=비·눈·안개 효과 · ground/hill/ga=땅 색을 바꿀 때(눈) 색과 정도
+var OPEN_WX = {
+  cloudy:   { tint: ["#c4d1e2", "#2a3558"], a: 0.28, sun: true,  clouds: 5, fx: "" },
+  overcast: { tint: ["#a9b3bf", "#222b45"], a: 0.58, sun: false, clouds: 6, fx: "" },
+  rain:     { tint: ["#8794a6", "#1e2740"], a: 0.62, sun: false, clouds: 6, fx: "rain" },
+  snow:     { tint: ["#d6e0ec", "#2c3656"], a: 0.55, sun: false, clouds: 5, fx: "snow", ground: "#eef3f8", hill: "#dfe8f1", ga: 0.88 },
+  fog:      { tint: ["#cdd5dc", "#2b3350"], a: 0.62, sun: false, clouds: 3, fx: "fog" }
+};
 var OPEN_X = [0.30, 0.50, 0.70], OPEN_XS = [0.27, 0.50, 0.73];      // 판 안에서 모인 자리(잠잘 때는 잠자리가 커서 조금 더 벌린다)
 
 function _r(t0, p, o) { var r = { t0: t0, p: p }; for (var k in (o || {})) r[k] = o[k]; return r; }
@@ -68,12 +79,12 @@ var OPEN_SLOTS = [
     sun: { x: 0.26, y0: 0.60, y1: 0.66, r: 0.13, c: "#ffb347" }, clouds: 2,
     roles: [_r(0, 2, { hop: 0.03, hz: 0.7 }), _r(120, 2, { hop: 0.03, hz: 0.7, say: "오늘도 수고했어요!", fx: "heart" }), _r(240, 2, { hop: 0.03, hz: 0.7 })], special: {} },
   // ── 20-23 야간 휴식: 달 아래 가운데에 모여 앉아 쉰다 ──
-  { id: "night", ko: "야간 휴식", h0: 20, h1: 23, kind: "pose",
+  { id: "night", ko: "야간 휴식", h0: 20, h1: 23, kind: "pose", dark: true,
     sky: ["#0e1a3f", "#243466", "#3d4a85"], ground: "#41614f", hill: "#365543",
     moon: { x: 0.80, y: 0.24, r: 0.07 }, stars: 22, clouds: 0,
     roles: [_r(0, 0, {}), _r(120, 0, { say: "편안한 밤이에요~", fx: "heart" }), _r(240, 0, {})], special: {} },
   // ── 23-07 잠자기: 가운데에 모여 곤히 잔다 ──
-  { id: "sleep", ko: "잠자기", h0: 23, h1: 7, kind: "sleep",
+  { id: "sleep", ko: "잠자기", h0: 23, h1: 7, kind: "sleep", dark: true,
     sky: ["#050a1e", "#0f1838", "#1a2650"], ground: "#26394a", hill: "#1f3140",
     moon: { x: 0.22, y: 0.24, r: 0.065 }, stars: 28, clouds: 0,
     roles: [_r(0, 0, { fx: "zzz" }), _r(120, 0, { fx: "zzz", say: "쿨쿨… 푹 자요" }), _r(240, 0, { fx: "zzz" })], special: {} }
@@ -90,6 +101,6 @@ function openSlotIndex(hour) {
 }
 
 /** 앱 assets/open.json 으로 내려보낼 대본 전체. chars = 나올 수 있는 친구(켤 때마다 이 중 셋이 무작위로), x/xs = 자리. */
-function openScript() { return { v: 3, dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, names: OPEN_NAMES, x: OPEN_X, xs: OPEN_XS, slots: OPEN_SLOTS }; }
+function openScript() { return { v: 3, dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, names: OPEN_NAMES, wx: OPEN_WX, x: OPEN_X, xs: OPEN_XS, slots: OPEN_SLOTS }; }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { openScript: openScript, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_NAMES: OPEN_NAMES, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { openScript: openScript, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_NAMES: OPEN_NAMES, OPEN_WX: OPEN_WX, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };

@@ -41,6 +41,17 @@ t('이름표: 사용자가 정한 이름(두덩 · 독슐 · 둘숑 · 뽀푸 ·
   const code = fs.readFileSync(N('OpenView.java'), 'utf8') + fs.readFileSync(N('OpenCore.java'), 'utf8');
   Object.values(want).forEach(n => assert.ok(!code.includes(n), n + ' 은 대본에만'));
 });
+t('날씨 연동: 대본(wx)이 날씨 종류별 색·효과를 정하고 · 앱은 장면을 받을 때 날씨를 적어 두었다가 오프닝이 읽는다(6시간 · 없으면 맑음)', () => {
+  const WK = ['cloudy', 'overcast', 'rain', 'snow', 'fog'];
+  assert.deepStrictEqual(Object.keys(E.OPEN_WX).sort(), WK.slice().sort(), '엔진 장면의 날씨 종류(맑음 제외)와 같다');
+  assert.ok(E.OPEN_WX.rain.fx === 'rain' && E.OPEN_WX.snow.fx === 'snow' && E.OPEN_WX.fog.fx === 'fog' && E.OPEN_WX.snow.ground && !E.OPEN_WX.rain.sun, '비·눈·안개 효과 · 눈은 하얀 땅 · 비엔 해가 없다');
+  ['sleep', 'night'].forEach(id => assert.ok(E.OPEN_SLOTS.find(x => x.id === id).dark, id + ' 은 어두운 칸'));
+  const w = fs.readFileSync(N('OpenWx.java'), 'utf8'), d = fs.readFileSync(N('SceneDriver.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), v = fs.readFileSync(N('OpenView.java'), 'utf8');
+  assert.ok(/MAX_AGE_MS = 6L \* 3600_000L/.test(w) && /wxKnown/.test(d) && /OpenWx\.save\(ctx, r\.look\.wk\)/.test(d), '엔진이 날씨를 확실히 알 때만(wxKnown) 적어 둔다');
+  assert.ok(/OpenCore\.withWeather\(sc, OpenCore\.slotFor\(sc, hour\), OpenWx\.read\(this\)\)/.test(a), '켤 때 읽어 입힌다');
+  assert.ok(/weatherFx\(cv, W, H, tt\)/.test(v) && /slot\.fx/.test(v) && !/"rain"\.equals\(wk|"snow"\.equals\(wk/.test(v), '효과는 대본의 fx 글을 그린다');
+  assert.ok(!/import android\./.test(fs.readFileSync(N('OpenCore.java'), 'utf8')));
+});
 t('앱 assets/open.json 이 엔진 출력과 같다(고쳤으면 node tools/engine/gen-open.js)', () => {
   assert.strictEqual(fs.readFileSync(ASSET, 'utf8').trim(), JSON.stringify(E.openScript()));
 });
@@ -69,12 +80,12 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   assert.ok(/new Thread\(/.test(v) && !/\.join\(\)/.test(v), '시트는 뒤 스레드에서 읽고 기다리지 않는다');
   assert.ok(/\* 0\.70f/.test(v), '친구 키는 처음보다 30% 작게(0.70배)');
   assert.ok(/saveLayerAlpha\(0, 0, W, H, bgA\)/.test(v) && /saveLayerAlpha\(0, 0, W, H, fgA\)/.test(v) && !/setAlpha\(\(float\)/.test(v), '배경과 글·친구를 따로 흐리게(앱 화면으로 녹아듦)');
-  assert.ok(/sc\.brand/.test(v) && /H \* 0\.5f \+ tp\.getTextSize\(\) \* 0\.35f/.test(v) && /Align\.CENTER/.test(v), '제목은 대본의 brand · 화면 가로·세로 한가운데');
-  assert.ok(/drawRect\(0, 0, W, H, p\)/.test(v) && /sc\.bg/.test(v) && /clipRect\(0, 0, pw, ph\)/.test(v) && /float pw = W,/.test(v) && !/drawRoundRect\(rf, 22f/.test(v) && !/STROKE/.test(v), '화면 전체는 불투명 파스텔 화이트 · 배경 그림은 가로 꽉 찬 띠 안에만(둥근 모서리·윤곽선 없음)');
+  assert.ok(/sc\.brand/.test(v) && /H \* 0\.35f \+ tp\.getTextSize\(\) \* 0\.35f/.test(v) && /Align\.CENTER/.test(v), '제목은 대본의 brand · 가로 가운데 · 바닥에서 65% 높이(위에서 35%)');
+  assert.ok(/drawRect\(0, 0, W, H, p\)/.test(v) && /sc\.bg/.test(v) && /clipRect\(0, 0, pw, ph\)/.test(v) && /float pw = W,/.test(v) && !/drawRoundRect\(rf, 22f/.test(v) && !/setStrokeWidth\(1f \* dp\)/.test(v), '화면 전체는 불투명 파스텔 화이트 · 배경 그림은 가로 꽉 찬 띠 안에만(둥근 모서리·윤곽선 없음)');
   const ds = v.slice(v.indexOf('private void drawSky'), v.indexOf('p.setShader(sky)'));
   assert.ok(/p\.setColor\(0xFF000000\); p\.setAlpha\(255\)/.test(ds), '하늘 셰이더를 그리기 전에 붓 투명도를 되돌린다(앱 화면이 비치던 문제)');
   assert.ok(/private void feather\(/.test(v) && /sc\.bg & 0x00FFFFFF/.test(v) && /feather\(cv, pw, ph, fh\)/.test(v), '띠의 위·아래 가장자리가 바탕색으로 번진다');
-  assert.ok(/H \* 0\.5f \+ tSize \* 0\.35f \+ 6f \* dp/.test(v), '띠는 한가운데 제목 바로 아래');
+  assert.ok(/float pt = H - ph;/.test(v) && !/fadeB/.test(v), '띠는 화면 맨 아래 바닥에 닿는다(아래쪽 번짐 없음)');
   assert.ok(/private void nameTag\(/.test(v) && /sc\.names\.get\(id\)/.test(v) && (v.match(/nameTag\(cv, a\.id/g) || []).length === 2, '자는 모습·깬 모습 모두 이름표');
   assert.ok(!/slot\.tc/.test(v + c0), '옛 상단 글 색(tc) 없음');
   // 켜는 준비(위치·정류장·탭 미리 받기)는 오프닝 호출보다 앞에서 이미 시작돼 있다

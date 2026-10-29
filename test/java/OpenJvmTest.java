@@ -91,6 +91,25 @@ public final class OpenJvmTest {
         ck(!OpenCore.at(cm[1], 1000).say.isEmpty() && OpenCore.at(cm[1], 1000).pose == 6 + (int) (1000 - 120) / 700 % 2, "죽순이가 가운데에 서도 인사 말풍선과 먹기를 함께 한다");
         ck(OpenCore.at(OpenCore.cast(sc, OpenCore.slotFor(sc, 3), new String[] { "dolsom", "lovel", "dudung" })[1], 1000).k.equals("sleep"), "잠자기: 가운데 친구도 자고 있다");
         ck(OpenCore.at(OpenCore.cast(sc, OpenCore.slotFor(sc, 15), new String[] { "bbosong", "dolsom", "lovel" })[0], 1000).pose == 7, "오후: 뽀송이 신발을 자랑한다");
+        // ⑥-0 날씨: 맑음·모르는 값·빈 값은 칸 그대로 · 날씨별로 하늘이 바뀌고 해/달/별·구름·효과가 대본대로 · 밤은 어두운 채
+        OpenCore.Slot noon = OpenCore.slotFor(sc, 12), night = OpenCore.slotFor(sc, 21);
+        ck(OpenCore.withWeather(sc, noon, null) == noon && OpenCore.withWeather(sc, noon, "") == noon && OpenCore.withWeather(sc, noon, "clear") == noon && OpenCore.withWeather(sc, noon, "tornado") == noon, "날씨: 맑음·모르는 값은 칸 그대로(날씨를 지어내지 않는다)");
+        for (String wk : new String[] { "cloudy", "overcast", "rain", "snow", "fog" }) {
+            OpenCore.Wx w = sc.wx.get(wk); ck(w != null, "날씨 정의 " + wk);
+            for (OpenCore.Slot s : sc.slots) {
+                OpenCore.Slot r = OpenCore.withWeather(sc, s, wk);
+                ck(r != s && r.id.equals(s.id) && r.roles == s.roles && r.special == s.special && r.kind.equals(s.kind) && r.fx.equals(w.fx), s.id + "/" + wk + ": 칸의 연기는 그대로, 날씨만 입힌다");
+                ck(r.sky0 != s.sky0 || r.sky1 != s.sky1 || r.sky2 != s.sky2, s.id + "/" + wk + ": 하늘 색이 바뀐다");
+                ck((r.sun == null) == (s.sun == null || !w.sun) && (r.moon == null) == (s.moon == null || !w.sun) && (w.sun ? r.stars == s.stars : r.stars == 0), s.id + "/" + wk + ": 해·달·별 가림");
+                ck(r.clouds >= s.clouds && r.clouds >= w.clouds, s.id + "/" + wk + ": 구름은 줄지 않는다");
+                ck((r.sky0 >>> 24) == 0xFF && (r.ground >>> 24) == 0xFF, s.id + "/" + wk + ": 색은 불투명");
+                if (s.dark) { int lum = ((r.sky0 >> 16) & 255) + ((r.sky0 >> 8) & 255) + (r.sky0 & 255); ck(lum < 3 * 110, s.id + "/" + wk + ": 밤은 어두운 채(" + lum + ")"); }
+            }
+        }
+        OpenCore.Slot snow = OpenCore.withWeather(sc, noon, "snow"); ck(((snow.ground >> 16) & 255) > 200 && ((snow.ground >> 8) & 255) > 200, "눈: 땅이 하얗다");
+        OpenCore.Slot rain = OpenCore.withWeather(sc, noon, "rain"); ck(rain.sun == null && rain.fx.equals("rain") && ((rain.sky0 >> 8) & 255) < ((noon.sky0 >> 8) & 255), "비: 해가 가려지고 하늘이 어두워진다");
+        ck(OpenCore.mix(0xFF000000, 0xFFFFFFFF, 0) == 0xFF000000 && OpenCore.mix(0xFF000000, 0xFFFFFFFF, 1) == 0xFFFFFFFF && OpenCore.mix(0xFF102030, 0xFF102030, 0.5) == 0xFF102030, "색 섞기");
+        ck(night.dark && !noon.dark, "밤 칸만 dark");
         // ⑥ 전체 진하기
         ck(OpenCore.alpha(sc, 0) == 1 && OpenCore.alpha(sc, sc.dur - sc.fade) == 1 && OpenCore.alpha(sc, sc.dur) == 0 && OpenCore.alpha(sc, sc.dur - sc.fade / 2) > 0.4 && OpenCore.alpha(sc, sc.dur - sc.fade / 2) < 0.6 && OpenCore.done(sc, sc.dur) && !OpenCore.done(sc, sc.dur - 1), "사라짐: 2초는 또렷이 · 마지막 0.7초에 서서히");
         ck(sc.dur - sc.fade >= 2000, "또렷이 보이는 시간이 2초 이상");

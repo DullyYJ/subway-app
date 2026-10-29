@@ -125,6 +125,7 @@ public final class SceneDriver implements SceneCore.Host {
     public boolean apply(String json) {
         try {
             SceneModel.Res r = SceneModel.parse(json);
+            if (r.look != null && r.look.wxKnown) OpenWx.save(ctx, r.look.wk);                       // 다음에 켤 때 오프닝 배경이 쓸 마지막 날씨(엔진이 정한 종류만 적어 둔다)
             boolean on = core.apply(r);
             lastNanos = 0;
             return on;

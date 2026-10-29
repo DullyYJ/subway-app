@@ -280,7 +280,7 @@ public class ShellActivity extends Activity {
             if (sc == null) return;
             java.util.Calendar cal = java.util.Calendar.getInstance();
             double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
-            OpenCore.Slot sl = OpenCore.slotFor(sc, hour);
+            OpenCore.Slot sl = OpenCore.withWeather(sc, OpenCore.slotFor(sc, hour), OpenWx.read(this));          // 마지막으로 받은 날씨(6시간 안)를 배경에 입힌다 — 없으면 맑은 그림 그대로
             String prev = ""; try { prev = store.get("open_last", ""); } catch (Throwable ignored) { }
             String[] ids = OpenCore.pickIds(sc, System.nanoTime() ^ cal.getTimeInMillis(), prev);          // 켤 때마다 친구 셋이 무작위로(방금 나온 조합은 피한다)
             try { store.put("open_last", ids[0] + "," + ids[1] + "," + ids[2]); } catch (Throwable ignored) { }
