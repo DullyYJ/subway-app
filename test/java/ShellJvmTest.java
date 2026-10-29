@@ -812,6 +812,14 @@ public class ShellJvmTest {
         cc.hide("m1"); ok(cs.get("lrHidden", "").equals("[\"m1\"]"), "신고한 글 숨김 기록");
         cc.onScreen("{\"info\":{\"sel\":\"all\",\"pl\":\"4호선\"}}"); ok("4호선".equals(cc.postLine), "전체 방 글에 붙일 노선(엔진이 정함)");
         ok(ChatCore.sendBody("나", "안녕", "1호선").equals("{\"nick\":\"나\",\"text\":\"안녕\",\"line\":\"1호선\"}"), "보내기 본문");
+        String echoJ = "{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"body\":[{\"t\":\"spacer\",\"h\":4},{\"t\":\"msg\",\"s\":\"안녕\",\"time\":\"11:00\",\"nick\":\"가\",\"pad\":[12,0,12,10]},{\"t\":\"spacer\",\"h\":4}],\"info\":{\"echo\":{\"t\":\"msg\",\"pad\":[12,0,12,10],\"s\":\"\",\"time\":\"전송 중\",\"mine\":true}},\"rev\":\"x\"}";
+        String echoN = ChatCore.withEcho(echoJ, "방금 친 글");
+        ok(echoN != null && echoN.indexOf("방금 친 글") > echoN.indexOf("안녕") && echoN.lastIndexOf("spacer") > echoN.indexOf("방금 친 글") && echoN.contains("전송 중") && !echoN.contains("\"rev\""), "엔진이 준 내 말풍선 틀로 방금 친 글을 맨 끝(마지막 여백 앞)에 보탠다");
+        ok(ChatCore.withEcho("{\"ok\":true,\"body\":[],\"info\":{}}", "x") == null && ChatCore.withEcho("zz", "x") == null, "틀이 없거나 깨진 글이면 건드리지 않는다(옛 엔진)");
+        cc.addPend("all", "방금 친 글", System.currentTimeMillis());
+        ok(cc.requestFor("all", true, 8, "dark", 0, "나", 0L).contains("\"pend\":[[\"방금 친 글\"") && !cc.requestFor("1호선", true, 8, "dark", 0, "나", 0L).contains("\"pend\""), "보낸 글을 그 방 요청에 실어 엔진이 전송 중으로 그리게 한다");
+        cc.dropPend("방금 친 글");
+        ok(!cc.requestFor("all", true, 8, "dark", 0, "나", 0L).contains("\"pend\""), "보내기 실패·확인되면 거둔다");
         HomeCore hr = new HomeCore(); hr.onResult("{\"info\":{\"sec\":[\"수도권 1호선\",\"2호선\"]}}");
         ok(hr.resSec.size() == 2 && "2호선".equals(hr.resSec.get(1)), "결과 화면의 지하철 구간 이름");
 
@@ -847,7 +855,14 @@ public class ShellJvmTest {
         ok(fd.pickChip("카페") && "카페".equals(fd.flt) && !fd.pickChip("주점") && "주점".equals(fd.flt), "칩: 엔진이 미리 계산해 둔 화면이 있으면 요청 없이");
         ok(fd.altOf("카페") != null && fd.altOf("카페").contains("\"v\":1") && fd.altOf("주점") == null, "칩 화면 보관");
         ok(fd.act("fm.c.0") == FoodCore.R_PANEL && fd.openKey.equals("c.0") && fd.pendingSel.contains("\"la\":37.5"), "가게 누름 → 카드 아래 지도 펼침(웹 토글)");
-        ok(fd.act("fm.c.0") == FoodCore.R_UNPANEL && fd.openKey.length() == 0, "같은 카드를 또 누르면 접는다");
+        ok(fd.act("fm.c.0") == FoodCore.R_NONE && fd.openKey.equals("c.0"), "펼침을 받는 중에 같은 카드를 또 눌러도 닫지 않는다(연타가 열고 닫기를 되풀이하지 않게)");
+        ok(fd.onPanel("{\"ok\":true,\"body\":[{\"t\":\"text\",\"s\":\"펼침\"}],\"info\":{}}") && fd.act("fm.c.0") == FoodCore.R_UNPANEL && fd.openKey.length() == 0, "펼침이 올라온 뒤 같은 카드를 또 누르면 접는다");
+        String sid = "[\"눌림가게\",\"한식\",\"서울 1\",37.55,127.05]";
+        ok(fd.act("fm.c.77", sid) == FoodCore.R_PANEL && fd.openKey.equals("c.77") && fd.selName.equals("눌림가게") && fd.pendingSel.contains("\"la\":37.55") && fd.act("fm.c.78", "[\"x\"]") == FoodCore.R_NONE, "엔진이 눌림에 실어 준 가게 사실로 연다(번호표에 없어도) · 깨진 글은 번호표로");
+        fd.closePanel();
+        FoodCore fxz = new FoodCore();
+        fxz.onScreen("{\"ok\":true,\"info\":{\"go\":{\"c.0\":[\"카페집\",\"카페\",\"y\",37.6,127.1]}},\"alts\":{\"카페\":{\"info\":{\"go\":{\"c.0\":[\"카페집\",\"카페\",\"y\",37.6,127.1]}}},\"밥집\":{\"info\":{\"go\":{\"c.0\":[\"밥집1\",\"한식\",\"z\",37.7,127.2]}}}}}");
+        ok(fxz.pickChip("밥집") && fxz.act("fm.c.0") == FoodCore.R_PANEL && fxz.selName.equals("밥집1"), "칩을 바꾸면 눌림 번호표도 그 칩 것으로 바뀐다(옛 엔진)");
         ok(fd.act("fm.c.9") == FoodCore.R_NONE && fd.act("fm.close") == FoodCore.R_CLOSE && fd.act("zz") == FoodCore.R_NONE && fd.act("fm.ni") == FoodCore.R_NONE, "없는 가게 · 닫기 · 엉터리 · 펼침 없을 때 단추");
         fd.ctr = new double[] { 37.4979, 127.0276 }; fd.stnName = "강남";
         fd.act("fm.c.0");
