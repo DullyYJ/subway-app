@@ -338,12 +338,12 @@ public class ScreenView extends View {
         return x >= fx - 4f && x < fx + lay.fabW + 4f && y >= fy - 4f && y < fy + ScreenCore.FAB_H + 4f;
     }
     private void drawFab(Canvas cv, float w, float h) {
-        if (lay == null || lay.fabW <= 0f || fabShader == null) return;
+        if (lay == null || lay.fabW <= 0f) return;
         float fw = lay.fabW, fh = ScreenCore.FAB_H, fx = (w - fw) / 2f, fy = h - lay.footH - ScreenCore.FAB_B - fh, rad = 30f;
         p.setStyle(Paint.Style.FILL); p.setShader(null);
         for (int i = 5; i >= 1; i--) { p.setColor((pal[R_GOLD] & 0x00FFFFFF) | 0x0A000000); float e = i * 1.4f; rf.set(fx - e, fy + 4f - e, fx + fw + e, fy + fh + 4f + e); cv.drawRoundRect(rf, rad + e, rad + e, p); }       // 웹 box-shadow 0 4px 14px rgba(212,175,55,.4) 흉내
         rf.set(fx, fy, fx + fw, fy + fh);
-        p.setShader(fabShader); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); p.setShader(null);
+        p.setColor(pal[R_GOLD]); p.setAlpha(255); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p);          // s313(YJ: 너무 흐림): 그라데이션 셰이더는 앞에서 남은 붓 투명도를 그대로 받아 흐리게 보였다 — 단색 · 불투명으로
         if (fabDown) { p.setColor(0x22000000); cv.drawRoundRect(rf, fh / 2f, fh / 2f, p); }
         float tx = fx + ScreenCore.FAB_PX;
         if (lay.fabIcon.length > 0) {

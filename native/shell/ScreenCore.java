@@ -1512,7 +1512,8 @@ public final class ScreenCore {
         y = 0f;
         for (Node n : sc.foot) y = stack(n, 0f, width, y, fi, m, openKey);
         L.foot = fi.toArray(new Item[0]); L.footH = y;
-        if (sc.fab != null) { L.fabLabel = sc.fab.s; L.fabIcon = sc.fab.pathOps; L.fabAct = sc.fab.act; L.fabW = FAB_PX * 2f + (sc.fab.pathOps.length > 0 ? FAB_ICON + FAB_GAP : 0f) + m.width(sc.fab.s, FAB_TXT, true); }
+        if (sc.fab != null) { L.fabLabel = sc.fab.s; L.fabIcon = new float[0];                                  // s313(YJ): 맨 왼쪽 하얀 연필 그림은 뺀다(글자의 ✏️ 만 남김)
+             L.fabAct = sc.fab.act; L.fabW = FAB_PX * 2f + 0f + m.width(sc.fab.s, FAB_TXT, true); }
         L.headMaxB = maxB(L.head); L.bodyMaxB = maxB(L.body);
         if (sc.dlg != null && sc.dlg.fit) {                                          // 안내창 너비 맞춤: 글 줄마다 (카드 너비 - 줄 칸 너비 + 줄 글 너비) 중 가장 큰 값
             float fw = 0f;
