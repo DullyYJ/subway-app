@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s301";
+var ENGINE_VERSION = "route-v2-2026-10-29s302";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12898,12 +12898,13 @@ var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksu
 //   acts: \uae30\ubcf8(walk\u00b7hop\u00b7spin\u00b7rest)\uacfc \uce90\ub9ad\ud130 \uc804\uc6a9 \ub3d9\uc791 \uc774\ub984. \uc571\uc740 \uc21c\uc11c\ub300\ub85c \ud55c \ub3d9\uc791\uc529 \uadf8\ub9b0\ub2e4(\ub05d\ub098\uba74 \ub2e4\uc74c).
 var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "tumble", bbosong: "hose" };
 var SCENE_ACTS = {
-  dolsom: ["shake", "tailchase", "loaf", "ball", "mirror"],
-  ppopu: ["dig", "bone", "dance", "slide", "dive"],
-  lovel: ["punch", "box", "stretch", "melt", "pounce"],
-  dudung: ["shades", "flag", "lens", "dust", "vanish"],
-  sul: ["glasses", "stumble", "feather", "binoc", "hover"],
-  chaeng: ["dash", "flop", "hide", "bubbles", "dew"],
+  // \ub098\uba38\uc9c0 \uc5ec\uc12f \uce5c\uad6c\ub3c4 \uc804\uc6a9 \ub3d9\uc791 10\uac00\uc9c0(s301): \uae30\uc874 5 + \uc0c8 5 (ppopu \ub294 \ub099\uc5fd \ub2e4\uc774\ube59\uc774 \uacc4\uc808 \ud55c\uc815\uc774\ub77c \uc0c8 \ub3d9\uc791 6\uac1c)
+  dolsom: ["shake", "tailchase", "loaf", "ball", "mirror", "sit", "howl", "snuffle", "rollover", "zoomies"],        // \ud754\ub4e4\uae30\u00b7\uaf2c\ub9ac\uc7a1\uae30\u00b7\uc2dd\ube75\u00b7\uacf5\ub180\uc774\u00b7\uac70\uc6b8 + \uc549\uc544\u00b7\uc544\uc6b0~\u00b7\ud081\ud081\u00b7\ubc30 \ubcf4\uc774\uae30\u00b7\uc6b0\ub2e4\ub2e4
+  ppopu: ["dig", "bone", "dance", "slide", "dive", "beg", "scratch", "bark", "frisbee", "chew", "zoomies"],       // \ub545\ud30c\uae30\u00b7\ubf08\ub2e4\uadc0\u00b7\ucda4\u00b7\ubbf8\ub044\ub7fc\u00b7\ub2e4\uc774\ube59 + \uac04\uc2dd \uc870\ub974\uae30\u00b7\ubc85\ubc85\u00b7\uc648\uc648\u00b7\uc6d0\ubc18 \uc7a1\uae30\u00b7\uc640\uc791\uc640\uc791\u00b7\uc6b0\ub2e4\ub2e4
+  lovel: ["punch", "box", "stretch", "melt", "pounce", "groom", "purr", "knead", "yarn", "cuke"],                  // \ud380\uce58\u00b7\uc0c1\uc790\u00b7\uae30\uc9c0\uac1c\u00b7\ub179\uae30\u00b7\ub36e\uce58\uae30 + \uadf8\ub8e8\ubc0d\u00b7\uac38\ub974\ub989\u00b7\uafb9\uafb9\uc774\u00b7\ud138\uc2e4\u00b7\uc624\uc774 \uae5c\uc9dd
+  dudung: ["shades", "flag", "lens", "dust", "vanish", "digdig", "lantern", "popup", "nap", "treasure"],           // \uc120\uae00\ub77c\uc2a4\u00b7\uae43\ubc1c\u00b7\ub3cb\ubcf4\uae30\u00b7\uba3c\uc9c0\u00b7\uc0ac\ub77c\uc9d0 + \uc0bd\uc9c8\u00b7\ub79c\ud134\u00b7\ub450\ub354\uc9c0 \uc7a1\uae30\u00b7\ub0ae\uc7a0\u00b7\ubcf4\ubb3c
+  sul: ["glasses", "stumble", "feather", "binoc", "hover", "soar", "preen", "swoop", "scan", "flapshow"],          // \uc548\uacbd\u00b7\ube44\ud2c0\u00b7\uae43\ud138\u00b7\uc30d\uc548\uacbd\u00b7\uc815\uc9c0\ube44\ud589 + \uc120\ud68c\u00b7\uae43 \ub2e4\ub4ec\uae30\u00b7\uae09\uac15\ud558\u00b7\ub9dd\ubcf4\uae30\u00b7\ub0a0\uac1c \uc790\ub791
+  chaeng: ["dash", "flop", "hide", "bubbles", "dew", "swim", "wiggle", "leap", "whirl", "tailsplash"],             // \uc9c8\uc8fc\u00b7\ud480\uc369\u00b7\uc228\uae30\u00b7\ubc29\uc6b8\u00b7\uc774\uc2ac + \ud5e4\uc5c4\u00b7\uaf2c\ubb3c\uaf2c\ubb3c\u00b7\uc810\ud504\u00b7\ube59\uae00\ube59\uae00\u00b7\uaf2c\ub9ac \ucca8\ubc99
   // \ucbb8\ub974(\ud310\ub2e4): \ub300\ub098\ubb34 \uba39\uae30 \u00b7 \ub0ae\uc7a0 \u00b7 \ud3f4\uc9dd\ud3f4\uc9dd \u00b7 \ub370\uad74\ub370\uad74 \u00b7 \ub300\ub098\ubb34 \ub3cc\ub9ac\uae30 \u00b7 \ub450\ub9ac\ubc88 \ube7c\uaf3c \u00b7 \ubc30 \ub450\ub4dc\ub9ac\uae30 \u00b7 \ud558\ud488 \uae30\uc9c0\uac1c \u00b7 \ucff5\ud478 \u00b7 \uc7ac\ucc44\uae30 (\ud65c\ubc1c\ud55c \uba39\ubcf4\u00b7\uc7a0\uafb8\ub7ec\uae30)
   juksun: ["munch", "snooze", "hooray", "roll", "twirl", "peek", "bellypat", "yawn", "kungfu", "sneeze"],
   // \ubca0\ube44\ud788\ud3ec(\uc544\uae30 \ud558\ub9c8): \uaf43 \ud5a5\uae30 \u00b7 \uc0c8 \uc2e0\ubc1c \uc790\ub791 \u00b7 \ubc18\uc9dd\ubc18\uc9dd \u00b7 \uc785 \ubd84\uc218 \u00b7 \ud0ed\ub304\uc2a4 \u00b7 \ube44\ub217\ubc29\uc6b8 \u00b7 \uca4d \ud558\ud488 \u00b7 \uc2e0\ubc1c \uac08\uc544\uc2e0\uae30 \u00b7 \uc2e0\ubc1c \ub2e6\uae30 \u00b7 \uba38\ub9ac\uaf43 \ub9e4\ub9cc\uc9c0\uae30 (\uaf43\uacfc \uc2e0\ubc1c\uc744 \uc0ac\ub791\ud558\ub294 \uae54\ub054\uc7c1\uc774)

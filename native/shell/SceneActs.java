@@ -393,6 +393,7 @@ final class SceneActs {
         }, (a, A) -> { a.alt = a.altSave != 0 ? a.altSave : 18; });
         registerWx(S);
         registerMo(S);
+        registerMo2(S);
     }
 
 
@@ -626,6 +627,214 @@ final class SceneActs {
                 if (S.once(A, "yell")) S.say(a, (a.id.length() + a.ai) % 3 == 0 ? "으앗, 차가워!" : (a.id.length() + a.ai) % 3 == 1 ? "꺄악! 도망가자!" : "물이다~!", 1.6);
                 if (S.every(A, "sw", .3)) S.ptx("sweat", a.x - side * h * .1, S.feetY(a) - h * .9, 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(120).l(.4, .7).jx(3));
             }
+        }, null);
+    }
+
+
+    /**
+     * ★ 나머지 여섯 친구(돌솜·뽀푸·러블·두덩·술·챙챙)도 전용 동작 5가지씩을 더해 10가지로 늘렸다(YJ 2026-10-29 "모든 캐릭터 각각 10가지").
+     *   이 친구들의 몸 그림은 걷기 16프레임 + 자세 6칸(앉기·잠·웃음·덜덜·헥헥·찡그림)뿐이라, 새 동작은 그 칸들을 골라 쓰고 몸을 기울이고 늘리고 소품·입자로 연출한다(기존 동작과 같은 방식).
+     */
+    static void registerMo2(final SceneCore S) {
+        // ── 돌솜(하얀 강아지): 앉아 · 아우~ · 킁킁 · 배 보이기 · 우다다 ──
+        A_(S, "sit", 3.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a);
+            if (u < .08) { /* 서 있다가 */ } else if (u < .58) { a.pose = 0; a.ox = Math.sin(T * 17) * .7; a.sy = 1 + Math.sin(T * 2.6) * .012; if (S.once(A, "sy")) S.say(a, "앉아! 기다려~", 2.0); }
+            else { a.pose = 2; a.y = -Math.abs(Math.sin(T * 7)) * 6; if (S.once(A, "ok")) { S.say(a, "잘했어요!", 1.6); S.haptic("grin"); } if (S.every(A, "hh", .5)) S.ptx("heart", a.x, S.feetY(a) - h * .8, 1, po().a(-PI * .98, -PI * .02).s(22, 44).g(55).l(.9, 1.3).r(1).jx(6)); }
+        }, null);
+        A_(S, "howl", 3.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .1 && u < .88;
+            if (on) { a.pose = 0; a.pvx = 0; a.pvy = -h * .4; a.ang = -.3 * ease(Math.min(1, (u - .1) / .15)) + Math.sin(T * 5) * .02; a.sy = 1.02;
+                if (S.every(A, "nt", .45)) S.ptx("note", a.x + a.dir * h * .35, S.feetY(a) - h * 1.05, 1, po().a(-PI * .8, -PI * .2).s(12, 20).g(-6).l(.9, 1.3).r(1).jx(6)); }
+            if (u > .12 && S.once(A, "sy")) S.say(a, "아우~~~!", 2.4);
+        }, null);
+        A_(S, "snuffle", 4.4, (a, t, A) -> { A.tx = S.aheadX(a, 55 + S.rnd() * 20); }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; double[] r = S.inRange(a);
+            if (u < .72) {
+                S.moveX(a, A.tx, a.spd * .38, dt); a.pvx = h * .3; a.pvy = -h * .3; a.ang = .3 + Math.sin(T * 9) * .03; a.y = Math.sin(T * 9) * .8;
+                if (S.every(A, "dt", .4)) S.ptx("dust", a.x + a.dir * h * .55, S.feetY(a) - 1, 1, po().a(-PI * .9, -PI * .1).s(4, 10));
+                if (S.once(A, "sy")) S.say(a, "킁킁킁…", 1.6);
+            } else {
+                S.standF(a); a.pose = 2; a.y = -Math.abs(Math.sin(T * 8)) * 5;
+                if (S.once(A, "f")) { S.say(a, "뭔가 있다!", 1.6); S.ptx("spark", a.x + a.dir * h * .5, S.feetY(a) - h * .3, 4, po().a(-PI, 0).s(12, 26).g(0).l(.3, .5).jx(5).r(1)); S.haptic("grin"); }
+            }
+        }, null);
+        A_(S, "rollover", 3.6, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.pvy = -h * .4;
+            if (u < .16) { a.sy = 1 - .06 * (u / .16); }
+            else if (u < .34) { a.ang = PI * ease((u - .16) / .18); a.y = -Math.sin(PI * (u - .16) / .18) * 3; }
+            else if (u < .72) { a.ang = PI + Math.sin(T * 9) * .14; a.pose = 2; if (S.once(A, "sy")) S.say(a, "배 쓰다듬어 주세요~", 2.2); if (S.every(A, "hh", .55)) S.ptx("heart", a.x, S.feetY(a) - h * .9, 1, po().a(-PI * .98, -PI * .02).s(22, 44).g(55).l(.9, 1.3).r(1).jx(6)); }
+            else if (u < .9) { a.ang = PI + PI * ease((u - .72) / .18); a.y = -Math.sin(PI * (u - .72) / .18) * 3; }
+            else { a.pose = 2; a.y = -Math.abs(Math.sin(T * 8)) * 3; }
+        }, null);
+        A_(S, "zoomies", 3.6, (a, t, A) -> { A.tx = S.aheadX(a, 110); }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; double[] r = S.inRange(a);
+            if (S.moveX(a, A.tx, a.spd * 3.0, dt)) A.tx = clamp(a.x - a.dir * (90 + S.rnd() * 60), r[0], r[1]);
+            a.y = -Math.abs(Math.sin(T * 18)) * 3.2; a.ang = .08;
+            if (S.every(A, "dt", .1)) S.ptx("dust", a.x - a.dir * h * .45, S.feetY(a) - 1, 1, po().a(-PI * .9, -PI * .1).s(8, 18));
+            if (S.once(A, "sy")) S.say(a, "우다다다다!", 1.8);
+        }, null);
+        // ── 뽀푸(갈색 강아지): 간식 조르기 · 벅벅 · 왈왈 · 원반 잡기 · 뼈다귀 와작 ──
+        A_(S, "beg", 3.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 0 : -1;
+            if (on) { a.ang = Math.sin(T * 6) * .03; a.y = -Math.abs(Math.sin(T * 6)) * 1.6; S.pr(a, S.prop("bone", h * .55, -h * 1.0 + Math.sin(T * 4) * 1.5)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "간식 주세요~!", 2.4);
+        }, null);
+        A_(S, "scratch", 3.4, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .88; a.pose = on ? 0 : -1;
+            if (on) { a.pvx = 0; a.pvy = -h * .4; a.ang = -.08 + Math.sin(T * 36) * .045; a.ox = Math.sin(T * 36) * .8;
+                if (S.every(A, "dt", .14)) S.ptx("dust", a.x + a.dir * h * .1, S.feetY(a) - h * .75, 1, po().a(-PI * .9, -PI * .1).s(6, 14)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "벅벅~ 간지러워!", 2.0);
+            if (u > .9 && S.once(A, "e")) S.say(a, "시원하다~", 1.2);
+        }, null);
+        A_(S, "bark", 3.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double ph = (T - A.t0) * 2.3, f = ph - Math.floor(ph); boolean on = u > .06 && u < .92;
+            if (on) { double k = f < .28 ? Math.sin(PI * f / .28) : 0; a.sx = 1 + .09 * k; a.sy = 1 - .05 * k; a.ox = -a.dir * 2.6 * k; a.ang = -.06 * k;
+                if (f < .05 && S.every(A, "br", .3)) { S.say(a, (int) Math.floor(ph) % 2 == 0 ? "왈!" : "왈왈!", .6); S.haptic("grin"); S.ptx("spark", a.x + a.dir * h * .7, S.feetY(a) - h * .62, 2, po().a(a.dir > 0 ? -.5 : PI - .5, a.dir > 0 ? .5 : PI + .5).s(14, 26).g(0).l(.25, .4).r(1)); } }
+        }, null);
+        A_(S, "frisbee", 4.8, (a, t, A) -> { A.tx = S.aheadX(a, 80); A.x0 = a.x; A.dir0 = a.dir; }, (a, u, dt, A) -> {
+            // 원반이 휙 날아오면 폴짝 뛰어 입으로 잡는다
+            double h = S.HH(a), T = S.t, fy = S.feetY(a); S.standF(a);
+            double x1 = A.tx, x0 = A.x0 - A.dir0 * 60;
+            if (u < .5) {
+                double p = u / .5; double dx = x0 + (x1 + A.dir0 * 10 - x0) * p, dy = fy - h * (.5 + .9 * Math.sin(PI * Math.min(1, p)) * .8); S.pr(a, S.propAbs("disc", dx, dy));
+                if (u < .3) { S.moveX(a, x1, a.spd * .8, dt); } else { a.dir = A.dir0; }
+                if (u > .3) { double q = ease((u - .3) / .2); a.y = -Math.sin(PI * q) * h * .75; a.ang = -.35 * Math.sin(PI * q); }
+                if (S.once(A, "sy")) S.say(a, "원반이다!", 1.4);
+            } else {
+                a.y = 0; S.pr(a, S.prop("disc", a.dir * h * .52, -h * .42)); a.pose = u < .7 ? 2 : -1; if (u >= .7) S.moveX(a, A.x0, a.spd * 1.1, dt);
+                if (S.once(A, "ca")) { S.say(a, "잡았다!", 1.6); S.haptic("grin"); S.ptx("spark", a.x + a.dir * h * .5, S.feetY(a) - h * .45, 4, po().a(-PI, 0).s(12, 26).g(0).l(.3, .5).jx(5).r(1)); }
+            }
+        }, null);
+        A_(S, "chew", 4.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 0 : -1;
+            if (on) { double b = Math.abs(Math.sin(T * 10)); a.sy = 1 - .02 * b; a.ang = Math.sin(T * 5) * .02; S.pr(a, S.prop("bone", h * .42, -h * .22 + b * 1.2));
+                if (S.every(A, "cr", .6)) S.ptx("dust", a.x + a.dir * h * .45, S.feetY(a) - h * .3, 2, po().a(-PI * .9, -PI * .1).s(6, 12)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "와작와작! 맛있다", 2.2);
+        }, null);
+        // ── 러블(고양이): 그루밍 · 갸르릉 · 꾹꾹이 · 털실 · 오이 깜짝 ──
+        A_(S, "groom", 3.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 0 : -1;
+            if (on) { a.pvx = 0; a.pvy = -h * .45; a.ang = .12 + Math.sin(T * 8) * .07; if (S.every(A, "sp", .3)) S.ptx("spark", a.x + a.dir * h * .35, S.feetY(a) - h * (.2 + S.rnd() * .6), 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(0).l(.3, .5).r(.9)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "핥핥~ 털 정리!", 2.0);
+        }, null);
+        A_(S, "purr", 4.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .92; a.pose = on ? 2 : -1;
+            if (on) { a.sy = 1 + Math.sin(T * 3.6) * .02; a.ox = Math.sin(T * 38) * .5; if (S.every(A, "hh", .7)) S.ptx("heart", a.x + a.dir * h * .3, S.feetY(a) - h * .85, 1, po().a(-PI * .9, -PI * .1).s(14, 26).g(30).l(.9, 1.3).r(1).jx(5)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "갸르릉~ 갸르릉~", 2.8);
+        }, null);
+        A_(S, "knead", 4.0, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 0 : -1;
+            if (on) { double b = Math.max(0, Math.sin(T * 8)); a.sy = 1 - .04 * b; a.ang = .04 * Math.sin(T * 4); if (S.every(A, "pt", .36)) S.ptx("note", a.x + a.dir * h * .35, S.feetY(a) - h * .3, 1, po().a(-PI * .75, -PI * .25).s(8, 14).g(-4).l(.7, 1.0).r(.9)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "꾹꾹꾹~ 폭신폭신", 2.2);
+        }, null);
+        A_(S, "yarn", 4.4, (a, t, A) -> { A.bx = S.aheadX(a, 60 + S.rnd() * 30); A.mx = a.x + a.dir * S.HH(a) * .5; A.px = 0; }, (a, u, dt, A) -> {
+            // 털실 뭉치를 굴리고 따라가 덮친다
+            double h = S.HH(a), T = S.t, fy = S.feetY(a); S.standF(a);
+            double yx = A.mx + (A.bx - A.mx) * ease(Math.min(1, u / .6)); double bob = u < .6 ? Math.abs(Math.sin(u * 22)) * 3 : 0;
+            Prop yp = S.propAbs("yarn", yx, fy - 4 - bob); yp.r = T * 8; S.pr(a, yp);
+            if (u < .1) { S.say(a, "털실이다냥!", 1.4); }
+            if (u < .62) { a.dir = A.bx >= a.x ? 1 : -1; if (u > .14) S.moveX(a, A.bx - a.dir * h * .45, a.spd * 1.0, dt); }
+            else if (u < .78) { double q = ease((u - .62) / .16); a.dir = A.bx >= a.x ? 1 : -1; a.y = -Math.sin(PI * q) * h * .5; a.ang = .35 * q; }
+            else { a.ang = .2 * (1 - ease((u - .78) / .22)); a.sy = .94; a.pose = u > .85 ? 2 : -1; if (S.once(A, "gt")) { S.say(a, "잡았다냥!", 1.4); S.haptic("grin"); } }
+        }, null);
+        A_(S, "cuke", 3.4, (a, t, A) -> { A.bx = S.aheadX(a, S.HH(a) * 1.0); }, (a, u, dt, A) -> {
+            // 뒤에 슬쩍 놓인 오이에 화들짝!
+            double h = S.HH(a), T = S.t; S.standF(a);
+            Prop cp = S.propAbs("cuke", A.bx, S.feetY(a) - 3); S.pr(a, cp);
+            if (u < .3) { a.dir = A.bx >= a.x ? 1 : -1; a.sy = 1 + .02 * Math.sin(T * 4); if (S.once(A, "q")) S.say(a, "…뭐지?", 1.0); }
+            else if (u < .56) { double q = (u - .3) / .26; a.y = -Math.sin(PI * Math.min(1, q * 1.2)) * h * .8; a.sy = 1.16; a.sx = .88; a.ang = -.16 * a.dir * Math.sin(PI * q); if (S.once(A, "!")) { S.say(a, "냥?!!", 1.0); S.haptic("thud"); S.ptx("sweat", a.x, S.feetY(a) - h, 3, po().a(-PI * .85, -PI * .15).s(10, 22).g(120).l(.5, .8).jx(4)); } }
+            else { a.pose = 3; a.ox = Math.sin(T * 40) * .8 * (1 - (u - .56) / .44); if (S.once(A, "e")) S.say(a, "오이는 무서워냥…", 1.8); }
+        }, null);
+        // ── 두덩(두더지): 삽질 · 랜턴 · 두더지 잡기 · 낮잠 · 보물 ──
+        A_(S, "digdig", 4.0, (a, t, A) -> {
+            A.hx = a.x + a.dir * S.HH(a) * .72; A.g = S.addGfx(S.gfx("hole", A.hx, a.z, 4.0 + .6)); Gfx m = S.gfx("mound", a.x - a.dir * S.HH(a) * .55, a.z, 4.0 + .6); m.r = 8; S.addGfx(m);
+        }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); double sw = Math.sin(T * 9); a.pvx = h * .3; a.ang = .22 + sw * .1;
+            if (S.every(A, "d", .22)) S.ptx("dirt", a.x + a.dir * h * .72, S.feetY(a) - 3, 2, po().a(-PI * .9, -PI * .1).s(14, 28).g(170).l(.35, .6).jx(3));
+            if (u > .08 && S.once(A, "sy")) S.say(a, "삽질 삽질~ 영차!", 2.2);
+        }, null);
+        A_(S, "lantern", 4.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.dir = A.d0 * (Math.sin(T * 1.9) > 0 ? 1 : -1); a.pose = -1;
+            Prop lp = S.prop("lantern", h * .52, -h * .52 + Math.sin(T * 3) * 1.4); S.pr(a, lp); a.ang = Math.sin(T * 3) * .02;
+            if (u > .08 && S.once(A, "sy")) S.say(a, "어두운 굴 탐험 중~", 2.4);
+        }, null);
+        A_(S, "popup", 4.6, (a, t, A) -> {
+            A.hx = a.x; A.g = S.addGfx(S.gfx("hole", A.hx, a.z, 4.6 + .6)); Gfx m = S.gfx("mound", a.x + S.HH(a) * .5, a.z, 4.6 + .6); m.r = 8; S.addGfx(m);
+        }, (a, u, dt, A) -> {
+            // 구멍에서 쏙 나왔다 쏙 들어갔다 — 두더지 잡기!
+            double h = S.HH(a), T = S.t, e = T - A.t0; S.standF(a); a.x = A.hx; a.cut = 0;
+            double v = u < .1 ? 0 : u > .9 ? 1 : Math.max(0, Math.sin((e - .45) * 3.6)); a.y = h * 1.1 * (1 - ease(Math.min(1, v * 1.25)));
+            if (u > .9) { a.cut = Double.NaN; a.y = 0; }
+            if (v > .85 && S.every(A, "pk", 1.4)) { S.say(a, "짠! 여기야~", .9); S.ptx("dirt", a.x, S.feetY(a) - 2, 3, po().a(-PI * .95, -PI * .05).s(10, 22).g(130).jx(5)); }
+        }, null);
+        A_(S, "nap", 4.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean zz = u > .1 && u < .92; a.pose = zz ? 1 : 0; a.sy = 1 + (zz ? Math.sin(T * 2.1) * .014 : 0);
+            if (zz && S.every(A, "zz", .6)) S.ptx("zzz", a.x + a.dir * h * .3, S.feetY(a) - h * .8, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.4).r(1));
+            if (u > .94 && S.once(A, "wk")) S.say(a, "드르렁… 헉! 파헤치던 중이었는데", 2.0);
+        }, null);
+        A_(S, "treasure", 4.6, (a, t, A) -> { A.hx = a.x + a.dir * S.HH(a) * .7; Gfx m = S.gfx("mound", A.hx, a.z, 4.6 + .4); m.r = 9; A.g = S.addGfx(m); }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a);
+            if (u < .5) { a.ang = .22 + Math.sin(T * 9) * .08; a.pvx = h * .3; if (S.every(A, "d", .2)) S.ptx("dirt", A.hx, S.feetY(a) - 3, 2, po().a(-PI * .9, -PI * .1).s(14, 26).g(170).l(.35, .6).jx(3)); if (S.once(A, "sy")) S.say(a, "여기가 수상해…", 1.6); }
+            else { double q = ease((u - .5) / .3); a.pose = 2; a.y = -Math.abs(Math.sin(T * 7)) * 3;
+                Prop gp = S.propAbs("gem", A.hx, S.feetY(a) - 6 - h * .7 * q - Math.sin(T * 5) * 1.2); S.pr(a, gp);
+                if (S.once(A, "f")) { S.say(a, "보물이다! 반짝반짝!", 2.4); S.haptic("hearts"); S.ptx("spark", A.hx, S.feetY(a) - h * .6, 8, po().a(-PI, 0).s(16, 34).g(0).l(.4, .7).jx(h * .3).jy(h * .2).r(1.2)); } }
+        }, null);
+        // ── 술(독수리): 선회 · 깃 다듬기 · 급강하 · 망보기 · 날개 자랑 ──
+        A_(S, "soar", 4.8, (a, t, A) -> { A.x0 = a.x; A.tx = a.x + (a.x < S.W / 2 ? 1 : -1) * S.W * .38; A.alt0 = Math.max(16, a.alt); }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; double p = ease(clamp(u / .85, 0, 1)); a.pvy = -h * .5;
+            double up = u < .3 ? ease(u / .3) : u > .8 ? 1 - ease((u - .8) / .2) : 1; a.alt = A.alt0 + 44 * up + Math.sin(T * 2.2) * 4; a.x = A.x0 + (A.tx - A.x0) * p; a.dir = A.tx >= A.x0 ? 1 : -1; a.ang = -.12 + Math.sin(T * 2.2) * .06; a.fr += dt * a.D.fps * (u < .25 ? 1.2 : .35);
+            if (S.once(A, "sy")) S.say(a, "높이 높이~!", 1.6);
+        }, null);
+        A_(S, "preen", 3.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 0 : -1;
+            if (on) { a.ang = Math.sin(T * 7) * .05 + .05; if (S.every(A, "fe", .7)) S.ptx("feather", a.x + a.dir * h * .1, S.feetY(a) - h * .6, 1, po().a(-PI * .7, -PI * .3).s(6, 14).g(40).l(.9, 1.4).jx(5)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "깃털 정리 정리~", 2.2);
+        }, null);
+        A_(S, "swoop", 3.4, (a, t, A) -> { A.alt0 = 78; A.x0 = a.x; A.tx = a.x + (a.x < S.W / 2 ? 1 : -1) * S.W * .28; }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; a.pvy = -h * .5;
+            if (u < .22) { a.alt = 18 + (A.alt0 - 18) * ease(u / .22); a.x = A.x0; a.dir = A.tx >= A.x0 ? 1 : -1; a.fr += dt * a.D.fps * 1.2; if (S.once(A, "sy")) S.say(a, "급강하 간다!", 1.4); }
+            else if (u < .56) { double q = (u - .22) / .34; a.alt = A.alt0 * (1 - q * q); a.x = A.x0 + (A.tx - A.x0) * ease(q); a.dir = A.tx >= A.x0 ? 1 : -1; a.ang = .55 * Math.sin(PI * Math.min(1, q)) + .1; a.fr += dt * a.D.fps * .5; }
+            else { double q = (u - .56) / .44; a.alt = 6 * Math.max(0, 1 - q * 4); a.x = A.tx; a.ang = 0; a.fr += dt * a.D.fps * .6; if (S.once(A, "td")) { S.ptx("dust", a.x, S.feetY(a) - 1, 6, po().a(-PI * .9, -PI * .1).s(10, 22)); S.ptx("feather", a.x, S.feetY(a) - 6, 3, po().a(-PI * .9, -PI * .1).s(10, 24).g(40).l(.9, 1.3).jx(5)); S.haptic("land_fly"); S.say(a, "착!", 1.0); } }
+        }, (a, A) -> { a.alt = 0; });
+        A_(S, "scan", 4.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.pose = 0; a.dir = A.d0 * ((int) Math.floor((T - A.t0) / .85) % 2 == 0 ? 1 : -1); a.ang = Math.sin(T * 3) * .015;
+            if (u > .08 && S.once(A, "sy")) S.say(a, "수상한 놈은 없나…", 2.2);
+            if (u > .78 && S.once(A, "ok")) S.say(a, "이상 무!", 1.4);
+        }, null);
+        A_(S, "flapshow", 3.6, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; boolean on = u > .08 && u < .9; a.fr += dt * a.D.fps * (on ? 1.5 : .6); a.pvy = -h * .5;
+            if (on) { double b = Math.abs(Math.sin(T * 9)); a.alt = 14 + b * 9; a.sx = 1.1; a.sy = 1 + .04 * b; if (S.every(A, "fe", .35)) S.ptx("feather", a.x + (S.rnd() - .5) * h * 1.2, S.feetY(a) - h * (.6 + S.rnd() * .4), 1, po().a(-PI * .85, -PI * .15).s(8, 18).g(40).l(.9, 1.4)); }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "내 날개 멋지지?", 2.2);
+        }, (a, A) -> { a.alt = 0; });
+        // ── 챙챙(올챙이): 헤엄 · 꼬물꼬물 · 점프 · 빙글빙글 · 꼬리 첨벙 ──
+        A_(S, "swim", 4.0, (a, t, A) -> { A.tx = S.aheadX(a, 100); }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; if (S.moveX(a, A.tx, a.spd * 1.5, dt)) A.tx = S.aheadX(a, 100);
+            a.y = Math.sin(T * 5) * 5; a.ang = Math.cos(T * 5) * .1; a.fr += dt * a.D.fps * .6;
+            if (S.every(A, "bb", .25)) S.ptx("bub", a.x - a.dir * h * .5, S.feetY(a) - h * .5, 1, po().a(-PI * .8, -PI * .2).s(8, 18).g(-24).l(.8, 1.3).r(1).jx(3));
+            if (S.once(A, "sy")) S.say(a, "쏘옥~ 쏘옥~", 1.6);
+        }, null);
+        A_(S, "wiggle", 3.4, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.pose = u > .08 && u < .9 ? 2 : -1; a.ang = Math.sin(T * 20) * .22; a.ox = Math.sin(T * 20 + 1) * 1.6;
+            if (S.every(A, "bb", .3)) S.ptx("bub", a.x, S.feetY(a) - h * .8, 1, po().a(-PI * .8, -PI * .2).s(8, 18).g(-24).l(.8, 1.3).r(1).jx(4));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "꼬물꼬물~", 1.8);
+        }, null);
+        A_(S, "leap", 3.2, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.pvy = -h * .4;
+            if (u < .2) { a.sy = 1 - .16 * (u / .2); a.sx = 1 + .1 * (u / .2); }
+            else if (u < .7) { double q = (u - .2) / .5; a.y = -Math.sin(PI * q) * h * 1.3; a.ang = PI2 * ease(q); a.sy = 1 + .1 * Math.sin(PI * q); if (S.once(A, "sy")) S.say(a, "점~프!", 1.2); }
+            else { double q = (u - .7) / .3; a.sy = .86 + .14 * ease(q); a.sx = 1.12 - .12 * ease(q); if (S.once(A, "td")) { S.ptx("drop", a.x, S.feetY(a) - 2, 12, po().a(-PI * .95, -PI * .05).s(26, 56).g(170).l(.5, .9).jx(4)); S.ptx("ring", a.x, S.feetY(a), 1, po().a(0, 0).s(0, 0).g(0).l(.8, .8)); S.haptic("splash"); } }
+        }, null);
+        A_(S, "whirl", 3.4, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .86; double k = on ? Math.sin(PI * (u - .08) / .78) : 0;
+            a.pvy = -h * .45; a.ang = (T - A.t0) * 13 * k; a.y = -k * 4;
+            if (on && S.every(A, "bb", .12)) S.ptx("bub", a.x + (S.rnd() - .5) * h * .8, S.feetY(a) - h * (.3 + S.rnd() * .5), 1, po().a(-PI * .8, -PI * .2).s(10, 24).g(-24).l(.8, 1.3).r(1));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "빙글빙글~ 어지러워!", 2.0);
+        }, null);
+        A_(S, "tailsplash", 3.6, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; a.pose = on ? 2 : -1;
+            if (on) { a.y = -Math.abs(Math.sin(T * 8)) * 4; double ph = (T - A.t0) * 4.2; if (ph - Math.floor(ph) < .08 && S.every(A, "sp", .22)) { S.ptx("drop", a.x - a.dir * h * .45, S.feetY(a) - h * .3, 6, po().a(-PI * .9, -PI * .1).s(24, 52).g(170).l(.5, .9).jx(3)); S.haptic("splash"); } }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "꼬리로 첨벙첨벙!", 2.0);
         }, null);
     }
 

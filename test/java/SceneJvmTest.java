@@ -214,7 +214,7 @@ public class SceneJvmTest {
                 if (c.error != null) { fine = false; break; }
             }
             ok(fine && sawLand, ex[0] + "(" + ex[1] + "): 놓으면 착지 연출이 시작된다 " + c.debugInfo().split("#")[3]);
-            ok(!ac.st.equals("fall") && !ac.st.equals("held") && Math.abs(ac.y) < 30 && ac.alt >= 0 && ac.vis, ex[0] + ": 9초 뒤엔 내려앉아 평소 동작으로 돌아왔다(st=" + ac.st + ", y=" + ac.y + ")");
+            ok(!ac.st.equals("fall") && !ac.st.equals("held") && Math.abs(ac.y) < 30 && ac.alt >= 0 && (ac.vis || (ac.act != null && ac.act.n.equals("vanish"))), ex[0] + ": 9초 뒤엔 내려앉아 평소 동작으로 돌아왔다(st=" + ac.st + ", act=" + (ac.act == null ? "-" : ac.act.n) + ", vis=" + ac.vis + ", y=" + ac.y + ")");
             String want = ex[1].equals("fly") ? "land_fly" : "land_" + ex[1];
             ok(h.hap.contains("release") && h.hap.contains(want), ex[0] + ": 진동 " + h.hap);
             if (ex[1].equals("flip")) ok(maxAng > 5.5, "고양이: 공중에서 한 바퀴(최대 각도 " + maxAng + ")");

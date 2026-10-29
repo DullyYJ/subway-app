@@ -121,13 +121,14 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
   });
   await t('캐릭터 특성(YJ 10-16): 8종 모두 착지 연출·동작 대본이 있고, 가을·눈 올 때만 낙엽 다이빙이 들어간다', () => {
     const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle', juksun: 'tumble', bbosong: 'hose' };
-    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'], juksun: ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze'], bbosong: ['sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower'] };
+    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror', 'sit', 'howl', 'snuffle', 'rollover', 'zoomies'], ppopu: ['dig', 'bone', 'dance', 'slide', 'beg', 'scratch', 'bark', 'frisbee', 'chew', 'zoomies'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce', 'groom', 'purr', 'knead', 'yarn', 'cuke'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish', 'digdig', 'lantern', 'popup', 'nap', 'treasure'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover', 'soar', 'preen', 'swoop', 'scan', 'flapshow'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew', 'swim', 'wiggle', 'leap', 'whirl', 'tailsplash'], juksun: ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze'], bbosong: ['sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower'] };
     const aut = decide({ nowMs: ms('2026-10-16T12:00:00'), locked: false }, null), sum = decide({ nowMs: ms('2026-07-16T12:00:00'), locked: false }, null), snow = decide({ nowMs: ms('2026-01-16T12:00:00'), locked: false }, { txt: '눈', temp: -2, rain: 80 });
     Object.keys(LAND).forEach(id => {
       assert.strictEqual(aut.traits[id].land, LAND[id]);
       sp[id].forEach(x => assert(aut.traits[id].acts.includes(x), id + ' 동작 ' + x));
       assert(aut.traits[id].acts.includes('walk'), '걷기가 사이에 끼는지');
     });
+    Object.keys(LAND).forEach(id => { const spec = new Set(sp[id].concat(id === 'ppopu' ? ['dive'] : [])), base = new Set(['walk', 'hop', 'spin', 'rest', 'shiver', 'pant', 'squint', 'gust', 'splash', 'shakeoff', 'snowcatch', 'peer']); const own = aut.traits[id].acts.filter(x => !base.has(x)); assert(new Set(own).size >= 10, id + ' 전용 동작이 10가지 이상: ' + [...new Set(own)].length); });
     assert(aut.traits.ppopu.acts.includes('dive') && snow.traits.ppopu.acts.includes('dive'), '가을·눈에는 다이빙');
     assert(!sum.traits.ppopu.acts.includes('dive'), '여름엔 다이빙 없음');
     const a2 = decide({ nowMs: ms('2026-10-16T12:01:00'), locked: false }, null); assert.deepStrictEqual(a2.traits, aut.traits, '같은 시각대(10분)면 같은 대본');

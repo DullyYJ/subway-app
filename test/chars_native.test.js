@@ -41,7 +41,7 @@ t('시트를 읽는 곳은 모두 Chars.file 을 거친다(뽀송 신발)', () =
 });
 t('엔진 새 동작 이름을 앱이 모두 그린다 + 날씨 말풍선 문구가 새 친구에게도 있다', () => {
   const sc = require('../engine/scene.js'), acts = R('SceneActs.java');
-  for (const a of ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze', 'sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower', 'L_tumble', 'search', 'L_hose', 'squirt', 'flee']) assert.ok(new RegExp('A_\\(S, "' + a + '"').test(acts), a + ' 동작');
+  for (const a of ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze', 'sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower', 'L_tumble', 'search', 'L_hose', 'squirt', 'flee', 'sit', 'howl', 'snuffle', 'rollover', 'zoomies', 'beg', 'scratch', 'bark', 'frisbee', 'chew', 'groom', 'purr', 'knead', 'yarn', 'cuke', 'digdig', 'lantern', 'popup', 'nap', 'treasure', 'soar', 'preen', 'swoop', 'scan', 'flapshow', 'swim', 'wiggle', 'leap', 'whirl', 'tailsplash']) assert.ok(new RegExp('A_\\(S, "' + a + '"').test(acts), a + ' 동작');
   for (const k of Object.keys(sc.SCENE_SAY)) for (const id of ['juksun', 'bbosong']) assert.ok(sc.SCENE_SAY[k][id] && sc.SCENE_SAY[k][id].length >= 2, k + '/' + id);
   const r = sc.sceneDecide({ nowMs: Date.UTC(2026, 9, 29, 3, 0, 0), tzOffsetMin: 540, locked: false, routeShown: false }, { temp: 2, rain: 0, txt: '맑음', wind: 30 });
   assert.ok(r.traits.juksun && r.traits.juksun.land === 'tumble' && r.traits.bbosong.land === 'hose', 'traits');

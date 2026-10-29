@@ -3280,4 +3280,5 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
   - **베비히포 `hose`**: 떨어지는 동안 입에서 땅으로 물줄기 소품(`jet`)을 쏘며 낙하 속도를 85 로 눌러 사뿐히(1) → `L_hose`(웅덩이·첨벙) → `squirt`(가까운 친구 최대 3명에게 차례로 물줄기, 1칸 3) → 맞은 친구에게 `SceneCore.startle` → `flee`(펄쩍 "!!" 후 반대로 달아남). 헤로·퇴장 중·잡힌/낙하/착지 연출 중인 친구는 건드리지 않는다.
   - 진동: `land_tumble`, `land_hose`, `squirt` 추가.
 - **시험**: scene_engine(착지·대본 갱신) · chars_native(새 동작 등록) · SceneJvmTest 3-c(쮸르: 대나무가 떨어져 눕고 한 바퀴·찾아 집음)·3-d(베비히포: 물줄기·낙하 속도·친구가 flee) · 진동 무늬 표. 기기에서 보이는 모양·타이밍은 아직 직접 확인하지 못했다(JVM 시험만).
-- **남은 일(다음 단계)**: 다른 여섯 친구(dolsom lovel dudung sul ppopu chaeng)도 전용 동작 5개 → 10개로 늘리기.
+- **나머지 여섯 친구(s302 워커)**: 전용 동작을 5개 → 10개로(ppopu 는 낙엽 다이빙이 계절 한정이라 11개 중 비수기 10). `SceneActs.registerMo2` — 이 친구들은 몸 그림이 걷기 16프레임 + 자세 6칸뿐이라 새 동작은 기존 칸을 골라 쓰고 몸 기울임·늘림·소품·입자로 연출한다(새로 렌더한 포즈 칸은 없음 = 쮸르·베비히포만큼 '고화질 전용 포즈'는 아니다). 돌솜 sit howl snuffle rollover zoomies / 뽀푸 beg scratch bark frisbee chew zoomies / 러블 groom purr knead yarn cuke / 두덩 digdig lantern popup nap treasure / 술 soar preen swoop scan flapshow / 챙챙 swim wiggle leap whirl tailsplash. 새 소품(`disc yarn cuke lantern gem`)은 SceneCore.drawProps. 이름 충돌 주의: 동작 이름은 전체에서 유일해야 한다.
+- **남은 일**: 여섯 친구도 전용 포즈를 3D 로 새로 렌더하려면 `tools/chars3d/models.js`(개·고양이·두더지·독수리·올챙이 5종 리그)에 포즈 사양을 추가해 `_act` 시트를 뽑아야 한다(쮸르·베비히포 방식).

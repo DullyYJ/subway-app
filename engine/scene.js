@@ -18,12 +18,13 @@ var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksu
 //   acts: 기본(walk·hop·spin·rest)과 캐릭터 전용 동작 이름. 앱은 순서대로 한 동작씩 그린다(끝나면 다음).
 var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "tumble", bbosong: "hose" };
 var SCENE_ACTS = {
-  dolsom: ["shake", "tailchase", "loaf", "ball", "mirror"],
-  ppopu: ["dig", "bone", "dance", "slide", "dive"],
-  lovel: ["punch", "box", "stretch", "melt", "pounce"],
-  dudung: ["shades", "flag", "lens", "dust", "vanish"],
-  sul: ["glasses", "stumble", "feather", "binoc", "hover"],
-  chaeng: ["dash", "flop", "hide", "bubbles", "dew"],
+  // 나머지 여섯 친구도 전용 동작 10가지(s301): 기존 5 + 새 5 (ppopu 는 낙엽 다이빙이 계절 한정이라 새 동작 6개)
+  dolsom: ["shake", "tailchase", "loaf", "ball", "mirror", "sit", "howl", "snuffle", "rollover", "zoomies"],        // 흔들기·꼬리잡기·식빵·공놀이·거울 + 앉아·아우~·킁킁·배 보이기·우다다
+  ppopu: ["dig", "bone", "dance", "slide", "dive", "beg", "scratch", "bark", "frisbee", "chew", "zoomies"],       // 땅파기·뼈다귀·춤·미끄럼·다이빙 + 간식 조르기·벅벅·왈왈·원반 잡기·와작와작·우다다
+  lovel: ["punch", "box", "stretch", "melt", "pounce", "groom", "purr", "knead", "yarn", "cuke"],                  // 펀치·상자·기지개·녹기·덮치기 + 그루밍·갸르릉·꾹꾹이·털실·오이 깜짝
+  dudung: ["shades", "flag", "lens", "dust", "vanish", "digdig", "lantern", "popup", "nap", "treasure"],           // 선글라스·깃발·돋보기·먼지·사라짐 + 삽질·랜턴·두더지 잡기·낮잠·보물
+  sul: ["glasses", "stumble", "feather", "binoc", "hover", "soar", "preen", "swoop", "scan", "flapshow"],          // 안경·비틀·깃털·쌍안경·정지비행 + 선회·깃 다듬기·급강하·망보기·날개 자랑
+  chaeng: ["dash", "flop", "hide", "bubbles", "dew", "swim", "wiggle", "leap", "whirl", "tailsplash"],             // 질주·풀썩·숨기·방울·이슬 + 헤엄·꼬물꼬물·점프·빙글빙글·꼬리 첨벙
   // 쮸르(판다): 대나무 먹기 · 낮잠 · 폴짝폴짝 · 데굴데굴 · 대나무 돌리기 · 두리번 빼꼼 · 배 두드리기 · 하품 기지개 · 쿵푸 · 재채기 (활발한 먹보·잠꾸러기)
   juksun: ["munch", "snooze", "hooray", "roll", "twirl", "peek", "bellypat", "yawn", "kungfu", "sneeze"],
   // 베비히포(아기 하마): 꽃 향기 · 새 신발 자랑 · 반짝반짝 · 입 분수 · 탭댄스 · 비눗방울 · 쩍 하품 · 신발 갈아신기 · 신발 닦기 · 머리꽃 매만지기 (꽃과 신발을 사랑하는 깔끔쟁이)

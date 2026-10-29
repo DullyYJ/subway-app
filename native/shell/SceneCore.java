@@ -646,6 +646,24 @@ public final class SceneCore {
                 c.strokeStyle("rgba(214,238,255,.95)"); c.lineWidth(2.4 * zz); c.beginPath(); c.moveTo(X, Y); c.lineTo(X2, Y2); c.stroke();
                 c.fillStyle("#ffffff"); for (i = 0; i < 5; i++) { double u2 = (T * 3.2 + i / 5.0) % 1; c.beginPath(); c.arc(X + dx * u2, Y + dy * u2, 1.5 * zz, 0, PI2); c.fill(); }
                 c.fillStyle("rgba(190,225,255,.7)"); c.beginPath(); c.ellipse(X2, Y2, 5.5 * zz, 2.4 * zz, 0, 0, PI2); c.fill();
+            } else if (k.equals("disc")) {
+                double dr = 6 * zz; c.save(); c.translate(X, Y); c.rotate(Math.sin(T * 9) * .25); c.fillStyle("#ff8a3d"); c.strokeStyle("#b3501a"); c.lineWidth(.8);
+                c.beginPath(); c.ellipse(0, 0, dr, dr * .38, 0, 0, PI2); c.fill(); c.stroke(); c.fillStyle("#ffd6b0"); c.beginPath(); c.ellipse(0, -dr * .06, dr * .55, dr * .2, 0, 0, PI2); c.fill(); c.restore();
+            } else if (k.equals("yarn")) {
+                double yr = 5 * zz; c.fillStyle("#ff6f91"); c.strokeStyle("#c23b62"); c.lineWidth(.8); c.beginPath(); c.arc(X, Y - yr * .6, yr, 0, PI2); c.fill(); c.stroke();
+                c.save(); c.translate(X, Y - yr * .6); c.rotate(p.r); c.beginPath(); c.arc(0, 0, yr * .62, .3, 2.7); c.moveTo(yr * .9, 0); c.arc(0, 0, yr * .9, 3.6, 5.6); c.stroke(); c.restore();
+            } else if (k.equals("cuke")) {
+                double cl = 8 * zz; c.save(); c.translate(X, Y - cl * .22); c.rotate(-.12); c.fillStyle("#4fa83d"); c.strokeStyle("#2e6b25"); c.lineWidth(.8);
+                c.beginPath(); c.ellipse(0, 0, cl, cl * .34, 0, 0, PI2); c.fill(); c.stroke(); c.fillStyle("#9be07e"); for (i = -2; i <= 2; i++) { c.beginPath(); c.arc(i * cl * .32, -cl * .08, .9 * zz, 0, PI2); c.fill(); } c.restore();
+            } else if (k.equals("lantern")) {
+                double lr = 3.4 * zz; double gl = L != null && L.night ? 1 : .6;
+                c.fillStyle("rgba(255,215,120," + (.12 * gl) + ")"); c.beginPath(); c.arc(X, Y, lr * 7, 0, PI2); c.fill(); c.fillStyle("rgba(255,215,120," + (.2 * gl) + ")"); c.beginPath(); c.arc(X, Y, lr * 4, 0, PI2); c.fill();
+                c.strokeStyle("#5a4a30"); c.lineWidth(1); c.beginPath(); c.moveTo(X - lr * .6, Y - lr * 1.5); c.lineTo(X, Y - lr * 2.3); c.lineTo(X + lr * .6, Y - lr * 1.5); c.stroke();
+                c.fillStyle("#ffd54f"); c.strokeStyle("#8a6a1a"); c.beginPath(); c.rect(X - lr * .8, Y - lr * 1.5, lr * 1.6, lr * 2.6); c.fill(); c.stroke(); c.fillStyle("rgba(255,255,255,.7)"); c.beginPath(); c.arc(X, Y - lr * .1, lr * .45, 0, PI2); c.fill();
+            } else if (k.equals("gem")) {
+                double gr = 5 * zz; c.fillStyle("#5fd4f0"); c.strokeStyle("#1d7f99"); c.lineWidth(.9);
+                c.beginPath(); c.moveTo(X, Y - gr); c.lineTo(X + gr, Y - gr * .25); c.lineTo(X, Y + gr * .9); c.lineTo(X - gr, Y - gr * .25); c.closePath(); c.fill(); c.stroke();
+                c.fillStyle("rgba(255,255,255,.75)"); c.beginPath(); c.moveTo(X - gr * .35, Y - gr * .55); c.lineTo(X, Y - gr * .9); c.lineTo(X + gr * .2, Y - gr * .45); c.closePath(); c.fill();
             } else if (k.equals("bamboo")) {
                 drawBamboo(c, X, Y, p.r, h * .95, zz);
             } else if (k.equals("moundhat")) {
