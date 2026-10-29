@@ -522,6 +522,12 @@ public class ShellJvmTest {
         ok(h.setCands("강남역", true, bus), "후보 받기");
         ok(h.request(env, 18).contains("\"b\":[{\"n\":\"강남역.강남역사거리\",\"d\":0}]"), "요청에 버스 후보 실림");
         ok(h.act("sg.b.0", null) == HomeCore.R_FIELDS && h.loc[0] != null && "bus".equals(h.loc[0].type) && "GGB1".equals(h.loc[0].nodeId) && h.active == -1, "버스정류장 고르기");
+        HomeCore ag = new HomeCore();                                    // s328: 출발이 정해진 채 도착 후보를 고르면 바로 경로를 찾는다
+        ag.setStation(HomeCore.START, "서울역", "1호선", 37.5547, 126.9707);
+        ag.onText("dest", "강남", "focus"); ag.onText("dest", "강남역", "edit"); ag.wantQuery(); ag.setCands("강남역", true, bus);
+        ok(ag.act("sg.b.0", null) == HomeCore.R_FIELDS && ag.takeAutoGo() && !ag.takeAutoGo(), "도착을 고르면 출발이 있을 때 자동 경로 탐색(한 번만 읽힘)");
+        HomeCore ag2 = new HomeCore(); ag2.onText("dest", "강남", "focus"); ag2.onText("dest", "강남역", "edit"); ag2.wantQuery(); ag2.setCands("강남역", true, bus);
+        ok(ag2.act("sg.b.0", null) == HomeCore.R_FIELDS && !ag2.takeAutoGo(), "출발이 비어 있으면 자동으로 찾지 않는다");
         ok(h.request(env, 18).contains("\"startSet\":true"), "고른 뒤 startSet");
         ok(h.act("rt.go", null) == HomeCore.R_NEED_BOTH, "도착 비면 경로 탐색 안 함");
         h.onText("dest", "서울역", "edit");
@@ -812,6 +818,8 @@ public class ShellJvmTest {
 
         // ── 맛집 ──
         FoodCore fd = new FoodCore();
+        fd.showPanelSkeleton(); ok(fd.panelSkel, "펼침 뼈대"); fd.closePanel(); ok(!fd.panelSkel, "닫으면 뼈대도 없어진다");
+        ok(fd.panelRequestFor(18, "c.0").length() == 0 && fd.goKeys(3).isEmpty(), "목록에 없는 가게는 미리 받기 본문이 없다");
         ok(fd.needGps() && "idle".equals(fd.state()) && !fd.needData(), "처음엔 도착지도 위치도 없다");
         fd.locating = true; ok("locating".equals(fd.state()), "위치 확인 중"); fd.locating = false; fd.noperm = true; ok("noperm".equals(fd.state()), "위치 권한 없음");
         fd.setGps(37.4979, 127.0276); ok(!fd.needGps() && "loading".equals(fd.state()) && !fd.noperm, "위치가 오면 불러오는 중");
