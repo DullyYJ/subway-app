@@ -37,7 +37,7 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     const nodes = [{ name: '출발', isOrigin: true }, { name: '도보', isWalk: true }, { name: 'A', isBus: true, lineName: '1', hasLoc: true }, { name: 'B', isBus: true, lineName: '1', hasLoc: true }];
     for (const here of [0, 1, 2, 3]) assert.strictEqual(decide(Object.assign({ locked: true, here, nodes }, base), null).fill, false, 'locked ' + here);
   });
-  await t('(10:23 YJ) 대표 캐릭터: 키마다 6종이 골고루(독수리만 나오지 않는다) · 같은 키라도 탈것 구간이 다르면 다르게 뽑힌다 · 같은 키·같은 구간이면 그대로', () => {
+  await t('(10:23 YJ) 대표 캐릭터: 키마다 8종이 골고루(독수리만 나오지 않는다) · 같은 키라도 탈것 구간이 다르면 다르게 뽑힌다 · 같은 키·같은 구간이면 그대로', () => {
     const NODES = [{ name: 'o', isOrigin: true }, { name: 'w', isWalk: true }, { name: 'A', isBus: true, lineName: '43', hasLoc: true }, { name: 'B', isBus: true, lineName: '43', hasLoc: true }, { name: 'w', isWalk: true }, { name: 'C', isBus: true, lineName: '6633', hasLoc: true }, { name: 'D', isBus: true, lineName: '6633', hasLoc: true }];
     const cnt = {}; let legDiff = 0;
     for (let i = 0; i < 360; i++) {
@@ -47,8 +47,8 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
       assert.strictEqual(a.hero, decide(Object.assign({ here: 1 }, base), null).hero, '같은 키·같은 구간이면 그대로');
       assert.strictEqual(a.hero, a2.hero, '같은 구간 안에서는 그대로(here 1→2)');
     }
-    assert.strictEqual(Object.keys(cnt).length, 6, '6종 모두: ' + JSON.stringify(cnt));
-    Object.values(cnt).forEach(v => assert(v >= 360 / 6 * .6 && v <= 360 / 6 * 1.45, '치우치지 않는다 ' + JSON.stringify(cnt)));
+    assert.strictEqual(Object.keys(cnt).length, 8, '8종 모두: ' + JSON.stringify(cnt));
+    Object.values(cnt).forEach(v => assert(v >= 360 / 8 * .6 && v <= 360 / 8 * 1.6, '치우치지 않는다 ' + JSON.stringify(cnt)));
     assert(legDiff > 360 * .6, '구간이 다르면 대체로 다른 캐릭터 ' + legDiff);
   });
   await t('tzOffsetMin 을 따른다(UTC 기기에서도 한국 시각으로 판단)', () => {
@@ -112,16 +112,16 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert.strictEqual(decide({ locked: true, here: 4, boarded: true, nodes: nd2 }, null).mode, 'wait');
     assert.strictEqual(decide({ locked: true, here: 5, boarded: true, nodes: nd2 }, null).cong.idx, 5);
   });
-  await t('대표 캐릭터·등장 순서: 6종 안, 같은 key·같은 날이면 같다, key 가 다르면 달라질 수 있다', () => {
-    const IDS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
+  await t('대표 캐릭터·등장 순서: 8종 안, 같은 key·같은 날이면 같다, key 가 다르면 달라질 수 있다', () => {
+    const IDS = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'juksun', 'bbosong'];
     const a = decide({ nowMs: ms('2026-10-15T09:00:00'), locked: true, key: 'k1', here: 1, nodes: BUS }, null), b = decide({ nowMs: ms('2026-10-15T09:01:00'), locked: true, key: 'k1', here: 3, nodes: BUS }, null);
     assert(IDS.includes(a.hero)); assert.strictEqual(a.hero, b.hero); assert.deepStrictEqual(a.cast.slice().sort(), IDS.slice().sort());
     const seen = new Set(); for (let i = 0; i < 40; i++) seen.add(decide({ nowMs: ms('2026-10-15T09:00:00'), locked: true, key: 'route' + i, here: 1, nodes: BUS }, null).hero);
     assert(seen.size >= 4, '여러 캐릭터가 골고루 뽑힌다: ' + [...seen]);
   });
-  await t('캐릭터 특성(YJ 10-16): 6종 모두 착지 연출·동작 대본이 있고, 가을·눈 올 때만 낙엽 다이빙이 들어간다', () => {
-    const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle' };
-    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'] };
+  await t('캐릭터 특성(YJ 10-16): 8종 모두 착지 연출·동작 대본이 있고, 가을·눈 올 때만 낙엽 다이빙이 들어간다', () => {
+    const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle', juksun: 'cotton', bbosong: 'pose' };
+    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'], juksun: ['munch', 'snooze', 'hooray'], bbosong: ['sniff', 'shoeshow', 'sparkle'] };
     const aut = decide({ nowMs: ms('2026-10-16T12:00:00'), locked: false }, null), sum = decide({ nowMs: ms('2026-07-16T12:00:00'), locked: false }, null), snow = decide({ nowMs: ms('2026-01-16T12:00:00'), locked: false }, { txt: '눈', temp: -2, rain: 80 });
     Object.keys(LAND).forEach(id => {
       assert.strictEqual(aut.traits[id].land, LAND[id]);
