@@ -1255,16 +1255,42 @@ function rsBlClear(st) { if (st.eta) { delete st.eta.boardNext; delete st.eta.bo
 function rsMinOfDay(ms, tz) { return (((ms / 60000 + tz) % 1440) + 1440) % 1440; }
 // 서울 실시간 도착 목록 → 내가 닿은 뒤 가장 빨리 오는 내 방향 열차의 도착 시각(ms) | null (웹 _boardNextDep 의 realtime 쪽)
 //   list = realtimeArrivalList, nt = 다음 열차 엔진(forward), q = { line, from, to, nowMs, fromMs }
+// ★ s332 (YJ: 서울역→남영, 시각표 38분 열차가 연착해 40분에 왔는데 앱은 다다음 차를 안내): 서울 도착정보는 열차가 역 가까이 오면 barvlDt(남은 초)를 0 으로 주고
+//   arvlCd(0진입·1도착·2출발·3전역출발·4전역진입·5전역도착·99운행중)와 arvlMsg2('[2]번째 전역 (종각)' · '전역 도착' · '서울 도착')로만 알려 준다 —
+//   예전엔 barvlDt ≤ 0 이면 통째로 버려 '곧 들어오는 연착 열차'가 후보에서 빠지고 시각표 다음 차(다다음 차)만 남았다. 이제 그 글자로 도착 시각을 어림한다.
+//   recptnDt(받은 시각, KST)가 있으면 그 시각을 기준으로(없으면 지금), 4분 넘게 묵은 항목은 믿지 않는다.
+var RS_BL_STN_MS = 110000;                                       // 역 사이 평균 주행(1호선 1.5~2분)
+var RS_BL_REC_STALE_MS = 4 * 60000;
+function rsRecMs(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(String(s || ''));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) - 9 * 3600000 : null;
+}
+// 도착 목록 한 항목 → 그 열차가 이 역에 닿는 시각(ms) | null(믿을 수 없음·이미 떠남)
+function rsArrivalMs(it, nowMs) {
+  if (!it) return null;
+  var sec = parseInt(it.barvlDt, 10), cd = parseInt(it.arvlCd, 10), rec = rsRecMs(it.recptnDt), base = nowMs;
+  if (rec != null) { if (nowMs - rec > RS_BL_REC_STALE_MS) return null; if (nowMs - rec >= -5000) base = rec; }
+  if (isFinite(sec) && sec > 0) return base + sec * 1000;
+  if (cd === 2) return null;                                      // 출발 — 이미 떠나는 차
+  if (cd === 0 || cd === 1) return base;                          // 진입·도착 — 지금 승강장에 있는 차
+  if (cd === 3) return base + 130000;                             // 전역 출발
+  if (cd === 4) return base + 70000;                              // 전역 진입
+  if (cd === 5) return base + 100000;                             // 전역 도착
+  var msg = String(it.arvlMsg2 || ''), m = /\[(\d+)\]\s*번째\s*전역/.exec(msg);
+  if (m) return base + (+m[1]) * RS_BL_STN_MS;                    // '[2]번째 전역 (종각)' = 두 역 앞
+  m = /(\d+)\s*분(?:\s*(\d+)\s*초)?\s*후/.exec(msg);
+  if (m) return base + ((+m[1]) * 60 + (+(m[2] || 0))) * 1000;    // '4분 20초 후'
+  return null;
+}
 function rsBlLivePick(list, q, nt) {
   try {
     var sid = rsSubwayId(q.line); if (!sid || !list || !list.length) return null;
-    var best = null, k, it, sec, term;
+    var best = null, k, it, term;
     for (k = 0; k < list.length; k++) {
       it = list[k]; if (!it || String(it.subwayId || '') !== sid) continue;
-      sec = parseInt(it.barvlDt, 10); if (!isFinite(sec) || sec <= 0) continue;
+      var arr = rsArrivalMs(it, q.nowMs); if (arr == null) continue;
       term = String(it.bstatnNm || '');
       if (q.to && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.from, q.to, term); if (fw === false) continue; }       // 반대 방향 열차는 뺀다(판단 불가 = 거르지 않음)
-      var arr = q.nowMs + sec * 1000;
       if (arr < q.fromMs + RS_BL_BUF_MS) continue;                                                     // 내가 닿기 전에 떠나는 차는 제외
       if (best == null || arr < best) best = arr;
     }
@@ -1604,4 +1630,4 @@ function handleRideStandby(request, env) {
   }, function () { return new Response(JSON.stringify({ error: '요청을 읽지 못함' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined') module.exports = { rsRecoFresh: rsRecoFresh, rsTtNow: rsTtNow, rsMonoPos: rsMonoPos, rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
+if (typeof module !== 'undefined') module.exports = { rsRecoFresh: rsRecoFresh, rsTtNow: rsTtNow, rsMonoPos: rsMonoPos, rideStandby: rideStandby, rsPressQuery: rsPressQuery, rsDetourQuery: rsDetourQuery, rsAttachDetourTT: rsAttachDetourTT, rsDtTarget: rsDtTarget, rsAttachPressTT: rsAttachPressTT, rsPickMs: rsPickMs, rsPickLive: rsPickLive, rsAttachPressLive: rsAttachPressLive, rsFetchSeoulArrivals: rsFetchSeoulArrivals, rsLegsOf: rsLegsOf, rsXwait: rsXwait, rsWait: rsWait, rsNextMs: rsNextMs, rsResync: rsResync, rsFuse: rsFuse, handleRideStandby: handleRideStandby, rsBlAsk: rsBlAsk, rsBlApply: rsBlApply, rsBlLivePick: rsBlLivePick, rsArrivalMs: rsArrivalMs, rsRecMs: rsRecMs, rsBlTable: rsBlTable, rsBlReconcile: rsBlReconcile, rsBlBusPick: rsBlBusPick, rsRtPick: rsRtPick, rsRtArm: rsRtArm, rsRtAsk: rsRtAsk, rsRtApply: rsRtApply, rsBoardLive: rsBoardLive, handleBoardLive: handleBoardLive, RS_BL: { STEP_MS: RS_BL_STEP_MS, AHEAD_MAX_MIN: RS_BL_AHEAD_MAX_MIN }, rsSubwayId: rsSubwayId, rsFetchSeoulPath: rsFetchSeoulPath, rsAlerts: rsAlerts, RIDE_STANDBY_DEFAULTS: RIDE_STANDBY_DEFAULTS };
