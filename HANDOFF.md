@@ -3427,3 +3427,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 엔진 `engine/open.js`: 밤(night)·잠자기(sleep) 칸에만 `bg`(= 하늘 맨 위색 `sky[0]`) · `ink`(#F4F6FF) 추가. 낮 칸은 없음(대본의 파스텔 화이트·진한 글). → `assets/open.json` 재생성(`node tools/engine/gen-open.js`). 워커에는 안 들어가므로 **워커 재배포 없음**.
 - 앱: `OpenCore.Slot.bg/ink` 읽기, `withWeather` 가 바탕을 하늘과 같은 비율로 물들임(비·눈 등에도 이음매 없음) · `OpenView.pageBg()` 가 바탕·띠 위 번짐(feather)에 쓰고, 제목만 칸의 `ink`. 이름표·말풍선은 흰 상자라 그대로.
 - 시험: OpenJvmTest(어두운 칸만 bg==sky0 · 밝은 ink / 날씨 4종에서도 유지) · open_native 정규식. 기기 확인 전(앱 새로 설치 필요).
+
+## s328 (2026-10-29) — 도착지를 고르면 바로 경로 탐색 · 맛집 가게 지도 바로 열기 (YJ) — 앱만, 엔진 변경 없음
+- 도착지(또는 출발지) 후보를 골라 출발·도착이 모두 정해지면 [경로 탐색]을 안 눌러도 바로 찾는다: `HomeCore.act` 가 후보 고르기(`sg.`) 직후 `autoGo = !riding() && bothSet()` 를 세우고, `ShellActivity.homeAct` 의 `R_FIELDS` 처리가 `takeAutoGo()` 이면 `goRoute()`. 탑승 확정 중이거나 한쪽이 비어 있으면 안 찾는다. 바꾸기(`rt.swap`)는 자동으로 찾지 않는다.
+- 맛집 가게를 눌러도 지도가 바로 안 열리던 것(화면 녹화 확인: 눌러도 서버 `/screen/food` 펼침 답이 올 때까지 빈 채): ① 누른 순간 `FoodCore.showPanelSkeleton()`(뼈대 `skel map`)으로 자리를 먼저 펼치고, 답이 오면 그 자리에서 진짜 펼침으로 바꾼다(`applyPanel`) ② 목록이 올라오면 1.2초 뒤 위쪽 4곳의 첫 펼침 본문(`FoodCore.panelRequestFor` = 눌렀을 때 첫 왕복 본문과 글자까지 같다)을 뒤에서 받아 `panelCache`(5분 · 24개)에 두고, 눌렀을 때 같은 본문이 캐시에 있으면 서버 없이 바로 올린다. 경로 주소를 더 받아 오는 뒷 왕복은 그대로.
+- 시험: `ShellJvmTest`(자동 찾기 · 뼈대 · 미리 받기 본문), `shell_native.test.js` s328. 기기 미확인.
