@@ -394,8 +394,101 @@ final class SceneActs {
         registerWx(S);
         registerMo(S);
         registerMo2(S);
+        applyCells(S);
     }
 
+
+    /**
+     * ★ 나머지 여섯 친구(돌솜·뽀푸·러블·두덩·술·챙챙)의 고화질 3D 전용 동작 시트(<id>_act, 4×4=16칸)를 동작별로 어느 구간에 쓰는지.
+     *   각 항목 = {시작u, 끝u, 칸A, 자세(옛 설치 대비), [칸B, 초당 번갈음 횟수, 칸A 비율]}. 없는 구간·시트가 없는 옛 설치는 원래 그림(자세/걷기 시트) 그대로.
+     *   칸: 강아지(돌솜·뽀푸)·고양이(러블) 0 앉기 1 앞발 모음 2 아우~ 3 킁킁 4 두리번 5 낮잠 6 엎드림 7·8 달리기 9 놀자 10 긁기 11 짖기 12 덮치기 13 와작 14 점프 15 신남
+     *       두더지(두덩) 0 앉기 1 만세 2·3 삽질 4 빼꼼 5 기지개 6 킁킁 7 깜짝 8 어질 9 인사 10·11 달리기 12 손흔들기 13 시무룩 14 낮잠 15 덜덜
+     *       독수리(술) 0 앉기 1 졸기 2·3 날갯짓 4 활공 5 급강하 6 꾸욱 7 부풀림 8 깃 다듬기 9 착지 10 이륙 11 날개 펴기 12 두리번 13 깡충 14 시무룩 15 신남
+     *       올챙이(챙챙) 0 둥실 1 빙글 2 잠수 3 점프 4 방울 5 잠 6 꼬물 7 깜짝 8 손흔들기 9 시무룩 10 질주 11 하품 12 데굴 13 신남 14 빼꼼 15 덜덜
+     */
+    static final java.util.Map<String, double[][]> CELLS = new java.util.LinkedHashMap<>();
+    private static void cs(String n, double[]... seg) { CELLS.put(n, seg); }
+    static {
+        // 돌솜
+        cs("shake", new double[]{0, 1, 4, -1});
+        cs("tailchase", new double[]{0, .74, 7, -1, 8, 6}, new double[]{.74, 1, 0, 0});
+        cs("loaf", new double[]{0, .5, 6, -1}, new double[]{.5, 1, 5, 1});
+        cs("ball", new double[]{0, .62, 7, -1, 8, 5}, new double[]{.62, .78, 12, -1}, new double[]{.78, 1, 15, 2});
+        cs("mirror", new double[]{.1, .92, 11, -1, 4, 1.6, .4});
+        cs("sit", new double[]{.08, .58, 0, 0}, new double[]{.58, 1, 15, 2});
+        cs("howl", new double[]{.1, .88, 2, 0});
+        cs("snuffle", new double[]{0, .72, 3, -1}, new double[]{.72, 1, 4, 2});
+        cs("rollover", new double[]{0, .16, 9, -1}, new double[]{.16, .34, 14, -1}, new double[]{.34, .72, 15, 2}, new double[]{.72, .9, 14, -1}, new double[]{.9, 1, 15, 2});
+        cs("zoomies", new double[]{0, 1, 7, -1, 8, 7});
+        // 뽀푸
+        cs("dig", new double[]{0, .45, 9, -1, 10, 5}, new double[]{.45, .84, 10, -1, 9, 8}, new double[]{.84, 1, 15, 2});
+        cs("bone", new double[]{0, .35, 3, -1}, new double[]{.35, 1, 13, 2});
+        cs("dance", new double[]{.08, .92, 15, 2, 9, 3});
+        cs("slide", new double[]{0, 1, 12, -1});
+        cs("dive", new double[]{0, .4, 7, -1, 8, 6}, new double[]{.4, .62, 14, -1}, new double[]{.62, 1, 15, 2});
+        cs("beg", new double[]{.08, .9, 1, 0});
+        cs("scratch", new double[]{.08, .88, 10, 0});
+        cs("bark", new double[]{.06, .92, 11, -1, 4, 2.3, .28});
+        cs("frisbee", new double[]{0, .5, 7, -1, 8, 6}, new double[]{.5, .68, 14, -1}, new double[]{.68, 1, 15, 2});
+        cs("chew", new double[]{.08, .9, 13, 0});
+        // 러블
+        cs("punch", new double[]{.08, .92, 12, -1, 9, 6});
+        cs("box", new double[]{.3, .46, 14, -1}, new double[]{.46, .9, 0, 0});
+        cs("stretch", new double[]{0, .6, 9, -1}, new double[]{.6, 1, 0, 0});
+        cs("melt", new double[]{.2, .42, 6, -1}, new double[]{.42, .9, 5, 1});
+        cs("pounce", new double[]{0, .2, 9, -1}, new double[]{.2, .72, 14, -1}, new double[]{.72, 1, 15, 2});
+        cs("groom", new double[]{.1, .9, 1, 0, 10, 2});
+        cs("purr", new double[]{.1, .9, 5, 1});
+        cs("knead", new double[]{.1, .9, 9, -1, 6, 3});
+        cs("yarn", new double[]{.1, .4, 3, -1}, new double[]{.4, .8, 12, -1, 9, 6}, new double[]{.8, 1, 15, 2});
+        cs("cuke", new double[]{0, .4, 4, -1}, new double[]{.4, .7, 14, -1}, new double[]{.7, 1, 4, -1});
+        // 두덩
+        cs("shades", new double[]{.3, 1, 0, 0});
+        cs("flag", new double[]{.26, .5, 0, 0}, new double[]{.5, .92, 1, 2});
+        cs("lens", new double[]{.14, .84, 6, -1});
+        cs("dust", new double[]{0, .62, 15, -1}, new double[]{.62, 1, 0, 0});
+        cs("vanish", new double[]{0, .5, 12, -1});
+        cs("digdig", new double[]{.08, .9, 2, -1, 3, 2.8});
+        cs("lantern", new double[]{.1, .9, 12, -1});
+        cs("popup", new double[]{0, 1, 4, -1});
+        cs("nap", new double[]{.1, .9, 14, 1});
+        cs("treasure", new double[]{0, .4, 6, -1}, new double[]{.4, .7, 2, -1, 3, 3}, new double[]{.7, 1, 1, 2});
+        // 술
+        cs("stumble", new double[]{.36, .74, 7, -1});
+        cs("preen", new double[]{.1, .9, 8, 0});
+        cs("flapshow", new double[]{.1, .9, 11, -1, 2, 2.5});
+        cs("scan", new double[]{.1, .9, 12, -1});
+        cs("soar", new double[]{.1, .9, 4, -1});
+        cs("swoop", new double[]{.2, .6, 5, -1});
+        // 챙챙
+        cs("dash", new double[]{0, 1, 10, -1});
+        cs("flop", new double[]{0, .4, 3, -1}, new double[]{.4, .8, 12, -1}, new double[]{.8, 1, 5, 1});
+        cs("hide", new double[]{.1, .9, 14, -1});
+        cs("bubbles", new double[]{.1, .9, 4, -1});
+        cs("dew", new double[]{.1, .86, 0, -1});
+        cs("wiggle", new double[]{0, 1, 6, -1});
+        cs("leap", new double[]{.2, .7, 3, -1});
+        cs("whirl", new double[]{0, 1, 1, -1, 12, 4});
+        cs("tailsplash", new double[]{0, 1, 10, -1, 6, 3});
+    }
+
+    /** register 끝에서 한 번: 위 표대로 동작마다 전용 시트 칸을 정한다(원래 몸짓·소품·말풍선은 그대로, 그림 칸만 바꾼다). */
+    static void applyCells(final SceneCore S) {
+        for (java.util.Map.Entry<String, double[][]> e : CELLS.entrySet()) {
+            final SceneCore.Act ac = S.ACT.get(e.getKey()); if (ac == null || ac.step == null) continue;
+            final SceneCore.Step orig = ac.step; final double[][] sg = e.getValue();
+            ac.step = (a, u, dt, A) -> {
+                orig.f(a, u, dt, A);
+                if (a.intro) return;
+                for (double[] s : sg) {
+                    if (u < s[0] || u >= s[1]) continue;
+                    int c = (int) s[2];
+                    if (s.length > 4 && s[4] >= 0) { double ph = (S.t - A.t0) * s[5]; ph -= Math.floor(ph); if (ph >= (s.length > 6 ? s[6] : .5)) c = (int) s[4]; }
+                    cell(a, c, (int) s[3]); break;
+                }
+            };
+        }
+    }
 
     /** 전용 동작 시트(<id>_act)가 있으면 그 칸을, 없으면(옛 설치) 자세 시트 칸으로 대신 그린다(둘 다 a.cell/a.pose 를 같이 정한다). */
     static void cell(Actor a, int cell, int pose) { a.cell = cell; a.pose = pose; }

@@ -43,7 +43,7 @@ public final class SceneDriver implements SceneCore.Host {
     }
 
     private static final String[] IDS = SceneModel.ORDER;
-    private static final String[] ACT_IDS = {"juksun", "bbosong"};       // 전용 동작 시트(<id>_act)가 있는 친구
+    private static final String[] ACT_IDS = {"juksun", "bbosong", "dolsom", "ppopu", "lovel", "dudung", "sul", "chaeng"};       // 전용 동작 시트(<id>_act)가 있는 친구
     private static final String DIR = "chars3d/";
 
     private final Context ctx;

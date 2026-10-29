@@ -60,6 +60,7 @@ public class SceneJvmTest {
         TestHost h = new TestHost();
         for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
         for (String id : SceneModel.ORDER) { File fp = new File(sheets, id + "_pose.png"); if (fp.exists()) h.sheets.put(id + "_pose", new AwtCv.Img(ImageIO.read(fp))); }
+        for (String id : SceneModel.ORDER) { File fa = new File(sheets, id + "_act.png"); if (fa.exists()) h.sheets.put(id + "_act", new AwtCv.Img(ImageIO.read(fa))); }
         File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
         SceneCore c = core(h, 7); c.layout(W, H, dens, false); c.apply(SceneModel.parse(read(new File(a[3])))); c.debugTick(3);
         c.apply(SceneModel.parse(read(new File(a[4]))));

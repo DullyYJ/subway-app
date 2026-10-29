@@ -19,6 +19,8 @@ def fur(im, cx, cy, r):
     ys,xs=np.mgrid[0:H,0:W]; d=np.hypot(xs-cx,ys-cy); ring=(d>r*1.15)&(d<r*1.9)
     return tuple(int(v) for v in np.median(a[ring],axis=0))
 def paint(id_, v):
+    mouth = v.endswith('open') and v!='open'
+    if mouth: v = v[:-4]
     x0,y0,x1,y1=R[id_]; im=Image.open(f'{SRC}/{id_}.webp').convert('RGBA').crop((x0,y0,x1,y1)); im=im.resize((im.width*4,im.height*4),Image.LANCZOS)
     rgb=im.convert('RGB'); al=im.split()[3]
     if v!='open':
@@ -35,7 +37,7 @@ def paint(id_, v):
         elif v=='squint': dr.line((cx-r*.9,cy+r*.1,cx+r*.9,cy-r*.05*s),fill=dark,width=lw)
         elif v=='tight':                                                                          # > <
             dx=r*.8; dr.line((cx-dx*s*-1 if False else cx+s*dx*-1,cy-r*.7,cx+s*dx,cy),fill=dark,width=lw); dr.line((cx+s*dx,cy,cx+s*dx*-1,cy+r*.7),fill=dark,width=lw)
-    if v in ('open','pant') and id_ in MOUTH:
+    if (v in ('open','pant') or mouth) and id_ in MOUTH:
         mx,my,rx,ry=MOUTH[id_]; dr.ellipse((mx-rx,my-ry,mx+rx,my+ry),fill=(96,28,40)); dr.ellipse((mx-rx*.62,my+ry*.05,mx+rx*.62,my+ry*1.25),fill=(238,120,140))
     out=rgb.convert('RGBA'); out.putalpha(al); return out
 def bleed(a, it=14):

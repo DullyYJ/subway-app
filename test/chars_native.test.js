@@ -25,6 +25,18 @@ t('새 친구 시트가 앱 assets 에 있고 형식·크기가 맞다', () => {
   for (const n of walks) { const [w, h, len] = webpSize(A(n + '_pose.webp')); assert.ok(w === 1024 && h === 512 && len > 15000 && len < 120000, n + ' 자세 시트 ' + [w, h, len]); }
   for (const n of ['juksun_sleep', 'bbosong_sleep']) { const [w, h, len] = webpSize(A(n + '.webp')); assert.ok(w === 1024 && h === 1024 && len > 40000 && len < 260000, n + ' 잠 시트 ' + [w, h, len]); }
 });
+t('전용 동작 시트 8장(s303): 칸 16개 시트가 있고 · 앱이 모두 읽고 · 동작→칸 표가 엔진 동작 이름과 맞다', () => {
+  const ids = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng'];
+  for (const n of ids.concat(['juksun'])) { const [w, h, len] = webpSize(A(n + '_act.webp')); assert.ok(w === 1024 && h === 1024 && len > 50000 && len < 220000, n + ' 동작 시트 ' + [w, h, len]); }
+  const drv = R('SceneDriver.java'); const m = drv.match(/ACT_IDS = \{([^}]*)\}/); assert.ok(m, 'ACT_IDS');
+  for (const n of ids.concat(['juksun', 'bbosong'])) assert.ok(m[1].includes('"' + n + '"'), n + ' 이 ACT_IDS 에 있다');
+  const src = R('SceneActs.java'), sc = require('../engine/scene.js');
+  const esrc = fs.readFileSync(path.join(__dirname, '..', 'engine', 'scene.js'), 'utf8'), blk = esrc.slice(esrc.indexOf('var SCENE_ACTS'), esrc.indexOf('var SCENE_BASE'));
+  const all = new Set([...blk.matchAll(/"([a-z]+)"/g)].map(x => x[1])); assert.ok(all.size > 50, '엔진 동작 목록');
+  const names = [...src.matchAll(/cs\("([a-z]+)"/g)].map(x => x[1]); assert.ok(names.length >= 45, '표 항목 수 ' + names.length);
+  for (const n of names) assert.ok(all.has(n), '표의 동작 ' + n + ' 이 엔진 동작이다');
+  for (const x of src.matchAll(/new double\[\]\{([^}]*)\}/g)) { const v = x[1].split(',').map(Number); if (v.length < 4) continue; assert.ok(v[0] >= 0 && v[1] <= 1 && v[0] < v[1], '구간 ' + x[1]); assert.ok(v[2] >= 0 && v[2] <= 15 && (v.length < 5 || v[4] <= 15), '칸 ' + x[1]); }
+});
 t('캐릭터 목록 — 모든 곳이 같은 여덟 마리를 끝에 덧붙인 순서로 안다', () => {
   const ids = ['dolsom', 'lovel', 'dudung', 'sul', 'ppopu', 'chaeng', 'juksun', 'bbosong'];
   const list = s => (s.match(/"(dolsom|lovel|dudung|sul|ppopu|chaeng|juksun|bbosong)"/g) || []).map(x => x.slice(1, -1));
