@@ -2258,7 +2258,16 @@ public class ShellActivity extends Activity {
         }
         if (!"call".equals(a.a)) return;
         switch (food.act(a.v)) {
-            case FoodCore.R_PANEL: foodPanelRound(); break;
+            case FoodCore.R_PANEL: {
+                if (panelCacheGet(food.panelRequest(ShellCore.CAP)) == null) {                  // 미리 받아 둔 답이 없으면 자리(뼈대)부터 바로 펼치고 답이 오면 그 자리에서 바뀐다
+                    final String pk = food.openKey;
+                    food.showPanelSkeleton();
+                    foodAfter = new Runnable() { @Override public void run() { body.revealBelow("fm." + pk); } };
+                    foodRedraw();
+                }
+                foodPanelRound();
+                break;
+            }
             case FoodCore.R_UNPANEL: case FoodCore.R_CLOSE: food.closePanel(); foodRedraw(); break;
             case FoodCore.R_LINK: {
                 String[] ln = food.sheetLink(a.v);
@@ -2273,7 +2282,7 @@ public class ShellActivity extends Activity {
     private int seqFoodP; private Runnable foodAfter;          // 끼운 글이 올라온 직후 한 번 할 일(펼침이 보이게 스크롤)
     private void foodPresent(final ScreenView v, final String txt, final boolean keep) {
         if (txt == null || txt.length() == 0) { present(v, txt, keep); return; }
-        if (!isNotMod(txt)) foodBase = txt;
+        if (!isNotMod(txt)) { foodBase = txt; main.removeCallbacks(foodPfRun); main.postDelayed(foodPfRun, 1200L); }
         if (food.openKey.length() == 0 || isNotMod(txt)) { present(v, txt, keep); return; }
         final int my = ++seqFoodP;
         final String base = foodBase;
@@ -2295,33 +2304,63 @@ public class ShellActivity extends Activity {
     private void foodPanelRound() {
         final int my = ++seqPanel;
         final String key = food.openKey, json = food.panelRequest(ShellCore.CAP);
+        final boolean r1 = food.panelRes.isEmpty();
+        if (r1) { String hit = panelCacheGet(json); if (hit != null) { applyPanel(my, key, hit); return; } }          // 미리 받아 둔 펼침 — 눌린 그 순간에 바로
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", json, 8000);
                 final String txt = r.status == 200 ? r.body : "";
-                main.post(new Runnable() { @Override public void run() {
-                    if (my != seqPanel || !key.equals(food.openKey)) return;
-                    final boolean first = food.panelNodes == null;
-                    if (!food.onPanel(txt)) { if (food.panelNodes == null) { food.closePanel(); toast("가게 지도를 열지 못했어요"); } return; }
-                    if (first) foodAfter = new Runnable() { @Override public void run() { body.revealBelow("fm." + key); } };
-                    foodRedraw();
-                    final java.util.List<String[]> need = new java.util.ArrayList<String[]>(food.panelNeed);
-                    if (need.isEmpty()) return;
-                    for (final String[] nd : need) {
-                        new Thread(new Runnable() { @Override public void run() {
-                            NetPost.Res nr = NetPost.get(nd[1], 9000);
-                            final String got = nr.status == 200 ? nr.body : "";
-                            main.post(new Runnable() { @Override public void run() {
-                                if (my != seqPanel || !key.equals(food.openKey)) return;
-                                food.panelGot(nd[0], got);
-                                foodPanelRound();
-                            } });
-                        } }, "shell-footroute").start();
-                    }
-                } });
+                if (r1 && txt.length() > 0 && txt.indexOf("\"ok\":true") >= 0) panelCachePut(json, txt);
+                main.post(new Runnable() { @Override public void run() { applyPanel(my, key, txt); } });
             }
         }, "shell-foodpanel").start();
     }
+    /** 엔진의 펼침 답을 올린다(미리 받아 둔 것이든 방금 받은 것이든 같다). 경로 주소를 더 받아 오라고 하면 받아 와서 다시 묻는다. */
+    private void applyPanel(final int my, final String key, String txt) {
+        if (my != seqPanel || !key.equals(food.openKey)) return;
+        final boolean first = food.panelNodes == null;
+        if (!food.onPanel(txt)) { if (food.panelNodes == null || food.panelSkel) { food.closePanel(); foodRedraw(); toast("가게 지도를 열지 못했어요"); } return; }
+        if (first) foodAfter = new Runnable() { @Override public void run() { body.revealBelow("fm." + key); } };
+        foodRedraw();
+        final java.util.List<String[]> need = new java.util.ArrayList<String[]>(food.panelNeed);
+        if (need.isEmpty()) return;
+        for (final String[] nd : need) {
+            new Thread(new Runnable() { @Override public void run() {
+                NetPost.Res nr = NetPost.get(nd[1], 9000);
+                final String got = nr.status == 200 ? nr.body : "";
+                main.post(new Runnable() { @Override public void run() {
+                    if (my != seqPanel || !key.equals(food.openKey)) return;
+                    food.panelGot(nd[0], got);
+                    foodPanelRound();
+                } });
+            } }, "shell-footroute").start();
+        }
+    }
+    // ── 가게 지도 펼침 미리 받기: 목록이 올라오면 위쪽 몇 곳의 첫 펼침을 뒤에서 받아 둔다 → 눌렀을 때 서버를 기다리지 않는다(5분) ──
+    private final java.util.LinkedHashMap<String, String[]> panelCache = new java.util.LinkedHashMap<String, String[]>();
+    private String panelCacheGet(String json) {
+        synchronized (panelCache) { String[] e = panelCache.get(json); return e != null && System.currentTimeMillis() - Long.parseLong(e[0]) < 300000L ? e[1] : null; }
+    }
+    private void panelCachePut(String json, String txt) {
+        synchronized (panelCache) { panelCache.put(json, new String[] { String.valueOf(System.currentTimeMillis()), txt }); while (panelCache.size() > 24) { String k0 = panelCache.keySet().iterator().next(); panelCache.remove(k0); } }
+    }
+    private final Runnable foodPfRun = new Runnable() { @Override public void run() {
+        try {
+            if (!"food".equals(ShellCore.currentTab(store)) || !resumed || !food.loaded) return;
+            final java.util.ArrayList<String> reqs = new java.util.ArrayList<String>();
+            for (String k : food.goKeys(4)) { String rq = food.panelRequestFor(ShellCore.CAP, k); if (rq.length() > 0 && panelCacheGet(rq) == null) reqs.add(rq); }
+            if (reqs.isEmpty()) return;
+            ioExec.execute(new Runnable() { @Override public void run() {
+                for (String rq : reqs) {
+                    try {
+                        NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/food", rq, 8000);
+                        if (r.status == 200 && r.body != null && r.body.indexOf("\"ok\":true") >= 0) panelCachePut(rq, r.body);
+                        Thread.sleep(150L);
+                    } catch (Throwable ignored) { }
+                }
+            } });
+        } catch (Throwable ignored) { }
+    } };
     private void openFoodSheet() {
         closeSheet();
         sheetName = ShellCore.S_FOODSHEET;
@@ -4092,6 +4131,7 @@ public class ShellActivity extends Activity {
             case HomeCore.R_CONFIRM: startRide(); break;
             case HomeCore.R_RENDER: case HomeCore.R_FIELDS:
                 if (r == HomeCore.R_FIELDS) setHomeFields();
+                if (r == HomeCore.R_FIELDS && home.takeAutoGo()) { goRoute(); break; }          // 목적지를 고르면 [경로 탐색]을 안 눌러도 바로 찾는다
                 reloadHome(); break;
             case HomeCore.R_GPS: startGps(); break;
             case HomeCore.R_PICK_TIME: pickBase(); break;
