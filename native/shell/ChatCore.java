@@ -110,6 +110,44 @@ public final class ChatCore {
     @SuppressWarnings("unchecked")
     public String request(int cap, String theme, int tzoMin, String me, long now) { return requestFor(sel(), true, cap, theme, tzoMin, me, now); }
     /** 방 sel 의 요청. live=false 면 눌림 번호표(ridsR)를 건드리지 않는다(미리 받기용 별도 상태기에서 쓴다). */
+    // ── 방금 보낸 글(전송 중): 서버 글에 아직 없을 때 엔진이 내 말풍선으로 맨 끝에 보탠다(0.1초 안에 뜨게 · s330). 앱은 적어 두고 요청에 실을 뿐이다. ──
+    private final List<Object[]> pends = new ArrayList<Object[]>();           // { 방, 글, 보낸 시각 }
+    private static final long PEND_KEEP_MS = 45000L;
+    public synchronized void addPend(String sel, String text, long ts) { pends.add(new Object[] { sel, text, Long.valueOf(ts) }); }
+    public synchronized void dropPend(String text) { for (int i = pends.size() - 1; i >= 0; i--) if (text.equals(pends.get(i)[1])) { pends.remove(i); break; } }
+    private synchronized String pendJson(String sel) {
+        long now = System.currentTimeMillis();
+        for (int i = pends.size() - 1; i >= 0; i--) if (now - ((Long) pends.get(i)[2]).longValue() > PEND_KEEP_MS) pends.remove(i);
+        List<Object> out = new ArrayList<Object>();
+        for (Object[] p : pends) if (sel.equals(p[0])) { List<Object> one = new ArrayList<Object>(); one.add(p[1]); one.add(p[2]); out.add(one); }
+        return out.isEmpty() ? "" : ",\"pend\":" + HomeSearchCore.toJson(out);
+    }
+    /** 화면 글(chat 화면)에 엔진이 준 내 말풍선 틀(info.echo)로 방금 친 글을 맨 끝에 보탠 새 화면 글. 틀이 없으면(옛 엔진) null. */
+    @SuppressWarnings("unchecked")
+    public static String withEcho(String screenJson, String text) {
+        try {
+            Object o = ScreenCore.parse(screenJson);
+            if (!(o instanceof Map)) return null;
+            Map<String, Object> m = (Map<String, Object>) o;
+            Object info = m.get("info");
+            Object echo = info instanceof Map ? ((Map<String, Object>) info).get("echo") : null;
+            if (!(echo instanceof Map) || !(m.get("body") instanceof List)) return null;
+            Map<String, Object> node = new LinkedHashMap<String, Object>((Map<String, Object>) echo);
+            node.put("s", text);
+            List<Object> body = new ArrayList<Object>((List<Object>) m.get("body"));
+            boolean hasMsg = false;
+            for (Object x : body) if (x instanceof Map && "msg".equals(((Map<String, Object>) x).get("t"))) { hasMsg = true; break; }
+            Map<String, Object> sp = new LinkedHashMap<String, Object>(); sp.put("t", "spacer"); sp.put("h", Double.valueOf(4));
+            if (!hasMsg) { body.clear(); body.add(sp); body.add(node); body.add(sp); }
+            else {
+                int at = body.size();
+                if (at > 0 && body.get(at - 1) instanceof Map && "spacer".equals(((Map<String, Object>) body.get(at - 1)).get("t"))) at--;
+                body.add(at, node);
+            }
+            m.put("body", body); m.remove("rev");
+            return HomeSearchCore.toJson(m);
+        } catch (Exception e) { return null; }
+    }
     public String requestFor(String sel, boolean live, int cap, String theme, int tzoMin, String me, long now) {
         return "{\"cap\":" + cap + "," + fdFor(sel, live, theme, tzoMin, me, true) + "}";
     }
@@ -122,7 +160,7 @@ public final class ChatCore {
         b.append(",\"th\":").append(ShellCore.q("dark".equals(theme) ? "dark" : "pastel"));
         boolean have = "all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel);          // 이 방의 글을 받아 둔 적이 있나 — 준비됨은 '이 방' 기준이다(다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않게 · s289)
         b.append(",\"st\":").append(ShellCore.q(have ? "ready" : live ? (failed ? "fail" : "loading") : "fail"));
-        b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append("},\"d\":{");
+        b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append(pendJson(sel)).append("},\"d\":{");
         List<Object> g = withG ? new ArrayList<Object>(talk.values()) : new ArrayList<Object>();
         b.append("\"g\":").append(HomeSearchCore.toJson(g));
         List<String> rids = new ArrayList<String>();
