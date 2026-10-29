@@ -41,10 +41,10 @@ t('시트를 읽는 곳은 모두 Chars.file 을 거친다(뽀송 신발)', () =
 });
 t('엔진 새 동작 이름을 앱이 모두 그린다 + 날씨 말풍선 문구가 새 친구에게도 있다', () => {
   const sc = require('../engine/scene.js'), acts = R('SceneActs.java');
-  for (const a of ['munch', 'snooze', 'hooray', 'sniff', 'shoeshow', 'sparkle']) assert.ok(new RegExp('A_\\(S, "' + a + '"').test(acts), a + ' 동작');
+  for (const a of ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze', 'sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower', 'L_tumble', 'search', 'L_hose', 'squirt', 'flee']) assert.ok(new RegExp('A_\\(S, "' + a + '"').test(acts), a + ' 동작');
   for (const k of Object.keys(sc.SCENE_SAY)) for (const id of ['juksun', 'bbosong']) assert.ok(sc.SCENE_SAY[k][id] && sc.SCENE_SAY[k][id].length >= 2, k + '/' + id);
   const r = sc.sceneDecide({ nowMs: Date.UTC(2026, 9, 29, 3, 0, 0), tzOffsetMin: 540, locked: false, routeShown: false }, { temp: 2, rain: 0, txt: '맑음', wind: 30 });
-  assert.ok(r.traits.juksun && r.traits.juksun.land === 'cotton' && r.traits.bbosong.land === 'pose', 'traits');
+  assert.ok(r.traits.juksun && r.traits.juksun.land === 'tumble' && r.traits.bbosong.land === 'hose', 'traits');
   assert.ok(r.traits.juksun.acts.some(a => ['munch', 'snooze', 'hooray'].includes(a)) && r.traits.bbosong.acts.some(a => ['sniff', 'shoeshow', 'sparkle'].includes(a)), '전용 동작이 대본에 들어간다');
 });
 console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);

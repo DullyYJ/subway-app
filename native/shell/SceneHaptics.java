@@ -39,6 +39,9 @@ public final class SceneHaptics {
         p("land_flip",    new long[]{0, 10, 14, 14, 14, 18, 16, 30}, new int[]{0, 50, 0, 85, 0, 120, 0, 235}); // 윙— 착
         p("land_fly",     new long[]{0, 20, 70, 20, 60, 14},    new int[]{0, 110, 0, 90, 0, 60});     // 펄럭 펄럭 사뿐
         p("land_puddle",  new long[]{0, 30, 44, 18, 44, 12},    new int[]{0, 235, 0, 120, 0, 60});    // 첨벙 + 잔물결
+        p("land_tumble",  new long[]{0, 12, 20, 14, 20, 30},    new int[]{0, 70, 0, 110, 0, 210});     // 데구르르 쿵
+        p("land_hose",    new long[]{0, 16, 30, 16, 30, 40},    new int[]{0, 120, 0, 90, 0, 60});      // 촤악 사뿐
+        p("squirt",       new long[]{0, 18, 22, 18, 22, 18},    new int[]{0, 90, 0, 120, 0, 90});      // 쏴아
         // 연출
         p("flap",         new long[]{0, 16, 60, 16},            new int[]{0, 100, 0, 80});
         p("hearts",       new long[]{0, 22, 70, 30},            new int[]{0, 130, 0, 100});            // 두근두근

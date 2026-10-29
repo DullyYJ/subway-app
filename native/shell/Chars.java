@@ -50,6 +50,7 @@ public final class Chars {
         if (key == null) return "";
         if (key.equals("bbosong")) return "bbosong_" + shoe(nowMs);
         if (key.equals("bbosong_pose")) return "bbosong_" + shoe(nowMs) + "_pose";
+        if (key.equals("bbosong_act")) return "bbosong_" + shoe(nowMs) + "_act";
         return key;
     }
     public static String file(String key) { return file(key, System.currentTimeMillis()); }

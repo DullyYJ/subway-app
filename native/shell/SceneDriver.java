@@ -43,6 +43,7 @@ public final class SceneDriver implements SceneCore.Host {
     }
 
     private static final String[] IDS = SceneModel.ORDER;
+    private static final String[] ACT_IDS = {"juksun", "bbosong"};       // 전용 동작 시트(<id>_act)가 있는 친구
     private static final String DIR = "chars3d/";
 
     private final Context ctx;
@@ -82,6 +83,8 @@ public final class SceneDriver implements SceneCore.Host {
                     for (String id : IDS) got.put(id, decode(DIR + Chars.file(id) + ".webp"));       // 뽀송은 지금 신은 신발 시트
                     in2 = decode(DIR + "dudung_intro.webp");
                     for (String id : IDS) { try { got.put(id + "_pose", decode(DIR + Chars.file(id + "_pose") + ".webp")); } catch (Throwable t2) { /* 자세 시트는 없어도 된다 — 걷기 시트로 대신 그린다 */ } }
+                    for (String id : ACT_IDS) { try { got.put(id + "_act", decode(DIR + Chars.file(id + "_act") + ".webp")); } catch (Throwable t3) { /* 전용 동작 시트도 없어도 된다 — 자세 시트로 대신 그린다 */ } }
+                    try { got.put("juksun_nb", decode(DIR + "juksun_nb.webp")); } catch (Throwable t4) { /* 대나무 없는 걷기 시트 — 없으면 대나무를 든 채로 그린다 */ }
                 } catch (Throwable t) { why = String.valueOf(t); }
                 final Bitmap introBmp = in2; final String err = why;
                 ui.post(new Runnable() {

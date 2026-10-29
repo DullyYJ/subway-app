@@ -392,6 +392,241 @@ final class SceneActs {
             } else { a.alt = 0; S.standF(a); }
         }, (a, A) -> { a.alt = a.altSave != 0 ? a.altSave : 18; });
         registerWx(S);
+        registerMo(S);
+    }
+
+
+    /** 전용 동작 시트(<id>_act)가 있으면 그 칸을, 없으면(옛 설치) 자세 시트 칸으로 대신 그린다(둘 다 a.cell/a.pose 를 같이 정한다). */
+    static void cell(Actor a, int cell, int pose) { a.cell = cell; a.pose = pose; }
+
+    /**
+     * ★ 쮸르(죽순이)·베비히포(뽀송)의 전용 동작 10가지씩 + 놓았을 때 연출(L_tumble·L_hose) + 놀라 달아나기(flee).
+     *   칸 번호: juksun_act = 0 웅크림 · 1 버둥 · 2 쭈그림 · 3 두리번 · 4 킁킁 · 5 찾았다 · 6 기지개 · 7 빼꼼 · 8 배 두드림 · 9 하품 · 10·11 쿵푸 · 12·13 재채기 · 14 오물오물 · 15 만세
+     *            bbosong_act = 0 버둥 · 1 물대포 아래로 · 2 쭈그림 · 3 물대포 앞으로 · 4 으쓱 · 5 분수 · 6·7 탭댄스 · 8 하품 · 9 신발 갈아신기 · 10 닦기 · 11 머리꽃 · 12 신발 자랑 · 13 반짝 · 14 킁킁 · 15 후~
+     *   무엇을 어떤 순서로 하는지는 엔진(traits)이 정한 이름이고, 여기는 그 이름대로 그리는 곳뿐이다.
+     */
+    static void registerMo(final SceneCore S) {
+        // ── 쮸르(죽순이) ──
+        A_(S, "roll", 3.6, (a, t, A) -> { A.tx = S.aheadX(a, 70 + S.rnd() * 40); }, (a, u, dt, A) -> {
+            // 몸을 동그랗게 말아 데굴데굴 굴러간다
+            double h = S.HH(a), T = S.t; S.standF(a);
+            if (u < .1) { cell(a, 2, 0); a.sy = .9 + .1 * (u / .1); if (S.once(A, "sy")) S.say(a, "데굴데굴~!", 2.2); }
+            else if (u < .84) {
+                cell(a, 0, 2); a.pvy = -h * .5; a.ang = (T - A.t0 - .36) * 9.5; a.y = 0;
+                if (S.moveX(a, A.tx, a.spd * 1.55, dt)) { A.tx = S.aheadX(a, 70 + S.rnd() * 40); }
+                if (S.every(A, "dt", .13)) S.ptx("dust", a.x - a.dir * h * .22, S.feetY(a) - 1, 1, po().a(-PI * .9, -PI * .1).s(8, 18));
+            } else {
+                cell(a, 15, 2); a.y = -Math.abs(Math.sin((u - .84) / .16 * PI * 2)) * 4;
+                if (S.once(A, "h")) S.ptx("heart", a.x, S.feetY(a) - h * .8, 3, po().a(-PI * .98, -PI * .02).s(24, 50).g(55).l(.9, 1.3).r(1).jx(5));
+            }
+        }, null);
+        A_(S, "twirl", 3.4, null, (a, u, dt, A) -> {
+            // 대나무를 번쩍 들어 빙글빙글 돌린다
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; cell(a, on ? 6 : -1, on ? 2 : -1);
+            if (on) {
+                a.ang = Math.sin(T * 5) * .03; a.y = -Math.abs(Math.sin(T * 5)) * 1.5;
+                Prop bp = S.prop("bamboo", h * .34, -h * 1.0); bp.r = T * 10; S.pr(a, bp);
+                if (S.every(A, "sp", .2)) S.ptx("spark", a.x + a.dir * h * .34 + (S.rnd() - .5) * h * .8, S.feetY(a) - h * (.9 + S.rnd() * .4), 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(0).l(.3, .5).r(.9));
+            }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "빙글빙글~ 대나무 돌리기!", 2.2);
+        }, null);
+        A_(S, "peek", 3.4, null, (a, u, dt, A) -> {
+            // 두리번두리번 살피다 빼꼼
+            double T = S.t; S.standF(a);
+            if (u < .3) { cell(a, 3, 0); a.dir = A.d0; }
+            else if (u < .62) { cell(a, 3, 0); a.dir = -A.d0; }
+            else { cell(a, 7, 0); a.dir = A.d0; a.sy = 1 + Math.sin(T * 6) * .012; }
+            if (u > .04 && S.once(A, "q")) S.say(a, "뭐가 있나~?", 1.6);
+            if (u > .66 && S.once(A, "e")) S.say(a, "빼꼼! 아무도 없네", 1.8);
+        }, null);
+        A_(S, "bellypat", 4.0, null, (a, u, dt, A) -> {
+            // 배불러서 앉아 배를 통통 두드린다
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .92; cell(a, on ? 8 : -1, on ? 0 : -1);
+            if (on) {
+                double b = Math.max(0, Math.sin(T * 9)); a.sy = 1 - .035 * b; a.sx = 1 + .03 * b;
+                if (S.every(A, "pt", .7)) S.ptx("note", a.x + a.dir * h * .3, S.feetY(a) - h * .7, 1, po().a(-PI * .75, -PI * .25).s(10, 18).g(-6).l(.8, 1.1).r(1));
+            }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "배불러~ 퉁퉁!", 2.4);
+            if (u > .88 && S.once(A, "hh")) S.ptx("heart", a.x, S.feetY(a) - h * .8, 3, po().a(-PI * .98, -PI * .02).s(24, 54).g(55).l(.9, 1.4).r(1.2).jx(5));
+        }, null);
+        A_(S, "yawn", 4.2, null, (a, u, dt, A) -> {
+            // 하아암~ 큰 하품 뒤에 기지개
+            double h = S.HH(a), T = S.t; S.standF(a);
+            if (u < .08) cell(a, -1, -1);
+            else if (u < .56) { cell(a, 9, 0); a.sy = 1 + .02 * Math.sin((u - .08) / .48 * PI); }
+            else if (u < .9) { cell(a, 6, 2); a.sy = 1 + .03 * Math.sin((u - .56) / .34 * PI); }
+            if (u > .1 && u < .56 && S.every(A, "zz", .8)) S.ptx("zzz", a.x + a.dir * h * .3, S.feetY(a) - h * .85, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.4).r(1));
+            if (u > .12 && S.once(A, "sy")) S.say(a, "하아암~", 1.8);
+            if (u > .58 && S.once(A, "st")) S.say(a, "으아~ 시원하다!", 1.6);
+        }, null);
+        A_(S, "kungfu", 3.6, null, (a, u, dt, A) -> {
+            // 쿵푸 자세 — 한 발 들고 서서(10) 앞으로 내지른다(11)
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .06 && u < .92; double ph = (T - A.t0) * 2.6; boolean strike = (int) Math.floor(ph) % 2 == 1;
+            cell(a, on ? (strike ? 11 : 10) : -1, on ? 2 : -1);
+            if (on) {
+                a.ox = strike ? a.dir * 3.5 : 0; a.y = strike ? -1.2 : 0;
+                if (strike && S.every(A, "sk", .38)) { S.ptx("spark", a.x + a.dir * h * .62, S.feetY(a) - h * .55, 2, po().a(a.dir > 0 ? -.7 : PI - .7, a.dir > 0 ? .7 : PI + .7).s(12, 24).g(0).l(.25, .4).jy(6).r(1.1)); S.say(a, "하이얍!", .5); }
+            }
+            if (u > .94 && S.once(A, "e")) S.say(a, "쿵푸 판다!", 1.2);
+        }, null);
+        A_(S, "sneeze", 3.2, null, (a, u, dt, A) -> {
+            // 에… 에… 에취! (코가 간질간질)
+            double h = S.HH(a), T = S.t; S.standF(a);
+            if (u < .44) { cell(a, 12, 0); double k = u / .44; a.sy = 1 + .035 * k; a.ang = -.05 * k + Math.sin(T * 30) * .006 * k; if (u > .08 && S.once(A, "a")) S.say(a, "에… 에…", 1.2); }
+            else if (u < .64) {
+                cell(a, 13, 0); a.ox = -a.dir * 3.5; a.sy = .94;
+                if (S.once(A, "x")) {
+                    S.say(a, "에취!!", 1.4); S.haptic("thud");
+                    S.ptx("puff", a.x + a.dir * h * .6, S.feetY(a) - h * .5, 6, po().a(a.dir > 0 ? -.5 : PI - .5, a.dir > 0 ? .5 : PI + .5).s(26, 54).g(10).l(.3, .5).jy(5));
+                    S.ptx("leaf", a.x + a.dir * h * .4, S.feetY(a) - h * .55, 4, po().a(a.dir > 0 ? -.6 : PI - .6, a.dir > 0 ? .6 : PI + .6).s(26, 50).g(90).l(.6, .9).jx(3).r(.8));
+                }
+            } else { cell(a, 12, 0); a.ang = -.03; if (u > .7 && S.once(A, "n")) S.say(a, "…훌쩍. 감기 걸렸나", 1.8); }
+        }, null);
+        // ── 놓았을 때: 죽순을 공중에 떨어뜨리고 앞구르기 → 착지 → 죽순 찾으러 가기 ──
+        A_(S, "L_tumble", 1.3, (a, t, A) -> {
+            S.ptx("dirt", a.x, S.feetY(a) - 2, 6, po().a(-PI * .95, -PI * .05).s(14, 30).g(150).l(.35, .6).jx(8));
+            S.ptx("star", a.x, S.feetY(a) - S.HH(a) * .9, 3, po().a(-PI * .95, -PI * .05).s(14, 30).g(40).l(.6, .9).r(.9).jx(8));
+            S.say(a, "어이쿠! 내 죽순!", 1.8); a.chain = "search";
+        }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t; S.standF(a); a.sk = "juksun_nb";
+            if (u < .45) { cell(a, 2, 0); a.sy = .86 + .14 * ease(u / .45); a.sx = 1.1 - .1 * ease(u / .45); }
+            else { cell(a, 3, 0); a.ang = Math.sin(T * 7) * .04; S.pr(a, S.prop("stars", 0, -h * 1.06)); }
+        }, null);
+        A_(S, "search", 9.0, (a, t, A) -> { A.mx = 0; A.lx = t; A.dir0 = a.dir; }, (a, u, dt, A) -> {
+            // 두리번 → 킁킁 → 걸어가서 → 집어 들고 "찾았다!"
+            double h = S.HH(a), T = S.t; SceneCore.Bam b = S.bamOf(a); S.standF(a); a.sk = "juksun_nb";
+            int ph = (int) A.mx; double pe = T - A.lx;
+            if (b == null && !(ph == 3 && A.on.containsKey("pick"))) { A.dur = (T - A.t0) + .01; return; }          // 대나무가 사라졌다(잡혀서 옮겨짐 등) — 찾기를 접는다
+            if (ph == 0) {
+                cell(a, 3, 0); a.dir = pe < .65 ? A.dir0 : -A.dir0; if (S.once(A, "q")) S.say(a, "어디 갔지…?", 1.4);
+                if (pe > 1.3) { A.mx = 1; A.lx = T; a.dir = b.x >= a.x ? 1 : -1; }
+            } else if (ph == 1) {
+                cell(a, 4, 0); a.dir = b.x >= a.x ? 1 : -1; a.ang = Math.sin(T * 9) * .02; if (S.once(A, "sn")) S.say(a, "킁킁… 이쪽이다!", 1.2);
+                if (pe > 1.1) { A.mx = 2; A.lx = T; }
+            } else if (ph == 2) {
+                a.cell = -1; double tx = b.x - (b.x >= a.x ? 1 : -1) * h * .34;
+                if (S.moveX(a, tx, a.spd * 1.3, dt) || pe > 6.5) { a.x = tx; A.mx = 3; A.lx = T; a.dir = b.x >= a.x ? 1 : -1; }
+            } else {
+                if (pe < .35) { cell(a, 2, 0); a.sy = .9; double q = ease(pe / .35); b.x += (a.x + a.dir * h * .3 - b.x) * q * .5; b.y += (S.feetY(a) - h * .45 - b.y) * q * .5; b.rot += (1.2 * a.dir - b.rot) * q * .5; }
+                else {
+                    if (S.once(A, "pick")) { b.taken = true; S.say(a, "찾았다! 내 죽순!", 2.0); S.haptic("hearts"); S.ptx("heart", a.x, S.feetY(a) - h * .85, 5, po().a(-PI * .98, -PI * .02).s(24, 54).g(55).l(.9, 1.4).r(1.2).jx(5)); }
+                    cell(a, 5, 2); a.sk = null; a.y = -Math.abs(Math.sin((pe - .35) * 9)) * 4;
+                }
+                if (pe > 1.7) A.dur = (T - A.t0) + .01;
+            }
+        }, null);
+
+        // ── 베비히포(뽀송) ──
+        A_(S, "fountain", 3.6, null, (a, u, dt, A) -> {
+            // 고개를 젖히고 입으로 분수를 뿜는다
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .1 && u < .88; cell(a, on ? 5 : -1, on ? 0 : -1);
+            if (on) {
+                double mx = a.x + a.dir * h * .3, my = S.feetY(a) - h * .92; S.pr(a, S.jetProp(mx, my, mx + a.dir * 3, my - h * (.55 + .12 * Math.sin(T * 12))));
+                if (S.every(A, "dr", .08)) S.ptx("drop", mx + a.dir * 3, my - h * .55, 1, po().a(-PI * .85, -PI * .15).s(10, 30).g(190).l(.5, .8).jx(2));
+            }
+            if (u > .12 && S.once(A, "sy")) S.say(a, "쏴아~ 분수 쇼!", 2.0);
+            if (u > .9 && S.once(A, "sp")) S.ptx("spark", a.x, S.feetY(a) - h * .9, 4, po().a(-PI, 0).s(12, 26).g(0).l(.3, .5).jx(h * .3).r(1));
+        }, null);
+        A_(S, "tapdance", 3.8, null, (a, u, dt, A) -> {
+            // 새 신발로 탭탭탭 탭댄스
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .06 && u < .92; double ph = (T - A.t0) * 4.6; boolean r2 = (int) Math.floor(ph) % 2 == 1;
+            cell(a, on ? (r2 ? 7 : 6) : -1, on ? 2 : -1);
+            if (on) {
+                a.y = -Math.abs(Math.sin(ph * PI)) * 2.4; a.ox = Math.sin(ph * PI * .5) * 1.6;
+                if (S.every(A, "tp", .22)) S.ptx("spark", a.x + (r2 ? -1 : 1) * h * .3, S.feetY(a) - 1, 1, po().a(-PI * .9, -PI * .1).s(8, 16).g(0).l(.25, .4).r(.9));
+                if (S.every(A, "nt", .6)) S.ptx("note", a.x + a.dir * h * .35, S.feetY(a) - h * 1.0, 1, po().a(-PI * .7, -PI * .3).s(12, 20).g(-6).l(.9, 1.3).r(1).jx(6));
+            }
+            if (u > .08 && S.once(A, "sy")) S.say(a, "탭탭탭~ 신발 소리 좋다!", 2.2);
+        }, null);
+        A_(S, "blowbub", 3.8, null, (a, u, dt, A) -> {
+            // 후~ 비눗방울을 불어 날린다
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .1 && u < .88; cell(a, on ? 15 : -1, on ? 0 : -1);
+            if (on) {
+                a.sy = 1 + Math.sin(T * 5) * .012;
+                if (S.every(A, "bb", .2)) S.ptx("bub", a.x + a.dir * h * .38, S.feetY(a) - h * .62, 1, po().a(a.dir > 0 ? -.55 : PI - .55, a.dir > 0 ? -.1 : PI - .1).s(14, 34).g(-26).l(1.4, 2.2).r(1 + S.rnd() * 1.4).jx(2));
+            }
+            if (u > .12 && S.once(A, "sy")) S.say(a, "후~ 비눗방울이다!", 2.2);
+        }, null);
+        A_(S, "gape", 3.6, null, (a, u, dt, A) -> {
+            // 하마답게 입을 쩌억~ 크게 하품
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .1 && u < .84; cell(a, on ? 8 : -1, on ? 0 : -1);
+            if (on) { double k = Math.sin((u - .1) / .74 * PI); a.sy = 1 + .03 * k; a.ang = -.03 * k; }
+            if (on && S.every(A, "zz", .8)) S.ptx("zzz", a.x + a.dir * h * .3, S.feetY(a) - h * .85, 1, po().a(-PI * .6, -PI * .4).s(6, 9).g(-4).l(1, 1.4).r(1));
+            if (u > .14 && S.once(A, "sy")) S.say(a, "하아~암! 졸려요", 2.0);
+        }, null);
+        A_(S, "shoeswap", 4.2, null, (a, u, dt, A) -> {
+            // 앉아서 신발을 갈아 신어 본다 — 이것도 예쁘고 저것도 예뻐!
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .06 && u < .92; boolean alt = (int) Math.floor((T - A.t0) / .85) % 2 == 1;
+            cell(a, on ? (alt ? 12 : 9) : -1, on ? 7 : -1);
+            if (on && S.every(A, "sp", .2)) S.ptx("spark", a.x + a.dir * h * .1 + (S.rnd() - .5) * h * .5, S.feetY(a) - h * .12 - S.rnd() * h * .14, 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(0).l(.3, .5).r(.9));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "이 신발도 예쁘고~", 1.8);
+            if (u > .56 && S.once(A, "s2")) S.say(a, "저 신발도 예쁘다!", 1.8);
+        }, null);
+        A_(S, "polish", 3.6, null, (a, u, dt, A) -> {
+            // 허리를 굽혀 신발을 쓱쓱 닦아 반짝반짝
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .06 && u < .9; cell(a, on ? 10 : -1, on ? 0 : -1);
+            if (on) {
+                a.ox = Math.sin(T * 13) * 1.4; a.sy = 1 - .015 * Math.abs(Math.sin(T * 13));
+                if (S.every(A, "sp", .14)) S.ptx("spark", a.x + a.dir * h * .3 + (S.rnd() - .5) * h * .3, S.feetY(a) - h * .12 - S.rnd() * h * .1, 1, po().a(-PI * .9, -PI * .1).s(8, 18).g(0).l(.3, .5).r(1));
+            }
+            if (u > .1 && S.once(A, "sy")) S.say(a, "쓱쓱~ 반짝반짝 닦자!", 2.2);
+        }, null);
+        A_(S, "flower", 3.4, null, (a, u, dt, A) -> {
+            // 머리의 데이지 꽃을 매만지며 으쓱
+            double h = S.HH(a), T = S.t; S.standF(a); boolean on = u > .08 && u < .9; cell(a, on ? 11 : -1, on ? 2 : -1);
+            if (on) { a.ang = Math.sin(T * 3.2) * .02; a.y = -Math.abs(Math.sin(T * 4)) * 1.2; }
+            if (on && S.every(A, "hh", .8)) S.ptx("heart", a.x + a.dir * h * .2, S.feetY(a) - h * 1.0, 1, po().a(-PI * .9, -PI * .1).s(14, 26).g(30).l(.9, 1.3).r(1).jx(5));
+            if (u > .1 && S.once(A, "sy")) S.say(a, "내 꽃이 제일 예쁘죠?", 2.2);
+        }, null);
+        // ── 놓았을 때: 입에서 땅으로 물대포로 안전하게 착지 → 주변 친구들에게 물대포 발사 → 친구들이 놀라 도망 ──
+        A_(S, "L_hose", 1.4, (a, t, A) -> {
+            SceneCore.Gfx pg = S.gfx("puddle", a.x, a.z, 3.4); pg.r = 13; S.addGfx(pg);
+            S.ptx("splash", a.x, S.feetY(a) - 1, 8, po().a(-PI * .95, -PI * .05).s(20, 50).g(170).l(.35, .7).jx(7)); S.ptx("ring", a.x, S.feetY(a), 1, po().a(0, 0).s(0, 0).g(0).l(.8, .8));
+            S.say(a, "사뿐~ 안전 착지!", 1.5); a.chain = "squirt";
+        }, (a, u, dt, A) -> {
+            S.standF(a);
+            if (u < .5) { cell(a, 2, 0); a.sy = .86 + .14 * ease(u / .5); a.sx = 1.1 - .1 * ease(u / .5); } else { cell(a, 4, 2); a.ang = Math.sin(S.t * 6) * .02; }
+        }, null);
+        A_(S, "squirt", 9.0, (a, t, A) -> {
+            java.util.List<Actor> L = new java.util.ArrayList<>();
+            for (Actor o : S.actors) if (o != a && !o.dead && !o.hidden && !o.hero && o.vis && !o.leaving) L.add(o);
+            final double ax = a.x; java.util.Collections.sort(L, (p, q) -> Double.compare(Math.abs(p.x - ax), Math.abs(q.x - ax)));
+            A.tg = new java.util.ArrayList<>(L.subList(0, Math.min(3, L.size()))); A.lx = t;
+        }, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t, e = T - A.t0; S.standF(a); int n = A.tg.size();
+            double fire0 = .8, per = .95, fireEnd = fire0 + (n == 0 ? 1.3 : per * n);
+            double mx = a.x + a.dir * h * .3, my = S.feetY(a) - h * .6;
+            if (e < fire0) {
+                cell(a, 3, 0); if (n > 0) a.dir = A.tg.get(0).x >= a.x ? 1 : -1; a.sx = 1 + .05 * Math.sin(e * 24) * (e / fire0); if (S.once(A, "rd")) S.say(a, "이번엔 내 차례! 물대포~!", 2.0);
+            } else if (e < fireEnd) {
+                double fe = e - fire0;
+                if (n == 0) {
+                    cell(a, 5, 0); S.pr(a, S.jetProp(mx, my, mx + a.dir * h * 1.4, my - h * .5)); if (S.once(A, "sy")) { S.say(a, "쏴아~!", 1.2); S.haptic("squirt"); }
+                } else {
+                    int i = Math.min(n - 1, (int) Math.floor(fe / per)); Actor o = A.tg.get(i); cell(a, 3, 0); a.dir = o.x >= a.x ? 1 : -1;
+                    mx = a.x + a.dir * h * .3; double tx = o.x + o.ox, ty = S.feetY(o) - S.HH(o) * .5 + o.y, k = clamp((fe - i * per) / .14, .05, 1);
+                    S.pr(a, S.jetProp(mx, my, mx + (tx - mx) * k, my + (ty - my) * k));
+                    if (S.once(A, "st" + i)) { S.startle(a, o); S.haptic("squirt"); }
+                    if (k >= 1 && S.every(A, "sp", .09)) S.ptx("splash", tx, ty, 2, po().a(-PI * .95, -PI * .05).s(16, 40).g(170).l(.3, .6).jx(5));
+                }
+            } else {
+                cell(a, 4, 2); a.ang = Math.sin(T * 6) * .02; if (S.once(A, "sm")) { S.say(a, "헤헤~ 시원하지?", 1.8); S.ptx("heart", a.x, S.feetY(a) - h * .8, 3, po().a(-PI * .98, -PI * .02).s(24, 50).g(55).l(.9, 1.3).r(1).jx(5)); }
+                if (e > fireEnd + 1.2) A.dur = e + .01;
+            }
+        }, null);
+        // ── 물대포를 맞은 친구들: 깜짝 놀라 달아난다 ──
+        A_(S, "flee", 2.8, null, (a, u, dt, A) -> {
+            double h = S.HH(a), T = S.t, side = a.x >= A.fx ? 1 : -1; S.standF(a);
+            if (u < .13) {
+                a.dir = (int) -side; a.y = -Math.sin(PI * u / .13) * 10 * SceneCore.zs(a.z); a.sy = 1 + .08 * Math.sin(PI * u / .13);
+                if (S.once(A, "bang")) { S.say(a, "!!", .9); S.ptx("sweat", a.x, S.feetY(a) - h * .9, 3, po().a(-PI * .85, -PI * .15).s(10, 22).g(120).l(.5, .8).jx(4)); }
+            } else {
+                double[] r = S.inRange(a); double tx = clamp(a.x + side * 220, r[0], r[1]); a.dir = (int) side;
+                S.moveX(a, tx, a.spd * 2.4, dt); a.y = -Math.abs(Math.sin(T * 15)) * 2.2;
+                if (S.once(A, "yell")) S.say(a, (a.id.length() + a.ai) % 3 == 0 ? "으앗, 차가워!" : (a.id.length() + a.ai) % 3 == 1 ? "꺄악! 도망가자!" : "물이다~!", 1.6);
+                if (S.every(A, "sw", .3)) S.ptx("sweat", a.x - side * h * .1, S.feetY(a) - h * .9, 1, po().a(-PI * .85, -PI * .15).s(8, 16).g(120).l(.4, .7).jx(3));
+            }
+        }, null);
     }
 
     /** 엔진이 정한 날씨 반응 말(traits[id].say[동작])을 말풍선에 띄운다. 엔진이 말을 주지 않았으면 말하지 않는다(앱이 지어내지 않는다). */

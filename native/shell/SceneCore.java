@@ -24,7 +24,7 @@ public final class SceneCore {
         SceneCv.Img sheet(String id);
         SceneCv.Img intro();
         boolean ready();
-        /** 진동 이름: grab, release, land_cotton, land_pose, land_dig, land_flip, land_fly, land_puddle, land, hearts, thud, angry, splash, flap */
+        /** 진동 이름: grab, release, land_cotton, land_pose, land_dig, land_flip, land_fly, land_puddle, land_tumble, land_hose, squirt, land, hearts, thud, angry, splash, flap */
         void haptic(String name);
         /** 길게 눌러 캐릭터를 잡았다(→ 아래 웹뷰의 손가락 동작을 취소해야 한다) */
         void held();
@@ -42,6 +42,8 @@ public final class SceneCore {
     static final class Prop { String k; boolean abs, front; double x, y, dx, dy, r, s; }
     static final class Stk { String k; double t0, dur; }
     static final class Ball { double x, y, vx, vy; }
+    /** 죽순이가 떨어뜨린 대나무(공중에서 구르다 땅에 눕는다 — 주인이 찾으러 와서 집어 든다) */
+    static final class Bam { double x, y, z, vx, vy, rot, vr, t0; boolean landed, taken; int bounces; Actor owner; }
     static final class Feather { double x, y, vy, ph; boolean land, got; }
     static final class Chip { double dx, dy, r; int col; }
     static final class Gfx {
@@ -59,7 +61,7 @@ public final class SceneCore {
     /** 동작 한 번의 상태(웹의 a.act 객체) */
     static final class AS {
         String n; double t0, dur; int d0;
-        Ball b; Feather f; Gfx g, b1, b2, m;
+        Ball b; Feather f; Gfx g, b1, b2, m; Actor tgt; List<Actor> tg;
         double mx, hx, tx, px, x0, x1 = Double.NaN, bx, s0 = Double.NaN, s1 = Double.NaN, fx, lx, alt0, z0, tz; int dir0; boolean snow;
         final HashMap<String, Double> ev = new HashMap<>();
         final HashMap<String, Boolean> on = new HashMap<>();
@@ -77,6 +79,7 @@ public final class SceneCore {
         String bub = ""; List<Prop> pr; Stk stk; int ai; AS act; Arrive onArrive;
         Integer lastCyc; double dirT; String afterEmerge, prevSt, landK = "";
         double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil, boost;
+        int cell = -1; String sk, chain;     // cell: 전용 동작 시트(<id>_act 4×4) 칸, -1 이면 안 씀 · sk: 걷기 시트 대신 쓸 시트 열쇠(대나무 없는 죽순이 juksun_nb) · chain: 지금 동작이 끝나면 이어서 할 동작
     }
 
     // ═══ 상태 ═══
@@ -87,7 +90,7 @@ public final class SceneCore {
     double tv = -1;
     static final double TV_OFF = .30, TV_HOLD = .08, TV_ON = .42, TV_T = TV_OFF + TV_HOLD + TV_ON;
     String mode; SceneModel.Res res, LAST; SceneArt.Pal L; SceneArt.Bg bg; SceneCv.Layer prev;
-    List<Actor> actors = new ArrayList<>(); List<Traffic> traffic = new ArrayList<>(); List<Pt> pt = new ArrayList<>(); List<Gfx> gfx = new ArrayList<>(); List<Ripple> ripples = new ArrayList<>();
+    List<Actor> actors = new ArrayList<>(); List<Traffic> traffic = new ArrayList<>(); List<Pt> pt = new ArrayList<>(); List<Gfx> gfx = new ArrayList<>(); List<Ripple> ripples = new ArrayList<>(); List<Bam> bams = new ArrayList<>();
     Actor hero; Seq seq; Ride ride; double nextCar, spawnAt, waitNext, bellAt; int castI;
     double stopX, entX; boolean inside; String sta = "", vk = ""; String venue = "bus"; int baseDir = -1; int busColor; String busNo; String bgKey = "";
     SceneTrain.St tr;
@@ -232,7 +235,11 @@ public final class SceneCore {
     void actStep(Actor a, double dt) {
         AS A = a.act; Act d = A != null ? ACT.get(A.n) : null; if (d == null) { endAct(a); return; }
         double u = A.dur > 0 ? (t - A.t0) / A.dur : 1;
-        if (u >= 1) { if (d.end != null) d.end.f(a, A); if (a.st.equals("act")) endAct(a); return; }
+        if (u >= 1) {
+            if (d.end != null) d.end.f(a, A);
+            if (a.chain != null && a.st.equals("act")) { String cn = a.chain; a.chain = null; startAct(a, cn); return; }          // 착지 연출 → 이어지는 동작(죽순 찾기·물대포 쏘기)
+            if (a.st.equals("act")) endAct(a); return;
+        }
         d.step.f(a, u, dt, A);
         if (a.hero && "wait".equals(mode)) { double[] r = inRange(a); a.x = clamp(a.x, r[0], r[1]); }
     }
@@ -240,7 +247,7 @@ public final class SceneCore {
         SceneModel.Spec D = a.D; double u = a.until > a.t0 ? (t - a.t0) / (a.until - a.t0) : 0; String st = a.st;
         if (!a.bub.isEmpty() && t > a.bubUntil && !st.equals("rest")) a.bub = "";
         if (st.equals("fall")) { fallStep(a, dt); return; }
-        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1;
+        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1; a.cell = -1; a.sk = null;
         if (a.kind.equals("eagle") && !a.hero) a.alt = 16 + Math.sin(t * 1.7 + a.x * .03) * 5;
         if (st.equals("emerge")) {
             a.intro = true; a.ii = (int) Math.min(D.intro - 1, Math.floor(u * D.intro));
@@ -309,7 +316,7 @@ public final class SceneCore {
     /** 장면의 '자리' 열쇠(정류장 · 역 입구 · 역 안 승강장). 같은 mode(wait)여도 버스 → 지하철처럼 자리가 바뀌면 장면을 다시 만든다. */
     static String venueKey(SceneModel.Res r) { return (r.venue == null ? "" : r.venue) + (r.inside ? "/in" : ""); }
     void setup(String m) {
-        dragReset(); mode = m; actors = new ArrayList<>(); traffic = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); hero = null; seq = null; nextCar = t + rnd(1.2, 3); spawnAt = t + .2; castI = 0; ripples = new ArrayList<>(); rideBell = false;
+        dragReset(); mode = m; actors = new ArrayList<>(); traffic = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); bams = new ArrayList<>(); hero = null; seq = null; nextCar = t + rnd(1.2, 3); spawnAt = t + .2; castI = 0; ripples = new ArrayList<>(); rideBell = false;
         stopX = Math.round(W * .3); entX = Math.round(W * .36); venue = "sub".equals(res.venue) ? "sub" : "bus"; baseDir = venue.equals("sub") ? 1 : -1;
         inside = false; sta = ""; vk = venueKey(res);
         if (m.equals("train")) { venue = "sub"; SceneTrain.setup(this); return; }                  // 지하철 객실(혼잡도 카드의 두 번째 쪽): 친구·자리·승하차는 엔진(res.train)이 정한 값
@@ -431,7 +438,7 @@ public final class SceneCore {
         Pend P = PEND; PEND = null; if (P == null || P.a == null || P.a.dead || !actors.contains(P.a) || "ride".equals(mode)) return;
         Actor a = P.a; double zc = zy(a.z);
         DRAG = new Drag(); DRAG.a = a; DRAG.fx = a.x; DRAG.fy = zc; DRAG.px = a.x; DRAG.py = zc;
-        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
+        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
         haptic("grab"); try { host.held(); } catch (RuntimeException e) { /* 무시 */ }
         addPart("puff", a.x, zy(a.z) - 2, 3);
     }
@@ -456,11 +463,16 @@ public final class SceneCore {
         a.held = false; a.pinned = true; a.pinX = a.x; a.lastBounce = false; a.landK = landOf(a); a.t0 = t; a.fy0 = a.y; a.vy = 0; a.sx = a.sy = 1;
         haptic("release"); hotUntil = t + 3.2;
         if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "flyaway"); haptic("flap"); return; }      // 떨어지다가 날개를 펴 날아간다
-        if (a.landK.equals("flip") && H0y < 40) a.vy = -190;                                                                       // 낮게 놓아도 한 바퀴 돌 시간을 번다
-        if (a.landK.equals("cotton")) gg = 150;
-        if (a.landK.equals("flip")) gg = 400;
+        boolean flipLike = a.landK.equals("flip") || a.landK.equals("tumble");
+        if (flipLike && H0y < 40) a.vy = -190;                                                                                     // 낮게 놓아도 한 바퀴 돌 시간을 번다
+        if (a.landK.equals("cotton") || a.landK.equals("hose")) gg = 150;
+        if (flipLike) gg = 400;
         a.airT = (Math.abs(Math.min(0, a.vy)) + Math.sqrt(a.vy * a.vy + 2 * gg * H0y)) / gg;
-        if (a.landK.equals("cotton")) a.airT = Math.max(.5, Math.min(1.3, H0y / 60 + .3));
+        if (a.landK.equals("cotton") || a.landK.equals("hose")) a.airT = Math.max(.5, Math.min(1.3, H0y / 60 + .3));
+        if (a.landK.equals("tumble")) {                                                                                            // 죽순이: 잡고 있던 대나무를 공중에 놓친다(주인은 앞구르기)
+            Bam b = new Bam(); b.owner = a; b.t0 = t; b.z = a.z; b.x = a.x + a.dir * h * .3; b.y = zy(a.z) + a.y - h * .75; b.vx = a.dir * rnd(22, 46); b.vy = -rnd(40, 95); b.vr = a.dir * rnd(5, 9);
+            bams.add(b); if (bams.size() > 4) bams.remove(0);
+        }
         a.st = "fall";
         if (a.landK.equals("puddle")) { Gfx pg = gfx("puddle", a.x, a.z, 9); pg.r = 15; addGfx(pg); }          // 놓은 자리에 웅덩이가 생긴다
     }
@@ -469,6 +481,15 @@ public final class SceneCore {
         a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8;
         if (kk.equals("cotton")) { gg = 150; a.vy = Math.min(a.vy, 70); a.sx = a.sy = 1 + .34 * ease(tf / .45); a.ang = 0; }
         else if (kk.equals("flip")) { gg = 400; a.pvy = -h * .5; a.ang = PI2 * ease(clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1)); }
+        else if (kk.equals("tumble")) {                                                       // 죽순이: 버둥 → 몸을 말아 앞으로 한 바퀴 → 웅크려 착지
+            gg = 400; a.pvy = -h * .5; double p = clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1); a.ang = PI2 * ease(clamp((p - .14) / .72, 0, 1));
+            a.cell = p < .14 ? 1 : p < .86 ? 0 : 2; a.sk = "juksun_nb"; a.pose = -1;
+        }
+        else if (kk.equals("hose")) {                                                         // 베비히포: 입에서 땅으로 물대포를 쏘아 물 쿠션으로 사뿐히 내려앉는다
+            gg = 150; a.vy = Math.min(a.vy, 85); a.ang = 0; a.cell = 1; a.pose = -1;
+            double mx = a.x + a.dir * h * .3, my = zy(a.z) + a.y - h * .55; pr(a, jetProp(mx, my, mx + a.dir * 2, zy(a.z)));
+            if (every2("hosefx", .07)) ptx("splash", mx + a.dir * 2, zy(a.z) - 1, 1, po().a(-PI * .95, -PI * .05).s(16, 40).g(170).l(.3, .6).jx(5));
+        }
         else if (kk.equals("pose")) a.ang = -.35 * ease(tf / .15);
         a.vy += gg * dt; a.y += a.vy * dt;
         if (a.y >= 0) {
@@ -492,6 +513,58 @@ public final class SceneCore {
         if ("walk".equals(a.prevSt) && a.onArrive != null) a.st = "walk";                  // 걸어가던 길(승하차 장면의 대표 캐릭터)은 놓은 자리에서 이어서
         else if (a.hero) { a.st = "stand"; waitNext = t + .35; }
         else nextAct(a);                                                                   // 놓자마자 바로 움직인다(엔진 대본의 다음 동작)
+    }
+
+    // ═══ 전용 동작 도구: 물줄기 소품 · 떨어진 대나무 · 놀라 달아나기 ═══
+    final HashMap<String, Double> evg = new HashMap<>();
+    boolean every2(String key, double gap) { Double v = evg.get(key); if (v == null || t - v >= gap || v > t) { evg.put(key, t); return true; } return false; }
+    /** (x,y)에서 (x2,y2)까지 뻗는 물줄기(소품). 입에서 땅으로, 또는 입에서 친구에게. */
+    Prop jetProp(double x, double y, double x2, double y2) { Prop p = propAbs("jet", x, y); p.s = x2; p.r = y2; return p; }
+    void dropBams(Actor a) { for (int i = bams.size() - 1; i >= 0; i--) if (bams.get(i).owner == a) bams.remove(i); }
+    Bam bamOf(Actor a) { for (Bam b : bams) if (b.owner == a && !b.taken) return b; return null; }
+    void stepBams(double dt) {
+        for (int i = bams.size() - 1; i >= 0; i--) {
+            Bam b = bams.get(i);
+            if (b.owner != null && (b.owner.dead || !actors.contains(b.owner))) { bams.remove(i); continue; }
+            if (b.taken || t - b.t0 > 40) { bams.remove(i); continue; }
+            if (b.landed) continue;
+            b.vy += 560 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.rot += b.vr * dt;
+            double gy = zy(b.z) - 1.5;
+            if (b.y >= gy) {
+                b.y = gy;
+                if (b.bounces < 2 && b.vy > 40) { b.vy = -b.vy * .38; b.vx *= .55; b.vr *= .4; b.bounces++; addPart("dust", b.x, gy, 2); }
+                else { b.landed = true; b.vx = 0; b.vy = 0; b.vr = 0; b.rot = Math.round(b.rot / PI) * PI + .06; }
+            }
+            b.x = clamp(b.x, 10, W - 10);
+        }
+    }
+    /** 대나무 한 그루(x,y 가운데, rot 기울기, len 길이). */
+    void drawBamboo(SceneCv c, double x, double y, double rot, double len, double zz) {
+        double w = 3.4 * zz;
+        c.save(); c.translate(x, y); c.rotate(rot); c.lineCapRound(true);
+        c.strokeStyle("#3f8f3a"); c.lineWidth(w + 1.2); c.beginPath(); c.moveTo(-len / 2, 0); c.lineTo(len / 2, 0); c.stroke();
+        c.strokeStyle("#86d466"); c.lineWidth(w); c.beginPath(); c.moveTo(-len / 2, 0); c.lineTo(len / 2, 0); c.stroke();
+        c.strokeStyle("#3f8f3a"); c.lineWidth(1); c.beginPath();
+        for (int i = 1; i < 4; i++) { double nx = -len / 2 + len * i / 4; c.moveTo(nx, -w * .6); c.lineTo(nx, w * .6); }
+        c.stroke();
+        c.fillStyle("#5fb04a"); c.beginPath(); c.ellipse(len / 2 - 1, -w * .9, 4 * zz, 1.6 * zz, -.5, 0, PI2); c.fill(); c.beginPath(); c.ellipse(len / 2 - 3, w * .9, 3.4 * zz, 1.4 * zz, .5, 0, PI2); c.fill();
+        c.restore();
+    }
+    void drawBams(SceneCv c, boolean air) {
+        for (Bam b : bams) {
+            if (b.landed == air || b.taken) continue;
+            double zz = zs(b.z), len = TH * zz * .9;
+            if (b.landed) { c.fillStyle("rgba(0,0,0,.18)"); c.beginPath(); c.ellipse(b.x, b.y + 1.5, len * .46, 2.4 * zz, 0, 0, PI2); c.fill(); }
+            drawBamboo(c, b.x, b.y - (b.landed ? 2.2 * zz : 0), b.rot, len, zz);
+        }
+    }
+    /** 물대포를 맞은 친구가 깜짝 놀라 달아난다(src 는 쏜 친구). 못 움직이는 상태(잡힘·낙하·착지 연출·퇴장·역 대기 대표)는 건드리지 않는다. */
+    void startle(Actor src, Actor o) {
+        if (o == null || o == src || o.dead || o.hidden || o.leaving || o.hero || o.held || o.nograb || o.onArrive != null || !o.vis) return;
+        String s = o.st; if (s.equals("fall") || s.equals("held") || s.equals("emerge") || s.equals("pan") || s.equals("hidden")) return;
+        if (s.equals("act") && o.act != null && (o.act.n.startsWith("L_") || o.act.n.equals("flee") || o.act.n.equals("flyaway"))) return;
+        o.chain = null; o.pr = null; o.cut = Double.NaN; o.alt = o.kind.equals("eagle") ? o.alt : 0;
+        startAct(o, "flee"); if (o.act != null) o.act.fx = src.x;
     }
 
     // ═══ 버스 안(타고 가는 중) ═══
@@ -567,6 +640,14 @@ public final class SceneCore {
                 double fr = 5.2 * zz; c.translate(X, Y); c.rotate(p.r - .6 * a.dir); c.fillStyle("#f2c94c"); c.strokeStyle("#9c6b17"); c.lineWidth(.8);
                 c.beginPath(); c.arc(0, -fr * 1.1, fr, 0, PI2); c.fill(); c.stroke(); c.strokeStyle("#9c6b17"); c.beginPath(); c.moveTo(0, -fr * .1); c.lineTo(0, fr * .9); c.stroke();
                 c.strokeStyle("rgba(156,107,23,.55)"); c.lineWidth(.6); c.beginPath(); c.moveTo(-fr * .6, -fr * 1.1); c.lineTo(fr * .6, -fr * 1.1); c.moveTo(0, -fr * 1.9); c.lineTo(0, -fr * .3); c.stroke();
+            } else if (k.equals("jet")) {
+                double X2 = p.s, Y2 = p.r, dx = X2 - X, dy = Y2 - Y; c.lineCapRound(true);
+                c.strokeStyle("rgba(110,185,255,.5)"); c.lineWidth(5.2 * zz); c.beginPath(); c.moveTo(X, Y); c.lineTo(X2, Y2); c.stroke();
+                c.strokeStyle("rgba(214,238,255,.95)"); c.lineWidth(2.4 * zz); c.beginPath(); c.moveTo(X, Y); c.lineTo(X2, Y2); c.stroke();
+                c.fillStyle("#ffffff"); for (i = 0; i < 5; i++) { double u2 = (T * 3.2 + i / 5.0) % 1; c.beginPath(); c.arc(X + dx * u2, Y + dy * u2, 1.5 * zz, 0, PI2); c.fill(); }
+                c.fillStyle("rgba(190,225,255,.7)"); c.beginPath(); c.ellipse(X2, Y2, 5.5 * zz, 2.4 * zz, 0, 0, PI2); c.fill();
+            } else if (k.equals("bamboo")) {
+                drawBamboo(c, X, Y, p.r, h * .95, zz);
             } else if (k.equals("moundhat")) {
                 double mr = p.r != 0 ? p.r : h * .2; c.fillStyle("#8a6a45"); c.beginPath(); c.moveTo(X - mr, Y); c.quadTo(X - mr * .7, Y - mr * 1.1, X, Y - mr * 1.05); c.quadTo(X + mr * .7, Y - mr * 1.1, X + mr, Y); c.closePath(); c.fill();
                 c.fillStyle("rgba(0,0,0,.18)"); c.beginPath(); c.arc(X - mr * .3, Y - mr * .5, mr * .2, 0, PI2); c.arc(X + mr * .35, Y - mr * .35, mr * .15, 0, PI2); c.fill();
@@ -648,11 +729,13 @@ public final class SceneCore {
     }
     void drawActor(SceneCv c, Actor a) {
         if (!a.vis) return;
-        SceneModel.Spec D = a.D; SceneCv.Img sheet = a.intro ? host.intro() : host.sheet(a.id); if (sheet == null) return;
+        SceneModel.Spec D = a.D; SceneCv.Img sheet = a.intro ? host.intro() : a.sk != null && host.sheet(a.sk) != null ? host.sheet(a.sk) : host.sheet(a.id); if (sheet == null) return;
         SceneCv.Img psh = !a.intro && a.pose >= 0 ? host.sheet(a.id + "_pose") : null;          // 자세 시트가 없으면(옛 설치·읽기 실패) 걷기 시트로 그린다
+        SceneCv.Img ash = !a.intro && a.cell >= 0 ? host.sheet(a.id + "_act") : null;           // 전용 동작 시트(쮸르·베비히포) — 없으면 자세·걷기 시트로 대신
         double zz = zs(a.z), s = a.k * zz * (a.held ? 1.12 : 1), sc = D.cell / 256 * s, y = zy(a.z);
         int idx = a.intro ? a.ii : (int) Math.floorMod((long) Math.floor(a.fr), 16L);
-        if (psh != null) { sheet = psh; idx = Math.max(0, Math.min(7, a.pose)); }
+        if (ash != null) { sheet = ash; idx = Math.max(0, Math.min(15, a.cell)); }
+        else if (psh != null) { sheet = psh; idx = Math.max(0, Math.min(7, a.pose)); }
         double lift = (D.lift + a.alt) * zz * (a.kind.equals("eagle") ? 1 : s / a.k);
         double shA = (L.night ? .22 : .34) * (a.kind.equals("eagle") ? .7 : 1) * (L.wk.equals("rain") || L.wk.equals("overcast") ? .7 : 1);
         boolean sunk = !Double.isNaN(a.cut) && a.y > TH * zz * .9;
@@ -763,11 +846,11 @@ public final class SceneCore {
         if (q != null && q.busOn) { SceneArt.VehOpt o = new SceneArt.VehOpt(); o.color = q.color; o.door = q.door; o.door2 = 0; o.dir = 1; o.rot = q.busX * .12; o.no = busLabel(); o.night = L.night; SceneArt.drawBus(c, q.busX, g.nearTop - 3, q.L, o); }
         drawTrafficPan(c, 1); drawTraffic(c, 1);
         if (!inside && ("wait".equals(mode) || "alight".equals(mode))) { if (venue.equals("sub")) SceneArt.drawEntrance(c, g, entX, L, res.line); else SceneArt.drawStop(c, g, stopX, L); }
-        drawGfx(c, false);
+        drawGfx(c, false); drawBams(c, false);
         List<Actor> arr = new ArrayList<>(); for (Actor a : actors) if (a.vis) arr.add(a);
         Collections.sort(arr, new Comparator<Actor>() { public int compare(Actor a, Actor b) { return Double.compare(a.held ? 9 : a.z, b.held ? 9 : b.z); } });
         for (Actor a : arr) drawActor(c, a);
-        drawGfx(c, true);
+        drawGfx(c, true); drawBams(c, true);
         for (Actor a : arr) if (a.stk != null) {
             double su = (t - a.stk.t0) / a.stk.dur;
             if (su >= 1) a.stk = null; else drawSticker(c, a.x + a.dir * a.w * .12, zy(a.z) - TH * zs(a.z) * 1.12 - 12 - (!a.bub.isEmpty() ? 16 : 0) + Math.min(0, a.y), a.stk.k, su);
@@ -1035,6 +1118,7 @@ public final class SceneCore {
                     }
                 }
                 if (DRAG != null && !actors.contains(DRAG.a)) dragReset();
+                stepBams(dt);
             } else rideStep(dt);
         } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
     }

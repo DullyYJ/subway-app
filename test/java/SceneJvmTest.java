@@ -199,7 +199,7 @@ public class SceneJvmTest {
         }
 
         // 3) 잡았다 놓기: 캐릭터별 착지 연출 + 진동
-        String[][] expect = {{"dolsom", "cotton"}, {"ppopu", "pose"}, {"dudung", "dig"}, {"lovel", "flip"}, {"sul", "fly"}, {"chaeng", "puddle"}};
+        String[][] expect = {{"dolsom", "cotton"}, {"ppopu", "pose"}, {"dudung", "dig"}, {"lovel", "flip"}, {"sul", "fly"}, {"chaeng", "puddle"}, {"juksun", "tumble"}, {"bbosong", "hose"}};
         for (String[] ex : expect) {
             ok(idle.traits.get(ex[0]).land.equals(ex[1]), ex[0] + ": 엔진의 착지 연출 = " + ex[1]);
             TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle);
@@ -221,6 +221,50 @@ public class SceneJvmTest {
             if (ex[1].equals("cotton")) ok(h.hap.contains("hearts"), "하얀 강아지: 하트 진동");
             if (ex[1].equals("dig")) ok(h.hap.contains("thud") && h.hap.contains("angry"), "두더지: 땅 파고 들어가는 진동 → 나와서 화내는 진동 " + h.hap);
             if (ex[1].equals("puddle")) ok(h.hap.contains("splash"), "올챙이: 첨벙 진동");
+        }
+        // 3-c) 쮸르: 놓으면 죽순을 공중에 떨어뜨리고 앞으로 한 바퀴 → 착지 → 죽순을 찾아 집어 든다
+        {
+            TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle); c.debugDrop("juksun", 90, true);
+            SceneCore.Actor ac = c.actors.get(0); boolean sawBam = false, sawAir = false, sawLay = false, sawSearch = false, sawFound = false, sawNb = false; double maxAng = 0; java.util.Set<Integer> cells = new java.util.HashSet<>();
+            for (int i = 0; i < 30 * 16; i++) {
+                c.update(1.0 / 30);
+                if (!c.bams.isEmpty()) { sawBam = true; if (!c.bams.get(0).landed) sawAir = true; else sawLay = true; }
+                maxAng = Math.max(maxAng, Math.abs(ac.ang)); if (ac.act != null && ac.act.n.equals("search")) sawSearch = true;
+                if (ac.sk != null) sawNb = true; if (ac.cell >= 0) cells.add(ac.cell);
+                if (ac.cell == 5 && sawSearch) sawFound = true;
+                if (c.error != null) break;
+            }
+            ok(c.error == null, "쮸르 떨어뜨림: 오류 없음 " + c.error);
+            ok(sawBam && sawAir && sawLay, "죽순(대나무)이 공중에서 떨어져 땅에 눕는다");
+            ok(maxAng > 5.5, "앞으로 한 바퀴(최대 각도 " + maxAng + ")");
+            ok(cells.contains(1) && cells.contains(0) && cells.contains(2), "버둥(1)→웅크림(0)→쭈그림(2) 칸을 쓴다 " + cells);
+            ok(sawSearch && sawNb && cells.contains(3) && cells.contains(4), "착지 뒤 죽순을 찾으러 간다(두리번 3·킁킁 4) " + cells);
+            ok(sawFound && c.bams.isEmpty(), "죽순을 찾아 집어 들면 땅의 죽순이 없어진다");
+            ok(h.hap.contains("land_tumble"), "쮸르 착지 진동 " + h.hap);
+        }
+        // 3-d) 베비히포: 놓으면 입에서 땅으로 물대포 → 안전 착지 → 주변 친구에게 물대포 → 친구들이 놀라 도망간다
+        {
+            TestHost h = fakeHost(); SceneCore c = core(h, 9); c.layout(340, 190, 2.75, true); c.apply(idle);
+            for (int i = 0; i < 30 * 25 && c.actors.size() < 4; i++) c.update(1.0 / 30);
+            SceneCore.Actor hip = null; for (SceneCore.Actor o : c.actors) if (!o.id.equals("bbosong") && !o.hero) { hip = o; break; }
+            ok(c.actors.size() >= 3, "물대포 시험: 친구가 여럿 모였다 " + c.actors.size());
+            c.debugDrop("bbosong", 90, false);
+            SceneCore.Actor ac = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("bbosong")) ac = o;
+            boolean sawJet = false, sawSq = false, sawFlee = false, sawLandCell = false; double minVy = 0; java.util.Set<Integer> cells = new java.util.HashSet<>();
+            for (int i = 0; i < 30 * 14; i++) {
+                c.update(1.0 / 30);
+                if (ac.pr != null) for (SceneCore.Prop p : ac.pr) if (p.k.equals("jet")) sawJet = true;
+                if (ac.act != null && ac.act.n.equals("squirt")) sawSq = true; if (ac.cell >= 0) cells.add(ac.cell);
+                for (SceneCore.Actor o : c.actors) if (o != ac && o.act != null && o.act.n.equals("flee")) sawFlee = true;
+                if (ac.st.equals("fall")) minVy = Math.max(minVy, ac.vy);
+                if (c.error != null) break;
+            }
+            ok(c.error == null, "베비히포 물대포: 오류 없음 " + c.error);
+            ok(sawJet && cells.contains(1), "떨어지는 동안 입에서 땅으로 물줄기(칸 1)");
+            ok(minVy <= 90.5, "물 쿠션: 떨어지는 속도가 눌려 사뿐히 내려앉는다(최대 " + minVy + ")");
+            ok(sawSq && cells.contains(3), "착지 뒤 물대포를 쏜다(칸 3) " + cells);
+            ok(sawFlee, "맞은 친구들이 놀라 도망간다(flee)");
+            ok(h.hap.contains("land_hose") && h.hap.contains("squirt"), "물대포 진동 " + h.hap);
         }
         // 3-b) 하얀 강아지는 다른 그림 없이 몸이 자연스럽게 부풀었다 돌아온다
         {
@@ -337,7 +381,7 @@ public class SceneJvmTest {
         }
         // 8) 진동 무늬표: 코어가 알리는 이름마다 무늬가 있고 모양이 올바르다
         for (String n : SceneHaptics.names()) { String e = SceneHaptics.check(n); ok(e == null, "진동 무늬 " + n + (e == null ? "" : " — " + e)); }
-        for (String n : new String[]{"grab", "release", "land", "land_cotton", "land_pose", "land_dig", "land_flip", "land_fly", "land_puddle", "flap", "hearts", "thud", "angry", "splash", "grin"})
+        for (String n : new String[]{"grab", "release", "land", "land_cotton", "land_pose", "land_dig", "land_flip", "land_fly", "land_puddle", "land_tumble", "land_hose", "squirt", "flap", "hearts", "thud", "angry", "splash", "grin"})
             ok(SceneHaptics.get(n) != null, "진동 이름 '" + n + "' 에 무늬가 있다");
         ok(SceneHaptics.get("없는이름") == null && SceneHaptics.get(null) == null, "모르는 이름은 울리지 않는다");
         // 9) 주사율 정책: 손가락·착륙 연출 중에만 interactive(= 끝까지 120Hz), 평소엔 아님

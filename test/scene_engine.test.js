@@ -120,8 +120,8 @@ const S = (name, line) => N({ name, isSub: true, lineName: line || '2호선' }),
     assert(seen.size >= 4, '여러 캐릭터가 골고루 뽑힌다: ' + [...seen]);
   });
   await t('캐릭터 특성(YJ 10-16): 8종 모두 착지 연출·동작 대본이 있고, 가을·눈 올 때만 낙엽 다이빙이 들어간다', () => {
-    const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle', juksun: 'cotton', bbosong: 'pose' };
-    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'], juksun: ['munch', 'snooze', 'hooray'], bbosong: ['sniff', 'shoeshow', 'sparkle'] };
+    const LAND = { dolsom: 'cotton', ppopu: 'pose', dudung: 'dig', lovel: 'flip', sul: 'fly', chaeng: 'puddle', juksun: 'tumble', bbosong: 'hose' };
+    const sp = { dolsom: ['shake', 'tailchase', 'loaf', 'ball', 'mirror'], ppopu: ['dig', 'bone', 'dance', 'slide'], lovel: ['punch', 'box', 'stretch', 'melt', 'pounce'], dudung: ['shades', 'flag', 'lens', 'dust', 'vanish'], sul: ['glasses', 'stumble', 'feather', 'binoc', 'hover'], chaeng: ['dash', 'flop', 'hide', 'bubbles', 'dew'], juksun: ['munch', 'snooze', 'hooray', 'roll', 'twirl', 'peek', 'bellypat', 'yawn', 'kungfu', 'sneeze'], bbosong: ['sniff', 'shoeshow', 'sparkle', 'fountain', 'tapdance', 'blowbub', 'gape', 'shoeswap', 'polish', 'flower'] };
     const aut = decide({ nowMs: ms('2026-10-16T12:00:00'), locked: false }, null), sum = decide({ nowMs: ms('2026-07-16T12:00:00'), locked: false }, null), snow = decide({ nowMs: ms('2026-01-16T12:00:00'), locked: false }, { txt: '눈', temp: -2, rain: 80 });
     Object.keys(LAND).forEach(id => {
       assert.strictEqual(aut.traits[id].land, LAND[id]);

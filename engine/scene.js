@@ -13,8 +13,10 @@ var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksu
 // ★ 캐릭터 특성(YJ 2026-10-16): 어떤 동작을 어떤 순서로 하는지 · 잡았다 놓았을 때 어떤 연출을 하는지는 엔진이 정한다. 앱은 이 이름대로 그리기만 한다.
 //   land: cotton(솜사탕처럼 부풀어 안전 착륙+하트) | pose(두 발 착지 멋진 포즈+씨익 웃음) | dig(땅속으로 숨었다 2초 뒤 나와 화냄) | flip(공중 앞 한 바퀴 안전 착지)
 //         | fly(날개를 펴 날아가 다른 곳에 착지) | puddle(웅덩이가 생기고 첨벙)
+//         | tumble(쮸르: 들고 있던 죽순을 공중에 떨어뜨리고 앞으로 한 바퀴 돌아 착지 → 죽순을 찾으러 가서 집어 듦)
+//         | hose(베비히포: 입에서 땅으로 물대포를 쏴 안전하게 착지 → 주변 친구들에게 물대포를 쏘면 친구들이 놀라 도망)
 //   acts: 기본(walk·hop·spin·rest)과 캐릭터 전용 동작 이름. 앱은 순서대로 한 동작씩 그린다(끝나면 다음).
-var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "cotton", bbosong: "pose" };
+var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "tumble", bbosong: "hose" };
 var SCENE_ACTS = {
   dolsom: ["shake", "tailchase", "loaf", "ball", "mirror"],
   ppopu: ["dig", "bone", "dance", "slide", "dive"],
@@ -22,8 +24,10 @@ var SCENE_ACTS = {
   dudung: ["shades", "flag", "lens", "dust", "vanish"],
   sul: ["glasses", "stumble", "feather", "binoc", "hover"],
   chaeng: ["dash", "flop", "hide", "bubbles", "dew"],
-  juksun: ["munch", "snooze", "hooray"],          // 대나무 먹기 · 낮잠 · 폴짝폴짝 (활발한 먹보·잠꾸러기)
-  bbosong: ["sniff", "shoeshow", "sparkle"]       // 꽃 향기 · 새 신발 자랑 · 반짝반짝 (꽃과 신발을 사랑하는 깔끔쟁이)
+  // 쮸르(판다): 대나무 먹기 · 낮잠 · 폴짝폴짝 · 데굴데굴 · 대나무 돌리기 · 두리번 빼꼼 · 배 두드리기 · 하품 기지개 · 쿵푸 · 재채기 (활발한 먹보·잠꾸러기)
+  juksun: ["munch", "snooze", "hooray", "roll", "twirl", "peek", "bellypat", "yawn", "kungfu", "sneeze"],
+  // 베비히포(아기 하마): 꽃 향기 · 새 신발 자랑 · 반짝반짝 · 입 분수 · 탭댄스 · 비눗방울 · 쩍 하품 · 신발 갈아신기 · 신발 닦기 · 머리꽃 매만지기 (꽃과 신발을 사랑하는 깔끔쟁이)
+  bbosong: ["sniff", "shoeshow", "sparkle", "fountain", "tapdance", "blowbub", "gape", "shoeswap", "polish", "flower"]
 };
 var SCENE_BASE = ["walk", "hop", "spin", "rest"];
 // ★ 장소(YJ 2026-10-25 "홈 화면 주변 배경도 다양한 장소를 랜덤으로"): 경로가 없을 때(idle)만 바뀐다. 정류장·역 입구가 있는 장면(wait·alight)은 늘 street.
