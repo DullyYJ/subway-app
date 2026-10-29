@@ -7,6 +7,8 @@
 
 var NT_KV_KEY = "nt:bundle:v1";
 var NT_TTL_MS = 6 * 3600 * 1000;
+var NT_NEAR_SEC = 260;            // s333: 승차역까지 걸어서 이 안(≈250m — 승차 대기 재보정 RS_BL_NEAR_M 과 같다)이면 '역 안에 있다'고 보고 지금 오는 열차부터 후보로 본다(걸음 시간을 먼저 빼지 않는다)
+var NT_HURRY_BUF_MS = 30000;      // 앞당겨 탈 때 열차 도착 이만큼(30초) 전에 승강장에 닿는 것으로 그린다
 var NT_MAX_WAIT_MIN = 30;         // 앱의 옛 _TT_MAX_WAIT — 대기가 이보다 길면 반영하지 않는다(막차 뒤·시각표 이상)
 var _NT = null, _NT_AT = 0, _NT_P = null, _NT_FAIL_AT = 0, _NT_WHY = '', _NT_SRC = '';   // _NT_WHY: 마지막 실패 사유 · _NT_SRC: 지금 쓰는 시각표의 출처(kv|svc|embed) — 진단용
 
@@ -72,7 +74,7 @@ function ntLiveTargets(out, id) {
     off = (r.accessWalkMin || 0) * 60;                                     // 첫 구간에 닿는 시각 = 탐색 시각 + 접근 도보(legsToSubPath 의 arriveSec 와 같다)
     key = ntLiveKey(L.line, sl[0], sl[1], off);
     if (seen[key]) continue; seen[key] = 1;
-    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off });
+    res.push({ key: key, line: String(L.line), from: String(sl[0]), to: String(sl[1]), offSec: off, near: off <= NT_NEAR_SEC });
   }
   return res;
 }
@@ -97,8 +99,8 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
     for (j = 0; j < tg.length; j++) {
       e = tg[j];
       var list = lists[e.from];
-      if (!list) { if ((Math.round(baseMs + e.offSec * 1000) - nowMs) / 60000 <= d.aheadMax) miss++; continue; }      // s332: 못 받음(중계 준비 중 · 시간 초과) — 앱이 3·6·10·15초 뒤 다시 묻는다(liveMissing)
-      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + e.offSec * 1000), tz: 540 };
+      if (!list) { if ((Math.round(baseMs + (e.near ? 0 : e.offSec) * 1000) - nowMs) / 60000 <= d.aheadMax) miss++; continue; }      // s332: 못 받음(중계 준비 중 · 시간 초과) — 앱이 3·6·10·15초 뒤 다시 묻는다(liveMissing)
+      var q = { line: e.line, from: e.from, to: e.to, nowMs: nowMs, fromMs: Math.round(baseMs + (e.near ? 0 : e.offSec) * 1000), tz: 540 };      // s333: 역 가까이(near)면 지금부터 — 앞 열차(연착)를 걸음 시간 때문에 건너뛰지 않는다
       if ((q.fromMs - nowMs) / 60000 > d.aheadMax) continue;                                // 20분 넘게 먼 승차는 시각표
       var live = d.pick(list, q, nt); if (live == null) continue;
       var rc = d.rec(live, d.table(q, nt));
@@ -113,6 +115,28 @@ async function ntLiveFirst(env, out, baseMs, nowMs, d) {
 //   baseMs: 탐색 기준 시각(요청의 baseMs).  bf: 앱이 '예상 시각 모드'라 운행종료 보정(svcWarn.shift)을 쓰지 않을 때 true.
 //   ttWaitMs 의 의미 = 앱의 옛 계산과 같다: 그 구간을 타러 가는 시각(탐색 시각 + 구간 startSec + 앞 구간 대기 누적)에 승차역에 닿으면
 //   다음 열차까지 기다리는 시간. 0~30분일 때만 붙는다. 앞 구간의 대기는 뒤 구간 시각에 그대로 이어진다(앱이 합산해 그린다).
+// s333: 첫 구간 앞의 걸음을 shSec 초 줄이고(마지막 도보의 끝) 그 뒤 모든 구간의 시각(startSec·arriveSec·endSec·stopSec)과 총 시간을 같은 만큼 당긴다. 앞 구간이 전부 도보일 때만.
+function ntHurry(path, sub, k, shSec) {
+  var j, w = sub[k - 1];
+  for (j = 0; j < k; j++) if (!sub[j] || sub[j].trafficType !== 3) return false;
+  if (!w || w.endSec == null || w.startSec == null || w.endSec - shSec < w.startSec) return false;
+  w.endSec -= shSec; if (w.arriveSec != null && w.arriveSec > w.endSec) w.arriveSec = w.endSec;
+  w.sectionTime = Math.max(0, Math.round((w.endSec - w.startSec) / 60));
+  for (j = k; j < sub.length; j++) {
+    var g = sub[j]; if (!g) continue;
+    if (g.startSec != null) g.startSec -= shSec;
+    if (g.arriveSec != null) g.arriveSec -= shSec;
+    if (g.endSec != null) g.endSec -= shSec;
+    if (Array.isArray(g.stopSec)) g.stopSec = g.stopSec.map(function (x) { return x - shSec; });
+  }
+  var inf = path.info;
+  if (inf) {
+    if (typeof inf.totalTime === 'number') inf.totalTime = Math.max(1, inf.totalTime - Math.round(shSec / 60));
+    if (inf.trip && typeof inf.trip.arrSec === 'number') inf.trip.arrSec -= shSec;
+    inf.ttHurry = (inf.ttHurry || 0) + 1;
+  }
+  return true;
+}
 function ntAttachPath(nt, path, baseMs, bf, live) {
   var sub = path && path.subPath;
   if (!nt || !sub || !sub.length) return 0;
@@ -146,6 +170,11 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
     if (live && k === firstT && shiftMs === 0 && st.length > 1) {
       var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];
       if (lv && lv.ms != null) {
+        if (lv.ms < t && leg.arriveSec != null && leg.arriveSec <= NT_NEAR_SEC && k === firstT && k > 0) {      // s333: 걸어서 닿는 시각(t)보다 앞서 오는 열차 — 역 가까이에 있으면 서둘러 그 차를 탄다: 걸음 시간을 줄여 승강장에 도착 30초 전에 닿는 것으로 그린다
+          var tNew = Math.max(base0 + leg.startSec * 1000 - Math.round(leg.arriveSec * 1000), lv.ms - NT_HURRY_BUF_MS);
+          var shSec = Math.round((t - tNew) / 1000);
+          if (shSec > 0 && ntHurry(path, sub, k, shSec)) { t = tNew; }
+        }
         var wl = (lv.ms - t) / 60000;
         if (wl > 0 && wl <= NT_MAX_WAIT_MIN) { var wlMs = Math.round(wl * 60000); leg.ttWaitMs = wlMs; leg.ttLive = true; acc += wlMs; n++; if (path.info) path.info.ttLive = (path.info.ttLive || 0) + 1; continue; }
       }
