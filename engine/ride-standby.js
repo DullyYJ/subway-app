@@ -567,6 +567,7 @@ function rsActs(st, req, now, notes) {
 //   엔진이 시각표를 다시 맞추면(GPS 도착 확정·재동기·대기 해제) 새 구간 시각이 '지금 마커 자리'보다 뒤일 수 있다 → 마커가 뒤로 튄다.
 //   지난 호출에서 앱이 그리던 위치(지난 시각표를 지금 시각으로 읽은 값)보다 새 위치가 뒤면, 그 구간의 출발 시각만 당겨 지금 자리를 그대로 이어 간다(도착 시각 t1 은 그대로 → 남은 거리를 그 시간에 간다).
 //   마커는 멈추거나 느려질 수는 있어도 뒤로 가지 않는다. 승차 되돌리기·다른 여정이면 풀린다.
+var RS_DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
 function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
@@ -613,13 +614,31 @@ function rsMonoPos(st, r, now, notes) {
     }
   }
   if (+pos.from > pf.n) pf.n = +pos.from;
+  // ★ s321 (YJ: "GPS 도착 확정 후 15초는 노랑 마커로 멈췄다가 파랑으로 이동 · GPS 가 약해 판정이 안 되면 시각표 도착 시각에 15초 서 있다가 이동 · 서 있는 도중 GPS 영점이 잡혀도 15초 타이머를 리셋하지 마"):
+  //   역에 마커가 서는 순간(처음 그 역을 가리킨 걸음)에 정차 시작 시각을 st.dw 에 붙잡는다 — GPS 확정이 처음이면 지금(확정 시각), 시각표 도착이면 그 도착 시각. 이후 시각표가 다시 맞춰져도(영점 반영) 시작은 그대로라 타이머가 리셋되지 않는다.
+  //   이미 그 역을 떠난 마커(이전 걸음에 그 역 앞)에는 서지 않는다(되돌아감 방지). 버스 정류장 · 목적지는 서지 않는다.
+  var dwf = +pos.from, dwn = nd[dwf];
+  if (isFinite(dwf) && dwf >= 1 && dwn && !dwn.isBus && dwf < nd.length - 1 && segs.length && +segs[0].from === dwf) {
+    var dwG = false, dwP = eta.passes || [];
+    for (i = 0; i < dwP.length; i++) if (dwP[i] && +dwP[i].idx === dwf && dwP[i].src === 'gps') dwG = true;
+    var dw = st.dw && st.dw.key === key && st.dw.i === dwf ? st.dw : null;
+    if (!dw) {
+      var dwTt = r.etaMs && r.etaMs[dwf] != null && isFinite(+r.etaMs[dwf]) ? +r.etaMs[dwf] : now, dwGone = prevP != null && prevP > dwf + (dwG ? 0.12 : 0.002);      // GPS 확정이 시각표보다 조금(구간의 12% 안) 늦으면 그 역으로 되돌려 서게 한다 — 그보다 멀리 갔으면 서지 않는다(되돌아감 방지)
+      dw = st.dw = { key: key, i: dwf, s: dwGone ? 0 : (dwG ? now : Math.min(now, dwTt)), g: dwG ? 1 : 0 };
+    } else if (dwG && !dw.g) dw.g = 1;
+    var dwEnd = dw.s + RS_DWELL_MS, g0s = segs[0];
+    if (now < dwEnd && +g0s.t0 < dwEnd && dwEnd < +g0s.t1 - 1000) {
+      g0s.t0 = dwEnd; pos.t0 = dwEnd; pos.ratio = 0; pos.moving = false;
+      notes.push('마커 정차 ' + dwf + '번 — ' + Math.round((dwEnd - now) / 1000) + '초 더(' + (dw.g ? 'GPS 확정' : '시각표') + ')');
+    }
+  }
   st.mk = { key: key, s: segs.slice(0, 6).map(function (x) { return [+x.from, +x.to, +x.t0, +x.t1]; }) };
 }
 // 되돌리기: 환승 확정(예약 포함) 또는 첫 구간 탑승 확정을 이전 기록으로 돌린다
 function rsDoUndo(st, now, notes) {
   var eta = st.eta, ux = st.rsUndo, pxs = eta.passes || [], ki;
   if (!ux) return;
-  delete st.mk; delete st.mkFloor;                     // 되돌리면 마커도 되돌아갈 수 있다(사용자가 직접 되돌린 것만)
+  delete st.mk; delete st.mkFloor; delete st.dw;                     // 되돌리면 마커도 되돌아갈 수 있다(사용자가 직접 되돌린 것만)
   if (ux.x) {
     if (ux.pend) delete st.xPend;
     else {

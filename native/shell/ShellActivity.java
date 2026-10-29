@@ -5198,12 +5198,17 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
+                if (r.status != 200 && ("erl".equals(setPage) || "dev".equals(setPage))) {          // s321 (YJ: 오류 로그 · 개발자 도구가 안 열려): 주소가 길거나 사실 글이 커서 거절됐을 수 있다 — 줄인 사실로 한 번 더 받는다
+                    String small = "erl".equals(setPage) ? ShellCore.pageUrlPlain("erl", ErrCore.pageFacts(store, 1800)) : ShellCore.pageUrlDev(DevCore.pageFacts(devPh, devLeft(), devStopped));
+                    r = NetPost.get(small, 8000);
+                }
+                final int stCode = r.status;
                 final String txt = r.status == 200 ? r.body : ""; warm(txt);
                 if (txt.indexOf("\"body\"") > 0 && url.indexOf("p=cm&") > 0 && url.indexOf("pop") > 0) tpPut(url, txt);
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
                     if (ShellCore.isAskPage(setPage) && txt.indexOf("\"body\"") < 0) { askUnburn(setPage); setupNoEngine = true; closeSheet(); if ("askovl".equals(setPage)) toast("설정에서 '다른 앱 위에 표시'를 켜 주세요"); return; }          // 서버 엔진이 아직 이 안내를 모르면(붙여넣기 전) 이번 실행엔 건너뛰고, '물었다' 표시는 지워 둔다
-                    if (txt.length() == 0) { toast("설정을 받지 못했어요"); return; }
+                    if (txt.length() == 0) { toast("설정을 받지 못했어요" + (stCode > 0 ? " (" + stCode + ")" : " (연결 안 됨)")); return; }
                     if ("cm".equals(setPage)) cm.setStations(cmStations(txt));
                     present(sheetView, txt, true);
                 } });

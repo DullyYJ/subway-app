@@ -434,6 +434,7 @@ final class RideStandbyJ {
         } else if ("undo".equals(a) && st.get("rsUndo") != null && now < num(mm(st.get("rsUndo")).get("until")) && !truthy(mm(st.get("rsUndo")).get("x"))) doUndo(st, now, notes);
     }
     // ★ 2026-10-27 s257 (JS rsMonoPos 와 같은 계산): 새 시각표가 지난번 마커 자리보다 뒤로 가면 그 구간의 출발 시각만 당겨 자리를 유지한다(도착 시각 t1 은 그대로).
+    static final double DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(RideEtaJ stopDwellSec 와 같은 값)
     static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
         Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
         Map<String, Object> eta = mm(st.get("eta")); List<Object> nd = eta == null ? null : l(eta.get("nodes")); if (nd == null) nd = new ArrayList<Object>();
@@ -487,13 +488,32 @@ final class RideStandbyJ {
             }
         }
         if (num(pos.get("from")) > num(pf.get("n"))) pf.put("n", num(pos.get("from")));
+        // s321 — engine/ride-standby.js rsMonoPos 의 정차 15초(st.dw) 그대로: 역에 마커가 서는 첫 걸음의 시작 시각을 붙잡아 영점이 잡혀도 타이머를 리셋하지 않는다
+        int dwf = (int) num(pos.get("from"));
+        Map<String, Object> dwn = dwf >= 0 && dwf < nd.size() ? mm(nd.get(dwf)) : null;
+        if (dwf >= 1 && dwn != null && !truthy(dwn.get("isBus")) && dwf < nd.size() - 1 && !segs.isEmpty() && (int) num(mm(segs.get(0)).get("from")) == dwf) {
+            boolean dwG = false; List<Object> dwP = eta == null ? null : l(eta.get("passes"));
+            if (dwP != null) for (Object px : dwP) { Map<String, Object> pm = mm(px); if (pm != null && (int) num(pm.get("idx")) == dwf && "gps".equals(pm.get("src"))) dwG = true; }
+            Map<String, Object> dw = mm(st.get("dw"));
+            if (dw == null || !key.equals(dw.get("key")) || (int) num(dw.get("i")) != dwf) {
+                List<Object> em = l(r.get("etaMs")); double tt = now;
+                if (em != null && dwf < em.size() && em.get(dwf) != null && fin(em.get(dwf))) tt = num(em.get(dwf));
+                boolean gone = fin(prevP) && prevP > dwf + (dwG ? 0.12 : 0.002);
+                dw = obj("key", key, "i", (double) dwf, "s", gone ? 0.0 : (dwG ? now : Math.min(now, tt)), "g", dwG ? 1.0 : 0.0); st.put("dw", dw);
+            } else if (dwG && num(dw.get("g")) == 0) dw.put("g", 1.0);
+            double dwEnd = num(dw.get("s")) + DWELL_MS; Map<String, Object> g0s = mm(segs.get(0));
+            if (now < dwEnd && num(g0s.get("t0")) < dwEnd && dwEnd < num(g0s.get("t1")) - 1000) {
+                g0s.put("t0", dwEnd); pos.put("t0", dwEnd); pos.put("ratio", 0.0); pos.put("moving", Boolean.FALSE);
+                notes.add("마커 정차 " + dwf + "번 — " + ns(round((dwEnd - now) / 1000)) + "초 더(" + (num(dw.get("g")) != 0 ? "GPS 확정" : "시각표") + ")");
+            }
+        }
         List<Object> keep = new ArrayList<Object>();
         for (i = 0; i < segs.size() && i < 6; i++) { Map<String, Object> x = mm(segs.get(i)); keep.add(list(num(x.get("from")), num(x.get("to")), num(x.get("t0")), num(x.get("t1")))); }
         st.put("mk", obj("key", key, "s", keep));
     }
     static void doUndo(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")), ux = mm(st.get("rsUndo"));
-        st.remove("mk"); st.remove("mkFloor");                   // 되돌리면 마커도 되돌아갈 수 있다
+        st.remove("mk"); st.remove("mkFloor"); st.remove("dw");                   // 되돌리면 마커도 되돌아갈 수 있다
         List<Object> pxs = l(eta.get("passes")); if (pxs == null) pxs = new ArrayList<Object>();
         if (ux == null) return;
         double wi = num(mm(ux.get("w")).get("i")); int ki;

@@ -31,7 +31,7 @@ final class RideEtaJ {
         driftPerStop = 0.12, driftBiasPerStop = 0.07,
         priorDelayMin = 0.5, priorNarrowW = 0.5, priorNarrowSd = 3, priorWideSd = 8, softMin = 0.2, quantile = 0.1,
         snapBackMin = 2, snapLateMaxMin = 1.5, snapCandMaxMin = 6, snapEps = 0.5, snapOldW = 0.4, staleShiftMin = 40,
-        stopDwellSec = 20, markerDwellSec = 20, arriveEarlySec = 5, posSegCount = 80,
+        stopDwellSec = 15, markerDwellSec = 15, arriveEarlySec = 5, posSegCount = 80,
         overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
         boardMaxWaitMin = 30, planSecMin = 20, planSecMax = 30, holdAfterStops = 1, holdGraceSec = 60;
