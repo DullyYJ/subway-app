@@ -167,7 +167,7 @@ function hcSceneNode(now, tz, routeShown, wx, stn, rd) {
   var js = JSON.stringify(sc);
   if (js.length >= 6000) return null;
   var node = { t: 'scene', h: 150, r: 12, pad: [0, 0, 0, 0], sc: js };
-  if (sc.fill === true) { node.fit = true; node.fmin = 90; node.fmax = 900; node.frh = 26; }      // 웹 _sceneFit: 경로가 없으면 남는 세로를 채운다(최소 90) — 앱은 잰 높이로 뺄셈만 한다
+  if (sc.fill === true) node.h = 180;      // (YJ 2026-10-29) 경로 탐색 전 홈 화면에서만 장면 세로를 고정 180(예전 최소 90 의 2배) — 남는 세로를 채우지도 · 대화 줄을 접지도 않는다. 경로 결과 등 다른 화면은 150 그대로
   return node;
 }
 
