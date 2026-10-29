@@ -193,9 +193,13 @@ function rsPickLive(list, q, nowMs, dk) {
       if (to) for (k = 0; k < same.length; k++) { var m = /[-–—]\s*([^\s]+?)\s*방면/.exec(String(same[k].trainLineNm || '')); if (m && rsStnKey(m[1]) === to) byTo.push(same[k]); }
       c = byTo.length ? byTo : same;
     }
-    c = c.slice().sort(function (a, b) { return parseInt(a.barvlDt || 9999, 10) - parseInt(b.barvlDt || 9999, 10); });
-    var t = c[0], cd = parseInt(t.arvlCd || '99', 10), bv = parseInt(t.barvlDt || '0', 10);
-    return (cd === 0 || cd === 1) ? nowMs : nowMs + Math.max(0, (isFinite(bv) ? bv : 0) * 1000);
+    // ★ s334: 남은 초(barvlDt)가 0 인 열차(가까이 온 차 · 위치만 아는 차)를 '지금'으로 잡던 것 → rsArrivalMs 로 도착 시각을 어림해 가장 빠른 열차(믿을 수 없는 항목은 뺀다)
+    var best = null;
+    for (k = 0; k < c.length; k++) {
+      var cd0 = parseInt(c[k].arvlCd, 10), ar = (cd0 === 0 || cd0 === 1) ? nowMs : rsArrivalMs(c[k], nowMs);
+      if (ar != null && (best == null || ar < best)) best = ar;
+    }
+    return best == null ? null : Math.max(nowMs, best);
   } catch (e) { return null; }
 }
 // 위 결과를 req.pressTT.liveMs 로 붙인다(시각표가 없어도 만든다). 붙였으면 true
@@ -1306,10 +1310,9 @@ function rsRtPick(list, q, nt) {
     for (k = 0; k < list.length; k++) {
       it = list[k]; if (!it || String(it.subwayId || '') !== sid) continue;
       cd = parseInt(it.arvlCd, 10); if (cd === 1 || cd === 2) continue;
-      sec = parseInt(it.barvlDt, 10); if (!isFinite(sec) || sec <= 0) continue;
+      var arr = rsArrivalMs(it, q.nowMs); if (arr == null) continue;                    // s334: 남은 초 0(전역 출발·진입·도착)도 글자로 어림해 쓴다
       term = String(it.bstatnNm || '');
       if (q.prev && nt && typeof nt.forward === 'function') { var fw = nt.forward(q.line, q.prev, q.from, term); if (fw === false) continue; }
-      var arr = q.nowMs + sec * 1000;
       if (best == null || arr < best) best = arr;
     }
     return best;
