@@ -226,6 +226,8 @@ public class ScreenView extends View {
     /** 입력칸 글자 모음(키 → 글자). 앱이 call 행동을 처리할 때 함께 받는다. */
     public Map<String, String> fields() { return new HashMap<String, String>(fieldVals); }
     public long drawAgeMs() { return lastDraw == 0L ? Long.MAX_VALUE : SystemClock.uptimeMillis() - lastDraw; }
+    /** 맨 아래로(내가 보낸 글이 바로 보이게). */
+    public void scrollToEnd() { if (lay == null) return; scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
     public int itemCount() { return lay == null ? 0 : lay.head.length + lay.body.length; }
     /** 놀이터 칸을 놓을 자리(dp · 이 뷰 좌표): kind 인 첫 칸(역 이름 K_TEXT · 시간표 머리줄 K_BAR)의 [글 x, 글 y, 글 너비, 글 줄 높이, 칸 y, 칸 높이, 오른쪽 한계]. 없으면 null. 배치가 끝난 뒤 주 스레드에서만(처음 위치 기준 · 스크롤 안 함). */
     public float[] playAnchor(int kind) {
