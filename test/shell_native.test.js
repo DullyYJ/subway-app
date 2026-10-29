@@ -977,6 +977,8 @@ function findAndroidJar() {
     assert.ok(/hc\.key\(home\.dataRev, home\.resTab/.test(a) && !/hc\.key\(home\.resRev/.test(a) && /hc\.tabKey\(/.test(a) && /hcTabFresh\(hcTk, 50000L\)/.test(a), '브리핑 열쇠는 경로 자료(dataRev) 기준 — 탭을 되돌아와도 미리 받은 것을 쓴다 · 50초 안이면 다시 묻지 않고 오래됐으면 먼저 보이고 뒤에서 갱신');
     assert.ok(/CAP = 29/.test(shc), '규격 29');
     assert.ok(/boolean swReg = false/.test(sv) && /final boolean swLayer = !swReg &&/.test(sv) && /private static boolean swIn\(/.test(sv) && /if \(swReg && swIn\(bit, rgL, rgR, rgT, rgB\)\) continue;/.test(sv) && !/swIn[\s\S]{0,300}new (Paint|RectF|Path)/.test(sv), 's314: 밀기 카드가 있으면 본문 전체가 아니라 카드 안 타임라인 아래 글 영역만 밀린다(카드 가장자리에서 잘림 · 단추 줄 제자리 · 그릴 때 새 객체 없음)');
+    assert.ok(/swFire = true; swipeHost\.onSwipe/.test(sv) && /SW_OUT_MS = 110L/.test(sv) && /else if \(swFire && swRelT > 0L\)/.test(sv) && /swAl = 0\.25f \+ 0\.75f \* slF/.test(sv), 's315: 넘기기로 정한 뒤엔 반쯤 민 채 멈추지 않고 가던 쪽으로 계속 미끄러지며 사라지고(0.11초) 새 화면은 투명에서 시작하지 않고 반대쪽에서 들어온다(안 오면 제자리에서 다시 나타남)');
+    assert.ok(/final String cachedRes = hasRes \? resGet\(resKey\) : null;/.test(a) && /hasRes && cachedRes == null \? home\.resultRequest/.test(a) && /private void premerge\(\)/.test(a) && /static String finKey\(/.test(a) && /lruGet\(finCache, fk\)/.test(a) && /home\.onScreen\(txt0\)/.test(a) && /premerge\(\); \} \}\);/.test(a), 's315: 탭을 밀면 통신도 · 요청 본문 만들기도 · JSON 합치기도 없이 — 미리 합쳐 읽어 둔 화면(finCache)을 바로 그린다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

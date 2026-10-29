@@ -144,6 +144,32 @@ public class ShellActivity extends Activity {
         return at != null && System.currentTimeMillis() - at < 120000L ? v : null;
     }
     private void resPut(String k, String v) { lruPut(resCache, k, v, 16); synchronized (resAt) { resAt.put(k, System.currentTimeMillis()); if (resAt.size() > 64) resAt.clear(); } }
+    private final java.util.LinkedHashMap<String, String> finCache = new java.util.LinkedHashMap<String, String>();      // 합쳐 둔 홈 화면(홈 + 결과 + 홈 카드) — 열쇠는 세 글의 해시
+    private static String finKey(String home0, String res, String cards) { return home0.hashCode() + ":" + home0.length() + "|" + res.hashCode() + ":" + res.length() + "|" + cards.hashCode() + ":" + cards.length(); }
+    /** 미리 받아 둔 탭들의 홈 화면을 뒤에서 미리 합쳐 읽어 둔다(주 스레드에서 열쇠만 모으고 합치기는 뒤 스레드). 탭을 밀면 통신도 합치기도 없이 바로 그린다. */
+    private void premerge() {
+        if (!home.hasRoute() || home.riding()) return;
+        final String th = ShellCore.theme(store);
+        final String hj = lruGet(homeCache, home.request(homeEnv(), ShellCore.CAP));
+        if (hj == null || hj.length() == 0) return;
+        final java.util.ArrayList<String[]> jobs = new java.util.ArrayList<String[]>();
+        for (String tb : new java.util.ArrayList<String>(home.resHas)) {
+            if (tb.equals(home.resTab)) continue;
+            String rs = resGet(home.dataRev + ":" + tb + ":" + th), cj = lruGet(hcTab, hc.tabKey(home.dataRev, tb, chat.talkCount(), chat.talkMark()));
+            if (rs == null || cj == null || rs.length() == 0 || cj.length() == 0) continue;
+            if (lruGet(finCache, finKey(hj, rs, cj)) != null) continue;
+            jobs.add(new String[] { rs, cj });
+        }
+        if (jobs.isEmpty()) return;
+        new Thread(new Runnable() { @Override public void run() {
+            for (String[] j : jobs) {
+                try {
+                    String f = ShellCore.mergeBodies(ShellCore.mergeBodies(hj, j[0]), j[1]);
+                    if (f.length() > 0) { lruPut(finCache, finKey(hj, j[0], j[1]), f, 8); warm(f); }
+                } catch (Throwable ignored) { }
+            }
+        } }, "shell-premerge").start();
+    }
     private final java.util.LinkedHashMap<String, String> hcTab = new java.util.LinkedHashMap<String, String>();      // 탭마다 미리 받은 홈 카드(브리핑 포함) — 결과 카드를 밀어 탭을 바꿀 때 바로 보이게
     private final java.util.HashMap<String, Long> hcTabAt = new java.util.HashMap<String, Long>();
     private final java.util.HashSet<String> hcFly = new java.util.HashSet<String>();
@@ -3726,10 +3752,11 @@ public class ShellActivity extends Activity {
         startHomeTick();
         final String json = home.request(homeEnv(), ShellCore.CAP);
         final boolean hasRes = home.hasRoute();
-        final String resBody = hasRes ? home.resultRequest(homeEnv(), ShellCore.CAP, ShellCore.theme(store), 0) : "";
         final boolean chip = homeChip; homeChip = false;
         final String themeNow = ShellCore.theme(store);
         final String resKey = home.dataRev + ":" + home.resTab + ":" + themeNow;
+        final String cachedRes = hasRes ? resGet(resKey) : null;                       // s315: 미리 받아 둔 결과 화면이 있으면 요청 본문(경로 응답 통째)을 주 스레드에서 만들지도 않는다
+        final String resBody = hasRes && cachedRes == null ? home.resultRequest(homeEnv(), ShellCore.CAP, themeNow, 0) : "";
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
         hc.rideScene = RideService.running ? RideService.liveScene : "";
@@ -3746,7 +3773,7 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
                 final boolean staleCards = hBody.length() > 0 && hcJson.length() > 0;                              // 지난 카드가 있으면 그것을 0초에 먼저 그리고, 새 카드는 뒤에서 받아 바뀐 것만 다시 그린다(SWR)
-                final String cachedRes = resGet(resKey), cachedHome = chip ? lruGet(homeCache, json) : null;
+                final String cachedHome = chip ? lruGet(homeCache, json) : null;
                 final String[] rsBox = { cachedRes == null ? "" : cachedRes }, cjBox = { hBody.length() == 0 || staleCards ? hcJson : "" };
                 Thread tr = null, tc = null;
                 if (hasRes && rsBox[0].length() == 0) {
@@ -3779,17 +3806,26 @@ public class ShellActivity extends Activity {
                     if (txt.length() > 0) lruPut(homeCache, json, txt, 6);
                 }
                 try { if (tr != null) tr.join(16000); if (tc != null && !staleCards) tc.join(16000); } catch (InterruptedException ignored) { }
-                if (hasRes && txt.length() > 0) {
-                    String rs = rsBox[0];
-                    if (rs.length() > 0) { final String rsf = rs; txt = ShellCore.mergeBodies(txt, rs); main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); maybePrefetchLd(); } }); }
+                final String txt0 = txt;
+                final String rs = hasRes ? rsBox[0] : "", cj = cjBox[0];
+                final String fk = txt0.length() > 0 ? finKey(txt0, rs, cj) : "";
+                String finHit = fk.length() > 0 ? lruGet(finCache, fk) : null;                                   // s315: 탭을 미리 합쳐 둔 화면이 있으면 JSON 을 다시 읽고 이어 붙이지 않는다
+                if (hasRes && txt0.length() > 0) {
+                    if (rs.length() > 0) { final String rsf = rs; main.post(new Runnable() { @Override public void run() { home.onResult(rsf); chat.routeSec = home.resSec; maybeFetchNotes(); maybePrefetchLd(); } }); }
                     else main.post(new Runnable() { @Override public void run() { toast("경로 결과를 그리지 못했어요"); } });
                 }
-                if (txt.length() > 0 && cjBox[0].length() > 0) txt = ShellCore.mergeBodies(txt, cjBox[0]);        // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
-                final String fin = txt; warm(fin);
+                if (finHit == null) {
+                    txt = txt0;
+                    if (hasRes && txt.length() > 0 && rs.length() > 0) txt = ShellCore.mergeBodies(txt, rs);
+                    if (txt.length() > 0 && cj.length() > 0) txt = ShellCore.mergeBodies(txt, cj);        // 홈 카드 3장(AI 승무원 · 혼잡도 · 실시간 대화)
+                    finHit = txt;
+                    if (fk.length() > 0 && finHit.length() > 0) lruPut(finCache, fk, finHit, 8);
+                }
+                final String fin = finHit; warm(fin);
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqHome) return;
                     present(v, fin, keep);
-                    if (fin.length() > 0) home.onScreen(fin);
+                    if (txt0.length() > 0) home.onScreen(txt0);                                               // 후보 목록(info.pk.u)은 홈 화면 몫이라 합친 큰 글을 다시 읽지 않는다
                 } });
             }
         }, "shell-home").start();
@@ -4513,13 +4549,13 @@ public class ShellActivity extends Activity {
             try {
                 NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", rbf, 15000);
                 if (rr.status == 200 && rr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(rr.body, rt).entrySet()) resPut(rev + ":" + e.getKey() + ":" + th, e.getValue());
-            } finally { for (String t : rt) synchronized (resFly) { resFly.remove(rev + ":" + t + ":" + th); } }
+            } finally { for (String t : rt) synchronized (resFly) { resFly.remove(rev + ":" + t + ":" + th); } main.post(new Runnable() { @Override public void run() { premerge(); } }); }
         } }, "shell-warm-res").start();
         if (hbf != null) new Thread(new Runnable() { @Override public void run() {
             try {
                 NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hbf, 15000);
                 if (cr.status == 200 && cr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(cr.body, ht).entrySet()) { int i = ht.indexOf(e.getKey()); if (i >= 0) hcTabPut(htk.get(i), e.getValue()); }
-            } finally { for (String k : htk) synchronized (hcFly) { hcFly.remove(k); } }
+            } finally { for (String k : htk) synchronized (hcFly) { hcFly.remove(k); } main.post(new Runnable() { @Override public void run() { premerge(); } }); }
         } }, "shell-warm-hc").start();
     }
     /** 미리 받은 편을 골랐다고 가정한 요청 본문을 주 스레드에서 만들어(상태는 되돌린다) 엔진에 결과 카드·홈 카드 묶음 화면을 미리 받아 둔다. */

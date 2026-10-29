@@ -193,10 +193,10 @@ public class ScreenView extends View {
     public interface SwipeHost { boolean onSwipe(ScreenView v, int dir); /** 지금 이 화면이 좌우 밀기를 쓰는 화면인가(아니면 세로 스크롤을 가로채지 않는다). */ boolean canSwipe(); }
     private SwipeHost swipeHost;
     private float swX0, swY0, swScroll0; private long swT0; private boolean swBlock, swOff, swCan;
-    private float swShift, swRelFrom; private long swRelT, swHold;                      // 가로로 밀 때 본문이 손가락을 따라 움직인 거리(dp) · 뗀 뒤 되돌아오는 그림
+    private float swShift, swRelFrom; private long swRelT, swHold; private boolean swFire;                      // 가로로 밀 때 본문이 손가락을 따라 움직인 거리(dp) · 뗀 뒤 되돌아오는 그림
     private int pendSlide; private long pendSlideAt, slT0; private int slDir;
     private static final float SW_MIN_DP = 32f, SW_OFF_DP = 80f, SW_FLING_DP = 520f, SW_FLING_MIN_DP = 10f, SW_LOCK_SW = 1.0f, SW_RECOVER_DP = 36f; private static final long SW_MAX_MS = 1200L, SLIDE_MS = 380L;
-    private static final float SW_DRAG_DP = 88f, SW_LOCK = 1.25f; private static final long SW_BACK_MS = 420L;          // 손가락을 거의 그대로 따라가다(고무줄처럼 88dp 까지) 놓으면 스프링으로 제자리 · 가로가 세로 이상이면 바로 가로로 잠근다(s236)          // 따라 움직이는 최대 36dp · 가로가 세로의 1.25배 넘으면 가로로 잠근다(그 뒤로는 위아래로 안 흔들린다)
+    private static final float SW_DRAG_DP = 88f, SW_LOCK = 1.25f; private static final long SW_BACK_MS = 420L, SW_OUT_MS = 110L;          // 손가락을 거의 그대로 따라가다(고무줄처럼 88dp 까지) 놓으면 스프링으로 제자리 · 가로가 세로 이상이면 바로 가로로 잠근다(s236)          // 따라 움직이는 최대 36dp · 가로가 세로의 1.25배 넘으면 가로로 잠근다(그 뒤로는 위아래로 안 흔들린다)
     private static final float SLIDE_DP = 56f;                                         // 웹 ltSlideInLeft/Right: 24px 옆에서 + 투명→불투명 0.34초 cubic-bezier(.22,.8,.3,1)
     private static android.view.animation.PathInterpolator slideEase;
     public void setSwipeHost(SwipeHost h) { swipeHost = h; }
@@ -604,8 +604,8 @@ public class ScreenView extends View {
                     vt.computeCurrentVelocity(1000, maxFling);
                     float vx9 = vt.getXVelocity() / dpr;
                     boolean fire = Math.abs(sdx) >= SW_MIN_DP * dpr || (Math.abs(vx9) >= SW_FLING_DP && Math.abs(sdx) >= SW_FLING_MIN_DP * dpr && vx9 * sdx > 0f);          // 빠르게 쓸기만 해도 넘긴다
-                    swRelFrom = swShift; swRelT = SystemClock.uptimeMillis(); swHold = 0L;
-                    if (fire && swipeHost != null) { swHold = 450L; swipeHost.onSwipe(this, sdx < 0f ? -1 : 1); }          // 새 화면이 오면 그 자리에서 미끄러져 들어온다(안 오면 450ms 뒤 되돌아온다)
+                    swRelFrom = swShift; swRelT = SystemClock.uptimeMillis(); swHold = 0L; swFire = false;
+                    if (fire && swipeHost != null) { swHold = 450L; swFire = true; swipeHost.onSwipe(this, sdx < 0f ? -1 : 1); }          // 새 화면이 오면 그 자리에서 미끄러져 들어온다(안 오면 450ms 뒤 되돌아온다)
                     pressed = null; ui.removeCallbacks(lpRun); finishTouch(); invalidate(); return true;
                 }
                 if (mode == 3 && fabDown) { fabDown = false; if (SystemClock.uptimeMillis() - downT < 600 && listener != null && lay != null && lay.fabAct != null) { blurInput(); listener.onAction(lay.fabAct); } finishTouch(); invalidate(); return true; }
@@ -2066,8 +2066,15 @@ public class ScreenView extends View {
             else { if (slideEase == null) slideEase = new android.view.animation.PathInterpolator(0.22f, 0.8f, 0.3f, 1f); slF = slideEase.getInterpolation(Math.max(0f, el) / (float) SLIDE_MS); moving = true; }
         }
         float swOx = 0f, swAl = 1f;
-        if (slF >= 0f) { swOx = -slDir * SLIDE_DP * (1f - slF); swAl = slF; swShift = 0f; swRelT = 0L; }
+        if (slF >= 0f) { swOx = -slDir * SLIDE_DP * (1f - slF); swAl = 0.25f + 0.75f * slF; swShift = 0f; swRelT = 0L; swFire = false; }          // s315: 투명에서 시작하지 않는다 — 새 글이 바로 비쳐 비는 틈이 안 보인다
         else if (mode == 9) { swOx = swShift; swAl = 1f - 0.3f * Math.min(1f, Math.abs(swShift) / SW_DRAG_DP); }
+        else if (swFire && swRelT > 0L) {                                                     // s315(YJ: 경로 넘길 때 부드럽지 않다): 넘기기로 정해 놓은 뒤 — 반쯤 민 채 멈춰 기다리지 않고 가던 쪽으로 계속 미끄러지며 사라지고(0.11초), 새 화면이 오면 반대쪽에서 들어온다
+            long el = now - swRelT; float tg = swRelFrom < 0f ? -SLIDE_DP : SLIDE_DP, a0 = 1f - 0.3f * Math.min(1f, Math.abs(swRelFrom) / SW_DRAG_DP);
+            if (el < SW_OUT_MS) { float u = el <= 0L ? 0f : el / (float) SW_OUT_MS, e = 1f - (1f - u) * (1f - u); swShift = swRelFrom + (tg - swRelFrom) * e; swOx = swShift; swAl = a0 * (1f - e); moving = true; }
+            else if (el < swHold) { swShift = tg; swOx = tg; swAl = 0f; moving = true; }                // 새 화면을 기다리는 동안은 비운다
+            else if (el < swHold + SW_BACK_MS) { float u = (el - swHold) / (float) SW_BACK_MS, e = 1f - (1f - u) * (1f - u); swShift = tg * (1f - e); swOx = swShift; swAl = e; moving = true; }      // 끝내 안 오면 제자리에서 다시 나타난다
+            else { swShift = 0f; swRelT = 0L; swFire = false; }
+        }
         else if (swShift != 0f && swRelT > 0L) {                                              // 놓은 뒤: 새 화면을 기다리다가(hold) 부드럽게 제자리로
             long el = now - swRelT - swHold;
             if (el >= SW_BACK_MS) { swShift = 0f; swRelT = 0L; }
