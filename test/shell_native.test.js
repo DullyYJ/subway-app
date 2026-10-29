@@ -962,6 +962,10 @@ function findAndroidJar() {
     assert.ok(/ldFly\.contains\(key\)\) \{ ldWant = key;/.test(a), '오는 중인 편을 누르면 새로 묻지 않고 그 응답을 기다린다');
     assert.ok(/public boolean hasLdRoute\(\)/.test(hm) && /if \(home\.hasLdRoute\(\)\) return;/.test(a) && /home\.hasLdRoute\(\)\) return;\s*\n\s*String u = url\.replaceFirst/.test(a), '장거리 결과는 실시간 재조회로 바꾸지 않는다(처음 찾은 것으로 고정)');
   });
+  await t('안내 종료 = 여정 종료(s309): 경로 · 도착지를 비우고 도착지를 넣기 전 첫 홈 화면으로', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), st = a.slice(a.indexOf('private void stopRide()'), a.indexOf('private long reviveAt;'));
+    assert.ok(/home\.endJourney\(\)/.test(st) && /setHomeFields\(\)/.test(st) && /RideService\.stop\(this\)/.test(st), '안내 종료가 여정 종료까지 한다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();

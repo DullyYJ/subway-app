@@ -1099,6 +1099,9 @@ public class ShellJvmTest {
             h2.rideRouteId = h2.routeId;
             ok(h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && !h2.setRide("{\"on\":1,\"text\":\"다음 부평\"}", "{\"cur\":2,\"pos\":null,\"arr\":null}") && h2.riding(), "서비스 상태를 받으면 바뀐 때만 true");
             ok(h2.actResult("rh.stop") == HomeCore.R_STOP && h2.actDetail("rd.stop") == HomeCore.D_STOP && h2.actDetail("rd.confirm") == HomeCore.D_NONE, "탑승 중: 종료만 가능");
+            { HomeCore je = new HomeCore(); je.setRoute("{\"result\":{}}", "송도3동", "마두", -1, 1L); je.text[HomeCore.START] = "송도3동"; je.text[HomeCore.DEST] = "마두"; je.baseMs = 5L; je.lastQs = "a=b"; je.resTab = "bus";
+              je.endJourney();
+              ok(!je.hasRoute() && je.lastQs.length() == 0 && je.text[HomeCore.DEST].length() == 0 && je.loc[HomeCore.DEST] == null && je.baseMs == -1 && "fast".equals(je.resTab) && "송도3동".equals(je.text[HomeCore.START]), "여정 종료: 경로 · 도착지 · 기준시각을 비우고 출발지는 그대로(첫 홈 화면)"); }
             String rf = h2.resultFacts(new HomeCore.Env(), "dark");
             ok(rf.contains("\"ride\":{\"on\":1,\"text\":\"다음 부평\"}") && rf.contains("\"lv\":{\"cur\":2"), "결과 사실에 탑승 상태(r.ride)와 내 위치(r.lv)가 실린다");
             {   // s214: 확정한 경로는 닫기 · 새로 찾기 · 바꾸기로 풀리지 않는다 — 안내를 끝내야(또는 도착해야) 풀린다

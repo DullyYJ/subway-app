@@ -4706,8 +4706,11 @@ public class ShellActivity extends Activity {
         RideService.stop(this);
         rideGraceUntil = 0L;
         home.setRide("", "");
+        home.endJourney(); hc.share = false;                                       // s309(YJ): 안내 종료 = 여정 종료 — 도착지를 넣기 전 첫 홈 화면으로(다시 도착지를 넣을 수 있게)
+        ldPf.clear(); ldScr.clear(); ldWant = "";
+        setHomeFields();
         reloadHome();
-        toast("탑승 안내를 끝냈어요");
+        toast("여정을 끝냈어요. 새 도착지를 넣어 주세요");
     }
     private long reviveAt; private int reviveN;
     /** 탑승 서비스가 꺼져 있는데 저장된 안내(30분 안)가 있으면 다시 켠다(앱이 죽었다 살아났거나 시스템이 서비스를 내렸을 때). 다시 켰으면 true — 그동안은 확정을 지우지 않는다. 4초에 한 번 · 최대 6번. */

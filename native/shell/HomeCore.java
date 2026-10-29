@@ -94,6 +94,11 @@ public final class HomeCore {
         return true;
     }
     public void clearRoute() { routeRaw = ""; ld2Raw = ""; lastQs = ""; touch(); }
+    /** 여정 종료(s309, YJ: [안내 종료] 는 도착지를 넣기 전 첫 홈 화면으로): 경로 · 고른 탭 · 기준시각 · 도착지를 비운다. 출발지(내 위치)는 그대로. */
+    public void endJourney() {
+        clearRoute(); resTab = "fast"; baseMs = -1; ldPending = ""; ldM = new ArrayList<String>(); ldG = new ArrayList<String>(); resSec = new ArrayList<String>(); detOpen.clear();
+        loc[DEST] = null; text[DEST] = ""; cand[DEST].clear(); pkU.clear(); if (active == DEST) active = -1;
+    }
     /** 같은 경로를 다시 받은 응답으로 바꾼다(보던 탭은 그대로). */
     public boolean replaceRoute(String raw) {
         String t = raw == null ? "" : raw.trim();
