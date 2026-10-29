@@ -56,6 +56,22 @@ function chtTime(ts, tzo) {
 // 웹 _offAgo 와 같다
 function chtOffAgo(ts, now) { var m = Math.max(0, Math.round((now - ts) / 60000)); return m < 1 ? '방금' : (m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전'); }
 
+// s330(YJ: 내가 친 대화가 너무 늦게 떠 · 0.1초 안에): 앱이 방금 보낸 글(전송 중)을 [글, 시각] 로 알려 주면 서버 글에 아직 없을 때만 내 말풍선으로 맨 끝에 보탠다.
+//   서버 글에 같은 글(내 것 · 시각이 비슷)이 생기면 자연히 빠진다 — 판단은 엔진, 앱은 보낸 글을 적어 두기만 한다.
+var CHT_PEND_TIME = '전송 중';
+function chtPend(a) {
+  var out = [];
+  if (Array.isArray(a)) a.slice(0, 5).forEach(function (x) { if (Array.isArray(x)) { var t = chtStr(x[0], 400).trim(), ts = Number(x[1]) || 0; if (t) out.push({ t: t, ts: ts }); } });
+  return out;
+}
+function chtPendNodes(f, mineMsgs) {            // mineMsgs: 서버 글 중 내 것 [{ s, ts }]
+  var out = [];
+  f.pend.forEach(function (p) {
+    var done = mineMsgs.some(function (m) { return m.s === p.t && (!p.ts || !m.ts || m.ts >= p.ts - 90000); });
+    if (!done) out.push({ t: 'msg', pad: [12, 0, 12, 10], s: p.t, time: CHT_PEND_TIME, mine: true });
+  });
+  return out;
+}
 function chtFacts(f) {
   f = (f && typeof f === 'object') ? f : {};
   var sel = chtStr(f.sel, 30) || 'all';
@@ -69,7 +85,7 @@ function chtFacts(f) {
   if (chtTrkColor) CHT_KNOWN.forEach(function (l) { if (!lc[l]) lc[l] = chtTrkColor(1, l, th); });   // 노선 색은 타임라인과 같은 표(rhead)에서
   var hid = {};
   if (Array.isArray(f.hid)) f.hid.forEach(function (i, q) { if (q < 400) hid[chtStr(i, 40)] = 1; });
-  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid };
+  return { my: Array.isArray(f.my) ? f.my : [], sel: sel, mine: mine, lc: lc, st: (f.st === 'loading' || f.st === 'fail') ? f.st : 'ready', tzo: isFinite(Number(f.tzo)) ? Number(f.tzo) : 0, me: chtStr(f.me, 40), hid: hid, pend: chtPend(f.pend) };
 }
 // 지금 경로의 지하철 노선(웹 _routeSubLines): 경로 순서 노선만 앞에 둔다(최대 8개). 경로가 없으면 빈 목록 = 호선 순서 원래대로.
 //   sec = 경로의 지하철 구간 이름들, my = 탄 기록(칩 순서에는 더 쓰지 않는다 — 글 붙일 노선(info.pl)만 쓴다)
@@ -201,8 +217,9 @@ function chatScreen(inp, factsIn, dataIn) {
     if (Array.isArray(d.g)) for (i = Math.max(0, d.g.length - CHT_IN_G); i < d.g.length; i++) { var g = chtMsgG(d.g[i], f); if (g) gs.push(g); }
     gs.sort(function (a, b) { return a.ts - b.ts; });
     gs = gs.slice(-CHT_MAX_G); n = gs.length;
+    var pn = chtPendNodes(f, gs.filter(function (x) { return x.node.mine; }).map(function (x) { return { s: x.node.s, ts: x.ts }; }));
     if (!gs.length) body.push({ t: 'text', s: f.st === 'fail' ? '연결이 불안정해요. 잠시 후 다시 불러올게요.' : '대화를 불러오는 중...', size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
-    body = [{ t: 'spacer', h: 4 }].concat(gs.length ? gs.map(function (x) { return x.node; }).concat([{ t: 'spacer', h: 4 }]) : body);
+    body = [{ t: 'spacer', h: 4 }].concat(gs.length || pn.length ? gs.map(function (x) { return x.node; }).concat(pn, [{ t: 'spacer', h: 4 }]) : body);
   } else {
     var off = chtOfficial(f.sel, d, now), al = chtAlert(d.al);
     if (off) head.push(off);
@@ -211,15 +228,16 @@ function chatScreen(inp, factsIn, dataIn) {
     if (Array.isArray(d.r)) for (i = 0; i < d.r.length && i < CHT_IN_R; i++) { var r = chtMsgR(d.r[i], i, f); if (r) rs.push(r); }
     rs.sort(function (a, b) { return (a.ts - b.ts) || (a.i - b.i); });
     rs = rs.slice(-CHT_MAX_R); n = rs.length;
-    if (!rs.length) {
+    var pn = chtPendNodes(f, rs.filter(function (x) { return x.node.mine; }).map(function (x) { return { s: x.node.s, ts: x.ts }; }));
+    if (!rs.length && !pn.length) {
       var s = f.st === 'loading' ? '불러오는 중…' : f.st === 'fail' ? '연결이 불안정해요. 잠시 후 다시 불러올게요.'
         : '아직 ' + f.sel + ' 방에 글이 없어요.\n첫 글을 남겨보세요! 지금 타고 계신다면 한마디 어때요?';
       body.push({ t: 'text', s: s, size: 13, color: 'sub', lh: 1.7, align: 'center', pad: [20, 40, 20, 40] });
-    } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), [{ t: 'spacer', h: 4 }]);
+    } else body = [{ t: 'spacer', h: 4 }].concat(rs.map(function (x) { return x.node; }), pn, [{ t: 'spacer', h: 4 }]);
   }
   var foot = [{ t: 'inbar', pad: [12, 10, 12, 10], key: f.sel === 'all' ? 'chat.all' : 'chat.room', hint: f.sel === 'all' ? '메시지를 입력하세요...' : '이 노선 이용자에게 한마디…', btn: '전송', h: 38, inh: 37, bh: 38, bicon: 'M5 3L21 12L5 21L8.5 12Z', ckf: '#121214', r: 18.5, maxlen: f.sel === 'all' ? 200 : 120, fill: 'card', line: 'border2', act: { a: 'call', v: 'ch.send' } }];       // 웹 .chat-inputbar: 입력 37 + 파란 동그라미 ➤ 38 · 위 1px 줄 + 위아래 10
   foot.unshift({ t: 'divider', pad: [0, 0, 0, 0], c: 'border' });
-  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '' } };
+  var out = { ok: true, v: 1, screen: 'chat', cover: 'tab', anchor: 'bottom', head: head, body: body, foot: foot, info: { sel: f.sel, n: n, pl: chtMyOrder(f.my)[0] || '', echo: { t: 'msg', pad: [12, 0, 12, 10], s: '', time: CHT_PEND_TIME, mine: true } } };
   var ci = -1; chips.forEach(function (c, k) { if (c.on) ci = k; });
   if (chips.length > 1 && ci >= 0) {                                       // t = 칸마다의 다음·이전(다음 화면이 오기 전에도 이어 넘긴다) · k = 이 화면의 칸
     var cn = chips.length, ct = {};
