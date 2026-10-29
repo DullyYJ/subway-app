@@ -317,7 +317,7 @@ function findAndroidJar() {
     assert.ok(/case ScreenCore\.K_TDROW: drawTdrow/.test(sv) && /tdDrawn/.test(sv) && /tdAct/.test(sv) && /System\.currentTimeMillis\(\)/.test(sv.slice(sv.indexOf('private void drawTdrow('), sv.indexOf('private String ellipsizeTd('))), '그리기 · 지금 시각으로 진행 비율');
     assert.ok(!/new Paint|new RectF|new Rect\(|new Path|new String|new int\[/.test(sv.slice(sv.indexOf('private void tdIcon('), sv.indexOf('private String ellipsizeTd('))), '그릴 때 새 객체 없음');
     assert.ok(/if \(tdAnim\) postInvalidateOnAnimation\(\);\s*else if \(tdAct && isShown\(\)\)/.test(sv) && /else if \(tdDrawn\) postInvalidateDelayed\(2000L\)/.test(sv), '펼침 움직임은 화면 박자 · 지금 가는 구간 점은 33ms(s239: 점 자리만) · 아니면 2초마다');
-    assert.ok(/CAP = 2[45678]/.test(fs.readFileSync(N("ShellCore.java"), "utf8")) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
+    assert.ok(/CAP = 2[456789]/.test(fs.readFileSync(N("ShellCore.java"), "utf8")) && /K_TDROW = 45/.test(sc) && /"tdrow"\.equals\(t\)/.test(sc), 'cap 21 · tdrow 파싱');
   });
   await t('세부경로 시트 웹 맞춤(s153): 머리(shd)·손잡이·× · 구간은 서버 없이 바로 펼침(▾ 0.2초) · 배경 0.82·탭바 위·끌어 닫기 120dp/.25초 · 확정 토스트·0.6초 뒤 닫힘·오버레이 안내 한 번', () => {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), hm = fs.readFileSync(N('HomeCore.java'), 'utf8');
@@ -407,7 +407,7 @@ function findAndroidJar() {
     const man = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'src', 'main', 'AndroidManifest.xml'), 'utf8');
     assert.ok(/windowSoftInputMode="adjustPan"/.test(man) && /private void applyIme\(\)/.test(a) && /SOFT_INPUT_ADJUST_PAN/.test(a) && /onInputFocus\(boolean on\) \{ if \(on\) applyIme\(\); \}/.test(a), '키보드: 화면은 그대로(adjustPan), 채팅 입력줄만 줄인다');
     assert.ok(/public void touch\(\) \{ resRev\+\+; dataRev\+\+; \}/.test(h) && /resultRequestTab\(/.test(h) && /case HomeCore\.R_RESULT: homeChip = true; reloadHome\(\)/.test(a), '칩: 경로 자료가 바뀔 때만 dataRev 가 오른다(칩만 바꿔도 캐시 열쇠는 그대로)');
-    assert.ok(/private String resGet\(String k\)/.test(a) && /home\.dataRev \+ ":" \+ home\.resTab/.test(a) && /"shell-home-res-pre"/.test(a) && /cachedHome = chip \? lruGet\(homeCache, json\)/.test(a) && /!home\.riding\(\)\) for \(String tb : HomeCore\.RTABS\)/.test(a), '칩: 다른 탭 결과를 뒤에서 미리 받아 두고 칩을 누르면 서버 없이 바로 그린다');
+    assert.ok(/private String resGet\(String k\)/.test(a) && /home\.dataRev \+ ":" \+ home\.resTab/.test(a) && /"shell-warm-res"/.test(a) && /cachedHome = chip \? lruGet\(homeCache, json\)/.test(a) && /for \(String tb : home\.resHas\.isEmpty\(\) \? java\.util\.Arrays\.asList\(HomeCore\.RTABS\)/.test(a), '칩: 다른 탭 결과를 뒤에서 미리 받아 두고(s311: 요청 하나에 alts 로 묶어) 칩을 누르면 서버 없이 바로 그린다');
     assert.ok(/CARD_STAGGER_MS \* Math\.min\(order, 8\)/.test(sv) && /dy = f <= 0f \? -18f : -18f \* \(1f - spring\(f\)\)/.test(sv) && /cardLn\.put\(it\.key, it\.ln\)/.test(sv), '버스: 정류장 카드가 첫 번째부터 차례로 위에서 스프링으로 내려앉는다(다시 그려도 멈추지 않는다)');
     assert.ok(/private void warmBus\(final double la, final double lo\)/.test(a) && /json\.equals\(warmBusJson\)/.test(a) && /warmBus\(l\.getLatitude\(\), l\.getLongitude\(\)\)/.test(a), '버스: 위치를 잡는 순간 정류장 화면을 미리 받아 둔다(요청이 같을 때만 쓴다)');
   });
@@ -676,7 +676,7 @@ function findAndroidJar() {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/SW_MIN_DP = 32f, SW_OFF_DP = 80f/.test(sv) && /Math\.abs\(sdx\) >= SW_MIN_DP \* dpr/.test(sv) && /ay9 > SW_OFF_DP \* dpr && ay9 > ax9/.test(sv), '웹 판정값: 32px 넘게 밀면 넘김 · 세로로 80px 넘게 벗어나면 스크롤로 되돌린다');
     assert.ok(/adx > ady \* SW_LOCK_SW && swCan\) \{ mode = 9;/.test(sv) && /else if \(mode == 9\) \{ swOx = swShift;/.test(sv) && /if \(mode == 9\) \{/.test(sv) && !/\(mode == 3 \|\| mode == 1\) && !fabDown/.test(sv), 's200: 가로로 먼저 움직이면 가로로 잠가(mode 9) 세로 스크롤을 멈춘다 — 비스듬히 밀어도 목록이 위아래로 흔들리지 않는다 · 스크롤 중에는 넘김이 안 된다');
-    assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /dir == -1 \? sc\.swL : sc\.swR/.test(a) && /canSwipe\(\) \{ String ct = ShellCore\.currentTab\(store\); return "community"\.equals\(ct\) \|\| "shop"\.equals\(ct\)/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
+    assert.ok(/sdx < 0f \? -1 : 1/.test(sv) && /dir == -1 \? sc\.swL : sc\.swR/.test(a) && /canSwipe\(\) \{ String ct = ShellCore\.currentTab\(store\); if \("home"\.equals\(ct\)\) \{[^}]*\} return "community"\.equals\(ct\) \|\| "shop"\.equals\(ct\)/.test(a), 's200: 손가락을 오른쪽으로 밀면(dx>0 → dir +1) 왼쪽 칸 · 왼쪽으로 밀면 오른쪽 칸');
     assert.ok(/swBlock = swipeHost == null \|\| inHead \|\| inBand \|\| inFoot/.test(sv) && /K_FIELD \|\| pressed\.kind == ScreenCore\.K_INBAR/.test(sv) && !/pressed\.kind == ScreenCore\.K_BUTTON \|\| pressed\.kind == ScreenCore\.K_FIELD/.test(sv), '칩 줄 · 가로 영역 · 입력칸에서 시작한 몸짓은 무시(s236: 단추 위에서 시작해도 밀린다)');
     assert.ok(/SLIDE_DP = 56f/.test(sv) && /SLIDE_MS = 380L/.test(sv) && /PathInterpolator\(0\.22f, 0\.8f, 0\.3f, 1f\)/.test(sv) && /saveLayerAlpha\(/.test(sv), '웹 ltSlideIn: 24px · 0.34초 · cubic-bezier(.22,.8,.3,1)');
     { const m = /private boolean commSwipe\(int dir\) \{[\s\S]*?\n    \}\n/.exec(a)[0];
@@ -779,7 +779,7 @@ function findAndroidJar() {
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), shc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/K_TAGS = 49/.test(sc) && /"tags"\.equals\(t\)/.test(sc) && /"tags"\.equals\(n\.t\)/.test(sc), 'tags 노드를 읽고 배치한다');
     assert.ok(/case ScreenCore\.K_TAGS: drawTags\(cv, it\)/.test(sv) && /private void drawTags\(Canvas cv, ScreenCore\.Item it\)/.test(sv) && !/drawTags[\s\S]{0,900}new (Paint|RectF|Path)/.test(sv), 'tags 를 그린다(그릴 때 새 객체 없음)');
-    assert.ok(/CAP = 28/.test(shc) && /static void fuseAi\(List<Object> body\)/.test(shc) && /"ai"\.equals\(\(\(Map<String, Object>\) o\)\.get\("into"\)\)/.test(shc) && /fuseAi\(body\);/.test(shc), '화면을 이어 붙일 때 AI 카드를 자리로 옮긴다');
+    assert.ok(/CAP = 29/.test(shc) && /static void fuseAi\(List<Object> body\)/.test(shc) && /"ai"\.equals\(\(\(Map<String, Object>\) o\)\.get\("into"\)\)/.test(shc) && /fuseAi\(body\);/.test(shc), '화면을 이어 붙일 때 AI 카드를 자리로 옮긴다');
     const hc = fs.readFileSync(path.join(ROOT, 'engine', 'hcards.js'), 'utf8'), rs = fs.readFileSync(path.join(ROOT, 'engine', 'result.js'), 'utf8'), rh = fs.readFileSync(path.join(ROOT, 'engine', 'rhead.js'), 'utf8');
     assert.ok(/HC_FUSE_CAP = 25/.test(hc) && /RES_TAGS_CAP = 25/.test(rs) && /Number\(inp\.cap\) < 25/.test(rh), '엔진은 규격 25부터만 합친다(옛 앱은 예전 모양)');
   });
@@ -965,6 +965,17 @@ function findAndroidJar() {
   await t('안내 종료 = 여정 종료(s309): 경로 · 도착지를 비우고 도착지를 넣기 전 첫 홈 화면으로', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), st = a.slice(a.indexOf('private void stopRide()'), a.indexOf('private long reviveAt;'));
     assert.ok(/home\.endJourney\(\)/.test(st) && /setHomeFields\(\)/.test(st) && /RideService\.stop\(this\)/.test(st), '안내 종료가 여정 종료까지 한다');
+  });
+  await t('결과 카드 좌우 밀기(s311): 카드 안에서만 · 엔진 표대로 탭 순환 · 탭마다 결과 화면과 브리핑을 미리 받아 즉시 전환', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), shc = fs.readFileSync(N('ShellCore.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/n\.swp = optBool\(m, "swp", false\)/.test(sc) && /pn\.swp = n\.swp/.test(sc), 'panel swp 를 읽어 카드 칸에 단다');
+    assert.ok(/private boolean swOutside\(float px, float py\)/.test(sv) && /swOutside\(x, y\) \|\|/.test(sv) && /it\.kind == ScreenCore\.K_PANEL && it\.swp/.test(sv), '카드 밖에서 시작한 몸짓은 밀기가 아니다(세로 스크롤 그대로) — swp 카드가 없는 화면은 영향 없음');
+    assert.ok(/if \("home"\.equals\(ct\)\) \{ ScreenCore\.Screen hs = body\.currentScreen\(\); return hs != null && \(hs\.swL != null \|\| hs\.swR != null\) && home\.hasRoute\(\) && !home\.riding\(\)/.test(a) && /"home"\.equals\(tab\) \|\| "community"\.equals\(tab\)/.test(a), '홈은 경로가 있고 확정 전(탑승 전)이며 엔진이 sw 를 줄 때만 밀린다');
+    assert.ok(/if \(ms\.get\("sw"\)|mb\.get\("sw"\) instanceof Map && ma\.get\("sw"\) == null/.test(shc), '합친 홈 화면이 결과 카드의 sw 를 이어받는다');
+    assert.ok(/call"\.equals\(a\.a\) && a\.v\.startsWith\("rh\.tab\."\)/.test(sv), '밀어서 넘길 때도 위 탭 단추를 먼저 켜 보인다(lightChip)');
+    assert.ok(/private void warmTabs\(\)/.test(a) && /\n        warmTabs\(\);/.test(a) && /home\.resHas/.test(a) && /\/screen\/hcards/.test(a.slice(a.indexOf('private void warmTabs()'), a.indexOf('private void warmTabs()') + 4600)) && /\/screen\/result/.test(a.slice(a.indexOf('private void warmTabs()'), a.indexOf('private void warmTabs()') + 4600)) && /ShellCore\.altsBody\(/.test(a) && /ShellCore\.altsParse\(/.test(a) && /static String altsBody\(/.test(shc), '다른 탭의 결과 카드 화면 + 홈 카드를 요청 둘(alts 로 묶어 경로 응답을 한 번씩만 올림)로 미리 받는다');
+    assert.ok(/hc\.key\(home\.dataRev, home\.resTab/.test(a) && !/hc\.key\(home\.resRev/.test(a) && /hc\.tabKey\(/.test(a) && /hcTabFresh\(hcTk, 50000L\)/.test(a), '브리핑 열쇠는 경로 자료(dataRev) 기준 — 탭을 되돌아와도 미리 받은 것을 쓴다 · 50초 안이면 다시 묻지 않고 오래됐으면 먼저 보이고 뒤에서 갱신');
+    assert.ok(/CAP = 29/.test(shc), '규격 29');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

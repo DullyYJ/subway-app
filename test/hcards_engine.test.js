@@ -210,6 +210,17 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
     } finally { globalThis.fetch = realFetch; }
   } catch (e) { fail++; console.log('  FAIL 워커 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
-  console.log(pass + ' 통과 / ' + fail + ' 실패');
+  // s311: 한 번에 여러 탭 — alts[탭] 은 그 탭으로 따로 요청했을 때와 글자 하나까지 같다
+{
+  const D3 = { result: { path: [
+    { info: { totalTime: 24, totalDistance: 9000, transferCount: 0, tab: 'fast' }, subPath: [walk(3), sub('부평', '강남', '수도권 1호선', 18), walk(3)] },
+    { info: { totalTime: 30, totalDistance: 9000, transferCount: 1, tab: 'less' }, subPath: [walk(3), bus('6', 20), walk(3)] }] } };
+  const fb = (tab) => base({ r: { data: D3, tab, a: '부평', b: '강남', bt: null, rb: now } });
+  const multi = E.hcardsScreens({ cap: 25 }, fb('fast'), ['less', 'sub', 'fast', 'zzz', 'less']);
+  const solo = E.hcardsScreen({ cap: 25 }, fb('less'));
+  ok(multi.ok && multi.alts && Object.keys(multi.alts).join() === 'less,sub' && JSON.stringify(multi.alts.less) === JSON.stringify(solo), '여러 탭 한 번에: alts[탭] 이 따로 요청한 화면과 같다 · 지금 탭 · 모르는 탭 · 중복은 뺀다');
+  ok(JSON.stringify(multi.body) === JSON.stringify(E.hcardsScreen({ cap: 25 }, fb('fast')).body) && !('alts' in E.hcardsScreens({ cap: 25 }, fb('fast'), [])) && E.hcardsScreens({ cap: 17 }, fb('fast'), ['less']).ok === false, 'alts 를 달아도 본 화면은 그대로 · alts 없으면 예전과 같다');
+}
+console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);
 })();

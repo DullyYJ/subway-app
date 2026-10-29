@@ -144,6 +144,11 @@ public class ShellActivity extends Activity {
         return at != null && System.currentTimeMillis() - at < 120000L ? v : null;
     }
     private void resPut(String k, String v) { lruPut(resCache, k, v, 16); synchronized (resAt) { resAt.put(k, System.currentTimeMillis()); if (resAt.size() > 64) resAt.clear(); } }
+    private final java.util.LinkedHashMap<String, String> hcTab = new java.util.LinkedHashMap<String, String>();      // 탭마다 미리 받은 홈 카드(브리핑 포함) — 결과 카드를 밀어 탭을 바꿀 때 바로 보이게
+    private final java.util.HashMap<String, Long> hcTabAt = new java.util.HashMap<String, Long>();
+    private final java.util.HashSet<String> hcFly = new java.util.HashSet<String>();
+    private void hcTabPut(String k, String v) { lruPut(hcTab, k, v, 12); synchronized (hcTabAt) { hcTabAt.put(k, System.currentTimeMillis()); if (hcTabAt.size() > 64) hcTabAt.clear(); } }
+    private boolean hcTabFresh(String k, long ms) { Long at; synchronized (hcTabAt) { at = hcTabAt.get(k); } return at != null && System.currentTimeMillis() - at < ms && lruGet(hcTab, k) != null; }
     private static String lruGet(java.util.LinkedHashMap<String, String> m, String k) { synchronized (m) { return m.get(k); } }
     private static void lruPut(java.util.LinkedHashMap<String, String> m, String k, String v, int cap) {
         synchronized (m) { m.remove(k); m.put(k, v); while (m.size() > cap) { java.util.Iterator<String> it = m.keySet().iterator(); it.next(); it.remove(); } }
@@ -193,7 +198,7 @@ public class ShellActivity extends Activity {
         body.setDpr(dpr);
         hostBody = new Host(1);
         body.setListener(hostBody);
-        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct) || "map".equals(ct); } });          // 커뮤니티 · 쇼핑 · 맛집 · 노선도(버스 ↔ 지하철) 좌우 밀기(웹 _commSwipeStep)
+        body.setSwipeHost(new ScreenView.SwipeHost() { @Override public boolean onSwipe(ScreenView v, int dir) { return commSwipe(dir); } @Override public boolean canSwipe() { String ct = ShellCore.currentTab(store); if ("home".equals(ct)) { ScreenCore.Screen hs = body.currentScreen(); return hs != null && (hs.swL != null || hs.swR != null) && home.hasRoute() && !home.riding(); } return "community".equals(ct) || "shop".equals(ct) || "food".equals(ct) || "map".equals(ct); } });          // 커뮤니티 · 쇼핑 · 맛집 · 노선도(버스 ↔ 지하철) 좌우 밀기(웹 _commSwipeStep)
         body.setPullHost(new ScreenView.PullHost() {                  // 아래로 당겨 새로고침(YJ: 버스가 계속 안 나올 때 · 스프링처럼 튀어오르며) — 노선도 버스 · 맛집
             @Override public boolean canPull() { String ct = ShellCore.currentTab(store); return ("map".equals(ct) && "bus".equals(map.mode())) || "food".equals(ct); }
             @Override public void onPull() {
@@ -1551,7 +1556,8 @@ public class ShellActivity extends Activity {
      */
     private boolean commSwipe(int dir) {
         String tab = ShellCore.currentTab(store);
-        if (!("community".equals(tab) || "shop".equals(tab) || "food".equals(tab) || "map".equals(tab)) || (dir != -1 && dir != 1)) return false;
+        if (!("home".equals(tab) || "community".equals(tab) || "shop".equals(tab) || "food".equals(tab) || "map".equals(tab)) || (dir != -1 && dir != 1)) return false;
+        if ("home".equals(tab) && (!home.hasRoute() || home.riding())) return true;                    // 경로 확정 뒤엔 결과 카드를 밀어 탭을 바꾸지 않는다
         ScreenCore.Screen sc = body.currentScreen();
         if (sc == null) return true;
         if (sc != swSeen) { swSeen = sc; swc.onScreen(sc, tab, "community".equals(tab) ? chat.sel() : ""); }                // 새 화면이 왔다 — 그 화면의 칸·순환표로 맞춘다(뼈대·오류 화면은 앞의 표를 둔다)
@@ -3724,19 +3730,18 @@ public class ShellActivity extends Activity {
         final boolean chip = homeChip; homeChip = false;
         final String themeNow = ShellCore.theme(store);
         final String resKey = home.dataRev + ":" + home.resTab + ":" + themeNow;
-        final java.util.LinkedHashMap<String, String> otherBodies = new java.util.LinkedHashMap<String, String>();               // 다른 탭 결과를 뒤에서 미리 받는다(칩을 누르면 바로 바뀌게)
-        if (hasRes && !home.riding()) for (String tb : HomeCore.RTABS) {              // 탑승 중엔 추적이 자주 바뀌므로 미리 받지 않는다
-            if ("longdist".equals(tb) || tb.equals(home.resTab)) continue;
-            String k2 = home.dataRev + ":" + tb + ":" + themeNow;
-            if (resGet(k2) == null) otherBodies.put(k2, tb);                          // 요청 본문은 뒤 스레드에서 만든다(주 스레드에서 큰 글을 여러 번 잇지 않는다)
-        }
-        final String curTab = home.resTab;
         final long nowH = System.currentTimeMillis();
         hc.ensureNext(nowH);
         hc.rideScene = RideService.running ? RideService.liveScene : "";
         hc.share = RideService.running && RideService.liveShare != null;
-        final String hKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
+        final String hKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
+        final String hcTk = hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark());
+        if (!hKey.equals(hcKey)) {                                                    // 이 탭의 브리핑을 미리 받아 둔 게 있으면 그것을 곧바로 쓴다(방금 받은 것이면 다시 묻지도 않는다)
+            String pre = lruGet(hcTab, hcTk);
+            if (pre != null && pre.length() > 0) { hcJson = pre; if (hcTabFresh(hcTk, 50000L)) hcKey = hKey; }
+        }
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
+        warmTabs();                                                                  // 경로가 있는 다른 탭의 결과 화면 · 홈 카드를 요청 하나씩으로 미리 받아 둔다(밀어서 탭을 바꿀 때 즉시)
         new Thread(new Runnable() {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
@@ -3752,23 +3757,11 @@ public class ShellActivity extends Activity {
                     } }, "shell-home-res");
                     tr.start();
                 }
-                for (final java.util.Map.Entry<String, String> ob : otherBodies.entrySet()) {
-                    synchronized (resFly) { if (!resFly.add(ob.getKey())) continue; }
-                    final String pat = ",\"tab\":\"" + curTab + "\",\"a\":";
-                    final int at = resBody.lastIndexOf(pat);
-                    if (at < 0) { synchronized (resFly) { resFly.remove(ob.getKey()); } continue; }
-                    final String body2 = resBody.substring(0, at) + ",\"tab\":\"" + ob.getValue() + "\",\"a\":" + resBody.substring(at + pat.length());          // 같은 사실에 탭만 바꾼다
-                    new Thread(new Runnable() { @Override public void run() {
-                        try {
-                            NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", body2, 15000);
-                            if (rr.status == 200 && rr.body != null && rr.body.length() > 0) resPut(ob.getKey(), rr.body);
-                        } finally { synchronized (resFly) { resFly.remove(ob.getKey()); } }
-                    } }, "shell-home-res-pre").start();
-                }
                 if (hBody.length() > 0) {
                     tc = new Thread(new Runnable() { @Override public void run() {
                         NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
                         String nj = cr.status == 200 && cr.body != null ? cr.body : "";
+                        if (nj.length() > 0) hcTabPut(hcTk, nj);
                         if (staleCards) {
                             if (nj.length() > 0) { boolean same = nj.equals(hcJson); hcKey = hKey; hcJson = nj; if (!same) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } }); }
                             return;
@@ -4487,6 +4480,48 @@ public class ShellActivity extends Activity {
             }
         }, "shell-ldpf" + w).start();
     }
+    /**
+     * s311(YJ): 경로 확정 전 결과 카드를 좌우로 밀면 탭(최단시간·최소환승·지하철·버스)이 바로 바뀌도록, 지금 탭이 아닌 탭들의 결과 카드 화면과 홈 카드(브리핑)를 미리 받아 둔다.
+     * 경로 응답을 탭마다 따로 올리지 않고 요청 둘(결과 화면 · 홈 카드)에 alts 로 묶어 한 번씩만 올린다 — 엔진이 탭마다 따로 요청한 것과 같은 화면을 돌려준다.
+     * 요청 본문은 주 스레드에서 만들고(상태는 되돌린다) 받는 것은 뒤 스레드. 이미 있거나 받는 중인 탭은 건너뛴다. 경로 없는 탭은 엔진이 빼 준다.
+     */
+    private void warmTabs() {
+        if (!home.hasRoute() || home.riding()) return;
+        final String th = ShellCore.theme(store);
+        final HomeCore.Env env = homeEnv();
+        final int rev = home.dataRev;
+        final java.util.ArrayList<String> rt = new java.util.ArrayList<String>(), ht = new java.util.ArrayList<String>(), htk = new java.util.ArrayList<String>();
+        for (String tb : home.resHas.isEmpty() ? java.util.Arrays.asList(HomeCore.RTABS) : new java.util.ArrayList<String>(home.resHas)) {
+            if (tb.equals(home.resTab)) continue;                                  // 지금 탭은 loadHome 본 요청이 받는다
+            String rk = rev + ":" + tb + ":" + th;
+            if (resGet(rk) == null) { boolean add; synchronized (resFly) { add = resFly.add(rk); } if (add) rt.add(tb); }
+            String tk = hc.tabKey(rev, tb, chat.talkCount(), chat.talkMark());
+            if (!hcTabFresh(tk, 45000L)) { boolean add; synchronized (hcFly) { add = hcFly.add(tk); } if (add) { ht.add(tb); htk.add(tk); } }
+        }
+        String rb = null, hb = null;
+        try {
+            if (!rt.isEmpty()) rb = ShellCore.altsBody(home.resultRequestTab(env, ShellCore.CAP, th, rt.get(0)), rt);
+            if (!ht.isEmpty()) {
+                hc.rideScene = RideService.running ? RideService.liveScene : ""; hc.share = RideService.running && RideService.liveShare != null;
+                hb = ShellCore.altsBody(hc.request(ShellCore.CAP, th, env, home.resultFactsTab(env, th, ht.get(0)), chat.recentTalksJson(8)), ht);
+            }
+        } catch (RuntimeException e) { rb = null; hb = null; }
+        final String rbf = rb, hbf = hb;
+        if (rbf == null) for (String t : rt) { synchronized (resFly) { resFly.remove(rev + ":" + t + ":" + th); } }
+        if (hbf == null) for (String k : htk) { synchronized (hcFly) { hcFly.remove(k); } }
+        if (rbf != null) new Thread(new Runnable() { @Override public void run() {
+            try {
+                NetPost.Res rr = NetPost.post(ShellCore.BASE + "/screen/result", rbf, 15000);
+                if (rr.status == 200 && rr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(rr.body, rt).entrySet()) resPut(rev + ":" + e.getKey() + ":" + th, e.getValue());
+            } finally { for (String t : rt) synchronized (resFly) { resFly.remove(rev + ":" + t + ":" + th); } }
+        } }, "shell-warm-res").start();
+        if (hbf != null) new Thread(new Runnable() { @Override public void run() {
+            try {
+                NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hbf, 15000);
+                if (cr.status == 200 && cr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(cr.body, ht).entrySet()) { int i = ht.indexOf(e.getKey()); if (i >= 0) hcTabPut(htk.get(i), e.getValue()); }
+            } finally { for (String k : htk) synchronized (hcFly) { hcFly.remove(k); } }
+        } }, "shell-warm-hc").start();
+    }
     /** 미리 받은 편을 골랐다고 가정한 요청 본문을 주 스레드에서 만들어(상태는 되돌린다) 엔진에 결과 카드·홈 카드 묶음 화면을 미리 받아 둔다. */
     private void ldWarmScreens(final int rid, final String key, final String body) {
         final String[] bs = new String[3];
@@ -4518,7 +4553,7 @@ public class ShellActivity extends Activity {
             long nowH = System.currentTimeMillis(); String th = ShellCore.theme(store);
             resPut(home.dataRev + ":" + home.resTab + ":" + th, sc[0]);
             hc.ensureNext(nowH); hc.rideScene = RideService.running ? RideService.liveScene : ""; hc.share = RideService.running && RideService.liveShare != null;
-            hcJson = sc[1]; hcKey = hc.key(home.resRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
+            hcJson = sc[1]; hcKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark()); hcTabPut(hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark()), sc[1]);
         }
         reloadHome();
     }

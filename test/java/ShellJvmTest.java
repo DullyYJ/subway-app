@@ -46,7 +46,7 @@ public class ShellJvmTest {
         ok("home".equals(ShellCore.currentTab(st)), "처음엔 홈 탭");
         st.put("tab", "bogus");
         ok("home".equals(ShellCore.currentTab(st)), "모르는 탭 이름은 홈으로");
-        ok(ShellCore.tabsBody("map").equals("{\"cap\":28,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
+        ok(ShellCore.tabsBody("map").equals("{\"cap\":29,\"f\":{\"tab\":\"map\"}}"), "탭 막대 요청 본문");
         ok(ShellCore.tabsBody("x\"y").contains("\"home\""), "엉터리 탭 이름은 요청에 실리지 않는다");
         ok(ShellCore.netOk(ShellCore.tabsUrl()), "탭 주소는 통신 허용 목록 안");
         ShellCore.Effect e = ShellCore.routeTabs(st, "call", "tab.shop");
@@ -405,11 +405,11 @@ public class ShellJvmTest {
         ok("news".equals(ShellCore.mode(s4)), "모르는 칩은 기본으로");
         ok(ShellCore.slotsOf(s4, "shop").length == 1 && "shop".equals(ShellCore.slotsOf(s4, "shop")[0]), "쇼핑 한 칸");
         ShellCore.Req rq = ShellCore.request("shop", s4, new String[0]);
-        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=28") && rq.body == null, "쇼핑 요청(분류 없음)");
+        ok("GET".equals(rq.method) && rq.url.equals("https://route-v2.phg0643.workers.dev/screen/shop?cap=29") && rq.body == null, "쇼핑 요청(분류 없음)");
         s4.put("shop_cat", "식사 & 간식");
         ok(ShellCore.request("shop", s4, new String[0]).url.endsWith("&cat=%EC%8B%9D%EC%82%AC+%26+%EA%B0%84%EC%8B%9D"), "쇼핑 분류 인코딩");
         rq = ShellCore.request("cchips", s4, null);
-        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":28,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
+        ok("POST".equals(rq.method) && rq.body.equals("{\"cap\":29,\"f\":{\"mode\":\"news\"}}"), "칩 줄 요청: " + rq.body);
         ok(ShellCore.feedUrls("news").length == 2 && ShellCore.netOk(ShellCore.feedUrls("news")[0]) && ShellCore.netOk(ShellCore.feedUrls("news")[1]), "뉴스 원자료 주소는 허용 목록 안");
         ok(ShellCore.feedUrls("shop").length == 0 && ShellCore.request("pending", s4, null) == null, "원자료 없는 화면 · 모르는 화면은 요청 없음");
 
@@ -472,7 +472,7 @@ public class ShellJvmTest {
         }
         s4.put("news_cat", "증시");
         rq = ShellCore.request("news", s4, new String[] { f0, f1 });
-        ok(rq.body.startsWith("{\"cap\":28,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
+        ok(rq.body.startsWith("{\"cap\":29,\"f\":{\"cat\":\"증시\"},\"n\":[[") && ShellCore.netOk(rq.url), "뉴스 요청 본문");
         ok(ShellCore.decode("a&lt;b&gt;&quot;&#x41;&unknown;&").equals("a<b>\"A&unknown;&"), "이름표 풀기 모음");
 
         // ── 칸별 눌림 ──
@@ -503,7 +503,7 @@ public class ShellJvmTest {
         dt = ShellCore.parseDetail("{\"ok\":true,\"detail\":{\"title\":\"t\",\"desc\":\"d\",\"open\":1}}", "javascript:x");
         ok(dt != null && !dt.open && "d".equals(dt.body), "이상한 링크면 원문 단추를 숨긴다");
         ok(ShellCore.parseDetail("{\"ok\":false}", "") == null && ShellCore.parseDetail("zzz", "") == null, "상세를 못 읽으면 null");
-        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":28,\"d\":[\"a\"]}"), "상세 요청 본문");
+        ok(ShellCore.newsDetailBody("[\"a\"]").equals("{\"cap\":29,\"d\":[\"a\"]}"), "상세 요청 본문");
 
         ok(ShellCore.palette("dark").length == 14 && ShellCore.palette("pastel").length == 14 && ShellCore.palette("zzz")[0] == 0xFFF0F4F8, "팔레트 14칸 · 기본은 파스텔");
         ok(ShellCore.palette("dark")[0] == 0xFF121214 && ShellCore.palette("dark")[5] == 0xFFD4AF37, "다크 배경·금색");
@@ -1102,6 +1102,40 @@ public class ShellJvmTest {
             { HomeCore je = new HomeCore(); je.setRoute("{\"result\":{}}", "송도3동", "마두", -1, 1L); je.text[HomeCore.START] = "송도3동"; je.text[HomeCore.DEST] = "마두"; je.baseMs = 5L; je.lastQs = "a=b"; je.resTab = "bus";
               je.endJourney();
               ok(!je.hasRoute() && je.lastQs.length() == 0 && je.text[HomeCore.DEST].length() == 0 && je.loc[HomeCore.DEST] == null && je.baseMs == -1 && "fast".equals(je.resTab) && "송도3동".equals(je.text[HomeCore.START]), "여정 종료: 경로 · 도착지 · 기준시각을 비우고 출발지는 그대로(첫 홈 화면)"); }
+            {   // s311: 결과 카드 좌우 밀기 — 합친 홈 화면이 결과의 sw 를 이어받고, 탭 순환표를 따라 넘기며, 탭별 홈 카드는 분(分)이 달라도 같은 열쇠다
+                String sw1 = "{\"ok\":true,\"v\":1,\"screen\":\"home\",\"cover\":\"chips\",\"head\":[],\"body\":[{\"t\":\"spacer\",\"h\":4}]}";
+                String sw2 = "{\"ok\":true,\"v\":1,\"screen\":\"result\",\"head\":[],\"body\":[{\"t\":\"panel\",\"swp\":true,\"kids\":[{\"t\":\"spacer\",\"h\":4}]}],\"sw\":{\"l\":{\"a\":\"call\",\"v\":\"rh.tab.less\"},\"r\":{\"a\":\"call\",\"v\":\"rh.tab.longdist\"},\"k\":\"fast\",\"t\":{\"fast\":{\"l\":{\"a\":\"call\",\"v\":\"rh.tab.less\"},\"r\":{\"a\":\"call\",\"v\":\"rh.tab.longdist\"}},\"less\":{\"l\":{\"a\":\"call\",\"v\":\"rh.tab.sub\"},\"r\":{\"a\":\"call\",\"v\":\"rh.tab.fast\"}}}}}";
+                try {
+                    ScreenCore.Screen swms = ScreenCore.load(ShellCore.mergeBodies(sw1, sw2));
+                    ok(swms.swL != null && "rh.tab.less".equals(swms.swL.v) && swms.swR != null && "rh.tab.longdist".equals(swms.swR.v) && "fast".equals(swms.swK) && swms.swT != null && swms.swT.size() == 2, "s311: 합친 홈 화면이 결과 카드의 sw(밀기 표)를 이어받는다");
+                    SwipeCore swx = new SwipeCore();
+                    swx.onScreen(swms, "home");
+                    ScreenCore.Act nx = swx.pick(-1, "home", "home");
+                    ok(nx != null && "rh.tab.less".equals(nx.v), "s311: 왼쪽으로 밀면 다음 탭");
+                    swx.note(nx);
+                    ScreenCore.Act nx2 = swx.pick(-1, "home", "home"), pv = swx.pick(1, "home", "home");
+                    ok(nx2 != null && "rh.tab.sub".equals(nx2.v) && pv != null && "rh.tab.fast".equals(pv.v), "s311: 다음 화면이 오기 전에 또 밀어도 '지금 고른 탭'에서 이어 넘어간다");
+                    ok(ShellCore.mergeBodies(sw2, sw1).contains("\"sw\"") && !ShellCore.mergeBodies(sw1, sw1).contains("\"sw\""), "s311: 밀기 표가 없는 화면은 그대로");
+                } catch (Exception e311) { ok(false, "s311: 밀기 표 읽기 " + e311); }
+                HcardsCore hk = new HcardsCore();
+                ok(hk.tabKey(3, "bus", 2, "x").equals(hk.tabKey(3, "bus", 2, "x")) && !hk.tabKey(3, "bus", 2, "x").equals(hk.tabKey(3, "sub", 2, "x")) && !hk.tabKey(3, "bus", 2, "x").equals(hk.tabKey(4, "bus", 2, "x")) && !hk.key(1, "bus", 60000L, 2, "x").equals(hk.key(1, "bus", 120000L, 2, "x")) && hk.tabKey(3, "bus", 2, "x").indexOf(':') > 0, "s311: 탭별 홈 카드 열쇠 — 탭 · 경로 자료가 다르면 다르고 분은 보지 않는다");
+                HomeCore hh = new HomeCore();
+                hh.onResult("{\"info\":{\"has\":{\"fast\":true,\"less\":false,\"sub\":true,\"bus\":true,\"longdist\":false}}}");
+                ok(hh.resHas.size() == 3 && "fast".equals(hh.resHas.get(0)) && "sub".equals(hh.resHas.get(1)) && "bus".equals(hh.resHas.get(2)), "s311: 결과 info.has 에서 경로 있는 탭 목록을 읽는다");
+                hh.setRoute("{\"result\":{}}", "부평", "강남", -1, 1L);
+                String fb = hh.resultFactsTab(new HomeCore.Env(), "dark", "bus");
+                ok(fb.contains("\"tab\":\"bus\"") && "fast".equals(hh.resTab) && hh.resultFacts(new HomeCore.Env(), "dark").contains("\"tab\":\"fast\""), "s311: 다른 탭을 고른 셈 치고 사실을 만들되 지금 탭은 그대로");
+                {   // 여러 탭 한 번에: 요청 끝에 alts 를 달고, 답을 탭마다 나눈다
+                    java.util.List<String> tl311 = java.util.Arrays.asList("less", "sub", "bus");
+                    String ab311 = ShellCore.altsBody("{\"cap\":29,\"r\":{\"tab\":\"less\"}}", tl311);
+                    ok("{\"cap\":29,\"r\":{\"tab\":\"less\"},\"alts\":[\"sub\",\"bus\"]}".equals(ab311) && ShellCore.altsBody("zz", tl311) == null && ShellCore.altsBody("{\"a\":1}", new java.util.ArrayList<String>()) == null && "{\"a\":1,\"alts\":[]}".equals(ShellCore.altsBody("{\"a\":1}", java.util.Arrays.asList("fast"))), "s311: 여러 탭 요청 — 끝에 alts(첫 탭 뒤의 탭들)를 단다");
+                    String ar311 = "{\"ok\":true,\"v\":1,\"screen\":\"result\",\"body\":[],\"info\":{\"tab\":\"less\"},\"alts\":{\"sub\":{\"ok\":true,\"screen\":\"result\",\"info\":{\"tab\":\"sub\"}},\"bus\":{\"ok\":false}}}";
+                    java.util.Map<String, String> ap311 = ShellCore.altsParse(ar311, tl311);
+                    ok(ap311.size() == 2 && ap311.get("less").contains("\"tab\":\"less\"") && !ap311.get("less").contains("alts") && ap311.get("sub").contains("\"tab\":\"sub\"") && !ap311.containsKey("bus"), "s311: 여러 탭 답을 탭마다 나눈다(alts 는 뺀다 · ok 아닌 화면은 넣지 않는다)");
+                    ok(ShellCore.altsParse("zzz", tl311).isEmpty() && ShellCore.altsParse("{\"ok\":false}", tl311).isEmpty(), "s311: 못 읽는 답 · 실패 답은 저장하지 않는다");
+                }
+                hh.onResult("zzz"); ok(hh.resHas.isEmpty(), "s311: 못 읽는 결과면 탭 목록을 비운다");
+            }
             String rf = h2.resultFacts(new HomeCore.Env(), "dark");
             ok(rf.contains("\"ride\":{\"on\":1,\"text\":\"다음 부평\"}") && rf.contains("\"lv\":{\"cur\":2"), "결과 사실에 탑승 상태(r.ride)와 내 위치(r.lv)가 실린다");
             {   // s214: 확정한 경로는 닫기 · 새로 찾기 · 바꾸기로 풀리지 않는다 — 안내를 끝내야(또는 도착해야) 풀린다

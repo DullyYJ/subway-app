@@ -43,7 +43,9 @@ final class SwipeCore {
 
     /** 행동을 실행했다(밀기 · 칩 누르기): 그 행동의 칸이 표에 있으면 지금 고른 칸으로 적는다. */
     void note(ScreenCore.Act a) {
-        if (tbl != null && a != null && "cat".equals(a.a) && a.v != null && tbl.containsKey(a.v)) cur = a.v;
+        if (tbl == null || a == null || a.v == null) return;
+        if ("cat".equals(a.a) && tbl.containsKey(a.v)) cur = a.v;
+        else if ("call".equals(a.a) && a.v.startsWith("rh.tab.") && tbl.containsKey(a.v.substring(7))) cur = a.v.substring(7);      // 경로 결과 카드: 탭 이름이 칸 이름
     }
 
     String current() { return cur; }

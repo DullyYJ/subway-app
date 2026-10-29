@@ -53,6 +53,8 @@ public final class HomeCore {
     public int dataRev = 0;                                      // 경로 자료(받은 경로 · 공지 · 탑승 추적)가 바뀔 때만 오른다 — 칩(최단시간 · 최소환승 · 지하철 · 버스)만 바꿀 때는 그대로(탭별 결과를 미리 받아 두는 열쇠)
     public void touch() { resRev++; dataRev++; }
     /** 탭만 바꿔 본 결과 요청(미리 받기용). 상태는 건드리지 않는다. */
+    /** 다른 탭을 골랐다고 가정한 결과 사실(상태는 되돌린다) — 그 탭의 홈 카드(브리핑)를 미리 받으려고 쓴다. */
+    public String resultFactsTab(Env env, String theme, String tab) { String keep = resTab; resTab = tab; try { return resultFacts(env, theme); } finally { resTab = keep; } }
     public String resultRequestTab(Env env, int cap, String theme, String tab) { String keep = resTab; resTab = tab; try { return resultRequest(env, cap, theme, 0); } finally { resTab = keep; } }
     public boolean hasRoute() { return routeRaw.length() > 2; }
     private static final java.util.regex.Pattern LD_PATH = java.util.regex.Pattern.compile("\"longDist\"\\s*:\\s*true");
@@ -71,12 +73,16 @@ public final class HomeCore {
     public String rideJson = "", lvJson = "";
     /** 엔진 결과 화면의 info.sec(지금 보이는 경로의 지하철 구간 이름). */
     public List<String> resSec = new ArrayList<String>();
+    /** 엔진 결과 화면의 info.has 에서 경로가 있는 탭들(최단시간·최소환승·지하철·버스·장거리 순) — 좌우 밀기로 넘길 탭을 미리 받아 둘 때 쓴다. */
+    public List<String> resHas = new ArrayList<String>();
     @SuppressWarnings("unchecked")
     public void onResult(String json) {
-        resSec = new ArrayList<String>(); ldM = new ArrayList<String>(); ldG = new ArrayList<String>();
+        resSec = new ArrayList<String>(); ldM = new ArrayList<String>(); ldG = new ArrayList<String>(); resHas = new ArrayList<String>();
         try {
             Object o = ScreenCore.parse(json);
             Object info = o instanceof Map ? ((Map<String, Object>) o).get("info") : null;
+            Object has = info instanceof Map ? ((Map<String, Object>) info).get("has") : null;
+            if (has instanceof Map) for (String t : RTABS) if (Boolean.TRUE.equals(((Map<String, Object>) has).get(t))) resHas.add(t);
             Object sec = info instanceof Map ? ((Map<String, Object>) info).get("sec") : null;
             if (sec instanceof List) for (Object x : (List<Object>) sec) if (x instanceof String) resSec.add((String) x);
             Object ld = info instanceof Map ? ((Map<String, Object>) info).get("ld") : null;
@@ -84,7 +90,7 @@ public final class HomeCore {
                 Object q = ((Map<String, Object>) ld).get(k);
                 if (q instanceof List) for (Object x : (List<Object>) q) (k.equals("m") ? ldM : ldG).add(x instanceof String ? (String) x : "");
             }
-        } catch (Exception e) { resSec = new ArrayList<String>(); }
+        } catch (Exception e) { resSec = new ArrayList<String>(); resHas = new ArrayList<String>(); }
     }
     /** 받은 경로 응답을 결과로 둔다. 모양이 JSON 객체가 아니면 버린다. */
     public boolean setRoute(String raw, String a, String b, long bt, long rb) {

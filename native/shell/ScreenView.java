@@ -527,7 +527,7 @@ public class ScreenView extends View {
                 pgHit = pagerAt(x, y);
                 swX0 = x; swY0 = y; swT0 = downT; swOff = false; swScroll0 = scrollY; swCan = swipeHost != null && swipeHost.canSwipe();
                 pullAllowed = pullHost != null && lay != null && lay.footH <= 0f && !inHead && !inBand && pullHost.canPull(); if (pullRelT > 0L && mode != 1) { pullRelT = 0L; pullY = 0f; }
-                swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || (pressed != null && (pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
+                swBlock = swipeHost == null || inHead || inBand || inFoot || fabDown || sceneTouch || swOutside(x, y) || (pressed != null && (pressed.kind == ScreenCore.K_FIELD || pressed.kind == ScreenCore.K_INBAR || pressed.kind == ScreenCore.K_SEARCH || pressed.kind == ScreenCore.K_RBTN));      // 웹 _swipeBlocked: 입력칸 · 단추 · 칩 줄 · 가로로 밀리는 영역에서 시작한 몸짓은 무시
                 invalidate();
                 return true;
             }
@@ -650,11 +650,23 @@ public class ScreenView extends View {
             default: return true;
         }
     }
+    /** 화면에 '좌우 밀기 카드'(panel swp)가 있으면 그 카드 밖에서 시작한 몸짓은 좌우 밀기가 아니다(세로 스크롤 · 다른 카드 그대로). 그런 카드가 없으면 항상 false. */
+    private boolean swOutside(float px, float py) {
+        if (lay == null) return false;
+        boolean any = false; float x = px / dpr, by = py / dpr - lay.headH + scrollY;
+        for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_PANEL && it.swp) { any = true; if (x >= it.x && x < it.x + it.w && by >= it.y && by < it.y + it.h) return false; }
+        return any;
+    }
     private boolean pressInFoot;
     private static final float PG_FLING = 500f;
     /** 분류 칩을 누르면 새 화면이 오기 전에 먼저 그 칩을 켜 보인다(같은 줄의 다른 칩은 끈다) — 엔진 화면이 오면 그것으로 덮어쓴다. */
     /** 좌우 밀기로 넘긴 칸의 칩을 새 화면이 오기 전에 먼저 켜 보인다(칩을 눌렀을 때와 같다) — 같은 행동을 가진 칩이 없으면 아무것도 안 한다. */
     public void lightChip(ScreenCore.Act a) {
+        if (lay != null && a != null && a.v != null && "call".equals(a.a) && a.v.startsWith("rh.tab.")) {          // 결과 카드를 밀어 탭을 넘길 때도 위 탭 단추를 먼저 켜 보인다
+            for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_BUTTON && it.act != null && a.v.equals(it.act.v)) { pickRtab(it); return; }
+            for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_BUTTON && it.act != null && a.v.equals(it.act.v)) { pickRtab(it); return; }
+            return;
+        }
         if (lay == null || a == null || a.v == null || !"cat".equals(a.a)) return;
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_CHIP && it.act != null && "cat".equals(it.act.a) && a.v.equals(it.act.v)) { pickChip(it); return; }
         for (ScreenCore.Item it : lay.body) if (it.kind == ScreenCore.K_CHIP && it.act != null && "cat".equals(it.act.a) && a.v.equals(it.act.v)) { pickChip(it); return; }

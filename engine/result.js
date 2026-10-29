@@ -414,6 +414,7 @@ function resPart(cap, part, facts) {
 //   r.ride.row = 대기 모드 엔진(ride-standby)의 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. 칸 색은 웹 _ROW_COLORS 와 같다.
 //   an = 전환 연출(앱이 sq 가 방금일 때만 그린다): { k, ms, e[4], sq, bg(가리개 색), o:{ s, fill, tc } 바뀌기 전 칸 }
 var RES_ROW_CAP = 21;
+var RES_SW_CAP = 29;                                                            // s311(YJ): 경로 확정 전 결과 카드를 좌우로 밀어 최단시간 · 최소환승 · 지하철 · 버스 탭을 넘기는 앱 수준(sw 밀기 표 · 패널 swp)
 var RES_CONF_CAP = 22;                                                          // 안내 전 버튼 줄의 [경로 확정](웹 mainConfirmRouteBtn)을 그릴 수 있는 앱 수준
 var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
 var RES_ROW_LABELS = { board: '탑승', transfer: '환승', arrive: '도착' };
@@ -455,6 +456,17 @@ function resNoRouteNodes(data) {
   var out = [{ t: 'text', s: title, size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }];
   lines.forEach(function (l) { out.push({ t: 'text', s: l, size: 12, color: 'sub', lh: 1.5, pad: [0, 4, 0, 0] }); });
   return out;
+}
+
+// s311: 결과 카드 좌우 밀기 표 — 경로가 있는 탭끼리 돌려 넘긴다(왼쪽으로 밀면 다음 탭 · 오른쪽으로 밀면 앞 탭 · 끝에서 처음으로). 탭이 둘 미만이면 없다.
+function resSwipe(has, tab) {
+  var ts = RESULT_TABS.filter(function (t) { return has[t]; });
+  if (!ts.length || (ts.length < 2 && ts.indexOf(tab) >= 0)) return null;
+  var act = function (t) { return { a: 'call', v: 'rh.tab.' + t }; };
+  var tbl = {};
+  ts.forEach(function (t, i) { tbl[t] = { l: act(ts[(i + 1) % ts.length]), r: act(ts[(i + ts.length - 1) % ts.length]) }; });
+  if (ts.indexOf(tab) < 0) tbl[tab] = { l: act(ts[0]), r: act(ts[ts.length - 1]) };      // 지금 탭에 경로가 없어도(예: 버스 없음) 밀어서 경로 있는 탭으로 나갈 수 있다
+  return { l: tbl[tab].l, r: tbl[tab].r, k: tab, t: tbl };
 }
 
 function resultScreen(opt, r) {
@@ -519,7 +531,25 @@ function resultScreen(opt, r) {
   var ldInfo = ldView;                                            // s307: 장거리 탭이 아니어도 질의 목록을 알려 앱이 모든 편의 경로·브리핑을 미리 받아 둔다(누르면 바로 바뀌게)
   if (!ldInfo && has.longdist) { var lr0 = resConvertPath(pick.longdist); if (lr0 && lr0.ld) ldInfo = resLdView(lr0, ldOrigPath ? resConvertPath(ldOrigPath) : null); }
   var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldInfo ? resLdQuery(ldInfo) : null } };
+  var swp = cap >= RES_SW_CAP && body.length && !(r.ride && r.ride.on) ? resSwipe(has, tab) : null;      // 경로 확정 전(탑승 전)에만 — 확정하면 경로가 고정이다
+  if (swp) { out.sw = swp; body[0].swp = true; }
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop, resNmFix: resNmFix };
+// s311: 같은 경로 응답으로 다른 탭 화면까지 한 번에 — 요청 하나(경로 응답을 한 번만 보낸다)로 alts[탭] 을 받는다. 각 alts[탭] 은 그 탭으로 따로 요청했을 때와 글자 하나까지 같다(시험이 대조).
+// 경로가 없는 탭 · 지금 탭 · 모르는 탭은 만들지 않는다. 앞에서부터 RES_ALTS_MAX 개.
+var RES_ALTS_MAX = 5;
+function resultScreens(opt, r, alts) {
+  var out = resultScreen(opt, r);
+  if (!out || !out.ok || !Array.isArray(alts) || !alts.length) return out;
+  var made = {}, n = 0, i;
+  for (i = 0; i < alts.length && n < RES_ALTS_MAX; i++) {
+    var t = alts[i];
+    if (RESULT_TABS.indexOf(t) < 0 || t === out.info.tab || made[t] || !out.info.has[t]) continue;
+    var o2 = resultScreen(opt, Object.assign({}, r, { tab: t }));
+    if (o2 && o2.ok) { made[t] = o2; n++; }
+  }
+  if (n) out.alts = made;
+  return out;
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { resultScreens: resultScreens, resNoRouteNodes: resNoRouteNodes, resTrkFacts: resTrkFacts, resultScreen: resultScreen, resConvertPath: resConvertPath, resApplyRv: resApplyRv, resPickTabs: resPickTabs, resNormStop: resNormStop, resNmFix: resNmFix };

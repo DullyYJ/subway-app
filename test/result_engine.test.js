@@ -325,6 +325,34 @@ ok(E.resultScreen({ cap: 11 }, { data: DATA }).ok === false, 'cap 12 미만이�
   ok(flat(ns.body).some(n => n.t === 'spacer' && n.slot === 'ai' && n.drop === 1), '이 탭에 경로가 없으면 AI 브리핑을 떼어 내라는 표시(drop)');
   ok(!flat(E.resultScreen({ cap: 24 }, Object.assign({ tab: 'sub', a: 'A', b: 'B', now, tz: 540, th: 'dark' }, sd)).body).some(n => n.slot === 'ai'), '옛 앱(규격 25 미만)에는 표시 없음');
 }
+// ⑤-e s311(YJ): 경로 확정 전 결과 카드를 좌우로 밀어 탭을 넘긴다 — 엔진이 밀기 표(sw)를 주고 카드(panel)에 swp 를 단다
+{
+  const c29 = (tab, extra, cap) => E.resultScreen({ cap: cap || 29 }, Object.assign({ data: DATA, tab, a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1 }, extra || {}));
+  const o = c29('fast'), has = o.info.has, ts = ['fast', 'less', 'sub', 'bus', 'longdist'].filter(t => has[t]);
+  ok(ts.length >= 2 && o.sw && o.sw.k === 'fast', '경로가 둘 이상이면 sw 가 온다: ' + JSON.stringify(ts));
+  ok(o.sw.l.a === 'call' && o.sw.l.v === 'rh.tab.' + ts[1] && o.sw.r.v === 'rh.tab.' + ts[ts.length - 1], '왼쪽으로 밀면 다음 탭 · 오른쪽으로 밀면 앞 탭(처음에서 뒤로 가면 끝 탭 — 돌려 넘긴다)');
+  ok(ts.every((t, i) => o.sw.t[t].l.v === 'rh.tab.' + ts[(i + 1) % ts.length] && o.sw.t[t].r.v === 'rh.tab.' + ts[(i + ts.length - 1) % ts.length]), '탭마다 순환 표를 모두 준다(다음 화면이 오기 전에 또 밀어도 이어 넘어간다)');
+  ok(o.body[0].swp === true, '결과 카드(panel)에 swp — 앱은 이 카드 안에서 시작한 밀기만 넘긴다');
+  const o2 = c29(ts[ts.length - 1]); ok(o2.sw.k === ts[ts.length - 1] && o2.sw.l.v === 'rh.tab.' + ts[0], '끝 탭에서 왼쪽으로 밀면 처음 탭');
+  ok(!c29('fast', null, 28).sw && c29('fast', null, 28).body[0].swp === undefined, '규격 28 이하 앱에는 sw · swp 를 쓰지 않는다');
+  ok(!c29('fast', { ride: { on: true } }).sw && !c29('fast', { ride: { on: true } }).body[0].swp, '경로 확정(탑승 중) 뒤엔 밀어서 탭을 바꾸지 않는다');
+  const none = ['fast', 'less', 'sub', 'bus', 'longdist'].filter(t => !has[t])[0];
+  if (none) { const o3 = c29(none); ok(!o3.sw || (o3.sw.l.v === 'rh.tab.' + ts[0] && o3.sw.r.v === 'rh.tab.' + ts[ts.length - 1] && o3.sw.t[none]), '경로 없는 탭에서도 밀어서 경로 있는 탭으로 나간다'); }
+  const one = E.resultScreen({ cap: 29 }, { data: { result: { path: [DATA.result.path[0]] } }, tab: 'fast', a: 'A', b: 'B', now, tz: 540, th: 'dark' });
+  ok(Object.keys(one.info.has).filter(t => one.info.has[t]).length < 2 ? !one.sw || one.sw.t : true, '탭이 하나뿐이면 넘길 곳이 없다');
+  const chk = screenCheck([o]); ok(!chk.err && chk.out.every(l => /^OK/.test(l)), '앱 검증기가 sw · swp 를 받는다: ' + (chk.err || chk.out.join('|')));
+}
+// ⑤-f s311: 한 번에 여러 탭 — alts[탭] 은 따로 요청했을 때와 글자 하나까지 같다
+{
+  const rq = (tab) => ({ data: DATA, tab, a: '부평', b: '두정', bt: null, rb: now, now, tz: 540, th: 'pastel', fav: 1 });
+  const has = E.resultScreen({ cap: 29 }, rq('fast')).info.has, ts = ['fast', 'less', 'sub', 'bus', 'longdist'].filter(t => has[t]);
+  const multi = E.resultScreens({ cap: 29 }, rq('fast'), ['less', 'sub', 'bus', 'longdist', 'fast', 'zzz', 'less']);
+  const want = ts.filter(t => t !== 'fast');
+  ok(multi.ok && Object.keys(multi.alts || {}).sort().join() === want.slice().sort().join(), '경로 있는 다른 탭만 alts 에 온다: ' + Object.keys(multi.alts || {}) + ' / ' + want);
+  ok(want.every(t => JSON.stringify(multi.alts[t]) === JSON.stringify(E.resultScreen({ cap: 29 }, rq(t)))), 'alts[탭] 이 따로 요청한 화면과 글자 하나까지 같다(밀기 표 포함)');
+  ok(JSON.stringify(multi.body) === JSON.stringify(E.resultScreen({ cap: 29 }, rq('fast')).body) && !('alts' in E.resultScreens({ cap: 29 }, rq('fast'), [])) && !('alts' in E.resultScreens({ cap: 29 }, rq('fast'))), '본 화면은 그대로 · alts 가 없거나 비면 예전과 같다');
+  ok(E.resultScreens({ cap: 5 }, rq('fast'), ['less']).ok === false, '규격 모자라면 그대로 실패');
+}
 // ⑥ 워커 내장
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');

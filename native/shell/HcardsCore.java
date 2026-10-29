@@ -106,6 +106,10 @@ public final class HcardsCore {
     public String key(int resRev, String tab, long now, int talkN, String lastTalk) {
         return resRev + ":" + tab + ":" + (now / 60000) + ":" + rev + ":" + talkN + ":" + (lastTalk == null ? "" : lastTalk) + ":" + aiNextAt + ":" + (rideScene == null ? 0 : rideScene.hashCode()) + ":" + (share ? 1 : 0);
     }
+    /** 탭마다 따로 간직하는 열쇠 — key() 에서 분(分)을 뺐다. 경로 결과 카드를 밀어 탭을 바꿀 때 그 탭의 브리핑을 미리 받아 둔 것을 찾는다(받은 지 얼마 안 됐으면 그대로, 오래됐으면 먼저 보이고 뒤에서 갱신). */
+    public String tabKey(int dataRev, String tab, int talkN, String lastTalk) {
+        return dataRev + ":" + tab + ":" + rev + ":" + talkN + ":" + (lastTalk == null ? "" : lastTalk) + ":" + aiNextAt + ":" + (rideScene == null ? 0 : rideScene.hashCode()) + ":" + (share ? 1 : 0);
+    }
     /** 눌림. tk.send 는 입력된 글(fields['talk.in'])을 받는다. */
     public int act(String v, String input) {
         if ("share.loc".equals(v)) return R_SHARE;

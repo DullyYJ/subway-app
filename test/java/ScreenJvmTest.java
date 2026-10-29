@@ -906,6 +906,14 @@ public class ScreenJvmTest {
             ok(fsel.onIdx == 4 && fsel.rows.get(4).on && !fsel.rows.get(2).on && !fsel.open, "pickl fold: 펼친 목록에서 고르면 새 화면이 오기 전에도 접힌 모습이 그 줄(pickSelect)");
         }
 
+        {   // s311: panel swp = 좌우 밀기가 이 카드 안에서만 먹는 카드 · 화면 sw 표(l/r/k/t)
+            String swj = "{\"ok\":true,\"v\":1,\"screen\":\"home\",\"cover\":\"chips\",\"head\":[],\"body\":[{\"t\":\"panel\",\"kids\":[{\"t\":\"text\",\"s\":\"가\"}]},{\"t\":\"panel\",\"swp\":true,\"kids\":[{\"t\":\"text\",\"s\":\"나\"}]}],\"sw\":{\"l\":{\"a\":\"call\",\"v\":\"rh.tab.less\"},\"r\":{\"a\":\"call\",\"v\":\"rh.tab.bus\"},\"k\":\"fast\"}}";
+            ScreenCore.Screen sws = ScreenCore.load(swj);
+            ScreenCore.Layout swl = ScreenCore.layout(sws, 340f, M);
+            int np = 0, nsp = 0; for (ScreenCore.Item it : swl.body) if (it.kind == ScreenCore.K_PANEL) { np++; if (it.swp) nsp++; }
+            ok(np == 2 && nsp == 1 && sws.swL != null && "rh.tab.less".equals(sws.swL.v) && "rh.tab.bus".equals(sws.swR.v) && "fast".equals(sws.swK), "panel swp: 표시한 카드만 밀기 영역 · 화면 sw 를 읽는다");
+        }
+
         // ── 알약 글자(pill: 미리보기 라벨) ──
         String pvJson = "{\"ok\":true,\"v\":1,\"screen\":\"pvl\",\"cover\":\"tab\",\"bg\":\"card\",\"head\":[{\"t\":\"pill\",\"pad\":[0,0,0,10],\"s\":\"예상 경로 · 오후 2:30\",\"size\":11,\"bold\":true,\"tc\":\"#ff9500\",\"fill\":\"rgba(255,149,0,0.14)\",\"ph\":11,\"pv\":4,\"r\":9}],\"body\":[{\"t\":\"spacer\",\"h\":0}]}";
         ScreenCore.Layout PVL = ScreenCore.layout(ScreenCore.load(pvJson), 300f, M);

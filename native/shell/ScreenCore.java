@@ -185,6 +185,7 @@ public final class ScreenCore {
     public static final class Node {
         public String t = "";
         public String s2 = "";                          // sec: 두 번째 제목(두 쪽 카드의 둘째 쪽이 보일 때) — 밀리는 정도에 맞춰 첫째 제목과 바뀐다
+        public boolean swp;                              // panel: 이 카드 안에서 시작한 좌우 밀기만 화면의 sw 로 넘긴다(그 밖은 세로 스크롤)
         public String sc2 = "";                          // panel: 옆으로 밀면 보이는 두 번째 쪽(지하철 객실 장면)의 엔진 글(JSON). 없으면 한 쪽짜리 카드
         public float padL, padT, padR, padB;
         public float gap = 6f, h = 0f, size = 12f, lh = 1.35f, alpha = 1f;
@@ -504,7 +505,7 @@ public final class ScreenCore {
         } else if ("panel".equals(t)) {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border"); n.r = optNum(m, "r", 14f, 0f, 40f);
-            n.glow = optBool(m, "glow", false);
+            n.glow = optBool(m, "glow", false); n.swp = optBool(m, "swp", false);          // swp = 좌우 밀기가 이 카드 안에서만 먹는 카드(경로 결과 카드 · s311)
             n.sc2 = optStr(m, "sc2", "", SCENE_MAX); if (n.sc2.length() >= SCENE_MAX) n.sc2 = "";
             n.lbw = optNum(m, "lb", 0f, 0f, 12f); n.lbc = roleOrCss(m, "lc", "gold"); if (n.lbc.length() == 0) n.lbc = "gold";       // 왼쪽 굵은 띠(웹 border-left)
             for (Object ko : asArr(m.get("kids"), "panel.kids")) {
@@ -1186,7 +1187,7 @@ public final class ScreenCore {
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
         public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
-        public boolean pub;
+        public boolean pub, swp;
         public float[] pathOps = new float[0];       // 탭 아이콘(절대 좌표 M/L/C/Z 로 풀어 둔 것: [연산, 좌표…])
         public float btnLX, btnLW, zoneX, zoneY, zoneW, zoneH;   // 말풍선 '신고' 글자 자리 · 입력줄 단추 글자 자리
         public Col fill2;                            // 말풍선 글자색 따로 필요할 때
@@ -2057,7 +2058,7 @@ public final class ScreenCore {
         if ("panel".equals(n.t)) {
             Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = n.r;
             pn.fill = col(n.fill, null); pn.line = col(n.line, null); pn.sw = n.lbw; if (n.lbw > 0f) pn.ac = col(n.lbc, new Col("gold", 0));
-            pn.pub = n.glow;
+            pn.pub = n.glow; pn.swp = n.swp;
             out.add(pn); final int pg0 = out.size();
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
             Item sbox = null; float sy0 = 0f;

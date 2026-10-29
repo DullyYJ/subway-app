@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-29s309";
+var ENGINE_VERSION = "route-v2-2026-10-29s311";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -21453,6 +21453,7 @@ function resPart(cap, part, facts) {
 //   r.ride.row = \ub300\uae30 \ubaa8\ub4dc \uc5d4\uc9c4(ride-standby)\uc758 row { slot, label, leg, can, anim:{kind,ms,ease,sq,o} }. \uce78 \uc0c9\uc740 \uc6f9 _ROW_COLORS \uc640 \uac19\ub2e4.
 //   an = \uc804\ud658 \uc5f0\ucd9c(\uc571\uc774 sq \uac00 \ubc29\uae08\uc77c \ub54c\ub9cc \uadf8\ub9b0\ub2e4): { k, ms, e[4], sq, bg(\uac00\ub9ac\uac1c \uc0c9), o:{ s, fill, tc } \ubc14\ub00c\uae30 \uc804 \uce78 }
 var RES_ROW_CAP = 21;
+var RES_SW_CAP = 29;                                                            // s311(YJ): \uacbd\ub85c \ud655\uc815 \uc804 \uacb0\uacfc \uce74\ub4dc\ub97c \uc88c\uc6b0\ub85c \ubc00\uc5b4 \ucd5c\ub2e8\uc2dc\uac04 \u00b7 \ucd5c\uc18c\ud658\uc2b9 \u00b7 \uc9c0\ud558\ucca0 \u00b7 \ubc84\uc2a4 \ud0ed\uc744 \ub118\uae30\ub294 \uc571 \uc218\uc900(sw \ubc00\uae30 \ud45c \u00b7 \ud328\ub110 swp)
 var RES_CONF_CAP = 22;                                                          // \uc548\ub0b4 \uc804 \ubc84\ud2bc \uc904\uc758 [\uacbd\ub85c \ud655\uc815](\uc6f9 mainConfirmRouteBtn)\uc744 \uadf8\ub9b4 \uc218 \uc788\ub294 \uc571 \uc218\uc900
 var RES_ROW_COLORS = { board: { fill: '#0a84ff', tc: '#ffffff' }, transfer: { fill: '#bf5af2', tc: '#ffffff' }, arrive: { fill: '#e8b84a', tc: '#121214' } };
 var RES_ROW_LABELS = { board: '\ud0d1\uc2b9', transfer: '\ud658\uc2b9', arrive: '\ub3c4\ucc29' };
@@ -21494,6 +21495,17 @@ function resNoRouteNodes(data) {
   var out = [{ t: 'text', s: title, size: 13, bold: true, color: 'sub', lh: 1.5, pad: [0, 0, 0, 0] }];
   lines.forEach(function (l) { out.push({ t: 'text', s: l, size: 12, color: 'sub', lh: 1.5, pad: [0, 4, 0, 0] }); });
   return out;
+}
+
+// s311: \uacb0\uacfc \uce74\ub4dc \uc88c\uc6b0 \ubc00\uae30 \ud45c \u2014 \uacbd\ub85c\uac00 \uc788\ub294 \ud0ed\ub07c\ub9ac \ub3cc\ub824 \ub118\uae34\ub2e4(\uc67c\ucabd\uc73c\ub85c \ubc00\uba74 \ub2e4\uc74c \ud0ed \u00b7 \uc624\ub978\ucabd\uc73c\ub85c \ubc00\uba74 \uc55e \ud0ed \u00b7 \ub05d\uc5d0\uc11c \ucc98\uc74c\uc73c\ub85c). \ud0ed\uc774 \ub458 \ubbf8\ub9cc\uc774\uba74 \uc5c6\ub2e4.
+function resSwipe(has, tab) {
+  var ts = RESULT_TABS.filter(function (t) { return has[t]; });
+  if (!ts.length || (ts.length < 2 && ts.indexOf(tab) >= 0)) return null;
+  var act = function (t) { return { a: 'call', v: 'rh.tab.' + t }; };
+  var tbl = {};
+  ts.forEach(function (t, i) { tbl[t] = { l: act(ts[(i + 1) % ts.length]), r: act(ts[(i + ts.length - 1) % ts.length]) }; });
+  if (ts.indexOf(tab) < 0) tbl[tab] = { l: act(ts[0]), r: act(ts[ts.length - 1]) };      // \uc9c0\uae08 \ud0ed\uc5d0 \uacbd\ub85c\uac00 \uc5c6\uc5b4\ub3c4(\uc608: \ubc84\uc2a4 \uc5c6\uc74c) \ubc00\uc5b4\uc11c \uacbd\ub85c \uc788\ub294 \ud0ed\uc73c\ub85c \ub098\uac08 \uc218 \uc788\ub2e4
+  return { l: tbl[tab].l, r: tbl[tab].r, k: tab, t: tbl };
 }
 
 function resultScreen(opt, r) {
@@ -21558,11 +21570,30 @@ function resultScreen(opt, r) {
   var ldInfo = ldView;                                            // s307: \uc7a5\uac70\ub9ac \ud0ed\uc774 \uc544\ub2c8\uc5b4\ub3c4 \uc9c8\uc758 \ubaa9\ub85d\uc744 \uc54c\ub824 \uc571\uc774 \ubaa8\ub4e0 \ud3b8\uc758 \uacbd\ub85c\u00b7\ube0c\ub9ac\ud551\uc744 \ubbf8\ub9ac \ubc1b\uc544 \ub454\ub2e4(\ub204\ub974\uba74 \ubc14\ub85c \ubc14\ub00c\uac8c)
   if (!ldInfo && has.longdist) { var lr0 = resConvertPath(pick.longdist); if (lr0 && lr0.ld) ldInfo = resLdView(lr0, ldOrigPath ? resConvertPath(ldOrigPath) : null); }
   var out = { ok: true, v: RESULT_V, screen: 'result', cover: 'chips', head: [], body: body, info: { has: has, tab: tab, m: total, n: paths.length, sec: sec, ld: ldInfo ? resLdQuery(ldInfo) : null } };
+  var swp = cap >= RES_SW_CAP && body.length && !(r.ride && r.ride.on) ? resSwipe(has, tab) : null;      // \uacbd\ub85c \ud655\uc815 \uc804(\ud0d1\uc2b9 \uc804)\uc5d0\ub9cc \u2014 \ud655\uc815\ud558\uba74 \uacbd\ub85c\uac00 \uace0\uc815\uc774\ub2e4
+  if (swp) { out.sw = swp; body[0].swp = true; }
   out.rev = 'e' + RESULT_V + ':' + resHash(JSON.stringify(body));
+  return out;
+}
+// s311: \uac19\uc740 \uacbd\ub85c \uc751\ub2f5\uc73c\ub85c \ub2e4\ub978 \ud0ed \ud654\uba74\uae4c\uc9c0 \ud55c \ubc88\uc5d0 \u2014 \uc694\uccad \ud558\ub098(\uacbd\ub85c \uc751\ub2f5\uc744 \ud55c \ubc88\ub9cc \ubcf4\ub0b8\ub2e4)\ub85c alts[\ud0ed] \uc744 \ubc1b\ub294\ub2e4. \uac01 alts[\ud0ed] \uc740 \uadf8 \ud0ed\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uae00\uc790 \ud558\ub098\uae4c\uc9c0 \uac19\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870).
+// \uacbd\ub85c\uac00 \uc5c6\ub294 \ud0ed \u00b7 \uc9c0\uae08 \ud0ed \u00b7 \ubaa8\ub974\ub294 \ud0ed\uc740 \ub9cc\ub4e4\uc9c0 \uc54a\ub294\ub2e4. \uc55e\uc5d0\uc11c\ubd80\ud130 RES_ALTS_MAX \uac1c.
+var RES_ALTS_MAX = 5;
+function resultScreens(opt, r, alts) {
+  var out = resultScreen(opt, r);
+  if (!out || !out.ok || !Array.isArray(alts) || !alts.length) return out;
+  var made = {}, n = 0, i;
+  for (i = 0; i < alts.length && n < RES_ALTS_MAX; i++) {
+    var t = alts[i];
+    if (RESULT_TABS.indexOf(t) < 0 || t === out.info.tab || made[t] || !out.info.has[t]) continue;
+    var o2 = resultScreen(opt, Object.assign({}, r, { tab: t }));
+    if (o2 && o2.ok) { made[t] = o2; n++; }
+  }
+  if (n) out.alts = made;
   return out;
 }
 // \uacbd\ub85c \uacb0\uacfc \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/result (engine/result.js \uc758 resultScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/result") return handleScreenResult(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(12 \uc774\uc0c1), r:{ data(\uacbd\ub85c \uc751\ub2f5 \uadf8\ub300\ub85c), tab, a, b, bt, rb, now, tz, th, fav } }
+//   alts(\uc120\ud0dd, s311): \uac19\uc740 \uacbd\ub85c \uc751\ub2f5\uc73c\ub85c \ud568\uaed8 \ubc1b\uc744 \ub2e4\ub978 \ud0ed \uc774\ub984\ub4e4 ["less","sub",\u2026] \u2192 \uc751\ub2f5\uc758 alts[\ud0ed] \uc5d0 \uadf8 \ud0ed \ud654\uba74(\ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uac19\ub2e4). \uacbd\ub85c \uc5c6\ub294 \ud0ed\uc740 \ube60\uc9c4\ub2e4.
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4. \uac1c\uc778 \uc2dd\ubcc4 \uc815\ubcf4\ub294 \uc624\uac00\uc9c0 \uc54a\ub294\ub2e4(\uc774\ub984 \ub450 \uac1c\uc640 \uacbd\ub85c \uc751\ub2f5\ubfd0).
 async function handleScreenResult(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
@@ -21574,7 +21605,7 @@ async function handleScreenResult(request) {
   try { body = JSON.parse(raw); } catch (e) { return new Response(JSON.stringify({ ok: false, error: "bad-json" }), { status: 400, headers: H }); }
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out;
-  try { out = resultScreen({ cap: Number(body.cap) || 0 }, body.r); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
+  try { out = resultScreens({ cap: Number(body.cap) || 0 }, body.r, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });
@@ -23519,8 +23550,24 @@ function hcardsScreen(inp, f) {
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;
 }
+// s311: \uac19\uc740 \uc0ac\uc2e4\ub85c \ub2e4\ub978 \ud0ed(\ucd5c\ub2e8\uc2dc\uac04\u00b7\ucd5c\uc18c\ud658\uc2b9\u00b7\uc9c0\ud558\ucca0\u00b7\ubc84\uc2a4\u00b7\uc7a5\uac70\ub9ac)\uc758 \ud648 \uce74\ub4dc(AI \ube0c\ub9ac\ud551 \ud3ec\ud568)\uae4c\uc9c0 \ud55c \ubc88\uc5d0 \u2014 \uacbd\ub85c \uc751\ub2f5\uc744 \ud55c \ubc88\ub9cc \ubcf4\ub0b8\ub2e4. alts[\ud0ed] \uc740 \uadf8 \ud0ed\uc73c\ub85c \ub530\ub85c \uc694\uccad\ud588\uc744 \ub54c\uc640 \uac19\ub2e4(\uc2dc\ud5d8\uc774 \ub300\uc870).
+var HC_ALT_TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
+function hcardsScreens(inp, f, alts) {
+  var out = hcardsScreen(inp, f);
+  if (!out || !out.ok || !Array.isArray(alts) || !alts.length || !f || !f.r || typeof f.r !== 'object') return out;
+  var made = {}, n = 0, i;
+  for (i = 0; i < alts.length && n < HC_ALT_TABS.length; i++) {
+    var t = alts[i];
+    if (HC_ALT_TABS.indexOf(t) < 0 || t === f.r.tab || made[t]) continue;
+    var o2 = hcardsScreen(inp, Object.assign({}, f, { r: Object.assign({}, f.r, { tab: t }) }));
+    if (o2 && o2.ok) { made[t] = o2; n++; }
+  }
+  if (n) out.alts = made;
+  return out;
+}
 // \ud648 \uce74\ub4dc \ubb36\uc74c \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 POST /screen/hcards (engine/hcards.js \uc758 hcardsScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/hcards") return handleScreenHcards(request);` \ub97c \ub123\ub294\ub2e4.
 //   \ubcf8\ubb38(JSON \uae00, Content-Type: text/plain): { cap(18 \uc774\uc0c1), f:{ now, tz, th, hol, gps, r, ai, tk } } \u2014 \ub0a0\uc528(f.wx)\ub294 Worker \uac00 \ucc44\uc6b4\ub2e4
+//   alts(\uc120\ud0dd, s311): \uac19\uc740 \uc0ac\uc2e4\ub85c \ud568\uaed8 \ubc1b\uc744 \ub2e4\ub978 \ud0ed \uc774\ub984\ub4e4 \u2192 \uc751\ub2f5\uc758 alts[\ud0ed] \uc5d0 \uadf8 \ud0ed\uc758 \ud648 \uce74\ub4dc \ud654\uba74
 //   \uc5d4\uc9c4\uc740 \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \uc0ac\uc2e4\ub85c \ud654\uba74\uc744 \uacc4\uc0b0\ud574 \ub3cc\ub824\uc904 \ubfd0).
 async function handleScreenHcards(request) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
@@ -23539,7 +23586,7 @@ async function handleScreenHcards(request) {
     }
   } catch (eWx) { /* \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0 */ }
   var out;
-  try { out = hcardsScreen({ cap: Number(body.cap) || 0 }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  try { out = hcardsScreens({ cap: Number(body.cap) || 0 }, body.f, body.alts); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   out.ver = ENGINE_VERSION;
   return new Response(JSON.stringify(out), { headers: H });

@@ -18,7 +18,7 @@ public final class ShellCore {
 
     public static final String BASE = "https://route-v2.phg0643.workers.dev";
     /** 껍데기가 아는 화면 규격(ScreenNativePlugin 의 status cap 과 같은 단계). */
-    public static final int CAP = 28;
+    public static final int CAP = 29;
     /** 설정 화면 요청의 cap — 3 이면 하위 화면 행동이 'web' 이라 껍데기가 안 열 수 있는 것은 '아직 안 옮겼어요'로 알린다. */
     public static final int SETTINGS_CAP = 8;
 
@@ -494,6 +494,7 @@ public final class ShellCore {
             body.addAll((List<Object>) mb.get("body"));
             fuseAi(body);
             ma.put("body", body);
+            if (mb.get("sw") instanceof Map && ma.get("sw") == null) ma.put("sw", mb.get("sw"));          // s311: 결과 카드의 좌우 밀기 표(탭 순환)를 합친 홈 화면이 이어받는다
             return HomeSearchCore.toJson(ma);
         } catch (Exception e) { return first; }
     }
@@ -533,6 +534,30 @@ public final class ShellCore {
             body.remove(ia);
             return;
         }
+    }
+    /** 요청 본문(…}}) 끝에 alts(첫 탭 뒤의 탭들)를 단다 — 요청 자체가 첫 탭이다. 모양이 다르면 null. (s311: 경로 응답을 한 번만 올려 여러 탭 화면을 받는다) */
+    public static String altsBody(String body, List<String> tabs) {
+        if (body == null || body.length() < 4 || body.charAt(body.length() - 1) != '}' || tabs == null || tabs.isEmpty()) return null;
+        StringBuilder b = new StringBuilder(body.substring(0, body.length() - 1)).append(",\"alts\":[");
+        for (int i = 1; i < tabs.size(); i++) { if (i > 1) b.append(','); b.append(q(tabs.get(i))); }
+        return b.append("]}").toString();
+    }
+    /** 여러 탭을 한 번에 받은 답을 탭마다 나눈다: 본 화면 = 첫 탭, alts[탭] = 나머지(alts 는 뺀 채로). ok 가 아닌 화면 · 읽을 수 없는 답은 넣지 않는다. */
+    @SuppressWarnings("unchecked")
+    public static java.util.Map<String, String> altsParse(String body, List<String> tabs) {
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<String, String>();
+        try {
+            Object o = ScreenCore.parse(body);
+            if (!(o instanceof Map) || tabs == null || tabs.isEmpty()) return out;
+            Map<String, Object> m = (Map<String, Object>) o;
+            Object al = m.remove("alts");
+            if (Boolean.TRUE.equals(m.get("ok"))) out.put(tabs.get(0), HomeSearchCore.toJson(m));
+            if (al instanceof Map) for (int i = 1; i < tabs.size(); i++) {
+                Object x = ((Map<String, Object>) al).get(tabs.get(i));
+                if (x instanceof Map && Boolean.TRUE.equals(((Map<String, Object>) x).get("ok"))) out.put(tabs.get(i), HomeSearchCore.toJson((Map<String, Object>) x));
+            }
+        } catch (Exception e) { out.clear(); }
+        return out;
     }
     /** 설정에 저장된 커뮤니티 아이디(없으면 빈 글). */
     public static String commId(Store st) { return st.get(K_ID, ""); }

@@ -262,4 +262,19 @@ function hcardsScreen(inp, f) {
   out.rev = 'h' + HC_V + ':' + hcHash(JSON.stringify(body));
   return out;
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreen: hcardsScreen, hcTrainJs: hcTrainJs, hcSceneNode: hcSceneNode, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };
+// s311: 같은 사실로 다른 탭(최단시간·최소환승·지하철·버스·장거리)의 홈 카드(AI 브리핑 포함)까지 한 번에 — 경로 응답을 한 번만 보낸다. alts[탭] 은 그 탭으로 따로 요청했을 때와 같다(시험이 대조).
+var HC_ALT_TABS = ['fast', 'less', 'sub', 'bus', 'longdist'];
+function hcardsScreens(inp, f, alts) {
+  var out = hcardsScreen(inp, f);
+  if (!out || !out.ok || !Array.isArray(alts) || !alts.length || !f || !f.r || typeof f.r !== 'object') return out;
+  var made = {}, n = 0, i;
+  for (i = 0; i < alts.length && n < HC_ALT_TABS.length; i++) {
+    var t = alts[i];
+    if (HC_ALT_TABS.indexOf(t) < 0 || t === f.r.tab || made[t]) continue;
+    var o2 = hcardsScreen(inp, Object.assign({}, f, { r: Object.assign({}, f.r, { tab: t }) }));
+    if (o2 && o2.ok) { made[t] = o2; n++; }
+  }
+  if (n) out.alts = made;
+  return out;
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { hcardsScreens: hcardsScreens, hcardsScreen: hcardsScreen, hcTrainJs: hcTrainJs, hcSceneNode: hcSceneNode, hcWxPoints: hcWxPoints, hcNearest: hcNearest, hcRoute: hcRoute };
