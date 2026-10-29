@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * 오프닝 화면 — 앱을 켜면 2초쯤 길동무 친구들이 나와 인사한다(2026-10-29 s299, YJ). 안드로이드 전용(그리기만).
  *
- *   무엇을 · 언제 · 어디서 하는지는 모두 OpenCore(= 엔진 대본 assets/open.json)가 정한다. 이 뷰는 받은 모습대로 하늘 · 해/달 · 땅 · 친구 · 말풍선 · 작은 효과를 그릴 뿐이다. 화면 전체는 불투명 파스텔 화이트이고 배경 그림은 친구들이 선 둥근 판 안에만 있다.
+ *   무엇을 · 언제 · 어디서 하는지는 모두 OpenCore(= 엔진 대본 assets/open.json)가 정한다. 이 뷰는 받은 모습대로 하늘 · 해/달 · 땅 · 친구 · 말풍선 · 작은 효과를 그릴 뿐이다. 화면 전체는 불투명 파스텔 화이트이고 배경 그림은 친구들이 선 가로 꽉 찬 띠 안에만 있다(위·아래 가장자리는 바탕색으로 번진다).
  *   그리는 동안 앱은 뒤에서 위치 · 정류장 · 탭 화면 받기를 이미 하고 있다(이 뷰는 아무것도 기다리지 않고, 아무것도 막지 않는다 — 터치를 누르면 바로 닫힌다).
  *   시트(걷기 · 자세 · 잠)는 필요한 것만 뒤 스레드에서 읽는다. 아직 못 읽었으면 그 친구만 잠시 안 보일 뿐 시간표는 그대로 흐른다.
  */
@@ -42,7 +42,7 @@ final class OpenView extends View {
     private final Map<String, Bitmap> sheets = new HashMap<String, Bitmap>();
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG), bmp = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG), tp = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rf = new RectF(); private final Rect src = new Rect(); private final RectF dst = new RectF(); private final Path path = new Path();
-    private Shader sky; private int skyW, skyH;
+    private Shader sky, fade, fadeB; private int skyW, skyH, fadeW, fadeH;
 
     OpenView(Context ctx, OpenCore.Script script, OpenCore.Slot s, OpenCore.Actor[] c, Done d) {
         super(ctx); sc = script; slot = s; cast = c; done = d; dp = ctx.getResources().getDisplayMetrics().density;
@@ -91,10 +91,12 @@ final class OpenView extends View {
         long t = now - t0;
         if (OpenCore.done(sc, t)) { finish(); return; }
         float W = getWidth(), H = getHeight(); if (W < 8 || H < 8) { postInvalidateOnAnimation(); return; }
-        // 화면 전체는 불투명 파스텔 화이트. 하늘·땅 배경은 친구들이 서 있는 둥근 판 안에만 있고, 제목은 그 판 바로 위에 있다.
-        float pw = Math.min(W - 40f * dp, 420f * dp), ph = Math.min(H * 0.31f, 240f * dp), pl = (W - pw) / 2f, pt = H * 0.50f - ph / 2f;
-        float gy = ph * 0.70f, charH = Math.min(pw * 0.30f, 108f * dp) * 0.70f;          // 친구는 판 가운데에 모여 선다 · 키는 처음보다 30% 작게
-        // 사라질 때: 판·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
+        // 화면 전체는 불투명 파스텔 화이트. 하늘·땅 배경은 친구들이 서 있는 가로 꽉 찬 띠 안에만 있고, 띠의 위·아래 가장자리는 바탕색으로 서서히 번져 경계가 안 보인다.
+        // 띠는 화면 아래쪽에 놓고, 제목은 띠 바로 위에 둔다.
+        float pw = W, fh = 40f * dp, ph = Math.min(H * 0.36f, 280f * dp), pl = 0f;
+        float pt = Math.max(60f * dp, Math.min(H * 0.72f - ph / 2f, H - ph - 20f * dp));
+        float gy = ph * 0.62f, charH = Math.min(Math.min(W, 420f * dp) * 0.30f, 108f * dp) * 0.70f;          // 친구는 띠 가운데에 모여 선다 · 키는 처음보다 30% 작게
+        // 사라질 때: 띠·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
         if (bgA <= 0) { finish(); return; }
         int sb = cv.saveLayerAlpha(0, 0, W, H, bgA);
@@ -103,18 +105,31 @@ final class OpenView extends View {
         if (fgA > 0) {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
             drawTitle(cv, W, pt);
-            cv.save(); cv.translate(pl, pt);
-            path.reset(); rf.set(0, 0, pw, ph); path.addRoundRect(rf, 22f * dp, 22f * dp, Path.Direction.CW);
-            cv.save(); cv.clipPath(path);
+            cv.save(); cv.translate(pl, pt); cv.clipRect(0, 0, pw, ph);
             drawSky(cv, pw, ph, t); drawGround(cv, pw, ph, gy);
+            feather(cv, pw, ph, fh);
             cv.restore();
-            rf.set(0, 0, pw, ph); p.setShader(null); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f * dp); p.setColor(0x1A000000); cv.drawRoundRect(rf, 22f * dp, 22f * dp, p); p.setStyle(Paint.Style.FILL);
+            cv.save(); cv.translate(pl, pt);
             int i = 0;
             for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), pw, gy, charH, i++); }
             cv.restore();
             cv.restoreToCount(sf);
         }
         postInvalidateOnAnimation();
+    }
+
+    /** 띠의 위·아래 가장자리를 바탕색으로 번지게 해 하늘·땅이 바탕과 갈라진 느낌을 없앤다(윤곽선 없음). */
+    private void feather(Canvas cv, float W, float H, float fh) {
+        if (fade == null || fadeW != (int) W || fadeH != (int) H) {
+            int c1 = sc.bg | 0xFF000000, c0 = sc.bg & 0x00FFFFFF;
+            fade = new LinearGradient(0, 0, 0, fh, new int[] { c1, c0 }, null, Shader.TileMode.CLAMP);
+            fadeB = new LinearGradient(0, H - fh, 0, H, new int[] { c0, c1 }, null, Shader.TileMode.CLAMP);
+            fadeW = (int) W; fadeH = (int) H;
+        }
+        p.setStyle(Paint.Style.FILL); p.setColor(0xFF000000); p.setAlpha(255);
+        p.setShader(fade); cv.drawRect(0, 0, W, fh, p);
+        p.setShader(fadeB); cv.drawRect(0, H - fh, W, H, p);
+        p.setShader(null);
     }
 
     // ───────────── 하늘 · 해 · 달 · 별 · 구름 (판 안 좌표) ─────────────
@@ -160,7 +175,7 @@ final class OpenView extends View {
     private void drawTitle(Canvas cv, float W, float panelTop) {
         if (sc.brand.length() == 0) return;
         tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setColor(sc.ink); tp.setTextAlign(Paint.Align.CENTER); tp.setTextSize(Math.min(24f * dp, W * 0.068f));
-        cv.drawText(sc.brand, W / 2f, panelTop - 22f * dp, tp);
+        cv.drawText(sc.brand, W / 2f, panelTop - 4f * dp, tp);
     }
 
     // ───────────── 친구 ─────────────
@@ -180,6 +195,7 @@ final class OpenView extends View {
                 bmp.setAlpha((int) (255 * s.alpha)); cv.drawBitmap(b, src, dst, bmp); bmp.setAlpha(255);
             }
             float ax = x - sl[1] * cell + sl[4] * cell, ay = footBase - sl[2] * cell + sl[5] * cell;       // 잠든 입가(위젯과 같은 기준점) 에서 Z 가 떠오른다
+            nameTag(cv, a.id, x, footBase, charH, s.alpha);
             effects(cv, s, ax - charH * 0.04f, ay - charH * 0.10f, charH, idx, a.id);
             if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, tp0 + cell * 0.10f - charH * 0.30f, W, (float) s.sayA);
             return;
@@ -199,8 +215,19 @@ final class OpenView extends View {
             cv.save(); if (s.face < 0) cv.scale(-1f, 1f, x, 0f);
             bmp.setAlpha((int) (255 * s.alpha)); cv.drawBitmap(b, src, dst, bmp); bmp.setAlpha(255); cv.restore();
         }
+        nameTag(cv, a.id, x, footBase, charH, s.alpha);
         effects(cv, s, x, top, charH, idx, a.id);
         if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, top - 6f * dp - (s.fx.length() > 0 ? charH * 0.30f : 0f), W, (float) s.sayA);      // 떠오르는 효과가 글을 가리지 않게 효과가 있으면 한 뼘 위로
+    }
+
+    /** 이름표: 친구 발밑에 둥근 작은 상자 + 이름(대본의 names). 친구가 나타나는 만큼 함께 진해진다. */
+    private void nameTag(Canvas cv, String id, float x, float footBase, float charH, double al) {
+        String nm = sc.names.get(id); if (nm == null || nm.length() == 0) return;
+        tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(11.5f * dp); tp.setTextAlign(Paint.Align.CENTER);
+        float tw = tp.measureText(nm), bw = tw + 16f * dp, bh = 20f * dp, top = footBase + charH * 0.09f + 9f * dp;
+        p.setShader(null); p.setStyle(Paint.Style.FILL); p.setColor(((int) (200 * al) << 24) | 0xFFFFFF); rf.set(x - bw / 2f, top, x + bw / 2f, top + bh); cv.drawRoundRect(rf, bh / 2f, bh / 2f, p);
+        tp.setColor(((int) (255 * al) << 24) | (sc.ink & 0xFFFFFF)); cv.drawText(nm, x, top + bh / 2f + 4.2f * dp, tp);
+        tp.setColor(sc.ink);
     }
 
     /** 말풍선: 머리 위(바닥점 x, 위 끝 y)에 둥근 상자 + 꼬리. 가장자리에서 잘리지 않게 안으로 민다. */

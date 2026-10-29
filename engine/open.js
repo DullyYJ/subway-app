@@ -4,6 +4,8 @@
 //   s299-3 (YJ: "제목을 화살표 방향(친구들 위)으로 · 동물들이 있는 곳만 배경 · 나머지는 파스텔 화이트 · 앱 화면이 오프닝에 보이면 안 돼 · 시간 규칙은 지키되 친구들은 랜덤으로"):
 //     ① 화면 전체는 불투명 파스텔 화이트, 하늘·땅 배경은 친구들이 서 있는 둥근 판 안에만 ② 제목은 그 판 바로 위 ③ 시간대 규칙(하늘·인사·자세·효과)은 칸이 정하고,
 //     누가 나올지는 켤 때마다 8마리 중에서 무작위(앱이 고른다 — 방금 나온 조합은 피한다). 죽순이·뽀송만 하는 전용 동작(먹기·냄새 맡기·신발 자랑)은 `special` 로 칸이 정해 둔다.
+//   s299-4 (YJ: "위치 이동(아래로) · 가로로 여백없이 · 테두리는 그라데이션으로 배경과 분리됐다는 느낌 최소화 · 캐릭터 아래 이름표"):
+//     배경 판은 화면 가로를 꽉 채우고(둥근 모서리·윤곽선 없음) 위·아래 가장자리가 바탕색으로 서서히 번져 경계가 안 보인다. 판은 화면 아래쪽으로 내렸고, 친구 발밑에 이름표(OPEN_NAMES)가 붙는다.
 //     친구 셋은 걸어 들어오지 않고 화면 가운데에 모여 서서 조용히 나타나 인사한다(왼쪽 · 가운데 · 오른쪽 — 가운데 친구가 말풍선으로 인사). 움직임은 작게(콩콩 키의 5% 안쪽).
 //
 // 앱을 켜면 2초쯤 길동무 친구들이 나와 인사한다. 그동안 앱은 뒤에서 위치·정류장·탭 화면을 받아 두며 안정화한다.
@@ -27,6 +29,8 @@
 
 var OPEN_DUR = 2700, OPEN_FADE = 700, OPEN_BRAND = "우리들의 길동무", OPEN_BG = "#FAF9F7", OPEN_INK = "#2B2F4A";      // 화면 바탕은 파스텔 화이트(불투명) · 글 색
 var OPEN_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"];
+// 친구 이름표(YJ 가 정한 이름 — 두더지 두덩 · 독수리 독슐 · 비숑 둘숑 · 푸들 뽀푸 · 올챙이 챙챙 · 판다 쮸르 · 하마 베비히포 · 고양이는 말씀이 없어 기존 이름 러블)
+var OPEN_NAMES = { dolsom: "둘숑", lovel: "러블", dudung: "두덩", sul: "독슐", ppopu: "뽀푸", chaeng: "챙챙", juksun: "쮸르", bbosong: "베비히포" };
 var OPEN_X = [0.30, 0.50, 0.70], OPEN_XS = [0.27, 0.50, 0.73];      // 판 안에서 모인 자리(잠잘 때는 잠자리가 커서 조금 더 벌린다)
 
 function _r(t0, p, o) { var r = { t0: t0, p: p }; for (var k in (o || {})) r[k] = o[k]; return r; }
@@ -86,6 +90,6 @@ function openSlotIndex(hour) {
 }
 
 /** 앱 assets/open.json 으로 내려보낼 대본 전체. chars = 나올 수 있는 친구(켤 때마다 이 중 셋이 무작위로), x/xs = 자리. */
-function openScript() { return { v: 3, dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, x: OPEN_X, xs: OPEN_XS, slots: OPEN_SLOTS }; }
+function openScript() { return { v: 3, dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, names: OPEN_NAMES, x: OPEN_X, xs: OPEN_XS, slots: OPEN_SLOTS }; }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { openScript: openScript, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { openScript: openScript, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_NAMES: OPEN_NAMES, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };

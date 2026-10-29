@@ -19,6 +19,8 @@ public final class OpenJvmTest {
         for (int h = 0; h < 24; h++) exp[h] = h >= 7 && h < 9 ? "greet" : h >= 9 && h < 11 ? "morning" : h >= 11 && h < 13 ? "lunch" : h >= 13 && h < 17 ? "afternoon" : h >= 17 && h < 20 ? "evening" : h >= 20 && h < 23 ? "night" : "sleep";
         for (int h = 0; h < 24; h++) for (int m = 0; m < 60; m += 29) ck(OpenCore.slotFor(sc, h + m / 60.0).id.equals(exp[h]), "시간대 " + h + ":" + m + " → " + OpenCore.slotFor(sc, h + m / 60.0).id + " (기대 " + exp[h] + ")");
         ck(OpenCore.slotFor(sc, 6.99).id.equals("sleep") && OpenCore.slotFor(sc, 7.0).id.equals("greet") && OpenCore.slotFor(sc, 22.99).id.equals("night") && OpenCore.slotFor(sc, 23.0).id.equals("sleep") && OpenCore.slotFor(sc, 0.0).id.equals("sleep") && OpenCore.slotFor(sc, 24.5).id.equals("sleep") && OpenCore.slotFor(sc, -0.5).id.equals("sleep"), "경계: 07·09·11·13·17·20·23 시 · 자정 · 범위 밖 값");
+        ck("두덩".equals(sc.names.get("dudung")) && "독슐".equals(sc.names.get("sul")) && "둘숑".equals(sc.names.get("dolsom")) && "뽀푸".equals(sc.names.get("ppopu")) && "챙챙".equals(sc.names.get("chaeng")) && "쮸르".equals(sc.names.get("juksun")) && "베비히포".equals(sc.names.get("bbosong")), "이름표: 대본의 이름을 읽는다");
+        for (String c : sc.chars) ck(sc.names.get(c) != null && !sc.names.get(c).isEmpty(), "이름표: " + c + " 에 이름이 있다");
         // ② 대본: 바탕·글 색 · 나올 수 있는 8마리 · 자리 · 칸 정보
         ck(sc.chars.length == 8 && sc.bg == 0xFFFAF9F7 && sc.ink == 0xFF2B2F4A, "대본: 8마리 · 파스텔 화이트 바탕 · 글 색");
         ck(Math.abs(sc.x[1] - 0.5) < 1e-9 && Math.abs((sc.x[0] + sc.x[2]) / 2 - 0.5) < 1e-9 && sc.x[0] >= 0.25 && sc.x[2] <= 0.75 && Math.abs(sc.xs[1] - 0.5) < 1e-9 && Math.abs((sc.xs[0] + sc.xs[2]) / 2 - 0.5) < 1e-9, "자리: 가운데(0.5)를 중심으로 대칭 · 모여 있다");

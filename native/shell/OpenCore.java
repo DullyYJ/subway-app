@@ -32,7 +32,7 @@ public final class OpenCore {
     }
     public static final class Script {
         public int dur = 2700, fade = 700; public String brand = ""; public int bg = 0xFFFAF9F7, ink = 0xFF2B2F4A;
-        public String[] chars = new String[0]; public double[] x = {.30, .50, .70}, xs = {.27, .50, .73};
+        public String[] chars = new String[0]; public Map<String, String> names = new java.util.HashMap<String, String>(); public double[] x = {.30, .50, .70}, xs = {.27, .50, .73};
         public Slot[] slots = new Slot[0];
     }
 
@@ -58,6 +58,8 @@ public final class OpenCore {
             if (co instanceof List) for (Object c : (List<Object>) co) if (c instanceof String && ((String) c).length() > 0 && !cl.contains(c)) cl.add((String) c);
             if (cl.size() < 3) return null;
             sc.chars = cl.toArray(new String[0]);
+            Object no = m.get("names");
+            if (no instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) no).entrySet()) if (en.getValue() instanceof String) sc.names.put(en.getKey(), (String) en.getValue());
             Object so = m.get("slots"); if (!(so instanceof List)) return null;
             List<Slot> out = new ArrayList<Slot>();
             for (Object e : (List<Object>) so) {
