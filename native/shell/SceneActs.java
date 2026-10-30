@@ -694,19 +694,23 @@ final class SceneActs {
      */
     static void registerDrop(final SceneCore S) {
         // ── 둘숑: 풍선처럼 3배로 부푼 몸이 땅에 닿는 순간 하트 모양으로 변한다 ──
-        A_(S, "L_cotton", 3.0, (a, t, A) -> {
+        A_(S, "L_cotton", 3.6, (a, t, A) -> {
             double h = S.HH(a), fy = S.feetY(a);
             Gfx bh = S.gfx("bigheart", a.x, a.z, 2.3); bh.r = h * 2.35; S.addGfx(bh);
             S.ptx("heart", a.x, fy - h * 1.2, 12, po().a(-PI * .98, -PI * .02).s(40, 90).g(55).l(1.0, 1.7).r(1.5).jx(h * .8)); S.haptic("hearts");
             S.ptx("ring", a.x, fy, 1, po().a(0, 0).s(0, 0).g(0).l(.8, .8)); S.ptx("ring", a.x, fy, 1, po().a(0, 0).s(0, 0).g(0).l(.8, .8).delay(.15));
             S.ptx("dust", a.x, fy - 1, 6, po().a(-PI * .98, -PI * .02).s(14, 36).g(30).l(.4, .8).jx(h * .6));
+            S.flash(255, 170, 205, .2, .35); S.shake(2.4, .35); S.ptx("spark", a.x, fy - h * 1.3, 10, po().a(-PI, 0).s(20, 60).g(20).l(.5, .9).jx(h * .6).r(1.2));
         }, (a, u, dt, A) -> {
-            double h = S.HH(a), T = S.t, tt = u * 3.0; S.standF(a); a.feetScale = true; a.pose = 2;
+            double h = S.HH(a), T = S.t, tt = u * 3.6; S.standF(a); a.feetScale = true; a.pose = 2; a.cell = tt < 2.85 ? 15 : 14;
             double sh = ease(clamp((tt - .16) / .55, 0, 1)), out = ease(clamp((tt - 2.25) / .6, 0, 1)), base = 3 - 1.5 * sh - .5 * out;      // 3배 → 하트 크기 → 원래 몸
             a.heart = tt < .2 ? ease(tt / .2) : 1 - out;
             if (tt < .16) { double q = Math.sin(PI * tt / .16); a.sx = base + .35 * q; a.sy = base - .5 * q; }                              // 닿는 순간 납작
             else { double pl = 1 + .05 * Math.sin(T * 10) * (1 - out); a.sx = a.sy = base * pl; }
-            if (out >= 1) { a.sx = a.sy = 1; a.heart = 0; a.feetScale = false; }
+            if (out >= 1) {                                                                                                          // 풍선 몸으로 돌아와 신나서 폴짝
+                a.sx = a.sy = 1; a.heart = 0; a.feetScale = false; double hp = clamp((tt - 2.85) / .75, 0, 1); a.y = -Math.abs(Math.sin(hp * PI * 2)) * 9 * SceneCore.zs(a.z) * (1 - hp * .5); a.cell = hp < .85 ? 14 : 15;
+                if (S.once(A, "wf")) { S.say(a, "멍멍!", 1.2); S.ptx("heart", a.x, S.feetY(a) - h * .9, 5, po().a(-PI * .98, -PI * .02).s(24, 56).g(55).l(.9, 1.4).r(1.1).jx(h * .5)); }
+            }
             if (tt > .25 && tt < 2.2 && S.every(A, "h", .22)) S.ptx("heart", a.x, S.feetY(a) - h * .9, 2, po().a(-PI * .98, -PI * .02).s(24, 60).g(55).l(.9, 1.5).r(1.2).jx(h * .6));
             if (tt > .5 && S.once(A, "sy")) { S.say(a, "두근두근~", 1.7); S.ptx("heart", a.x, S.feetY(a) - h * 1.2, 8, po().a(-PI * .98, -PI * .02).s(30, 70).g(55).l(.9, 1.5).r(1.3).jx(h * .7)); }
         }, null);
@@ -714,20 +718,22 @@ final class SceneActs {
         // ── 뽀푸: 두 발로 멋지게 착지 — 땅이 갈라지고 흔들려 주변 친구가 깜짝 놀란 뒤, "히힛" 멋있는 척 ──
         A_(S, "L_pose", 4.6, (a, t, A) -> {
             double h = S.HH(a), fy = S.feetY(a);
-            S.shake(8.5, 1.5); S.haptic("thud");
+            S.shake(8.5, 1.5); S.haptic("thud"); S.flash(255, 246, 225, .24, .22);
+            Gfx wv = S.gfx("wave", a.x, a.z, 1.2); wv.r = h * 3.6; S.addGfx(wv);
+            S.ptx("dirt", a.x, fy - 1, 12, po().a(-PI * .92, -PI * .08).s(40, 110).g(260).l(.5, .9).jx(h * .5).r(1.2));
             S.ptx("dust", a.x, fy - 1, 14, po().a(-PI * .98, -PI * .02).s(26, 76).g(40).l(.5, 1.0).jx(h * .3).r(1.4));
             for (int i = 0; i < 3; i++) S.ptx("ring", a.x, fy, 1, po().a(0, 0).s(0, 0).g(0).l(.9, .9).delay(i * .13));
             Gfx cg = S.gfx("crack", a.x, a.z, 3.2); cg.r = h * 1.7; S.addGfx(cg);
             for (Actor o : new ArrayList<>(S.actors)) if (o != a && Math.abs(o.x - a.x) < S.W * .85) S.startleK(a, o, "shock");
         }, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t, tt = u * 4.6; S.standF(a);
-            if (tt < .3) { double q = ease(tt / .3); a.sx = 1.2 - .2 * q; a.sy = .7 + .3 * q; }                                           // 쭈그려 착지
-            else { a.sx = .98; a.sy = 1.05; }
+            if (tt < .3) { double q = ease(tt / .3); a.sx = 1.2 - .2 * q; a.sy = .7 + .3 * q; a.cell = tt < .16 ? 1 : 11; a.pose = 2; }               // 쭈그려 착지(앞발 모음) → 일어선다
+            else { a.sx = .98; a.sy = 1.05; a.cell = tt < 1.5 ? 11 : 0; a.pose = 2; }                                                          // 꼿꼿이 선 채 숨을 고르다 → 앉아 으스댄다
             if (tt < .9 && S.every(A, "du", .16)) S.ptx("dust", a.x + (S.rnd() - .5) * h, S.feetY(a) - 1, 1, po().a(-PI * .98, -PI * .02).s(10, 30).g(30).l(.4, .8).jx(h * .4));
             if (tt >= 1.5) {
-                a.pose = 2; a.ang = -.08 + Math.sin(T * 3) * .03;
+                a.ang = -.08 + Math.sin(T * 3) * .03;
                 if (S.once(A, "p")) { S.say(a, "히힛~", 2.2); S.stk(a, "smirk", 2.6); S.haptic("grin"); S.ptx("spark", a.x, S.feetY(a) - h * .6, 8, po().a(-PI, 0).s(14, 30).g(0).l(.4, .7).jx(h * .35).jy(h * .3).r(1.2)); }
-                double gb = ease(clamp((tt - 1.85) / .22, 0, 1)); if (gb > 0) { Prop gl = S.prop("glasses", h * .2, -h * .62); gl.s = 1.1 * gb; S.pr(a, gl); }
+                double gb = ease(clamp((tt - 1.85) / .22, 0, 1)); if (gb > 0) { Prop gl = S.prop("glasses", h * .2, -h * .44); gl.s = 1.0 * gb; S.pr(a, gl); }
                 if (tt > 2.2 && S.every(A, "gl", .32)) S.ptx("spark", a.x + a.dir * h * .28, S.feetY(a) - h * .66, 1, po().a(-PI, 0).s(4, 8).g(0).l(.3, .5).jx(4).r(1.2));
             }
             if (tt > 3.9) a.ang *= 1 - ease((tt - 3.9) / .7);
@@ -737,19 +743,24 @@ final class SceneActs {
         A_(S, "L_dig", 5.4, (a, t, A) -> {
             double W = S.W, h = S.HH(a); A.x0 = a.x; A.z0 = a.z; double[] r = S.inRange(a); int sd = a.x < W / 2 ? 1 : -1;
             double lo = Math.max(r[0], W * .14), hi = Math.min(r[1], W * .86); if (hi < lo) { lo = r[0]; hi = r[1]; }
-            A.tx = clamp(a.x + sd * S.rnd(.28, .42) * W, lo, hi); if (Math.abs(A.tx - a.x) < W * .15) A.tx = clamp(a.x - sd * S.rnd(.28, .42) * W, lo, hi);
+            A.tx = clamp(a.x + sd * S.rnd(.2, .3) * W, lo, hi); if (Math.abs(A.tx - a.x) < W * .15) A.tx = clamp(a.x - sd * S.rnd(.2, .3) * W, lo, hi);
             A.tz = a.hero ? a.z : S.rnd(.35, .92);
-            A.g = S.addGfx(S.gfx("hole", a.x, a.z, 5.4 + 1.2)); A.m = null; A.b1 = null;
+            A.g = S.addGfx(S.gfx("hole", a.x, a.z, 5.4 + 1.2)); A.m = null; A.b1 = null; A.b2 = null;
             S.ptx("dirt", a.x, S.feetY(a) - 2, 10, po().a(-PI * .95, -PI * .05).s(16, 38).g(150).jx(8)); S.haptic("thud");
         }, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t, tt = u * 5.4; S.standF(a); a.nograb = true;
             if (tt < .5) {                                                                                                             // 파고 들어간다
                 if (tt < .12) a.sy = 1 - .15 * (tt / .12);
-                a.y = h * 1.1 * ease(clamp((tt - .1) / .4, 0, 1)); a.cut = 0;
+                a.y = h * 1.1 * ease(clamp((tt - .1) / .4, 0, 1)); a.cut = 0; a.cell = (int) (T * 12) % 2 == 0 ? 2 : 3; a.pose = 2;                    // 삽질 두 칸을 번갈아
                 if (S.every(A, "d", .1)) S.ptx("dirt", a.x, S.feetY(a) - 2, 3, po().a(-PI * .95, -PI * .05).s(8, 20).g(120).jx(5));
             } else if (tt < 2.6) {                                                                                                     // 땅속 이동 — 두둑이 움직인다
                 a.vis = false; a.y = h * 1.1; a.cut = 0;
                 if (A.m == null) { Gfx mg = S.gfx("mound", a.x, a.z, 3.0); mg.r = 9; A.m = S.addGfx(mg); }
+                if (tt > 1.9) {                                                                                                         // 나올 자리의 땅이 들썩들썩 부푼다
+                    if (A.b2 == null) { Gfx bg = S.gfx("mound", A.tx, A.tz, 1.6); bg.r = 3; A.b2 = S.addGfx(bg); }
+                    A.b2.r = 3 + 11 * ease(clamp((tt - 1.9) / .7, 0, 1)); A.b2.life = (S.t - A.b2.t0) + .3;
+                    if (S.every(A, "bg", .08)) S.ptx("dirt", A.tx + (S.rnd() - .5) * h * .5, S.zy(A.tz) - 2, 1, po().a(-PI * .9, -PI * .1).s(10, 26).g(150).l(.3, .5).jx(3));
+                }
                 double m = ease(clamp((tt - .6) / 1.8, 0, 1)); a.x = A.x0 + (A.tx - A.x0) * m; a.z = A.z0 + (A.tz - A.z0) * m; a.dir = A.tx >= A.x0 ? 1 : -1;
                 A.m.x = a.x; A.m.z = a.z; A.m.life = (S.t - A.m.t0) + .4;
                 if (S.every(A, "ug", .09)) S.ptx("dirt", a.x - a.dir * h * .2, S.feetY(a) - 2, 2, po().a(-PI * .95, -PI * .05).s(8, 22).g(130).jx(5));
@@ -757,17 +768,18 @@ final class SceneActs {
             } else if (tt < 3.85) {                                                                                                    // 구멍을 뚫고 하늘로 높이 점프
                 double q = (tt - 2.6) / 1.25, h4 = Math.max(h * 1.5, Math.min(h * 3.4, S.feetY(a) - h * 1.4 - 4));
                 if (S.once(A, "ex")) {
-                    if (A.m != null) A.m.life = (S.t - A.m.t0) + .12;
+                    if (A.m != null) A.m.life = (S.t - A.m.t0) + .12; if (A.b2 != null) A.b2.life = (S.t - A.b2.t0) + .05;
+                    S.flash(255, 236, 200, .16, .2); Gfx wv = S.gfx("wave", a.x, a.z, 1.0); wv.r = h * 2.4; S.addGfx(wv);
                     Gfx hg = S.gfx("hole", a.x, a.z, 3.6); A.b1 = S.addGfx(hg);
                     S.ptx("dirt", a.x, S.feetY(a) - 2, 14, po().a(-PI * .9, -PI * .1).s(30, 80).g(150).jx(6)); S.shake(3.2, .5); S.haptic("land_dig"); S.say(a, "짜잔~!", 1.0);
                 }
-                a.y = -h4 * (1 - (2 * q - 1) * (2 * q - 1)); a.pvy = a.y - h * .5; a.ang = PI2 * 2 * ease(q); a.cell = q > .42 && q < .62 ? 7 : 1; a.pose = 2;
+                a.y = -h4 * (1 - (2 * q - 1) * (2 * q - 1)); a.pvy = a.y - h * .5; a.ang = PI2 * 2 * ease(q); a.cell = q < .08 ? 4 : q > .42 && q < .62 ? 7 : 1; a.pose = 2;      // 빼꼼 → 만세 → 깜짝(꼭대기) → 만세
                 if (S.every(A, "tr", .1)) S.ptx("dirt", a.x, S.feetY(a) + a.y, 1, po().a(-PI * .9, -PI * .1).s(6, 14).g(100).l(.3, .5).jx(h * .3));
             } else if (tt < 4.25) {                                                                                                    // 착지
                 double q = ease((tt - 3.85) / .32); a.sx = 1.2 - .2 * q; a.sy = .72 + .28 * q; a.cell = 0; a.pose = 0;
                 if (S.once(A, "ld")) { S.shake(5.5, .8); S.haptic("thud"); S.ptx("dust", a.x, S.feetY(a) - 1, 12, po().a(-PI * .98, -PI * .02).s(24, 64).g(40).l(.5, .9).jx(h * .4)); S.ptx("ring", a.x, S.feetY(a), 1, po().a(0, 0).s(0, 0).g(0).l(.8, .8)); }
             } else {                                                                                                                   // 인사
-                cell(a, 9, 2); double bn = Math.abs(Math.sin((tt - 4.25) * 6)); a.y = -bn * 3 * (tt < 5.0 ? 1 : 0);
+                cell(a, tt < 4.8 ? 9 : 12, 2); double bn = Math.abs(Math.sin((tt - 4.25) * 6)); a.y = -bn * 3 * (tt < 5.0 ? 1 : 0);                 // 인사 → 손 흔들기
                 if (S.once(A, "hi")) { S.say(a, "두더지 등장!", 1.6); S.ptx("star", a.x, S.feetY(a) - h * .9, 6, po().a(-PI * .95, -PI * .05).s(20, 44).g(70).l(.5, .9).r(1).jx(h * .4)); }
             }
         }, (a, A) -> {
@@ -782,11 +794,12 @@ final class SceneActs {
         }, (a, u, dt, A) -> {
             double h = S.HH(a), T = S.t, tt = u * 4.8, fy = S.feetY(a); S.standF(a);
             if (tt < .3) { double q = ease(tt / .3); a.sx = 1.15 - .15 * q; a.sy = .76 + .24 * q; }
-            if (tt > .45) { a.pose = 0; a.sy *= 1 + .012 * Math.sin(T * 2.2); }
+            a.pose = 0; a.cell = tt < .35 ? 6 : tt < 1.3 ? 4 : 12;                                                                              // 엎드려 착지 → 고개를 들고 → 몸을 낮춰 노려본다
+            if (tt > .45) a.sy *= 1 + .012 * Math.sin(T * 2.2);
             double dk = ease(clamp((tt - .35) / .9, 0, 1)) * (1 - ease(clamp((tt - 3.9) / .8, 0, 1)));
             if (dk > .01) S.dim(dk, a.x, fy - h * .5);
             double ea = ease(clamp((tt - .8) / .5, 0, 1)) * (1 - ease(clamp((tt - 3.9) / .7, 0, 1)));
-            if (ea > .01) S.eyes(ea, a.x + a.dir * h * .14, fy - h * .56, a.x + a.dir * h * .36, fy - h * .56, h * .05, a.dir);
+            if (ea > .01) S.eyes(ea, a.x + a.dir * h * .17, fy - h * .47, a.x + a.dir * h * .37, fy - h * .45, h * .055, a.dir);
             if (tt > 1.0 && S.once(A, "sc")) {
                 S.say(a, "…", 3.0); S.haptic("angry");
                 for (Actor o : new ArrayList<>(S.actors)) if (o != a) S.startleK(a, o, "scary");
@@ -818,22 +831,23 @@ final class SceneActs {
                 a.alt = fal;
             } else if (tt < 1.75) {                                                                                                     // 낚아챈다
                 att = true; a.dir = gx >= A.x0 ? 1 : -1; fx = gx; fal = gAlt; ang = -.3 * ease((tt - 1.3) / .45); cl = 9;
-                if (S.once(A, "gr")) { A.fr1 = o != null; S.haptic("flap"); S.ptx("star", gx, S.feetY(a) - h * .6, 6, po().a(-PI, 0).s(18, 40).g(40).l(.4, .7).jx(h * .3).r(1)); if (o != null) S.say(o, "으앗?!", 1.2); S.say(a, o != null ? "잡았다!" : "휙!", 1.2); }
+                if (S.once(A, "gr")) { A.fr1 = o != null; S.haptic("flap"); S.ptx("star", gx, S.feetY(a) - h * .6, 6, po().a(-PI, 0).s(18, 40).g(40).l(.4, .7).jx(h * .3).r(1)); if (o != null) S.say(o, "으앗?!", 1.2); S.say(a, o != null ? "잡았다!" : "휙!", 1.2); S.shake(2.6, .3); S.flash(255, 255, 255, .12, .15); S.ptx("puff", gx, S.feetY(a) - h * .3, 6, po().a(-PI, 0).s(14, 34).g(30).l(.3, .6).jx(h * .4)); }
                 a.alt = fal;
             } else if (tt < 3.0) {                                                                                                      // 안고 올라간다
                 att = true; double q = ease((tt - 1.75) / 1.25); a.dir = fd; fx = gx + (cx - gx) * q; fal = gAlt + (bot - gAlt) * q; ang = -.6 * Math.sin(PI * q) * (1 - q); cl = q < .5 ? 10 : 2 + (int) (T * 10 % 2);
                 a.alt = fal; if (S.every(A, "fl", .22)) S.haptic("flap");
             } else if (tt < 5.4) {                                                                                                      // 하늘에서 한 바퀴
                 att = true; double q = (tt - 3.0) / 2.4; th = PI2 * ease(q) * 1.0; a.dir = fd; fx = cx + fd * Rpx * Math.sin(th); fal = altC - R * Math.cos(th); ang = -th; cl = 2 + (int) (T * 12 % 2);
-                a.alt = fal; if (S.once(A, "lp")) { S.say(a, "한 바퀴~!", 1.4); if (o != null) S.say(o, "꺄아아~!", 2.0); } if (S.every(A, "tr", .12)) S.ptx("puff", a.x, S.feetY(a) - liftPx(S, a, fal), 1, po().a(-PI, 0).s(2, 6).g(0).l(.3, .5).r(.8));
+                a.alt = fal; if (S.once(A, "lp")) { S.say(a, "한 바퀴~!", 1.4); if (o != null) S.say(o, "꺄아아~!", 2.0); } if (S.every(A, "tr", .07)) S.ptx("puff", a.x, S.feetY(a) - liftPx(S, a, fal), 1, po().a(-PI, 0).s(2, 6).g(0).l(.35, .6).r(.9).jx(3));
             } else if (tt < 7.0) {                                                                                                      // 안고 천천히 내려온다
                 att = true; double q = ease((tt - 5.4) / 1.6); a.dir = fd; fx = clamp(cx + fd * S.W * .15, a.w * .6, S.W - a.w * .6); fx = cx + (fx - cx) * q; fal = bot + (gAlt - bot) * q; ang = .3 * Math.sin(PI * q) * (1 - q * .4); cl = 4;
                 a.alt = fal;
             } else {                                                                                                                    // 내려놓고 뿌듯
                 if (S.once(A, "rl")) {
                     A.lx = a.x; if (o != null) { Actor f = o; f.alt = 0; S.startAct(f, "dizzy"); f.dir = a.dir; A.tgt = null; } S.say(a, "어때? 재밌지?", 1.9); S.haptic("land_fly");
-                    S.ptx("dust", A.lx, S.feetY(a) - 1, 6, po().a(-PI * .98, -PI * .02).s(14, 34).g(30).l(.4, .8).jx(h * .4));
+                    S.ptx("dust", A.lx, S.feetY(a) - 1, 8, po().a(-PI * .98, -PI * .02).s(14, 40).g(30).l(.4, .8).jx(h * .4)); S.shake(1.6, .3);
                 }
+                if (tt < 7.4 && S.every(A, "ds", .08)) S.ptx("dust", a.x, S.feetY(a) - 1, 1, po().a(-PI * .98, -PI * .02).s(8, 22).g(30).l(.3, .6).jx(h * .4));
                 fx = a.x; a.alt = gAlt + (16 - gAlt) * ease(clamp((tt - 7.0) / .5, 0, 1)); cell(a, 15, 0); ang = 0; a.pvy = 0; if (tt > 7.3) S.standF(a);
             }
             a.x = fx; a.ang = ang; a.pvy = a.ang != 0 ? -S.liftOf(a) - h * .5 : 0; if (tt < 7.0) { cell(a, cl, 0); a.fr += dt * a.D.fps * .5; }
@@ -880,11 +894,12 @@ final class SceneActs {
                 if (S.once(A, "td")) { S.haptic("land_puddle"); S.ptx("dust", a.x, S.feetY(a) - 1, 10, po().a(-PI * .98, -PI * .02).s(20, 56).g(40).l(.4, .8).jx(h * .5)); S.say(a, "…!", 1.0); }
             }
             A.s0 = Double.isNaN(A.s0) ? 0 : A.s0; A.s0 += om * dt; a.x = x; a.alt = alt;
+            a.cell = tt >= 6.7 ? 4 : (int) (T * 9) % 2 == 0 ? 1 : 12; a.pose = 2;                                                              // 꼬리를 돌리는 두 칸을 번갈아, 착지하면 깜짝
             if (om > 4) { Prop rp = S.prop("rotor", -h * .5, -h * .42); rp.s = A.s0; rp.r = h * .55; S.pr(a, rp); }
             if (tt < 6.7 && S.every(A, "wl", .14)) S.ptx("puff", a.x - a.dir * h * .55, S.feetY(a) - liftPx(S, a, alt) - h * .42, 1, po().a(-PI * .85, -PI * .15).s(6, 14).g(0).l(.25, .4).r(.7));
         }, (a, A) -> { a.alt = a.altSave != 0 ? a.altSave : 0; a.ang = 0; a.pvy = 0; });
         A_(S, "rage", 4.2, null, (a, u, dt, A) -> {                                                                                     // 마구마구 화낸다
-            double h = S.HH(a), T = S.t, tt = u * 4.2, amp = 1 - ease(clamp((tt - 3.5) / .7, 0, 1)); S.standF(a); a.pose = 5;
+            double h = S.HH(a), T = S.t, tt = u * 4.2, amp = 1 - ease(clamp((tt - 3.5) / .7, 0, 1)); S.standF(a); a.pose = 5; a.cell = amp < .3 ? 14 : (int) (T * 7) % 2 == 0 ? 15 : 9;     // > < 화난 얼굴을 번갈아
             double b = Math.abs(Math.sin(T * 9.5)); a.y = -b * h * .16 * amp; a.sy = 1 - .12 * (1 - b) * amp; a.sx = 1 + .08 * (1 - b) * amp; a.ox = Math.sin(T * 38) * 1.4 * amp; a.ang = Math.sin(T * 19) * .05 * amp;
             if (S.once(A, "st")) { S.stk(a, "angry", 3.4); S.haptic("angry"); }
             if (S.every(A, "say", 1.3)) S.say(a, new String[]{"화났다!!", "누가 던졌어!!", "으아아아!!", "놓지 말랬잖아!"}[(int) ((S.t * 3) % 4)], 1.3);
