@@ -149,14 +149,15 @@ function swTableOk(S, chips, m) {
   ok(E.foodDist(1200) === '1.2km' && E.foodDist('999') === '999m' && E.foodDist(null) === '0m' && E.foodDist(1000) === '1.0km', '거리 글');
   ok(cur[5].sub === '분식' && !/·/.test(cur[5].sub), '주소가 없으면 업종만');
   ok(cur[0].act.v === 'fm.c.0' && cur[4].act.v === 'fm.c.4' && cur[5].act.v === 'fm.c.5', '번호 = 앱이 보낸 배열의 원래 위치(이름 없는 항목이 있어도 밀리지 않는다)');
-  ok(pub.map(p => p.act.v).join() === 'fm.p.0,fm.p.2' && pub.every(p => p.badge === '공공데이터' && p.rank === '' && !p.stars), '공공데이터: 번호 원래 위치 · 딱지 · 순위 없음');
-  ok(S.body.some(n => n.t === 'divider') && S.body.some(n => n.t === 'text' && n.s === '공공데이터 · 주변 음식점 2곳'), '구분선 + 제목');
+  ok(pub.map(p => p.act.v).join() === 'fm.p.2,fm.p.0' && pub.every(p => p.badge === '공공데이터' && p.rank === '' && !p.stars), '공공데이터: 번호 원래 위치(거리순으로 섞여 앞뒤가 바뀐다) · 딱지 · 순위 없음');
+  const dm = ps.map(p => parseFloat(p.dist) * (/km$/.test(p.dist) ? 1000 : 1));
+  ok(dm.every((d, i) => i === 0 || d >= dm[i - 1]) && !S.body.some(n => n.t === 'divider') && ps[ps.length - 1].pub, '서버 가게 + 공공데이터를 한 줄로 합쳐 가까운 것부터(s355) ' + dm.join());
   ok(S.head[0].t === 'bar' && S.head[0].title === '🍽️ 도착역 맛집' && /* 도착지 있음 */ S.head[0].btn === '🔄 새로고침' && S.head[0].act.a === 'refresh', '머리줄');
   ok(S.head[1].t === 'chips' && S.head[1].items.length === 6 && S.head[1].items[0].on && S.head[1].items.slice(1).every(c => !c.on) && S.head[1].items[2].act.v === '밥집', '칩 6개 · 켜진 칩');
   // 거르기
   const f1 = E.foodScreen({ cap: 4 }, { stn: '강남', st: 'ready', flt: '카페' }, { c: C, p: P });
   ok(places(f1.body).filter(p => !p.pub).map(p => p.name).join() === '스타벅스 강남점' && f1.head[1].items[1].on && !f1.head[1].items[0].on, '카페 칩: 카페만');
-  ok(f1.body.some(n => n.t === 'text' && n.s === '공공데이터 · 주변 카페 1곳'), '공공데이터 제목에 칩 이름');
+  ok(places(f1.body).length === 2 && places(f1.body)[0].name === '스타벅스 강남점' && places(f1.body)[1].pub, '카페 칩: 한 줄 거리순(서버 250m → 공공 800m)');
   ok(places(E.foodScreen({ cap: 4 }, { stn: '강남', flt: '회집' }, { c: C, p: P }).body)[0].name === '참치회 전문 바다', '회집이 육식보다 먼저');
   ok(E.foodScreen({ cap: 4 }, { stn: '강남', flt: '없는칩' }, { c: C, p: P }).info.flt === '전체', '모르는 칩은 전체');
   // 한도
