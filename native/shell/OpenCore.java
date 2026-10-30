@@ -17,11 +17,21 @@ public final class OpenCore {
     private OpenCore() {}
 
     public static final class Seg { public double t0, t1, x0, x1, hop, hz; public String k = "pose", say = "", fx = ""; public int p, f = 1; }
-    public static final class Actor { public String id = ""; public Seg[] tr = new Seg[0]; }
+    public static final class Actor {
+        public String id = ""; public Seg[] tr = new Seg[0];
+        public int row;                                  // s338 전원 인사: 줄(0 앞 · 1 가운데 · 2 뒤) — 오프닝은 늘 0
+        public double scale = 1, gap;                    // 친구 키 배율 · 줄 간격(친구 키의 배수) — 오프닝은 1 · 0
+        public String say = ""; public double sayAt = -1;     // 자기 차례에 하는 인사(전원 인사) — 동작 구간과 따로 시각을 정한다
+    }
     /** 자리(왼쪽·가운데·오른쪽)마다의 연기 — 누가 서든 이 연기를 한다. t0 은 나타나는 시각. */
     public static final class Role { public double t0, hop, hz; public int p; public String say = "", fx = ""; }
+    /** 전원 인사(s338)에서 한 칸의 모두의 모습: 친구별 인사 · 자세 · 콩콩 · 효과 · 전용 동작(죽순이·뽀송). */
+    public static final class AllLook { public Map<String, String> say = new java.util.HashMap<String, String>(); public int p; public double hop, hz = 2; public String fx = ""; public Map<String, Seg[]> special = new java.util.HashMap<String, Seg[]>(); }
+    /** 전원 인사의 판: 길이 · 사라짐 · 첫 인사 · 인사 간격 · 친구 키 · 줄 간격 · 자리(x · 줄 · 나타남) · 인사 차례(자리 번호). */
+    public static final class All { public int dur = 8200, fade = 700; public double t0 = 900, step = 700, scale = .82, gap = .72; public double[] sx = new double[0], st = new double[0]; public int[] sr = new int[0], order = new int[0]; }
     public static final class Slot {
         public String id = "", ko = "", kind = "pose", fx = ""; public boolean dark;
+        public AllLook all;                              // 전원 인사 대본(없으면 null)
         public double h0, h1;
         public int sky0, sky1, sky2, ground, hill;
         public int bg, ink;          // 칸이 정한 화면 바탕 · 제목 글 색(0xFFRRGGBB) — 0 이면 대본(Script)의 bg · ink (밤 칸만 어두운 바탕 · 밝은 글)
@@ -36,6 +46,7 @@ public final class OpenCore {
         public String[] chars = new String[0]; public Map<String, String> names = new java.util.HashMap<String, String>(); public double[] x = {.30, .50, .70}, xs = {.27, .50, .73};
         public Slot[] slots = new Slot[0];
         public Map<String, Wx> wx = new java.util.HashMap<String, Wx>();
+        public All all;                                  // 전원 인사 판(없으면 null)
     }
     /** 날씨 한 종류(엔진 대본 wx): 하늘·땅에 섞을 색(낮/밤) · 정도 · 해/달/별 가림 · 구름 수 · 비·눈·안개 효과 · 땅 색 바꿈(눈). */
     public static final class Wx { public int tintDay, tintNight, ground, hill; public double a, ga; public boolean sun = true, hasGround; public int clouds; public String fx = ""; }
@@ -74,6 +85,7 @@ public final class OpenCore {
             sc.chars = cl.toArray(new String[0]);
             Object no = m.get("names");
             if (no instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) no).entrySet()) if (en.getValue() instanceof String) sc.names.put(en.getKey(), (String) en.getValue());
+            sc.all = parseAll(m.get("all"));
             Object so = m.get("slots"); if (!(so instanceof List)) return null;
             List<Slot> out = new ArrayList<Slot>();
             for (Object e : (List<Object>) so) {
@@ -100,25 +112,59 @@ public final class OpenCore {
                 }
                 if (rl.size() < 3) continue;
                 sl.roles = rl.toArray(new Role[0]);
-                Object spo = s.get("special");
-                if (spo instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) spo).entrySet()) {
-                    if (!(en.getValue() instanceof List)) continue;
-                    List<Seg> sg = new ArrayList<Seg>();
-                    for (Object t : (List<Object>) en.getValue()) {
-                        if (!(t instanceof Map)) continue;
-                        Map<String, Object> tm = (Map<String, Object>) t; Seg g = new Seg();
-                        g.t0 = num(tm.get("t0"), 0); g.t1 = num(tm.get("t1"), g.t0);
-                        g.hop = num(tm.get("hop"), 0); g.hz = num(tm.get("hz"), 2); g.p = (int) num(tm.get("p"), 0); g.f = num(tm.get("f"), 1) < 0 ? -1 : 1;
-                        g.k = SceneModel.Json.strOr(tm.get("k"), "pose"); g.say = SceneModel.Json.strOr(tm.get("say"), ""); g.fx = SceneModel.Json.strOr(tm.get("fx"), "");
-                        sg.add(g);
-                    }
-                    if (!sg.isEmpty()) sl.special.put(en.getKey(), sg.toArray(new Seg[0]));
-                }
+                sl.special = parseSpecial(s.get("special"));
+                sl.all = parseAllLook(s.get("all"));
                 out.add(sl);
             }
             if (out.isEmpty()) return null;
             sc.slots = out.toArray(new Slot[0]); return sc;
         } catch (RuntimeException e) { return null; }
+    }
+    @SuppressWarnings("unchecked")
+    private static Map<String, Seg[]> parseSpecial(Object spo) {
+        Map<String, Seg[]> out = new java.util.HashMap<String, Seg[]>();
+        if (spo instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) spo).entrySet()) {
+            if (!(en.getValue() instanceof List)) continue;
+            List<Seg> sg = new ArrayList<Seg>();
+            for (Object t : (List<Object>) en.getValue()) {
+                if (!(t instanceof Map)) continue;
+                Map<String, Object> tm = (Map<String, Object>) t; Seg g = new Seg();
+                g.t0 = num(tm.get("t0"), 0); g.t1 = num(tm.get("t1"), g.t0);
+                g.hop = num(tm.get("hop"), 0); g.hz = num(tm.get("hz"), 2); g.p = (int) num(tm.get("p"), 0); g.f = num(tm.get("f"), 1) < 0 ? -1 : 1;
+                g.k = SceneModel.Json.strOr(tm.get("k"), "pose"); g.say = SceneModel.Json.strOr(tm.get("say"), ""); g.fx = SceneModel.Json.strOr(tm.get("fx"), "");
+                sg.add(g);
+            }
+            if (!sg.isEmpty()) out.put(en.getKey(), sg.toArray(new Seg[0]));
+        }
+        return out;
+    }
+    /** 전원 인사의 판(대본 all). 자리가 8개 미만이거나 차례가 자리 수와 안 맞으면 null — 앱은 그 경우 전원 인사를 쓰지 않는다. */
+    @SuppressWarnings("unchecked")
+    private static All parseAll(Object o) {
+        if (!(o instanceof Map)) return null;
+        Map<String, Object> m = (Map<String, Object>) o; All a = new All();
+        a.dur = (int) num(m.get("dur"), 8200); a.fade = (int) num(m.get("fade"), 700); a.t0 = num(m.get("t0"), 900); a.step = num(m.get("step"), 700); a.scale = num(m.get("scale"), .82); a.gap = num(m.get("gap"), .72);
+        Object so = m.get("seats"), oo = m.get("order");
+        if (!(so instanceof List) || !(oo instanceof List)) return null;
+        List<Object> sl = (List<Object>) so, ol = (List<Object>) oo; int n = sl.size();
+        if (n < 3 || ol.size() != n) return null;
+        a.sx = new double[n]; a.st = new double[n]; a.sr = new int[n]; a.order = new int[n];
+        for (int i = 0; i < n; i++) {
+            if (!(sl.get(i) instanceof Map)) return null;
+            Map<String, Object> q = (Map<String, Object>) sl.get(i); a.sx[i] = num(q.get("x"), .5); a.sr[i] = (int) num(q.get("r"), 0); a.st[i] = num(q.get("t"), 0);
+            a.order[i] = (int) num(ol.get(i), i); if (a.order[i] < 0 || a.order[i] >= n) return null;
+        }
+        return a;
+    }
+    @SuppressWarnings("unchecked")
+    private static AllLook parseAllLook(Object o) {
+        if (!(o instanceof Map)) return null;
+        Map<String, Object> m = (Map<String, Object>) o; AllLook l = new AllLook();
+        l.p = (int) num(m.get("p"), 0); l.hop = num(m.get("hop"), 0); l.hz = num(m.get("hz"), 2); l.fx = SceneModel.Json.strOr(m.get("fx"), "");
+        Object so = m.get("say");
+        if (so instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) so).entrySet()) if (en.getValue() instanceof String) l.say.put(en.getKey(), (String) en.getValue());
+        l.special = parseSpecial(m.get("special"));
+        return l;
     }
     private static double[] three(Object o, double[] d) {
         if (o instanceof List && ((List<?>) o).size() >= 3) { List<?> l = (List<?>) o; double[] r = new double[3]; for (int i = 0; i < 3; i++) r[i] = num(l.get(i), d[i]); return r; }
@@ -167,7 +213,7 @@ public final class OpenCore {
     /** 마지막으로 받은 날씨(wk: clear·cloudy·overcast·rain·snow·fog)를 칸의 하늘·땅·해/달/별·구름·효과에 입힌 새 칸. 모르는 날씨·맑음·빈 값이면 칸 그대로. */
     public static Slot withWeather(Script sc, Slot s, String wk) {
         Wx w = wk == null ? null : sc.wx.get(wk); if (w == null) return s;
-        Slot r = new Slot(); r.id = s.id; r.ko = s.ko; r.kind = s.kind; r.dark = s.dark; r.h0 = s.h0; r.h1 = s.h1; r.roles = s.roles; r.special = s.special; r.ink = s.ink;
+        Slot r = new Slot(); r.id = s.id; r.ko = s.ko; r.kind = s.kind; r.dark = s.dark; r.h0 = s.h0; r.h1 = s.h1; r.roles = s.roles; r.special = s.special; r.ink = s.ink; r.all = s.all;
         int t = s.dark ? w.tintNight : w.tintDay;
         r.bg = s.bg == 0 ? 0 : mix(s.bg, t, w.a);                                           // 바탕은 하늘 맨 위와 같은 비율로 물들어 둘의 이음매가 안 보인다
         r.sky0 = mix(s.sky0, t, w.a); r.sky1 = mix(s.sky1, t, w.a); r.sky2 = mix(s.sky2, t, w.a);
@@ -205,6 +251,45 @@ public final class OpenCore {
         return out;
     }
 
+    /** 전원 인사를 할 수 있는가 — 판과 이 칸의 인사 대본이 있고, 모든 친구에게 인사 글이 있고, 자리가 친구 수만큼 있다. */
+    public static boolean canAll(Script sc, Slot s) {
+        if (sc == null || s == null || sc.all == null || s.all == null || sc.all.sx.length < sc.chars.length) return false;
+        for (String c : sc.chars) { String t = s.all.say.get(c); if (t == null || t.length() == 0) return false; }
+        return true;
+    }
+    /** 전원 인사용 시간표(길이·사라짐만 전원 인사의 것) — alpha/bgAlpha/fgAlpha/done 을 그대로 쓴다. 나머지(칸·이름·날씨)는 같은 것을 가리킨다. */
+    public static Script forAll(Script sc) {
+        Script r = new Script(); r.dur = sc.all.dur; r.fade = sc.all.fade; r.brand = sc.brand; r.bg = sc.bg; r.ink = sc.ink; r.chars = sc.chars; r.names = sc.names; r.x = sc.x; r.xs = sc.xs; r.slots = sc.slots; r.wx = sc.wx; r.all = sc.all;
+        return r;
+    }
+    /**
+     * 모든 친구(8마리)를 판의 자리에 앉힌다. 누가 어느 자리에 서는지는 seed 로 무작위(시험은 정해진 값 · 같은 seed 면 같은 배치) — 인사 차례는 자리마다 판이 정한다.
+     * 반환은 뒤 줄 → 앞 줄 순서(앞 줄이 뒤 줄을 가리도록 그릴 차례). 칸의 전용 동작(죽순이·뽀송)은 자기 자리에서 그대로 한다.
+     */
+    public static Actor[] castAll(Script sc, Slot s, long seed) {
+        All al = sc.all; int n = sc.chars.length; java.util.Random rnd = new java.util.Random(mix(seed));
+        List<String> pool = new ArrayList<String>(); for (String c : sc.chars) pool.add(c);
+        java.util.Collections.shuffle(pool, rnd);
+        int[] rank = new int[al.order.length]; for (int i = 0; i < al.order.length; i++) rank[al.order[i]] = i;
+        List<Actor> list = new ArrayList<Actor>();
+        for (int i = 0; i < n; i++) {
+            String id = pool.get(i); Actor a = new Actor(); a.id = id; a.row = al.sr[i]; a.scale = al.scale; a.gap = al.gap;
+            a.say = s.all.say.get(id); a.sayAt = al.t0 + rank[i] * al.step;
+            Seg[] sp = s.all.special.get(id);
+            if (sp != null) {
+                Seg[] tr = new Seg[sp.length];
+                for (int j = 0; j < sp.length; j++) { Seg q = sp[j], g = new Seg(); g.t0 = q.t0 + (j == 0 ? al.st[i] : 0); g.t1 = q.t1; g.x0 = g.x1 = al.sx[i]; g.hop = q.hop; g.hz = q.hz; g.k = q.k; g.p = q.p; g.f = q.f; g.fx = q.fx; tr[j] = g; }
+                a.tr = tr;
+            } else {
+                Seg g = new Seg(); g.t0 = al.st[i]; g.t1 = al.dur; g.x0 = g.x1 = al.sx[i]; g.k = s.kind; g.p = s.all.p; g.hop = s.all.hop; g.hz = s.all.hz; g.fx = s.all.fx;
+                a.tr = new Seg[] { g };
+            }
+            list.add(a);
+        }
+        java.util.Collections.sort(list, new java.util.Comparator<Actor>() { @Override public int compare(Actor p, Actor q) { return q.row - p.row; } });          // 뒤 줄(2) 먼저 · 앞 줄(0) 마지막 — 안정 정렬이라 같은 줄은 자리 순서
+        return list.toArray(new Actor[0]);
+    }
+
     // ───────────── 시각 t(ms) 의 모습 ─────────────
     /** 전체 진하기: 끝나기 fade ms 전부터 서서히 사라지고, dur 이 지나면 0. */
     public static double alpha(Script sc, long tMs) {
@@ -236,6 +321,7 @@ public final class OpenCore {
         for (Seg s : a.tr) if (s.say.length() > 0 && t >= s.t0 && t - s.t0 < SAY_MS) {                      // 말풍선: 말하기 시작한 뒤 1.5초 동안(가장 나중 것)
             r.say = s.say; double ts = t - s.t0; r.sayA = Math.min(1, ts / 160.0) * Math.min(1, (SAY_MS - ts) / 260.0);
         }
+        if (a.say.length() > 0 && a.sayAt >= 0 && t >= a.sayAt && t - a.sayAt < SAY_MS) { double ts = t - a.sayAt; r.say = a.say; r.sayA = Math.min(1, ts / 160.0) * Math.min(1, (SAY_MS - ts) / 260.0); }          // s338: 전원 인사 — 자기 차례에 한 번
         return r;
     }
 }
