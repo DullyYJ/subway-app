@@ -159,13 +159,9 @@ function chtBox(parts, col) {
 function chtOfficial(line, data, now) {
   if (!data || !data.offOk) return null;
   var n = data.off && typeof data.off === 'object' ? data.off : null;
-  if (n && n.estimated) return chtBox(chtOffParts(line, n, now), n.suspect ? CHT_WARN : CHT_QUIET);
+  if (n && n.estimated) return n.suspect ? chtBox(chtOffParts(line, n, now), CHT_WARN) : null;               // '정상 운행 중으로 보여요' 추정 상자도 그리지 않는다(지연 의심만)
   if (n) return chtBox(chtOffParts(line, n, now), CHT_ALERT);
-  var at = Number(data.offAt) > 0 ? Number(data.offAt) : now;
-  if (line === '경의중앙선' || line === '공항철도') return chtBox([[line + '은(는) 서울교통공사 환승역 관련 공지만 가끔 올라와요 · 지금은 없어요 · 아래 이용자 제보로 알려 드려요', 0]], CHT_QUIET);
-  if (/^[1-8]호선$/.test(line)) return chtBox([[line + ' 정상 운행 중입니다', 1], [' (' + chtOffAgo(at, now) + ' 확인)', 0]], CHT_QUIET);
-  if (/선$/.test(line) || /^(공항철도|경의중앙|수인분당|신분당|경춘|경강|서해|GTX)/.test(line)) return chtBox([[line + '은(는) 공식 공지 연동 전이에요 · 아래 이용자 제보로 알려 드려요', 0]], CHT_QUIET);
-  return null;
+  return null;                                                    // s355(YJ): 올라온 공지가 없을 때의 안내 상자(정상 운행 중 · 연동 전 · 공지 없음)는 그리지 않는다 — 실제 공지·지연 의심만 보인다
 }
 // 지연 제보 집계 배너(웹 _lrRenderAlert)
 function chtAlert(al) {
