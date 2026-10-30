@@ -58,7 +58,7 @@ public final class RideCore {
     public boolean quit;
 
     /** 하차 추천 줄(/reco-text 의 ad) — 오버레이 [보기]가 열 곳. url 이 있으면 그 주소(쿠팡 상품), 없으면 가게 이름으로 찾는다. */
-    public static final class RecoAd { public String a = "", b = "", m = "", go = "맛집 보기", url = ""; public boolean n; }      // n = 가게·상품 없이 글만 있는 추천(s295)
+    public static final class RecoAd { public String a = "", b = "", m = "", go = "맛집 보기", url = "", q = "", pn = ""; public boolean n; }      // n = 가게·상품 없이 글만 있는 추천(s295)
     /** s295 (YJ: 알림만 오고 오버레이·앱에 안 떴다): 서버가 가게·상품(ad)을 못 골라 글만 보낸 추천도 오버레이 줄·팝업으로 보이게 글(제목·본문)에서 한 줄을 만든다. [보기] 없이 [확인]만. */
     public static RecoAd textAd(String title, String text) {
         String t = title == null ? "" : title.replace('\n', ' ').trim();
@@ -68,6 +68,15 @@ public final class RideCore {
         r.b = BoardCore.s((text == null ? "" : text).replaceAll("\\s+", " ").trim(), 64);
         r.go = ""; r.n = true;
         return r;
+    }
+    /** s350 (YJ: 추천을 눌렀더니 카카오맵 검색창에 안내 문구가 들어갔다): 지도에서 찾을 말은 엔진이 정한 q(가게 이름 · "<메뉴> 맛집" · "카페") 뿐이다 — 없으면 가게 이름(pn), 그것도 없으면 이름줄의 ' · ' 앞까지.
+     *  글만 있는 추천(n)이거나 찾을 말이 없으면 빈 글 — 안내 문구로 검색하지 않는다(RecoGo 가 앱을 연다). 순수 계산 — 시험이 쓴다. */
+    public static String recoQuery(RecoAd ad) {
+        if (ad == null || ad.n) return "";
+        String q = ad.q != null ? ad.q.trim() : "";
+        if (q.length() == 0) q = ad.pn != null ? ad.pn.trim() : "";
+        if (q.length() == 0 && ad.a != null) { int i = ad.a.indexOf(" · "); q = (i > 0 ? ad.a.substring(0, i) : ad.a).trim(); }
+        return q;
     }
     private volatile RecoAd pendingAd;                 // 엔진에 아직 못 알린 추천 줄
     private volatile RecoAd lastAd;                    // 마지막으로 받은 추천 줄([보기]가 쓴다)
@@ -99,6 +108,7 @@ public final class RideCore {
             r.a = BoardCore.s(ad.get("a"), 40); r.b = BoardCore.s(ad.get("b"), 64); r.m = BoardCore.s(ad.get("m"), 32);
             if (r.a.length() == 0) return null;
             boolean shop = "shop".equals(ad.get("k"));
+            r.q = BoardCore.s(ad.get("q"), 40); r.pn = BoardCore.s(ad.get("pn"), 40);      // s350: 지도에서 찾을 말(엔진 값) — 가게 이름 또는 "<메뉴> 맛집"/"카페"
             r.go = BoardCore.s(ad.get("go"), 8);                      // s237: 엔진이 아이템(맛집·카페·쿠팡)과 날씨·시간에 맞춰 정한 클릭 유도 글 — 없으면 예전 이름
             if (r.go.length() == 0) r.go = shop ? "쿠팡 보기" : "맛집 보기";
             if (shop && m.get("shopItem") instanceof Map) {
