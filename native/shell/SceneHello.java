@@ -41,7 +41,8 @@ public final class SceneHello {
         return p.expand > 0 && p.collapse > p.leave && p.end > p.collapse && p.greet >= p.expand * 0.5 && p.leave > p.greet && p.step > 0 && p.bubble > 0;
     }
 
-    static double ease(double u) { u = Math.max(0, Math.min(1, u)); return u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; }
+    /** smootherstep(6u⁵−15u⁴+10u³): 처음과 끝의 속도 · 가속이 모두 0 이라 늘어나기 시작할 때와 멈출 때 끊김이 없다. */
+    static double ease(double u) { u = Math.max(0, Math.min(1, u)); return u * u * u * (u * (u * 6 - 15) + 10); }
 
     /** 카드가 늘어난 정도 0~1: 처음 expand ms 동안 늘고, collapse 부터 end 까지 줄어든다. */
     public static double ext(Plan p, double ms) {
