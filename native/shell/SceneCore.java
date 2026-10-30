@@ -86,6 +86,8 @@ public final class SceneCore {
     // ═══ 상태 ═══
     final Host host; final SceneCv factory; final SceneUtil.Rng R;
     boolean laid, running; double PW, PH, dens = 1, k = 1, W, H, dpr = 1; boolean dark = true, reduce;
+    /** 0 보다 크면 칸 높이와 상관없이 이 배율로 그린다(카드 확장 인사: 키가 2배로 커지지 않고 같은 그림이 세로로 넓어진다). */
+    public double forceK = 0;
     SceneArt.Geom g; double t, fade; long frames;
     /** TV 전원 전환(2026-10-16, YJ: "경로 탐색·취소·애니메이션이 바뀔 때 TV 처럼 화면이 꺼졌다 켜지게"): 장면이 바뀌는 순간부터 지난 초(없으면 -1). */
     double tv = -1;
@@ -230,6 +232,7 @@ public final class SceneCore {
     }
     void endAct(Actor a) {
         a.pr = null; a.cut = Double.NaN; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.ang = 0; a.act = null; a.stk = null; if (a.pinned) a.pinX = a.x;
+        if (hello != null && !hello.free.contains(a.id)) { helloSettle(a); return; }                  // s340: 카드 확장 인사 중에는 어떤 동작이든 끝나면 자리에 서서 인사를 기다린다
         if (a.hero && ("wait".equals(mode) || "alight".equals(mode))) { a.st = "stand"; waitNext = t + rnd(1.0, 2.2); if ("wait".equals(mode) && a.lookUntil == 0) a.dir = baseDir; }
         else nextAct(a);
     }
@@ -987,7 +990,7 @@ public final class SceneCore {
     }
     void boot(boolean keepBus) {
         int bc = css(pickOf(BUS_COLORS)); String bn = pickOf(BUS_NOS); if (!keepBus || busNo == null) { busColor = bc; busNo = bn; }
-        double kk = PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
+        double kk = forceK > 0 ? forceK : PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
         k = kk; W = PW / kk; H = PH / kk; dpr = dens * kk; g = SceneArt.geom(W, H);
         fade = 0; tv = -1; xf = -1; pan = -1; panBg = null; panL = null; panWx = null; oldTraffic = new ArrayList<>(); frames = 0; error = null; prev = null; running = true;
     }
@@ -1139,7 +1142,8 @@ public final class SceneCore {
                 stepTraffic(dt);
                 if (L.wk.equals("rain") && R.next() < dt * 14) { Ripple rp = new Ripple(); rp.x = rnd(4, W - 4); rp.y = rnd(g.nearTop + 6, g.floor); rp.t0 = t; ripples.add(rp); if (ripples.size() > 14) ripples.remove(0); }
                 if ("wait".equals(mode)) waitManage(); else if ("alight".equals(mode)) alightManage(dt);
-                if ("idle".equals(mode) || "alight".equals(mode)) idleManage();
+                if (hello != null) helloManage();
+                else if ("idle".equals(mode) || "alight".equals(mode)) idleManage();
                 for (int i = 0; i < actors.size(); i++) {
                     Actor a = actors.get(i); if (a.hidden) continue;
                     if (a.held) { heldStep(a, dt); continue; }
@@ -1208,6 +1212,85 @@ public final class SceneCore {
             if (xf >= 0 && prev != null) { try { c.globalAlpha(clamp(1 - xf / XF_T, 0, 1)); c.drawImage(prev, 0, 0, W, H); c.globalAlpha(1); } catch (RuntimeException e) { c.globalAlpha(1); } }
         }
         c.restore();
+    }
+
+
+    // ═══ 카드 확장 인사(s340, YJ: "3초 꾹 누르면 카드가 2배로 늘어나고 나머지 친구들이 나와 인사한 뒤 남을 친구만 남고 들어간다") ═══
+    //   이 SceneCore 는 '늘어난 카드' 전용 두 번째 장면이다(카드의 평소 장면은 그대로 돈다). 시간 · 자리 · 차례 · 인사 글은 엔진 대본(SceneHello.Plan)이 정하고,
+    //   누가 남는지는 평소 카드에 지금 나와 있는 친구(folks)가 정한다. 손님 친구는 자기 걸음(걷기 · 달리기 · 날기)으로 양쪽 가장자리에서 들어오고 두덩은 땅에서 솟는다.
+    /** 평소 카드에 지금 나와 있는 친구 한 마리(자리는 칸 폭 · 깊이의 비율). */
+    public static final class Folk { public String id = ""; public double fx, z; public int dir = 1; }
+    static final class HelloRun {
+        SceneHello.Plan p; double t0; String[] idAt; int[] rank; boolean leaving;
+        final Map<String, Integer> seat = new HashMap<>(); final Map<String, Double> arrive = new HashMap<>(), sayAt = new HashMap<>();
+        final java.util.Set<String> said = new java.util.HashSet<>(), guests = new java.util.HashSet<>(), free = new java.util.HashSet<>();
+        final List<Actor> queue = new ArrayList<>(); final List<Double> queueAt = new ArrayList<>();
+    }
+    HelloRun hello;
+    public boolean helloActive() { return hello != null; }
+    /** 확장 인사가 시작된 뒤 지난 ms(없으면 -1). */
+    public double helloMs() { return hello == null ? -1 : (t - hello.t0) * 1000; }
+    /** 확장 인사를 일찍 끝낸다: 손님은 바로 나가고 카드는 줄어든다. */
+    public void helloSkip() { if (hello != null && helloMs() < hello.p.leave) hello.t0 = t - hello.p.leave / 1000.0; }
+    public void helloStop() { hello = null; }
+    /** 지금 카드에 나와 있는(나가는 중이 아닌) 친구들. */
+    public List<Folk> folks() {
+        List<Folk> out = new ArrayList<>();
+        for (Actor a : actors) if (!a.dead && !a.hero && !a.leaving && !a.hidden && W > 0) { Folk f = new Folk(); f.id = a.id; f.fx = clamp(a.x / W, 0, 1); f.z = clamp(a.z, 0, 1); f.dir = a.dir; out.add(f); }
+        return out;
+    }
+    /** 확장 인사를 시작한다. 평소 장면(idle)이 아니거나 대본이 틀리면 false. orig: 평소 카드에 나와 있던 친구들(그대로 남는다). */
+    public boolean startHello(SceneHello.Plan p, long seed, List<Folk> orig) {
+        if (!running || !"idle".equals(mode) || pan >= 0 || !SceneHello.ok(p) || W <= 0) return false;
+        HelloRun h = new HelloRun(); h.p = p; h.t0 = t; h.idAt = SceneHello.seats(p, seed); h.rank = SceneHello.rank(p);
+        actors = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); bams = new ArrayList<>(); dragReset();
+        int gi = 0;
+        for (int i = 0; i < h.idAt.length; i++) {
+            String id = h.idAt[i]; if (!SceneModel.D3.containsKey(id)) continue;
+            double sx = clamp(p.sx[i], .05, .95) * W, sz = clamp(p.sz[i], 0, 1); Folk f = null;
+            if (orig != null) for (Folk o : orig) if (o.id.equals(id)) { f = o; break; }
+            Actor a;
+            if (f != null) { a = mkActor(id, f.fx * W, f.z, f.dir); a.st = "walk"; }
+            else {
+                boolean left = sx < W * .5; a = mkActor(id, 0, sz, left ? 1 : -1); h.guests.add(id);
+                if (id.equals("dudung") && a.D.intro > 0 && host.intro() != null) { a.x = sx; a.st = "emerge"; }
+                else { a.x = left ? -a.w * .9 : W + a.w * .9; a.st = "walk"; }
+            }
+            a.tx = sx; a.tz = sz; a.life = 1e9; a.born = t; a.boost = p.boost; h.seat.put(id, i);
+            if (f == null) { h.queue.add(a); h.queueAt.add(id.equals("dudung") ? 700.0 : 200.0 + (gi++) * 140.0); } else actors.add(a);
+        }
+        hello = h; return true;
+    }
+    void helloSettle(Actor a) {                                          // 자리에 닿았다/동작이 끝났다 → 서서 인사를 기다린다(잠자는 칸은 앉아 쉰다)
+        HelloRun h = hello; a.dir = a.x < W * .5 ? 1 : -1; a.tx = a.x; a.tz = a.z; a.afterEmerge = null; a.onArrive = null;
+        if (!h.arrive.containsKey(a.id)) h.arrive.put(a.id, t);
+        if (h.p.rest) { a.st = "rest"; a.t0 = t; a.until = t + 1e6; } else a.st = "stand";
+    }
+    void helloManage() {
+        HelloRun h = hello; SceneHello.Plan p = h.p; double ms = (t - h.t0) * 1000;
+        for (int i = h.queue.size() - 1; i >= 0; i--) if (ms >= h.queueAt.get(i)) {                                   // 손님 입장(차례로 · 두덩은 땅에서 솟는다)
+            Actor a = h.queue.remove(i); h.queueAt.remove(i);
+            if (a.st.equals("emerge")) { a.t0 = t; a.until = t + (double) a.D.intro / a.D.introFps; }
+            actors.add(a);
+        }
+        for (int i = actors.size() - 1; i >= 0; i--) if (actors.get(i).dead) actors.remove(i);
+        for (Actor a : actors) {
+            Integer si = h.seat.get(a.id); if (si == null || a.leaving) continue;
+            Double ar = h.arrive.get(a.id);
+            if (ar != null && !h.said.contains(a.id) && ms >= Math.max(p.greet + h.rank[si] * (double) p.step, (ar - h.t0) * 1000 + 200)) {       // 자리에 선 친구만, 자기 차례에 한 번 인사
+                h.said.add(a.id); h.sayAt.put(a.id, ms); String txt = p.say.get(a.id); if (txt != null) say(a, txt, p.bubble / 1000.0);
+                if (!p.rest && a.st.equals("stand")) { a.st = "hop"; a.t0 = t; a.until = t + .7; a.lastCyc = null; }
+            }
+            Double sa = h.sayAt.get(a.id); if (sa != null && ms >= sa + p.bubble && !a.bub.isEmpty()) a.bub = "";           // 앉아 쉬는 칸은 말풍선을 스스로 안 지우므로 여기서
+        }
+        if (!h.leaving && ms >= p.leave) {                                                                              // 손님은 양쪽으로 걸어 나가고, 남을 친구는 다시 평소처럼
+            h.leaving = true;
+            for (Actor a : actors) {
+                a.bub = "";
+                if (h.guests.contains(a.id)) { a.leaving = true; a.st = "walk"; a.tx = a.x < W / 2 ? -a.w * 1.1 : W + a.w * 1.1; a.tz = a.z; a.onArrive = null; a.act = null; a.boost = p.boost; }
+                else { h.free.add(a.id); a.boost = 0; a.life = rnd(15, 26); a.born = t; startAct(a, nextName(a)); }
+            }
+        }
     }
 
     // ═══ 시험용 ═══
