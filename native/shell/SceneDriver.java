@@ -50,8 +50,6 @@ public final class SceneDriver implements SceneCore.Host {
     private final Listener ls;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final SceneCore core;
-    private SceneCore hcore;                       // s340: 카드 확장 인사용 두 번째 장면(같은 시트를 쓴다) — 인사가 끝나면 버린다
-    private final Random hrnd = new Random();
     private final AndroidCv acv;
     private final HashMap<String, AndroidCv.AImg> sheets = new HashMap<>();
     private AndroidCv.AImg intro;
@@ -154,15 +152,14 @@ public final class SceneDriver implements SceneCore.Host {
     public boolean frame(long nanos) {
         frameAt = SystemClock.uptimeMillis();
         if (paused || !core.isRunning() || !loaded) { lastNanos = 0; return false; }
-        boolean hot = core.interactive() || hcore != null;       // 카드 확장 인사 중에는 화면 주사율 그대로(최대 120Hz)
+        boolean hot = core.interactive() || core.helloActive();       // 카드 확장 인사 중에는 화면 주사율 그대로(최대 120Hz)
         if (hot != hotNow) setHot(hot);
         if (lastNanos == 0) { lastNanos = nanos; return true; }
         double dt = (nanos - lastNanos) / 1e9;
         if (!hot && dt < 0.014) return false;                 // 평소엔 60Hz: 120Hz 화면이면 두 프레임에 한 번
         lastNanos = nanos;
-        try { core.update(Math.min(dt, .1)); if (hcore != null) hcore.update(Math.min(dt, .25)); } catch (RuntimeException e) { fail("움직임 계산 실패: " + e); return false; }
+        try { core.update(Math.min(dt, .1)); } catch (RuntimeException e) { fail("움직임 계산 실패: " + e); return false; }
         if (core.error != null) fail("그리기 실패: " + core.error);
-        if (hcore != null && hcore.error != null) { helloStop(); }
         return true;
     }
     private void setHot(boolean hot) {
@@ -200,35 +197,19 @@ public final class SceneDriver implements SceneCore.Host {
         return b;
     }
 
-    // ───────────── 카드 확장 인사(s340): 평소 장면은 그대로 돌고, 늘어난 카드는 두 번째 장면이 그린다 ─────────────
-    /** 늘어난 카드(폭 · 높이 dp)의 장면을 미리 만든다(눌러 둔 동안 먼저 해 두어 3초가 되는 순간 끊기지 않게). 평소 장면이 idle 이 아니거나 못 만들면 false. */
-    public boolean helloPrepare(double wDp, double hDp, boolean dark) {
-        if (!loaded || destroyed || !core.isRunning() || !"idle".equals(core.mode()) || core.last() == null) return false;
-        if (hcore != null && !hcore.helloActive()) { hcore.stop(); hcore = null; }
-        if (hcore != null) return true;
-        try {
-            SceneCore c = new SceneCore(this, acv, new SceneUtil.Rng() { @Override public double next() { return hrnd.nextDouble(); } });
-            c.forceK = core.k;                                       // 같은 배율 — 친구가 커지지 않고 같은 그림이 세로로 넓어진다
-            c.layout(wDp, hDp, density, dark);
-            if (!c.apply(core.last())) { c.stop(); return false; }
-            hcore = c; return true;
-        } catch (RuntimeException e) { hcore = null; return false; }
-    }
-    /** 미리 만든 늘어난 장면에서 인사를 시작한다. 평소 카드에 나와 있던 친구는 그대로 남는다. */
+    // ───────────── 카드 확장 인사(s340): 같은 장면 그대로 — 카드가 늘어난 만큼 아래 인도만 늘려 그린다 ─────────────
+    /** 인사를 시작할 수 있는가(평소 장면이 돌고 있다). */
+    public boolean helloReady() { return loaded && !destroyed && core.isRunning() && "idle".equals(core.mode()); }
+    /** 엔진 대본대로 인사를 시작한다. 지금 나와 있던 친구는 그대로 남는다. */
     public boolean helloStart(SceneHello.Plan plan, long seed) {
-        if (hcore == null) return false;
-        try { return hcore.startHello(plan, seed, core.folks()); } catch (RuntimeException e) { helloStop(); return false; }
+        try { return core.startHello(plan, seed); } catch (RuntimeException e) { helloStop(); return false; }
     }
-    public boolean helloReady() { return hcore != null; }
-    public boolean helloActive() { return hcore != null && hcore.helloActive(); }
-    public double helloMs() { return hcore == null ? -1 : hcore.helloMs(); }
-    public void helloSkip() { if (hcore != null) hcore.helloSkip(); }
-    public void helloStop() { if (hcore != null) { try { hcore.stop(); } catch (RuntimeException e) { /* 이미 멈춤 */ } hcore = null; } }
-    /** 늘어난 장면을 그린다(c 는 장면 왼쪽 위 기준 픽셀 · 평소 장면과 같은 방식). */
-    public void drawHello(Canvas c) {
-        if (!loaded || hcore == null) return;
-        try { acv.begin(c); hcore.render(acv); } catch (RuntimeException e) { helloStop(); }
-    }
+    public boolean helloActive() { return core.helloActive(); }
+    public double helloMs() { return core.helloMs(); }
+    public void helloSkip() { core.helloSkip(); }
+    public void helloStop() { try { core.helloStop(); } catch (RuntimeException e) { /* 이미 멈춤 */ } }
+    /** 카드가 늘어난 높이(dp) — 장면 안에서는 디자인 좌표(÷배율)로 바꿔 인도를 그만큼 늘린다. */
+    public void helloStretch(double extDp) { core.setStretch(core.k > 0 ? extDp / core.k : 0); }
 
     // ───────────── 손가락(화면 픽셀, 장면 왼쪽 위 기준) ─────────────
     public boolean touchDown(float xPx, float yPx) { return core.isRunning() && core.down(xPx / density, yPx / density); }
