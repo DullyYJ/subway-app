@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s335";
+var ENGINE_VERSION = "route-v2-2026-10-30s336";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10290,7 +10290,11 @@ function rsMtTimeline(st, i, line) {
   return out;
 }
 // \uc2b9\ucc28 \ub300\uae30(st.bl)\uac00 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubc1b\uc740 \uc2e4\uc2dc\uac04 \ub2f5\uc774 \uac00\ub9ac\ud0a8 \uc5f4\ucc28 | null
-function rsMtCandWait(st) { var bl = st && st.bl; return (bl && bl.tn && bl.src === 'realtime' && bl.ms != null && isFinite(+bl.ms)) ? { tn: bl.tn, ms: +bl.ms } : null; }
+function rsMtCandWait(st) {
+  var bl = st && st.bl, c = bl && bl.cand;
+  if (c && c.tn && c.src === 'realtime' && c.ms != null && isFinite(+c.ms)) return { tn: c.tn, ms: +c.ms };          // s336: \ub3c4\ucc29 \uad6c\uac04\uc5d0 \uace0\uc815\ud574 \ub454 \ud6c4\ubcf4 \uc6b0\uc120
+  return (bl && bl.tn && bl.src === 'realtime' && bl.ms != null && isFinite(+bl.ms)) ? { tn: bl.tn, ms: +bl.ms } : null;
+}
 // \ud658\uc2b9 \ub300\uae30(st.bl.x)\uac00 \ubc1b\uc740 \ub2f5\uc774 \uac00\ub9ac\ud0a8 \uc5f4\ucc28 | null
 function rsMtCandX(st, i) { var bx = st && st.bl && st.bl.x; return (bx && bx.i === i && bx.tn && bx.src === 'realtime' && bx.ms != null && isFinite(+bx.ms)) ? { tn: bx.tn, ms: +bx.ms } : null; }
 // i0 \ubc88 \ub178\ub4dc(\uac19\uc740 \ub178\uc120 \uc9c0\ud558\ucca0 \uad6c\uac04 \uc548)\uc5d0\uc11c \uc4f8 \uc218 \uc788\ub294 \ub0b4 \uc5f4\ucc28 \uae30\uc5b5 | null \u2014 \ub178\uc120\uc774 \ubc14\ub00c\uc5c8\uac70\ub098 \uc0ac\uc774\uc5d0 \ud658\uc2b9\u00b7\ub3c4\ubcf4\u00b7\ubc84\uc2a4\uac00 \ub07c\uba74 \uc61b \uae30\uc5b5\uc774\ub2e4
@@ -10524,7 +10528,13 @@ var RS_RT_STEP_MS = 15000, RS_RT_WINDOW_MS = 180000, RS_RT_MAXTRY = 2, RS_RT_ANS
 //   \u00b7 \ucfe8\ud0c0\uc784(RS_RT_COOL_MS 1\ubd84): \uc9c1\uc804 \ud638\ucd9c\ub85c\ubd80\ud130 \uc774 \uc2dc\uac04\uc774 \uc9c0\ub098\uc57c \uc0c8 \ubcf4\uc815\uc744 \uc2dc\uc791\ud55c\ub2e4(\ud55c \ubc88\uc758 \ubcf4\uc815 \uc548\uc758 \uc7ac\uc2dc\ub3c4 2\ubc88(15\ucd08 \uac04\uaca9)\uc740 \uadf8\ub300\ub85c). \ud55c \uc5ec\uc815 \ucd5c\ub300 RS_RT_TRIP_MAX \ubc88 \u2014 \ud0a4 \uc77c\uc77c \ud55c\ub3c4(\uacf5\uc720)\ub97c \uc9c0\ud0a8\ub2e4.
 //   \u00b7 \ud638\ucd9c\uc740 '\ub0b4 \uc5f4\ucc28 \ubc88\ud638(st.mt.tn)'\uac00 \uc788\uc73c\uba74 \uadf8 \uc5f4\ucc28\ub9cc \ucc3e\ub294\ub2e4(rsRtPickX). \ub2f5\uc774 \uc624\uba74 \ub85c\uceec \ud0c0\uc784\ub77c\uc778\uc774 \uadf8 \uc2dc\uac01\uc73c\ub85c \ub9de\ucdb0\uc9c0\uace0(fix) \ub2e4\uc2dc GPS \uc601\uc810\uc73c\ub85c \ub3cc\uc544\uac04\ub2e4.
 var RS_RT_COOL_MS = 60000, RS_RT_DEV_MS = 150000, RS_RT_REC_DEV_MS = 60000, RS_RT_LOSS_MS = 180000, RS_RT_TRIP_MAX = 24, RS_RT_CHK_MS = 10000, RS_RT_CORR_M = 400, RS_RT_GOOD_ACC_M = 100, RS_RT_FRESH_MS = 15000, RS_RT_RECWIN_MS = 60000;
-function rsRtGate(st, now) { var c = st && st.rtc; if (!c) return true; if ((c.n || 0) >= RS_RT_TRIP_MAX) return false; return c.at == null || now - c.at >= RS_RT_COOL_MS; }
+// \u2605 2026-10-30 s336 (YJ: "\uc9c0\uc0c1 \uad6c\uac04 \uc5f0\ucc29 \ub54c \uc2dc\uac01 \uc624\ucc28 150\ucd08\ub97c \ub118\uc5b4\uc57c \ubd80\ub974\ub2c8 \ub9c8\ucee4\uac00 \ucd5c\ub300 1.3km \uc55e\uc11c\uac04\ub2e4 \u2014 \uac70\ub9ac \uc624\ucc28\ub3c4 \ud568\uaed8 \ubcf4\uace0, \uc9d5\ud6c4\uac00 \ubcf4\uc774\uba74 \uc7a0\uae50 \uc9d1\uc911 \ud655\uc778\ud55c \ub4a4 \ub2e4\uc2dc \ubc31\uc624\ud504\ub85c") \u2014
+//   \u00b7 \uac70\ub9ac \ud2b8\ub9ac\uac70: GPS \uc704\uce58\uc640 \ub85c\uceec \uc2dc\uac01\ud45c\uac00 \ub9d0\ud558\ub294 \uc704\uce58(\uad6c\uac04 \ube44\uc728)\uac00 RS_RT_DEV_M(500m) \uc774\uc0c1 \ubc8c\uc5b4\uc9c0\uace0 \uc2dc\uac01 \uc624\ucc28\ub3c4 RS_RT_DEV_M_MIN_MS(75\ucd08) \uc774\uc0c1\uc774\uba74 \ud638\ucd9c(\uc0ac\uc720 'dist'). \uc2dc\uac01\ub9cc \ubd10\uc11c\ub294 \ub2a6\uac8c \uac78\ub9ac\ub294 '\ucc9c\ucc9c\ud788 \ub290\ub824\uc9c0\ub294' \uc5f0\ucc29\uc744 \uc77c\ucc0d \uc7a1\ub294\ub2e4.
+//   \u00b7 \uc801\uc751\ud615 \ubc84\uc2a4\ud2b8: \uc9d5\ud6c4(dev\u00b7dist\u00b7recover)\ub85c \uccab \ud638\ucd9c\uc744 \ud55c \uc9c1\ud6c4 RS_BU_WIN_MS(2\ubd84) \ub3d9\uc548\uc740 \ucfe8\ud0c0\uc784\uc744 RS_BU_COOL_MS(20\ucd08)\ub85c \uc904\uc5ec \ucd5c\ub300 RS_BU_N(2)\ubc88 \ub354 \ud655\uc778\ud55c\ub2e4(\uc774\ubbf8 \ub9de\ucd98 \uad6c\uac04(fx)\ub3c4 \ub2e4\uc2dc \ubcf8\ub2e4 \u2014 \uc624\ucc28\uac00 RS_BU_DEV_MS(60\ucd08)\u00b7RS_BU_DEV_M(300m) \uc774\uc0c1 \ub0a8\uc544 \uc788\uc744 \ub54c\ub9cc).
+//     \ubc84\uc2a4\ud2b8\uac00 \ub05d\ub098\uba74(\ud69f\uc218 \uc18c\uc9c4\u00b72\ubd84 \uacbd\uacfc\u00b7\uc5f0\uc774\uc740 \ub450 \ub2f5\uc774 RS_BU_SAME_MS(15\ucd08) \uc548\uc73c\ub85c \uac19\uc544 \ub354 \ubb3c\uc744 \uac8c \uc5c6\uc744 \ub54c) \ucfe8\ud0c0\uc784 1\ubd84\uc758 \ud3c9\uc18c \ubc31\uc624\ud504\ub85c \ub3cc\uc544\uc628\ub2e4. \ud55c \uc5ec\uc815 \ud55c\ub3c4(RS_RT_TRIP_MAX)\ub294 \ubc84\uc2a4\ud2b8 \ud638\ucd9c\ub3c4 \uc13c\ub2e4.
+var RS_RT_DEV_M = 500, RS_RT_DEV_M_MIN_MS = 75000, RS_BU_N = 2, RS_BU_COOL_MS = 20000, RS_BU_WIN_MS = 120000, RS_BU_DEV_MS = 60000, RS_BU_DEV_M = 300, RS_BU_DEV_M_MIN_MS = 30000, RS_BU_SAME_MS = 15000;
+function rsRtBurst(c, now) { return !!(c && c.bu && c.bu.n > 0 && now <= c.bu.until); }
+function rsRtGate(st, now) { var c = st && st.rtc; if (!c) return true; if ((c.n || 0) >= RS_RT_TRIP_MAX) return false; return c.at == null || now - c.at >= (rsRtBurst(c, now) ? RS_BU_COOL_MS : RS_RT_COOL_MS); }
 // \ub85c\uceec \ud0c0\uc784\ub77c\uc778 \ub300\uc870: \uc704\uce58 q=[ts,lat,lng,acc] \ub97c \uc774\uc6c3\ud55c \ub450 \uc5ed(\ub178\ub4dc \ubc88\ud638\uac00 \uc5f0\ub2ec\uc544) \uad6c\uac04\uc5d0 \uc5b9\uc5b4, \uadf8 \uc790\ub9ac\ub97c \uc9c0\ub098\ub294 \uc2dc\uac01\uacfc q \uc758 \uc2dc\uac01 \ucc28(ms, \uc591\uc218=\ub2a6\uc74c) | null
 function rsTlErr(st, q, etaMs) {
   var stops = st.stops || [], k, a, b, best = null, bd = 1e18, cl = Math.cos(q[1] * Math.PI / 180), mt = st.mt;
@@ -10539,13 +10549,15 @@ function rsTlErr(st, q, etaMs) {
   }
   if (!best || bd > RS_RT_CORR_M) return null;
   var ta = tlAt(best.a.i), tb = tlAt(best.b.i); if (ta == null || tb == null || !(tb > ta)) return null;
-  return { err: q[0] - (ta + best.t * (tb - ta)), i: best.a.i, d: bd };
+  var fe = Math.max(0, Math.min(1, (q[0] - ta) / (tb - ta)));                     // s336: \uc9c0\uae08 \ub85c\uceec \uc2dc\uac01\ud45c\uac00 \ub9d0\ud558\ub294 \uad6c\uac04 \ube44\uc728 \u2014 \uc2e4\uc81c GPS \ube44\uc728\uacfc\uc758 \uac70\ub9ac \ucc28(m, \uc591\uc218 = \uc2dc\uac01\ud45c\uac00 \uc55e\uc11c \uc788\ub2e4)
+  return { err: q[0] - (ta + best.t * (tb - ta)), i: best.a.i, d: bd, dm: (fe - best.t) * rsHav(best.a.lat, best.a.lng, best.b.lat, best.b.lng) };
 }
 // \ud55c \uac78\uc74c\uc758 \ub85c\uceec \uac80\uc99d \u2014 \uc608\uc678 \uc870\uac74\uc774\uba74 \uc2e4\uc2dc\uac04 \ubcf4\uc815\uc744 \uc2dc\uc791\ud55c\ub2e4(st.rt). \uc2dc\uc791\ud588\uc73c\uba74 true
 function rsRtWatch(st, tr, now, etaMs, notes) {
   try {
     var eta = st.eta; if (!eta || eta.boarded === false || eta.notDeparted === true || st.wait || st.xw || st.xPend || !tr.length) return false;
     var c = st.rtc = st.rtc || { n: 0 }, q = null, k;
+    if (c.bu && (c.bu.n <= 0 || now > c.bu.until)) delete c.bu;                       // s336: \ub05d\ub09c \ubc84\uc2a4\ud2b8\ub294 \uce58\uc6b4\ub2e4 \u2192 \ud3c9\uc18c \ubc31\uc624\ud504
     for (k = tr.length - 1; k >= 0; k--) { var z = tr[k]; if (z && isFinite(z[0]) && isFinite(z[1]) && isFinite(z[2]) && (z[3] == null || z[3] <= RS_RT_GOOD_ACC_M)) { q = z; break; } }
     if (!q) return false;
     if (c.g == null || q[0] > c.g) { if (c.g != null && q[0] - c.g >= RS_RT_LOSS_MS) c.rec = q[0]; c.g = q[0]; }      // \uc88b\uc740 \uc704\uce58\uac00 \ub04a\uacbc\ub2e4 \ub3cc\uc544\uc628 \uc21c\uac04
@@ -10553,12 +10565,16 @@ function rsRtWatch(st, tr, now, etaMs, notes) {
     if ((st.rt && !st.rt.done) || !rsRtGate(st, now) || (c.chk != null && now - c.chk < RS_RT_CHK_MS)) return false;
     c.chk = now;
     var e = rsTlErr(st, q, etaMs); if (!e) return false;
-    if (c.fx != null && e.i + 1 === c.fx) return false;                 // \uc774\ubbf8 \uc2e4\uc2dc\uac04\uc73c\ub85c \ub9de\ucd98 \uad6c\uac04
-    var recov = c.rec != null && now - c.rec <= RS_RT_RECWIN_MS;
-    if (Math.abs(e.err) < (recov ? RS_RT_REC_DEV_MS : RS_RT_DEV_MS)) return false;
+    var burst = rsRtBurst(c, now);
+    if (!burst && c.fx != null && e.i + 1 === c.fx) return false;       // \uc774\ubbf8 \uc2e4\uc2dc\uac04\uc73c\ub85c \ub9de\ucd98 \uad6c\uac04(\ubc84\uc2a4\ud2b8 \uc911\uc5d0\ub294 \uc624\ucc28\uac00 \ub0a8\uc558\ub294\uc9c0 \ub2e4\uc2dc \ubcf8\ub2e4)
+    var recov = c.rec != null && now - c.rec <= RS_RT_RECWIN_MS, ae = Math.abs(e.err);
+    var bySec = ae >= (burst ? RS_BU_DEV_MS : (recov ? RS_RT_REC_DEV_MS : RS_RT_DEV_MS));
+    var byDist = e.dm != null && Math.abs(e.dm) >= (burst ? RS_BU_DEV_M : RS_RT_DEV_M) && ae >= (burst ? RS_BU_DEV_M_MIN_MS : RS_RT_DEV_M_MIN_MS);
+    if (!bySec && !byDist) return false;
     if (!rsRtArm(st, e.i, now, notes)) return false;
-    c.why = recov ? 'recover' : 'dev';
-    notes.push('\ub85c\uceec \uc2dc\uac01\ud45c\uc640 GPS \uc704\uce58\uac00 ' + Math.round(e.err / 1000) + '\ucd08 \uc5b4\uae0b\ub0a8' + (recov ? '(\uc2e0\ud638 \ubcf5\uad6c \uc9c1\ud6c4)' : '') + ' \u2014 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub0b4 \uc5f4\ucc28 \ub9de\ucd94\uae30(' + e.i + '\ubc88 \uc5ed \ub2e4\uc74c)');
+    c.why = bySec ? (recov ? 'recover' : 'dev') : 'dist';
+    if (burst) { c.bu.n--; if (c.bu.n <= 0) delete c.bu; } else c.bu = { n: RS_BU_N, until: now + RS_BU_WIN_MS };
+    notes.push('\ub85c\uceec \uc2dc\uac01\ud45c\uc640 GPS \uc704\uce58\uac00 ' + Math.round(e.err / 1000) + '\ucd08 \uc5b4\uae0b\ub0a8' + (recov ? '(\uc2e0\ud638 \ubcf5\uad6c \uc9c1\ud6c4)' : '') + ' \u2014 \uc2e4\uc2dc\uac04 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub0b4 \uc5f4\ucc28 \ub9de\ucd94\uae30(' + e.i + '\ubc88 \uc5ed \ub2e4\uc74c)' + (e.dm != null && Math.abs(e.dm) >= 100 ? ' \u00b7 \uac70\ub9ac ' + Math.round(Math.abs(e.dm)) + 'm' : '') + (burst ? ' \u00b7 \uc9d1\uc911 \ud655\uc778' : ''));
     return true;
   } catch (e0) { return false; }
 }
@@ -10596,7 +10612,10 @@ function rsRtApply(st, req, now, notes) {
   if (!mtN && b.tn != null && String(b.tn) !== '') { st.mt = { tn: String(b.tn), line: rt.line, i: rt.i0, at: now, src: 'late' }; notes.push('\ub0b4 \uc5f4\ucc28 \uae30\uc5b5(\ub2a6\uac8c): ' + st.mt.tn + '\ubc88(' + rt.line + ')'); }      // s334: \ud0c8 \ub54c \ubabb \ubd99\uc600\uc73c\uba74 \ucc98\uc74c \ub9de\ucd98 \uc5f4\ucc28\ub97c \uc774\ub54c\ubd80\ud130 \uae30\uc5b5
   var lv = (eta.live || []).filter(function (x) { return x && +x.idx !== rt.i1; });
   lv.push({ idx: rt.i1, ms: Math.round(+b.ms), fix: true }); eta.live = lv; rt.done = 1; rt.ms = Math.round(+b.ms);
-  (st.rtc = st.rtc || { n: 0 }).fx = rt.i1;                       // s334: \uc774 \uad6c\uac04(\u2192 i1)\uc740 \uc2e4\uc2dc\uac04\uc73c\ub85c \ub9de\ucdc4\ub2e4 \u2014 \ub85c\uceec \uac80\uc99d\uc774 \uac19\uc740 \uad6c\uac04\uc744 \ub610 \ubd80\ub974\uc9c0 \uc54a\ub294\ub2e4
+  var rtc0 = (st.rtc = st.rtc || { n: 0 }); rtc0.fx = rt.i1;      // s334: \uc774 \uad6c\uac04(\u2192 i1)\uc740 \uc2e4\uc2dc\uac04\uc73c\ub85c \ub9de\ucdc4\ub2e4 \u2014 \ub85c\uceec \uac80\uc99d\uc774 \uac19\uc740 \uad6c\uac04\uc744 \ub610 \ubd80\ub974\uc9c0 \uc54a\ub294\ub2e4
+  if (rtc0.bu) {                                                  // s336: \ubc84\uc2a4\ud2b8 \uc911 \uc5f0\uc774\uc740 \ub450 \ub2f5\uc774 \uac19\uc73c\uba74 \uc218\ub834\ud55c \uac83 \u2014 \ub354 \ubb3b\uc9c0 \uc54a\uace0 \ud3c9\uc18c \ubc31\uc624\ud504\ub85c
+    if (rtc0.bu.last != null && Math.abs(rt.ms - rtc0.bu.last) <= RS_BU_SAME_MS) { delete rtc0.bu; notes.push('\uc9d1\uc911 \ud655\uc778 \ub05d(\ub2f5\uc774 \uac19\ub2e4)'); } else rtc0.bu.last = rt.ms;
+  }
   notes.push('\uc2e4\uc2dc\uac04 \ubcf4\uc815: ' + rt.stn + ' \ub3c4\ucc29 ' + Math.round((+b.ms - now) / 1000) + '\ucd08 \ub4a4\ub85c \ub9de\ucda4');
 }
 // \ud55c \uac78\uc74c: \ub0a8\uc740 \uac70\ub9ac\u00b7\uc2dc\uac04\uc744 \uacc4\uc0b0\ud558\uace0, \ub2ff\uc558\uc73c\uba74 \uc774\uc5b4 \ubd99\uc778\ub2e4. \ub3cc\ub824\uc8fc\ub294 \uac12 = { name, distM, etaSec, arrived } \ub610\ub294 null(\ud574\uc81c\ub428)
@@ -10700,7 +10719,12 @@ function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
   var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
-  if (!segs || !segs.length) { delete st.mk; return; }
+  if (!segs || !segs.length) {
+    delete st.mk;
+    var pf0 = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });      // s336: \uc885\ucc29\uc5d0 \uc11c \uc788\ub294 \uac78\uc74c(\uad6c\uac04 \uc5c6\uc74c)\ub3c4 \ubc14\ub2e5\uc744 \uc62c\ub824 \ub454\ub2e4 \u2014 \ub2e4\uc74c\uc5d0 \uad6c\uac04\uc774 \ub2e4\uc2dc \uc0dd\uaca8\ub3c4 \uc885\ucc29 \ub4a4\ub85c \uac00\uc9c0 \uc54a\ub294\ub2e4
+    if (+pos.from > pf0.n) pf0.n = +pos.from;
+    return;
+  }
   // \u2605 s323 (YJ: "\uc2e4\uce21 \ucd9c\ubc1c \uc2dc\uac01\uc744 \uae30\uc900\uc73c\ub85c \ub2e4\uc74c \uc5ed \ub3c4\ucc29\uc744 \ucd9c\ubc1c + \uc2dc\uac04\ud45c\uc0c1 \uad6c\uac04 \uc18c\uc694\ub85c \ub2e4\uc2dc \uc774\uc5b4 \ubd99\uc5ec \ub9c8\ucee4\uac00 \uac00\uc18d\ud574 \ub2ec\ub9ac\uc9c0 \uc54a\uac8c"): \ub2a6\uac8c \ucd9c\ubc1c\ud55c \uad6c\uac04(st.dly = \uc9c0\uc5f0 d)\uc740 \ub3c4\ucc29\ub3c4 \uac19\uc740 \ub9cc\ud07c \ub2a6\ucd98\ub2e4(\uc815\uc18d \uc720\uc9c0). \ub4a4 \uad6c\uac04\uc740 \uacb9\uce60 \ub54c\ub9cc \ubbfc\ub2e4.
   var dly = st.dly && st.dly.key === key ? st.dly : null;
   if (dly && +dly.d > 0) {
@@ -10748,6 +10772,11 @@ function rsMonoPos(st, r, now, notes) {
       if (pos.ttFrom == null) pos.ttFrom = pos.from;
       pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt2 * 1000) / 1000; pos.moving = rt2 > 0 && rt2 < 1;
       notes.push('\ub3c4\ucc29 \ud655\uc815 \uc5ed \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0: ' + pf.n + '\ubc88 \uc55e\uc73c\ub85c\ub294 \uac00\uc9c0 \uc54a\ub294\ub2e4');
+    } else if (segs.length && pf.n >= +segs[segs.length - 1].to) {
+      // \u2605 s336 (YJ: "\uc885\ucc29\uc5ed\uc5d0 \ub2ff\uc740 \ub4a4 \ub9c8\ucee4\uac00 0.3\uce78 \ub4a4\ub85c \ud55c \ud504\ub808\uc784 \ud284\ub2e4"): \ub9c8\ucee4\uac00 \uc774\ubbf8 \uc885\ucc29(\ub9c8\uc9c0\ub9c9 \uad6c\uac04\uc758 \ub05d)\uc5d0 \ub2ff\uc558\ub294\ub370 \ub3c4\ucc29 \uc2dc\uac01\uc774 \ub2a6\uac8c \ub2e4\uc2dc \uacc4\uc0b0\ub3fc \ub2e4\uc2dc \uad6c\uac04\uc774 \uc0dd\uae30\uba74 \uc704\uc758 '\ub04c\uc5b4\uc62c\ub9b4 \uad6c\uac04'\uc774 \uc5c6\uc5b4 \ub4a4\ub85c \ud280\uc5c8\ub2e4 \u2014 \uc885\ucc29\uc5d0 \uadf8\ub300\ub85c \uc138\uc6b4\ub2e4.
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.from = pf.n; pos.to = pf.n; pos.t0 = null; pos.t1 = null; pos.ratio = 0; pos.moving = false; pos.segs = segs = [];
+      notes.push('\uc885\ucc29 \ub3c4\ucc29 \ub4a4 \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0: ' + pf.n + '\ubc88\uc5d0 \uc138\uc6b4\ub2e4');
     }
   }
   if (+pos.from > pf.n) pf.n = +pos.from;
@@ -11219,6 +11248,7 @@ function rsHav(a, b, c, d) {
 
 // \uc2b9\ucc28 \ub300\uae30: \ucc98\uc74c \uc704\uce58\ub97c \ubc1b\uc740 \ud2f1\uc5d0 \ub300\uae30\ub97c \uac78\uc9c0 \uc815\ud558\uace0(\uccab \uc2b9\ucc28\uc5ed \ucd9c\ubc1c \uc2dc\uac01 \uc804\uc774\uba74 \ub300\uae30), \ub300\uae30 \uc911\uc5d0\ub294 \uc2b9\ucc28(\uc5ed \uadfc\ucc98 \u2192 \ube60\ub974\uac8c \uba40\uc5b4\uc9d0)\ub97c \uac10\uc9c0\ud55c\ub2e4.
 // \ub300\uae30 \uc911 eta.boarded=false \u00b7 notDeparted=true \ub77c ride-eta \uac00 \uc2b9\ucc28\uc5ed \uc774\ud6c4\ub97c \uc608\uc815 \uc2dc\uac01 \uadf8\ub300\ub85c \ub454\ub2e4. \uc2b9\ucc28\uac00 \ud655\uc815\ub418\uba74 \uccab \uc2b9\ucc28\uc5ed \ud1b5\uacfc \uc99d\uac70(gps)\ub97c \ub123\uace0 \ud3c9\uc18c \ud750\ub984\uc73c\ub85c \uac04\ub2e4.
+var RS_WL_GAP_MS = 20000, RS_WL_GAP_TBL_MS = 30000, RS_WL_NEAR_M = 300, RS_WL_AFTER_MS = 40000, RS_WL_TBL_MS = 150000;
 function rsWait(st, tr, now, O, notes) {
   var eta = st.eta, stops = st.stops || [], b = null, i;
   for (i = 0; i < stops.length; i++) if (stops[i] && stops[i].pass === false && isFinite(stops[i].lat) && isFinite(stops[i].lng)) { b = stops[i]; break; }
@@ -11239,6 +11269,7 @@ function rsWait(st, tr, now, O, notes) {
     if (q[3] != null && q[3] > 150) continue;
     d = rsHav(q[1], q[2], w.lat, w.lng) - (q[3] == null ? 30 : q[3]);
     if (d <= O.waitNearM) { w.seen = true; if (q[0] > w.nearTs) w.nearTs = q[0]; }
+    if (d <= RS_WL_PLAT_M && w.pf == null) w.pf = q[0];                                // s336: \uc2b9\uac15\uc7a5(\uc5ed \ub458\ub808 60m)\uc5d0 \ucc98\uc74c \ub2ff\uc740 \uc2dc\uac01
     last = q;
   }
   var boarded = false, why = '';
@@ -11249,6 +11280,16 @@ function rsWait(st, tr, now, O, notes) {
       if (win.length >= 3) {
         var f0 = win[0], f1 = win[win.length - 1], dt = (f1[0] - f0[0]) / 1000;
         if (dt >= O.waitSpanSec) { var sp = rsHav(f0[1], f0[2], f1[1], f1[2]) / dt; if (sp >= O.waitMoveMps) { boarded = true; why = '\uc5ed\uc5d0\uc11c ' + Math.round(dl) + 'm \u00b7 ' + sp.toFixed(1) + 'm/s'; } }
+      }
+    }
+  }
+  // \u2605 s336 (YJ: \uc9c0\ud558\ucca0\uc740 \uc2b9\uac15\uc7a5\uc5d0\uc11c GPS \uac00 \uc7a1\ud788\ub2e4 \uc5f4\ucc28\uac00 \ucd9c\ubc1c\ud558\uba74 \ub04a\uae34\ub2e4 \u2014 '\ub04a\uae30\uba74 \ucd9c\ubc1c'): \ud6c4\ubcf4 \uc5f4\ucc28\uac00 \ub3c4\ucc29\ud560 \uc988\uc74c \uc2b9\uac15\uc7a5 \uadfc\ucc98\uc5d0 \uc788\uc5c8\uace0 \uadf8 \ub4a4 \uc2e0\ud638\uac00 \ub04a\uacbc\uc73c\uba74 \uadf8 \uc5f4\ucc28\ub97c \ud0c4 \uac83\uc73c\ub85c \ubcf8\ub2e4(\ub2e4\uc74c \uc5ed \uc2e0\ud638\ub97c \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4).
+  if (!boarded && w.seen && w.nearTs > 0 && tr.length) {
+    var wc = st.bl && st.bl.cand, wl = tr[tr.length - 1];
+    if (wc && wc.ms != null && isFinite(+wc.ms) && wl && rsOnPlat(w, +wc.ms)) {
+      var wrt = !!wc.tn, wgap = now - wl[0], wd = rsHav(wl[1], wl[2], w.lat, w.lng);
+      if (wgap >= (wrt ? RS_WL_GAP_MS : RS_WL_GAP_TBL_MS) && wd <= RS_WL_NEAR_M && w.nearTs >= +wc.ms - RS_WL_PRE_MS / 4 && w.nearTs <= +wc.ms + (wrt ? RS_WL_KEEP_MS : RS_WL_TBL_MS) && now >= +wc.ms + RS_WL_AFTER_MS) {
+        boarded = true; why = '\uc2b9\uac15\uc7a5\uc5d0\uc11c \uc2e0\ud638\uac00 ' + Math.round(wgap / 1000) + '\ucd08 \ub04a\uaca8 ' + (wrt ? wc.tn + '\ubc88 ' : '') + '\uc5f4\ucc28 \ucd9c\ubc1c\ub85c \ud310\ub2e8';
       }
     }
   }
@@ -11361,7 +11402,22 @@ function rsBlApply(st, req, now, notes) {
   if (b.fromMs != null && isFinite(+b.fromMs)) eta.boardArriveMs = +b.fromMs;                      // \uc6f9 _htlBoardFixWait: \uc2b9\ucc28\uc5ed \uc2dc\uac01 \u2265 \ub0b4\uac00 \ub2ff\ub294 \uc2dc\uac01
   var bl = st.bl = st.bl || {}; bl.src = b.src || ''; bl.ms = +b.ms; bl.okAt = now;
   if (b.src === 'realtime' && b.tn != null && String(b.tn) !== '') bl.tn = String(b.tn); else delete bl.tn;      // s334: \uc2e4\uc2dc\uac04\uc774 \uac00\ub9b0 \uc5f4\ucc28\uc758 \ubc88\ud638 \u2014 \ud0c0\uba74 '\ub0b4 \uc5f4\ucc28'\ub85c \uae30\uc5b5
+  rsBlCand(bl, b, now, w);
   notes.push('\uc2e4\uc2dc\uac04 \uc7ac\ubcf4\uc815(' + (b.src || '?') + ') \ub2e4\uc74c \ucc28 ' + Math.round((+b.ms - now) / 1000) + '\ucd08 \ub4a4');
+}
+// \u2605 2026-10-30 s336 (YJ: "\uc9c0\ud558 \uccab \uc2b9\ucc28 \uc9c1\ud6c4 \uc2e0\ud638\uac00 \ub04a\uae30\uba74 \uc5d4\uc9c4\uc774 \uc544\uc9c1 \ubabb \ud0d4\ub2e4\uace0 \ubcf4\uace0 \ub2e4\uc74c \uc5f4\ucc28\ub97c \ucc3e\ub290\ub77c \ub0b4 \uc5f4\ucc28 \ubc88\ud638\ub97c \ub2a6\uac8c \uae30\uc5b5\ud55c\ub2e4 \u2014 \ubc88\ud638\ub97c \uc120\uc81c\uc801\uc73c\ub85c \uace0\uc815\ud574\ub77c") \u2014 \uc2b9\ucc28 \ud6c4\ubcf4 \uc5f4\ucc28(st.bl.cand = { tn?, ms, src })
+//   \u00b7 \uc2b9\ucc28 \ub300\uae30 \uc911 \ubc1b\uc740 \uc2e4\uc2dc\uac04 \ub2f5\uc774 \uac00\ub9ac\ud0a8 \uc5f4\ucc28(\ubc88\ud638 tn \u00b7 \ub3c4\ucc29 ms)\ub97c '\ud6c4\ubcf4'\ub85c \ubd99\uc7a1\ub294\ub2e4. \ub2f5\uc740 15\ucd08\ub9c8\ub2e4 \uc624\uc9c0\ub9cc, \uadf8 \uc5f4\ucc28\uac00 \ub3c4\ucc29 \uad6c\uac04(\ub3c4\ucc29 90\ucd08 \uc804 ~ \ub3c4\ucc29 4\ubd84 \ub4a4)\uc5d0 \uc788\ub294 \ub3d9\uc548\uc740 \ub2e4\ub978 \ub2f5(\ub2e4\uc74c \ucc28)\uc774 \ud6c4\ubcf4\ub97c \ub36e\uc5b4\uc4f0\uc9c0 \ubabb\ud55c\ub2e4.
+//     (\uc608\uc804\uc5d4 \ud6c4\ubcf4 \uc5f4\ucc28\uac00 '\uc9c4\uc785'\uc774 \ub418\uba74 \uc11c\ubc84\uac00 \ub2e4\uc74c \ucc28\ub85c \ub118\uaca8 \ubc88\ud638\uac00 \ubc14\ub00c\uc5c8\uace0, \ud0d1\uc2b9 \ud655\uc815\uc774 \ub2a6\uc73c\uba74 \ud0c4 \uc2dc\uac01\uc774 \uc5b4\uae0b\ub098 \uc544\ubb34 \ubc88\ud638\ub3c4 \uae30\uc5b5 \ubabb \ud588\ub2e4.)
+//   \u00b7 \uc2dc\uac01\ud45c \ub2f5\uc740 \uc2e4\uc2dc\uac04 \ud6c4\ubcf4\ub97c \ub36e\uc9c0 \uc54a\ub294\ub2e4(\ubc88\ud638\uac00 \uc5c6\ub2e4). \ud6c4\ubcf4\uac00 \uc5c6\uc744 \ub54c\ub9cc \uc2dc\uac01\ud45c \uc2dc\uac01\uc774 \ud6c4\ubcf4\uac00 \ub41c\ub2e4 \u2014 \uc2b9\uac15\uc7a5 \uc2e0\ud638 \ub04a\uae40 \uc2b9\ucc28 \ud310\uc815(rsWait)\uc758 \uae30\uc900 \uc2dc\uac01\uc73c\ub85c \uc4f4\ub2e4.
+var RS_WL_KEEP_MS = 240000, RS_WL_PRE_MS = 90000, RS_WL_PLAT_M = 60;
+function rsOnPlat(w, ms) { return !!(w && w.pf != null && isFinite(+w.pf) && +w.pf <= ms + 20000); }
+function rsBlCand(bl, b, now, w) {
+  var c = bl.cand, rt = b.src === 'realtime' && b.tn != null && String(b.tn) !== '', tn = rt ? String(b.tn) : '';
+  var zone = c && rsOnPlat(w, +c.ms) && now >= +c.ms - RS_WL_PRE_MS / 4 && now <= +c.ms + RS_WL_KEEP_MS;      // \ud6c4\ubcf4 \uc5f4\ucc28\uac00 \ub3c4\ucc29\ud560 \ub54c \ub0b4\uac00 \uc2b9\uac15\uc7a5\uc5d0 \uc788\uc5c8\ub358 \uacbd\uc6b0\uc5d0\ub9cc \uace0\uc815(\uac78\uc5b4\uc624\ub294 \uc911\uc5d0 \uc9c0\ub098\uac04 \uc5f4\ucc28\ub294 \uace0\uc815\ud558\uc9c0 \uc54a\ub294\ub2e4)
+  if (c && c.tn && tn && c.tn === tn) { c.ms = +b.ms; c.src = 'realtime'; return; }          // \uac19\uc740 \uc5f4\ucc28\uc758 \uc2dc\uac01 \uac31\uc2e0
+  if (zone) return;                                                                          // \ub3c4\ucc29 \uad6c\uac04\uc758 \ud6c4\ubcf4\ub294 \uace0\uc815
+  if (c && c.tn && !tn && now <= +c.ms + RS_WL_KEEP_MS) return;                              // \uc2dc\uac01\ud45c \ub2f5\uc740 \uc544\uc9c1 \uc720\ud6a8\ud55c \uc2e4\uc2dc\uac04 \ud6c4\ubcf4\ub97c \ub36e\uc9c0 \uc54a\ub294\ub2e4
+  bl.cand = rt ? { tn: tn, ms: +b.ms, src: 'realtime' } : { ms: +b.ms, src: b.src || 'table' };
 }
 // \uc2b9\ucc28 \ud655\uc815(\ub300\uae30 \ub05d) \u2014 \uc2b9\ucc28 \uc804 \uc99d\uac70\ub294 \uc9c0\uc6b4\ub2e4
 function rsBlClear(st) { if (st.eta) { delete st.eta.boardNext; delete st.eta.boardArriveMs; } delete st.bl; }
