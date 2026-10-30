@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s350";
+var ENGINE_VERSION = "route-v2-2026-10-30s351";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18338,6 +18338,12 @@ function rtxPickPlace(food, recent, kind) {
       if (it.d != null && it.d > radius) return;
       if (re.test(String(it.c || ''))) list.push({ idx: idx, it: it });
     });
+    // \u2605 s351 (YJ: "\uce74\ud398\ub098 \ub9db\uc9d1\uc740 \ubb34\uc870\uac74 \uc5f0\ub3d9"): \ubc18\uacbd \uc548\uc5d0 \uc5c6\uc73c\uba74(\ud55c\uc801\ud55c \uc5ed) \ubc1b\uc544 \uc628 \ubaa9\ub85d \uc911 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uacf3\uc73c\ub85c \u2014 \uac00\uac8c\ub97c \ubabb \uace0\ub974\uace0 \uae00\ub9cc \ubcf4\ub0b4\uc9c0 \uc54a\ub294\ub2e4
+    if (!list.length) {
+      arr.forEach(function (it, idx) { if (it && it.n && re.test(String(it.c || ''))) list.push({ idx: idx, it: it }); });
+      list.sort(function (x, y) { return (x.it.d == null ? 1e9 : x.it.d) - (y.it.d == null ? 1e9 : y.it.d); });
+      list = list.slice(0, 5);
+    }
     if (!list.length) return null;
     var fresh = list.filter(function (x) { return recent.indexOf(x.it.n) < 0; });
     var pool = fresh.length ? fresh : list;
@@ -18606,19 +18612,24 @@ function rtxLoadFood(loc) {
   var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
   if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
   if (typeof fetch !== 'function') return Promise.resolve(null);
-  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
-  var tm = ac ? setTimeout(function () { ac.abort(); }, 1800) : null;
-  return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=800&limit=200', ac ? { signal: ac.signal } : undefined)
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) {
-      if (tm) clearTimeout(tm);
-      var it = (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
-      if (!it.length) return null;
-      if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
-      RTX_FOOD_MEM[key] = { ts: now, items: it };
-      return it;
-    })
-    .catch(function () { if (tm) clearTimeout(tm); return null; });
+  // \u2605 s351 (YJ: "\uce74\ud398\ub098 \ub9db\uc9d1\uc740 \ubb34\uc870\uac74 \uc5f0\ub3d9"): \ud55c \ubc88\uc5d0 \ubabb \ubc1b\uc73c\uba74(1.8\ucd08 \uc81c\ud55c\uc5d0 \uac78\ub9b0 \ub290\ub9b0 \uc751\ub2f5 \u00b7 \ube48 \ubaa9\ub85d) \ubc18\uacbd\uc744 \ub113\ud600 \ud55c \ubc88 \ub354 \u2014 \uad6c\uccb4\uc801\uc778 \uac00\uac8c\ub97c \ubabb \uace0\ub974\uace0 \uae00\ub9cc \ub098\uac00\ub294 \uc77c\uc744 \uc904\uc778\ub2e4.
+  var one = function (r, ms) {
+    var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+    var tm = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
+    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=200', ac ? { signal: ac.signal } : undefined)
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (d) {
+        if (tm) clearTimeout(tm);
+        return (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+      })
+      .catch(function () { if (tm) clearTimeout(tm); return []; });
+  };
+  return one(800, 3000).then(function (it) { return it.length ? it : one(1500, 2000); }).then(function (it) {
+    if (!it.length) return null;
+    if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
+    RTX_FOOD_MEM[key] = { ts: now, items: it };
+    return it;
+  });
 }
 
 // s237: \uc571\uc740 \ub0a0\uc528\ub97c \uc548 \ubcf4\ub0b8\ub2e4 \u2014 \ub3c4\ucc29\uc5ed(\uc5c6\uc73c\uba74 \uc571\uc774 \ubcf4\ub0b8 loc) \uc88c\ud45c\uc758 \ub0a0\uc528(Open-Meteo, \uc7a5\uba74 \uc5d4\uc9c4\uacfc \uac19\uc740 sceneWeather \u00b7 10\ubd84 \uce90\uc2dc)\ub97c \uc5d4\uc9c4\uc774 \ubc1b\uc544 \ubb38\uad6c(\ubb38\uad6c \uace0\ub974\uae30 \u00b7 \ubc84\ud2bc \uae00)\uc5d0 \uc4f4\ub2e4. 2.5\ucd08 \uc548\uc5d0 \ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc5c6\uc774 \ub9cc\ub4e0\ub2e4.
