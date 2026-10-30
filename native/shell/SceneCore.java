@@ -89,6 +89,9 @@ public final class SceneCore {
     double shkEnd = -1, shkDur = 1, shkAmp = 0;
     /** 땅이 흔들린다(뽀푸 착지): amp(장면 px)로 시작해 dur 초 동안 잦아든다. */
     void shake(double amp, double dur) { shkAmp = Math.max(shkAmp * Math.max(0, (shkEnd - t) / Math.max(.01, shkDur)), amp); shkDur = dur; shkEnd = t + dur; }
+    double flEnd = -1, flDur = 1, flAmt = 0; int flR = 255, flG = 255, flB = 255;
+    /** 번쩍(착지 충격): 색 · 세기 · 길이. */
+    void flash(int r, int g, int b, double amt, double dur) { flR = r; flG = g; flB = b; flAmt = amt; flDur = dur; flEnd = t + dur; }
     double dkAmt, dkX, dkY, dkT = -9, eyeAmt, eyeX1, eyeY1, eyeX2, eyeY2, eyeR, eyeDir;
     /** 주변이 어두워진다(가운데 (x,y) 만 밝게). 매 프레임 불러야 유지되고, 부르지 않으면 곧 사라진다. */
     void dim(double amt, double x, double y) { dkAmt = amt; dkX = x; dkY = y; dkT = t; }
@@ -505,11 +508,11 @@ public final class SceneCore {
         a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8; a.feetScale = false; a.heart = 0;
         if (kk.equals("cotton")) {                                                            // 둘숑: 몸이 풍선처럼 3배로 부풀며 천천히 내려온다(발 기준으로 커진다)
             gg = 110; a.vy = Math.min(a.vy, 52); double gp = ease(clamp(tf / .95, 0, 1));
-            a.sx = a.sy = 1 + 2 * gp; a.feetScale = true; a.ang = Math.sin(tf * 3.1) * .05 * gp; a.pose = 2;
+            a.sx = a.sy = 1 + 2 * gp; a.feetScale = true; a.ang = Math.sin(tf * 3.1) * .05 * gp; a.pose = 2; a.cell = 15;
             if (gp > .15 && every2("balfx", .2)) ptx("spark", a.x + rnd(-1, 1) * h * 1.2, zy(a.z) + a.y - h * (.4 + 2 * gp * rnd(.2, 1)), 1, po().a(-PI, 0).s(4, 10).g(0).l(.3, .5).r(.9));
         }
         else if (kk.equals("flip")) {                                                         // 러블: 같은 자리에서 공중 앞구르기 3번
-            gg = 250; a.pvy = a.y - h * .5; double fp = clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1); a.ang = PI2 * 3 * ease(fp);
+            gg = 250; a.pvy = a.y - h * .5; double fp = clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1); a.ang = PI2 * 3 * ease(fp); a.cell = fp < .1 || fp > .9 ? 14 : 5; a.pose = 2;                    // 날아오를 땐 점프, 도는 동안은 몸을 동그랗게 만 칸
             if (every2("flipfx", .18)) ptx("star", a.x, zy(a.z) + a.y - h * .5, 1, po().a(-PI, 0).s(6, 14).g(0).l(.3, .5).r(.8).jx(h * .3));
         }
         else if (kk.equals("tumble")) {                                                       // 죽순이: 버둥 → 몸을 말아 앞으로 한 바퀴 → 웅크려 착지
@@ -521,7 +524,7 @@ public final class SceneCore {
             double mx = a.x + a.dir * h * .3, my = zy(a.z) + a.y - h * .55; pr(a, jetProp(mx, my, mx + a.dir * 2, zy(a.z)));
             if (every2("hosefx", .07)) ptx("splash", mx + a.dir * 2, zy(a.z) - 1, 1, po().a(-PI * .95, -PI * .05).s(16, 40).g(170).l(.3, .6).jx(5));
         }
-        else if (kk.equals("pose")) { a.ang = 0; a.sy = 1.06; a.sx = .96; a.pose = 2; }                 // 뽀푸: 몸을 쭉 펴고 두 발로 꼿꼿이 떨어진다
+        else if (kk.equals("pose")) { a.ang = 0; a.sy = 1.06; a.sx = .96; a.pose = 2; a.cell = 11; }                 // 뽀푸: 몸을 쭉 펴고 두 발로 꼿꼿이 떨어진다
         a.vy += gg * dt; a.y += a.vy * dt;
         if (a.y >= 0) {
             a.y = 0; landFx(a);
@@ -762,8 +765,13 @@ public final class SceneCore {
                 c.fillStyle("rgba(0,0,0,.16)"); c.beginPath(); c.ellipse(x + mr * .2, y - mr * .25, mr * .45, mr * .18, 0, 0, PI2); c.fill();
             } else if (k.equals("bigheart")) {                                                 // s354 둘숑: 땅에 닿는 순간 머리 위에 커다란 하트가 뿅 떠오른다
                 double sc2 = ease(age / .28) * (1 + .09 * Math.sin(age * 11)), yy = y - (gg.r != 0 ? gg.r : hh * 1.6) - age * 8, hs2 = hh * .34 * sc2;
+                SceneCv.Grad hg = c.radial(x, yy, 0, x, yy, hs2 * 3.4).stop(0, rgba(255, 150, 190, .55 * clamp(1 - age / 2.3, 0, 1))).stop(1, rgba(255, 150, 190, 0)); c.fillGrad(hg); c.beginPath(); c.arc(x, yy, hs2 * 3.4, 0, PI2); c.fill();
                 c.fillStyle("#ff5c8a"); SceneArt.heartP(c, x, yy, hs2);
                 c.fillStyle("rgba(255,255,255,.7)"); c.beginPath(); c.ellipse(x - hs2 * .6, yy - hs2 * .5, hs2 * .26, hs2 * .15, -.7, 0, PI2); c.fill();
+            } else if (k.equals("wave")) {                                                      // s354 충격파: 땅 위로 번지는 타원 고리 두 겹
+                double wr = (gg.r != 0 ? gg.r : 40) * zz;
+                for (i = 0; i < 2; i++) { double wu = clamp((age - i * .16) / .75, 0, 1); if (wu <= 0) continue; double rr2 = wr * (.15 + .85 * ease(wu)); c.globalAlpha(.65 * (1 - wu)); c.strokeStyle("rgba(255,244,222,.95)"); c.lineWidth((2.4 - i * .8) * zz * (1 - wu * .6)); c.beginPath(); c.ellipse(x, y, rr2, rr2 * .3, 0, 0, PI2); c.stroke(); }
+                c.globalAlpha(1);
             } else if (k.equals("crack")) {                                                    // s354 뽀푸: 땅이 갈라진다
                 double cr = hh * pop; c.strokeStyle("rgba(60,45,32,.85)"); c.lineWidth(1.3 * zz); c.lineCapRound(true);
                 for (i = 0; i < 7; i++) {
@@ -830,8 +838,9 @@ public final class SceneCore {
         double shA = (L.night ? .22 : .34) * (a.kind.equals("eagle") ? .7 : 1) * (L.wk.equals("rain") || L.wk.equals("overcast") ? .7 : 1);
         boolean sunk = !Double.isNaN(a.cut) && a.y > TH * zz * .9;
         if (!sunk) {
-            c.fillStyle(rgba(0, 0, 0, shA * (a.alt != 0 ? clamp(1 - a.alt / 60, .5, 1) : 1)));
-            c.beginPath(); c.ellipse(a.x + a.ox, y + 1, D.cell * s * .2 * ((a.sq != 0 || a.sy < .9) ? 1.15 : 1) * Math.abs(a.sx != 0 ? a.sx : 1), 3.2 * zz, 0, 0, PI2); c.fill();
+            double air = Math.max(0, -a.y) + a.alt;                                                                // s354: 떠 있는 높이만큼 그림자가 작고 옅어진다(떨어질수록 커지며 짙어진다)
+            c.fillStyle(rgba(0, 0, 0, shA * (air > 0 ? clamp(1 - air / 110, .3, 1) : 1)));
+            c.beginPath(); c.ellipse(a.x + a.ox, y + 1, D.cell * s * .2 * ((a.sq != 0 || a.sy < .9) ? 1.15 : 1) * Math.abs(a.sx != 0 ? a.sx : 1) * (air > 0 ? clamp(1 - air / 300, .6, 1) : 1), 3.2 * zz * (air > 0 ? clamp(1 - air / 300, .6, 1) : 1), 0, 0, PI2); c.fill();
         }
         double sx = (idx % 4) * 256, sy = Math.floor(idx / 4) * 256, dx = -D.ox * sc, dy = -D.base * sc - lift + (a.feetScale ? 0 : a.y);
         c.save();
@@ -1238,6 +1247,7 @@ public final class SceneCore {
         if ("train".equals(mode)) SceneTrain.draw(this, c); else if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
         if (shA > .05) c.restore();
         if (t - dkT < .12 && !"ride".equals(mode) && !"train".equals(mode)) drawDim(c);
+        if (t < flEnd) { double fa = flAmt * Math.pow((flEnd - t) / flDur, 1.5); if (fa > .01) { c.fillStyle(rgba(flR, flG, flB, fa)); c.fillRect(0, 0, W, H + stretch); } }
         if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H + stretch); }
     }
     /** s354 러블: 가운데(러블)만 밝고 주변이 어두워지며 두 눈에서 노란 빛이 난다. */
