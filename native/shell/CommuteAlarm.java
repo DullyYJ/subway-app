@@ -24,6 +24,7 @@ final class CommuteAlarm {
     static final String ACT_FIRE = "com.dullyyj.subway.COMMUTE_FIRE", EXTRA_KIND = "kind";
     static final String CH = "gdm_commute";
     static final int NOTI_ID = 7104, REQ_BASE = 9200, MAX_EACH = 14;
+    private static final String K_OCC_FP = "cm_occ_fp", K_OCC_RESP = "cm_occ_resp";    // 마지막으로 받은 알람 시각 답(설정 지문과 함께)
     private static final String K_COUNT = "cm_sched_n";             // 지난번에 건 알람 수 "아침,저녁" — 다시 걸기 전에 지운다
 
     private CommuteAlarm() { }
@@ -69,9 +70,14 @@ final class CommuteAlarm {
             cancelAll(c, am, st);
             if (!CmCore.on(st)) return;
             long now = System.currentTimeMillis();
-            NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-alarm", CmCore.occBody(st, now), 8000);
-            if (r.status != 200) return;                          // 못 받으면 알람이 없는 채로 둔다 — 앱을 열 때·알람이 울릴 때 다시 시도
-            long[] morn = CmCore.parseOcc(r.body, "morn", MAX_EACH), eve = CmCore.parseOcc(r.body, "eve", MAX_EACH);
+            String fp = CmCore.occBody(st, 0L), resp = null;                   // 설정이 같은지 알아보는 지문(시각 부분만 0 으로)
+            try {
+                NetPost.Res r = NetPost.post(ShellCore.BASE + "/commute-alarm", CmCore.occBody(st, now), 8000);
+                if (r.status == 200 && r.body != null && r.body.length() > 0) { resp = r.body; st.put(K_OCC_FP, fp); st.put(K_OCC_RESP, resp); }
+            } catch (Throwable ignored) { }
+            if (resp == null && fp.equals(st.get(K_OCC_FP, ""))) resp = st.get(K_OCC_RESP, "");          // s356: 못 받아도(재부팅 직후 네트워크 없음 등) 같은 설정의 마지막 답에서 앞으로 남은 시각으로 다시 건다 — 알람이 통째로 사라지지 않게
+            if (resp == null || resp.length() == 0) return;       // 처음부터 못 받았으면 알람이 없는 채로 둔다 — 앱을 열 때·알람이 울릴 때 다시 시도
+            long[] morn = CmCore.parseOcc(resp, "morn", MAX_EACH), eve = CmCore.parseOcc(resp, "eve", MAX_EACH);
             int nm = 0, ne = 0;
             for (int i = 0; i < morn.length; i++) if (morn[i] > now) { set(c, am, morn[i], pi(c, REQ_BASE + i, "morn", true)); nm++; }
             for (int i = 0; i < eve.length; i++) if (eve[i] > now) { set(c, am, eve[i], pi(c, REQ_BASE + 100 + i, "eve", true)); ne++; }
