@@ -35,7 +35,7 @@ function talkScreen(inp, f) {
   }
   var rows = list.slice(-LTK_ROWS).slice(-want), n = rows.length;
   var listH = LTK_ROWS * LTK_ROW_H + (LTK_ROWS - 1) * LTK_ROW_GAP - fold * (LTK_ROW_H + LTK_ROW_GAP);        // 웹 .livetalk-list 높이 120 / 95 / 70 / 45
-  var head = [{ t: 'lth', pad: [0, 0, 0, 0], s: '실시간 대화', tail: '›', dot: '#ff3b30', act: { a: 'call', v: 'tk.open' } }];
+  var head = [{ t: 'lth', pad: [0, 0, 0, 0], s: '실시간 대화', tail: '›', dot: '#ff3b30', live: true, act: { a: 'call', v: 'tk.open' } }];
   var foldable = Math.min(LTK_MAX_FOLD, Math.max(0, n - 2));                            // 웹 _sceneFit: 작은 폰에서는 오래된 줄부터 접되 2줄은 남긴다 — 앱이 잰 남는 세로로 몇 줄 접을지 정하고, 어느 줄이 접힐 수 있는지(fo)는 여기서 정한다
   for (var r = 0; r < n; r++) head.push({ t: 'ltr', pad: [0, 0, 0, r === n - 1 ? 0 : LTK_ROW_GAP], nick: rows[r].nick, s: rows[r].text, time: rows[r].time, fo: r < foldable ? r + 1 : 0 });
   var rest = listH - (n ? n * LTK_ROW_H + (n - 1) * LTK_ROW_GAP : 0);
