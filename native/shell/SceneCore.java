@@ -86,8 +86,10 @@ public final class SceneCore {
     // ═══ 상태 ═══
     final Host host; final SceneCv factory; final SceneUtil.Rng R;
     boolean laid, running; double PW, PH, dens = 1, k = 1, W, H, dpr = 1; boolean dark = true, reduce;
-    /** 0 보다 크면 칸 높이와 상관없이 이 배율로 그린다(카드 확장 인사: 키가 2배로 커지지 않고 같은 그림이 세로로 넓어진다). */
-    public double forceK = 0;
+    /** s340: 카드 확장 인사 — 카드가 늘어난 만큼(디자인 좌표)의 바닥. 하늘 · 먼 도시 · 길은 그대로 두고 인도(길 아래)만 아래로 늘려 그린다. 0 이면 평소. */
+    double stretch = 0;
+    public void setStretch(double d) { stretch = d < .5 ? 0 : d; }
+    public double stretch() { return stretch; }
     SceneArt.Geom g; double t, fade; long frames;
     /** TV 전원 전환(2026-10-16, YJ: "경로 탐색·취소·애니메이션이 바뀔 때 TV 처럼 화면이 꺼졌다 켜지게"): 장면이 바뀌는 순간부터 지난 초(없으면 -1). */
     double tv = -1;
@@ -118,7 +120,7 @@ public final class SceneCore {
     double rnd() { return R.next(); }
     <T> T pickOf(T[] a) { return a[(int) Math.floor(R.next() * a.length)]; }
     static double lerp(double a, double b, double u) { return a + (b - a) * u; }
-    double zy(double z) { return g.nearTop + 4 + z * (g.floor - g.nearTop - 4); }       // 깊이(0~1) → 화면 y (원근: 멀수록 위·작게)
+    double zy(double z) { return g.nearTop + 4 + z * (g.floor + stretch - g.nearTop - 4); }       // 깊이(0~1) → 화면 y (원근: 멀수록 위·작게)
     static double zs(double z) { return .74 + .34 * clamp(z, -.2, 1.1); }
     double HH(Actor a) { return TH * zs(a.z) * (a.hero ? 1.12 : 1); }
     double liftOf(Actor a) { return (a.D.lift + a.alt) * zs(a.z) * (a.kind.equals("eagle") ? 1 : zs(a.z)); }
@@ -450,7 +452,7 @@ public final class SceneCore {
         Drag d = DRAG; if (d == null || d.a != a) { a.held = false; return; }
         double kk = Math.min(1, (dt <= 0 ? .033 : dt) * 16), ox = d.px;
         d.px += (d.fx - d.px) * kk; d.py += (d.fy - d.py) * kk;
-        double vx = d.fx - d.px, zc = clamp((d.py - (g.nearTop + 4)) / (g.floor - g.nearTop - 4), -.2, 1.05), gy = zy(zc);
+        double vx = d.fx - d.px, zc = clamp((d.py - (g.nearTop + 4)) / (g.floor + stretch - g.nearTop - 4), -.2, 1.05), gy = zy(zc);
         a.x = clamp(d.px, 6, W - 6); a.z = zc;
         a.y = Math.min(-8, (d.py - 26) - gy);                                  // 손가락 위로 떠 있다(손가락이 캐릭터를 가리지 않게)
         a.ang = clamp(-vx * .018, -.4, .4) + Math.sin(t * 5.2) * .06;          // 손가락이 앞서 가면 몸이 뒤로 흔들린다
@@ -866,6 +868,13 @@ public final class SceneCore {
             if (v.bus) SceneArt.drawBus(c, v.x, laneGy(lane), v.L, o); else SceneArt.drawCar(c, v.x, laneGy(lane), v.L, o);
         }
     }
+    /** 길 아래 바닥(인도). 카드가 늘어난 동안은 길(nearTop 위)은 그대로 두고 인도만 세로로 늘려 같은 그림이 이어지게 한다. */
+    void drawGnd(SceneCv c) {
+        if (stretch <= 0) { c.drawImage(bg.gnd, 0, 0, W, H); return; }
+        double top = g.nearTop, sh = (H - top + stretch) / Math.max(1, H - top);
+        c.save(); c.beginPath(); c.rect(0, top, W, H + stretch - top); c.clip(); c.translate(0, top); c.scale(1, sh); c.translate(0, -top); c.drawImage(bg.gnd, 0, 0, W, H); c.restore();
+        c.save(); c.beginPath(); c.rect(0, 0, W, top + .5); c.clip(); c.drawImage(bg.gnd, 0, 0, W, H); c.restore();
+    }
     void drawStreet(SceneCv c, double dt) {
         int tw = bg.tw;
         if (inside) {                                           // 역 안 승강장: 실내라서 하늘·날씨·바람 효과 없이 승강장만 그린다
@@ -874,7 +883,7 @@ public final class SceneCore {
             drawPanBack(c);
         } else {
             c.drawImage(bg.sky, 0, 0, W, H); drawSkyFx(c, t);
-            c.drawImage(bg.far, 0, 0, tw, H); SceneFx.drawMid(this, c, bg.mid, tw); c.drawImage(bg.gnd, 0, 0, W, H);
+            c.drawImage(bg.far, 0, 0, tw, H); SceneFx.drawMid(this, c, bg.mid, tw); drawGnd(c);
             SceneFx.ambient(this, c, t);
         }
         drawTrafficPan(c, 0); drawTraffic(c, 0);
@@ -990,7 +999,7 @@ public final class SceneCore {
     }
     void boot(boolean keepBus) {
         int bc = css(pickOf(BUS_COLORS)); String bn = pickOf(BUS_NOS); if (!keepBus || busNo == null) { busColor = bc; busNo = bn; }
-        double kk = forceK > 0 ? forceK : PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
+        double kk = PH < 150 ? Math.max(.55, PH / 150) : clamp(Math.min(PH / 190, PW / 200), 1, 2);       // 150px 보다 낮으면 같은 그림을 줄여 그린다
         k = kk; W = PW / kk; H = PH / kk; dpr = dens * kk; g = SceneArt.geom(W, H);
         fade = 0; tv = -1; xf = -1; pan = -1; panBg = null; panL = null; panWx = null; oldTraffic = new ArrayList<>(); frames = 0; error = null; prev = null; running = true;
     }
@@ -1161,7 +1170,7 @@ public final class SceneCore {
     }
     void paintAll(SceneCv c, double dt) {
         if ("train".equals(mode)) SceneTrain.draw(this, c); else if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
-        if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H); }
+        if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H + stretch); }
     }
     // ═══ TV 전원 전환 ═══
     //   꺼짐(0.30초): 옛 장면이 위아래로 납작해져 하얀 선이 되고, 선이 좌우로 줄어 점이 된다.
@@ -1203,11 +1212,11 @@ public final class SceneCore {
         if (!running || bg == null) return;
         c.save(); c.scale(dpr, dpr);
         // 웹에서는 호스트 div(.cong-scene)의 CSS 가 하던 일: 연파랑 바탕(#9fd0ff)과 둥근 모서리(12px − 테두리 1px). 네이티브는 캔버스가 직접 한다.
-        SceneUtil.rr(c, 0, 0, W, H, HOST_RADIUS); c.clip();
+        SceneUtil.rr(c, 0, 0, W, H + stretch, HOST_RADIUS); c.clip();
         if (tv >= 0) {
             try { tvDraw(c); } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
         } else {
-            c.fillStyle(HOST_BG); c.fillRect(0, 0, W, H);
+            c.fillStyle(HOST_BG); c.fillRect(0, 0, W, H + stretch);
             try { paintAll(c, dtLast); dtLast = 0; } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
             if (xf >= 0 && prev != null) { try { c.globalAlpha(clamp(1 - xf / XF_T, 0, 1)); c.drawImage(prev, 0, 0, W, H); c.globalAlpha(1); } catch (RuntimeException e) { c.globalAlpha(1); } }
         }
@@ -1215,11 +1224,9 @@ public final class SceneCore {
     }
 
 
-    // ═══ 카드 확장 인사(s340, YJ: "3초 꾹 누르면 카드가 2배로 늘어나고 나머지 친구들이 나와 인사한 뒤 남을 친구만 남고 들어간다") ═══
-    //   이 SceneCore 는 '늘어난 카드' 전용 두 번째 장면이다(카드의 평소 장면은 그대로 돈다). 시간 · 자리 · 차례 · 인사 글은 엔진 대본(SceneHello.Plan)이 정하고,
-    //   누가 남는지는 평소 카드에 지금 나와 있는 친구(folks)가 정한다. 손님 친구는 자기 걸음(걷기 · 달리기 · 날기)으로 양쪽 가장자리에서 들어오고 두덩은 땅에서 솟는다.
-    /** 평소 카드에 지금 나와 있는 친구 한 마리(자리는 칸 폭 · 깊이의 비율). */
-    public static final class Folk { public String id = ""; public double fx, z; public int dir = 1; }
+    // ═══ 카드 확장 인사(s340, YJ: "3초 꾹 누르면 카드가 배경 그대로 2배로 늘어나고 나머지 친구들이 나와 인사한 뒤 남을 친구만 남고 들어간다") ═══
+    //   카드의 평소 장면 그대로(같은 SceneCore) 아래 인도만 늘어난다 — 하늘 · 먼 도시 · 길 · 차 · 버스 · 날씨 · 지금 나와 있던 친구는 끊김 없이 이어진다.
+    //   시간 · 자리 · 차례 · 인사 글은 엔진 대본(SceneHello.Plan)이 정한다. 손님 친구는 자기 걸음(걷기 · 달리기 · 날기)으로 양쪽 가장자리에서 들어오고 두덩은 땅에서 솟는다.
     static final class HelloRun {
         SceneHello.Plan p; double t0; String[] idAt; int[] rank; boolean leaving;
         final Map<String, Integer> seat = new HashMap<>(); final Map<String, Double> arrive = new HashMap<>(), sayAt = new HashMap<>();
@@ -1232,34 +1239,36 @@ public final class SceneCore {
     public double helloMs() { return hello == null ? -1 : (t - hello.t0) * 1000; }
     /** 확장 인사를 일찍 끝낸다: 손님은 바로 나가고 카드는 줄어든다. */
     public void helloSkip() { if (hello != null && helloMs() < hello.p.leave) hello.t0 = t - hello.p.leave / 1000.0; }
-    public void helloStop() { hello = null; }
-    /** 지금 카드에 나와 있는(나가는 중이 아닌) 친구들. */
-    public List<Folk> folks() {
-        List<Folk> out = new ArrayList<>();
-        for (Actor a : actors) if (!a.dead && !a.hero && !a.leaving && !a.hidden && W > 0) { Folk f = new Folk(); f.id = a.id; f.fx = clamp(a.x / W, 0, 1); f.z = clamp(a.z, 0, 1); f.dir = a.dir; out.add(f); }
-        return out;
-    }
-    /** 확장 인사를 시작한다. 평소 장면(idle)이 아니거나 대본이 틀리면 false. orig: 평소 카드에 나와 있던 친구들(그대로 남는다). */
-    public boolean startHello(SceneHello.Plan p, long seed, List<Folk> orig) {
+    public void helloStop() { hello = null; stretch = 0; }
+    /** 확장 인사를 시작한다(같은 장면 그대로 — 새 장면을 만들지 않는다). 평소 장면(idle)이 아니거나 대본이 틀리면 false.
+     *  지금 나와 있는 친구는 자리로 걸어가고(가까운 자리부터), 나머지 친구는 양쪽 가장자리에서 들어온다. 길의 차 · 버스 · 날씨는 그대로 이어진다. */
+    public boolean startHello(SceneHello.Plan p, long seed) {
         if (!running || !"idle".equals(mode) || pan >= 0 || !SceneHello.ok(p) || W <= 0) return false;
-        HelloRun h = new HelloRun(); h.p = p; h.t0 = t; h.idAt = SceneHello.seats(p, seed); h.rank = SceneHello.rank(p);
-        actors = new ArrayList<>(); pt = new ArrayList<>(); gfx = new ArrayList<>(); bams = new ArrayList<>(); dragReset();
-        int gi = 0;
-        for (int i = 0; i < h.idAt.length; i++) {
-            String id = h.idAt[i]; if (!SceneModel.D3.containsKey(id)) continue;
-            double sx = clamp(p.sx[i], .05, .95) * W, sz = clamp(p.sz[i], 0, 1); Folk f = null;
-            if (orig != null) for (Folk o : orig) if (o.id.equals(id)) { f = o; break; }
-            Actor a;
-            if (f != null) { a = mkActor(id, f.fx * W, f.z, f.dir); a.st = "walk"; }
-            else {
-                boolean left = sx < W * .5; a = mkActor(id, 0, sz, left ? 1 : -1); h.guests.add(id);
-                if (id.equals("dudung") && a.D.intro > 0 && host.intro() != null) { a.x = sx; a.st = "emerge"; }
-                else { a.x = left ? -a.w * .9 : W + a.w * .9; a.st = "walk"; }
-            }
-            a.tx = sx; a.tz = sz; a.life = 1e9; a.born = t; a.boost = p.boost; h.seat.put(id, i);
-            if (f == null) { h.queue.add(a); h.queueAt.add(id.equals("dudung") ? 700.0 : 200.0 + (gi++) * 140.0); } else actors.add(a);
+        HelloRun h = new HelloRun(); h.p = p; h.t0 = t; h.rank = SceneHello.rank(p);
+        dragReset();
+        int n = p.chars.length; String[] idAt = new String[n]; boolean[] used = new boolean[n]; java.util.Set<String> have = new java.util.HashSet<>();
+        for (int i = 0; i < actors.size(); i++) {                                                    // 지금 나와 있는 친구: 가까운 빈 자리로
+            Actor o = actors.get(i); if (o.dead || o.hero || o.leaving || o.hidden || have.contains(o.id) || !SceneModel.D3.containsKey(o.id)) continue;
+            boolean known = false; for (String c0 : p.chars) if (c0.equals(o.id)) known = true; if (!known) continue;
+            int best = -1; double bd = 1e18;
+            for (int s = 0; s < n; s++) if (!used[s]) { double dx = o.x / W - p.sx[s], dz = o.z - p.sz[s], d = dx * dx + dz * dz * .5; if (d < bd) { bd = d; best = s; } }
+            if (best < 0) continue; used[best] = true; idAt[best] = o.id; have.add(o.id);
+            Actor a = mkActor(o.id, o.x, o.z, o.dir); a.st = "walk"; a.vis = true; actors.set(i, a);
+            a.tx = clamp(p.sx[best], .05, .95) * W; a.tz = clamp(p.sz[best], 0, 1); a.life = 1e9; a.born = t; a.boost = p.boost; h.seat.put(a.id, best);
         }
-        hello = h; return true;
+        int gi = 0; String[] rnd = SceneHello.seats(p, seed); int next = 0;
+        for (String id : rnd) {                                                                      // 나머지 친구(손님): 남은 자리에 무작위로
+            if (have.contains(id) || !SceneModel.D3.containsKey(id)) continue;
+            while (next < n && used[next]) next++; if (next >= n) break;
+            int si = next; used[si] = true; idAt[si] = id;
+            double sx = clamp(p.sx[si], .05, .95) * W, sz = clamp(p.sz[si], 0, 1);
+            boolean left = sx < W * .5; Actor a = mkActor(id, 0, sz, left ? 1 : -1); h.guests.add(id);
+            if (id.equals("dudung") && a.D.intro > 0 && host.intro() != null) { a.x = sx; a.st = "emerge"; }
+            else { a.x = left ? -a.w * .9 : W + a.w * .9; a.st = "walk"; }
+            a.tx = sx; a.tz = sz; a.life = 1e9; a.born = t; a.boost = p.boost; h.seat.put(id, si);
+            h.queue.add(a); h.queueAt.add(id.equals("dudung") ? 700.0 : 200.0 + (gi++) * 140.0);
+        }
+        h.idAt = idAt; hello = h; return true;
     }
     void helloSettle(Actor a) {                                          // 자리에 닿았다/동작이 끝났다 → 서서 인사를 기다린다(잠자는 칸은 앉아 쉰다)
         HelloRun h = hello; a.dir = a.x < W * .5 ? 1 : -1; a.tx = a.x; a.tz = a.z; a.afterEmerge = null; a.onArrive = null;
