@@ -544,32 +544,38 @@ function rsDtRebase(st, tg, now, tt, notes) {
   delete st.dt;
   notes.push('역까지 이동 끝 — ' + tg.name + ' ' + (src === 'tt' ? '시각표 가장 빠른 열차' : src === 'plan' ? '계획 시각표' : '승강장 도착 뒤 5분') + '으로 이어 붙임');
 }
-// ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 지하철은 도착 확정 연쇄 2회 실패하면 5분동안 GPS 를 탐색해서 다음 역의 영점을 무조건 맞춰):
-//   확정 실패 = 마커가 통과 증거가 없는 역 앞에서 기다린 일(ride-eta pos.hold). 서로 다른 역에서 연달아 2번 실패하면(그 사이 제때 확정된 역이 없으면) 그 역을 5분 동안 '찾는다':
-//   최근 2분~5분 사이 좌표 중 그 역에 가장 가까웠던 순간(정확도 400m 이하 · 350m 안)을 통과 시각으로 강제로 적는다(평소 영점은 150m·정확도 100m — 여기서는 터널·역사 안에서도 잡히게 넓힌다).
-//   가장 가까운 순간이 지난 뒤(더 멀어졌거나 8초 경과)에만 적는다. 5분 안에 못 잡으면 탐색만 끝내고 마커는 계속 그 역 앞에서 기다린다.
-var RS_SRCH_MS = 300000, RS_SRCH_BACK_MS = 120000, RS_SRCH_NEAR_M = 350, RS_SRCH_ACC_M = 400, RS_SRCH_SETTLE_MS = 8000, RS_SRCH_AWAY_M = 60;
+// ★ 2026-10-26 s231 (YJ: 임학은 도착하지도 않았는데 박촌 이동중 — 지하철은 도착 확정 연쇄 실패하면 5분동안 GPS 를 탐색해서 영점을 무조건 맞춰):
+//   확정 실패 = 마커가 통과 증거가 없는 역 앞에서 기다린 일(ride-eta pos.miss).
+// ★ 2026-10-30 s349 (YJ: "3회 이상 실패하면 GPS 를 계속 추적 — 지하에서 신호가 잡혔다는 건 열차가 도착해 문이 열렸다는 것, 그 신호와 일치하는 역에 도착 확정, 신호가 끊기면 출발 → 다시 영점으로, 루프 반복"):
+//   · 연쇄 RS_SRCH_MISS(3)회 실패하면 5분 창으로 탐색을 켠다. 마지막 실패 역 한 곳이 아니라 '마지막으로 GPS 가 확정한 역 뒤의 모든 지하철 역' 중 신호와 가장 가까운 역을 찾는다
+//     (시각표가 앞서 가 있어 실제 위치가 한참 뒤여도 맞춘다). 신호(정확도 400m 이하)가 역 350m 안에 잡힌 순간을 도착(문 열림)으로 적는다 — 8초 지났거나 60m 멀어졌으면 확정.
+//   · 확정하면 탐색을 끝내고, 그 뒤 신호가 끊기면 출발(마커 정차 규칙 s322) → 실패가 다시 3회 쌓이면 탐색이 다시 켜진다(루프). 5분 안에 못 잡아도 실패가 이어지면 다시 켠다.
+var RS_SRCH_MS = 300000, RS_SRCH_BACK_MS = 120000, RS_SRCH_NEAR_M = 350, RS_SRCH_ACC_M = 400, RS_SRCH_SETTLE_MS = 8000, RS_SRCH_AWAY_M = 60, RS_SRCH_MISS = 3;
 function rsSearch(st, tr, now, passes, notYet, notes) {
   var sr = st.srch; if (!sr) return false;
-  if (now > sr.until) { delete st.srch; notes.push('GPS 탐색 종료(5분) — ' + sr.i + '번 영점 못 잡음'); return false; }
-  var s = null, i, j; for (i = 0; i < (st.stops || []).length; i++) if (st.stops[i] && st.stops[i].i === sr.i) { s = st.stops[i]; break; }
-  if (!s || !isFinite(s.lat) || !isFinite(s.lng) || !tr.length) return false;
-  var best = null, bi = -1;
+  if (now > sr.until) { delete st.srch; notes.push('GPS 탐색 5분 끝 — 영점 못 잡음(실패가 이어지면 다시 탐색)'); return false; }
+  var stops = st.stops || [], nd = (st.eta && st.eta.nodes) || [], gMax = -1, i, j, k;
+  for (i = 0; i < passes.length; i++) if (passes[i] && passes[i].src === 'gps' && passes[i].idx > gMax) gMax = passes[i].idx;
+  var best = null, bi = -1, bs = null;
   for (i = 0; i < tr.length; i++) {
     var q = tr[i]; if (q[0] < sr.from) continue;
     if (q[3] != null && isFinite(q[3]) && q[3] > RS_SRCH_ACC_M) continue;
-    var d = rsHav(q[1], q[2], s.lat, s.lng) - (q[3] != null && isFinite(q[3]) ? Math.min(+q[3] * 0.5, 100) : 0);
-    if (d <= RS_SRCH_NEAR_M && (best === null || d < best)) { best = d; bi = i; }
+    for (k = 0; k < stops.length; k++) {
+      var s = stops[k]; if (!s || s.i <= gMax || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+      var n0 = nd[s.i]; if (!n0 || !n0.isSub || n0.isBus || n0.isWalk) continue;
+      var d = rsHav(q[1], q[2], s.lat, s.lng) - (q[3] != null && isFinite(q[3]) ? Math.min(+q[3] * 0.5, 100) : 0);
+      if (d <= RS_SRCH_NEAR_M && (best === null || d < best)) { best = d; bi = i; bs = s; }
+    }
   }
   if (bi < 0) return false;
   var conf = now - tr[bi][0] >= RS_SRCH_SETTLE_MS;
-  for (j = bi + 1; !conf && j < tr.length; j++) if (rsHav(tr[j][1], tr[j][2], s.lat, s.lng) >= best + RS_SRCH_AWAY_M) conf = true;
+  for (j = bi + 1; !conf && j < tr.length; j++) if (rsHav(tr[j][1], tr[j][2], bs.lat, bs.lng) >= best + RS_SRCH_AWAY_M) conf = true;
   if (!conf) return false;
-  var hit = -1; for (j = 0; j < passes.length; j++) if (passes[j].idx === sr.i) { hit = j; break; }
-  var np = { idx: sr.i, ms: tr[bi][0], src: 'gps' };
+  var hit = -1; for (j = 0; j < passes.length; j++) if (passes[j].idx === bs.i) { hit = j; break; }
+  var np = { idx: bs.i, ms: tr[bi][0], src: 'gps' };
   if (hit >= 0) passes[hit] = np; else passes.push(np);
-  delete notYet[sr.i]; delete st.srch;
-  notes.push('GPS 탐색: ' + sr.i + '번 영점 강제(' + Math.round(best) + 'm)');
+  delete notYet[bs.i]; delete st.srch;
+  notes.push('GPS 탐색: ' + bs.i + '번 영점 강제(' + Math.round(best) + 'm · 신호와 가장 가까운 역)');
   return true;
 }
 // ★ s231 (YJ: 실시간 위치 API 가 붙은 노선은 2회 연속 실패 → GPS 5분 탐색으로 영점이 맞으면, 거기서 내가 탄 열차의 실시간 도착정보를 불러 정확하게 맞추고 다시 GPS 영점으로 — API 호출은 아껴야 한다):
@@ -792,6 +798,29 @@ function rsPosFromSegs(pos, segs, now) {
     return;
   }
 }
+var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000;
+//   마커가 GPS 가 확정한 역 p 보다 앞서 있는데(시각표가 앞섰다) ① 마커가 닿은 역에 '아직 안 옴' 증거가 45초 안에 있고 가드가 실제로 마커를 붙잡는 중(held) 이거나
+//   ② p 에서 '지금도' 문이 열려 있다(8초 안의 좋은 위치가 p 의 문 열림 반경 RS_DOOR_M 안, 출발 판정·정차 종료가 없음) — 열차는 아직 p 에 서 있으니 마커를 p 로 내린다.
+//   풀면 정차 시계가 지금부터 다시 시작해 s322 규칙대로(신호가 끊기고 10초 뒤) 출발한다. 같은 GPS 확정은 한 번만 푼다.
+function rsMkRelease(st, prevP, now, held) {
+  try {
+    var eta = st.eta || {}, ny = st.notYet || {}, passes = eta.passes || [], tr = st.trail || [], k, i, best = null;
+    if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) best = { i: i }; } }
+    if (best) return { n: best.i - 1, why: best.i + '번 역 아직 안 옴(GPS)' };
+    var last = tr.length ? tr[tr.length - 1] : null;
+    if (!last || now - last[0] > RS_REL_FIX_MS || (last[3] != null && last[3] > RS_DOOR_ACC_M)) return null;
+    for (k = 0; k < passes.length; k++) {
+      var ps = passes[k]; if (!ps || ps.src !== 'gps' || !(prevP > ps.idx + 0.0001) || !(now - ps.ms <= RS_REL_GPS_MS)) continue;
+      if (st.rel2 && st.rel2.idx === ps.idx) continue;      // 역마다 한 번(GPS 통과 시각은 신호가 이어지는 동안 조금씩 바뀐다)
+      if (st.dw && st.dw.i === ps.idx && ((st.dw.e != null && st.dw.e >= ps.ms) || (st.dw.go != null && st.dw.go >= ps.ms))) continue;      // 이 GPS 확정 뒤에 출발이 굳었으면 풀지 않는다(시각표가 GPS 보다 먼저 보낸 정차 끝은 해당 없음)
+      var rn = (eta.nodes || [])[ps.idx]; if (!rn || !rn.isSub || rn.isBus || rn.isWalk) continue;      // 문 열림 = 지하철 · 버스는 신호가 늘 있어 해당 없다
+      var sp = rsStopOf(st, ps.idx); if (!sp || !isFinite(sp.lat) || !isFinite(sp.lng)) continue;
+      if (rsHav(last[1], last[2], sp.lat, sp.lng) <= RS_DOOR_M && (best === null || ps.idx > best.i)) best = { i: ps.idx, ms: ps.ms, g: 1 };
+    }
+    if (best) { st.rel2 = { idx: best.i, ms: best.ms }; return { n: best.i, why: best.i + '번 역에서 GPS 확정 · 아직 문 열림' }; }
+  } catch (e) { }
+  return null;
+}
 function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
@@ -819,9 +848,19 @@ function rsMonoPos(st, r, now, notes) {
       if (now < q[3]) { prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]); break; }
     }
   }
+  // ★ 2026-10-30 s349 (YJ: "명확한 GPS 가 확정한 역이 있으면 앞에 남아 있던 마커를 끌어내려도 된다"): 되돌아감 방지는 시각표가 앞서 있다가 GPS 가 '아직 안 왔다'고 해도 마커를 그 앞 자리에 붙잡았다(로그: 2.66 → 3 자리 유지).
+  //   GPS 가 분명히 말하는 두 경우에만 푼다 — ① 마커가 닿은 역(prevP 이상)에 '아직 안 옴'(notYet) 증거가 45초 안에 있다 ② 최근 90초 안에 GPS 로 확정한 역 p 가 마커보다 뒤인데 방금 위치(30초 안)가 그 역 350m 안이다.
+  //   풀면 마커 기록(mk)을 비우고 바닥(mkFloor)을 그 역 앞으로 내린다 — 도착 시각은 이미 GPS 통과 시각에 이어 붙어 있어 마커가 그 구간으로 내려온다.
   var cur = null;
   for (i = 0; i < segs.length; i++) if (now < segs[i].t1) { cur = i; break; }
   var newP = cur == null ? +segs[segs.length - 1].to : (now < segs[cur].t0 ? +segs[cur].from : +segs[cur].from + Math.max(0, Math.min(1, (now - segs[cur].t0) / (segs[cur].t1 - segs[cur].t0))) * (segs[cur].to - segs[cur].from));
+  var rel = prevP != null ? rsMkRelease(st, prevP, now, newP < prevP - 0.002) : null;
+  if (rel) {
+    var pfR = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
+    if (pfR.n > rel.n) pfR.n = rel.n;
+    delete st.mk; mk = null; prevP = null; delete st.dw;
+    notes.push('마커 되돌아감 방지 해제: ' + rel.why);
+  }
   if (prevP != null && newP < prevP - 0.002) {
     var k = -1;
     for (i = 0; i < segs.length; i++) if (prevP >= segs[i].from && prevP < segs[i].to) { k = i; break; }
@@ -1067,7 +1106,8 @@ function rsRows(st, r, now, dest, finLv, arrived) {
 // ★ 2026-10-13 (YJ: "카카오 방식 — 앱이 사라져도 네이티브가 안내를 그린다"): 웹이 사라진 동안 네이티브 오버레이가 그릴 값을 엔진이 만든다.
 //   state.ovl = { cells:[앱 타임라인 칸(n·t·g·gp·gc·lc·rc·dc·dk + m(이동 중 문구))], map:[칸→노드 번호 또는 -1], theme:{bg,fg,sub} } 는 웹이 맡겨 둔 '그림 틀'(색·이름·노선 라벨)이고,
 //   엔진은 시각(t)·현위치 칸(cur)·이동 중(moving)·알약 문구·남은시간 줄·하차 임박 단계(alert)·[안내 종료] 줄(rs)만 채운다. 출력은 OverlayPlugin.update 가 받는 모양 그대로다.
-function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
+function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done, showIdx) {
+  if (showIdx == null || !isFinite(showIdx)) showIdx = curIdx;
   var ov = st.ovl;
   if (done) return { active: false };
   if (!ov || !ov.cells || !ov.cells.length) return null;
@@ -1076,7 +1116,7 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done) {
     var c = rsClone(ov.cells[j]), ni = map[j] != null ? map[j] : -1;
     if (ni >= 0 && r.arr && r.arr[ni]) c.t = r.arr[ni];
     cells.push(c);
-    if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= curIdx) cur = j; }
+    if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= showIdx) cur = j; }
   }
   if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
   var arrived = !!(dest && curPos >= dest.seqPos);
@@ -1825,16 +1865,19 @@ function rideStandby(req) {
   var nodes = eta.nodes || [], cfg = st.cfg || {}, curIdx = -1;
   if (r.pos && r.pos.from != null) curIdx = r.pos.ttFrom != null ? r.pos.ttFrom : r.pos.from;      // s231: 마커가 도착 확정을 기다려 멈춰 있어도 알림은 시각표 위치로(지하에서 GPS 가 없어도 하차 알림은 나가야 한다)
   else { for (i = 0; i < nodes.length; i++) if (r.etaMs[i] != null && r.etaMs[i] <= now) curIdx = i; }
+  // ★ s349 (YJ: "오버레이와 앱 마커는 같아야 한다 · 모든 계산은 엔진이"): 화면에 보이는 현위치(오버레이 칸·알약·앱 카드 cur)는 마커와 같은 값 하나(pos.from)만 쓴다. curIdx(시각표 위치)는 하차·환승 알림 판정에만 쓴다.
+  var showIdx = (r.pos && r.pos.from != null && isFinite(+r.pos.from)) ? +r.pos.from : curIdx;
   // ★ 2026-10-28 s268: 도착 확정 실패 처리 — 마커는 시각표대로 간다(세우지 않는다). 실패 = 예정 시각 + 60초가 지나도 그 역(이후) 통과 증거(영점·움직임·위치 판단)가 없음. 영점이 잡히면 목록이 줄어 자연히 0 부터 다시 센다.
   //   · 연속 2회 → GPS 5분 탐색(가장 최근 실패 역 근처를 지난 흔적을 찾아 영점을 강제) — 모든 호선.
   //   · 연속 3회 → 서울 실시간 노선(rsSubwayId 가 있는 노선)만 실시간 API 로 내 열차 도착을 물어 시각을 맞춘다(다음 역 한 곳). 하차까지 3회 실패마다 반복(st.mb = 이미 보정을 시도한 실패 역 번호).
   var missL = (r.pos && r.pos.miss) || [];
   if (missL.length) st.xf = missL.length; else delete st.xf;
+  if (missL.length < RS_SRCH_MISS && st.srch) delete st.srch;      // s349: 실패가 3회 밑으로 내려가면(영점이 잡혔다) 탐색은 쉰다
   if (missL.length) {
     var lastMiss = missL[missL.length - 1];
-    if (missL.length >= 2 && !st.srch && lastMiss > (st.sd == null ? -1 : st.sd)) {
-      st.sd = lastMiss; st.srch = { i: lastMiss, from: now - RS_SRCH_BACK_MS, until: now + RS_SRCH_MS };
-      notes.push('도착 확정 실패 ' + missL.length + '회 — GPS 탐색 5분 시작(' + lastMiss + '번 역)');
+    if (missL.length >= RS_SRCH_MISS && !st.srch) {      // s349: 3회 · 마지막 실패 역에 묶지 않고(루프) 실패가 이어지는 동안 계속 다시 켠다
+      st.srch = { i: lastMiss, from: now - RS_SRCH_BACK_MS, until: now + RS_SRCH_MS };
+      notes.push('도착 확정 실패 ' + missL.length + '회 — GPS 탐색 5분 시작(신호와 가장 가까운 역 · 마지막 실패 ' + lastMiss + '번)');
     }
     var mb = st.mb == null ? -1 : st.mb, nMiss = 0, mk;
     for (mk = 0; mk < missL.length; mk++) if (missL[mk] > mb) nMiss++;
@@ -1884,7 +1927,7 @@ function rideStandby(req) {
   }
   var seq = cfg.seq || [], dest = null, nextIdx = -1;
   (cfg.targets || []).forEach(function (t) { if (t.kind === 'dest') dest = t; });
-  for (i = 0; i < seq.length; i++) if (seq[i] > curIdx) { nextIdx = seq[i]; break; }
+  for (i = 0; i < seq.length; i++) if (seq[i] > showIdx) { nextIdx = seq[i]; break; }
   var text;
   if (dest && al.curPos >= dest.seqPos) text = (cfg.destName || dest.name || '목적지') + ' 도착';
   else if (nextIdx >= 0) {
@@ -1902,14 +1945,14 @@ function rideStandby(req) {
   // 버스는 네비게이션식 — 엔진이 본 '지금 달리는 중인가'(motion)를 따른다(null 이면 모른다 → 계산 값 유지)
   if (progBus && tk && tk.motion && tk.motion.moving != null) moving = tk.motion.moving === true;
   var nextMs = rsNextMs(st, r, now, O);
-  try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
+  try { overlay = rsOverlay(st, r, curIdx, al.curPos, now, dest, cfg.destName || (dest && dest.name) || '', moving, done, showIdx); } catch (eOv) { notes.push('오버레이 계산 실패: ' + (eOv && eOv.message)); }
   if (offActive && overlay && overlay.active) { overlay.alert = 0; overlay.pre = false; overlay.banner = '경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요'; }
   if (dtInfo && overlay && overlay.active) { overlay.line2 = rsDtText(dtInfo); overlay.pillTxt = rsDtText(dtInfo); overlay.alert = 0; overlay.pre = false; overlay.moving = true; }
   var reco = { fire: false };
   try { if (!done) reco = rsReco(st, r, dest, cfg.destName || (dest && dest.name) || '', now, offActive); } catch (eRc) { notes.push('추천 판단 실패: ' + (eRc && eRc.message)); }
-  var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: curIdx, at: now };
+  var view = { text: text, line1: overlay && overlay.line1 || '', line2: overlay && overlay.line2 || '', curIdx: showIdx, at: now };
   var row = done ? null : rsRowOut(st, now);
-  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? rsOffOut(st, now) : undefined, dt: dtInfo && !done ? { n: dtInfo.name, d: dtInfo.distM, s: dtInfo.etaSec, a: dtInfo.arrived ? 1 : 0 } : undefined, done: done, quit: quit, curIdx: curIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving, t0: r.pos.t0 == null ? null : r.pos.t0, t1: r.pos.t1 == null ? null : r.pos.t1, hold: r.pos.hold == null ? undefined : r.pos.hold, segs: (r.pos.segs || []).slice(0, 14) } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : (askRt ? { kind: 'boardlive', body: askRt } : null), notes: notes };
+  return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: text }, row: row, alert: al.alert, off: offActive && !done ? rsOffOut(st, now) : undefined, dt: dtInfo && !done ? { n: dtInfo.name, d: dtInfo.distM, s: dtInfo.etaSec, a: dtInfo.arrived ? 1 : 0 } : undefined, done: done, quit: quit, curIdx: showIdx, overlay: overlay, reco: reco, view: view, pos: r.pos ? { from: r.pos.from, to: r.pos.to, ratio: r.pos.ratio, moving: !!r.pos.moving, t0: r.pos.t0 == null ? null : r.pos.t0, t1: r.pos.t1 == null ? null : r.pos.t1, hold: r.pos.hold == null ? undefined : r.pos.hold, segs: (r.pos.segs || []).slice(0, 14) } : null, arr: r.arr || null, zero: zero, nextMs: done ? O.stepMs : nextMs, motion: tk && tk.motion ? tk.motion : null, ask: askBl ? { kind: 'boardlive', body: askBl } : (askRt ? { kind: 'boardlive', body: askRt } : null), notes: notes };
 }
 
 function handleRideStandby(request, env) {
