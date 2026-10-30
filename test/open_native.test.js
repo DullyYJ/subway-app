@@ -104,6 +104,12 @@ t('카드 확장 인사(s340): 엔진이 대본(시간 · 자리 · 차례 · �
   assert.ok(/3000L/.test(scr) && /sdy \+= hExt/.test(scr) && /gh \+= hExt/.test(scr), '3초 꾹 · 아래 카드들이 같이 밀린다(슬라이드)');
   for (const k of ['helloPrepare', 'helloStart', 'drawHello', 'helloSkip', 'forceK']) assert.ok(sd.indexOf(k) > -1 || sco.indexOf(k) > -1, 'SceneDriver/SceneCore: ' + k);
   assert.ok(/helloFor\(/.test(sa) && /open\.json/.test(sa) && /catch \(Throwable/.test(sa), 'ShellActivity 는 엔진 대본을 읽어 넘길 뿐(실패하면 아무것도 안 한다)');
+  assert.ok(/bit\.kind == ScreenCore\.K_PANEL && bit\.y <= hY \+ 0\.5f && bit\.y \+ bit\.h >= hBot - 0\.5f\) gh \+= hExt/.test(scr), '장면을 담은 틀(테두리 · 그림자)도 같이 늘어난다');
+  assert.ok(/helloNowMs\(\)/.test(scr) && !/scene\.helloMs\(\)/.test(scr) && /System\.nanoTime\(\) - helloT0Ns/.test(scr), '카드 높이 시간은 실제 시계(장면이 프레임을 건너뛰어도 매 프레임 부드럽게)');
+  assert.ok(/if \(hExt > fmg\) fmg = hExt;/.test(scr) && /spAnim = true;/.test(scr), '내려가는 아래 칸이 가장자리에서 안 빠지고 · 매 프레임 다시 그린다');
+  assert.ok(/preferredRefreshRate = best/.test(scr) && /hiRate\(true\)/.test(scr) && /hiRate\(false\)/.test(scr), '인사 동안 화면 주사율을 가장 높게');
+  assert.ok(/core\.interactive\(\) \|\| hcore != null/.test(sd), '인사 중에는 60Hz 로 아끼지 않고 화면 주사율 그대로');
+  assert.ok(/u \* u \* u \* \(u \* \(u \* 6 - 15\) \+ 10\)/.test(sh), '늘고 줄 때 시작과 끝이 끊기지 않는 곡선(smootherstep)');
   const txt = (sc.slots.flatMap(sl => Object.values(sl.hello.say)));
   for (const line of txt) for (const f of [scr, sd, sa, sh, sco]) assert.ok(f.indexOf(line) < 0, '인사 글이 앱 코드에 없다: ' + line);
   assert.ok(!/Thread|new Handler|runOnUiThread|synchronized/.test(sh), '순수 계산이라 스레드 없음');
