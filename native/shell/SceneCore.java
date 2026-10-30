@@ -868,12 +868,11 @@ public final class SceneCore {
             if (v.bus) SceneArt.drawBus(c, v.x, laneGy(lane), v.L, o); else SceneArt.drawCar(c, v.x, laneGy(lane), v.L, o);
         }
     }
-    /** 길 아래 바닥(인도). 카드가 늘어난 동안은 길(nearTop 위)은 그대로 두고 인도만 세로로 늘려 같은 그림이 이어지게 한다. */
+    /** 길 아래 바닥(인도). 바닥 그림은 처음부터 카드가 가장 길게 늘어난 높이(H + g.ext)까지 같은 무늬로 이어 그려 두었다 — 늘어난 만큼 그 위쪽 부분을 1:1 로 더 보여 줄 뿐 그림을 늘이지 않는다(구조물 · 줄무늬가 안 일그러짐). */
     void drawGnd(SceneCv c) {
-        if (stretch <= 0) { c.drawImage(bg.gnd, 0, 0, W, H); return; }
-        double top = g.nearTop, sh = (H - top + stretch) / Math.max(1, H - top);
-        c.save(); c.beginPath(); c.rect(0, top, W, H + stretch - top); c.clip(); c.translate(0, top); c.scale(1, sh); c.translate(0, -top); c.drawImage(bg.gnd, 0, 0, W, H); c.restore();
-        c.save(); c.beginPath(); c.rect(0, 0, W, top + .5); c.clip(); c.drawImage(bg.gnd, 0, 0, W, H); c.restore();
+        double show = Math.min(H + stretch, H + g.ext);
+        if (show <= H + .01) { c.drawImage(bg.gnd, 0, 0, (int) Math.round(W * dpr), (int) Math.round(H * dpr), 0, 0, W, H); return; }
+        int hp = (int) Math.round(show * dpr); c.drawImage(bg.gnd, 0, 0, (int) Math.round(W * dpr), hp, 0, 0, W, hp / dpr);
     }
     void drawStreet(SceneCv c, double dt) {
         int tw = bg.tw;
@@ -1077,7 +1076,7 @@ public final class SceneCore {
             if (alpha < 1) c.globalAlpha(alpha);
             int tw = b.tw;
             c.drawImage(b.sky, 0, 0, W, H); if (fx) drawSkyFx(c, t);
-            c.drawImage(b.far, 0, 0, tw, H); if (fx) SceneFx.drawMid(this, c, b.mid, tw); else c.drawImage(b.mid, 0, 0, tw, H); c.drawImage(b.gnd, 0, 0, W, H);
+            c.drawImage(b.far, 0, 0, tw, H); if (fx) SceneFx.drawMid(this, c, b.mid, tw); else c.drawImage(b.mid, 0, 0, tw, H); c.drawImage(b.gnd, 0, 0, (int) Math.round(W * dpr), (int) Math.round(H * dpr), 0, 0, W, H);
             if (fx) SceneFx.ambient(this, c, t);
             c.globalAlpha(1); c.restore();
         } finally { bg = sb; L = sl; wxP = sw; }
