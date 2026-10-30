@@ -17,7 +17,10 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
   await t('폰 안 엔진이 서버 엔진의 녹화된 답(eta · standby · track)과 모두 같다', async () => {
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', out].concat(CORE.concat(RIDE).map(c => N(c + '.java')), [path.join(__dirname, 'java', 'RideLocalJvmTest.java')]), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 1500));
-    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', path.join(__dirname, 'fixtures', 'ride_corpus.jsonl')], { env: ENV, encoding: 'utf8' });
+    // s349: 말뭉치의 standby 줄은 '입력'만 쓰고, 기대 답은 지금 서버 엔진(engine/ride-standby.js)으로 그때그때 다시 계산한다 — 엔진을 고칠 때마다 7MB 녹화본을 다시 올리지 않아도 '자바 = 서버 JS' 가 같은 입력으로 비교된다(eta · track 줄은 녹화 그대로).
+    const { rideStandby } = require(path.join(ROOT, 'engine', 'ride-standby.js')), corpusNow = path.join(out, 'ride_corpus_now.jsonl');
+    fs.writeFileSync(corpusNow, fs.readFileSync(path.join(__dirname, 'fixtures', 'ride_corpus.jsonl'), 'utf8').split('\n').filter(Boolean).map(ln => { const o = JSON.parse(ln); if (o.fn !== 'standby') return ln; o.out = JSON.parse(JSON.stringify(rideStandby(JSON.parse(JSON.stringify(o.in))))); return JSON.stringify(o); }).join('\n') + '\n');
+    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', corpusNow], { env: ENV, encoding: 'utf8' });
     assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1200) + (r.stderr || '').slice(-300));
     assert.ok(+/ALL OK \((\d+)\)/.exec(r.stdout)[1] >= 40, '녹화본이 너무 적다');
     assert.ok(!/FAIL/.test(r.stdout), r.stdout.slice(-800));
