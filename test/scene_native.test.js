@@ -35,7 +35,7 @@ const { sceneDecide } = require('../engine/scene.js');
       assert.ok(js.length > 100 && js.length < 6000, '객실 장면 글');
       fs.writeFileSync(path.join(dir, 'train_ride.json'), js);
     }
-    const files = ['SceneCore', 'SceneHello', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain', 'ScenePlatform'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
+    const files = ['SceneCore', 'SceneHello', 'OpenCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain', 'ScenePlatform'].map(n => N(n + '.java')).concat([path.join(__dirname, 'java', 'AwtCv.java'), path.join(__dirname, 'java', 'SceneJvmTest.java')]);
     let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', cls].concat(files), { env: ENV, encoding: 'utf8' });
     assert.strictEqual(r.status, 0, r.stderr || r.stdout);
     r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Djava.awt.headless=true', '-cp', cls, 'com.dullyyj.subway.SceneJvmTest', 'check', dir], { env: ENV, encoding: 'utf8', timeout: 240000 });
@@ -68,7 +68,7 @@ const { sceneDecide } = require('../engine/scene.js');
     assert.ok(/wsay\(S, a, "shiver"/.test(acts) && /traits\.get\(a\.id\)/.test(acts), '말은 엔진(traits.say)이 정한 글만 띄운다');
   });
   await t('SceneCore·SceneArt·SceneActs 는 android.* 를 쓰지 않는다(순수 자바)', async () => {
-    for (const n of ['SceneCore', 'SceneHello', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
+    for (const n of ['SceneCore', 'SceneHello', 'OpenCore', 'SceneActs', 'SceneArt', 'SceneFx', 'ScenePlaces', 'SceneModel', 'SceneUtil', 'SceneHaptics', 'SceneCv', 'SceneTrain']) assert.ok(!/import android\./.test(fs.readFileSync(N(n + '.java'), 'utf8')), n + ' 에 android import');
   });
   await t('내 버스 번호는 엔진이 알려 준 res.line 으로 그린다 — 무작위 번호는 지나가는 다른 차 장식만(s293)', async () => {
     const core = fs.readFileSync(N('SceneCore.java'), 'utf8');
