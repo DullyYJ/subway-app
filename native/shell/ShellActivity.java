@@ -2118,9 +2118,38 @@ public class ShellActivity extends Activity {
                     if (my != seqBoard) return;
                     present(v, txt, keep);
                     if (txt.length() > 0 && !isNotMod(txt)) board.onScreen(txt);
+                    if (fetch) prefetchComments();
                 } });
             }
         }, "shell-board").start();
+    }
+    /** s355: 글 목록이 그려지면 위쪽 글들의 댓글을 미리(동시에) 받아 둔다 — 글을 눌렀을 때 댓글이 글과 함께 바로 나온다. 다 받으면 한 번만 다시 그린다. */
+    private void prefetchComments() {
+        final java.util.List<String> ids = new java.util.ArrayList<String>();
+        final long now = System.currentTimeMillis();
+        for (java.util.Map<String, Object> p : board.posts) {
+            if (ids.size() >= 14) break;
+            String id = BoardCore.idStr(p.get("id"));
+            Object c = p.get("cmts");
+            if (id.length() == 0 || !(c instanceof Double) || (Double) c <= 0) continue;
+            Long last = cmtAt.get(id);
+            if (last != null && now - last < 60000 && board.cmts.containsKey(id)) continue;
+            cmtAt.put(id, now);
+            ids.add(id);
+        }
+        if (ids.isEmpty()) return;
+        new Thread(new Runnable() {
+            @Override public void run() {
+                final java.util.concurrent.atomic.AtomicInteger got = new java.util.concurrent.atomic.AtomicInteger();
+                java.util.concurrent.ExecutorService ex = java.util.concurrent.Executors.newFixedThreadPool(4);
+                for (final String id : ids) ex.execute(new Runnable() { @Override public void run() {
+                    try { NetPost.Res r = NetPost.get(BoardCore.commentsUrl(id), 6000); if (r.status == 200 && board.setComments(id, r.body)) got.incrementAndGet(); } catch (Throwable t) { /* 눌렀을 때 다시 받는다 */ }
+                } });
+                ex.shutdown();
+                try { ex.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException e) { return; }
+                if (got.get() > 0) main.post(new Runnable() { @Override public void run() { reloadBoard(); } });
+            }
+        }, "shell-cmts-pre").start();
     }
     /** (스레드 안) 글 목록 원자료를 받아 상태에 넣고 엔진에 보낼 본문을 만든다. */
     private String boardBody(boolean fetch) {
@@ -2138,7 +2167,7 @@ public class ShellActivity extends Activity {
             final String id = board.idOfPid(a.v);
             if (id.length() == 0 || !board.isServerPost(id)) return;
             Long last = cmtAt.get(id);
-            if (last != null && System.currentTimeMillis() - last < 15000) return;
+            if (last != null && System.currentTimeMillis() - last < (board.cmts.containsKey(id) ? 15000 : 3000)) return;       // 미리 받은 댓글이 있으면 그대로 보이고(15초 안엔 다시 안 받고), 아직 없으면 눌렀을 때 바로 받는다
             cmtAt.put(id, System.currentTimeMillis());
             new Thread(new Runnable() {
                 @Override public void run() {
