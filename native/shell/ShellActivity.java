@@ -505,6 +505,26 @@ public class ShellActivity extends Activity {
     }
 
     // ───────────── 화면 받기 ─────────────
+    // ── s346 (YJ: 역 설정 때 화면이 마음대로 움직이고 후보가 안 보인다): 설정 화면에서 글자를 칠 땐 창을 밀어 올리지(pan) 않고 줄인다 —
+    //    그러면 화면(ScreenView)이 키보드 위 남은 높이를 알아 입력칸과 그 아래 후보 줄을 스스로 보이게 놓는다. 위 문구줄과 아래 탭은 그동안 접어 둔다. ──
+    private boolean kbEdit;
+    private final Runnable kbRestoreRun = new Runnable() { @Override public void run() {
+        if (!kbEdit) return;
+        kbEdit = false;
+        hdr.setVisibility(View.VISIBLE); tabs.setVisibility(View.VISIBLE);
+        applyIme();
+    } };
+    private void settingsKb(boolean on) {
+        main.removeCallbacks(kbRestoreRun);
+        if (on) {
+            if (kbEdit) return;
+            if (sheet != null && sheet.isShowing()) return;
+            if (slots.length == 0 || !ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) return;
+            kbEdit = true;
+            try { getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); } catch (Throwable ignored) { }
+            hdr.setVisibility(View.GONE); tabs.setVisibility(View.GONE);
+        } else if (kbEdit) main.postDelayed(kbRestoreRun, 300L);          // 칸에서 칸으로 옮기는 사이의 잠깐 끊김에는 되돌리지 않는다
+    }
     /** 키보드가 올라올 때 화면을 줄이지(눌러 찌그러뜨리지) 않는다 — 웹처럼 화면은 그대로 두고 키보드만 위로 뜬다(adjustPan: 입력칸이 키보드에 가릴 때만 창을 밀어 올린다).
      *  단 채팅(아래 입력줄이 화면 밑에 붙은 화면)은 입력줄이 키보드 위에 붙어야 하므로 예전처럼 줄인다. */
     private void applyIme() {
@@ -514,6 +534,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable ignored) { }
     }
     private void showTab(String tab) {
+        if (kbEdit) { main.removeCallbacks(kbRestoreRun); kbRestoreRun.run(); }
         applyIme();
         hideMapView();
         slots = ShellCore.slotsOf(store, tab);
@@ -1657,7 +1678,7 @@ public class ShellActivity extends Activity {
             if (ShellCore.S_SETTINGS.equals(screenName()) && a != null && "call".equals(a.a) && a.v != null && a.v.startsWith("pk.")) { cmInlineAct("call", a.v, null, false, q); return; }          // 설정 화면 안 장소 입력칸의 [저장] · 엔터
             apply(ShellCore.routeSearch(a.tpl, a.empty, q));
         }
-        @Override public void onInputFocus(boolean on) { if (on) applyIme(); }
+        @Override public void onInputFocus(boolean on) { if (on) applyIme(); if (ShellCore.S_SETTINGS.equals(screenName()) || kbEdit) settingsKb(on); }
         @Override public void onFirstDraw() { }
         @Override public void onText(String key, String value, String kind) {
             if (ShellCore.S_SETTINGS.equals(screenName()) && key != null && key.startsWith("cmp.")) { cmText(key.substring(4), value, kind); return; }
@@ -5268,6 +5289,8 @@ public class ShellActivity extends Activity {
     private final CmCore cm = new CmCore();
     private int cmBusSeq;
     private boolean popSheet;
+    private float tpPopH;                       // 시각 고르기 창의 마지막 높이(dp) — 다음에 열 때 처음부터 이 높이로
+    private String tpPresented;                // 창을 열기 전에 미리 올린 시각 고르기 글(같은 글을 다시 올리지 않는다)
     /** 가운데 팝업(위치 안내 · 처음 설치 안내)의 높이를 화면이 정한 글 높이에 맞춘다(화면 높이의 90%까지). */
     private void popResize(float dp) {
         try {
@@ -5275,6 +5298,7 @@ public class ShellActivity extends Activity {
             float sh = getResources().getDisplayMetrics().heightPixels / dpr, sw = getResources().getDisplayMetrics().widthPixels / dpr;
             android.view.Window w = sheet.getWindow();
             android.view.WindowManager.LayoutParams lp = w.getAttributes();
+            if ("cm".equals(setPage) && cm.pop && "tp".equals(cm.sub)) tpPopH = Math.min(dp, sh * 0.9f);
             lp.width = Math.round(Math.min(sw - 44f, 400f) * dpr); lp.height = Math.round(Math.min(dp, sh * 0.9f) * dpr); lp.gravity = android.view.Gravity.CENTER; lp.y = 0;
             w.setAttributes(lp);
         } catch (Throwable ignored) { }
@@ -5311,11 +5335,15 @@ public class ShellActivity extends Activity {
             } });
             android.view.Window w = sheet.getWindow();
             float sw = getResources().getDisplayMetrics().widthPixels / dpr;
-            w.setLayout(Math.round(Math.min(sw - 44f, 400f) * dpr), Math.round(200f * dpr));          // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
+            float sh0 = getResources().getDisplayMetrics().heightPixels / dpr;
+            float h0 = tpPop ? Math.min(tpPopH > 0f ? tpPopH : 390f, sh0 * 0.9f) : 200f;                // s346: 시각 고르기는 지난번 높이로 처음부터 알맞게(빈 작은 상자가 떴다 커지지 않게)
+            w.setLayout(Math.round(Math.min(sw - 44f, 400f) * dpr), Math.round(h0 * dpr));          // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
             w.setGravity(android.view.Gravity.CENTER);
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
             w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             w.setDimAmount(0.68f);                                                                    // 웹 rgba(0,0,0,.68)
+            tpPresented = null;
+            if (tpPop) { String hit0 = tpCache.get(ShellCore.pageUrlCm(cm.pageFacts(store))); if (hit0 != null) { present(sheetView, hit0, true); tpPresented = hit0; } }          // s346: 미리 받아 둔 시각 고르기 화면은 창을 열기 전에 먼저 올려 두어, 열리는 순간 글이 이미 있다
             try { sheet.show(); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
             loadSetPage();
             return;
@@ -5338,7 +5366,7 @@ public class ShellActivity extends Activity {
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage + (RideService.recoRoute.length() > 0 ? " · " + RideService.recoRoute : ""), RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
         final String hit = "cm".equals(setPage) && cm.pop ? tpCache.get(url) : null;                     // 미리 받아 둔 시각 고르기 화면이면 기다리지 않고 바로 올린다
-        if (hit != null) { present(sheetView, hit, true); return; }
+        if (hit != null) { if (!hit.equals(tpPresented)) present(sheetView, hit, true); tpPresented = null; return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
@@ -5376,17 +5404,16 @@ public class ShellActivity extends Activity {
     private final java.util.HashMap<String, String> tpCache = new java.util.HashMap<String, String>();
     private void tpPut(final String url, final String txt) { main.post(new Runnable() { @Override public void run() { if (tpCache.size() > 12) tpCache.clear(); tpCache.put(url, txt); } }); }
     /** 설정 화면이 뜨면 출근·퇴근 시각 고르기 팝업 화면을 뒤에서 미리 받아 둔다 — 시각 칸을 누르면 기다림 없이 뜬다. */
-    private long tpPreAt;
+    private final java.util.HashSet<String> tpFly = new java.util.HashSet<String>();
     private void cmPrefetchTp() {
-        long now = System.currentTimeMillis();
-        if (now - tpPreAt < 120000L) return;
-        tpPreAt = now;
         for (String k : new String[] { "morn", "eve" }) {
             final String url = ShellCore.pageUrlCm(CmCore.tpPopFacts(store, k));
-            if (tpCache.containsKey(url)) continue;
+            if (tpCache.containsKey(url) || !tpFly.add(url)) continue;          // s346: 시간·요일·장소가 바뀌면 열쇠(주소)도 바뀐다 — 그때마다 새로 받아 둔다(예전엔 2분에 한 번이라 바꾼 직후엔 빈 상자가 떴다)
             new Thread(new Runnable() { @Override public void run() {
-                NetPost.Res r = NetPost.get(url, 8000);
-                if (r.status == 200 && r.body.indexOf("\"body\"") > 0) tpPut(url, r.body);
+                try {
+                    NetPost.Res r = NetPost.get(url, 8000);
+                    if (r.status == 200 && r.body.indexOf("\"body\"") > 0) { warm(r.body); tpPut(url, r.body); }
+                } finally { main.post(new Runnable() { @Override public void run() { tpFly.remove(url); } }); }
             } }, "shell-tppre").start();
         }
     }
