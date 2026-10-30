@@ -3586,3 +3586,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **엔진 `engine/reco-text.js`**: ① `rtxLoadFood` — 반경 800m 3초, 못 받거나 비면 반경 1500m 로 2초 한 번 더(총 5초 이내: 앱 응답 대기 9초 안). ② `rtxPickPlace` — 반경 안에 없으면 받아 온 목록 중 가장 가까운 5곳에서 고른다(한적한 역도 가게 연동). 그래도 목록이 없을 때만 s350 의 '<메뉴> 맛집 / 카페' 지도 검색으로 간다.
 - 앱 변경 없음(s350 `recoQuery` 가 q → 가게 이름을 카카오맵 + 도착지 좌표로 연다).
 - 워커: `route-v2-2026-10-30s351` → ⚠ Cloudflare 에 `engine/route-v2-worker.ascii.js` 다시 붙여 넣어야 반영. 시험: reco_text(반경 밖 카페·식당도 가게 이름으로 연동). ⚠ 실기기 미확인.
+
+## s352 (2026-10-30) — 추천도 맛집 탭과 같은 자료(맛집 서버 + 공공데이터)로, 전국 어디서나 그 가게로 연동 (YJ: "맛집탭에 나온다면 거기서 채택 — 아라역뿐 아니라 전국")
+- 원인 추정: 추천은 맛집 서버(`/food`)만 봤고, 맛집 탭은 서버(r=1500·400곳) + 공공데이터(`/food-pub`, 소상공인 등록 음식점)를 합쳐 쓴다 → 서버가 비는 지역에서 탭에는 나와도 추천은 글만 나갈 수 있었다.
+- **엔진 `engine/reco-text.js`**: ① `handleRecoText(request, env, ctx)` — Worker 가 env·ctx 를 넘기고(`handleFetch` 길 `/reco-text` 수정), `rtxLoadPub` 가 같은 Worker 의 `handleFoodPub` 를 직접 불러(자기 주소로 다시 요청하지 않는다) 공공데이터 행(`bizesNm·indsMclsNm·indsSclsNm·rdnmAdr·lat·lon`)을 `{n,c,a,d}` 로 바꾼다(거리 d 는 엔진이 계산, 4초 제한). ② `rtxLoadFood` — 맛집 서버(r=1500·limit=400, 비면 r=3000)와 공공데이터를 동시에 받아 `rtxMergeFood`(이름+주소 앞 8자 기준 중복 제거)로 합친다. 10분 메모리 캐시. ③ s351 의 `rtxPickPlace`(반경 안이 없으면 가장 가까운 5곳)와 s350 의 검색 줄(목록이 아예 없을 때만)은 그대로 마지막 수단.
+- 앱 변경 없음. 시험: reco_text(공공데이터 행 변환 · 합치기 중복 · 서버 빈 목록이어도 공공데이터로 가게 선택 · 공공데이터 실패 시 서버 목록) + 전체 67개 통과.
+- 워커 `route-v2-2026-10-30s352` → ⚠ Cloudflare 에 `engine/route-v2-worker.ascii.js` 다시 붙여 넣어야 반영(ROWS_KV 바인딩이 있는 같은 Worker 라 공공데이터 사용 가능). ⚠ 실기기 미확인.
