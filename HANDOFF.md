@@ -3592,3 +3592,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **엔진 `engine/reco-text.js`**: ① `handleRecoText(request, env, ctx)` — Worker 가 env·ctx 를 넘기고(`handleFetch` 길 `/reco-text` 수정), `rtxLoadPub` 가 같은 Worker 의 `handleFoodPub` 를 직접 불러(자기 주소로 다시 요청하지 않는다) 공공데이터 행(`bizesNm·indsMclsNm·indsSclsNm·rdnmAdr·lat·lon`)을 `{n,c,a,d}` 로 바꾼다(거리 d 는 엔진이 계산, 4초 제한). ② `rtxLoadFood` — 맛집 서버(r=1500·limit=400, 비면 r=3000)와 공공데이터를 동시에 받아 `rtxMergeFood`(이름+주소 앞 8자 기준 중복 제거)로 합친다. 10분 메모리 캐시. ③ s351 의 `rtxPickPlace`(반경 안이 없으면 가장 가까운 5곳)와 s350 의 검색 줄(목록이 아예 없을 때만)은 그대로 마지막 수단.
 - 앱 변경 없음. 시험: reco_text(공공데이터 행 변환 · 합치기 중복 · 서버 빈 목록이어도 공공데이터로 가게 선택 · 공공데이터 실패 시 서버 목록) + 전체 67개 통과.
 - 워커 `route-v2-2026-10-30s352` → ⚠ Cloudflare 에 `engine/route-v2-worker.ascii.js` 다시 붙여 넣어야 반영(ROWS_KV 바인딩이 있는 같은 Worker 라 공공데이터 사용 가능). ⚠ 실기기 미확인.
+
+## s353 (2026-10-30) — 지방(부산·대구·광주·대전) 노선도에 역이 안 나오던 것 (YJ: "지방노선도가 안 나와. 원래 있었는데 사라졌어")
+- 증상: 노선도 > 지하철 > 부산/대구/광주/대전 에서 호선 알약("부산1호선 (40개 역)")만 있고 그 아래 역 이름 칩이 빈칸. 원인: 엔진(`engine/map.js` `mapRegionBody`)은 호선마다 `chips` 줄(역 목록)을 본문에 보내는데, 앱 `ScreenCore.stack()` 은 `chips` 를 머리(head)에서만 그리고 본문에서는 아무것도 안 그렸다(높이만 차지 → 빈칸). s139 에서 역 시트의 호선 알약만 `lpills` 로 바꿔 고쳤고 지방 목록은 남아 있었다.
+- **앱 `ScreenCore.stack()`**: 본문 `chips` 노드를 그린다 — 머리 칩과 같은 칩(K_CHIP, 눌림 `act`·꺼진 칩 모양 `offf/offb/offt`·켜진 색), 폭이 차면 다음 줄로 흘려 쓴다(칩이 칸보다 길면 칸 폭까지). 눌림은 기존 본문 눌림 길 그대로(`mr.N` → `MapCore` 가 역 시트).
+- **엔진 `mapRegionBody`**: 역 칩 꺼진 모양을 엔진이 정한다(`offf:'card2', offb:'border', offt:'text'`). 워커 `route-v2-2026-10-30s353` → ⚠ Cloudflare 재붙여넣기.
+- 시험: ScreenJvmTest(본문 chips 12개 · 줄바꿈 · 눌림 · 꺼진 모양) 560개, map_engine(호선 알약 수 = 역 칩 줄 수 · `mr.N`) 233개. ⚠ 실기기 미확인.
