@@ -22,8 +22,10 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     assert.ok(+/ALL OK \((\d+)\)/.exec(r.stdout)[1] >= 40, '녹화본이 너무 적다');
     assert.ok(!/FAIL/.test(r.stdout), r.stdout.slice(-800));
     console.log('        ' + r.stdout.split('\n').filter(l => /같음|RideLocal:|ALL OK/.test(l)).join(' / '));
-    // s336: 새 규칙(승강장 신호 끊김 승차 · 거리 트리거+버스트 · 종착 고정)을 시뮬레이션에서 녹화한 답 — 새 상태 키도 빠짐없이(-Dstrict=1) 비교한다
-    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', path.join(__dirname, 'fixtures', 'ride_corpus_s336.jsonl')], { env: ENV, encoding: 'utf8' });
+    // s336: 새 규칙(승강장 신호 끊김 승차 · 거리 트리거+버스트 · 종착 고정)을 시뮬레이션(test/sim/multimodal_sim.js)에서 그때그때 서버 JS 로 녹화해 — 새 상태 키도 빠짐없이(-Dstrict=1) 비교한다
+    const s336 = path.join(out, 'ride_corpus_s336.jsonl'), rc = spawnSync('node', [path.join(__dirname, 'sim', 'multimodal_sim.js'), '--record', s336], { env: ENV, encoding: 'utf8' });
+    assert.strictEqual(rc.status, 0, (rc.stderr || rc.stdout || '').slice(0, 800));
+    r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', s336], { env: ENV, encoding: 'utf8' });
     assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1500) + (r.stderr || '').slice(-300));
     assert.ok(+/ALL OK \((\d+)\)/.exec(r.stdout)[1] >= 30, 's336 녹화본이 너무 적다');
     console.log('        s336: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
