@@ -16037,13 +16037,9 @@ function chtBox(parts, col) {
 function chtOfficial(line, data, now) {
   if (!data || !data.offOk) return null;
   var n = data.off && typeof data.off === 'object' ? data.off : null;
-  if (n && n.estimated) return chtBox(chtOffParts(line, n, now), n.suspect ? CHT_WARN : CHT_QUIET);
+  if (n && n.estimated) return n.suspect ? chtBox(chtOffParts(line, n, now), CHT_WARN) : null;               // '\uc815\uc0c1 \uc6b4\ud589 \uc911\uc73c\ub85c \ubcf4\uc5ec\uc694' \ucd94\uc815 \uc0c1\uc790\ub3c4 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc9c0\uc5f0 \uc758\uc2ec\ub9cc)
   if (n) return chtBox(chtOffParts(line, n, now), CHT_ALERT);
-  var at = Number(data.offAt) > 0 ? Number(data.offAt) : now;
-  if (line === '\uacbd\uc758\uc911\uc559\uc120' || line === '\uacf5\ud56d\ucca0\ub3c4') return chtBox([[line + '\uc740(\ub294) \uc11c\uc6b8\uad50\ud1b5\uacf5\uc0ac \ud658\uc2b9\uc5ed \uad00\ub828 \uacf5\uc9c0\ub9cc \uac00\ub054 \uc62c\ub77c\uc640\uc694 \u00b7 \uc9c0\uae08\uc740 \uc5c6\uc5b4\uc694 \u00b7 \uc544\ub798 \uc774\uc6a9\uc790 \uc81c\ubcf4\ub85c \uc54c\ub824 \ub4dc\ub824\uc694', 0]], CHT_QUIET);
-  if (/^[1-8]\ud638\uc120$/.test(line)) return chtBox([[line + ' \uc815\uc0c1 \uc6b4\ud589 \uc911\uc785\ub2c8\ub2e4', 1], [' (' + chtOffAgo(at, now) + ' \ud655\uc778)', 0]], CHT_QUIET);
-  if (/\uc120$/.test(line) || /^(\uacf5\ud56d\ucca0\ub3c4|\uacbd\uc758\uc911\uc559|\uc218\uc778\ubd84\ub2f9|\uc2e0\ubd84\ub2f9|\uacbd\ucd98|\uacbd\uac15|\uc11c\ud574|GTX)/.test(line)) return chtBox([[line + '\uc740(\ub294) \uacf5\uc2dd \uacf5\uc9c0 \uc5f0\ub3d9 \uc804\uc774\uc5d0\uc694 \u00b7 \uc544\ub798 \uc774\uc6a9\uc790 \uc81c\ubcf4\ub85c \uc54c\ub824 \ub4dc\ub824\uc694', 0]], CHT_QUIET);
-  return null;
+  return null;                                                    // s355(YJ): \uc62c\ub77c\uc628 \uacf5\uc9c0\uac00 \uc5c6\uc744 \ub54c\uc758 \uc548\ub0b4 \uc0c1\uc790(\uc815\uc0c1 \uc6b4\ud589 \uc911 \u00b7 \uc5f0\ub3d9 \uc804 \u00b7 \uacf5\uc9c0 \uc5c6\uc74c)\ub294 \uadf8\ub9ac\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc2e4\uc81c \uacf5\uc9c0\u00b7\uc9c0\uc5f0 \uc758\uc2ec\ub9cc \ubcf4\uc778\ub2e4
 }
 // \uc9c0\uc5f0 \uc81c\ubcf4 \uc9d1\uacc4 \ubc30\ub108(\uc6f9 _lrRenderAlert)
 function chtAlert(al) {
@@ -20973,7 +20969,7 @@ function talkScreen(inp, f) {
   }
   var rows = list.slice(-LTK_ROWS).slice(-want), n = rows.length;
   var listH = LTK_ROWS * LTK_ROW_H + (LTK_ROWS - 1) * LTK_ROW_GAP - fold * (LTK_ROW_H + LTK_ROW_GAP);        // \uc6f9 .livetalk-list \ub192\uc774 120 / 95 / 70 / 45
-  var head = [{ t: 'lth', pad: [0, 0, 0, 0], s: '\uc2e4\uc2dc\uac04 \ub300\ud654', tail: '\u203a', dot: '#ff3b30', act: { a: 'call', v: 'tk.open' } }];
+  var head = [{ t: 'lth', pad: [0, 0, 0, 0], s: '\uc2e4\uc2dc\uac04 \ub300\ud654', tail: '\u203a', dot: '#ff3b30', live: true, act: { a: 'call', v: 'tk.open' } }];
   var foldable = Math.min(LTK_MAX_FOLD, Math.max(0, n - 2));                            // \uc6f9 _sceneFit: \uc791\uc740 \ud3f0\uc5d0\uc11c\ub294 \uc624\ub798\ub41c \uc904\ubd80\ud130 \uc811\ub418 2\uc904\uc740 \ub0a8\uae34\ub2e4 \u2014 \uc571\uc774 \uc7b0 \ub0a8\ub294 \uc138\ub85c\ub85c \uba87 \uc904 \uc811\uc744\uc9c0 \uc815\ud558\uace0, \uc5b4\ub290 \uc904\uc774 \uc811\ud790 \uc218 \uc788\ub294\uc9c0(fo)\ub294 \uc5ec\uae30\uc11c \uc815\ud55c\ub2e4
   for (var r = 0; r < n; r++) head.push({ t: 'ltr', pad: [0, 0, 0, r === n - 1 ? 0 : LTK_ROW_GAP], nick: rows[r].nick, s: rows[r].text, time: rows[r].time, fo: r < foldable ? r + 1 : 0 });
   var rest = listH - (n ? n * LTK_ROW_H + (n - 1) * LTK_ROW_GAP : 0);
