@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s351";
+var ENGINE_VERSION = "route-v2-2026-10-30s352";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18568,8 +18568,9 @@ function recoPip(b) {
 // \u2500\u2500 \ubc14\uae65 \uc790\uc6d0(\uc1fc\ud551 \uc0c1\ud488 \ubaa9\ub85d \u00b7 \ub9db\uc9d1 \uc11c\ubc84) \u2014 Worker \uc548\uc5d0\uc11c\ub9cc \ubd80\ub978\ub2e4. \uc2dc\ud5d8\uc740 rtxSetLoaders \ub85c \uac00\uc9dc\ub97c \ub07c\uc6b4\ub2e4 \u2500\u2500
 var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
 var RTX_FOOD_MEM = {};
-var RTX_LOADERS = { shop: null, food: null, ai: null, wx: null };
-function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null, wx: (o && o.wx) || null }; RTX_FOOD_MEM = {}; }
+var RTX_LOADERS = { shop: null, food: null, ai: null, wx: null, pub: null };
+var RTX_ENV = null, RTX_CTX = null;   // s352: Worker \uac00 \ub118\uaca8 \uc900 env\u00b7ctx \u2014 \uacf5\uacf5\ub370\uc774\ud130(handleFoodPub)\ub97c \uac19\uc740 Worker \uc548\uc5d0\uc11c \ubc14\ub85c \ubd80\ub974\ub294 \ub370 \uc4f4\ub2e4
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null, wx: (o && o.wx) || null, pub: (o && o.pub) || null }; RTX_FOOD_MEM = {}; }
 // \u2500\u2500 \u2466 AI \uc704\ub85c \ubb38\uad6c(\uc800\ub141\u00b7\uc57c\uc2dd\u00b7\uc1fc\ud551) \u2014 \uc608\uc804 \uc6f9 _arrAiCopy \uc640 \uac19\uc740 \uc694\uccad\u00b7\uac19\uc740 \uac80\uc0ac(\uc11c\ubc84\uac00 '\uc800\ub141/\uc57c\uc2dd \u00d7 \uba54\ub274'\ubcc4\ub85c \ubbf8\ub9ac \ub9cc\ub4e4\uc5b4 \ub454 \ubb38\uad6c\ub97c \ud558\ub098 \uace8\ub77c \uc900\ub2e4) \u2500\u2500
 var RTX_AI_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 var RTX_BAN_RE = /(\uc815\uce58|\ub300\ud1b5\ub839|\ub300\uc120|\ucd1d\uc120|\ubcf4\uad90|\uc120\uac70|\ud6c4\ubcf4\s*\ub4f1\ub85d|\uad6d\ud68c|\uad6d\uc815|\uc758\uc6d0|\uc5ec\ub2f9|\uc57c\ub2f9|\uc815\ub2f9|\ubbfc\uc8fc\ub2f9|\uad6d\ubbfc\uc758\ud798|\uac1c\ud601\uc2e0\ub2f9|\uc9c4\ubcf4\ub2f9|\uc7a5\uad00|\ub0b4\uac01|\uccad\uc640\ub300|\ud0c4\ud575|\ud2b9\uac80|\uac80\ucc30\s*\uc218\uc0ac|\uacf5\uc218\ucc98|\uad6d\uc815\uac10\uc0ac|\uc2dc\uad6d|\uc9d1\ud68c|\uc2dc\uc704|\uaddc\ud0c4|\ud30c\uc5c5\s*\ud22c\uc7c1|\uc88c\ud30c|\uc6b0\ud30c|\ubcf4\uc218\s*\uc9c4\uc601|\uc9c4\ubcf4\s*\uc9c4\uc601|\uce5c\uc77c|\ubc18\uc77c|\ubc18\uc911|\ud610\uc624|\uc820\ub354\s*\uac08\ub4f1|\uc131\ubcc4\s*\uac08\ub4f1|\ud398\ubbf8|\ud55c\ub0a8|\ud55c\ub140|\uc885\ubd81|\uadf9\uc6b0|\uadf9\uc88c|\uc774\ub150)/;
@@ -18607,24 +18608,66 @@ function rtxLoadShop() {
   if (typeof shopLoad !== 'function') return Promise.resolve(null);
   return shopLoad().then(function (m) { return (m && m.data) ? { data: m.data, cfg: m.cfg || null } : null; }, function () { return null; });
 }
+function rtxHav(la1, lo1, la2, lo2) {
+  var R = 6371000, r = Math.PI / 180, dA = (la2 - la1) * r, dO = (lo2 - lo1) * r;
+  var h = Math.sin(dA / 2) * Math.sin(dA / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dO / 2) * Math.sin(dO / 2);
+  return Math.round(2 * R * Math.asin(Math.min(1, Math.sqrt(h))));
+}
+// s352 (YJ: "\ub9db\uc9d1\ud0ed\uc5d0 \ub098\uc628\ub2e4\uba74 \uac70\uae30\uc11c \ucc44\ud0dd \u2014 \uc804\uad6d\uc774 \uadf8\ub807\uac8c"): \ub9db\uc9d1 \ud0ed\uc774 \uc4f0\ub294 \uacf5\uacf5\ub370\uc774\ud130(/food-pub \uacfc \uac19\uc740 \ud589)\ub97c {n,c,a,d} \ub85c \ubc14\uafbc\ub2e4.
+function rtxPubRows(rows, loc) {
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i]; if (!r || typeof r !== 'object') continue;
+    var nm = rtxStr(r.bizesNm, 60); if (!nm) continue;
+    var la = Number(r.lat), lo = Number(r.lon);
+    var c = (rtxStr(r.indsMclsNm, 40) + ' ' + rtxStr(r.indsSclsNm, 40)).replace(/\s+/g, ' ').trim();
+    out.push({ n: nm, c: c, a: rtxStr(r.rdnmAdr, 120) || rtxStr(r.lnoAdr, 120), d: (isFinite(la) && isFinite(lo) && la && lo) ? rtxHav(loc.lat, loc.lng, la, lo) : null });
+  }
+  return out;
+}
+function rtxLoadPub(loc) {
+  if (RTX_LOADERS.pub) return Promise.resolve().then(function () { return RTX_LOADERS.pub(loc); }).then(function (rows) { return rtxPubRows(rows, loc); }, function () { return []; });
+  if (!RTX_ENV || typeof handleFoodPub !== 'function' || typeof Request !== 'function') return Promise.resolve([]);
+  var guard = new Promise(function (res) { setTimeout(function () { res(null); }, 4000); });
+  var job = Promise.resolve().then(function () {
+    return handleFoodPub(new Request('https://reco.local/food-pub?lat=' + loc.lat + '&lng=' + loc.lng), RTX_ENV, RTX_CTX);
+  }).then(function (res) { return res && res.ok ? res.json() : null; })
+    .then(function (j) { var it = j && j.response && j.response.body && j.response.body.items; return rtxPubRows(it, loc); })
+    .catch(function () { return []; });
+  return Promise.race([job, guard]).then(function (v) { return v || []; });
+}
+// \ub450 \ubaa9\ub85d\uc744 \uc774\ub984+\uc8fc\uc18c \uc55e\ubd80\ubd84\uc73c\ub85c \uacb9\uce68 \uc5c6\uc774 \ud569\uce5c\ub2e4(\uc11c\ubc84 \ucabd \uba3c\uc800)
+function rtxMergeFood(a, b) {
+  var seen = {}, out = [];
+  var add = function (x) { var k = (x.n || '').replace(/\s+/g, '') + '|' + (x.a || '').slice(0, 8); if (seen[k]) return; seen[k] = 1; out.push(x); };
+  (a || []).forEach(add); (b || []).forEach(add);
+  return out;
+}
 function rtxLoadFood(loc) {
-  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; });
+  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; }).then(function (srv) {
+    // \uc2dc\ud5d8\uc6a9 loader \ub3c4 \uacf5\uacf5\ub370\uc774\ud130 loader \uac00 \uc788\uc73c\uba74 \uac19\uc774 \ud569\uce5c\ub2e4
+    if (!RTX_LOADERS.pub) return srv;
+    return rtxLoadPub(loc).then(function (pb) { var m = rtxMergeFood(srv, pb); return m.length ? m : null; });
+  });
   var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
   if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
   if (typeof fetch !== 'function') return Promise.resolve(null);
-  // \u2605 s351 (YJ: "\uce74\ud398\ub098 \ub9db\uc9d1\uc740 \ubb34\uc870\uac74 \uc5f0\ub3d9"): \ud55c \ubc88\uc5d0 \ubabb \ubc1b\uc73c\uba74(1.8\ucd08 \uc81c\ud55c\uc5d0 \uac78\ub9b0 \ub290\ub9b0 \uc751\ub2f5 \u00b7 \ube48 \ubaa9\ub85d) \ubc18\uacbd\uc744 \ub113\ud600 \ud55c \ubc88 \ub354 \u2014 \uad6c\uccb4\uc801\uc778 \uac00\uac8c\ub97c \ubabb \uace0\ub974\uace0 \uae00\ub9cc \ub098\uac00\ub294 \uc77c\uc744 \uc904\uc778\ub2e4.
+  // \u2605 s351/s352: \ub9db\uc9d1 \ud0ed\uacfc \uac19\uc740 \ub450 \uc790\ub8cc(\ub9db\uc9d1 \uc11c\ubc84 r=1500 limit=400 + \uacf5\uacf5\ub370\uc774\ud130)\ub97c \ud568\uaed8 \ubc1b\uc544 \ud569\uce5c\ub2e4. \uc11c\ubc84\uac00 \ub290\ub9ac\uac70\ub098 \ube44\uc5b4\ub3c4 \uacf5\uacf5\ub370\uc774\ud130\ub85c \ucc44\uc6b4\ub2e4.
   var one = function (r, ms) {
     var ac = (typeof AbortController === 'function') ? new AbortController() : null;
     var tm = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
-    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=200', ac ? { signal: ac.signal } : undefined)
+    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=400', ac ? { signal: ac.signal } : undefined)
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (d) {
         if (tm) clearTimeout(tm);
-        return (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+        return (d && Array.isArray(d.items)) ? d.items.slice(0, 400).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
       })
       .catch(function () { if (tm) clearTimeout(tm); return []; });
   };
-  return one(800, 3000).then(function (it) { return it.length ? it : one(1500, 2000); }).then(function (it) {
+  var srvP = one(1500, 3000).then(function (it) { return it.length ? it : one(3000, 2000); });
+  return Promise.all([srvP, rtxLoadPub(loc)]).then(function (r2) {
+    var it = rtxMergeFood(r2[0], r2[1]);
     if (!it.length) return null;
     if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
     RTX_FOOD_MEM[key] = { ts: now, items: it };
@@ -18641,7 +18684,8 @@ function rtxLoadWx(loc) {
 }
 
 // \u2500\u2500 Worker \uc5f0\uacb0\ubd80 \u2014 POST /reco-text {\u2026} (handleFetch \uc5d0 \uae38\uc744 \ub454\ub2e4) \u2500\u2500
-function handleRecoText(request) {
+function handleRecoText(request, env, ctx) {
+  if (env) { RTX_ENV = env; RTX_CTX = ctx || null; }
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
   if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ ok: false, error: 'POST only' }), { status: 405, headers: H }));
@@ -25507,7 +25551,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/ride-alert") return handleRideAlert(request);
   if (url.pathname === "/notif-policy") return handleNotifPolicy(request);
   if (url.pathname === "/arrive-reco") return handleArriveReco(request);
-  if (url.pathname === "/reco-text") return handleRecoText(request);
+  if (url.pathname === "/reco-text") return handleRecoText(request, env, ctx);
   if (url.pathname === "/commute-alarm") return handleCommuteAlarm(request);
   if (url.pathname === "/home-brief") return handleHomeBrief(request);
   if (url.pathname === "/next-train") return handleNextTrain(request, env);
