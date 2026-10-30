@@ -1021,6 +1021,7 @@ public class ScreenView extends View {
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
     private boolean lbDrawn; private long lbT0;
+    private boolean liveDrawn; private int liveCol; private android.graphics.RadialGradient liveSh; private final Matrix liveM = new Matrix();
     /** 불러오는 중 막대: 제목 · 0→100% 로 차오르는 막대 · 퍼센트. 받는 시간은 알 수 없어 시간으로 천천히 차오르게 그린다(99% 에서 멈춰 기다리다, 받으면 이 줄이 내용으로 바뀐다). 새 객체 없이 그린다. */
     private void drawLbar(Canvas cv, ScreenCore.Item it) {
         long now = SystemClock.uptimeMillis();
@@ -2145,7 +2146,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; liveDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -2302,7 +2303,7 @@ public class ScreenView extends View {
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (!lbDrawn) lbT0 = 0L;                                                                                                            // 불러오는 막대가 안 보이면 다음에 보일 때 0% 부터
-        if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || liveDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -3394,7 +3395,21 @@ public class ScreenView extends View {
     /** 홈 '실시간 대화' 머리줄: 색 점 + 굵은 제목 + 작은 꼬리 글(›). 글·색은 엔진이 정했다. */
     private void drawLth(Canvas cv, ScreenCore.Item it) {
         if (it == pressed) { rf.set(it.x, it.y, it.x + it.w, it.y + it.h); p.setStyle(Paint.Style.FILL); p.setColor(0x14808080); cv.drawRoundRect(rf, 6f, 6f, p); }
-        p.setStyle(Paint.Style.FILL); p.setColor(cc(it.dotC, 0xFFFF3B30)); cv.drawCircle(it.x + ScreenCore.LTH_DOT / 2f, it.y + (it.h - 4f) / 2f, ScreenCore.LTH_DOT / 2f, p);
+        float dcx = it.x + ScreenCore.LTH_DOT / 2f, dcy = it.y + (it.h - 4f) / 2f, dr = ScreenCore.LTH_DOT / 2f;
+        int dcol = cc(it.dotC, 0xFFFF3B30);
+        p.setStyle(Paint.Style.FILL);
+        if (it.on) {                                                                                            // 실시간 점: 안쪽은 숨 쉬듯 밝아졌다 어두워지고, 바깥 그라데이션 고리가 번지며 잦아든다(1.8초 주기)
+            long ms = SystemClock.uptimeMillis();
+            float ph = (ms % 1800L) / 1800f, br = 0.5f - 0.5f * (float) Math.cos(ph * 6.2831855f);              // 0→1→0 부드러운 숨
+            float hr = dr * (1.2f + 2.6f * ph), ha = (1f - ph) * (1f - ph);                                     // 번지는 고리: 커질수록 옅어진다
+            if (liveSh == null || liveCol != dcol) { liveCol = dcol; liveSh = new android.graphics.RadialGradient(0f, 0f, 1f, new int[] { dcol & 0x00FFFFFF | 0xB0000000, dcol & 0x00FFFFFF | 0x55000000, dcol & 0x00FFFFFF }, new float[] { 0f, 0.45f, 1f }, Shader.TileMode.CLAMP); }
+            liveM.reset(); liveM.setScale(hr, hr); liveM.postTranslate(dcx, dcy); liveSh.setLocalMatrix(liveM);
+            p.setShader(liveSh); p.setAlpha(Math.round(255f * ha)); cv.drawCircle(dcx, dcy, hr, p); p.setShader(null);
+            float gr = dr * 2.1f; liveM.reset(); liveM.setScale(gr, gr); liveM.postTranslate(dcx, dcy); liveSh.setLocalMatrix(liveM);        // 점 둘레의 은은한 후광(숨과 함께)
+            p.setShader(liveSh); p.setAlpha(Math.round(255f * (0.35f + 0.5f * br))); cv.drawCircle(dcx, dcy, gr, p); p.setShader(null);
+            p.setColor(dcol); p.setAlpha(Math.round(255f * (0.62f + 0.38f * br))); cv.drawCircle(dcx, dcy, dr * (0.92f + 0.12f * br), p); p.setAlpha(255);
+            liveDrawn = true;
+        } else { p.setColor(dcol); cv.drawCircle(dcx, dcy, dr, p); }
         setText(ScreenCore.LTH_TITLE, true, pal[R_TEXT]);
         cv.drawText(it.t1, it.f1, base(it.y, it.h - 4f, 0), tp);
         if (it.t2.length() > 0) { setText(ScreenCore.LTH_TITLE, false, pal[R_SUB]); cv.drawText(it.t2, it.f2, base(it.y, it.h - 4f, 0), tp); }
