@@ -72,6 +72,15 @@ public final class SceneArt {
         }
     }
 
+    /** 바닥 가로줄(타일 세로 간격)의 y 목록. 평소 카드 안(i=1..n)은 원근 식 그대로이고, 카드가 늘어나 보이는 아래쪽(H~H+ext)은 **마지막 간격 그대로 같은 간격**으로 이어 간다(타일 세로 크기가 같게). */
+    public static double[] gridRows(double top, double span, double pw, int n, double H, double ext) {
+        java.util.ArrayList<Double> ys = new java.util.ArrayList<>();
+        for (int i = 1; i <= n; i++) ys.add(top + Math.pow(i / (double) n, pw) * span);
+        double last = ys.get(ys.size() - 1), gap = n > 1 ? last - ys.get(ys.size() - 2) : span / n;
+        for (double y = last + gap; y <= H + ext && gap > 2; y += gap) ys.add(y);
+        double[] r = new double[ys.size()]; for (int i = 0; i < r.length; i++) r[i] = ys.get(i); return r;
+    }
+
     public static Bg buildBG(SceneCv root, Pal L, Geom g, double dpr, String season, boolean dark) {
         double W = g.W, H = g.H, hy = g.hy; int tw = (int) Math.ceil(W * 1.7);
         if (L.place != null && !"street".equals(L.place)) return ScenePlaces.build(root, L, g, dpr, season, dark);
@@ -127,7 +136,7 @@ public final class SceneArt {
         gr = c.linear(0, g.nearTop, 0, H).stop(0, shade(walk, .06)).stop(1, shade(walk, -.1)); c.fillGrad(gr); c.fillRect(0, g.nearTop, W, H + g.ext - g.nearTop);                                     // 카드가 늘어날 때 보일 아래쪽(H~H+ext)까지 같은 바닥을 이어 그린다
         c.fillStyle(shade(walk, .2)); c.fillRect(0, g.nearTop - 1, W, 2.2); c.fillStyle("rgba(0,0,0,.18)"); c.fillRect(0, g.nearTop + 1.2, W, 1.4);
         c.strokeStyle("rgba(0,0,0,.09)"); c.lineWidth(1);
-        for (i = 1; i < 60; i++) { double yy = g.nearTop + Math.pow(i / 5.0, 1.5) * (H - g.nearTop); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        for (double yy : gridRows(g.nearTop, H - g.nearTop, 1.5, 5, H, g.ext)) { c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         for (i = -8; i <= 8; i++) { c.beginPath(); c.moveTo(W / 2 + i * 16, g.nearTop); c.lineTo(W / 2 + i * (16 + 28 * (H + g.ext - g.nearTop) / (H - g.nearTop)), H + g.ext); c.stroke(); }       // 같은 기울기로 끝까지
         if (wet) for (i = 0; i < 5; i++) {
             double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 18);
