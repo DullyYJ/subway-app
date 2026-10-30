@@ -273,7 +273,7 @@ public class ScreenView extends View {
         boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
         // 키 기준 갱신: 새 데이터로 목록이 바뀌어도 보던 글(엔진이 준 고유 id)이 같은 자리에 남도록 위치를 맞춘다
         String ancKey = null; float ancOff = 0f;
-        if (keepScroll && !stick && lay != null && scrollY > 1f) {
+        if (keepScroll && !stick && lay != null && scrollY > 1f && editKey == null) {          // s346: 글자를 치는 중엔 후보 줄이 바뀌어도 화면이 그 줄을 따라 움직이지 않는다
             for (ScreenCore.Item q : lay.body) {
                 if (q.y + q.h <= scrollY) continue;
                 String k = anchorKey(q);
@@ -3836,15 +3836,31 @@ public class ScreenView extends View {
         };
         post(r); postDelayed(r, 120L); postDelayed(r, 350L);
     }
-    /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). */
+    /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). s346: 입력줄이면 바로 아래 후보 줄까지 보이게 — 단 입력칸이 위로 밀려 나가지는 않는다. */
     private void ensureEditVisible(ScreenCore.Item f) {
         if (lay == null || f == null || editInFoot) return;
         float vh = bodyViewH();
         if (vh <= f.h + 16f) return;
-        if (f.y + f.h + 8f > scrollY + vh) scrollY = f.y + f.h + 8f - vh;
-        if (f.y - 8f < scrollY) scrollY = f.y - 8f;
-        scrollY = ScreenCore.clamp(scrollY, lay.bodyMaxScroll(vh));
-        flingY.forceFinished(true);
+        float bottom = f.y + f.h + 8f;
+        if (f.kind == ScreenCore.K_INBAR) { float sb = sugBottom(f); if (sb > 0f) bottom = Math.max(bottom, sb + 8f); }
+        float want = scrollY;
+        if (bottom > want + vh) want = bottom - vh;
+        if (f.y - 8f < want) want = f.y - 8f;
+        want = ScreenCore.clamp(want, lay.bodyMaxScroll(vh));
+        if (Math.abs(want - scrollY) > 0.5f) { scrollY = want; flingY.forceFinished(true); }
+    }
+    /** 입력줄 바로 아래에 이어 붙은 후보 줄(K_SUG)들의 맨 아래(dp). 없으면 0. */
+    private float sugBottom(ScreenCore.Item f) {
+        float end = 0f, edge = f.y + f.h;
+        boolean any = true;
+        while (any) {
+            any = false;
+            for (ScreenCore.Item q : lay.body) {
+                if (q.kind != ScreenCore.K_SUG || q.y + q.h <= end || q.y < edge - 1f || q.y - edge > 30f) continue;
+                end = q.y + q.h; edge = end; any = true; break;
+            }
+        }
+        return end;
     }
     private void syncEditor() {
         if (editKey == null || editor == null) return;
@@ -3852,7 +3868,15 @@ public class ScreenView extends View {
         ViewGroup par = getParent() instanceof ViewGroup ? (ViewGroup) getParent() : null;
         if (f == null || par == null || getVisibility() != View.VISIBLE) { endEdit(); return; }
         float topDp = editInFoot ? footTop() + f.y : lay.headH + f.y - scrollY;
-        if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { if (SystemClock.uptimeMillis() - editBeganAt < 600L) return; endEdit(); return; }      // 막 시작한 때엔 크기가 따라오는 중이라 닫지 않는다     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)
+        if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) {
+            if (SystemClock.uptimeMillis() - editBeganAt < 600L) return;
+            if (mode == 0 && flingY.isFinished() && SystemClock.uptimeMillis() - downT > 2500L) {                                                                // s346: 손가락이 닿은 게 아니면(키보드가 오르내리며 크기가 바뀐 것) 키보드를 내리지 말고 칸을 다시 보이게 한다
+                ensureEditVisible(f);
+                topDp = lay.headH + f.y - scrollY;
+                if (!(topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { invalidate(); }
+                else { endEdit(); return; }
+            } else { endEdit(); return; }
+        }      // 막 시작한 때엔 크기가 따라오는 중이라 닫지 않는다     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)
         boolean ib = f.kind == ScreenCore.K_INBAR;
         float exDp = ib ? (f.dotC != null ? f.textX : f.ix + 14f) : f.x + 13f, ewDp = ib ? (f.dotC != null ? f.ix + f.iw - 8f - f.textX : f.iw - 28f) : f.w - 26f;
         int l = getLeft() + Math.round(exDp * dpr), t = getTop() + Math.round(topDp * dpr);
