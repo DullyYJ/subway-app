@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s349";
+var ENGINE_VERSION = "route-v2-2026-10-30s350";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -17675,7 +17675,7 @@ function handleCommuteAlarm(request) {
 //   \ub3cc\uc544\uc628 \uc81c\ubaa9\u00b7\ubcf8\ubb38\u00b7\uba54\ub274\u00b7\uac00\uac8c\ub97c \uadf8\ub300\ub85c \ubcf4\uc5ec\uc900\ub2e4. (\uc791\uc740 \ud654\uba74(PiP) \ubb38\uad6c \u00b7 \uc624\ubc84\ub808\uc774 \uad11\uace0 \uc904\uc740 2\ub2e8\uacc4, \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30 \u00b7 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30\ub294 3\ub2e8\uacc4\uc5d0\uc11c \uc5d4\uc9c4\uc73c\ub85c \uc654\ub2e4.)
 //   \uc2dc\uac04\uc740 \ud55c\uad6d\uc2dc\uac04 \uae30\uc900(\uc608\uc804 \uc6f9\uc740 \uae30\uae30 \uc2dc\uac04\ub300; \ud55c\uad6d \uc571\uc774\ub77c \uac19\ub2e4). \ubb34\uc791\uc704\ub294 \uc528\uc557(seed)\uc73c\ub85c \uc815\ud574 \uac19\uc740 \uc785\ub825\uc774\uba74 \uac19\uc740 \uacb0\uacfc(\uc2dc\ud5d8\uc774 \uac00\ub2a5\ud558\ub2e4).
 //
-// \ucd9c\ub825\uc5d0\ub294 \ub354\ud574\uc11c pip:{title,lines}(\uc791\uc740 \ud654\uba74 \ubb38\uad6c) \u00b7 ad:{k,a,b,m,pn,piIdx}|null(\uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904) \ub3c4 \ub4e4\uc5b4 \uc788\ub2e4(\uc54c\ub9bc \ubcf8\ubb38 \uadf8\ub300\ub85c \uc4f8 \ub54c).
+// \ucd9c\ub825\uc5d0\ub294 \ub354\ud574\uc11c pip:{title,lines}(\uc791\uc740 \ud654\uba74 \ubb38\uad6c) \u00b7 ad:{k,a,b,m,q,pn,piIdx}|null (q = \uc9c0\ub3c4\uc5d0\uc11c \ucc3e\uc744 \ub9d0 \u2014 \uac00\uac8c \uc774\ub984 \u00b7 \uac00\uac8c\ub97c \ubabb \uace8\ub790\uc73c\uba74 "<\uba54\ub274> \ub9db\uc9d1"/"\uce74\ud398")(\uc624\ubc84\ub808\uc774 \ucd94\ucc9c \uc904) \ub3c4 \ub4e4\uc5b4 \uc788\ub2e4(\uc54c\ub9bc \ubcf8\ubb38 \uadf8\ub300\ub85c \uc4f8 \ub54c).
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) \u2192 { v:1, pip } \u2014 \ubcf8\ubb38 \ud55c \uc904\uc774 AI \ubb38\uad6c\ub85c \ubc14\ub010 \uacbd\uc6b0 \uc791\uc740 \ud654\uba74 \ubb38\uad6c\ub9cc \ub2e4\uc2dc \ub9cc\ub4e0\ub2e4.
 // 3\ub2e8\uacc4(2026-10-19): \u2464 \ucfe0\ud321 \uc0c1\ud488 \uace0\ub974\uae30(pickShop:1 + shopRecent:[\uc774\ub984\u2026] \u2192 \uc5d4\uc9c4\uc774 \uc1fc\ud551 \uc11c\ubc84 \ubaa9\ub85d\uc5d0\uc11c \uace8\ub77c shopItem:{n,u,i,_cat,_t} \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \uace0\ub974\uba74 shopMiss:true)
 //   \u2465 \ub3c4\ucc29\uc9c0 \uac00\uac8c \ubaa9\ub85d \ubc1b\uae30(foodPref:'server' + loc:{lat,lng}=\uc5ed\u00b7\uc815\ub958\uc7a5 \uc88c\ud45c \u2192 \uc5d4\uc9c4\uc774 \ub9db\uc9d1 \uc11c\ubc84\uc5d0\uc11c \ubc1b\uc544 foods:[{n,c,a,d}] \ub85c \ub3cc\ub824\uc900\ub2e4; \ubabb \ubc1b\uc73c\uba74 \uc571\uc774 \ubcf4\ub0b8 food \ub97c \uc4f4\ub2e4)
@@ -18152,7 +18152,16 @@ function rtxAd(a, slot, destStn){
     if(sl !== 'morning' && a.spots && a.spots.length){ nm = a.spots[0]; info = find(nm); byMenu = true; }
     else if(pl && pl.n){ nm = pl.n; info = pl; }
     else if(a.spots && a.spots[0]){ nm = a.spots[0]; info = find(nm); byMenu = (sl !== 'morning'); }
-    if(!nm) return null;
+    if(!nm){
+      // \u2605 2026-10-30 s350 (YJ: "\ucd94\ucc9c\uc774 \ub098\uc640\uc11c \ub20c\ub800\ub354\ub2c8 \uc774\uc0c1\ud55c \uae00\uc790(\ud83d\ude87 \ud558\ucc28 6\ubd84 \uc804 \u00b7 \uc544\ub77c \ud83c\udf7d\ufe0f)\uac00 \uce74\uce74\uc624\ub9f5 \uac80\uc0c9\ucc3d\uc5d0 \ub4e4\uc5b4\uac04\ub2e4 \u2014 \ucd94\ucc9c\ud574 \uc8fc\ub294 \uc2dd\ub2f9\u00b7\uce74\ud398\ub97c \ubcf4\uc5ec\uc918"):
+      //   \ub3c4\ucc29\uc9c0 \uc8fc\ubcc0 \uac00\uac8c \ubaa9\ub85d\uc744 \ubabb \ubc1b\uc544 \uad6c\uccb4\uc801\uc778 \uac00\uac8c\ub97c \ubabb \uace8\ub790\uc5b4\ub3c4 \uc904\uc740 \ub9cc\ub4e0\ub2e4 \u2014 [\ubcf4\uae30]\ub294 \uc9c0\ub3c4\uc5d0\uc11c '<\uba54\ub274> \ub9db\uc9d1'(\uc544\uce68\uc740 '\uce74\ud398')\uc744 \ub3c4\ucc29\uc9c0 \uc88c\ud45c \uadfc\ucc98\ub85c \ucc3e\ub294\ub2e4. \uc548\ub0b4 \ubb38\uad6c(\uc81c\ubaa9)\ub97c \uac80\uc0c9\uc5b4\ub85c \uc4f0\uc9c0 \uc54a\ub294\ub2e4.
+      var cafeS = (sl === 'morning'), wd = clean(a.menu || '');
+      var qS = cafeS ? '\uce74\ud398' : (wd ? wd + ' \ub9db\uc9d1' : '\ub9db\uc9d1');
+      var dS = '';
+      try{ if(typeof rtxHook === 'function') dS = String(rtxHook(sl, a.cx, wd).t || '').replace(/\s*\uc5b4\ub54c\uc694\??$/, '').trim(); }catch(e){}
+      dS = clean(dS ? dS + ((wd && dS.indexOf(wd) < 0) ? ', ' + wd + ' \uc5b4\ub54c\uc694?' : '') : (wd ? wd + ' \uc5b4\ub54c\uc694?' : (cafeS ? '\ub0b4\ub9ac\uc790\ub9c8\uc790 \uadfc\ucc98 \uce74\ud398\uc5d0 \ub4e4\ub7ec\ubcf4\uc138\uc694' : '\ub0b4\ub9ac\ub294 \uae38\uc5d0 \ud55c \ub07c \ucc59\uae30\uc138\uc694')));
+      return { k: cafeS ? 'cafe' : 'food', a: clean((destStn ? destStn + ' ' : '\uadfc\ucc98 ') + qS), b: dS, m: rtxTeaser(sl, a.cx), go: cafeS ? '\uce74\ud398 \ubcf4\uae30' : '\ub9db\uc9d1 \ubcf4\uae30', q: qS, pn: '', piIdx: -1 };
+    }
     var catTail = info ? String(info.c || '').split('>').pop().trim() : '';
     var word = (sl === 'morning' || byMenu) ? (a.menu || catTail) : (catTail || a.menu || '');
     var hk = '';
@@ -18175,7 +18184,7 @@ function rtxAd(a, slot, destStn){
     } else {
       d += (/[\uc694\uc8e0\ub2e4]$/.test(d) ? '. ' : ', ') + word + ' \uc5b4\ub54c\uc694?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' \u00b7 ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn\u00b7pi: [\ub9db\uc9d1 \ubcf4\uae30]\uac00 \uc571\uc5d0\uc11c \uadf8 \uac00\uac8c\ub97c \uc5f4 \ub54c \uc4f4\ub2e4
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' \u00b7 ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), q: clean(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn\u00b7pi: [\ub9db\uc9d1 \ubcf4\uae30]\uac00 \uc571\uc5d0\uc11c \uadf8 \uac00\uac8c\ub97c \uc5f4 \ub54c \uc4f4\ub2e4
   }catch(e){ return null; }
 }
 
