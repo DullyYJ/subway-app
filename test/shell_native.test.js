@@ -865,7 +865,7 @@ function findAndroidJar() {
     assert.ok(/\\"cmi\\":1,\\"cmf\\":"\)\.append\(CmCore\.inlineFacts\(st\)\)/.test(sh) || /cmi.{0,12}1.{0,20}cmh.{0,12}1.{0,30}cmf.{0,20}CmCore\.inlineFacts\(st\)/.test(sh), '설정 요청에 새 앱 표시(cmi)와 출퇴근 기기 사실(cmf)을 싣는다');
     assert.ok(/public static volatile String inlX/.test(cm) && /public void focusInline\(/.test(cm) && /public int onInline\(/.test(cm) && /public boolean endInline\(/.test(cm) && /v\.startsWith\("pk\.save\."\)/.test(cm) && /"pk\.n"\.equals\(v\)/.test(cm), '고치는 중인 칸 · 글자 · 후보를 요청에 싣고, 저장/지하철 후보 눌림을 받는다');
     assert.ok(/cmInlineOwns\(a\)/.test(a) && /private void cmInlineAct\(/.test(a) && /private void cmText\(final String k/.test(a) && /key\.startsWith\("cmp\."\)\) \{ cmText\(key\.substring\(4\)/.test(a) && /a\.v\.startsWith\("pk\."\)\) \{ cmInlineAct\("call", a\.v, null, false, q\)/.test(a), '설정 화면의 눌림 · 입력 이벤트가 출퇴근 패널로 간다');
-    assert.ok(/private void cmReload\(\)/.test(a) && /present\(v, txt, true\);/.test(a.slice(a.indexOf('private void cmReload()'), a.indexOf('private void cmReload()') + 900)), '화면을 새로 받아도 위치 · 입력은 그대로(keep)');
+    assert.ok(/private void cmReload\(\)/.test(a) && /present\(v, txt, true\);/.test(a.slice(a.indexOf('private void cmReload()'), a.indexOf('private void cmReload()') + 1600)), '화면을 새로 받아도 위치 · 입력은 그대로(keep)');
     assert.ok(/if \("tp"\.equals\(cm\.sub\)\) \{ cm\.pop = true; openSetPage\("cm"\); cmFromInline = true; return; \}/.test(a) && /if \(cmFromInline && cm\.sub\.length\(\) == 0\) \{ cmFromInline = false; cm\.pop = false; closeSheet\(\); cmReload\(\); return; \}/.test(a), '시각 고르기만 팝업으로 열고 마치면 닫고 설정 화면을 새로');
     assert.ok(/cm\.blurInline\(store, k, typed\)/.test(a) && /postDelayed[\s\S]{0,500}350L/.test(a.slice(a.indexOf('private void cmText('), a.indexOf('private void cmText(') + 1800)), '입력칸을 벗어나면 친 글자를 자동 저장한다(후보 줄을 누르는 동안은 기다림) — s281');
   });
@@ -1026,11 +1026,19 @@ function findAndroidJar() {
       assert.ok(!/tpPreAt/.test(aa) && /private final java\.util\.HashSet<String> tpFly/.test(aa) && /if \(tpCache\.containsKey\(url\) \|\| !tpFly\.add\(url\)\) continue;/.test(aa) && /warm\(r\.body\); tpPut\(url, r\.body\)/.test(aa), 's346: 시각 고르기 팝업 화면은 2분 제한 없이 바뀔 때마다(주소가 다르면) 미리 받아 두고, 받는 즉시 읽어 둔다');
       assert.ok(/tpCache\.get\(ShellCore\.pageUrlCm\(cm\.pageFacts\(store\)\)\); if \(hit0 != null\) \{ present\(sheetView, hit0, true\); tpPresented = hit0; \}/.test(aa) && /try \{ sheet\.show\(\); \} catch \(Throwable t\) \{ toast\("설정을 열지 못했어요"\); return; \}\s*loadSetPage\(\);\s*return;/.test(aa) && /if \(!hit\.equals\(tpPresented\)\) present\(sheetView, hit, true\); tpPresented = null; return;/.test(aa), 's346: 미리 받은 시각 고르기 화면은 창을 열기 전에 올려 열리는 순간 글이 있다(흰 빈 상자 없음)');
       assert.ok(/tpPopH > 0f \? tpPopH : 390f/.test(aa) && /tpPopH = Math\.min\(dp, sh \* 0\.9f\)/.test(aa), 's346: 시각 고르기 창은 지난번 높이로 처음부터 열려 열린 뒤 커지지 않는다');
-      assert.ok(/private void settingsKb\(boolean on\)/.test(aa) && /SOFT_INPUT_ADJUST_RESIZE/.test(aa.slice(aa.indexOf('private void settingsKb'), aa.indexOf('private void settingsKb') + 900)) && /hdr\.setVisibility\(View\.GONE\); tabs\.setVisibility\(View\.GONE\)/.test(aa) && /main\.postDelayed\(kbRestoreRun, 300L\)/.test(aa) && /settingsKb\(on\)/.test(aa), 's346: 설정 화면에서 글자를 칠 땐 창을 밀지 않고 줄이며(위 문구줄·아래 탭은 접는다), 칸을 떠나면 0.3초 뒤 되돌린다');
+      assert.ok(/private void settingsKb\(boolean on\)/.test(aa) && /SOFT_INPUT_ADJUST_RESIZE/.test(aa.slice(aa.indexOf('private void settingsKb'), aa.indexOf('private void settingsKb') + 900)) && !/hdr\.setVisibility\(View\.GONE\)/.test(aa) && /main\.postDelayed\(kbRestoreRun, 300L\)/.test(aa) && /settingsKb\(on\)/.test(aa), 's346: 설정 화면에서 글자를 칠 땐 창을 밀지 않고 줄이며(위 문구줄·아래 탭은 접는다), 칸을 떠나면 0.3초 뒤 되돌린다');
       assert.ok(/if \(kbEdit\) \{ main\.removeCallbacks\(kbRestoreRun\); kbRestoreRun\.run\(\); \}\s*applyIme\(\);/.test(aa), 's346: 탭을 바꾸면 접어 둔 줄을 곧바로 되돌린다');
       assert.ok(/scrollY > 1f && editKey == null\)/.test(sv), 's346: 글자를 치는 중엔 키 기준 위치 맞춤을 하지 않는다(후보 줄이 바뀌어도 화면이 따라 움직이지 않음)');
       assert.ok(/float sb = sugBottom\(f\); if \(sb > 0f\) bottom = Math\.max\(bottom, sb \+ 8f\)/.test(sv) && /if \(f\.y - 8f < want\) want = f\.y - 8f;/.test(sv) && /private float sugBottom\(ScreenCore\.Item f\)/.test(sv), 's346: 입력줄 바로 아래 후보 줄까지 보이게 스크롤하되 입력칸은 위로 밀려 나가지 않는다');
       assert.ok(/if \(mode == 0 && flingY\.isFinished\(\) && SystemClock\.uptimeMillis\(\) - downT > 2500L\) \{\s*\/\/ s346[^\n]*\n\s*ensureEditVisible\(f\);/.test(sv), 's346: 키보드로 크기가 바뀌어 칸이 밀렸을 땐 키보드를 내리지 않고 칸을 다시 보이게 한다(손으로 민 때는 예전처럼 끝낸다)');
+    }
+    {
+      const aa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+      assert.ok(/public float shy, shh;/.test(sc) && /private java\.util\.HashMap<String, float\[\]> shSnap\(\)/.test(sv) && /if \(shOld != null\) shApply\(shOld\);/.test(sv) && /editKey != null && lay != null \? shSnap\(\) : null/.test(sv), 's347: 글자를 치는 중 화면이 바뀌면 옛 자리를 적어 두었다가 새 자리로 미끄러진다');
+      assert.ok(/sdy \+= bit\.shy \* sr; gh \+= bit\.shh \* sr;/.test(sv) && /SH_MS = 240f/.test(sv) && /if \(shOn\) \{ if \(shE\(now\) >= 1f\) shOn = false; else \{ spAnim = true; fmg = Math\.max\(fmg, shMax\)/.test(sv) && /sdy \+= foldDy/.test(sv), 's347: 아래 칸은 옛 자리에서 240ms 로 미끄러지고 틀 높이도 같이 변하며, 접기 애니메이션과 합쳐진다');
+      assert.ok(/smoothScrollTo\(want\)/.test(sv) && /ensureEditVisible\(f, true\)/.test(sv) && /if \(editKey != null\) syncLater\(\);\s*\/\/ s347/.test(sv), 's347: 후보 줄 때문에 스크롤할 때도 부드럽게, 글자 칸 위의 입력칸이 따라온다');
+      assert.ok(/w == ow && oh > 0 && lay != null && screen != null && "settings"\.equals\(screen\.id\)/.test(sv), 's347: 키보드가 오르내리며 높이만 바뀔 땐 설정 화면 전체를 다시 배치하지 않는다');
+      assert.ok(/v\.springChanges\(400L\);[^\n]*\n\s*present\(v, txt, true\);/.test(aa), 's347: 새 후보 줄은 스프링으로 나타난다');
     }
     {
       const mm = fs.readFileSync(N('MetroMapView.java'), 'utf8'), aa = fs.readFileSync(N('ShellActivity.java'), 'utf8');
