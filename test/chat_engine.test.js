@@ -112,11 +112,10 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
 {
   const head = (line, d) => chat({ sel: line }, Object.assign({ r: [] }, d)).head.filter(n => n.t === 'box');
   ok(head('2호선', { offOk: 0 }).length === 0, '공지 조회가 안 됐으면 배너 없음');
-  const ok2 = head('2호선', { offOk: 1, off: null, offAt: NOW - 3 * MIN })[0];
-  ok(ok2.s === '2호선 정상 운행 중입니다 (3분 전 확인)' && JSON.stringify(ok2.hl) === '[[0,14]]' && /142,142,147/.test(ok2.fill), '1~8호선 공지 없음: 정상 운행 중(회색) ' + ok2.s);
-  ok(head('경의중앙선', { offOk: 1 })[0].s.startsWith('경의중앙선은(는) 서울교통공사 환승역 관련 공지만 가끔'), '경의중앙선 문구');
-  ok(head('신분당선', { offOk: 1 })[0].s === '신분당선은(는) 공식 공지 연동 전이에요 · 아래 이용자 제보로 알려 드려요', '연동 전 노선 문구');
-  ok(head('인천1호선', { offOk: 1 }).length === 0 || /연동 전/.test(head('인천1호선', { offOk: 1 })[0].s), '인천1호선');
+  ok(head('2호선', { offOk: 1, off: null, offAt: NOW - 3 * MIN }).length === 0, '1~8호선 공지 없음: 안내 상자를 그리지 않는다(s355)');
+  ok(head('경의중앙선', { offOk: 1 }).length === 0, '경의중앙선: 공지 없음 상자 없음');
+  ok(head('신분당선', { offOk: 1 }).length === 0 && head('수인분당선', { offOk: 1 }).length === 0, '연동 전 노선: 안내 상자 없음');
+  ok(head('인천1호선', { offOk: 1 }).length === 0, '인천1호선');
   const off = head('2호선', { offOk: 1, off: { text: '2호선 신도림역 열차 지연\n  안내', ts: NOW - 10 * MIN } })[0];
   ok(off.s === '서울교통공사 공지 · 2호선 신도림역 열차 지연 안내 (10분 전)' && JSON.stringify(off.hl) === '[[0,9]]' && /10,132,255/.test(off.fill), '공식 공지(파랑): 노선명이 이미 있으면 안 붙임 ' + off.s);
   ok(head('3호선', { offOk: 1, off: { text: '신사역 정차', ts: NOW } })[0].s === '서울교통공사 공지 · 3호선 — 신사역 정차 (방금)', '노선명이 없으면 붙임');
@@ -124,8 +123,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
   ok(long.s.length < 140 && /…/.test(long.s), '긴 공지는 줄임');
   const est = head('2호선', { offOk: 1, off: { estimated: true, suspect: true, text: '배차 간격 길어짐', ts: NOW - 2 * MIN } })[0];
   ok(est.s === '2호선 지연 의심 (도착 간격 기준 추정) · 배차 간격 길어짐 (2분 전 · 공식 공지 아님)' && /255,159,10/.test(est.fill), '추정 지연 의심(주황)');
-  const est2 = head('2호선', { offOk: 1, off: { estimated: true, text: '', ts: NOW } })[0];
-  ok(est2.s === '2호선 정상 운행 중으로 보여요 (도착 간격 기준) (방금)' && /142,142,147/.test(est2.fill), '추정 정상(회색)');
+  ok(head('2호선', { offOk: 1, off: { estimated: true, text: '', ts: NOW } }).length === 0, '추정 정상은 상자 없음(지연 의심만 보인다)');
   const al = head('2호선', { offOk: 0, al: { reporters: 2, stations: [{ stn: '강남', n: 2 }] } });
   ok(al.length === 1 && al[0].s === '지연 제보가 있어요 · 최근 30분 2명 (강남 2명) — 아직 확인 중이에요' && /255,159,10/.test(al[0].fill), '지연 제보(2명): 주황');
   const al3 = head('2호선', { offOk: 0, al: { reporters: 5, stations: [] } })[0];
