@@ -1055,23 +1055,35 @@ t('s268 영점이 잡히면 그 역까지의 실패가 지워진다(연속 실�
   const r = stepL(st, o.ms + 5000, []);
   assert.strictEqual(r.state.xf || 0, 0, '4번 영점 → 4번 이하 실패는 지워진다(그 뒤 역은 아직 예정 전) ' + r.state.xf);
 });
-t('s268 인천1호선(API 없는 노선): 연속 2회 실패 → GPS 5분 탐색, 몇 번을 실패해도 실시간 API 는 부르지 않는다 · 탐색으로 잡으면 영점이 적힌다', () => {
+t('s268 인천1호선(API 없는 노선): 연속 3회 실패 → GPS 5분 탐색(s349: 3회), 몇 번을 실패해도 실시간 API 는 부르지 않는다 · 탐색으로 잡으면 영점이 적힌다', () => {
   const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.srch);
-  assert.ok(o.st.srch && o.st.srch.i === 3 && o.st.xf === 2 && o.st.sd === 3, JSON.stringify(o.st.srch) + ' xf ' + o.st.xf);
+  assert.ok(o.st.srch && o.st.xf >= 3, JSON.stringify(o.st.srch) + ' xf ' + o.st.xf);
   const later = runUntil(o.st, o.ms + 5000, at(13, 8, 0), null);
   assert.ok(!later.st.rt && !later.r.ask, '실시간 위치를 모르는 노선은 API 를 부르지 않는다: ' + JSON.stringify(later.st.rt));
   // 3번 역(경도 LNG0+DL*2) 곁을 지나간 흔적이 있으면 탐색이 영점을 적는다
   const nowMs = o.ms + 30000, fx = [[nowMs - 50000, LAT, LNG0 + DL * 2 - 0.0008, 30], [nowMs - 40000, LAT, LNG0 + DL * 2, 30], [nowMs - 30000, LAT, LNG0 + DL * 2 + 0.0010, 30], [nowMs - 5000, LAT, LNG0 + DL * 2 + 0.0030, 30]];
   const r = stepL(o.st, nowMs, fx);
   assert.ok(r.state.eta.passes.some(p => p.idx === 3 && p.src === 'gps'), JSON.stringify(r.notes));
-  assert.ok(!r.state.srch, '탐색 끝');
 });
-t('s268 탐색 5분 안에 못 잡으면 탐색만 끝낸다(마커는 계속 시각표대로) · 같은 역으로 다시 탐색하지 않는다', () => {
+t('s349 탐색 루프: 마지막 실패 역이 아니라 신호와 가장 가까운 역을 잡는다(시각표가 앞서 있어도) · 잡으면 탐색이 끝나고 실패가 쌓이면 다시 켜진다', () => {
+  const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.srch);
+  assert.ok(o.st.srch && o.st.srch.i >= 4, JSON.stringify(o.st.srch));
+  // 신호가 3번보다 앞선 역(2번)에 가장 가깝게 잡힌다 → 2번 도착 확정(마지막 실패 역 4번이 아님)
+  const nowMs = o.ms + 30000, fx = [[nowMs - 50000, LAT, LNG0 + DL * 1 - 0.0008, 30], [nowMs - 40000, LAT, LNG0 + DL * 1, 30], [nowMs - 30000, LAT, LNG0 + DL * 1 + 0.0010, 30], [nowMs - 5000, LAT, LNG0 + DL * 1 + 0.0030, 30]];
+  const r = stepL(o.st, nowMs, fx);
+  assert.ok(r.state.eta.passes.some(p => p.idx === 2 && p.src === 'gps'), '신호와 가장 가까운 2번 역: ' + JSON.stringify(r.notes));
+  assert.ok(r.notes.some(n => /(GPS 탐색: 2번|영점 2번 통과)/.test(n)), JSON.stringify(r.notes));      // 영점(ride-track)이 먼저 잡으면 그것, 못 잡으면 탐색
+  assert.ok(!r.state.eta.passes.some(p => p.idx >= 4 && p.src === 'gps'), '마지막 실패 역(4번 이후)을 억지로 잡지 않는다');
+  // s349 되돌아감 방지 예외: 시각표가 앞서 마커가 3번 이후에 가 있었어도 GPS 가 2번에서 확정했으면 마커를 2번 구간으로 끌어내린다 · 화면 현위치(curIdx)는 마커(pos.from)와 같다
+  assert.ok(r.pos && r.pos.from === 2, '마커가 2번 역으로 내려온다 ' + JSON.stringify(r.pos) + JSON.stringify(r.notes));
+  assert.strictEqual(r.curIdx, r.pos.from, '앱 카드 현위치 = 마커');
+  assert.ok(r.notes.some(n => /되돌아감 방지 해제/.test(n)), JSON.stringify(r.notes));
+});
+t('s349 탐색 5분 안에 못 잡아도 실패가 이어지면 다시 켠다(루프) · 영점이 잡혀 실패가 3회 밑이면 쉰다', () => {
   const o = runUntil(longState('인천1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.srch);
   const r = stepL(o.st, o.ms + 301000, []);
-  assert.ok(!r.state.eta.passes.some(p => p.idx === 3) && (!r.state.srch || r.state.srch.i !== 3), JSON.stringify(r.notes));      // 끝난 탐색 자리에 새 실패 역(5번)이 생기면 그 역으로는 다시 시작할 수 있다
-  const r2 = stepL(r.state, o.ms + 306000, []);
-  assert.ok(!r2.state.srch || r2.state.srch.i > 3, '같은 역(3번)은 다시 탐색하지 않는다 ' + JSON.stringify(r2.state.srch));
+  assert.ok(!r.state.eta.passes.some(p => p.idx === 3 && p.src === 'gps'), JSON.stringify(r.notes));
+  assert.ok(r.state.srch && r.state.srch.until > o.ms + 301000, '실패가 이어지면 새 5분 탐색으로 다시 켠다 ' + JSON.stringify(r.state.srch) + ' xf ' + r.state.xf);
 });
 t('s268 서울 실시간 노선(1호선): 영점 연속 3회 실패 → 다음 역 도착정보로 내 열차를 맞춘다 · 답이 오면 실시간 시각으로 · 3회 더 실패하면 또(하차까지 반복)', () => {
   const o = runUntil(longState('1호선'), at(12, 52, 5), at(13, 3, 0), (r) => r.state.rt);
