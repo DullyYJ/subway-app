@@ -21,7 +21,7 @@ public final class BoardCore {
     public int n = SHOW_STEP;
     String armK = "", armId = ""; long armAt;
     final List<Map<String, Object>> posts = new ArrayList<Map<String, Object>>();               // 서버가 준 글(원래 모양)
-    final Map<String, List<Object>> cmts = new LinkedHashMap<String, List<Object>>();           // 글번호 → 엔진 댓글 줄
+    final Map<String, List<Object>> cmts = java.util.Collections.synchronizedMap(new LinkedHashMap<String, List<Object>>());           // 글번호 → 엔진 댓글 줄
     List<String> idByIdx = new ArrayList<String>();                                             // 엔진이 돌려준 info: 원래 번호 → 글번호
     Map<String, String> pidById = new LinkedHashMap<String, String>();                          // 글번호 → 엔진이 정한 post id (입력칸 열쇠용)
 
