@@ -280,7 +280,11 @@ function rsMtTimeline(st, i, line) {
   return out;
 }
 // 승차 대기(st.bl)가 마지막으로 받은 실시간 답이 가리킨 열차 | null
-function rsMtCandWait(st) { var bl = st && st.bl; return (bl && bl.tn && bl.src === 'realtime' && bl.ms != null && isFinite(+bl.ms)) ? { tn: bl.tn, ms: +bl.ms } : null; }
+function rsMtCandWait(st) {
+  var bl = st && st.bl, c = bl && bl.cand;
+  if (c && c.tn && c.src === 'realtime' && c.ms != null && isFinite(+c.ms)) return { tn: c.tn, ms: +c.ms };          // s336: 도착 구간에 고정해 둔 후보 우선
+  return (bl && bl.tn && bl.src === 'realtime' && bl.ms != null && isFinite(+bl.ms)) ? { tn: bl.tn, ms: +bl.ms } : null;
+}
 // 환승 대기(st.bl.x)가 받은 답이 가리킨 열차 | null
 function rsMtCandX(st, i) { var bx = st && st.bl && st.bl.x; return (bx && bx.i === i && bx.tn && bx.src === 'realtime' && bx.ms != null && isFinite(+bx.ms)) ? { tn: bx.tn, ms: +bx.ms } : null; }
 // i0 번 노드(같은 노선 지하철 구간 안)에서 쓸 수 있는 내 열차 기억 | null — 노선이 바뀌었거나 사이에 환승·도보·버스가 끼면 옛 기억이다
@@ -514,7 +518,13 @@ var RS_RT_STEP_MS = 15000, RS_RT_WINDOW_MS = 180000, RS_RT_MAXTRY = 2, RS_RT_ANS
 //   · 쿨타임(RS_RT_COOL_MS 1분): 직전 호출로부터 이 시간이 지나야 새 보정을 시작한다(한 번의 보정 안의 재시도 2번(15초 간격)은 그대로). 한 여정 최대 RS_RT_TRIP_MAX 번 — 키 일일 한도(공유)를 지킨다.
 //   · 호출은 '내 열차 번호(st.mt.tn)'가 있으면 그 열차만 찾는다(rsRtPickX). 답이 오면 로컬 타임라인이 그 시각으로 맞춰지고(fix) 다시 GPS 영점으로 돌아간다.
 var RS_RT_COOL_MS = 60000, RS_RT_DEV_MS = 150000, RS_RT_REC_DEV_MS = 60000, RS_RT_LOSS_MS = 180000, RS_RT_TRIP_MAX = 24, RS_RT_CHK_MS = 10000, RS_RT_CORR_M = 400, RS_RT_GOOD_ACC_M = 100, RS_RT_FRESH_MS = 15000, RS_RT_RECWIN_MS = 60000;
-function rsRtGate(st, now) { var c = st && st.rtc; if (!c) return true; if ((c.n || 0) >= RS_RT_TRIP_MAX) return false; return c.at == null || now - c.at >= RS_RT_COOL_MS; }
+// ★ 2026-10-30 s336 (YJ: "지상 구간 연착 때 시각 오차 150초를 넘어야 부르니 마커가 최대 1.3km 앞서간다 — 거리 오차도 함께 보고, 징후가 보이면 잠깐 집중 확인한 뒤 다시 백오프로") —
+//   · 거리 트리거: GPS 위치와 로컬 시각표가 말하는 위치(구간 비율)가 RS_RT_DEV_M(500m) 이상 벌어지고 시각 오차도 RS_RT_DEV_M_MIN_MS(75초) 이상이면 호출(사유 'dist'). 시각만 봐서는 늦게 걸리는 '천천히 느려지는' 연착을 일찍 잡는다.
+//   · 적응형 버스트: 징후(dev·dist·recover)로 첫 호출을 한 직후 RS_BU_WIN_MS(2분) 동안은 쿨타임을 RS_BU_COOL_MS(20초)로 줄여 최대 RS_BU_N(2)번 더 확인한다(이미 맞춘 구간(fx)도 다시 본다 — 오차가 RS_BU_DEV_MS(60초)·RS_BU_DEV_M(300m) 이상 남아 있을 때만).
+//     버스트가 끝나면(횟수 소진·2분 경과·연이은 두 답이 RS_BU_SAME_MS(15초) 안으로 같아 더 물을 게 없을 때) 쿨타임 1분의 평소 백오프로 돌아온다. 한 여정 한도(RS_RT_TRIP_MAX)는 버스트 호출도 센다.
+var RS_RT_DEV_M = 500, RS_RT_DEV_M_MIN_MS = 75000, RS_BU_N = 2, RS_BU_COOL_MS = 20000, RS_BU_WIN_MS = 120000, RS_BU_DEV_MS = 60000, RS_BU_DEV_M = 300, RS_BU_DEV_M_MIN_MS = 30000, RS_BU_SAME_MS = 15000;
+function rsRtBurst(c, now) { return !!(c && c.bu && c.bu.n > 0 && now <= c.bu.until); }
+function rsRtGate(st, now) { var c = st && st.rtc; if (!c) return true; if ((c.n || 0) >= RS_RT_TRIP_MAX) return false; return c.at == null || now - c.at >= (rsRtBurst(c, now) ? RS_BU_COOL_MS : RS_RT_COOL_MS); }
 // 로컬 타임라인 대조: 위치 q=[ts,lat,lng,acc] 를 이웃한 두 역(노드 번호가 연달아) 구간에 얹어, 그 자리를 지나는 시각과 q 의 시각 차(ms, 양수=늦음) | null
 function rsTlErr(st, q, etaMs) {
   var stops = st.stops || [], k, a, b, best = null, bd = 1e18, cl = Math.cos(q[1] * Math.PI / 180), mt = st.mt;
@@ -529,13 +539,15 @@ function rsTlErr(st, q, etaMs) {
   }
   if (!best || bd > RS_RT_CORR_M) return null;
   var ta = tlAt(best.a.i), tb = tlAt(best.b.i); if (ta == null || tb == null || !(tb > ta)) return null;
-  return { err: q[0] - (ta + best.t * (tb - ta)), i: best.a.i, d: bd };
+  var fe = Math.max(0, Math.min(1, (q[0] - ta) / (tb - ta)));                     // s336: 지금 로컬 시각표가 말하는 구간 비율 — 실제 GPS 비율과의 거리 차(m, 양수 = 시각표가 앞서 있다)
+  return { err: q[0] - (ta + best.t * (tb - ta)), i: best.a.i, d: bd, dm: (fe - best.t) * rsHav(best.a.lat, best.a.lng, best.b.lat, best.b.lng) };
 }
 // 한 걸음의 로컬 검증 — 예외 조건이면 실시간 보정을 시작한다(st.rt). 시작했으면 true
 function rsRtWatch(st, tr, now, etaMs, notes) {
   try {
     var eta = st.eta; if (!eta || eta.boarded === false || eta.notDeparted === true || st.wait || st.xw || st.xPend || !tr.length) return false;
     var c = st.rtc = st.rtc || { n: 0 }, q = null, k;
+    if (c.bu && (c.bu.n <= 0 || now > c.bu.until)) delete c.bu;                       // s336: 끝난 버스트는 치운다 → 평소 백오프
     for (k = tr.length - 1; k >= 0; k--) { var z = tr[k]; if (z && isFinite(z[0]) && isFinite(z[1]) && isFinite(z[2]) && (z[3] == null || z[3] <= RS_RT_GOOD_ACC_M)) { q = z; break; } }
     if (!q) return false;
     if (c.g == null || q[0] > c.g) { if (c.g != null && q[0] - c.g >= RS_RT_LOSS_MS) c.rec = q[0]; c.g = q[0]; }      // 좋은 위치가 끊겼다 돌아온 순간
@@ -543,12 +555,16 @@ function rsRtWatch(st, tr, now, etaMs, notes) {
     if ((st.rt && !st.rt.done) || !rsRtGate(st, now) || (c.chk != null && now - c.chk < RS_RT_CHK_MS)) return false;
     c.chk = now;
     var e = rsTlErr(st, q, etaMs); if (!e) return false;
-    if (c.fx != null && e.i + 1 === c.fx) return false;                 // 이미 실시간으로 맞춘 구간
-    var recov = c.rec != null && now - c.rec <= RS_RT_RECWIN_MS;
-    if (Math.abs(e.err) < (recov ? RS_RT_REC_DEV_MS : RS_RT_DEV_MS)) return false;
+    var burst = rsRtBurst(c, now);
+    if (!burst && c.fx != null && e.i + 1 === c.fx) return false;       // 이미 실시간으로 맞춘 구간(버스트 중에는 오차가 남았는지 다시 본다)
+    var recov = c.rec != null && now - c.rec <= RS_RT_RECWIN_MS, ae = Math.abs(e.err);
+    var bySec = ae >= (burst ? RS_BU_DEV_MS : (recov ? RS_RT_REC_DEV_MS : RS_RT_DEV_MS));
+    var byDist = e.dm != null && Math.abs(e.dm) >= (burst ? RS_BU_DEV_M : RS_RT_DEV_M) && ae >= (burst ? RS_BU_DEV_M_MIN_MS : RS_RT_DEV_M_MIN_MS);
+    if (!bySec && !byDist) return false;
     if (!rsRtArm(st, e.i, now, notes)) return false;
-    c.why = recov ? 'recover' : 'dev';
-    notes.push('로컬 시각표와 GPS 위치가 ' + Math.round(e.err / 1000) + '초 어긋남' + (recov ? '(신호 복구 직후)' : '') + ' — 실시간 도착정보로 내 열차 맞추기(' + e.i + '번 역 다음)');
+    c.why = bySec ? (recov ? 'recover' : 'dev') : 'dist';
+    if (burst) { c.bu.n--; if (c.bu.n <= 0) delete c.bu; } else c.bu = { n: RS_BU_N, until: now + RS_BU_WIN_MS };
+    notes.push('로컬 시각표와 GPS 위치가 ' + Math.round(e.err / 1000) + '초 어긋남' + (recov ? '(신호 복구 직후)' : '') + ' — 실시간 도착정보로 내 열차 맞추기(' + e.i + '번 역 다음)' + (e.dm != null && Math.abs(e.dm) >= 100 ? ' · 거리 ' + Math.round(Math.abs(e.dm)) + 'm' : '') + (burst ? ' · 집중 확인' : ''));
     return true;
   } catch (e0) { return false; }
 }
@@ -586,7 +602,10 @@ function rsRtApply(st, req, now, notes) {
   if (!mtN && b.tn != null && String(b.tn) !== '') { st.mt = { tn: String(b.tn), line: rt.line, i: rt.i0, at: now, src: 'late' }; notes.push('내 열차 기억(늦게): ' + st.mt.tn + '번(' + rt.line + ')'); }      // s334: 탈 때 못 붙였으면 처음 맞춘 열차를 이때부터 기억
   var lv = (eta.live || []).filter(function (x) { return x && +x.idx !== rt.i1; });
   lv.push({ idx: rt.i1, ms: Math.round(+b.ms), fix: true }); eta.live = lv; rt.done = 1; rt.ms = Math.round(+b.ms);
-  (st.rtc = st.rtc || { n: 0 }).fx = rt.i1;                       // s334: 이 구간(→ i1)은 실시간으로 맞췄다 — 로컬 검증이 같은 구간을 또 부르지 않는다
+  var rtc0 = (st.rtc = st.rtc || { n: 0 }); rtc0.fx = rt.i1;      // s334: 이 구간(→ i1)은 실시간으로 맞췄다 — 로컬 검증이 같은 구간을 또 부르지 않는다
+  if (rtc0.bu) {                                                  // s336: 버스트 중 연이은 두 답이 같으면 수렴한 것 — 더 묻지 않고 평소 백오프로
+    if (rtc0.bu.last != null && Math.abs(rt.ms - rtc0.bu.last) <= RS_BU_SAME_MS) { delete rtc0.bu; notes.push('집중 확인 끝(답이 같다)'); } else rtc0.bu.last = rt.ms;
+  }
   notes.push('실시간 보정: ' + rt.stn + ' 도착 ' + Math.round((+b.ms - now) / 1000) + '초 뒤로 맞춤');
 }
 // 한 걸음: 남은 거리·시간을 계산하고, 닿았으면 이어 붙인다. 돌려주는 값 = { name, distM, etaSec, arrived } 또는 null(해제됨)
@@ -690,7 +709,12 @@ function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
   var mk = st.mk && st.mk.key === key ? st.mk : null, segs = pos.segs, i, g;
-  if (!segs || !segs.length) { delete st.mk; return; }
+  if (!segs || !segs.length) {
+    delete st.mk;
+    var pf0 = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });      // s336: 종착에 서 있는 걸음(구간 없음)도 바닥을 올려 둔다 — 다음에 구간이 다시 생겨도 종착 뒤로 가지 않는다
+    if (+pos.from > pf0.n) pf0.n = +pos.from;
+    return;
+  }
   // ★ s323 (YJ: "실측 출발 시각을 기준으로 다음 역 도착을 출발 + 시간표상 구간 소요로 다시 이어 붙여 마커가 가속해 달리지 않게"): 늦게 출발한 구간(st.dly = 지연 d)은 도착도 같은 만큼 늦춘다(정속 유지). 뒤 구간은 겹칠 때만 민다.
   var dly = st.dly && st.dly.key === key ? st.dly : null;
   if (dly && +dly.d > 0) {
@@ -738,6 +762,11 @@ function rsMonoPos(st, r, now, notes) {
       if (pos.ttFrom == null) pos.ttFrom = pos.from;
       pos.from = g.from; pos.to = g.to; pos.t0 = g.t0; pos.t1 = g.t1; pos.ratio = Math.round(rt2 * 1000) / 1000; pos.moving = rt2 > 0 && rt2 < 1;
       notes.push('도착 확정 역 되돌아감 방지: ' + pf.n + '번 앞으로는 가지 않는다');
+    } else if (segs.length && pf.n >= +segs[segs.length - 1].to) {
+      // ★ s336 (YJ: "종착역에 닿은 뒤 마커가 0.3칸 뒤로 한 프레임 튄다"): 마커가 이미 종착(마지막 구간의 끝)에 닿았는데 도착 시각이 늦게 다시 계산돼 다시 구간이 생기면 위의 '끌어올릴 구간'이 없어 뒤로 튀었다 — 종착에 그대로 세운다.
+      if (pos.ttFrom == null) pos.ttFrom = pos.from;
+      pos.from = pf.n; pos.to = pf.n; pos.t0 = null; pos.t1 = null; pos.ratio = 0; pos.moving = false; pos.segs = segs = [];
+      notes.push('종착 도착 뒤 되돌아감 방지: ' + pf.n + '번에 세운다');
     }
   }
   if (+pos.from > pf.n) pf.n = +pos.from;
@@ -1209,6 +1238,7 @@ function rsHav(a, b, c, d) {
 
 // 승차 대기: 처음 위치를 받은 틱에 대기를 걸지 정하고(첫 승차역 출발 시각 전이면 대기), 대기 중에는 승차(역 근처 → 빠르게 멀어짐)를 감지한다.
 // 대기 중 eta.boarded=false · notDeparted=true 라 ride-eta 가 승차역 이후를 예정 시각 그대로 둔다. 승차가 확정되면 첫 승차역 통과 증거(gps)를 넣고 평소 흐름으로 간다.
+var RS_WL_GAP_MS = 20000, RS_WL_GAP_TBL_MS = 30000, RS_WL_NEAR_M = 300, RS_WL_AFTER_MS = 40000, RS_WL_TBL_MS = 150000;
 function rsWait(st, tr, now, O, notes) {
   var eta = st.eta, stops = st.stops || [], b = null, i;
   for (i = 0; i < stops.length; i++) if (stops[i] && stops[i].pass === false && isFinite(stops[i].lat) && isFinite(stops[i].lng)) { b = stops[i]; break; }
@@ -1229,6 +1259,7 @@ function rsWait(st, tr, now, O, notes) {
     if (q[3] != null && q[3] > 150) continue;
     d = rsHav(q[1], q[2], w.lat, w.lng) - (q[3] == null ? 30 : q[3]);
     if (d <= O.waitNearM) { w.seen = true; if (q[0] > w.nearTs) w.nearTs = q[0]; }
+    if (d <= RS_WL_PLAT_M && w.pf == null) w.pf = q[0];                                // s336: 승강장(역 둘레 60m)에 처음 닿은 시각
     last = q;
   }
   var boarded = false, why = '';
@@ -1239,6 +1270,16 @@ function rsWait(st, tr, now, O, notes) {
       if (win.length >= 3) {
         var f0 = win[0], f1 = win[win.length - 1], dt = (f1[0] - f0[0]) / 1000;
         if (dt >= O.waitSpanSec) { var sp = rsHav(f0[1], f0[2], f1[1], f1[2]) / dt; if (sp >= O.waitMoveMps) { boarded = true; why = '역에서 ' + Math.round(dl) + 'm · ' + sp.toFixed(1) + 'm/s'; } }
+      }
+    }
+  }
+  // ★ s336 (YJ: 지하철은 승강장에서 GPS 가 잡히다 열차가 출발하면 끊긴다 — '끊기면 출발'): 후보 열차가 도착할 즈음 승강장 근처에 있었고 그 뒤 신호가 끊겼으면 그 열차를 탄 것으로 본다(다음 역 신호를 기다리지 않는다).
+  if (!boarded && w.seen && w.nearTs > 0 && tr.length) {
+    var wc = st.bl && st.bl.cand, wl = tr[tr.length - 1];
+    if (wc && wc.ms != null && isFinite(+wc.ms) && wl && rsOnPlat(w, +wc.ms)) {
+      var wrt = !!wc.tn, wgap = now - wl[0], wd = rsHav(wl[1], wl[2], w.lat, w.lng);
+      if (wgap >= (wrt ? RS_WL_GAP_MS : RS_WL_GAP_TBL_MS) && wd <= RS_WL_NEAR_M && w.nearTs >= +wc.ms - RS_WL_PRE_MS / 4 && w.nearTs <= +wc.ms + (wrt ? RS_WL_KEEP_MS : RS_WL_TBL_MS) && now >= +wc.ms + RS_WL_AFTER_MS) {
+        boarded = true; why = '승강장에서 신호가 ' + Math.round(wgap / 1000) + '초 끊겨 ' + (wrt ? wc.tn + '번 ' : '') + '열차 출발로 판단';
       }
     }
   }
@@ -1351,7 +1392,22 @@ function rsBlApply(st, req, now, notes) {
   if (b.fromMs != null && isFinite(+b.fromMs)) eta.boardArriveMs = +b.fromMs;                      // 웹 _htlBoardFixWait: 승차역 시각 ≥ 내가 닿는 시각
   var bl = st.bl = st.bl || {}; bl.src = b.src || ''; bl.ms = +b.ms; bl.okAt = now;
   if (b.src === 'realtime' && b.tn != null && String(b.tn) !== '') bl.tn = String(b.tn); else delete bl.tn;      // s334: 실시간이 가린 열차의 번호 — 타면 '내 열차'로 기억
+  rsBlCand(bl, b, now, w);
   notes.push('실시간 재보정(' + (b.src || '?') + ') 다음 차 ' + Math.round((+b.ms - now) / 1000) + '초 뒤');
+}
+// ★ 2026-10-30 s336 (YJ: "지하 첫 승차 직후 신호가 끊기면 엔진이 아직 못 탔다고 보고 다음 열차를 찾느라 내 열차 번호를 늦게 기억한다 — 번호를 선제적으로 고정해라") — 승차 후보 열차(st.bl.cand = { tn?, ms, src })
+//   · 승차 대기 중 받은 실시간 답이 가리킨 열차(번호 tn · 도착 ms)를 '후보'로 붙잡는다. 답은 15초마다 오지만, 그 열차가 도착 구간(도착 90초 전 ~ 도착 4분 뒤)에 있는 동안은 다른 답(다음 차)이 후보를 덮어쓰지 못한다.
+//     (예전엔 후보 열차가 '진입'이 되면 서버가 다음 차로 넘겨 번호가 바뀌었고, 탑승 확정이 늦으면 탄 시각이 어긋나 아무 번호도 기억 못 했다.)
+//   · 시각표 답은 실시간 후보를 덮지 않는다(번호가 없다). 후보가 없을 때만 시각표 시각이 후보가 된다 — 승강장 신호 끊김 승차 판정(rsWait)의 기준 시각으로 쓴다.
+var RS_WL_KEEP_MS = 240000, RS_WL_PRE_MS = 90000, RS_WL_PLAT_M = 60;
+function rsOnPlat(w, ms) { return !!(w && w.pf != null && isFinite(+w.pf) && +w.pf <= ms + 20000); }
+function rsBlCand(bl, b, now, w) {
+  var c = bl.cand, rt = b.src === 'realtime' && b.tn != null && String(b.tn) !== '', tn = rt ? String(b.tn) : '';
+  var zone = c && rsOnPlat(w, +c.ms) && now >= +c.ms - RS_WL_PRE_MS / 4 && now <= +c.ms + RS_WL_KEEP_MS;      // 후보 열차가 도착할 때 내가 승강장에 있었던 경우에만 고정(걸어오는 중에 지나간 열차는 고정하지 않는다)
+  if (c && c.tn && tn && c.tn === tn) { c.ms = +b.ms; c.src = 'realtime'; return; }          // 같은 열차의 시각 갱신
+  if (zone) return;                                                                          // 도착 구간의 후보는 고정
+  if (c && c.tn && !tn && now <= +c.ms + RS_WL_KEEP_MS) return;                              // 시각표 답은 아직 유효한 실시간 후보를 덮지 않는다
+  bl.cand = rt ? { tn: tn, ms: +b.ms, src: 'realtime' } : { ms: +b.ms, src: b.src || 'table' };
 }
 // 승차 확정(대기 끝) — 승차 전 증거는 지운다
 function rsBlClear(st) { if (st.eta) { delete st.eta.boardNext; delete st.eta.boardArriveMs; } delete st.bl; }
