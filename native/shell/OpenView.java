@@ -33,6 +33,7 @@ final class OpenView extends View {
     interface Done { void onDone(); }
 
     private final OpenCore.Script sc;
+    private final boolean allMode;                  // s338: 홈 장면을 3초 꾹 눌렀다 — 8마리 전원이 3줄로 서서 시간대 인사를 한다(오프닝은 셋)
     private final OpenCore.Slot slot;
     private final OpenCore.Actor[] cast;
     private final Done done;
@@ -44,8 +45,11 @@ final class OpenView extends View {
     private final RectF rf = new RectF(); private final Rect src = new Rect(); private final RectF dst = new RectF(); private final Path path = new Path();
     private Shader sky, fade; private int skyW, skyH, fadeW, fadeH;
 
-    OpenView(Context ctx, OpenCore.Script script, OpenCore.Slot s, OpenCore.Actor[] c, Done d) {
-        super(ctx); sc = script; slot = s; cast = c; done = d; dp = ctx.getResources().getDisplayMetrics().density;
+    OpenView(Context ctx, OpenCore.Script script, OpenCore.Slot s, OpenCore.Actor[] c, Done d) { this(ctx, script, s, c, d, false); }
+
+    /** all=true 면 script 는 OpenCore.forAll(원본) 이어야 한다(길이·사라짐이 전원 인사의 것) · cast 는 OpenCore.castAll 의 결과. */
+    OpenView(Context ctx, OpenCore.Script script, OpenCore.Slot s, OpenCore.Actor[] c, Done d, boolean all) {
+        super(ctx); sc = script; slot = s; cast = c; done = d; allMode = all && script.all != null; dp = ctx.getResources().getDisplayMetrics().density;
         setClickable(true);                                                      // 뒤 화면이 눌리지 않게 막고, 누르면 바로 닫는다
         tp.setTypeface(Typeface.DEFAULT_BOLD);
         loadSheets(ctx.getApplicationContext());
@@ -96,6 +100,11 @@ final class OpenView extends View {
         float pw = W, fh = 40f * dp, ph = H * 0.40f, pl = 0f;          // 띠는 화면 아래 40%(YJ: 하늘을 위로 늘려 달라 — 친구 크기·자리는 그대로)
         float pt = H - ph;          // 띠는 화면 맨 아래 바닥에 닿는다(제목은 바닥에서 65% 높이)
         float gy = ph - 106f * dp, charH = Math.min(Math.min(W, 420f * dp) * 0.30f, 108f * dp) * 0.70f;          // 친구는 띠 가운데에 모여 선다 · 키는 처음보다 30% 작게
+        float gg = gy;                                                          // 땅이 시작하는 높이(오프닝은 친구 발 자리와 같다)
+        if (allMode) {                                                           // 전원 인사: 3줄(뒤 · 가운데 · 앞)이 서야 해서 띠를 더 키우고, 친구는 대본의 배율로 줄이고, 땅은 맨 뒷줄 발 높이에서 시작한다
+            ph = Math.min(H * 0.62f, Math.max(H * 0.44f, 285f * dp)); pt = H - ph;
+            charH *= (float) sc.all.scale; gg = ph - 150f * dp; gy = gg + 2f * (float) sc.all.gap * charH;          // gy = 맨 앞줄 발 기준
+        }
         // 사라질 때: 띠·글·친구가 먼저 흐려지고 바탕(파스텔 화이트)이 뒤따라 앱 화면으로 녹아든다 → 켜져 있는 내내는 앱 화면이 전혀 비치지 않는다
         int bgA = (int) Math.round(255 * OpenCore.bgAlpha(sc, t)), fgA = (int) Math.round(255 * OpenCore.fgAlpha(sc, t));
         if (bgA <= 0) { finish(); return; }
@@ -106,12 +115,13 @@ final class OpenView extends View {
             int sf = cv.saveLayerAlpha(0, 0, W, H, fgA);
             drawTitle(cv, W, H);
             cv.save(); cv.translate(pl, pt); cv.clipRect(0, 0, pw, ph);
-            drawSky(cv, pw, ph, gy, t); drawGround(cv, pw, ph, gy);
+            drawSky(cv, pw, ph, gg, t); drawGround(cv, pw, ph, gg);
             feather(cv, pw, ph, fh);
             cv.restore();
             cv.save(); cv.translate(pl, pt);
-            int i = 0;
+            int i = 0; bN = 0;
             for (OpenCore.Actor a : cast) { drawActor(cv, a, OpenCore.at(a, t), pw, gy, charH, i++); }
+            for (int k = 0; k < bN; k++) bubble(cv, bTxt[k], bX[k], bY[k], pw, bA[k]);          // 말풍선은 모든 친구를 그린 뒤 맨 위에(앞 줄 친구의 말이 뒤 줄 친구에 가리지 않게)
             cv.restore();
             cv.restoreToCount(sf);
         }
@@ -208,7 +218,7 @@ final class OpenView extends View {
     // ───────────── 친구 ─────────────
     private void drawActor(Canvas cv, OpenCore.Actor a, OpenCore.St s, float W, float gy, float charH, int idx) {
         if (!s.on || s.alpha <= 0.01f) return;
-        float x = (float) s.x * W, footBase = gy + charH * 0.10f, lift;
+        float x = (float) s.x * W, footBase = gy + charH * 0.10f - a.row * (float) a.gap * charH, lift;          // 줄이 뒤일수록 위로(오프닝은 row 0 · gap 0)
         float[] f = WidgetSim.cfg(a.id);
         boolean sleep = "sleep".equals(s.k);
         float footY, top;
@@ -224,7 +234,7 @@ final class OpenView extends View {
             float ax = x - sl[1] * cell + sl[4] * cell, ay = footBase - sl[2] * cell + sl[5] * cell;       // 잠든 입가(위젯과 같은 기준점) 에서 Z 가 떠오른다
             nameTag(cv, a.id, x, footBase, charH, s.alpha);
             effects(cv, s, ax - charH * 0.04f, ay - charH * 0.10f, charH, idx, a.id);
-            if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, tp0 + cell * 0.10f - charH * 0.30f, W, (float) s.sayA);
+            if (s.say.length() > 0 && s.sayA > 0.02f) later(s.say, x, tp0 + cell * 0.10f - charH * 0.30f, (float) s.sayA);
             return;
         }
         float sc2 = charH * f[5] / (f[1] - f[0]); lift = f[4] * charH / 58f;
@@ -244,8 +254,12 @@ final class OpenView extends View {
         }
         nameTag(cv, a.id, x, footBase, charH, s.alpha);
         effects(cv, s, x, top, charH, idx, a.id);
-        if (s.say.length() > 0 && s.sayA > 0.02f) bubble(cv, s.say, x, top - 6f * dp - (s.fx.length() > 0 ? charH * 0.30f : 0f), W, (float) s.sayA);      // 떠오르는 효과가 글을 가리지 않게 효과가 있으면 한 뼘 위로
+        if (s.say.length() > 0 && s.sayA > 0.02f) later(s.say, x, top - 6f * dp - (s.fx.length() > 0 ? charH * 0.30f : 0f), (float) s.sayA);      // 떠오르는 효과가 글을 가리지 않게 효과가 있으면 한 뼘 위로
     }
+
+    private final String[] bTxt = new String[12]; private final float[] bX = new float[12], bY = new float[12], bA = new float[12]; private int bN;
+    /** 말풍선을 나중에(모든 친구를 그린 뒤) 그리도록 적어 둔다 — 새 객체를 만들지 않는다. */
+    private void later(String txt, float x, float yBottom, float al) { if (bN < bTxt.length) { bTxt[bN] = txt; bX[bN] = x; bY[bN] = yBottom; bA[bN] = al; bN++; } }
 
     /** 이름표: 친구 발밑에 둥근 작은 상자 + 이름(대본의 names). 친구가 나타나는 만큼 함께 진해진다. */
     private void nameTag(Canvas cv, String id, float x, float footBase, float charH, double al) {
