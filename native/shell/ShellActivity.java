@@ -173,6 +173,9 @@ public class ShellActivity extends Activity {
     private final java.util.LinkedHashMap<String, String> hcTab = new java.util.LinkedHashMap<String, String>();      // 탭마다 미리 받은 홈 카드(브리핑 포함) — 결과 카드를 밀어 탭을 바꿀 때 바로 보이게
     private final java.util.HashMap<String, Long> hcTabAt = new java.util.HashMap<String, Long>();
     private final java.util.HashSet<String> hcFly = new java.util.HashSet<String>();
+    /** s343: 브리핑이 어느 경로·어느 편·어느 탭의 것인지 가리키는 이름표. 장거리에서 다른 편을 골라도(ld2Raw 가 바뀜) 이름표가 달라져 앞 편의 브리핑이 그대로 남지 않는다. */
+    private String hcSigOf(String tab) { return (home.hasRoute() ? "r" + home.routeId + "#" + home.ld2Raw.hashCode() : "n") + ":" + tab; }
+    private final java.util.LinkedHashMap<String, String> hcLast = new java.util.LinkedHashMap<String, String>();      // 이름표(hcSigOf)마다 가장 최근에 받은 브리핑 — 채팅·시각이 바뀌어 정확한 열쇠는 못 찾아도 '그 경로·그 탭'의 브리핑을 먼저 보이고 뒤에서 갱신한다
     private void hcTabPut(String k, String v) { lruPut(hcTab, k, v, 12); synchronized (hcTabAt) { hcTabAt.put(k, System.currentTimeMillis()); if (hcTabAt.size() > 64) hcTabAt.clear(); } }
     private boolean hcTabFresh(String k, long ms) { Long at; synchronized (hcTabAt) { at = hcTabAt.get(k); } return at != null && System.currentTimeMillis() - at < ms && lruGet(hcTab, k) != null; }
     private static String lruGet(java.util.LinkedHashMap<String, String> m, String k) { synchronized (m) { return m.get(k); } }
@@ -3913,10 +3916,11 @@ public class ShellActivity extends Activity {
         hc.share = RideService.running && RideService.liveShare != null;
         final String hKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark());
         final String hcTk = hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark());
-        final String hcSig = (hasRes ? "r" + home.routeId : "n") + ":" + home.resTab;
+        final String hcSig = hcSigOf(home.resTab);
         if (!hKey.equals(hcKey)) {                                                    // 이 탭의 브리핑을 미리 받아 둔 게 있으면 그것을 곧바로 쓴다(방금 받은 것이면 다시 묻지도 않는다)
-            String pre = lruGet(hcTab, hcTk);
-            if (pre != null && pre.length() > 0) { hcJson = pre; hcFor = hcSig; if (hcTabFresh(hcTk, 50000L)) hcKey = hKey; }
+            String pre = lruGet(hcTab, hcTk), exact = pre;
+            if (pre == null || pre.length() == 0) pre = hasRes ? lruGet(hcLast, hcSig) : null;      // s343: 정확한 열쇠가 없어도 같은 경로·같은 탭의 가장 최근 브리핑이 있으면 그것을 먼저(없어서 브리핑 없이 결과만 뜨던 것을 막는다)
+            if (pre != null && pre.length() > 0) { hcJson = pre; hcFor = hcSig; if (exact != null && hcTabFresh(hcTk, 50000L)) hcKey = hKey; }
         }
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         warmTabs();                                                                  // 경로가 있는 다른 탭의 결과 화면 · 홈 카드를 요청 하나씩으로 미리 받아 둔다(밀어서 탭을 바꿀 때 즉시)
@@ -3940,7 +3944,7 @@ public class ShellActivity extends Activity {
                     tc = new Thread(new Runnable() { @Override public void run() {
                         NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hBody, 15000);
                         String nj = cr.status == 200 && cr.body != null ? cr.body : "";
-                        if (nj.length() > 0) hcTabPut(hcTk, nj);
+                        if (nj.length() > 0) { hcTabPut(hcTk, nj); if (hasRes) lruPut(hcLast, hcSig, nj, 16); }
                         if (staleCards) {
                             if (nj.length() > 0) { boolean same = nj.equals(hcJson); hcKey = hKey; hcJson = nj; hcFor = hcSig; if (!same) main.post(new Runnable() { @Override public void run() { if (homeVisible()) reloadHome(); } }); }
                             return;
@@ -3962,7 +3966,7 @@ public class ShellActivity extends Activity {
                     if (tr != null) tr.join(16000);
                     if (tc != null && !staleCards) {
                         if (hasRes) {                                                                    // s330: 경로 결과가 준비됐는데 홈 카드(AI 승무원 · 대화)가 늦으면 0.5초만 더 기다리고 결과부터 올린다 — 카드는 도착하는 대로 끼운다
-                            tc.join(500L);
+                            tc.join(hcFor.startsWith("r" + home.routeId + "#") ? 1500L : 500L);                     // s343: 첫 탐색 결과는 0.5초만 기다리되(s330), 탭·편을 넘길 땐 브리핑도 같이 바뀌도록 조금 더 기다린다(미리 받아 둔 게 없을 때만 해당)
                             if (tc.isAlive()) { cardsLate.set(true); if (!tc.isAlive()) cardsLate.set(false); }
                         } else tc.join(16000);
                     }
@@ -4706,6 +4710,7 @@ public class ShellActivity extends Activity {
         final String th = ShellCore.theme(store);
         final HomeCore.Env env = homeEnv();
         final int rev = home.dataRev;
+        final String sigRoute = "r" + home.routeId + "#" + home.ld2Raw.hashCode();
         final java.util.ArrayList<String> rt = new java.util.ArrayList<String>(), ht = new java.util.ArrayList<String>(), htk = new java.util.ArrayList<String>();
         for (String tb : home.resHas.isEmpty() ? java.util.Arrays.asList(HomeCore.RTABS) : new java.util.ArrayList<String>(home.resHas)) {
             if (tb.equals(home.resTab)) continue;                                  // 지금 탭은 loadHome 본 요청이 받는다
@@ -4734,7 +4739,7 @@ public class ShellActivity extends Activity {
         if (hbf != null) new Thread(new Runnable() { @Override public void run() {
             try {
                 NetPost.Res cr = NetPost.post(ShellCore.BASE + "/screen/hcards", hbf, 15000);
-                if (cr.status == 200 && cr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(cr.body, ht).entrySet()) { int i = ht.indexOf(e.getKey()); if (i >= 0) hcTabPut(htk.get(i), e.getValue()); }
+                if (cr.status == 200 && cr.body != null) for (java.util.Map.Entry<String, String> e : ShellCore.altsParse(cr.body, ht).entrySet()) { int i = ht.indexOf(e.getKey()); if (i >= 0) { hcTabPut(htk.get(i), e.getValue()); lruPut(hcLast, sigRoute + ":" + e.getKey(), e.getValue(), 16); } }
             } finally { for (String k : htk) synchronized (hcFly) { hcFly.remove(k); } main.post(new Runnable() { @Override public void run() { premerge(); } }); }
         } }, "shell-warm-hc").start();
     }
@@ -4769,7 +4774,7 @@ public class ShellActivity extends Activity {
             long nowH = System.currentTimeMillis(); String th = ShellCore.theme(store);
             resPut(home.dataRev + ":" + home.resTab + ":" + th, sc[0]);
             hc.ensureNext(nowH); hc.rideScene = RideService.running ? RideService.liveScene : ""; hc.share = RideService.running && RideService.liveShare != null;
-            hcJson = sc[1]; hcFor = "r" + home.routeId + ":" + home.resTab; hcKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark()); hcTabPut(hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark()), sc[1]);
+            hcJson = sc[1]; hcFor = hcSigOf(home.resTab); lruPut(hcLast, hcFor, sc[1], 16); hcKey = hc.key(home.dataRev, home.resTab, nowH, chat.talkCount(), chat.talkMark()); hcTabPut(hc.tabKey(home.dataRev, home.resTab, chat.talkCount(), chat.talkMark()), sc[1]);
         }
         reloadHome();
     }
