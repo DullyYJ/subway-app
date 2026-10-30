@@ -20,7 +20,12 @@ final class RecoGo {
     }
 
     static void open(Context c, RideCore.RecoAd ad, double[] loc, OvCore.Row r) {
-        String[] u = urls(ad == null ? "" : ad.url, ad != null && ad.a.length() > 0 ? ad.a : r.a, loc);
+        String q = RideCore.recoQuery(ad);
+        if (q.length() == 0 && (ad == null || ad.url == null || ad.url.length() == 0)) {
+            try { c.startActivity(new Intent(c, ShellActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP)); } catch (Throwable ignored) { }
+            return;
+        }
+        String[] u = urls(ad == null ? "" : ad.url, q, loc);
         try {
             if (u[0].length() > 0) {
                 try { c.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u[0])).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return; }
