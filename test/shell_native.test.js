@@ -947,6 +947,7 @@ function findAndroidJar() {
     assert.ok(/deb\.trailing\("cmq", 40L/.test(a), '40ms');
     assert.ok(/"\,\\"eta\\":1"/.test(fs.readFileSync(N('CmCore.java'), 'utf8')), 'CmCore eta');
     assert.ok(/CmCore\.briefBody\(st, kind, System\.currentTimeMillis\(\), gps, true\)/.test(fs.readFileSync(N('CommuteAlarm.java'), 'utf8')), '알림은 eta 요청');
+    { const al2 = fs.readFileSync(N('CommuteAlarm.java'), 'utf8'); assert.ok(/K_OCC_FP/.test(al2) && /fp\.equals\(st\.get\(K_OCC_FP/.test(al2) && /resp == null \|\| resp\.length\(\) == 0\) return/.test(al2), 's356: 알람 시각을 못 받아도(오프라인 재부팅) 같은 설정의 마지막 답으로 다시 건다'); }
   });
   await t('s286: 소통방 좌우 밀기 안전장치 — 늦게 온 옛 방 화면은 올리지 않고 · 칸 기억은 지금 고른 방 기준 · 넘기는 중엔 6초 새로고침이 끼지 않고 · 흐릿한 떠오름 없이 바로 · 이웃 방은 밀자마자 받는다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sw = fs.readFileSync(N('SwipeCore.java'), 'utf8');
