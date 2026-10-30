@@ -833,7 +833,7 @@ t('승차 대기 실시간: 승차 확정(수동 [탑승] · 감지)되면 증�
   const p = blStep(r.state, T + 10000, 20, { act: 'press' });
   assert.ok(!p.state.wait && !p.state.eta.boardNext && !p.state.eta.boardArriveMs && !p.state.bl, JSON.stringify(p.state.eta));
   assert.strictEqual(p.ask, null);
-  for (let k = 1; k <= 8; k++) { const q = blStep(p.state, T + 10000 + k * 15000, 20); assert.strictEqual(q.ask, null, '탑승 뒤 ' + k); }
+  for (let k = 1; k <= 8; k++) { const q = blStep(p.state, T + 10000 + k * 15000, 20); assert.ok(!q.ask || q.ask.body.kind === 'subrt', '탑승 뒤 승차 대기 질의는 없다(내 열차 보정 subrt 만 가능) ' + k + JSON.stringify(q.ask)); }
   const g = blState(); g.wait.arrMs = at(12, 40, 0);
   r = blStep(g, at(12, 49, 0), 100, { bl: blAns({ at: at(12, 49, 0) }) });
   assert.ok(!r.state.wait && !r.state.eta.boardNext, '감지 유예 시간이 지나 승차 확정 → 증거를 지운다 ' + JSON.stringify(r.notes));
@@ -1257,7 +1257,7 @@ function lagRun(lagMs, gaps, opt) {
     const extra = pending ? { bl: pending } : {}; pending = null;
     const r = stepL(st, ms, gap ? [] : [[ms, p[0], p[1], 15]], extra); st = r.state;
     if (r.ask) { asks.push({ s: Math.round((ms - at(12, 52, 0)) / 1000), b: r.ask.body }); if (opt.answer) pending = { ok: true, kind: 'subrt', i: r.ask.body.i, ms: opt.answer(ms, r.ask.body), tn: '2145', src: 'realtime', at: ms }; }
-    r.notes.filter(n => /로컬 시각표|실시간 보정|내 열차/.test(n)).forEach(n => notes.push(Math.round((ms - at(12, 52, 0)) / 1000) + 's ' + n));
+    r.notes.filter(n => /로컬 시각표|실시간 보정|내 열차|집중 확인/.test(n)).forEach(n => notes.push(Math.round((ms - at(12, 52, 0)) / 1000) + 's ' + n));
   }
   return { asks: asks, notes: notes, st: st };
 }
@@ -1268,17 +1268,17 @@ t('s334 로컬 우선: GPS 신호가 4분 끊겼다 돌아와도 로컬 시각�
   const o = lagRun(0, [[at(12, 54, 0), at(12, 58, 0)]]);
   assert.strictEqual(o.asks.length, 0, JSON.stringify(o.asks)); assert.ok(o.st.rtc && o.st.rtc.rec, '복구 순간은 상태가 안다(1분 동안 더 민감): ' + JSON.stringify(o.st.rtc));
 });
-t('s334 예외 호출: 로컬 시각표와 GPS 위치가 2분 반 넘게 어긋나면 그때만 API(내 열차 번호 포함) · 구간 비율로 어긋남을 잰다 · 쿨타임 1분 · 한 보정 안에서는 15초 간격 최대 2번', () => {
+t('s334 예외 호출: 로컬 시각표와 GPS 위치가 크게 어긋나면 그때만 API(내 열차 번호 포함) · 구간 비율로 어긋남을 잰다 · 쿨타임 1분 · 한 보정 안에서는 15초 간격 최대 2번 (s336: 거리 500m + 75초면 일찍)', () => {
   const o = lagRun(240000, null, { mt: true });
   assert.ok(o.asks.length >= 2 && o.asks[0].b.kind === 'subrt' && o.asks[0].b.tn === '2145' && o.asks[0].b.i === 2, JSON.stringify(o.asks));
-  assert.ok(o.asks[0].s >= 140 && o.asks[0].s <= 175, '2분 반(150초) 어긋나는 순간 ' + o.asks[0].s);
+  assert.ok(o.asks[0].s >= 60 && o.asks[0].s <= 100, 's336: 거리(500m)와 75초가 함께 넘는 순간 — 예전 150초보다 일찍 ' + o.asks[0].s);
   assert.strictEqual(o.asks[1].s - o.asks[0].s, 15, '재시도는 15초 간격 ' + JSON.stringify(o.asks));
   assert.ok(o.notes.some(n => /로컬 시각표와 GPS 위치가 \d+초 어긋남 — 실시간/.test(n)), o.notes.join('|'));
   for (let k = 1; k < o.asks.length; k++) if (o.asks[k].s - o.asks[k - 1].s > 15) assert.ok(o.asks[k].s - o.asks[k - 1].s >= 60, '새 보정은 쿨타임(1분) 뒤 ' + JSON.stringify(o.asks));
 });
-t('s334 예외 호출: 답이 오면 로컬 타임라인이 그 시각으로 맞춰져 어긋남이 풀리고 더는 부르지 않는다(보정 1회로 끝)', () => {
+t('s334 예외 호출: 답이 오면 로컬 타임라인이 그 시각으로 맞춰져 어긋남이 풀리고 더는 부르지 않는다(보정 1회 + 확인 1회로 끝)', () => {
   const o = lagRun(240000, null, { mt: true, answer: (ms, b) => at(12, 50 + 2 * b.i, 0) + 240000 });      // 늦은 열차의 실제 도착(계획 + 4분)
-  assert.ok(o.asks.length >= 1 && o.asks.length <= 2, '한 번의 보정 ' + JSON.stringify(o.asks));
+  assert.ok(o.asks.length >= 1 && o.asks.length <= 2, '한 번의 보정 + 같은 답이면 확인 한 번 뒤 끝 ' + JSON.stringify(o.asks));
   assert.ok(o.st.eta.live && o.st.eta.live.some(x => x.fix === true), JSON.stringify(o.st.eta.live));
 });
 t('s334 예외 호출: GPS 가 3분 넘게 끊겼다 돌아온 뒤 1분 안에 로컬 시각표와 1분 넘게 어긋나 있으면 호출(복구 직후는 임계값을 낮춘다)', () => {
@@ -1287,7 +1287,7 @@ t('s334 예외 호출: GPS 가 3분 넘게 끊겼다 돌아온 뒤 1분 안에 �
   assert.strictEqual(o.st.rtc.why, 'recover');
   const lag90 = lagRun(90000, [[at(12, 54, 0), at(12, 58, 0)]], { mt: true });
   assert.ok(lag90.notes.some(n => /신호 복구 직후/.test(n)), '90초 어긋남은 평소(150초)면 안 부르지만 복구 직후(60초)엔 부른다 ' + lag90.notes.join('|'));
-  const noGap = lagRun(90000, null, { mt: true }); assert.strictEqual(noGap.asks.length, 0, '신호가 안 끊겼으면 90초 어긋남은 그냥 둔다');
+  const lag50 = lagRun(50000, [[at(12, 54, 0), at(12, 58, 0)]], { mt: true }); assert.ok(!lag50.asks.some(a => a.s < 300), '복구 직후라도 50초 어긋남은 그냥 둔다(60초 미만 · 거리 조건에도 75초 미만) — 호출이 있다면 기존 3연속 실패 사유뿐 ' + JSON.stringify(lag50.asks));
 });
 t('s334 쿨타임·한도: rsRtGate — 직전 호출 1분 안에는 새 보정을 시작하지 않고, 한 여정 24번을 넘기지 않는다', () => {
   const N = 1e12;
@@ -1318,4 +1318,88 @@ t('s334 타임라인 사본: 탑승 확정 때 같은 노선으로 이어지는 
   let r = blStep(blState(), T, 100, { bl: blAns({ at: T, ms: at(12, 52, 10), tn: '2145', fromMs: T }) });
   const p = blStep(r.state, at(12, 52, 20), 20, { act: 'press' });
   assert.ok(p.state.mt && Array.isArray(p.state.mt.tl) && p.state.mt.tl.length >= 3 && p.state.mt.tl.every(x => x[0] > 1 && isFinite(x[1])), JSON.stringify(p.state.mt));
+});
+
+// ── s336: 지하 첫 승차 후보 고정 · 승강장 신호 끊김 승차 · 종착 마커 고정 · 거리 트리거 · 적응형 버스트 ──
+t('s336 승차 후보 고정: 후보 열차가 도착할 때 내가 승강장에 있었으면 다음 차 답이 후보를 덮지 못한다 · 걸어오는 중이면 덮는다 · 시각표 답은 실시간 후보를 덮지 않는다', () => {
+  const T0 = at(12, 50, 5), cand = (r) => r.state.bl && r.state.bl.cand;
+  let r = blStep(blState(), T0, 10, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) });
+  assert.deepStrictEqual([cand(r).tn, cand(r).ms, cand(r).src], ['2145', at(12, 52, 10), 'realtime']);
+  r = blStep(r.state, T0 + 10000, 10, { bl: blAns({ at: T0 + 10000, ms: at(12, 51, 40), tn: '2143', fromMs: T0 }) });
+  assert.strictEqual(cand(r).tn, '2143', '도착 전에는 더 이른 실시간 답이 후보를 바꾼다');
+  r = blStep(blState(), T0, 10, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) });
+  assert.ok(r.state.wait.pf != null, '승강장에 닿은 시각이 적힌다');
+  r = blStep(r.state, at(12, 52, 15), 10, { bl: blAns({ at: at(12, 52, 15), ms: at(12, 56, 10), tn: '2147', fromMs: at(12, 52, 15) }) });
+  assert.strictEqual(cand(r).tn, '2145', '도착 구간에서 승강장에 있었다 → 다음 차(2147) 답이 후보를 덮지 못한다');
+  assert.strictEqual(r.state.bl.tn, '2147', '대기 시각 보정 자체는 예전대로 다음 차를 따라간다');
+  const t2 = blStep(blState(), T0, 600, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 + 400000 }) });
+  const t3 = blStep(t2.state, at(12, 52, 15), 600, { bl: blAns({ at: at(12, 52, 15), ms: at(12, 56, 10), tn: '2147', fromMs: at(12, 52, 15) }) });
+  assert.strictEqual(cand(t3).tn, '2147', '승강장에 못 간 사람(걸어오는 중)에겐 지나간 열차를 고정하지 않는다');
+  const tb = blStep(r.state, at(12, 52, 20), 10, { bl: blAns({ at: at(12, 52, 20), ms: at(12, 52, 30), src: 'table', fromMs: at(12, 52, 20) }) });
+  assert.strictEqual(cand(tb).tn, '2145', '시각표 답은 실시간 후보를 덮지 않는다');
+});
+t('s336 승강장 신호 끊김 승차: 후보 열차 도착 즈음 승강장에 있다가 신호가 20초 끊기면 그 열차를 탄 것 — 번호를 바로 고정하고 다음 열차를 묻지 않는다', () => {
+  const T0 = at(12, 50, 5);
+  let r = blStep(blState(), T0, 10, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) }), boardAt = null, last = T0;
+  for (let ms = T0 + 5000; ms <= at(12, 52, 40); ms += 5000) { r = blStep(r.state, ms, 10); last = ms; assert.ok(r.state.wait, '신호가 들어오는 동안(문 열림)은 대기 ' + ms); }
+  for (let ms = at(12, 52, 45); ms <= at(12, 54, 30); ms += 5000) { r = blStep(r.state, ms, null); if (!r.state.wait) { boardAt = ms; break; } }
+  assert.ok(boardAt != null && boardAt <= at(12, 53, 5), '마지막 신호 12:52:40 + 20초 → 약 12:53:00 에 확정 ' + (boardAt && new Date(boardAt).toISOString()));
+  assert.ok(r.state.mt && r.state.mt.tn === '2145' && r.state.mt.i === 1 && r.state.mt.src === 'board', JSON.stringify(r.state.mt));
+  assert.ok(r.notes.some(n => /승강장에서 신호가 \d+초 끊겨 2145번 열차 출발로 판단/.test(n)), r.notes.join('|'));
+  const p1 = r.state.eta.passes.find(p => p.idx === 1); assert.ok(p1 && p1.ms >= at(12, 52, 30) && p1.ms <= at(12, 52, 41), '승차 통과 시각 = 승강장에서 마지막으로 잡힌 때 ' + JSON.stringify(p1));
+  const q = blStep(r.state, boardAt + 15000, null); assert.ok(!q.ask, '확정 뒤 승차 대기 질의가 없다');
+});
+t('s336 승강장 신호 끊김 승차: 승강장에 간 적이 없거나(걸어오다 끊김) 후보 도착 전에 끊겼으면 승차로 보지 않는다', () => {
+  const T0 = at(12, 50, 5);
+  let r = blStep(blState(), T0, 120, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) });      // 역 120m — 승강장(60m) 밖
+  for (let ms = T0 + 5000; ms <= at(12, 53, 30); ms += 5000) r = blStep(r.state, ms, ms <= at(12, 52, 0) ? 120 : null);
+  assert.ok(r.state.wait, '승강장(60m)에 닿은 적이 없다 → 대기 유지');
+  r = blStep(blState(), T0, 10, { bl: blAns({ at: T0, ms: at(12, 58, 10), tn: '2149', fromMs: T0 }) });             // 후보는 8분 뒤 열차
+  for (let ms = T0 + 5000; ms <= at(12, 55, 0); ms += 5000) r = blStep(r.state, ms, ms <= at(12, 50, 30) ? 10 : null);
+  assert.ok(r.state.wait && !r.state.mt, '후보 열차 도착 전에 신호가 끊긴 것 — 승차 아님');
+});
+t('s336 종착 마커 고정: 종착에 닿은 마커는 구간이 다시 생겨도 뒤로 튀지 않고 종착에 선다 · 구간 없는 종착 걸음도 바닥을 올린다', () => {
+  const nd = [{ name: '출발', isOrigin: true }, { name: 'A', isSub: true }, { name: 'B', isSub: true }, { name: 'C', isSub: true }], key = nd.length + '|출발|C', now = 1e12;
+  const st = { eta: { nodes: nd }, mkFloor: { key: key, n: 3 } }, r = { pos: { from: 2, to: 3, ratio: 0.6, moving: true, t0: now - 60000, t1: now + 60000, segs: [{ from: 2, to: 3, t0: now - 60000, t1: now + 60000 }] } }, notes = [];
+  rsMonoPos(st, r, now, notes);
+  assert.ok(r.pos.from === 3 && r.pos.to === 3 && r.pos.ratio === 0 && r.pos.moving === false && r.pos.segs.length === 0 && r.pos.t0 === null && r.pos.ttFrom === 2, JSON.stringify(r.pos));
+  assert.ok(notes.some(n => /종착 도착 뒤 되돌아감 방지/.test(n)), notes.join('|'));
+  const st2 = { eta: { nodes: nd } }, r2 = { pos: { from: 3, to: 3, ratio: 0, segs: [] } };
+  rsMonoPos(st2, r2, now, []); assert.strictEqual(st2.mkFloor.n, 3, '구간 없는 종착 걸음이 바닥을 3 으로');
+  const st3 = { eta: { nodes: nd }, mkFloor: { key: key, n: 2 } }, r3 = { pos: { from: 2, to: 3, ratio: 0.6, moving: true, segs: [{ from: 2, to: 3, t0: now - 60000, t1: now + 60000 }] } };
+  rsMonoPos(st3, r3, now, []); assert.ok(r3.pos.from === 2 && r3.pos.segs.length === 1, '종착 전에는 건드리지 않는다');
+});
+t('s336 거리 트리거: rsTlErr 가 시각표 위치와 GPS 위치의 거리 차(dm)를 낸다 · 시각표가 앞서 있으면 +', () => {
+  const st = longState('1호선'), sp = st.stops, eta = []; sp.forEach(q => { eta[q.i] = q.arrMs; });
+  const a = sp[1], b = sp[2], q25 = [(eta[2] + 0.75 * (eta[3] - eta[2])), a.lat, a.lng + 0.25 * (b.lng - a.lng), 10];      // 시각표는 75% 지점인데 GPS 는 25% 지점
+  const e = rsTlErr(st, q25, eta), len = 0.0137 * Math.cos(37.5 * Math.PI / 180) * 111320;
+  assert.ok(e && e.i === 2 && Math.abs(e.dm - 0.5 * len) < 60, JSON.stringify(e) + ' len ' + len);
+  const q75 = [(eta[2] + 0.25 * (eta[3] - eta[2])), a.lat, a.lng + 0.75 * (b.lng - a.lng), 10], e2 = rsTlErr(st, q75, eta);
+  assert.ok(e2 && e2.dm < -0.4 * len, '시각표보다 GPS 가 앞서면 − ' + JSON.stringify(e2));
+});
+t('s336 거리 트리거: 시각 오차 150초 전이라도 거리 500m + 시각 75초면 호출(사유 dist) · 평소 1분 늦음(600m 안팎)은 그냥 둔다', () => {
+  const o = lagRun(100000, null, { mt: true });
+  assert.ok(o.asks.length >= 1 && o.asks[0].s >= 60 && o.asks[0].s <= 110, JSON.stringify(o.asks));
+  assert.ok(o.notes.some(n => /초 어긋남 — 실시간.* · 거리 \d+m/.test(n)), o.notes.join('|'));
+  assert.strictEqual(o.st.rtc.why, 'dist');
+  assert.strictEqual(lagRun(60000, null, { mt: true }).asks.length, 0, '1분 늦음은 호출 없음');
+});
+t('s336 적응형 버스트: 징후 직후 쿨타임 20초로 최대 2번 더 확인 — 답이 달라지면 계속, 같으면 끝 → 그 뒤는 1분 백오프', () => {
+  let c1 = 0;
+  const ch = lagRun(240000, null, { mt: true, answer: (ms, b) => at(12, 50 + 2 * b.i, 0) + 240000 + (c1++) * 120000 });      // 답이 호출마다 크게 달라진다(시각표와 계속 어긋남)
+  const sub = ch.asks.filter(a => a.b.kind === 'subrt');
+  assert.deepStrictEqual(sub.slice(0, 3).map(a => a.s - sub[0].s), [0, 20, 40], '첫 호출 + 20초 간격 확인 2번 ' + JSON.stringify(sub.map(a => a.s)));
+  assert.ok(ch.notes.filter(n => /집중 확인/.test(n)).length >= 2, ch.notes.join('|'));
+  assert.ok(sub.length === 3 || sub[3].s - sub[2].s >= 60, '버스트가 끝나면 1분 백오프 ' + JSON.stringify(sub.map(a => a.s)));
+  const same = lagRun(240000, null, { mt: true, answer: (ms, b) => at(12, 50 + 2 * b.i, 0) + 240000 });
+  assert.strictEqual(same.asks.length, 2, '같은 답이 연이어 오면 두 번째에서 끝 ' + JSON.stringify(same.asks.map(a => a.s)));
+  assert.ok(same.notes.some(n => /집중 확인 끝\(답이 같다\)/.test(n)), same.notes.join('|'));
+});
+t('s336 버스트 쿨타임: rsRtGate — 버스트 중에는 20초 · 소진/만료되면 1분 · 한 여정 한도는 그대로', () => {
+  const N = 1e12;
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 25000, bu: { n: 1, until: N + 60000 } } }, N), true, '버스트 중 25초 뒤');
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 15000, bu: { n: 1, until: N + 60000 } } }, N), false, '버스트 중이라도 20초는 지나야');
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 25000, bu: { n: 0, until: N + 60000 } } }, N), false, '소진');
+  assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 25000, bu: { n: 1, until: N - 1 } } }, N), false, '만료');
+  assert.strictEqual(rsRtGate({ rtc: { n: 24, at: N - 25000, bu: { n: 1, until: N + 60000 } } }, N), false, '한도');
 });
