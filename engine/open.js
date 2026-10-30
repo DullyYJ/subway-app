@@ -48,7 +48,7 @@ var OPEN_X = [0.30, 0.50, 0.70], OPEN_XS = [0.27, 0.50, 0.73];      // 판 안�
 function _r(t0, p, o) { var r = { t0: t0, p: p }; for (var k in (o || {})) r[k] = o[k]; return r; }
 function _g(t0, t1, p, o) { var s = { t0: t0, t1: t1, k: "pose", p: p, f: 1 }; for (var k in (o || {})) s[k] = o[k]; return s; }
 // 먹는 모습(죽순이): 입을 다물었다 벌렸다를 천천히 되풀이한다
-function _munch(fx, dur) { var D = dur || OPEN_DUR, out = [], t = 0, i = 0; while (t < D) { out.push(_g(t, Math.min(D, t + 700), i % 2 ? 7 : 6, { fx: fx })); t += 700; i++; } return out; }
+function _munch(fx) { var out = [], t = 0, i = 0; while (t < OPEN_DUR) { out.push(_g(t, Math.min(OPEN_DUR, t + 700), i % 2 ? 7 : 6, { fx: fx })); t += 700; i++; } return out; }
 
 var OPEN_SLOTS = [
   // ── 07-09 아침 맞이: 해가 떠오르고, 가운데에 모여 아침 인사를 한다 ──
@@ -91,60 +91,6 @@ var OPEN_SLOTS = [
     roles: [_r(0, 0, { fx: "zzz" }), _r(120, 0, { fx: "zzz", say: "쿨쿨… 푹 자요" }), _r(240, 0, { fx: "zzz" })], special: {} }
 ];
 
-// ───────────── 전원 인사 (s338) ─────────────
-// YJ: "홈 화면 애니메이션(길동무 친구들 카드)을 꾹 3초 이상 누르고 있으면 모든 길동무 친구들이 나와서 시간대별 인사를 하게 해줘".
-//   s339 (YJ: "자연스럽게 화면 안으로 각자의 특성에 맞게 와서 줄 서서 시간대별로 인사해주면 돼"): 갑자기 나타나지 않고, 친구마다 자기 성격대로 화면 밖에서 들어와(ALL_ENTER)
-//   자기 자리에 선 다음 인사한다. 들어오는 동안(0 ~ ALL_T0)은 아무도 말하지 않는다.
-//   오프닝은 8마리 중 셋이 나오지만, 이 장면은 8마리 전부가 나온다. 시간대 7칸·하늘·해/달·땅은 오프닝과 같은 칸을 그대로 쓰고(앞의 OPEN_SLOTS),
-//   칸마다 '친구별 인사 한 줄'과 모두의 자세·효과(slot.all)만 더한다. 앱은 이 대본을 읽어 그리기만 한다(문구·자리·차례·시간은 앱 코드에 없다).
-//   자리 3줄(뒤 3 · 가운데 2 · 앞 3, 벽돌처럼 엇갈림): x = 화면 폭의 0~1 · r = 줄(0 앞 · 1 가운데 · 2 뒤). 누가 어느 자리에 설지는 앱이 무작위로 정한다.
-//   인사는 한 마리씩 차례로(ALL_ORDER 는 자리 번호 순서) ALL_STEP 간격 — 같은 시각에 뜨는 말풍선(2~3개)이 서로 안 닿게 멀리 떨어진 자리끼리 이어 놓았다.
-//   등장 방식 ALL_ENTER (친구id → { from: 시작 x(화면 폭의 배수 · 화면 밖 · 없으면 자기 자리에서), t0: 들어오기 시작(ms), speed: 걷는 빠르기(화면 폭/초 — 도착 시각은
-//     앱이 자리까지 거리로 센다) | dur: 정해진 시간(ms), hop·hz: 걸으며 콩콩(키의 배수 · 초당 횟수), arc: true 면 콩콩 대신 한 번 크게 포물선(hop 이 높이),
-//     k·p·fx: 들어오는 동안의 동작·자세·효과(기본 걷기) }). 모든 친구는 ALL_T0 - 200 ms 안에 자리에 닿아야 한다(시험이 모든 자리에서 확인).
-var ALL_DUR = 10100, ALL_FADE = 700, ALL_T0 = 2800, ALL_STEP = 700, ALL_SCALE = 0.82, ALL_GAP = 0.72;       // 전체 길이 · 사라짐 · 첫 인사 · 인사 간격 · 친구 키(오프닝 대비) · 줄 간격(친구 키의 배수)
-var ALL_SEATS = [
-  { x: 0.20, r: 2 }, { x: 0.50, r: 2 }, { x: 0.80, r: 2 },          // 0~2 뒤 줄
-  { x: 0.35, r: 1 }, { x: 0.65, r: 1 },                             // 3~4 가운데 줄
-  { x: 0.20, r: 0 }, { x: 0.50, r: 0 }, { x: 0.80, r: 0 }           // 5~7 앞 줄
-];
-// 친구별 등장(성격): 둘숑 신나게 달려옴 · 뽀푸 우아한 종종걸음 · 챙챙 통통 튀며 · 러블 느긋하게 어슬렁 · 쮸르 뒤뚱뒤뚱 · 베비히포 아장아장 · 독슐 날아와 사뿐히 · 두덩 땅에서 쏙
-var ALL_ENTER = {
-  dolsom:  { from: -0.15, t0: 0,   speed: 0.85, hop: 0.06,  hz: 3.4 },
-  ppopu:   { from: -0.15, t0: 250, speed: 0.60, hop: 0.02,  hz: 2.4 },
-  chaeng:  { from: -0.15, t0: 120, speed: 0.70, hop: 0.10,  hz: 2.2 },
-  bbosong: { from: -0.15, t0: 380, speed: 0.44, hop: 0.015, hz: 1.4 },
-  lovel:   { from: 1.15,  t0: 300, speed: 0.50, hop: 0,     hz: 1 },
-  juksun:  { from: 1.15,  t0: 300, speed: 0.46, hop: 0.015, hz: 1.6 },
-  sul:     { from: 1.15,  t0: 200, dur: 1500, arc: true, hop: 0.9 },
-  dudung:  { t0: 800, dur: 650, arc: true, hop: 0.35, k: "pose", p: 2, fx: "spark" }
-};
-var ALL_ORDER = [5, 2, 3, 7, 0, 4, 6, 1];
-// 칸 × 친구 인사(말풍선 한 줄 · 아홉 글자 안팎). 성격: 둘숑 씩씩 · 러블 느긋한 고양이 · 두덩 부지런한 두더지 · 독슐 멋진 독수리 · 뽀푸 우아 · 챙챙 통통 · 쮸르 먹보 판다 · 베비히포 아기 하마
-var ALL_SAY = {
-  greet:     { dolsom: "굿모닝! 멍멍!", lovel: "좋은 아침이냥~", dudung: "일찍 일어났다!", sul: "아침 하늘 최고!", ppopu: "상쾌한 아침~", chaeng: "으쌰! 아침이다!", juksun: "아침 대나무 냠", bbosong: "아함~ 좋은 아침" },
-  morning:   { dolsom: "오늘도 힘차게!", lovel: "느긋한 오전이냥", dudung: "열심히 파는 중!", sul: "높이 날아볼까?", ppopu: "활기찬 오전~", chaeng: "첨벙! 신나는 오전", juksun: "느긋느긋 오전", bbosong: "오늘도 방긋~" },
-  lunch:     { dolsom: "점심 뭐 먹지?", lovel: "참치가 좋겠다냥", dudung: "지렁이 도시락!", sul: "내 점심은 생선!", ppopu: "맛있게 먹어요~", chaeng: "냠냠 점심 시간!", juksun: "대나무 점심 냠냠", bbosong: "밥 먹자 밥~" },
-  afternoon: { dolsom: "조금만 더 힘내!", lovel: "낮잠 자고 싶냥", dudung: "땅 팔 힘이 나요", sul: "바람이 좋은 오후", ppopu: "간식 타임이에요", chaeng: "물장구 치고 싶어", juksun: "나른한 오후야~", bbosong: "졸려도 힘내요" },
-  evening:   { dolsom: "오늘도 수고했어!", lovel: "수고했다냥~", dudung: "고생 많았어요", sul: "노을이 멋지네", ppopu: "수고 많으셨어요", chaeng: "퇴근이다 야호!", juksun: "푹 쉬어요~", bbosong: "토닥토닥 수고!" },
-  night:     { dolsom: "편안한 밤이야~", lovel: "달이 예쁘다냥", dudung: "별이 반짝반짝", sul: "밤하늘 구경 중", ppopu: "좋은 저녁이에요", chaeng: "달님 안녕~", juksun: "포근한 밤이야", bbosong: "굿나잇 준비~" },
-  sleep:     { dolsom: "쿨쿨… 잘 자요", lovel: "그르릉… 잘 자냥", dudung: "음냐… 잘 자요", sul: "푸드덕… 굿나잇", ppopu: "새근… 잘 자요", chaeng: "뽀글… 잘 자요", juksun: "대나무 꿈… 쿨", bbosong: "으음… 굿나잇" }
-};
-// 칸마다 모두의 자세(p 0 앉기 · 2 신남) · 콩콩 · 떠오르는 효과 — 오프닝의 가운데 자리와 같은 분위기(콩콩은 5% 안쪽)
-var ALL_LOOK = {
-  greet: { p: 2, hop: 0.04, hz: 0.9, fx: "spark" }, morning: { p: 0, hop: 0, hz: 2, fx: "note" }, lunch: { p: 0, hop: 0, hz: 2, fx: "food" },
-  afternoon: { p: 2, hop: 0.05, hz: 0.8, fx: "note" }, evening: { p: 2, hop: 0.03, hz: 0.7, fx: "heart" }, night: { p: 0, hop: 0, hz: 2, fx: "heart" }, sleep: { p: 0, hop: 0, hz: 2, fx: "zzz" }
-};
-function _allOf(s) {
-  var l = ALL_LOOK[s.id], a = { say: ALL_SAY[s.id], p: l.p, hop: l.hop, hz: l.hz, fx: l.fx, special: {} };
-  if (s.id === "greet") { a.special.juksun = _munch("leaf", ALL_DUR); a.special.bbosong = [_g(0, 1300, 0, {}), _g(1300, ALL_DUR, 6, { fx: "heart" })]; }
-  if (s.id === "lunch") a.special.juksun = _munch("food", ALL_DUR);
-  if (s.id === "afternoon") a.special.bbosong = [_g(0, ALL_DUR, 7, { fx: "spark" })];
-  return a;
-}
-OPEN_SLOTS.forEach(function (s) { s.all = _allOf(s); });
-function allScript() { return { dur: ALL_DUR, fade: ALL_FADE, t0: ALL_T0, step: ALL_STEP, scale: ALL_SCALE, gap: ALL_GAP, seats: ALL_SEATS, order: ALL_ORDER, enter: ALL_ENTER }; }
-
 /** 시(0~24 실수)가 속한 칸의 번호. 칸 범위는 [h0, h1) 이고 자정을 넘기는 칸은 h0 > h1. */
 function openSlotIndex(hour) {
   var h = ((hour % 24) + 24) % 24;
@@ -156,6 +102,37 @@ function openSlotIndex(hour) {
 }
 
 /** 앱 assets/open.json 으로 내려보낼 대본 전체. chars = 나올 수 있는 친구(켤 때마다 이 중 셋이 무작위로), x/xs = 자리. */
-function openScript() { return { v: 4, dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, names: OPEN_NAMES, wx: OPEN_WX, x: OPEN_X, xs: OPEN_XS, all: allScript(), slots: OPEN_SLOTS }; }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { allScript: allScript, ALL_SAY: ALL_SAY, ALL_SEATS: ALL_SEATS, ALL_ORDER: ALL_ORDER, ALL_ENTER: ALL_ENTER, ALL_DUR: ALL_DUR, ALL_FADE: ALL_FADE, ALL_T0: ALL_T0, ALL_STEP: ALL_STEP, openScript: openScript, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_NAMES: OPEN_NAMES, OPEN_WX: OPEN_WX, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// s340 (YJ: "홈 '길동무 친구들' 카드를 3초 꾹 누르면 그 화면이 배경을 유지한 채 세로로 2배 슬라이드로 늘어나고, 나머지 친구들이 나와 3초쯤 시간대별 인사를 한 뒤,
+//        남을 친구들만 남고 들어가며 카드가 다시 슬라이드로 줄어든다"): 카드 자체가 늘어난다(전체 화면을 덮는 장면이 아니다).
+//   카드가 지금 보여 주는 친구(엔진 /scene 의 cast)는 그대로 남고, 나머지 친구가 양쪽 가장자리에서 걸어/날아/솟아 들어와 8마리가 3줄로 서서 한 마리씩 인사한다.
+//   이 대본은 그 순서·자리·시간·인사 글만 정한다 — 누가 남고 누가 들어오는지는 지금 카드의 친구가 정한다(앱은 그리기만).
+//   시간 t 는 모두 눌림이 확정된 순간부터의 ms:
+//     expand: 카드가 2배로 늘어나는 시간 · greet: 첫 인사 시각 · step: 인사 간격 · bubble: 말풍선이 떠 있는 시간
+//     leave: 손님 친구가 나가기 시작 · collapse: 카드가 줄기 시작 · end: 끝(이 뒤에 평소 카드로 돌아간다) · boost: 걸음 빠르기 배수
+//   seats: 3줄(뒤 3 · 가운데 2 · 앞 3, 엇갈림) 자리 { x: 카드 폭의 0~1, z: 길의 깊이 0(멀다)~1(가깝다) } · order: 인사 차례(자리 번호) — 같은 시각에 뜨는 말풍선이 안 닿게 떨어진 자리끼리 이어 놓았다.
+//   칸마다 say(친구별 인사 글 8개 · 열 글자 안쪽)와 rest(true 면 앉아 쉬며 — 잠자는 칸).
+var HELLO_T = { expand: 650, greet: 2300, step: 380, bubble: 900, leave: 5900, collapse: 6150, end: 6800, boost: 2.2 };
+var HELLO_SEATS = [
+  { x: 0.20, z: 0.12 }, { x: 0.50, z: 0.12 }, { x: 0.80, z: 0.12 },       // 0~2 뒤 줄
+  { x: 0.35, z: 0.50 }, { x: 0.65, z: 0.50 },                             // 3~4 가운데 줄
+  { x: 0.20, z: 0.90 }, { x: 0.50, z: 0.90 }, { x: 0.80, z: 0.90 }        // 5~7 앞 줄
+];
+var HELLO_ORDER = [5, 2, 3, 7, 0, 4, 6, 1];
+// 칸 × 친구 인사(말풍선 한 줄). 성격: 둘숑 씩씩 · 러블 느긋한 고양이 · 두덩 부지런한 두더지 · 독슐 멋진 독수리 · 뽀푸 우아 · 챙챙 통통 · 쮸르 먹보 판다 · 베비히포 아기 하마
+var HELLO_SAY = {
+  greet:     { dolsom: "굿모닝! 멍멍!", lovel: "좋은 아침이냥~", dudung: "일찍 일어났다!", sul: "아침 하늘 최고!", ppopu: "상쾌한 아침~", chaeng: "으쌰! 아침이다!", juksun: "아침 대나무 냠", bbosong: "아함~ 좋은 아침" },
+  morning:   { dolsom: "오늘도 힘차게!", lovel: "느긋한 오전이냥", dudung: "열심히 파는 중!", sul: "높이 날아볼까?", ppopu: "활기찬 오전~", chaeng: "첨벙! 신나는 오전", juksun: "느긋느긋 오전", bbosong: "오늘도 방긋~" },
+  lunch:     { dolsom: "점심 뭐 먹지?", lovel: "참치가 좋겠다냥", dudung: "지렁이 도시락!", sul: "내 점심은 생선!", ppopu: "맛있게 먹어요~", chaeng: "냠냠 점심 시간!", juksun: "대나무 점심 냠냠", bbosong: "밥 먹자 밥~" },
+  afternoon: { dolsom: "조금만 더 힘내!", lovel: "낮잠 자고 싶냥", dudung: "땅 팔 힘이 나요", sul: "바람이 좋은 오후", ppopu: "간식 타임이에요", chaeng: "물장구 치고 싶어", juksun: "나른한 오후야~", bbosong: "졸려도 힘내요" },
+  evening:   { dolsom: "오늘도 수고했어!", lovel: "수고했다냥~", dudung: "고생 많았어요", sul: "노을이 멋지네", ppopu: "수고 많으셨어요", chaeng: "퇴근이다 야호!", juksun: "푹 쉬어요~", bbosong: "토닥토닥 수고!" },
+  night:     { dolsom: "편안한 밤이야~", lovel: "달이 예쁘다냥", dudung: "별이 반짝반짝", sul: "밤하늘 구경 중", ppopu: "좋은 저녁이에요", chaeng: "달님 안녕~", juksun: "포근한 밤이야", bbosong: "굿나잇 준비~" },
+  sleep:     { dolsom: "쿨쿨… 잘 자요", lovel: "그르릉… 잘 자냥", dudung: "음냐… 잘 자요", sul: "푸드덕… 굿나잇", ppopu: "새근… 잘 자요", chaeng: "뽀글… 잘 자요", juksun: "대나무 꿈… 쿨", bbosong: "으음… 굿나잇" }
+};
+function helloScript() { return { t: HELLO_T, seats: HELLO_SEATS, order: HELLO_ORDER }; }
+OPEN_SLOTS.forEach(function (s) { s.hello = { say: HELLO_SAY[s.id], rest: s.kind === "sleep" }; });
+
+function openScript() { return { v: 5, hello: helloScript(), dur: OPEN_DUR, fade: OPEN_FADE, brand: OPEN_BRAND, bg: OPEN_BG, ink: OPEN_INK, chars: OPEN_CHARS, names: OPEN_NAMES, wx: OPEN_WX, x: OPEN_X, xs: OPEN_XS, slots: OPEN_SLOTS }; }
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { openScript: openScript, helloScript: helloScript, HELLO_SAY: HELLO_SAY, HELLO_SEATS: HELLO_SEATS, HELLO_ORDER: HELLO_ORDER, HELLO_T: HELLO_T, openSlotIndex: openSlotIndex, OPEN_SLOTS: OPEN_SLOTS, OPEN_DUR: OPEN_DUR, OPEN_FADE: OPEN_FADE, OPEN_BRAND: OPEN_BRAND, OPEN_BG: OPEN_BG, OPEN_INK: OPEN_INK, OPEN_CHARS: OPEN_CHARS, OPEN_NAMES: OPEN_NAMES, OPEN_WX: OPEN_WX, OPEN_X: OPEN_X, OPEN_XS: OPEN_XS };
