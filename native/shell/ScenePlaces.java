@@ -67,7 +67,7 @@ final class ScenePlaces {
     public static SceneArt.Bg build(SceneCv root, SceneArt.Pal L, SceneArt.Geom g, double dpr, String season, boolean dark) {
         double W = g.W, H = g.H, hy = g.hy; int tw = (int) Math.ceil(W * 1.7);
         SceneArt.Bg bg = new SceneArt.Bg(); bg.tw = tw;
-        bg.sky = root.newLayer(W, H, dpr); bg.far = root.newLayer(tw, H, dpr); bg.mid = root.newLayer(tw, H, dpr); bg.gnd = root.newLayer(W, H, dpr);
+        bg.sky = root.newLayer(W, H, dpr); bg.far = root.newLayer(tw, H, dpr); bg.mid = root.newLayer(tw, H, dpr); bg.gnd = root.newLayer(W, H + g.ext, dpr);
         SceneArt.drawSky(bg.sky.cv(), L, W, H, hy);
         Seeded rng = new Seeded(L.place.hashCode() * 31 + L.slot.length() * 977 + L.wk.length() * 131 + 7);
         switch (L.place) {
@@ -111,10 +111,11 @@ final class ScenePlaces {
         // 땅: 잔디 + 굽은 길 + 가로등
         c = bg.gnd.cv();
         int grass = gnd(L, season.equals("winter") ? "#9aa58f" : season.equals("autumn") ? "#9db36a" : "#6fbf6a");
-        SceneCv.Grad gr = c.linear(0, hy + 3, 0, H).stop(0, shade(grass, .08)).stop(1, shade(grass, -.12)); c.fillGrad(gr); c.fillRect(0, hy + 3, W, H - hy - 3);
+        SceneCv.Grad gr = c.linear(0, hy + 3, 0, H).stop(0, shade(grass, .08)).stop(1, shade(grass, -.12)); c.fillGrad(gr); c.fillRect(0, hy + 3, W, H + g.ext - hy - 3);
         c.fillStyle("rgba(255,255,255,.06)"); for (i = 0; i < 9; i++) { double y0 = hy + 6 + Math.pow(i / 9.0, 1.4) * (H - hy), y1 = hy + 6 + Math.pow((i + .5) / 9.0, 1.4) * (H - hy); c.fillRect(0, y0, W, Math.max(1, y1 - y0)); }
         int path = gnd(L, "#e5d3b0");
         c.fillStyle(path); c.beginPath(); c.moveTo(W * .44, hy + 8); c.bezierTo(W * .5, g.nearTop * .9, W * .02, g.nearTop + 4, -W * .06, H); c.lineTo(W * .72, H); c.bezierTo(W * .6, g.nearTop + 6, W * .56, hy + 24, W * .54, hy + 8); c.closePath(); c.fill();
+        { double sl = (W * .72 - W * .6) / Math.max(1, H - g.nearTop - 6), sr = (-W * .06 - W * .02) / Math.max(1, H - g.nearTop - 4); c.beginPath(); c.moveTo(-W * .06, H - .5); c.lineTo(W * .72, H - .5); c.lineTo(W * .72 + sl * g.ext, H + g.ext); c.lineTo(-W * .06 + sr * g.ext, H + g.ext); c.closePath(); c.fill(); }       // 길을 같은 기울기로 아래까지 잇는다
         c.strokeStyle("rgba(0,0,0,.1)"); c.lineWidth(1); c.beginPath(); c.moveTo(W * .44, hy + 8); c.bezierTo(W * .5, g.nearTop * .9, W * .02, g.nearTop + 4, -W * .06, H); c.stroke();
         c.beginPath(); c.moveTo(W * .54, hy + 8); c.bezierTo(W * .56, hy + 24, W * .6, g.nearTop + 6, W * .72, H); c.stroke();
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.3, .7) * W, pyy = rng.r(g.nearTop + 12, H - 8), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
@@ -169,11 +170,11 @@ final class ScenePlaces {
         c.strokeStyle("rgba(0,0,0,.14)"); c.lineWidth(1); for (double x = 0; x < W; x += 13) { c.beginPath(); c.moveTo(x, wBot); c.lineTo(x, g.nearTop + 1); c.stroke(); }
         c.fillStyle("rgba(0,0,0,.18)"); c.fillRect(0, wBot, W, 1.6);
         // 산책로
-        int walk = gnd(L, "#d9cdb8"); SceneCv.Grad pg = c.linear(0, g.nearTop, 0, H).stop(0, shade(walk, .06)).stop(1, shade(walk, -.1)); c.fillGrad(pg); c.fillRect(0, g.nearTop, W, H - g.nearTop);
+        int walk = gnd(L, "#d9cdb8"); SceneCv.Grad pg = c.linear(0, g.nearTop, 0, H).stop(0, shade(walk, .06)).stop(1, shade(walk, -.1)); c.fillGrad(pg); c.fillRect(0, g.nearTop, W, H + g.ext - g.nearTop);
         c.fillStyle(shade(walk, .2)); c.fillRect(0, g.nearTop - 1, W, 2);
         c.fillStyle(gnd(L, "#c0675a")); c.fillRect(0, g.nearTop + (H - g.nearTop) * .62, W, 3.4);       // 자전거길 띠
         c.fillStyle("rgba(255,255,255,.55)"); for (double x = 6; x < W; x += 22) c.fillRect(x, g.nearTop + (H - g.nearTop) * .62 + 1.1, 11, 1.2);
-        c.strokeStyle("rgba(0,0,0,.08)"); for (i = 1; i <= 4; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        c.strokeStyle("rgba(0,0,0,.08)"); for (i = 1; i < 60; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
         if (snow) for (i = 0; i < 8; i++) { c.fillStyle("rgba(255,255,255,.88)"); c.beginPath(); c.ellipse(rng.r(0, W), rng.r(g.nearTop + 3, H - 3), rng.r(8, 20), rng.r(2, 4), 0, 0, PI2); c.fill(); }
         // 난간(둑 위)
@@ -226,11 +227,13 @@ final class ScenePlaces {
         c = bg.gnd.cv();
         int yard = gnd(L, "#d8bf94"); SceneCv.Grad yg = c.linear(0, hy + 9, 0, g.nearTop).stop(0, shade(yard, .06)).stop(1, shade(yard, -.06)); c.fillGrad(yg); c.fillRect(0, hy + 9, W, g.nearTop - hy - 9);
         c.fillStyle(gnd(L, "#e1d9c8")); c.fillRect(0, hy + 9, W, 2);
-        int walk = gnd(L, "#cfc8ba"); SceneCv.Grad pg = c.linear(0, g.nearTop, 0, H).stop(0, shade(walk, .06)).stop(1, shade(walk, -.1)); c.fillGrad(pg); c.fillRect(0, g.nearTop, W, H - g.nearTop);
+        int walk = gnd(L, "#cfc8ba"); SceneCv.Grad pg = c.linear(0, g.nearTop, 0, H).stop(0, shade(walk, .06)).stop(1, shade(walk, -.1)); c.fillGrad(pg); c.fillRect(0, g.nearTop, W, H + g.ext - g.nearTop);
         c.fillStyle(shade(walk, .2)); c.fillRect(0, g.nearTop - 1, W, 2.2);
         c.fillStyle(gnd(L, "#f2c230")); c.fillRect(0, g.nearTop + (H - g.nearTop) * .5, W, 5);
         c.fillStyle(rgba(0, 0, 0, .45)); for (double x = 4; x < W; x += 14) { c.beginPath(); c.moveTo(x, g.nearTop + (H - g.nearTop) * .5 + 5); c.lineTo(x + 6, g.nearTop + (H - g.nearTop) * .5); c.lineTo(x + 8, g.nearTop + (H - g.nearTop) * .5); c.lineTo(x + 2, g.nearTop + (H - g.nearTop) * .5 + 5); c.closePath(); c.fill(); }
-        c.fillStyle(gnd(L, "#ffffff")); for (i = 0; i < 6; i++) { double x0 = W * .52 + i * 15; c.beginPath(); c.moveTo(x0, g.nearTop + 3); c.lineTo(x0 + 9, g.nearTop + 3); c.lineTo(x0 + 11 + i * .6, H - 3); c.lineTo(x0 - 3 + i * .6, H - 3); c.closePath(); c.fill(); }
+        c.fillStyle(gnd(L, "#ffffff"));       // 횡단보도: 줄마다 폭 · 간격이 같은 비율로 부챗살처럼 벌어진다 — 평소 카드 아래(H-3)까지만 그리고, 카드가 늘어난 아래쪽은 일반 바닥
+        { double yt = g.nearTop + 3, yb = H - 3, xc = W * .52 + 37.5 + 4.5, a = .5 / Math.max(1, H - 3 - yt), sb = 1 + a * (yb - yt);
+          for (i = 0; i < 6; i++) { double ci = W * .52 + i * 15 + 4.5, cb = xc + (ci - xc) * sb; c.beginPath(); c.moveTo(ci - 4.5, yt); c.lineTo(ci + 4.5, yt); c.lineTo(cb + 4.5 * sb, yb); c.lineTo(cb - 4.5 * sb, yb); c.closePath(); c.fill(); } }
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.08, .5) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
         if (snow) for (i = 0; i < 7; i++) { c.fillStyle("rgba(255,255,255,.88)"); c.beginPath(); c.ellipse(rng.r(0, W * .5), rng.r(g.nearTop + 3, H - 3), rng.r(8, 20), rng.r(2, 4), 0, 0, PI2); c.fill(); }
         // 보호구역 표지판
@@ -273,11 +276,11 @@ final class ScenePlaces {
         }
         // 땅: 돌바닥 + 가로 줄무늬 그림자 + 전구줄은 SceneFx
         c = bg.gnd.cv();
-        int pave = gnd(L, "#b8ad9c"); SceneCv.Grad pg = c.linear(0, hy + 6, 0, H).stop(0, shade(pave, -.08)).stop(1, shade(pave, -.02)); c.fillGrad(pg); c.fillRect(0, hy + 6, W, H - hy - 6);
+        int pave = gnd(L, "#b8ad9c"); SceneCv.Grad pg = c.linear(0, hy + 6, 0, H).stop(0, shade(pave, -.08)).stop(1, shade(pave, -.02)); c.fillGrad(pg); c.fillRect(0, hy + 6, W, H + g.ext - hy - 6);
         c.fillStyle("rgba(0,0,0,.2)"); c.fillRect(0, hy + 6, W, 5);
         c.strokeStyle("rgba(0,0,0,.12)"); c.lineWidth(1);
-        for (i = 1; i <= 7; i++) { double yy = hy + 8 + Math.pow(i / 7.0, 1.6) * (H - hy - 8); c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
-        for (i = -10; i <= 10; i++) { c.beginPath(); c.moveTo(W / 2 + i * 12, hy + 8); c.lineTo(W / 2 + i * 40, H); c.stroke(); }
+        for (i = 1; i < 80; i++) { double yy = hy + 8 + Math.pow(i / 7.0, 1.6) * (H - hy - 8); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        for (i = -10; i <= 10; i++) { c.beginPath(); c.moveTo(W / 2 + i * 12, hy + 8); c.lineTo(W / 2 + i * (12 + 28 * (H + g.ext - hy - 8) / (H - hy - 8)), H + g.ext); c.stroke(); }       // 같은 기울기로 끝까지
         if (wet(L)) for (i = 0; i < 6; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop - 8, H - 6), prx = rng.r(9, 18); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); c.fillStyle("rgba(210,230,255,.3)"); c.beginPath(); c.ellipse(pxx - prx * .2, pyy - 1, prx * .5, prx * .08, 0, 0, PI2); c.fill(); }
         if (snow) for (i = 0; i < 9; i++) { c.fillStyle("rgba(255,255,255,.85)"); c.beginPath(); c.ellipse(rng.r(0, W), rng.r(g.nearTop - 6, H - 3), rng.r(8, 22), rng.r(2, 4), 0, 0, PI2); c.fill(); }
         // 가까운 쪽 손수레
@@ -308,10 +311,10 @@ final class ScenePlaces {
         double rx = L.sunX * W; SceneCv.Grad rgl = c.linear(rx, hy + 3, rx, seaB).stop(0, rgba(255, 244, 200, L.hidesSun ? .08 : L.moon ? .3 : .55)).stop(1, rgba(255, 244, 200, 0)); c.fillGrad(rgl); c.fillRect(rx - 16, hy + 3, 32, seaB - hy - 3);
         c.fillStyle("rgba(255,255,255,.28)"); for (i = 0; i < 14; i++) { double yy = rng.r(hy + 6, seaB - 3); c.fillRect(rng.r(0, W), yy, rng.r(6, 16), 1); }
         int dry = gnd(L, "#e8d7b0"), wetS = mix(dry, css("#6a5a44"), .35);
-        SceneCv.Grad sa = c.linear(0, seaB, 0, H).stop(0, wetS).stop(.18, wetS).stop(.26, shade(dry, .04)).stop(1, shade(dry, -.1)); c.fillGrad(sa); c.fillRect(0, seaB, W, H - seaB);
+        SceneCv.Grad sa = c.linear(0, seaB, 0, H).stop(0, wetS).stop(.18, wetS).stop(.26, shade(dry, .04)).stop(1, shade(dry, -.1)); c.fillGrad(sa); c.fillRect(0, seaB, W, H + g.ext - seaB);
         c.fillStyle("rgba(255,255,255,.85)"); c.beginPath(); for (double x = 0; x <= W; x += 4) c.lineTo(x, seaB - 1.4 + Math.sin(x * .09) * 1.4); c.lineTo(W, seaB + 3); c.lineTo(0, seaB + 3); c.closePath(); c.fill();
         for (i = 0; i < 14; i++) { c.fillStyle(rng.r() < .5 ? "rgba(255,255,255,.7)" : "rgba(210,170,150,.8)"); c.beginPath(); c.arc(rng.r(0, W), rng.r(g.nearTop + 6, H - 3), rng.r(.8, 1.6), 0, PI2); c.fill(); }
-        c.strokeStyle("rgba(0,0,0,.07)"); c.lineWidth(1); for (i = 1; i <= 4; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        c.strokeStyle("rgba(0,0,0,.07)"); c.lineWidth(1); for (i = 1; i < 60; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.4)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
         String[] pc = {"#e0556c", "#f0b83a", "#5aa9e6", "#e9eef5"};
         for (int k = 0; k < 3; k++) {
@@ -348,9 +351,10 @@ final class ScenePlaces {
         // 땅: 풀 · 흙길 · 나무 울타리
         c = bg.gnd.cv();
         int grass = gnd(L, season.equals("winter") ? "#8d9a7e" : season.equals("autumn") ? "#8a9a5a" : "#5c9a58");
-        SceneCv.Grad gr = c.linear(0, hy + 3, 0, H).stop(0, shade(grass, .04)).stop(1, shade(grass, -.14)); c.fillGrad(gr); c.fillRect(0, hy + 3, W, H - hy - 3);
+        SceneCv.Grad gr = c.linear(0, hy + 3, 0, H).stop(0, shade(grass, .04)).stop(1, shade(grass, -.14)); c.fillGrad(gr); c.fillRect(0, hy + 3, W, H + g.ext - hy - 3);
         int dirt = gnd(L, "#a98a62");
         c.fillStyle(dirt); c.beginPath(); c.moveTo(W * .5, hy + 8); c.bezierTo(W * .46, g.nearTop * .85, W * .1, g.nearTop + 2, -W * .1, H); c.lineTo(W * .78, H); c.bezierTo(W * .6, g.nearTop + 4, W * .56, hy + 22, W * .56, hy + 8); c.closePath(); c.fill();
+        { double sl = (W * .78 - W * .6) / Math.max(1, H - g.nearTop - 4), sr = (-W * .1 - W * .1) / Math.max(1, H - g.nearTop - 2); c.beginPath(); c.moveTo(-W * .1, H - .5); c.lineTo(W * .78, H - .5); c.lineTo(W * .78 + sl * g.ext, H + g.ext); c.lineTo(-W * .1 + sr * g.ext, H + g.ext); c.closePath(); c.fill(); }       // 길을 같은 기울기로 아래까지 잇는다
         c.fillStyle("rgba(0,0,0,.09)"); for (i = 0; i < 18; i++) { c.beginPath(); c.ellipse(rng.r(W * .08, W * .7), rng.r(g.nearTop - 4, H - 3), rng.r(1.6, 4), rng.r(.8, 1.6), 0, 0, PI2); c.fill(); }
         c.fillStyle(dim(L, "#7e8590")); for (i = 0; i < 9; i++) { c.beginPath(); c.ellipse(rng.r(W * .05, W * .75), rng.r(g.nearTop, H - 3), rng.r(2, 4.4), rng.r(1.2, 2.4), 0, 0, PI2); c.fill(); }
         c.strokeStyle(dim(L, "#6b4f33")); c.lineWidth(1.6); for (i = 0; i < 3; i++) { double rx = rng.r(W * .2, W * .6), ry = rng.r(g.nearTop + 6, H - 8); c.beginPath(); c.moveTo(rx, ry); c.quadTo(rx + 8, ry - 3, rx + 15, ry + 1); c.stroke(); }
