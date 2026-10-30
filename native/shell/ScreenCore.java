@@ -2136,6 +2136,24 @@ public final class ScreenCore {
             out.add(it);
             return y + n.h + n.padB;
         }
+        if ("chips".equals(n.t)) {                                                   // s353 (YJ: 지방 노선도에 역이 안 나온다): 본문 칩 줄 — 머리 칩과 같은 모양, 폭이 차면 다음 줄로 흘러 쓴다(칩 하나가 칸보다 길면 칸 폭까지만)
+            float tx = ox, ty = y + n.padT; boolean any = false;
+            for (Node c : n.items) {
+                Item it = new Item(); it.kind = K_CHIP; it.label = c.label; it.badge = c.badge; it.on = c.on; it.act = c.act;
+                it.size = n.cfs; it.bold = true; it.ac = col(c.fill.length() > 0 ? c.fill : n.onc, new Col("orange", 0)); it.tc = col(n.tc, new Col("white", 0));
+                if (n.offf.length() > 0 || n.offb.length() > 0 || n.offt.length() > 0 || c.line.length() > 0 || c.ob.length() > 0) {
+                    it.owc = true; it.ofl = col(n.offf, null); it.obd = col(c.ob.length() > 0 ? c.ob : (c.line.length() > 0 ? c.line : n.offb), null); it.otx = col(c.line.length() > 0 ? c.line : n.offt, null);
+                }
+                it.labelW = m.width(c.label, n.cfs, true);
+                it.badgeW = c.badge.length() > 0 ? m.width(c.badge, n.cfs, true) : 0f;
+                it.sx = n.cpx; it.plain = c.big; it.bw = c.bw;
+                it.w = Math.min(innerW, n.cpx * 2 + it.labelW + (c.badge.length() > 0 ? 6f + it.badgeW : 0f));
+                if (tx > ox && tx + it.w > ox + innerW + 0.5f) { tx = ox; ty += n.h + n.gap; }
+                it.h = n.h; it.x = tx; it.y = ty;
+                out.add(it); tx += it.w + n.gap; any = true;
+            }
+            return any ? ty + n.h + n.padB : y + n.padT + n.padB;
+        }
         if ("tags".equals(n.t)) {                                                    // 알약 줄바꿈 배치: 글 폭 + 좌우 여백, 줄이 차면 다음 줄
             float tx = ox, ty = y, hh = n.h; boolean any = false;
             for (Node c : n.items) {
