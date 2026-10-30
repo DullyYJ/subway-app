@@ -671,6 +671,12 @@ function rtxPickPlace(food, recent, kind) {
       if (it.d != null && it.d > radius) return;
       if (re.test(String(it.c || ''))) list.push({ idx: idx, it: it });
     });
+    // ★ s351 (YJ: "카페나 맛집은 무조건 연동"): 반경 안에 없으면(한적한 역) 받아 온 목록 중 가장 가까운 곳으로 — 가게를 못 고르고 글만 보내지 않는다
+    if (!list.length) {
+      arr.forEach(function (it, idx) { if (it && it.n && re.test(String(it.c || ''))) list.push({ idx: idx, it: it }); });
+      list.sort(function (x, y) { return (x.it.d == null ? 1e9 : x.it.d) - (y.it.d == null ? 1e9 : y.it.d); });
+      list = list.slice(0, 5);
+    }
     if (!list.length) return null;
     var fresh = list.filter(function (x) { return recent.indexOf(x.it.n) < 0; });
     var pool = fresh.length ? fresh : list;
@@ -939,19 +945,24 @@ function rtxLoadFood(loc) {
   var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
   if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
   if (typeof fetch !== 'function') return Promise.resolve(null);
-  var ac = (typeof AbortController === 'function') ? new AbortController() : null;
-  var tm = ac ? setTimeout(function () { ac.abort(); }, 1800) : null;
-  return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=800&limit=200', ac ? { signal: ac.signal } : undefined)
-    .then(function (r) { return r.ok ? r.json() : null; })
-    .then(function (d) {
-      if (tm) clearTimeout(tm);
-      var it = (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
-      if (!it.length) return null;
-      if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
-      RTX_FOOD_MEM[key] = { ts: now, items: it };
-      return it;
-    })
-    .catch(function () { if (tm) clearTimeout(tm); return null; });
+  // ★ s351 (YJ: "카페나 맛집은 무조건 연동"): 한 번에 못 받으면(1.8초 제한에 걸린 느린 응답 · 빈 목록) 반경을 넓혀 한 번 더 — 구체적인 가게를 못 고르고 글만 나가는 일을 줄인다.
+  var one = function (r, ms) {
+    var ac = (typeof AbortController === 'function') ? new AbortController() : null;
+    var tm = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
+    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=200', ac ? { signal: ac.signal } : undefined)
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (d) {
+        if (tm) clearTimeout(tm);
+        return (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+      })
+      .catch(function () { if (tm) clearTimeout(tm); return []; });
+  };
+  return one(800, 3000).then(function (it) { return it.length ? it : one(1500, 2000); }).then(function (it) {
+    if (!it.length) return null;
+    if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
+    RTX_FOOD_MEM[key] = { ts: now, items: it };
+    return it;
+  });
 }
 
 // s237: 앱은 날씨를 안 보낸다 — 도착역(없으면 앱이 보낸 loc) 좌표의 날씨(Open-Meteo, 장면 엔진과 같은 sceneWeather · 10분 캐시)를 엔진이 받아 문구(문구 고르기 · 버튼 글)에 쓴다. 2.5초 안에 못 받으면 날씨 없이 만든다.
