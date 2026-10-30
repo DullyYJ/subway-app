@@ -506,12 +506,11 @@ public class ShellActivity extends Activity {
 
     // ───────────── 화면 받기 ─────────────
     // ── s346 (YJ: 역 설정 때 화면이 마음대로 움직이고 후보가 안 보인다): 설정 화면에서 글자를 칠 땐 창을 밀어 올리지(pan) 않고 줄인다 —
-    //    그러면 화면(ScreenView)이 키보드 위 남은 높이를 알아 입력칸과 그 아래 후보 줄을 스스로 보이게 놓는다. 위 문구줄과 아래 탭은 그동안 접어 둔다. ──
+    //    그러면 화면(ScreenView)이 키보드 위 남은 높이를 알아 입력칸과 그 아래 후보 줄을 스스로 보이게 놓는다. (s347: 위 문구줄 · 아래 탭은 접지 않는다 — 접고 펴는 순간 화면이 튀었다.) ──
     private boolean kbEdit;
     private final Runnable kbRestoreRun = new Runnable() { @Override public void run() {
         if (!kbEdit) return;
         kbEdit = false;
-        hdr.setVisibility(View.VISIBLE); tabs.setVisibility(View.VISIBLE);
         applyIme();
     } };
     private void settingsKb(boolean on) {
@@ -522,7 +521,6 @@ public class ShellActivity extends Activity {
             if (slots.length == 0 || !ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) return;
             kbEdit = true;
             try { getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE); } catch (Throwable ignored) { }
-            hdr.setVisibility(View.GONE); tabs.setVisibility(View.GONE);
         } else if (kbEdit) main.postDelayed(kbRestoreRun, 300L);          // 칸에서 칸으로 옮기는 사이의 잠깐 끊김에는 되돌리지 않는다
     }
     /** 키보드가 올라올 때 화면을 줄이지(눌러 찌그러뜨리지) 않는다 — 웹처럼 화면은 그대로 두고 키보드만 위로 뜬다(adjustPan: 입력칸이 키보드에 가릴 때만 창을 밀어 올린다).
@@ -5500,6 +5498,7 @@ public class ShellActivity extends Activity {
             main.post(new Runnable() { @Override public void run() {
                 if (my <= seqCmApplied || txt.length() == 0 || li != slots.length - 1 || !ShellCore.S_SETTINGS.equals(slots[li])) return;          // s285 (YJ: 역 후보가 너무 느려): 먼저 보낸 요청의 답도 더 새 답이 아직 안 왔으면 바로 그린다(예전엔 최신 요청이 아니면 버려, 버스 후보가 끼면 두 번 왕복을 기다렸다) — 더 새 답이 이미 그려졌으면 늦은 옛 답만 버린다
                 seqCmApplied = my;
+                v.springChanges(400L);                                                                                  // s347: 새로 생긴 후보 줄은 스프링으로 나타난다(바뀐 칸만 · 아래 칸은 ScreenView 가 미끄러뜨린다)
                 present(v, txt, true);
             } });
         } }, "shell-cmi").start();
