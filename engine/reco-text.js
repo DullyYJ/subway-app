@@ -7,7 +7,7 @@
 //   돌아온 제목·본문·메뉴·가게를 그대로 보여준다. (작은 화면(PiP) 문구 · 오버레이 광고 줄은 2단계, 쿠팡 상품 고르기 · 가게 목록 받기는 3단계에서 엔진으로 왔다.)
 //   시간은 한국시간 기준(예전 웹은 기기 시간대; 한국 앱이라 같다). 무작위는 씨앗(seed)으로 정해 같은 입력이면 같은 결과(시험이 가능하다).
 //
-// 출력에는 더해서 pip:{title,lines}(작은 화면 문구) · ad:{k,a,b,m,pn,piIdx}|null(오버레이 추천 줄) 도 들어 있다(알림 본문 그대로 쓸 때).
+// 출력에는 더해서 pip:{title,lines}(작은 화면 문구) · ad:{k,a,b,m,q,pn,piIdx}|null (q = 지도에서 찾을 말 — 가게 이름 · 가게를 못 골랐으면 "<메뉴> 맛집"/"카페")(오버레이 추천 줄) 도 들어 있다(알림 본문 그대로 쓸 때).
 //   recoPip({ a:{remMin,menu,brunch,hook,spots,shopN,cx,dinner}, slot, dest, body, nowMs, seed }) → { v:1, pip } — 본문 한 줄이 AI 문구로 바뀐 경우 작은 화면 문구만 다시 만든다.
 // 3단계(2026-10-19): ⑤ 쿠팡 상품 고르기(pickShop:1 + shopRecent:[이름…] → 엔진이 쇼핑 서버 목록에서 골라 shopItem:{n,u,i,_cat,_t} 로 돌려준다; 못 고르면 shopMiss:true)
 //   ⑥ 도착지 가게 목록 받기(foodPref:'server' + loc:{lat,lng}=역·정류장 좌표 → 엔진이 맛집 서버에서 받아 foods:[{n,c,a,d}] 로 돌려준다; 못 받으면 앱이 보낸 food 를 쓴다)
@@ -485,7 +485,16 @@ function rtxAd(a, slot, destStn){
     if(sl !== 'morning' && a.spots && a.spots.length){ nm = a.spots[0]; info = find(nm); byMenu = true; }
     else if(pl && pl.n){ nm = pl.n; info = pl; }
     else if(a.spots && a.spots[0]){ nm = a.spots[0]; info = find(nm); byMenu = (sl !== 'morning'); }
-    if(!nm) return null;
+    if(!nm){
+      // ★ 2026-10-30 s350 (YJ: "추천이 나와서 눌렀더니 이상한 글자(🚇 하차 6분 전 · 아라 🍽️)가 카카오맵 검색창에 들어간다 — 추천해 주는 식당·카페를 보여줘"):
+      //   도착지 주변 가게 목록을 못 받아 구체적인 가게를 못 골랐어도 줄은 만든다 — [보기]는 지도에서 '<메뉴> 맛집'(아침은 '카페')을 도착지 좌표 근처로 찾는다. 안내 문구(제목)를 검색어로 쓰지 않는다.
+      var cafeS = (sl === 'morning'), wd = clean(a.menu || '');
+      var qS = cafeS ? '카페' : (wd ? wd + ' 맛집' : '맛집');
+      var dS = '';
+      try{ if(typeof rtxHook === 'function') dS = String(rtxHook(sl, a.cx, wd).t || '').replace(/\s*어때요\??$/, '').trim(); }catch(e){}
+      dS = clean(dS ? dS + ((wd && dS.indexOf(wd) < 0) ? ', ' + wd + ' 어때요?' : '') : (wd ? wd + ' 어때요?' : (cafeS ? '내리자마자 근처 카페에 들러보세요' : '내리는 길에 한 끼 챙기세요')));
+      return { k: cafeS ? 'cafe' : 'food', a: clean((destStn ? destStn + ' ' : '근처 ') + qS), b: dS, m: rtxTeaser(sl, a.cx), go: cafeS ? '카페 보기' : '맛집 보기', q: qS, pn: '', piIdx: -1 };
+    }
     var catTail = info ? String(info.c || '').split('>').pop().trim() : '';
     var word = (sl === 'morning' || byMenu) ? (a.menu || catTail) : (catTail || a.menu || '');
     var hk = '';
@@ -508,7 +517,7 @@ function rtxAd(a, slot, destStn){
     } else {
       d += (/[요죠다]$/.test(d) ? '. ' : ', ') + word + ' 어때요?';
     }
-    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
+    return { k: (sl === 'morning' ? 'cafe' : 'food'), a: clean(word ? nm + ' · ' + word : nm), b: clean(d), m: rtxTeaser(sl, a.cx), go: rtxGoLabel(nm), q: clean(nm), pn: nm, piIdx: (list && info) ? list.indexOf(info) : -1 };   // pn·pi: [맛집 보기]가 앱에서 그 가게를 열 때 쓴다
   }catch(e){ return null; }
 }
 
