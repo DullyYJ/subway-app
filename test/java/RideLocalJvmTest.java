@@ -16,6 +16,7 @@ import java.util.Set;
  * 합격 기준(YJ): 역 도착 시각 차이 3초 이내 — 여기서는 그보다 훨씬 엄격하게 숫자 끝자리(ulp)까지 같아야 통과로 센다.
  */
 public class RideLocalJvmTest {
+    static final boolean STRICT = Boolean.getBoolean("strict");
     static int diffs;
     static final List<String> samples = new ArrayList<String>();
 
@@ -23,7 +24,8 @@ public class RideLocalJvmTest {
     static void cmp(Object a, Object b, String path) {
         if (diffs > 12) return;
         if (a == null && b == null) return;
-        if (b == null && path.endsWith(".state.rtc")) return;      // s334: 녹화본 중 s334 이전에 녹화한 답에는 실시간 호출 장부(state.rtc)가 없다 — 새 녹화(s334 줄)는 있으면 모두 비교한다
+        if (!STRICT && b == null && (path.endsWith(".state.rtc") || path.contains(".state.rtc.bu") || path.contains(".state.mkFloor") || path.contains(".state.bl.cand") || path.endsWith(".state.wait.pf") || path.endsWith(".w.pf"))) return;      // s336: 이전에 녹화한 답에는 새 상태 키(승차 후보 열차 · 승강장 시각 · 종착 바닥 · 버스트)가 없다 — 새 녹화(v:336, -Dstrict=1)는 모두 비교한다      // s334: 녹화본 중 s334 이전에 녹화한 답에는 실시간 호출 장부(state.rtc)가 없다 — 새 녹화(s334 줄)는 있으면 모두 비교한다
+        if (!STRICT && a instanceof String && b instanceof String && ((String) a).startsWith((String) b + " · 거리")) return;      // s336: 이전 녹화의 '어긋남' 메모에는 거리 꼬리말이 없다
         if (a instanceof Map || b instanceof Map) {
             Map<String, Object> ma = a instanceof Map ? (Map<String, Object>) a : new HashMap<String, Object>(), mb = b instanceof Map ? (Map<String, Object>) b : new HashMap<String, Object>();
             if (!(a instanceof Map) && a != null || !(b instanceof Map) && b != null) { note(path, a, b); return; }
@@ -125,7 +127,7 @@ public class RideLocalJvmTest {
             }
         }
         int tot = 0, fail = 0;
-        fail += localChecks();
+        if (!STRICT) fail += localChecks();
         for (String fn : stat.keySet()) { int[] s = stat.get(fn); tot += s[0] + s[1]; fail += s[1]; System.out.println(fn + ": 같음 " + s[0] + " · 다름 " + s[1]); }
         for (String fn : bad.keySet()) for (String b : bad.get(fn)) System.out.println("  [" + fn + "] " + b);
         System.out.println(fail == 0 ? "ALL OK (" + tot + ")" : "FAIL (" + fail + "/" + tot + ")");
