@@ -234,7 +234,7 @@ public class ShellActivity extends Activity {
                 a.a = "call"; a.v = "mp.rf"; hostBody.handle(a, false);              // 위 🔄 단추와 같은 행동
             }
         });
-        body.setSceneLongPress(new Runnable() { @Override public void run() { showAllHello(); } });          // s338: 홈 장면 3초 꾹 누르기 → 길동무 친구들 전원 인사
+        body.setHelloFeed(new ScreenView.HelloFeed() { @Override public SceneHello.Plan get() { return helloPlan(); } });          // s340: 홈 장면 3초 꾹 누르기 → 카드가 늘어나 친구들 인사
         body.setReorderHost(new ScreenView.ReorderHost() { @Override public void onReorder(String[] keys, int[] perm) { reorderBusNear(keys, perm); } });      // 주변 정류장 카드 끌어서 순서 바꾸기
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
@@ -305,27 +305,23 @@ public class ShellActivity extends Activity {
 
     // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸을 고르고, 나올 친구 셋은 켤 때마다 무작위로 고른다 ──
     private OpenView openV;
-    /** 엔진이 만든 오프닝 대본(assets/open.json)을 읽는다. 못 읽으면 null. */
-    private OpenCore.Script readOpenScript() throws java.io.IOException {
-        java.io.InputStream in = getAssets().open("open.json");
-        try { java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); return OpenCore.parse(bo.toString("UTF-8")); } finally { in.close(); }
-    }
-    /** s338: 홈 장면(길동무 친구들 카드)을 3초 넘게 꾹 누르면 — 친구 8마리 모두가 나와 지금 시간대의 인사를 한다(YJ). 대본(자리 · 차례 · 인사 글)은 엔진 assets/open.json 의 all/slot.all. */
-    private void showAllHello() {
-        if (openV != null) return;                                                  // 오프닝이나 전원 인사가 이미 떠 있다
+    private OpenCore.Script helloScript;
+    /** s340: 홈 장면(길동무 친구들 카드)을 3초 꾹 누르면 카드가 늘어나 나머지 친구들이 인사한다(YJ). 대본(시간 · 자리 · 차례 · 인사 글)은 엔진이 만든 assets/open.json 의 hello 와 지금 시(時) 칸. 없으면 null(아무것도 안 한다). */
+    private SceneHello.Plan helloPlan() {
         try {
-            OpenCore.Script sc = readOpenScript(); if (sc == null) return;
+            if (helloScript == null) {
+                java.io.InputStream in = getAssets().open("open.json");
+                try { java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); helloScript = OpenCore.parse(bo.toString("UTF-8")); } finally { in.close(); }
+            }
+            if (helloScript == null) return null;
             java.util.Calendar cal = java.util.Calendar.getInstance();
-            double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
-            OpenCore.Slot sl = OpenCore.withWeather(sc, OpenCore.slotFor(sc, hour), OpenWx.read(this));
-            if (!OpenCore.canAll(sc, sl)) return;                                    // 대본에 전원 인사가 없으면 아무것도 안 한다
-            openV = new OpenView(this, OpenCore.forAll(sc), sl, OpenCore.castAll(sc, sl, System.nanoTime() ^ cal.getTimeInMillis()), new OpenView.Done() { @Override public void onDone() { closeOpening(); } }, true);
-            addContentView(openV, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        } catch (Throwable ignored) { openV = null; }
+            return OpenCore.helloFor(helloScript, OpenCore.slotFor(helloScript, cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0));
+        } catch (Throwable ignored) { return null; }
     }
     private void showOpening() {
         try {
-            OpenCore.Script sc = readOpenScript();
+            OpenCore.Script sc; java.io.InputStream in = getAssets().open("open.json");
+            try { java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); sc = OpenCore.parse(bo.toString("UTF-8")); } finally { in.close(); }
             if (sc == null) return;
             java.util.Calendar cal = java.util.Calendar.getInstance();
             double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
