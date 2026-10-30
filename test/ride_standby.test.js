@@ -649,6 +649,36 @@ t('탑승 버튼 보정: 승차역에서 800m 넘게 먼 곳에서 누르면 버
   assert.ok(wr.state.wait && wr.state.eta.boarded === false, '첫 구간도 멀면 거둔다 ' + JSON.stringify(wr.notes));
 });
 
+// ── s348: 열차를 타고 출발한 뒤(승차역에서 먼 곳)에 누른 [탑승] — 거두지 않고 탄 열차로 적는다 ─────────────────────────────
+const tableNt = (deps) => ({ boardTable: (q) => { const d = deps.filter(x => x >= q.atMin)[0]; return { dk: '상', depMin: d == null ? null : d }; } });
+const rodeState = () => {
+  const w0 = waitState(); w0.eta.nodes = w0.eta.nodes.map(n => Object.assign({}, n, n.isOrigin ? {} : { isSub: true, isBus: false, lineName: '인천1호선' }));
+  w0.trail = [[at(12, 47, 0), LAT, LNG0, 10], [at(12, 48, 0), LAT, LNG0, 10], [at(12, 49, 0), LAT, LNG0, 10], [at(12, 50, 20), LAT, LNG0, 12]];      // 승차역에 있었다
+  return w0;
+};
+t('s348 탑승 버튼: 승차역에 있다가 열차로 멀어진 뒤(2km) 눌러도 거두지 않고, 그 사이 떠난 열차(12:50)로 적는다 — 다음 차(12:56)가 아니다', () => {
+  const T = at(12, 52, 10), far = [[T - 3000, LAT + 0.018, LNG0, 12]];
+  const rq = { nowMs: T, fixes: far, state: JSON.parse(JSON.stringify(withOvl(rodeState()))), act: 'press' };
+  assert.ok(rsAttachPressTT(rq, tableNt([12 * 60 + 40, 12 * 60 + 50, 12 * 60 + 56])) && rq.pressTT.rode === true && rq.pressTT.late === 12 * 60 + 50, JSON.stringify(rq.pressTT));
+  const r = rideStandby(Object.assign({}, rq, { fixes: far }));
+  assert.ok(!r.state.wait && r.state.eta.boarded === true, '거두지 않는다 ' + JSON.stringify(r.notes));
+  assert.ok(r.state.eta.passes.some(p => p.idx === 1 && p.ms === at(12, 50, 30)), '12:50:30 출발 ' + JSON.stringify(r.state.eta.passes));
+  assert.ok(!r.state.rsToast, '떨어져 있다는 안내 없음');
+});
+t('s348 탑승 버튼: 역에 온 적이 없으면(멀리서 누름) 예전처럼 거둔다 · 역에 닿기 전 시각표는 후보에서 뺀다', () => {
+  const T = at(12, 52, 10), far = [[T - 3000, LAT + 0.018, LNG0, 12]];
+  const w1 = withOvl(rodeState()); w1.trail = [];
+  const rq = { nowMs: T, fixes: far, state: JSON.parse(JSON.stringify(w1)), act: 'press' };
+  rsAttachPressTT(rq, tableNt([12 * 60 + 50, 12 * 60 + 56]));
+  assert.ok(!rq.pressTT.rode && rq.pressTT.late === null, JSON.stringify(rq.pressTT));
+  const r = rideStandby(rq);
+  assert.ok(r.state.wait && r.state.eta.boarded === false, '역에 온 적 없으면 거둔다 ' + JSON.stringify(r.notes));
+  const w2 = withOvl(rodeState()); w2.trail = [[at(12, 51, 0), LAT, LNG0, 10]];      // 12:51 에야 역에 닿았다 → 12:49 차는 탈 수 없다
+  const rq2 = { nowMs: T, fixes: far, state: JSON.parse(JSON.stringify(w2)), act: 'press' };
+  rsAttachPressTT(rq2, tableNt([12 * 60 + 40, 12 * 60 + 49, 12 * 60 + 56]));
+  assert.ok(!rq2.pressTT.rode, '역에 닿기 전 출발한 차는 인정하지 않는다 ' + JSON.stringify(rq2.pressTT));
+});
+
 // ── s146: 경로 카드 버튼 줄의 오른쪽 칸(탑승 → 환승 → 도착) — 칸의 뜻·전환은 엔진이 정한다 ─────────────────────────────
 t('버튼 줄 칸: 처음엔 탑승(밀고 들어옴) → 첫 구간 뒤 환승(위에서 내려옴) → 마지막 구간 뒤 도착(아래에서 올라옴), 누를 수 있는지(can)도 엔진이 말한다', () => {
   let r = stepO(waitState(), at(12, 47, 0), null, false);
