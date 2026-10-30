@@ -901,8 +901,9 @@ function recoPip(b) {
 // ── 바깥 자원(쇼핑 상품 목록 · 맛집 서버) — Worker 안에서만 부른다. 시험은 rtxSetLoaders 로 가짜를 끼운다 ──
 var RTX_FOOD_URL = 'https://gildongmu-food.phg0643.workers.dev';
 var RTX_FOOD_MEM = {};
-var RTX_LOADERS = { shop: null, food: null, ai: null, wx: null };
-function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null, wx: (o && o.wx) || null }; RTX_FOOD_MEM = {}; }
+var RTX_LOADERS = { shop: null, food: null, ai: null, wx: null, pub: null };
+var RTX_ENV = null, RTX_CTX = null;   // s352: Worker 가 넘겨 준 env·ctx — 공공데이터(handleFoodPub)를 같은 Worker 안에서 바로 부르는 데 쓴다
+function rtxSetLoaders(o) { RTX_LOADERS = { shop: (o && o.shop) || null, food: (o && o.food) || null, ai: (o && o.ai) || null, wx: (o && o.wx) || null, pub: (o && o.pub) || null }; RTX_FOOD_MEM = {}; }
 // ── ⑦ AI 위로 문구(저녁·야식·쇼핑) — 예전 웹 _arrAiCopy 와 같은 요청·같은 검사(서버가 '저녁/야식 × 메뉴'별로 미리 만들어 둔 문구를 하나 골라 준다) ──
 var RTX_AI_URL = 'https://gentle-lab-7e47subway-api.phg0643.workers.dev';
 var RTX_BAN_RE = /(정치|대통령|대선|총선|보궐|선거|후보\s*등록|국회|국정|의원|여당|야당|정당|민주당|국민의힘|개혁신당|진보당|장관|내각|청와대|탄핵|특검|검찰\s*수사|공수처|국정감사|시국|집회|시위|규탄|파업\s*투쟁|좌파|우파|보수\s*진영|진보\s*진영|친일|반일|반중|혐오|젠더\s*갈등|성별\s*갈등|페미|한남|한녀|종북|극우|극좌|이념)/;
@@ -940,24 +941,66 @@ function rtxLoadShop() {
   if (typeof shopLoad !== 'function') return Promise.resolve(null);
   return shopLoad().then(function (m) { return (m && m.data) ? { data: m.data, cfg: m.cfg || null } : null; }, function () { return null; });
 }
+function rtxHav(la1, lo1, la2, lo2) {
+  var R = 6371000, r = Math.PI / 180, dA = (la2 - la1) * r, dO = (lo2 - lo1) * r;
+  var h = Math.sin(dA / 2) * Math.sin(dA / 2) + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin(dO / 2) * Math.sin(dO / 2);
+  return Math.round(2 * R * Math.asin(Math.min(1, Math.sqrt(h))));
+}
+// s352 (YJ: "맛집탭에 나온다면 거기서 채택 — 전국이 그렇게"): 맛집 탭이 쓰는 공공데이터(/food-pub 과 같은 행)를 {n,c,a,d} 로 바꾼다.
+function rtxPubRows(rows, loc) {
+  var out = [];
+  if (!Array.isArray(rows)) return out;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i]; if (!r || typeof r !== 'object') continue;
+    var nm = rtxStr(r.bizesNm, 60); if (!nm) continue;
+    var la = Number(r.lat), lo = Number(r.lon);
+    var c = (rtxStr(r.indsMclsNm, 40) + ' ' + rtxStr(r.indsSclsNm, 40)).replace(/\s+/g, ' ').trim();
+    out.push({ n: nm, c: c, a: rtxStr(r.rdnmAdr, 120) || rtxStr(r.lnoAdr, 120), d: (isFinite(la) && isFinite(lo) && la && lo) ? rtxHav(loc.lat, loc.lng, la, lo) : null });
+  }
+  return out;
+}
+function rtxLoadPub(loc) {
+  if (RTX_LOADERS.pub) return Promise.resolve().then(function () { return RTX_LOADERS.pub(loc); }).then(function (rows) { return rtxPubRows(rows, loc); }, function () { return []; });
+  if (!RTX_ENV || typeof handleFoodPub !== 'function' || typeof Request !== 'function') return Promise.resolve([]);
+  var guard = new Promise(function (res) { setTimeout(function () { res(null); }, 4000); });
+  var job = Promise.resolve().then(function () {
+    return handleFoodPub(new Request('https://reco.local/food-pub?lat=' + loc.lat + '&lng=' + loc.lng), RTX_ENV, RTX_CTX);
+  }).then(function (res) { return res && res.ok ? res.json() : null; })
+    .then(function (j) { var it = j && j.response && j.response.body && j.response.body.items; return rtxPubRows(it, loc); })
+    .catch(function () { return []; });
+  return Promise.race([job, guard]).then(function (v) { return v || []; });
+}
+// 두 목록을 이름+주소 앞부분으로 겹침 없이 합친다(서버 쪽 먼저)
+function rtxMergeFood(a, b) {
+  var seen = {}, out = [];
+  var add = function (x) { var k = (x.n || '').replace(/\s+/g, '') + '|' + (x.a || '').slice(0, 8); if (seen[k]) return; seen[k] = 1; out.push(x); };
+  (a || []).forEach(add); (b || []).forEach(add);
+  return out;
+}
 function rtxLoadFood(loc) {
-  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; });
+  if (RTX_LOADERS.food) return Promise.resolve().then(function () { return RTX_LOADERS.food(loc); }).catch(function () { return null; }).then(function (srv) {
+    // 시험용 loader 도 공공데이터 loader 가 있으면 같이 합친다
+    if (!RTX_LOADERS.pub) return srv;
+    return rtxLoadPub(loc).then(function (pb) { var m = rtxMergeFood(srv, pb); return m.length ? m : null; });
+  });
   var key = loc.lat + ',' + loc.lng, now = Date.now(), hit = RTX_FOOD_MEM[key];
   if (hit && now - hit.ts < 600000) return Promise.resolve(hit.items);
   if (typeof fetch !== 'function') return Promise.resolve(null);
-  // ★ s351 (YJ: "카페나 맛집은 무조건 연동"): 한 번에 못 받으면(1.8초 제한에 걸린 느린 응답 · 빈 목록) 반경을 넓혀 한 번 더 — 구체적인 가게를 못 고르고 글만 나가는 일을 줄인다.
+  // ★ s351/s352: 맛집 탭과 같은 두 자료(맛집 서버 r=1500 limit=400 + 공공데이터)를 함께 받아 합친다. 서버가 느리거나 비어도 공공데이터로 채운다.
   var one = function (r, ms) {
     var ac = (typeof AbortController === 'function') ? new AbortController() : null;
     var tm = ac ? setTimeout(function () { ac.abort(); }, ms) : null;
-    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=200', ac ? { signal: ac.signal } : undefined)
+    return fetch(RTX_FOOD_URL + '/food?lat=' + loc.lat + '&lng=' + loc.lng + '&r=' + r + '&limit=400', ac ? { signal: ac.signal } : undefined)
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (d) {
         if (tm) clearTimeout(tm);
-        return (d && Array.isArray(d.items)) ? d.items.slice(0, 200).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
+        return (d && Array.isArray(d.items)) ? d.items.slice(0, 400).map(function (x) { x = (x && typeof x === 'object') ? x : {}; return { n: rtxStr(x.n, 60), c: rtxStr(x.c, 100), a: rtxStr(x.a, 120), d: rtxNum(x.d) }; }).filter(function (x) { return !!x.n; }) : [];
       })
       .catch(function () { if (tm) clearTimeout(tm); return []; });
   };
-  return one(800, 3000).then(function (it) { return it.length ? it : one(1500, 2000); }).then(function (it) {
+  var srvP = one(1500, 3000).then(function (it) { return it.length ? it : one(3000, 2000); });
+  return Promise.all([srvP, rtxLoadPub(loc)]).then(function (r2) {
+    var it = rtxMergeFood(r2[0], r2[1]);
     if (!it.length) return null;
     if (Object.keys(RTX_FOOD_MEM).length > 40) RTX_FOOD_MEM = {};
     RTX_FOOD_MEM[key] = { ts: now, items: it };
@@ -974,7 +1017,8 @@ function rtxLoadWx(loc) {
 }
 
 // ── Worker 연결부 — POST /reco-text {…} (handleFetch 에 길을 둔다) ──
-function handleRecoText(request) {
+function handleRecoText(request, env, ctx) {
+  if (env) { RTX_ENV = env; RTX_CTX = ctx || null; }
   var H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type', 'cache-control': 'no-store' };
   if (request.method === 'OPTIONS') return Promise.resolve(new Response(null, { status: 204, headers: H }));
   if (request.method !== 'POST') return Promise.resolve(new Response(JSON.stringify({ ok: false, error: 'POST only' }), { status: 405, headers: H }));
@@ -1011,4 +1055,4 @@ function handleRecoText(request) {
   }, function () { return new Response(JSON.stringify({ ok: false, error: 'read-fail' }), { status: 400, headers: H }); });
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, rtxGoLabel: rtxGoLabel, rtxTeaser: rtxTeaser, RTX_TEASE: RTX_TEASE, RTX_V: RTX_V };
+if (typeof module !== 'undefined' && module.exports) module.exports = { recoAlert: recoAlert, recoPip: recoPip, rtxCx: rtxCx, rtxHook: rtxHook, rtxShopLine: rtxShopLine, rtxFixJosa: rtxFixJosa, rtxAiClean: rtxAiClean, rtxAiSubject: rtxAiSubject, rtxMulberry: rtxMulberry, handleRecoText: handleRecoText, rtxSetLoaders: rtxSetLoaders, rtxPubRows: rtxPubRows, rtxMergeFood: rtxMergeFood, rtxGoLabel: rtxGoLabel, rtxTeaser: rtxTeaser, RTX_TEASE: RTX_TEASE, RTX_V: RTX_V };
