@@ -269,6 +269,41 @@ public class ScreenView extends View {
     public void setPalette(int[] c) { for (int i = 0; i < pal.length && i < c.length; i++) pal[i] = c[i]; styleInput(); invalidate(); }
 
     /** 새 화면을 올린다. keepScroll 이면 위치를 유지(같은 목록 갱신), 아니면 맨 위로. */
+    // ── s347: 글자를 치는 동안 레이아웃이 바뀌어도(후보 줄이 늘고 줄어듦) 칸이 옛 자리에서 새 자리로 미끄러진다 ──
+    private boolean shOn; private long shT0; private float shMax;
+    private static final float SH_MS = 240f;
+    private float shE(long now) { float f = (now - shT0) / SH_MS; if (f >= 1f) return 1f; f = 1f - f; return 1f - f * f * f; }
+    private static String shKey(ScreenCore.Item q) {
+        return q.kind + "|" + q.key + "|" + (q.act != null ? q.act.v + "/" + q.act.id : "") + "|" + q.label + "|" + q.value + "|" + (q.lines != null && q.lines.length > 0 ? q.lines[0] : "");
+    }
+    /** 지금 보이는 자리(y · 높이)를 칸마다 적어 둔다 — 같은 칸이 여럿이면 순서로 구분한다. 움직이는 중이면 움직이는 중의 자리. */
+    private java.util.HashMap<String, float[]> shSnap() {
+        java.util.HashMap<String, float[]> m = new java.util.HashMap<String, float[]>();
+        java.util.HashMap<String, Integer> cnt = new java.util.HashMap<String, Integer>();
+        float rem = shOn ? 1f - shE(SystemClock.uptimeMillis()) : 0f;
+        int pn = 0;
+        for (ScreenCore.Item q : lay.body) {
+            String k = q.kind == ScreenCore.K_PANEL ? "P#" + (pn++) : shKey(q);
+            Integer c = cnt.get(k); int n = c == null ? 0 : c; cnt.put(k, n + 1);
+            m.put(k + "#" + n, new float[] { q.y + q.shy * rem, q.h + q.shh * rem });
+        }
+        return m;
+    }
+    private void shApply(java.util.HashMap<String, float[]> old) {
+        if (lay == null) return;
+        java.util.HashMap<String, Integer> cnt = new java.util.HashMap<String, Integer>();
+        int pn = 0; float mx = 0f;
+        for (ScreenCore.Item q : lay.body) {
+            String k = q.kind == ScreenCore.K_PANEL ? "P#" + (pn++) : shKey(q);
+            Integer c = cnt.get(k); int n = c == null ? 0 : c; cnt.put(k, n + 1);
+            float[] o = old.get(k + "#" + n);
+            if (o == null) continue;
+            float dy = o[0] - q.y, dh = q.kind == ScreenCore.K_PANEL ? o[1] - q.h : 0f;
+            if (Math.abs(dy) < 0.5f && Math.abs(dh) < 0.5f) continue;
+            q.shy = dy; q.shh = dh; mx = Math.max(mx, Math.max(Math.abs(dy), Math.abs(dh)));
+        }
+        if (mx > 0f) { shOn = true; shT0 = SystemClock.uptimeMillis(); shMax = mx; invalidate(); }
+    }
     public void setScreen(ScreenCore.Screen s, boolean keepScroll) {
         boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
         // 키 기준 갱신: 새 데이터로 목록이 바뀌어도 보던 글(엔진이 준 고유 id)이 같은 자리에 남도록 위치를 맞춘다
@@ -283,6 +318,7 @@ public class ScreenView extends View {
         final long nowSp = SystemClock.uptimeMillis();
         java.util.HashMap<String, Integer> spOld = null;
         if (keepScroll && lay != null && nowSp < spUntil) { spOld = new java.util.HashMap<String, Integer>(); fpAdd(spOld, lay.head); fpAdd(spOld, lay.body); fpAdd(spOld, lay.foot); }
+        final java.util.HashMap<String, float[]> shOld = keepScroll && editKey != null && lay != null ? shSnap() : null;          // s347: 글자를 치는 중 후보 줄이 늘고 줄어도 아래 칸이 순간이동하지 않고 미끄러진다
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
         mqT0 = SystemClock.uptimeMillis();
@@ -297,6 +333,7 @@ public class ScreenView extends View {
         partialFrom = before != null && before.part ? before : null;
         relayout();
         partialFrom = null;
+        if (shOld != null) shApply(shOld);
         if (spOld != null) markChanged(spOld, nowSp);
         trackMsgs(keepScroll);
         syncMk(keepScroll);
@@ -437,7 +474,7 @@ public class ScreenView extends View {
         syncFieldBases(lay.body); syncFieldBases(lay.foot);
         float ch = lay.headH + lay.bodyH + lay.footH;
         if (Math.abs(ch - lastCH) > 0.5f) { lastCH = ch; final float chf = ch; post(new Runnable() { @Override public void run() { if (listener != null) listener.onContentH(chf); } }); }
-        if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f); }
+        if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f, true); }
         if (lay != null && lay.mk != null && !mkHas) syncMk(false);      // 폭이 정해지기 전에 올라온 화면의 마커도 첫 배치 때 놓는다
         if (partialFrom == null || !dirtyOnly(partialFrom)) invalidate();
         syncLater();
@@ -479,6 +516,12 @@ public class ScreenView extends View {
     }
     @Override protected void onSizeChanged(int w, int h, int ow, int oh) {
         super.onSizeChanged(w, h, ow, oh);
+        if (w == ow && oh > 0 && lay != null && screen != null && "settings".equals(screen.id)) {          // s347: 키보드가 오르내리며 높이만 매 프레임 바뀔 때 설정 화면 전체를 다시 배치하지 않는다(끊김) — 위치만 맞추고 입력칸을 따라 붙인다
+            clampScroll();
+            if (editKey != null) { ScreenCore.Item f = fieldByKey(editKey); if (f != null) ensureEditVisible(f, true); }
+            invalidate(); syncLater();
+            return;
+        }
         boolean stick = screen != null && "bottom".equals(screen.anchor) && nearBottom();
         relayout();
         if (stick && lay != null) { scrollY = lay.bodyMaxScroll(bodyViewH()); invalidate(); }
@@ -2107,6 +2150,7 @@ public class ScreenView extends View {
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
             scrollY = ScreenCore.clamp(ssFrom + (ssTo - ssFrom) * ease(f), lay.bodyMaxScroll(bodyViewH())); moving = true;
+            if (editKey != null) syncLater();                                                  // s347: 글자 칸 위에 얹힌 진짜 입력칸도 같이 따라온다
         }
         if (flingKey != null && flingP.computeScrollOffset()) { pickOff.put(flingKey, ScreenCore.clamp(flingP.getCurrY() / dpr, flingMax)); moving = true; }
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
@@ -2181,6 +2225,7 @@ public class ScreenView extends View {
             else for (ScreenCore.Item fi : lay.body) if (fi.kind == ScreenCore.K_PICKL && foldKey.equals(fi.key)) { foldY = fi.y; foldBot = fi.y + fi.h; foldDy = pickVisH(fi) - fi.h; foldOn = Math.abs(foldDy) > 0.2f; spAnim = true; break; }
         }
         float fmg = foldOn ? Math.abs(foldDy) : 0f;
+        if (shOn) { if (shE(now) >= 1f) shOn = false; else { spAnim = true; fmg = Math.max(fmg, shMax); if (editKey != null) syncLater(); } }
         float hExt = 0f, hY = 0f, hBot = 0f;                                                          // s340: 카드 확장 인사 — 늘어난 높이(dp) · 늘어나기 전 카드의 아래 끝
         if (helloPlan != null) {
             if (scene == null || !scene.helloActive() || SceneHello.done(helloPlan, helloNowMs())) helloEnd();
@@ -2195,7 +2240,8 @@ public class ScreenView extends View {
             if (swReg && swIn(bit, rgL, rgR, rgT, rgB)) continue;                          // 밀리는 영역의 칸은 아래에서 따로 그린다
             if (!sceneFailed && isPager(bit)) { i += drawPager(cv, bit, i, now); continue; }
             float sdy = 0f, gh = 0f;
-            if (foldOn && bit.kind != ScreenCore.K_PICKL) { if (bit.y >= foldBot - 0.5f) sdy = foldDy; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= foldY && bit.y + bit.h >= foldBot - 0.5f) gh = foldDy; }
+            if (shOn && (bit.shy != 0f || bit.shh != 0f)) { float sr = 1f - shE(now); sdy += bit.shy * sr; gh += bit.shh * sr; }
+            if (foldOn && bit.kind != ScreenCore.K_PICKL) { if (bit.y >= foldBot - 0.5f) sdy += foldDy; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= foldY && bit.y + bit.h >= foldBot - 0.5f) gh += foldDy; }
             if (hExt > 0f) { if (bit.kind == ScreenCore.K_SCENE) gh += hExt; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= hY + 0.5f && bit.y + bit.h >= hBot - 0.5f) gh += hExt; else if (bit.y >= hBot - 0.5f) sdy += hExt; }          // 장면을 담은 틀(테두리 · 그림자)도 같이 늘어난다                  // s340: 카드가 늘어난 만큼 아래 칸이 내려간다
             if (bit.kind == ScreenCore.K_SCENE) helloGh = hExt;
             if (sdy != 0f) { cv.save(); cv.translate(0f, sdy); }
@@ -3837,7 +3883,8 @@ public class ScreenView extends View {
         post(r); postDelayed(r, 120L); postDelayed(r, 350L);
     }
     /** 편집 중인 칸이 본문 보이는 영역 안에 오도록 스크롤한다(키보드가 올라와 영역이 줄어든 뒤에도). s346: 입력줄이면 바로 아래 후보 줄까지 보이게 — 단 입력칸이 위로 밀려 나가지는 않는다. */
-    private void ensureEditVisible(ScreenCore.Item f) {
+    private void ensureEditVisible(ScreenCore.Item f) { ensureEditVisible(f, false); }
+    private void ensureEditVisible(ScreenCore.Item f, boolean smooth) {
         if (lay == null || f == null || editInFoot) return;
         float vh = bodyViewH();
         if (vh <= f.h + 16f) return;
@@ -3847,7 +3894,10 @@ public class ScreenView extends View {
         if (bottom > want + vh) want = bottom - vh;
         if (f.y - 8f < want) want = f.y - 8f;
         want = ScreenCore.clamp(want, lay.bodyMaxScroll(vh));
-        if (Math.abs(want - scrollY) > 0.5f) { scrollY = want; flingY.forceFinished(true); }
+        if (Math.abs(want - scrollY) > 0.5f) {
+            if (smooth && SystemClock.uptimeMillis() - editBeganAt > 700L && Math.abs(want - scrollY) > 2f) smoothScrollTo(want);          // s347: 후보 줄이 길어져 스크롤해야 할 때도 부드럽게(처음 칸을 누른 직후만 바로)
+            else { scrollY = want; flingY.forceFinished(true); }
+        }
     }
     /** 입력줄 바로 아래에 이어 붙은 후보 줄(K_SUG)들의 맨 아래(dp). 없으면 0. */
     private float sugBottom(ScreenCore.Item f) {
