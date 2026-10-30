@@ -161,6 +161,12 @@ t('s350 가게 목록을 못 받아도 추천 줄(ad)이 있고, 찾을 말(q)�
   const a3 = R.recoAlert({ arrMs: t + 6 * 60000, nowMs: t, dest: '아라', weather: null, food: [{ n: '아라국밥', c: '음식점 > 한식 > 국밥', d: 120 }], recent: [], seed: 1 }).ad;
   assert.ok(a3 && a3.q === '아라국밥' && a3.pn === '아라국밥', '가게를 골랐으면 그 가게 이름: ' + JSON.stringify(a3));
 });
+t('s351 반경 밖에만 가게가 있어도(한적한 역) 가장 가까운 카페·식당을 골라 그 이름으로 연동한다', () => {
+  const t = Date.parse('2026-10-30T07:40:00+09:00'), o = R.recoAlert({ arrMs: t + 6 * 60000, nowMs: t, dest: '아라', weather: null, food: [{ n: '먼카페', c: '비알코올 카페', d: 900 }, { n: '더먼카페', c: '비알코올 카페', d: 1300 }], recent: [], seed: 1 });
+  assert.ok(o.ad && o.ad.k === 'cafe' && /먼카페$/.test(o.ad.pn) && o.ad.q === o.ad.pn && o.ad.go.endsWith(' 보기'), JSON.stringify(o.ad));
+  const t3 = Date.parse('2026-10-30T18:24:00+09:00'), o2 = R.recoAlert({ arrMs: t3 + 6 * 60000, nowMs: t3, dest: '아라', weather: null, food: [{ n: '먼국밥', c: '한식 국밥', d: 1400 }], recent: [], seed: 1 });
+  assert.ok(o2.ad && o2.ad.pn === '먼국밥' && o2.ad.q === '먼국밥', JSON.stringify(o2.ad));
+});
 t('Worker 에 내장되고 /reco-text 길이 있다', () => {
   assert.ok(/\/\/ ===== reco-text \(/.test(worker)); assert.ok(/reco-text \\ub05d =====/.test(worker));
   assert.ok(/url\.pathname === "\/reco-text"\) return handleRecoText\(request\)/.test(worker));
