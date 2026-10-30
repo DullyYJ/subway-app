@@ -154,13 +154,13 @@ public final class SceneDriver implements SceneCore.Host {
     public boolean frame(long nanos) {
         frameAt = SystemClock.uptimeMillis();
         if (paused || !core.isRunning() || !loaded) { lastNanos = 0; return false; }
-        boolean hot = core.interactive();
+        boolean hot = core.interactive() || hcore != null;       // 카드 확장 인사 중에는 화면 주사율 그대로(최대 120Hz)
         if (hot != hotNow) setHot(hot);
         if (lastNanos == 0) { lastNanos = nanos; return true; }
         double dt = (nanos - lastNanos) / 1e9;
         if (!hot && dt < 0.014) return false;                 // 평소엔 60Hz: 120Hz 화면이면 두 프레임에 한 번
         lastNanos = nanos;
-        try { core.update(Math.min(dt, .1)); if (hcore != null) hcore.update(Math.min(dt, .1)); } catch (RuntimeException e) { fail("움직임 계산 실패: " + e); return false; }
+        try { core.update(Math.min(dt, .1)); if (hcore != null) hcore.update(Math.min(dt, .25)); } catch (RuntimeException e) { fail("움직임 계산 실패: " + e); return false; }
         if (core.error != null) fail("그리기 실패: " + core.error);
         if (hcore != null && hcore.error != null) { helloStop(); }
         return true;
