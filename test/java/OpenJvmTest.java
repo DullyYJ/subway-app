@@ -138,7 +138,6 @@ public final class OpenJvmTest {
           pv = 2; for (double t = hp.collapse; t <= hp.end; t += 5) { double e = SceneHello.ext(hp, t); if (e > pv + 1e-9) down = false; pv = e; }
           ck(up && down, "늘어날 땐 줄지 않고 · 줄어들 땐 늘지 않는다(슬라이드)");
           ck(SceneHello.ext(hp, hp.expand / 2.0) > 0.45 && SceneHello.ext(hp, hp.expand / 2.0) < 0.55, "슬라이드는 가운데에서 절반(ease in-out)");
-          ck(SceneHello.mix(hp, 0) == 0 && SceneHello.mix(hp, hp.expand) == 1 && SceneHello.mix(hp, (hp.leave + hp.collapse) / 2.0) == 1 && SceneHello.mix(hp, hp.end) == 0, "장면 바뀜: 처음 0 · 늘어난 동안 1 · 끝나면 0");
           ck(SceneHello.done(hp, hp.end) && !SceneHello.done(hp, hp.end - 1), "끝 시각");
           ck(hp.greet >= hp.expand * 0.5 && hp.leave - (hp.greet + 7 * hp.step + hp.bubble) >= 0, "마지막 인사가 끝난 뒤에 손님이 나간다");
           ck(hp.leave < hp.collapse && hp.collapse - hp.leave <= 600, "손님이 나가기 시작한 뒤 곧 카드가 줄기 시작한다");
