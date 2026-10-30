@@ -3514,3 +3514,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **구조**: `SceneHello`(순수 · Plan/ext/mix/seats/rank) · `SceneCore.startHello/helloManage/folks` · `SceneDriver.hcore`(늘어난 크기로 한 번만 layout 한 두 번째 장면, forceK 로 캐릭터 크기 고정 · 평소 장면과 mix 로 크로스페이드) · `ScreenView`(1.5초에 준비 → 3초 시작 · 높이 ext 를 foldDy 방식으로 그림) · `ShellActivity.helloPlan()` 이 open.json → `OpenCore.helloFor` 로 지금 칸의 대본만 넘김. 시간 · 자리 · 차례 · 인사 글은 전부 엔진(HELLO_*·HELLO_SAY) → `node tools/engine/gen-open.js`.
 - **시험**: open_native 9(엔진 hello · 앱에 글/숫자 없음 · 옛 전체 화면 없음) · OpenJvmTest ⑩(모든 칸 대본 · 곡선 단조 · 자리 순열 · seed 배치) · SceneJvmTest 6b(손님 입장/인사/퇴장/원래 친구 잔류/일찍 끝내기, 일반·잠자는 칸).
 - ⚠ 실기기 미확인(Android 클래스는 CI 컴파일만): 크로스페이드 이음새 · 뒤 줄 자리 겹침 · 3초 직전 준비 끊김 · 늘어난 높이에서 카드 배경 비율. 조정은 engine/open.js 의 HELLO_* 만 고치고 gen-open.
+
+## s341 (2026-10-30) — 카드 확장 인사 다듬기: 테두리(틀)도 같이 늘어남 · 아래 칸이 부드럽게 내려갔다 올라옴 · 120프레임 (YJ: "태두리들도 같이 확장돼야지 / 슬라이딩되면서 하단 내용들도 자연스럽게 내려가고 다시 올라올 때도 부드럽게 / 120프레임처럼 굉장히 부드럽게") — 워커 재배포 불필요(앱 assets/open.json + 앱 다시 빌드)
+- **틀**: 장면을 담은 K_PANEL(흰 틀 · 파란 왼쪽 테두리 · 그림자)이 장면과 같은 높이만큼 늘어난다(접힘 애니메이션과 같은 `bit.h += gh`) — 이전엔 장면만 늘어나고 틀은 그대로였다.
+- **부드러움**: ① 카드 높이 · 아래 칸 이동 · 장면 바뀜(ext/mix)은 장면 계산 시계가 아닌 **실제 시계**(`helloNowMs`, nanoTime)로 — 장면이 프레임을 건너뛰어도 높이는 매 프레임 변함 ② 인사 동안 `SceneDriver` 가 60Hz 절약을 끄고(`hot`) 화면 주사율 그대로 계산 ③ `hiRate` 가 창 `preferredRefreshRate` 를 지원 최고값으로 올림(1.5초 준비 때부터 · 끝나면 0=시스템에 맡김) ④ 곡선을 smootherstep 으로(시작·끝 속도·가속 0) ⑤ 늘어남 0.9초 · 줄어듦 0.9초(엔진 HELLO_T: expand 900 · greet 2500 · leave 6100 · collapse 6300 · end 7200) ⑥ 내려가는 칸이 가장자리에서 빠지지 않게 그릴 범위를 늘어난 높이만큼 넓힘.
+- ⚠ 실기기 미확인: 주사율이 실제 120Hz 로 오르는지는 기기(적응형 주사율 정책)마다 다를 수 있음 · 장면 두 개(평소 + 늘어난)를 동시에 그리는 동안의 프레임 시간.
