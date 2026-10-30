@@ -127,7 +127,7 @@ t('작은 화면 문구(pip)와 오버레이 추천 줄(ad)이 함께 온다: �
   }
   const s = ask(22); assert.strictEqual(s.ad.k, 'shop'); assert.strictEqual(s.ad.a, '우산'); assert.ok(s.ad.m.length > 0 && s.ad.m.length <= 16 && s.ad.go.length > 0 && s.ad.go.length <= 8, JSON.stringify(s.ad)); assert.ok(!('pn' in s.ad));
   assert.strictEqual(s.pip.lines[1], '우산');
-  const none = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 }); assert.strictEqual(none.ad, null);
+  const none = R.recoAlert({ arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '강남', weather: null, food: null, recent: [], seed: 3 }); assert.ok(none.ad && none.ad.pn === '' && none.ad.q.length > 0 && none.ad.go.length > 0, 's350: 가게 목록이 없어도 지도에서 찾는 추천 줄은 있다 ' + JSON.stringify(none.ad));
 });
 t('s237 오버레이 추천 줄: 버튼은 추천한 그 가게·상품 이름("<이름> 보기", 8자 안) · 셋째 줄(m ≤16자)은 날씨·시간에 맞는 클릭 유도 문구, 호출(씨앗)마다 달라진다', () => {
   for (const k of Object.keys(R.RTX_TEASE)) for (const g of Object.keys(R.RTX_TEASE[k])) R.RTX_TEASE[k][g].forEach(x => assert.ok(x.length > 0 && x.length <= 16 && !/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/u.test(x), k + '.' + g + ': ' + x));
@@ -153,6 +153,14 @@ t('recoPip: 이상한 입력에도 죽지 않는다', () => {
 });
 
 const worker = fs.readFileSync(path.join(root, 'engine/route-v2-worker.ascii.js'), 'utf8');
+t('s350 가게 목록을 못 받아도 추천 줄(ad)이 있고, 찾을 말(q)은 가게 이름·"<메뉴> 맛집"·"카페" 이지 안내 문구가 아니다', () => {
+  const t = Date.parse('2026-10-30T18:24:00+09:00'), a1 = R.recoAlert({ arrMs: t + 6 * 60000, nowMs: t, dest: '아라', weather: null, food: null, recent: [], seed: 1 }).ad;
+  assert.ok(a1 && a1.k === 'food' && /맛집$/.test(a1.q) && a1.go === '맛집 보기' && a1.a.indexOf('아라') === 0 && !/하차|🚇|🍽/.test(a1.q + a1.a), JSON.stringify(a1));
+  const t2 = Date.parse('2026-10-30T07:40:00+09:00'), a2 = R.recoAlert({ arrMs: t2 + 6 * 60000, nowMs: t2, dest: '아라', weather: null, food: null, recent: [], seed: 2 }).ad;
+  assert.ok(a2 && a2.k === 'cafe' && a2.q === '카페' && a2.go === '카페 보기', JSON.stringify(a2));
+  const a3 = R.recoAlert({ arrMs: t + 6 * 60000, nowMs: t, dest: '아라', weather: null, food: [{ n: '아라국밥', c: '음식점 > 한식 > 국밥', d: 120 }], recent: [], seed: 1 }).ad;
+  assert.ok(a3 && a3.q === '아라국밥' && a3.pn === '아라국밥', '가게를 골랐으면 그 가게 이름: ' + JSON.stringify(a3));
+});
 t('Worker 에 내장되고 /reco-text 길이 있다', () => {
   assert.ok(/\/\/ ===== reco-text \(/.test(worker)); assert.ok(/reco-text \\ub05d =====/.test(worker));
   assert.ok(/url\.pathname === "\/reco-text"\) return handleRecoText\(request\)/.test(worker));
