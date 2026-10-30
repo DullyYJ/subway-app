@@ -155,6 +155,13 @@ const RT = (x0, startPlan, d0, tn, extra) => line('sub', '1호선', 'R', x0, sta
 const RT2 = (x0, startPlan, d0, tn, extra) => line('sub', '2호선', 'Q', x0, startPlan, 6, d0, 8, Object.assign({ rt: true, tn: tn, headSec: 300 }, extra));
 const NR = (x0, startPlan, n, d0, dStep) => line('sub', '인천1호선', 'N', x0, startPlan, n, d0, dStep, { rt: false, headSec: 360 });
 
+// N7: 인천1호선 8역, 계획보다 역마다 75초씩 더 늦어진다. 신호는 열차가 역에 서 있는 동안(aA~aD)에만 잡힌다.
+function n7spec() {
+  const n = 8, d0 = 50, dStep = 75, L = NR(0, [12, 10], n, d0, dStep), bl = [];
+  const aA = (k) => DAY + ((12 * 60 + 10 + 3 * k) * 60 + d0 + dStep * k) * 1000;
+  for (let k = 0; k < n - 1; k++) bl.push([aA(k) + 30000 + 3000, aA(k + 1)]);
+  return { start: { x: -350, t: T(12, 3, 0) }, blackout: bl, legs: [L] };
+}
 const SCENARIOS = {
   A: {
     name: '시나리오 A: 실시간 1호선 → 시각표 인천1호선 환승',
@@ -218,7 +225,9 @@ const SCENARIOS = {
   N3: { name: 'N3 실시간 첫 구간 · GPS 전혀 없음 · 버튼 없음', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 0, 0), T(12, 30, 0)]], legs: [RT(0, [12, 10], 70, '4017')] } },
   N4: { name: 'N4 승강장 직전부터 GPS 끊김 · 버튼 없음', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 8, 0), T(12, 30, 0)]], legs: [RT(0, [12, 10], 70, '4017')] } },
   N5: { name: 'N5 환승 · 환승역 GPS 없음 · [환승] 버튼', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 16, 30), T(12, 45, 30)]], legs: [RT(0, [12, 10], 70, '4017'), RT2(7620, [12, 30], 60, '7788')] }, acts: [{ t: T(12, 31, 12), act: 'press' }] },
-  N6: { name: 'N6 실시간 목록에 시각표에 없는 열차(95초 먼저) → 비실시간 환승', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 16, 30), T(12, 25, 30)]], legs: [RT(0, [12, 10], 70, '4017', { decoy: -95 }), NR(7620, [12, 30], 5, 50, 20)] } }
+  N6: { name: 'N6 실시간 목록에 시각표에 없는 열차(95초 먼저) → 비실시간 환승', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 16, 30), T(12, 25, 30)]], legs: [RT(0, [12, 10], 70, '4017', { decoy: -95 }), NR(7620, [12, 30], 5, 50, 20)] } },
+  // ── s349: 열차가 시각표보다 점점 늦어(마커가 앞서 감) · 지하 — GPS 는 역에 선 동안(문 열림)에만 잡힌다 → 3회 실패 뒤 GPS 탐색 루프 · 되돌아감 방지 해제 ──
+  N7: { name: 'N7 인천1호선 · 열차가 시각표보다 점점 늦음 · GPS 는 역에서 문이 열릴 때만', spec: n7spec() }
 };
 
 // ── 5초 루프(앱 흉내) ────────────────────────────────────────────
@@ -265,7 +274,7 @@ function summary(sc, res) {
 }
 // 대표 장면 고르기: 새 기능이 일어난 걸음의 입력(직전 상태) + 균등 표본
 function pick(R) {
-  const pats = [/위치 없/, /내 열차 번호를 붙이려/, /실시간 보정 거절/, /수동 확정/, /승강장에서 신호가/, /집중 확인/, /거리 \d+m/, /종착 도착 뒤/, /내 열차 기억/, /승차 확정/, /실시간 보정:/, /실시간 보정 준비/, /도착 확정 역 되돌아감/, /실시간 재보정\(/];
+  const pats = [/위치 없/, /내 열차 번호를 붙이려/, /실시간 보정 거절/, /수동 확정/, /승강장에서 신호가/, /집중 확인/, /거리 \d+m/, /종착 도착 뒤/, /내 열차 기억/, /승차 확정/, /실시간 보정:/, /실시간 보정 준비/, /도착 확정 역 되돌아감/, /실시간 재보정\(/, /되돌아감 방지 해제/, /GPS 탐색:/];
   const idx = new Set(), cnt = pats.map(() => 0);
   R.forEach((r, i) => { const n = (r.out.notes || []).join('|'); pats.forEach((p, pi) => { if (p.test(n) && cnt[pi] < (pi <= 8 || pi === 12 ? 2 : 1)) { cnt[pi]++; idx.add(i); } }); });
   let nc = 0, np = 0;
