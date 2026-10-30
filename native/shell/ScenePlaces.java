@@ -174,7 +174,7 @@ final class ScenePlaces {
         c.fillStyle(shade(walk, .2)); c.fillRect(0, g.nearTop - 1, W, 2);
         c.fillStyle(gnd(L, "#c0675a")); c.fillRect(0, g.nearTop + (H - g.nearTop) * .62, W, 3.4);       // 자전거길 띠
         c.fillStyle("rgba(255,255,255,.55)"); for (double x = 6; x < W; x += 22) c.fillRect(x, g.nearTop + (H - g.nearTop) * .62 + 1.1, 11, 1.2);
-        c.strokeStyle("rgba(0,0,0,.08)"); for (i = 1; i < 60; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        c.strokeStyle("rgba(0,0,0,.08)"); for (double yy : SceneArt.gridRows(g.nearTop, H - g.nearTop, 1.5, 4, H, g.ext)) { c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
         if (snow) for (i = 0; i < 8; i++) { c.fillStyle("rgba(255,255,255,.88)"); c.beginPath(); c.ellipse(rng.r(0, W), rng.r(g.nearTop + 3, H - 3), rng.r(8, 20), rng.r(2, 4), 0, 0, PI2); c.fill(); }
         // 난간(둑 위)
@@ -279,7 +279,7 @@ final class ScenePlaces {
         int pave = gnd(L, "#b8ad9c"); SceneCv.Grad pg = c.linear(0, hy + 6, 0, H).stop(0, shade(pave, -.08)).stop(1, shade(pave, -.02)); c.fillGrad(pg); c.fillRect(0, hy + 6, W, H + g.ext - hy - 6);
         c.fillStyle("rgba(0,0,0,.2)"); c.fillRect(0, hy + 6, W, 5);
         c.strokeStyle("rgba(0,0,0,.12)"); c.lineWidth(1);
-        for (i = 1; i < 80; i++) { double yy = hy + 8 + Math.pow(i / 7.0, 1.6) * (H - hy - 8); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        for (double yy : SceneArt.gridRows(hy + 8, H - hy - 8, 1.6, 7, H, g.ext)) { c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         for (i = -10; i <= 10; i++) { c.beginPath(); c.moveTo(W / 2 + i * 12, hy + 8); c.lineTo(W / 2 + i * (12 + 28 * (H + g.ext - hy - 8) / (H - hy - 8)), H + g.ext); c.stroke(); }       // 같은 기울기로 끝까지
         if (wet(L)) for (i = 0; i < 6; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop - 8, H - 6), prx = rng.r(9, 18); c.fillStyle("rgba(70,90,120,.5)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); c.fillStyle("rgba(210,230,255,.3)"); c.beginPath(); c.ellipse(pxx - prx * .2, pyy - 1, prx * .5, prx * .08, 0, 0, PI2); c.fill(); }
         if (snow) for (i = 0; i < 9; i++) { c.fillStyle("rgba(255,255,255,.85)"); c.beginPath(); c.ellipse(rng.r(0, W), rng.r(g.nearTop - 6, H - 3), rng.r(8, 22), rng.r(2, 4), 0, 0, PI2); c.fill(); }
@@ -314,7 +314,7 @@ final class ScenePlaces {
         SceneCv.Grad sa = c.linear(0, seaB, 0, H).stop(0, wetS).stop(.18, wetS).stop(.26, shade(dry, .04)).stop(1, shade(dry, -.1)); c.fillGrad(sa); c.fillRect(0, seaB, W, H + g.ext - seaB);
         c.fillStyle("rgba(255,255,255,.85)"); c.beginPath(); for (double x = 0; x <= W; x += 4) c.lineTo(x, seaB - 1.4 + Math.sin(x * .09) * 1.4); c.lineTo(W, seaB + 3); c.lineTo(0, seaB + 3); c.closePath(); c.fill();
         for (i = 0; i < 14; i++) { c.fillStyle(rng.r() < .5 ? "rgba(255,255,255,.7)" : "rgba(210,170,150,.8)"); c.beginPath(); c.arc(rng.r(0, W), rng.r(g.nearTop + 6, H - 3), rng.r(.8, 1.6), 0, PI2); c.fill(); }
-        c.strokeStyle("rgba(0,0,0,.07)"); c.lineWidth(1); for (i = 1; i < 60; i++) { double yy = g.nearTop + Math.pow(i / 4.0, 1.5) * (H - g.nearTop); if (yy > H + g.ext) break; c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
+        c.strokeStyle("rgba(0,0,0,.07)"); c.lineWidth(1); for (double yy : SceneArt.gridRows(g.nearTop, H - g.nearTop, 1.5, 4, H, g.ext)) { c.beginPath(); c.moveTo(0, yy); c.lineTo(W, yy); c.stroke(); }
         if (wet(L)) for (i = 0; i < 4; i++) { double pxx = rng.r(.08, .92) * W, pyy = rng.r(g.nearTop + 10, H - 6), prx = rng.r(9, 16); c.fillStyle("rgba(70,90,120,.4)"); c.beginPath(); c.ellipse(pxx, pyy, prx, prx * .26, 0, 0, PI2); c.fill(); }
         String[] pc = {"#e0556c", "#f0b83a", "#5aa9e6", "#e9eef5"};
         for (int k = 0; k < 3; k++) {
