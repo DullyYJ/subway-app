@@ -513,7 +513,7 @@ final class RideStandbyJ {
         else if ("press".equals(a) && st.get("wait") == null && xw != null && st.get("xPend") == null) {
             Map<String, Object> x = xw, tt = (mm(req.get("pressTT")) != null && num(mm(req.get("pressTT")).get("i")) == num(x.get("i"))) ? mm(req.get("pressTT")) : null;
             double dN = distToStop(st, trailOf(st), num(x.get("i")));
-            boolean lateHit = tt != null && tt.get("late") != null && !(!Double.isNaN(dN) && dN > RS_NEAR_M);
+            boolean lateHit = tt != null && tt.get("late") != null && (truthy(tt.get("rode")) || !(!Double.isNaN(dN) && dN > RS_NEAR_M));      // s348: 열차를 타고 멀어진 뒤 누른 것(rode)은 거리로 버리지 않는다
             if (!lateHit && x.get("arrMs") != null && num(x.get("arrMs")) - now > RS_EARLY_MS) {
                 Map<String, Object> xpN = obj("i", x.get("i"), "at", now); st.put("xPend", xpN);
                 if (tt != null && tt.get("liveMs") != null && fin(tt.get("liveMs"))) { xpN.put("lv", num(tt.get("liveMs"))); if (truthy(tt.get("liveTn"))) xpN.put("ltn", str(tt.get("liveTn"))); }      // s192/s334: 실시간으로 가린 열차 시각·번호를 예약에 적어 둔다
@@ -522,7 +522,7 @@ final class RideStandbyJ {
                 notes.add("환승 예약(" + ns(num(x.get("i"))) + "번 · 도착 " + ns(round((num(x.get("arrMs")) - now) / 1000)) + "초 전)");
             } else {
                 Map<String, Object> ruN = obj("w", obj("i", x.get("i")), "x", Boolean.TRUE, "prev", null, "until", now + 20000);
-                double pk = pickMs(tt != null && (Double.isNaN(dN) || dN <= RS_NEAR_M || tt.get("late") == null) ? tt : null, num(x.get("i")), now);
+                double pk = pickMs(tt != null && (truthy(tt.get("rode")) || Double.isNaN(dN) || dN <= RS_NEAR_M || tt.get("late") == null) ? tt : null, num(x.get("i")), now);
                 ruN.put("prev", xCommit(st, num(x.get("i")), now, pk, mtCandPress(tt)));
                 st.put("rsUndo", ruN);
                 notes.add("환승 수동 확정(" + ns(num(x.get("i"))) + "번)" + (lateHit ? " · 방금 떠난 차 인정" : ""));
@@ -536,7 +536,7 @@ final class RideStandbyJ {
             int hit = -1;
             for (k = 0; k < passes.size(); k++) if (gn(passes.get(k), "idx") == num(w.get("i"))) { hit = k; break; }
             st.put("rsUndo", obj("w", w, "prev", hit >= 0 ? passes.get(hit) : null, "until", now + 20000));
-            double pk = pickMs(tw != null && !(!Double.isNaN(dW) && dW > RS_NEAR_M && tw.get("late") != null) ? tw : null, num(w.get("i")), now);
+            double pk = pickMs(tw != null && !(!Double.isNaN(dW) && dW > RS_NEAR_M && tw.get("late") != null && !truthy(tw.get("rode"))) ? tw : null, num(w.get("i")), now);
             Map<String, Object> np = obj("idx", w.get("i"), "ms", pk, "src", "gps");
             if (hit >= 0) passes.set(hit, np); else passes.add(np);
             Map<String, Object> cpW = mtCandPress(tw);
@@ -565,6 +565,40 @@ final class RideStandbyJ {
             pos.put("from", g.get("from")); pos.put("to", g.get("to")); pos.put("t0", g.get("t0")); pos.put("t1", g.get("t1")); pos.put("ratio", Math.floor(rt * 1000 + 0.5) / 1000); pos.put("moving", rt > 0 && rt < 1);
             return;
         }
+    }
+    static final double REL_NY_MS = 45000, REL_GPS_MS = 90000, REL_FIX_MS = 8000;
+    /** engine rsMkRelease — {바닥 n, 종류(0 아직안옴 | 1 GPS확정), 역 번호} 또는 null. held = 가드가 실제로 마커를 붙잡는 중(새 계산이 마커보다 뒤) */
+    static double[] mkRelease(Map<String, Object> st, double prevP, double now, boolean held) {
+        try {
+            Map<String, Object> eta = mm(st.get("eta")), ny = mm(st.get("notYet")); List<Object> passes = eta == null ? null : l(eta.get("passes")), nds = eta == null ? null : l(eta.get("nodes")), tr = trailOf(st);
+            double bestI = Double.NaN, bestMs = 0;
+            if (held && ny != null) for (Map.Entry<String, Object> e : ny.entrySet()) {
+                double ii; try { ii = Double.parseDouble(e.getKey()); } catch (NumberFormatException ex) { continue; }
+                Object rn0 = nds != null && ii >= 0 && ii < nds.size() ? nds.get((int) ii) : null;
+                if (!(rn0 != null && truthy(g(rn0, "isSub")) && !truthy(g(rn0, "isBus")) && !truthy(g(rn0, "isWalk")))) continue;
+                if (now - num(e.getValue()) <= REL_NY_MS && prevP >= ii - 0.0001 && (Double.isNaN(bestI) || ii < bestI)) bestI = ii;
+            }
+            if (!Double.isNaN(bestI)) return new double[] { bestI - 1, 0, bestI };
+            Object last = tr.isEmpty() ? null : tr.get(tr.size() - 1);
+            if (last == null || now - num(at(last, 0)) > REL_FIX_MS || (at(last, 3) != null && num(at(last, 3)) > DOOR_ACC_M)) return null;
+            if (passes == null) return null;
+            Map<String, Object> r2 = mm(st.get("rel2")), dwS = mm(st.get("dw"));
+            for (Object po : passes) {
+                Map<String, Object> ps = mm(po); if (ps == null || !"gps".equals(ps.get("src")) || !(prevP > num(ps.get("idx")) + 0.0001) || !(now - num(ps.get("ms")) <= REL_GPS_MS)) continue;
+                double pi = num(ps.get("idx"));
+                if (r2 != null && r2.get("idx") != null && num(r2.get("idx")) == pi) continue;
+                if (dwS != null && dwS.get("i") != null && num(dwS.get("i")) == pi && ((dwS.get("e") != null && num(dwS.get("e")) >= num(ps.get("ms"))) || (dwS.get("go") != null && num(dwS.get("go")) >= num(ps.get("ms"))))) continue;
+                Object rn = nds != null && pi >= 0 && pi < nds.size() ? nds.get((int) pi) : null;
+                if (!(rn != null && truthy(g(rn, "isSub")) && !truthy(g(rn, "isBus")) && !truthy(g(rn, "isWalk")))) continue;
+                Map<String, Object> sp = stopOf(st, pi); if (sp == null || !fin(sp.get("lat")) || !fin(sp.get("lng"))) continue;
+                if (rsHav(num(at(last, 1)), num(at(last, 2)), num(sp.get("lat")), num(sp.get("lng"))) <= DOOR_M && (Double.isNaN(bestI) || pi > bestI)) { bestI = pi; bestMs = num(ps.get("ms")); }
+            }
+            if (!Double.isNaN(bestI)) {
+                Map<String, Object> nr = obj(); nr.put("idx", bestI); nr.put("ms", bestMs); st.put("rel2", nr);
+                return new double[] { bestI, 1, bestI };
+            }
+        } catch (RuntimeException e) { }
+        return null;
     }
     static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
         Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
@@ -601,6 +635,14 @@ final class RideStandbyJ {
         double newP;
         if (cur < 0) newP = num(mm(segs.get(segs.size() - 1)).get("to"));
         else { Map<String, Object> c = mm(segs.get(cur)); double f = num(c.get("from")), t = num(c.get("to")), t0 = num(c.get("t0")), t1 = num(c.get("t1")); newP = now < t0 ? f : f + Math.max(0, Math.min(1, (now - t0) / (t1 - t0))) * (t - f); }
+        // s349 (engine rsMkRelease): 문 열림 GPS(8초 안·80m 이하·문 열림 반경 안)가 말하는 역은 마커가 앞서 있어도 마커를 그 역으로 내린다(역마다 한 번) · '아직 안 옴' 증거는 가드가 실제로 붙잡는 중일 때만
+        double[] rel = fin(prevP) ? mkRelease(st, prevP, now, newP < prevP - 0.002) : null;
+        if (rel != null) {
+            Map<String, Object> pfR = mm(st.get("mkFloor")); if (pfR == null || !key.equals(pfR.get("key"))) { pfR = obj("key", key, "n", -1.0); st.put("mkFloor", pfR); }
+            if (num(pfR.get("n")) > rel[0]) pfR.put("n", rel[0]);
+            st.remove("mk"); mk = null; prevP = Double.NaN; st.remove("dw");
+            notes.add("마커 되돌아감 방지 해제: " + (rel[1] == 0 ? ns(rel[2]) + "번 역 아직 안 옴(GPS)" : ns(rel[2]) + "번 역에서 GPS 확정 · 아직 문 열림"));
+        }
         if (fin(prevP) && newP < prevP - 0.002) {
             int k = -1;
             for (i = 0; i < segs.size(); i++) { Map<String, Object> g = mm(segs.get(i)); if (prevP >= num(g.get("from")) && prevP < num(g.get("to"))) { k = i; break; } }
@@ -736,6 +778,24 @@ final class RideStandbyJ {
         }
     }
 
+    // ★ s348 (engine rsRodeEv): GPS 궤적이 '승차역 250m 안에 있었고(15초 넘게) 그 뒤 400m 넘게 멀어졌다'면 이미 탄 것이다.
+    static final double RODE_NEAR_M = 250, RODE_AWAY_M = 400, RODE_MAX_AGE_MS = 600000;
+    static boolean rodeEv(Map<String, Object> st, List<Object> tr, double i, double now) {
+        try {
+            Map<String, Object> s = stopOf(st, i);
+            if (s == null || tr == null || tr.isEmpty() || !fin(s.get("lat")) || !fin(s.get("lng"))) return false;
+            double first = 0, lastNear = 0; Object last = null;
+            for (Object q : tr) {
+                if (q == null || now - num(at(q, 0)) > RODE_MAX_AGE_MS) continue;
+                Object acc = at(q, 3); if (acc != null && num(acc) > 150) continue;
+                double d = rsHav(num(at(q, 1)), num(at(q, 2)), num(s.get("lat")), num(s.get("lng"))) - (acc == null ? 30 : num(acc));
+                if (d <= RODE_NEAR_M) { if (first == 0) first = num(at(q, 0)); lastNear = num(at(q, 0)); }
+                last = q;
+            }
+            if (first == 0 || last == null || num(at(last, 0)) - lastNear < 15000) return false;
+            return rsHav(num(at(last, 1)), num(at(last, 2)), num(s.get("lat")), num(s.get("lng"))) >= RODE_AWAY_M;
+        } catch (RuntimeException e) { return false; }
+    }
     /** 누른 순간 승차역에 있나: 800m 밖('away')이면 버튼을 거두고 알린다. */
     static void pressVerify(Map<String, Object> st, double i, double now, List<Object> notes) {
         try {
@@ -746,6 +806,7 @@ final class RideStandbyJ {
             Map<String, Object> res = RideTrackJ.rideTrack(P), pr = res == null ? null : mm(res.get("press"));
             if (pr == null) return;
             notes.add("승차역확인 " + pr.get("state") + (pr.get("distM") != null ? " " + ns(num(pr.get("distM"))) + "m" : "") + (truthy(pr.get("why")) ? " (" + pr.get("why") + ")" : ""));
+            if ("away".equals(pr.get("state")) && rodeEv(st, tr, i, now)) { notes.add("승차역에 있다가 멀어짐 — 이미 탄 것으로 보고 버튼을 거두지 않음"); return; }      // s348
             if ("away".equals(pr.get("state"))) {
                 doUndo(st, now, notes);
                 st.put("rsToast", obj("t", "승차역에서 " + ns(num(pr.get("distM"))) + "m 떨어져 있어요. 도착해서 다시 눌러 주세요", "until", now + 8000));
@@ -947,7 +1008,8 @@ final class RideStandbyJ {
 
     // ═════════════ 오버레이 ═════════════
     static String p2(double n) { return (n < 10 ? "0" : "") + ns(n); }
-    static Map<String, Object> overlay(Map<String, Object> st, Map<String, Object> r, double curIdx, int curPos, double now, Map<String, Object> dest, String destName, boolean moving, boolean done) {
+    static Map<String, Object> overlay(Map<String, Object> st, Map<String, Object> r, double curIdx, int curPos, double now, Map<String, Object> dest, String destName, boolean moving, boolean done, double showIdx) {
+        if (Double.isNaN(showIdx)) showIdx = curIdx;
         Map<String, Object> ov = mm(st.get("ovl"));
         if (done) return obj("active", Boolean.FALSE);
         if (ov == null || l(ov.get("cells")) == null || l(ov.get("cells")).isEmpty()) return null;
@@ -959,7 +1021,7 @@ final class RideStandbyJ {
             Object cc = copy(ocells.get(j)); Object nio = at(map, j); int ni = nio != null ? (int) num(nio) : -1;
             if (ni >= 0 && truthy(at(arr, ni)) && cc instanceof Map) ((Map<String, Object>) cc).put("t", at(arr, ni));
             cells.add(cc);
-            if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= curIdx) cur = j; }
+            if (ni >= 0) { if (firstNode < 0) firstNode = j; if (ni <= showIdx) cur = j; }
         }
         if (cur < 0) cur = firstNode >= 0 ? firstNode : 0;
         boolean arrived = dest != null && curPos >= num(dest.get("seqPos"));
@@ -1414,7 +1476,7 @@ final class RideStandbyJ {
 
 
     // ═════════════ s231 — 도착 확정 실패 · 5분 GPS 탐색 · 실시간 노선 보정 (engine/ride-standby.js rsSearch · rsRt* 그대로) ═════════════
-    static final double SRCH_MS = 300000, SRCH_BACK_MS = 120000, SRCH_NEAR_M = 350, SRCH_ACC_M = 400, SRCH_SETTLE_MS = 8000, SRCH_AWAY_M = 60;
+    static final double SRCH_MS = 300000, SRCH_BACK_MS = 120000, SRCH_NEAR_M = 350, SRCH_ACC_M = 400, SRCH_SETTLE_MS = 8000, SRCH_AWAY_M = 60, SRCH_MISS = 3;
     static final double RT_STEP_MS = 15000, RT_WINDOW_MS = 180000, RT_MAXTRY = 2, RT_ANS_MS = 90000, RT_MAXAHEAD_MS = 600000;
     private static final Map<String, String> SUBWAY_ID = new java.util.HashMap<String, String>();
     static {
@@ -1428,30 +1490,37 @@ final class RideStandbyJ {
         return v == null ? "" : v;
     }
 
+    // s349 (engine rsSearch): 연쇄 3회 실패 → 마지막 GPS 확정 역 뒤의 모든 지하철 역 중 신호와 가장 가까운 역을 도착(문 열림)으로 확정 · 끝나면 실패가 쌓일 때 다시 켠다(루프)
     static boolean search(Map<String, Object> st, List<Object> tr, double now, List<Object> passes, Map<String, Object> notYet, List<Object> notes) {
         Map<String, Object> sr = mm(st.get("srch")); if (sr == null) return false;
-        double sri = num(sr.get("i"));
-        if (now > num(sr.get("until"))) { st.remove("srch"); notes.add("GPS 탐색 종료(5분) — " + ns(sri) + "번 영점 못 잡음"); return false; }
-        Map<String, Object> s = null; List<Object> stl = l(st.get("stops"));
-        if (stl != null) for (Object so : stl) if (truthy(so) && gn(so, "i") == sri) { s = mm(so); break; }
-        if (s == null || !fin(s.get("lat")) || !fin(s.get("lng")) || tr.isEmpty()) return false;
-        double best = Double.NaN; int bi = -1, j;
+        if (now > num(sr.get("until"))) { st.remove("srch"); notes.add("GPS 탐색 5분 끝 — 영점 못 잡음(실패가 이어지면 다시 탐색)"); return false; }
+        List<Object> stl = l(st.get("stops")); Map<String, Object> eta0 = mm(st.get("eta")); List<Object> nd = eta0 == null ? null : l(eta0.get("nodes"));
+        double gMax = -1; int j, k;
+        for (j = 0; j < passes.size(); j++) { Map<String, Object> pm = mm(passes.get(j)); if (pm != null && "gps".equals(pm.get("src")) && num(pm.get("idx")) > gMax) gMax = num(pm.get("idx")); }
+        double best = Double.NaN; int bi = -1; Map<String, Object> bs = null;
         for (int i = 0; i < tr.size(); i++) {
             Object q = tr.get(i); if (num(at(q, 0)) < num(sr.get("from"))) continue;
             Object acc = at(q, 3);
             if (acc != null && fin(acc) && num(acc) > SRCH_ACC_M) continue;
-            double dd = rsHav(num(at(q, 1)), num(at(q, 2)), num(s.get("lat")), num(s.get("lng"))) - (acc != null && fin(acc) ? Math.min(num(acc) * 0.5, 100) : 0);
-            if (dd <= SRCH_NEAR_M && (bi < 0 || dd < best)) { best = dd; bi = i; }
+            if (stl == null) continue;
+            for (k = 0; k < stl.size(); k++) {
+                Map<String, Object> s = mm(stl.get(k)); if (s == null || num(s.get("i")) <= gMax || !fin(s.get("lat")) || !fin(s.get("lng"))) continue;
+                Map<String, Object> n0 = nd != null && num(s.get("i")) >= 0 && num(s.get("i")) < nd.size() ? mm(nd.get((int) num(s.get("i")))) : null;
+                if (n0 == null || !truthy(n0.get("isSub")) || truthy(n0.get("isBus")) || truthy(n0.get("isWalk"))) continue;
+                double dd = rsHav(num(at(q, 1)), num(at(q, 2)), num(s.get("lat")), num(s.get("lng"))) - (acc != null && fin(acc) ? Math.min(num(acc) * 0.5, 100) : 0);
+                if (dd <= SRCH_NEAR_M && (bi < 0 || dd < best)) { best = dd; bi = i; bs = s; }
+            }
         }
         if (bi < 0) return false;
         boolean conf = now - num(at(tr.get(bi), 0)) >= SRCH_SETTLE_MS;
-        for (j = bi + 1; !conf && j < tr.size(); j++) if (rsHav(num(at(tr.get(j), 1)), num(at(tr.get(j), 2)), num(s.get("lat")), num(s.get("lng"))) >= best + SRCH_AWAY_M) conf = true;
+        for (j = bi + 1; !conf && j < tr.size(); j++) if (rsHav(num(at(tr.get(j), 1)), num(at(tr.get(j), 2)), num(bs.get("lat")), num(bs.get("lng"))) >= best + SRCH_AWAY_M) conf = true;
         if (!conf) return false;
-        int hit = -1; for (j = 0; j < passes.size(); j++) if (gn(passes.get(j), "idx") == sri) { hit = j; break; }
-        Map<String, Object> np = obj("idx", sr.get("i"), "ms", at(tr.get(bi), 0), "src", "gps");
+        double bsi = num(bs.get("i"));
+        int hit = -1; for (j = 0; j < passes.size(); j++) if (gn(passes.get(j), "idx") == bsi) { hit = j; break; }
+        Map<String, Object> np = obj("idx", bs.get("i"), "ms", at(tr.get(bi), 0), "src", "gps");
         if (hit >= 0) passes.set(hit, np); else passes.add(np);
-        notYet.remove(ik(sri)); st.remove("srch");
-        notes.add("GPS 탐색: " + ns(sri) + "번 영점 강제(" + ns(round(best)) + "m)");
+        notYet.remove(ik(bsi)); st.remove("srch");
+        notes.add("GPS 탐색: " + ns(bsi) + "번 영점 강제(" + ns(round(best)) + "m · 신호와 가장 가까운 역)");
         return true;
     }
 
@@ -1729,14 +1798,17 @@ final class RideStandbyJ {
         Object etaMs = r.get("etaMs");
         if (rpos != null && rpos.get("from") != null) curIdx = rpos.get("ttFrom") != null ? num(rpos.get("ttFrom")) : num(rpos.get("from"));
         else { for (i = 0; i < nodes.size(); i++) if (at(etaMs, i) != null && etaAt(etaMs, i) <= now) curIdx = i; }
+        // s349: 화면에 보이는 현위치(오버레이 칸 · 알약 · 앱 카드 cur)는 마커와 같은 값 하나(pos.from) — curIdx(시각표 위치)는 하차·환승 알림 판정에만
+        double showIdx = (rpos != null && rpos.get("from") != null && fin(rpos.get("from"))) ? num(rpos.get("from")) : curIdx;
         // s268: 도착 확정 실패 처리 — 마커는 시각표대로 간다. 연속 2회 → GPS 5분 탐색 · 연속 3회 → 서울 실시간 노선만 실시간 API 로 내 열차 맞추기(하차까지 반복)
         List<Object> missL = rpos != null ? l(rpos.get("miss")) : null; if (missL == null) missL = new ArrayList<Object>();
         if (!missL.isEmpty()) st.put("xf", (double) missL.size()); else st.remove("xf");
+        if (missL.size() < SRCH_MISS && st.get("srch") != null) st.remove("srch");      // s349: 실패가 3회 밑으로 내려가면(영점이 잡혔다) 탐색은 쉰다
         if (!missL.isEmpty()) {
             double lastMiss = num(missL.get(missL.size() - 1));
-            if (missL.size() >= 2 && st.get("srch") == null && lastMiss > (st.get("sd") == null ? -1 : num(st.get("sd")))) {
-                st.put("sd", lastMiss); st.put("srch", obj("i", lastMiss, "from", now - SRCH_BACK_MS, "until", now + SRCH_MS));
-                notes.add("도착 확정 실패 " + ns(missL.size()) + "회 — GPS 탐색 5분 시작(" + ns(lastMiss) + "번 역)");
+            if (missL.size() >= SRCH_MISS && st.get("srch") == null) {      // s349: 3회 · 마지막 실패 역에 묶지 않고(루프) 실패가 이어지는 동안 계속 다시 켠다
+                st.put("srch", obj("i", lastMiss, "from", now - SRCH_BACK_MS, "until", now + SRCH_MS));
+                notes.add("도착 확정 실패 " + ns(missL.size()) + "회 — GPS 탐색 5분 시작(신호와 가장 가까운 역 · 마지막 실패 " + ns(lastMiss) + "번)");
             }
             double mb = st.get("mb") == null ? -1 : num(st.get("mb")); int nMiss = 0;
             for (int mk = 0; mk < missL.size(); mk++) if (num(missL.get(mk)) > mb) nMiss++;
@@ -1788,7 +1860,7 @@ final class RideStandbyJ {
         List<Object> seq = l(cfg.get("seq")); if (seq == null) seq = new ArrayList<Object>();
         Map<String, Object> dest = null; int nextIdx = -1;
         List<Object> targets = l(cfg.get("targets")); if (targets != null) for (Object t : targets) if ("dest".equals(g(t, "kind"))) dest = mm(t);
-        for (i = 0; i < seq.size(); i++) if (num(seq.get(i)) > curIdx) { nextIdx = (int) num(seq.get(i)); break; }
+        for (i = 0; i < seq.size(); i++) if (num(seq.get(i)) > showIdx) { nextIdx = (int) num(seq.get(i)); break; }
         String destNameC = or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : "목적지");
         String text;
         if (dest != null && al.curPos >= num(dest.get("seqPos"))) text = destNameC + " 도착";
@@ -1813,16 +1885,16 @@ final class RideStandbyJ {
         if (progBus && motion != null && motion.get("moving") != null) moving = Boolean.TRUE.equals(motion.get("moving"));
         double nextMsV = nextMsAt(st, r, now);
         Map<String, Object> overlay = null;
-        try { overlay = overlay(st, r, curIdx, al.curPos, now, dest, or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : ""), moving, done); }
+        try { overlay = overlay(st, r, curIdx, al.curPos, now, dest, or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : ""), moving, done, showIdx); }
         catch (RuntimeException eOv) { notes.add("오버레이 계산 실패: " + eOv.getMessage()); }
         if (offActive && overlay != null && Boolean.TRUE.equals(overlay.get("active"))) { overlay.put("alert", 0.0); overlay.put("pre", Boolean.FALSE); overlay.put("banner", "경로를 벗어났어요 — 앱을 열면 다시 찾아 드려요"); }
         if (dtInfo != null && overlay != null && Boolean.TRUE.equals(overlay.get("active"))) { overlay.put("line2", dtText(dtInfo)); overlay.put("pillTxt", dtText(dtInfo)); overlay.put("alert", 0.0); overlay.put("pre", Boolean.FALSE); overlay.put("moving", Boolean.TRUE); }
         Map<String, Object> reco = obj("fire", Boolean.FALSE);
         try { if (!done) reco = reco(st, r, dest, or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : ""), now, offActive); }
         catch (RuntimeException eRc) { notes.add("추천 판단 실패: " + eRc.getMessage()); }
-        Map<String, Object> view = obj("text", text, "line1", overlay != null && truthy(overlay.get("line1")) ? overlay.get("line1") : "", "line2", overlay != null && truthy(overlay.get("line2")) ? overlay.get("line2") : "", "curIdx", curIdx, "at", now);
+        Map<String, Object> view = obj("text", text, "line1", overlay != null && truthy(overlay.get("line1")) ? overlay.get("line1") : "", "line2", overlay != null && truthy(overlay.get("line2")) ? overlay.get("line2") : "", "curIdx", showIdx, "at", now);
         Map<String, Object> row = done ? null : rowOut(st, now);
-        Map<String, Object> result = obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "off", offActive && !done ? offOut(st, now) : null, "done", done, "quit", quit, "curIdx", curIdx, "overlay", overlay, "reco", reco, "view", view,
+        Map<String, Object> result = obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", text), "row", row, "alert", al.alert, "off", offActive && !done ? offOut(st, now) : null, "done", done, "quit", quit, "curIdx", showIdx, "overlay", overlay, "reco", reco, "view", view,
             "pos", rpos != null ? posOut(rpos) : null,
             "arr", r.get("arr"), "zero", zero, "nextMs", done ? stepMs : nextMsV, "motion", motion, "ask", askBl != null ? obj("kind", "boardlive", "body", askBl) : (askRt != null ? obj("kind", "boardlive", "body", askRt) : null), "notes", notes);
         if (dtInfo != null && !done) result.put("dt", obj("n", dtInfo.name, "d", dtInfo.distM, "s", dtInfo.etaSec, "a", dtInfo.arrived ? 1 : 0));
