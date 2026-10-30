@@ -1351,9 +1351,9 @@ t('s336 승강장 신호 끊김 승차: 후보 열차 도착 즈음 승강장에
 });
 t('s336 승강장 신호 끊김 승차: 승강장에 간 적이 없거나(걸어오다 끊김) 후보 도착 전에 끊겼으면 승차로 보지 않는다', () => {
   const T0 = at(12, 50, 5);
-  let r = blStep(blState(), T0, 120, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) });      // 역 120m — 승강장(60m) 밖
-  for (let ms = T0 + 5000; ms <= at(12, 53, 30); ms += 5000) r = blStep(r.state, ms, ms <= at(12, 52, 0) ? 120 : null);
-  assert.ok(r.state.wait, '승강장(60m)에 닿은 적이 없다 → 대기 유지');
+  let r = blStep(blState(), T0, 250, { bl: blAns({ at: T0, ms: at(12, 52, 10), tn: '2145', fromMs: T0 }) });      // 역 250m — 역 150m 밖(s337: 마지막 위치가 역 150m 안이면 입구에서 끊긴 것으로 본다)
+  for (let ms = T0 + 5000; ms <= at(12, 53, 30); ms += 5000) r = blStep(r.state, ms, ms <= at(12, 52, 0) ? 250 : null);
+  assert.ok(r.state.wait, '역에서 먼 곳에서 끊겼다 → 대기 유지');
   r = blStep(blState(), T0, 10, { bl: blAns({ at: T0, ms: at(12, 58, 10), tn: '2149', fromMs: T0 }) });             // 후보는 8분 뒤 열차
   for (let ms = T0 + 5000; ms <= at(12, 55, 0); ms += 5000) r = blStep(r.state, ms, ms <= at(12, 50, 30) ? 10 : null);
   assert.ok(r.state.wait && !r.state.mt, '후보 열차 도착 전에 신호가 끊긴 것 — 승차 아님');
@@ -1402,4 +1402,94 @@ t('s336 버스트 쿨타임: rsRtGate — 버스트 중에는 20초 · 소진/�
   assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 25000, bu: { n: 0, until: N + 60000 } } }, N), false, '소진');
   assert.strictEqual(rsRtGate({ rtc: { n: 1, at: N - 25000, bu: { n: 1, until: N - 1 } } }, N), false, '만료');
   assert.strictEqual(rsRtGate({ rtc: { n: 24, at: N - 25000, bu: { n: 1, until: N + 60000 } } }, N), false, '한도');
+});
+
+// ── ★ s337 최종 안정화: 위치 없이 대기 · 신호 끊김 승차 · 번호 붙이기 · 환승 리셋 · 교차 검증 · 마커 되돌아감 ──────────────────────────────────────────────
+const { rsRtCross, rsLegReset, rsMtqSet } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));
+const freshWait = () => { const st = blState(); delete st.waitChk; delete st.wait; st.eta.boarded = undefined; delete st.eta.notDeparted; st.eta.passes = []; st.etaMs = [null, at(12, 52, 0)]; return st; };
+t('s337 위치 없이 대기: 위치를 한 번도 못 받아도 15초 뒤 대기를 걸고, 그 사이엔 미룬다', () => {
+  const T = at(12, 45, 0);
+  let r = blStep(freshWait(), T, null); assert.ok(!r.state.wait && r.state.waitT0 === T, '15초 전엔 미룸');
+  r = blStep(r.state, T + 10000, null); assert.ok(!r.state.wait);
+  r = blStep(r.state, T + 15000, null); assert.ok(r.state.wait && /위치 없음/.test(r.notes.join('|')), r.notes.join('|'));
+});
+t('s337 위치 없이 승차: 후보 열차(시각표)가 떠난 뒤 90초가 지나면 그 열차를 탄 것 — 8분을 기다리지 않는다 · 통과 시각은 그 열차 시각', () => {
+  const T = at(12, 45, 0);
+  let r = blStep(freshWait(), T + 20000, null, { nowMs: T + 20000 }); r = blStep(r.state, T + 35000, null);
+  assert.ok(r.state.wait, '대기 걸림');
+  let st = r.state, boardAt = null;
+  for (let ms = T + 40000; ms <= at(12, 56, 0); ms += 5000) { r = blStep(st, ms, null); st = r.state; if (!st.wait) { boardAt = ms; break; } }
+  const plan = r.state.eta && st.eta.passes.find(p => p.idx === 1).ms;
+  assert.ok(boardAt != null && Math.abs(boardAt - (plan + 90000)) <= 5000, '계획 출발 + 90초 ' + new Date(boardAt).toISOString() + ' plan ' + new Date(plan).toISOString());
+  assert.ok(plan > T + 6 * 60000 && plan < at(12, 53, 0), '통과 시각 = 계획 출발(시각표) ' + new Date(plan).toISOString());
+});
+t('s337 입구에서 끊김: 마지막 위치가 역 150m 안이면 승차로 추정 · 250m 밖이면 걸어오는 중으로 본다', () => {
+  const run = (d) => {
+    let st = blStep(blState(), at(12, 45, 0), d).state; st.wait.arrMs = at(12, 47, 0); st.etaMs = [null, at(12, 47, 0)];
+    for (let ms = at(12, 45, 5); ms <= at(12, 50, 0); ms += 5000) { const r = blStep(st, ms, null); st = r.state; if (!st.wait) return ms; }
+    return null;
+  };
+  const near = run(100), far = run(250);
+  assert.ok(near != null && near < at(12, 50, 0), '가까우면 판정');
+  assert.ok(far == null, '멀면 대기 유지');
+});
+t('s337 위치 없이 묻기: 위치를 한 번도 못 받았으면 계획한 차(계획 출발 90초 전부터)를 찾고 앞당기지 않는다 · 출발 6분 넘게 남으면 묻지 않는다', () => {
+  let st = blState(); st.wait.arrMs = at(12, 52, 0); st.etaMs = [null, at(12, 52, 0)];
+  let r = blStep(st, at(12, 45, 0), null); assert.ok(!r.ask, '7분 남음 — 안 묻는다');
+  r = blStep(r.state, at(12, 46, 40), null); assert.ok(r.ask, '5분 반 남음 — 묻는다');
+  assert.ok(r.ask.body.fromMs === r.state.etaMs[1] - 90000 && r.ask.body.allowEarlier === false, JSON.stringify(r.ask.body) + ' plan ' + r.state.etaMs[1]);
+});
+t('s337 시각표만 있는 호선은 60초 간격으로 묻는다(실시간 호선은 15초)', () => {
+  const T = at(12, 50, 0), st = blState(); st.eta.nodes = st.eta.nodes.map(n => n.isOrigin ? n : Object.assign({}, n, { lineName: '공항철도9' }));
+  let r = blStep(st, T, 100); assert.ok(r.ask, '첫 질의(닿은 순간)');
+  r = blStep(r.state, T + 15000, 90); assert.ok(!r.ask, '15초 뒤 안 묻는다'); r = blStep(r.state, T + 45000, 90); assert.ok(!r.ask, '45초 뒤도 안 묻는다'); r = blStep(r.state, T + 76000, 90); assert.ok(r.ask, '60초 넘으면 묻는다');
+});
+t('s337 [탑승] 버튼: 위치도 대기도 아직 없는 상태에서 눌러도 받는다', () => {
+  const st = freshWait(); st.etaMs = [null, at(12, 52, 0)];
+  const r = rideStandby({ nowMs: at(12, 50, 0), fixes: [], act: 'press', state: JSON.parse(JSON.stringify(st)) });
+  assert.ok(!r.state.wait && r.state.eta.boarded === true && r.state.eta.passes.some(p => p.idx === 1), r.notes.join('|'));
+  assert.ok(/승차 수동 확정/.test(r.notes.join('|')));
+});
+t('s337 실시간 교차 검증: 시각표와 12분 넘게 다르거나 GPS 와 속도가 안 맞으면 거절 · 맞으면 통과', () => {
+  const st = mkState(); const rt = { i0: 1, i1: 2 }, N = at(12, 55, 0);
+  st.etaMs = [null, at(12, 52, 0), at(12, 56, 0)];
+  assert.strictEqual(rsRtCross(st, rt, at(12, 57, 0), N), null);
+  assert.ok(/시각표와/.test(rsRtCross(st, rt, at(13, 20, 0), N)));
+  const sp = st.stops.find(s => s.i === 2); st.trail = [[N - 3000, sp.lat, sp.lng - 3000 / M_DEG, 10]];       // 3km 앞
+  assert.ok(/GPS/.test(rsRtCross(st, rt, N + 30000, N)), '3km 를 30초 = 100m/s');
+  assert.strictEqual(rsRtCross(st, rt, N + 240000, N), null, '3km 를 4분 = 12.5m/s');
+});
+t('s337 누른 순간 실시간 교차 검증: 시각표 다음 차와 5분 넘게 어긋난 실시간은 쓰지 않는다', () => {
+  const req = { act: 'press', nowMs: at(12, 50, 0), state: (() => { const s = blState(); return s; })() };
+  req.pressTT = { i: 1, nowM: 770, depMin: 772, late: null, dk: '상' };
+  const list = [{ subwayId: '1002', updnLine: '상행', barvlDt: 1200, arvlCd: '99', btrainNo: '2999', statnNm: 'S0' }];
+  const q = rsPressQuery(req); assert.ok(q);
+  rsAttachPressLive(req, list.map(x => Object.assign({}, x, { subwayId: '1002' })));
+  assert.ok(req.pressTT.liveMs == null && req.pressTT.liveRej != null, JSON.stringify(req.pressTT));
+  req.pressTT = { i: 1, nowM: 770, depMin: 772, late: null, dk: '상' };
+  rsAttachPressLive(req, [Object.assign({}, list[0], { barvlDt: 150 })]);
+  assert.ok(req.pressTT.liveMs != null && req.pressTT.liveTn === '2999', JSON.stringify(req.pressTT));
+});
+t('s337 환승 확정 리셋: 앞 구간의 보정 · 탐색 · 장부 · 내 열차 기억을 지우고 마커 바닥은 둔다', () => {
+  const st = { mt: { tn: 'A' }, rt: { i0: 3 }, srch: { i: 4 }, sd: 4, dly: { d: 1 }, mtq: {}, mkFloor: { key: 'k', n: 5 }, rtc: { n: 7, at: 1, fx: 3, why: 'loss', chk: 2, g: 3, rec: 4, bu: { n: 1 } }, bl: { cand: { ms: 1 }, tn: 'A', ms: 1, src: 'realtime', x: { i: 7 } } };
+  rsLegReset(st);
+  assert.ok(!st.mt && !st.rt && !st.srch && st.sd === undefined && !st.dly && !st.mtq);
+  assert.deepStrictEqual(st.rtc, { n: 7, at: 1 }); assert.deepStrictEqual(st.mkFloor, { key: 'k', n: 5 }); assert.deepStrictEqual(st.bl, { x: { i: 7 } });
+});
+t('s337 번호 붙이기 예약: 번호 없이 탑승하면 45초 뒤 한 번 실시간으로 확인하고 번호를 붙인다', () => {
+  const st = mkState(); st.eta.nodes = st.eta.nodes.map(n => n.isOrigin ? n : Object.assign({}, n, { isSub: true, isBus: false, lineName: '1호선' }));
+  rsMtqSet(st, 1, at(12, 52, 0), at(12, 52, 0)); assert.ok(st.mtq && st.mtq.i === 1);
+  let r = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: JSON.parse(JSON.stringify(st)) }); assert.ok(!r.ask, '45초 전');
+  r = rideStandby({ nowMs: at(12, 52, 50), fixes: [], state: r.state });
+  assert.ok(r.ask && r.ask.kind === 'boardlive' && r.ask.body.kind === 'subrt', JSON.stringify(r.ask));
+  assert.ok(!r.state.mtq);
+});
+t('s337 마커 되돌아감: 구간 끝 가까이(98% 넘는 자리)에서 시각표가 다시 맞춰져도 마커가 뒤로 밀리지 않는다', () => {
+  const nd = [{ name: '출발', isOrigin: true }, { name: 'A', isSub: true }, { name: 'B', isSub: true }, { name: 'C', isSub: true }], now = 1e12;
+  const st = { eta: { nodes: nd }, mk: { key: nd.length + '|출발|C', s: [[1, 2, now - 665000, now + 3000]] } };
+  const r = { pos: { from: 1, to: 2, ratio: 0.98, moving: true, t0: now - 190000, t1: now + 3000, segs: [{ from: 1, to: 2, a: now - 190000, t0: now - 190000, t1: now + 3000 }] } };
+  rsMonoPos(st, r, now, []);
+  const prevP = 1 + 665000 / 668000;
+  assert.ok(r.pos.from + r.pos.ratio >= prevP - 0.0006, '자리 유지 ' + (r.pos.from + r.pos.ratio) + ' vs ' + prevP);
+  assert.ok(r.pos.t1 > now, '도착은 아직 앞');
 });
