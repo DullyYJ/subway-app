@@ -526,6 +526,7 @@ public class ScreenView extends View {
                 if (pressed != null && pressed.kind == ScreenCore.K_BCARD && "near".equals(pressed.value) && !inHead && !inFoot && roEnabled()) ui.postDelayed(lpRun, RO_LP_MS);       // 꾹 누르면 순서 바꾸기
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
+                ui.removeCallbacks(sceneLpRun); if (sceneLong != null && sceneAt(x, y) != null) ui.postDelayed(sceneLpRun, SCENE_LP_MS);
                 pgHit = pagerAt(x, y);
                 swX0 = x; swY0 = y; swT0 = downT; swOff = false; swScroll0 = scrollY; swCan = swipeHost != null && swipeHost.canSwipe();
                 pullAllowed = pullHost != null && lay != null && lay.footH <= 0f && !inHead && !inBand && pullHost.canPull(); if (pullRelT > 0L && mode != 1) { pullRelT = 0L; pullY = 0f; }
@@ -535,6 +536,7 @@ public class ScreenView extends View {
             }
             case MotionEvent.ACTION_MOVE: {
                 float dx = x - lastX, dy = y - lastY;
+                if (Math.hypot(x - downX, y - downY) > slop * 2f) ui.removeCallbacks(sceneLpRun);          // s338: 손가락이 움직이면 3초 꾹 누르기는 아니다
                 { float ay = Math.abs(y - swY0), ax = Math.abs(x - swX0); if (ay > SW_OFF_DP * dpr && ay > ax) swOff = true; }
                 if (sceneTouch && scene != null) {
                     ScreenCore.Item si = sceneAt(x, y);
@@ -587,6 +589,7 @@ public class ScreenView extends View {
                 return true;
             }
             case MotionEvent.ACTION_UP: {
+                ui.removeCallbacks(sceneLpRun);
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
                 if (mode == 11 && pickHit != null) {
@@ -652,7 +655,7 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } if (mode == 1 && pullY > 0f) { pullFrom = pullY; pullRelT = SystemClock.uptimeMillis(); } finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: ui.removeCallbacks(sceneLpRun); if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } if (mode == 1 && pullY > 0f) { pullFrom = pullY; pullRelT = SystemClock.uptimeMillis(); } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
@@ -1106,6 +1109,19 @@ public class ScreenView extends View {
         downT = 0L;                                                        // 꾹 누른 뒤 놓는 것은 '누름'이 아니다
         if (roBegin(it, downY)) mode = 7; else mode = 0;
         invalidate();
+    } };
+    // ── s338: 홈 장면(길동무 친구들 카드)을 3초 넘게 꾹 누르면 앱이 전원 인사를 띄운다(YJ). 무엇을 그릴지는 엔진 대본 · 여기는 눌림 시간만 잰다 ──
+    private static final long SCENE_LP_MS = 3000L;
+    private Runnable sceneLong;
+    /** 장면 카드를 3초 넘게 가만히 누르고 있으면 불린다(손가락이 슬롭 두 배 넘게 움직이거나 떼면 취소). null 이면 쓰지 않는다. */
+    public void setSceneLongPress(Runnable r) { sceneLong = r; }
+    private final Runnable sceneLpRun = new Runnable() { @Override public void run() {
+        if (sceneLong == null || lay == null || (mode != 3 && mode != 4) || sceneAt(downX, downY) == null) return;          // 목록을 밀거나 쪽을 넘기는 중이면 아니다(3 = 가만히 누름 · 4 = 캐릭터를 잡은 채 가만히)
+        if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }                                                  // 잡고 있던 캐릭터는 놓는다
+        pressed = null; fabDown = false; downT = 0L; mode = 0;                                                                     // 이 누름은 여기서 끝(놓을 때 '눌림'으로 안 친다)
+        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        invalidate();
+        sceneLong.run();
     } };
     private final Runnable roGuard = new Runnable() { @Override public void run() { if (settleOn) { roReset(); invalidate(); } } };     // 새 화면이 끝내 안 오면 제자리로
     private boolean roEnabled() { return reorderHost != null && dgCards.length >= 2 && dgCards[0].rol != null && dgCards[0].rol.length() > 0; }
@@ -1978,7 +1994,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { ui.removeCallbacks(lpRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { ui.removeCallbacks(lpRun); ui.removeCallbacks(sceneLpRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
