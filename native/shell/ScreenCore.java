@@ -1217,6 +1217,7 @@ public final class ScreenCore {
         public float[] gf = new float[0];            // bcard: 줄마다 [위쪽 y(카드 안), 높이]
         public boolean[] gb = new boolean[0];        // bcard: 줄마다 [첫 도착 임박, 둘째 도착 임박, 벨]
         public long[] rt = new long[0];              // bcard: 줄마다 나타난 시각(ms; 0 이면 애니메이션 없음)
+        public float shy, shh;                       // s347: 글자를 치는 동안 칸 자리가 바뀔 때 옛 자리에서 부드럽게 옮겨 오는 거리(dp, 시작 때) · 틀 높이 차이
         public long sp;                              // 새로 받은 화면에서 내용이 바뀐 칸이 스프링으로 나타나기 시작한 시각(0 이면 없음) — 바뀐 칸만 움직이고 나머지는 가만히
         public float yo; public long yt;             // bcard: 자리가 바뀔 때 옛 자리에서 스프링으로 옮겨 오는 거리(dp, 시작 때)와 시작 시각 — 위 카드가 커지면 아래 카드가 미끄러져 내려간다
         public float[] bs = new float[0];            // bcard: 줄마다 도착 둘의 남은 초(엔진이 준 값; 0 이면 카운트다운 없음) — 앱은 1초마다 줄여 그린다(웹 _busFmtCd)
