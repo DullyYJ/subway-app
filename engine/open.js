@@ -113,7 +113,7 @@ function openSlotIndex(hour) {
 //     leave: 손님 친구가 나가기 시작 · collapse: 카드가 줄기 시작 · end: 끝(이 뒤에 평소 카드로 돌아간다) · boost: 걸음 빠르기 배수
 //   seats: 3줄(뒤 3 · 가운데 2 · 앞 3, 엇갈림) 자리 { x: 카드 폭의 0~1, z: 길의 깊이 0(멀다)~1(가깝다) } · order: 인사 차례(자리 번호) — 같은 시각에 뜨는 말풍선이 안 닿게 떨어진 자리끼리 이어 놓았다.
 //   칸마다 say(친구별 인사 글 8개 · 열 글자 안쪽)와 rest(true 면 앉아 쉬며 — 잠자는 칸).
-var HELLO_T = { expand: 650, greet: 2300, step: 380, bubble: 900, leave: 5900, collapse: 6150, end: 6800, boost: 2.2 };
+var HELLO_T = { expand: 900, greet: 2500, step: 380, bubble: 900, leave: 6100, collapse: 6300, end: 7200, boost: 2.2 };
 var HELLO_SEATS = [
   { x: 0.20, z: 0.12 }, { x: 0.50, z: 0.12 }, { x: 0.80, z: 0.12 },       // 0~2 뒤 줄
   { x: 0.35, z: 0.50 }, { x: 0.65, z: 0.50 },                             // 3~4 가운데 줄
