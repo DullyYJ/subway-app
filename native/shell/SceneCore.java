@@ -64,6 +64,7 @@ public final class SceneCore {
         String n; double t0, dur; int d0;
         Ball b; Feather f; Gfx g, b1, b2, m; Actor tgt; List<Actor> tg;
         double mx, hx, tx, px, x0, x1 = Double.NaN, bx, s0 = Double.NaN, s1 = Double.NaN, fx, lx, alt0, z0, tz; int dir0; boolean snow;
+        double px1, pz1, pal1, pang1; boolean fr1;     // s354 독슐이 안고 가는 친구의 자리(독슐 동작이 정하고 친구 동작이 따라 한다)
         final HashMap<String, Double> ev = new HashMap<>();
         final HashMap<String, Boolean> on = new HashMap<>();
     }
@@ -80,8 +81,19 @@ public final class SceneCore {
         String bub = ""; List<Prop> pr; Stk stk; int ai; AS act; Arrive onArrive;
         Integer lastCyc; double dirT; String afterEmerge, prevSt, landK = "";
         double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil, boost;
+        boolean feetScale; double heart; String fearK = "";     // s354: feetScale — 늘어나는 몸이 발(공중이면 떠 있는 발)을 기준으로 커진다 · heart — 몸이 하트로 바뀐 정도(0~1) · fearK — 놀란 까닭(flee 문구)
         int cell = -1; String sk, chain;     // cell: 전용 동작 시트(<id>_act 4×4) 칸, -1 이면 안 씀 · sk: 걷기 시트 대신 쓸 시트 열쇠(대나무 없는 죽순이 juksun_nb) · chain: 지금 동작이 끝나면 이어서 할 동작
     }
+
+    // ═══ s354: 떨어뜨리기 연출 도구(화면 흔들림 · 러블의 어둠 · 노란 눈빛) ═══
+    double shkEnd = -1, shkDur = 1, shkAmp = 0;
+    /** 땅이 흔들린다(뽀푸 착지): amp(장면 px)로 시작해 dur 초 동안 잦아든다. */
+    void shake(double amp, double dur) { shkAmp = Math.max(shkAmp * Math.max(0, (shkEnd - t) / Math.max(.01, shkDur)), amp); shkDur = dur; shkEnd = t + dur; }
+    double dkAmt, dkX, dkY, dkT = -9, eyeAmt, eyeX1, eyeY1, eyeX2, eyeY2, eyeR, eyeDir;
+    /** 주변이 어두워진다(가운데 (x,y) 만 밝게). 매 프레임 불러야 유지되고, 부르지 않으면 곧 사라진다. */
+    void dim(double amt, double x, double y) { dkAmt = amt; dkX = x; dkY = y; dkT = t; }
+    /** 노란 눈빛(두 눈 위치 · 크기 r · 세기 amt · 보는 쪽 dir). */
+    void eyes(double amt, double x1, double y1, double x2, double y2, double r, int dir) { eyeAmt = amt; eyeX1 = x1; eyeY1 = y1; eyeX2 = x2; eyeY2 = y2; eyeR = r; eyeDir = dir; dkT = t; }
 
     // ═══ 상태 ═══
     final Host host; final SceneCv factory; final SceneUtil.Rng R;
@@ -233,7 +245,7 @@ public final class SceneCore {
         a.st = "act"; AS A = new AS(); A.n = name; A.t0 = t; A.dur = d.dur; A.d0 = a.dir; a.act = A; if (d.init != null) d.init.f(a, t, A);
     }
     void endAct(Actor a) {
-        a.pr = null; a.cut = Double.NaN; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.ang = 0; a.act = null; a.stk = null; if (a.pinned) a.pinX = a.x;
+        a.pr = null; a.cut = Double.NaN; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.ang = 0; a.act = null; a.stk = null; a.feetScale = false; a.heart = 0; if (a.pinned) a.pinX = a.x;
         if (hello != null && !hello.free.contains(a.id)) { helloSettle(a); return; }                  // s340: 카드 확장 인사 중에는 어떤 동작이든 끝나면 자리에 서서 인사를 기다린다
         if (a.hero && ("wait".equals(mode) || "alight".equals(mode))) { a.st = "stand"; waitNext = t + rnd(1.0, 2.2); if ("wait".equals(mode) && a.lookUntil == 0) a.dir = baseDir; }
         else nextAct(a);
@@ -253,7 +265,7 @@ public final class SceneCore {
         SceneModel.Spec D = a.D; double u = a.until > a.t0 ? (t - a.t0) / (a.until - a.t0) : 0; String st = a.st;
         if (!a.bub.isEmpty() && t > a.bubUntil && !st.equals("rest")) a.bub = "";
         if (st.equals("fall")) { fallStep(a, dt); return; }
-        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1; a.cell = -1; a.sk = null;
+        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1; a.cell = -1; a.sk = null; a.feetScale = false; a.heart = 0;
         if (a.kind.equals("eagle") && !a.hero) a.alt = 16 + Math.sin(t * 1.7 + a.x * .03) * 5;
         if (st.equals("emerge")) {
             a.intro = true; a.ii = (int) Math.min(D.intro - 1, Math.floor(u * D.intro));
@@ -345,7 +357,7 @@ public final class SceneCore {
         if (pan >= 0) return;                                      // 장소 이동 중에는 친구들이 함께 걷는다(내보내거나 새로 부르지 않는다)
         int want = W < 260 ? 2 : 3, alive = 0;
         for (Actor o : actors) {
-            if (!o.hero && !o.leaving && !o.held && !o.st.equals("fall") && t - o.born > o.life) { o.leaving = true; o.st = "walk"; o.tx = o.x < W / 2 ? -o.w * 1.1 : W + o.w * 1.1; o.tz = o.z; o.onArrive = null; }
+            if (!o.hero && !o.leaving && !o.held && !o.st.equals("fall") && !bigAct(o) && t - o.born > o.life) { o.leaving = true; o.st = "walk"; o.tx = o.x < W / 2 ? -o.w * 1.1 : W + o.w * 1.1; o.tz = o.z; o.onArrive = null; }
             if (!o.leaving) alive++;
         }
         for (int i = actors.size() - 1; i >= 0; i--) if (actors.get(i).dead) actors.remove(i);
@@ -444,7 +456,7 @@ public final class SceneCore {
         Pend P = PEND; PEND = null; if (P == null || P.a == null || P.a.dead || !actors.contains(P.a) || "ride".equals(mode)) return;
         Actor a = P.a; double zc = zy(a.z);
         DRAG = new Drag(); DRAG.a = a; DRAG.fx = a.x; DRAG.fy = zc; DRAG.px = a.x; DRAG.py = zc;
-        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
+        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.feetScale = false; a.heart = 0; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
         haptic("grab"); try { host.held(); } catch (RuntimeException e) { /* 무시 */ }
         addPart("puff", a.x, zy(a.z) - 2, 3);
     }
@@ -463,16 +475,23 @@ public final class SceneCore {
         Drag d = DRAG; DRAG = null; if (d == null) return;
         releaseActor(d.a);
     }
+    double hotFor(String k) { return k.equals("cotton") ? 6.5 : k.equals("pose") ? 7 : k.equals("dig") ? 7.5 : k.equals("flip") ? 8 : k.equals("fly") ? 10 : k.equals("puddle") ? 12.5 : 3.2; }
     String landOf(Actor a) { SceneModel.Traits T = res != null ? res.traits.get(a.id) : null; return T != null ? T.land : ""; }
     void releaseActor(Actor a) {
         double h = HH(a), H0y = Math.max(0, -a.y), gg = 560;
         a.held = false; a.pinned = true; a.pinX = a.x; a.lastBounce = false; a.landK = landOf(a); a.t0 = t; a.fy0 = a.y; a.vy = 0; a.sx = a.sy = 1;
-        haptic("release"); hotUntil = t + 3.2;
-        if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "flyaway"); haptic("flap"); return; }      // 떨어지다가 날개를 펴 날아간다
+        a.feetScale = false; a.heart = 0;
+        haptic("release"); hotUntil = t + hotFor(a.landK);
+        // s354 (YJ: 떨어뜨릴 때 친구마다 다른 연출): 엔진의 land 값이 연출 갈래를 정한다 — cotton 둘숑(풍선) · pose 뽀푸(지진 착지) · dig 두덩(땅속 이동) · flip 러블(3회전) · fly 독슐(친구 납치 비행) · puddle 챙챙(꼬리 헬리콥터) · tumble 쮸르 · hose 베비히포
+        if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "carry"); haptic("flap"); return; }      // 고공낙하 → 친구를 안고 하늘로 → 한 바퀴 → 내려놓기
+        if (a.landK.equals("puddle")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "heli"); haptic("flap"); return; }      // 꼬리를 헬리콥터처럼 돌려 하늘을 돌다 천천히 내려와 화낸다
         boolean flipLike = a.landK.equals("flip") || a.landK.equals("tumble");
         if (flipLike && H0y < 40) a.vy = -190;                                                                                     // 낮게 놓아도 한 바퀴 돌 시간을 번다
         if (a.landK.equals("cotton") || a.landK.equals("hose")) gg = 150;
         if (flipLike) gg = 400;
+        if (a.landK.equals("flip")) gg = 250;                                                                                     // 러블: 느긋하게 떠서 화면 위로 벗어나지 않게
+        if (a.landK.equals("flip")) a.vy = -Math.max(0, (gg * 1.4 * 1.4 - 2 * H0y) / (2 * 1.4));                                   // 러블: 같은 자리에서 앞구르기 3번 할 시간(1.4초 이상)을 번다
+        if (a.landK.equals("cotton") && H0y < 50) a.vy = -80;                                                                     // 둘숑: 낮게 놓아도 풍선이 부풀 시간을 번다
         a.airT = (Math.abs(Math.min(0, a.vy)) + Math.sqrt(a.vy * a.vy + 2 * gg * H0y)) / gg;
         if (a.landK.equals("cotton") || a.landK.equals("hose")) a.airT = Math.max(.5, Math.min(1.3, H0y / 60 + .3));
         if (a.landK.equals("tumble")) {                                                                                            // 죽순이: 잡고 있던 대나무를 공중에 놓친다(주인은 앞구르기)
@@ -480,13 +499,19 @@ public final class SceneCore {
             bams.add(b); if (bams.size() > 4) bams.remove(0);
         }
         a.st = "fall";
-        if (a.landK.equals("puddle")) { Gfx pg = gfx("puddle", a.x, a.z, 9); pg.r = 15; addGfx(pg); }          // 놓은 자리에 웅덩이가 생긴다
     }
     void fallStep(Actor a, double dt) {                                          // 놓으면 떨어진다 — 어떻게 내려앉는지는 엔진의 land 값
         if (dt <= 0) dt = .033; String kk = a.landK; double tf = t - a.t0, h = HH(a), gg = 560;
-        a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8;
-        if (kk.equals("cotton")) { gg = 150; a.vy = Math.min(a.vy, 70); a.sx = a.sy = 1 + .34 * ease(tf / .45); a.ang = 0; }
-        else if (kk.equals("flip")) { gg = 400; a.pvy = -h * .5; a.ang = PI2 * ease(clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1)); }
+        a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8; a.feetScale = false; a.heart = 0;
+        if (kk.equals("cotton")) {                                                            // 둘숑: 몸이 풍선처럼 3배로 부풀며 천천히 내려온다(발 기준으로 커진다)
+            gg = 110; a.vy = Math.min(a.vy, 52); double gp = ease(clamp(tf / .95, 0, 1));
+            a.sx = a.sy = 1 + 2 * gp; a.feetScale = true; a.ang = Math.sin(tf * 3.1) * .05 * gp; a.pose = 2;
+            if (gp > .15 && every2("balfx", .2)) ptx("spark", a.x + rnd(-1, 1) * h * 1.2, zy(a.z) + a.y - h * (.4 + 2 * gp * rnd(.2, 1)), 1, po().a(-PI, 0).s(4, 10).g(0).l(.3, .5).r(.9));
+        }
+        else if (kk.equals("flip")) {                                                         // 러블: 같은 자리에서 공중 앞구르기 3번
+            gg = 250; a.pvy = a.y - h * .5; double fp = clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1); a.ang = PI2 * 3 * ease(fp);
+            if (every2("flipfx", .18)) ptx("star", a.x, zy(a.z) + a.y - h * .5, 1, po().a(-PI, 0).s(6, 14).g(0).l(.3, .5).r(.8).jx(h * .3));
+        }
         else if (kk.equals("tumble")) {                                                       // 죽순이: 버둥 → 몸을 말아 앞으로 한 바퀴 → 웅크려 착지
             gg = 400; a.pvy = -h * .5; double p = clamp(tf / Math.max(.25, a.airT != 0 ? a.airT : .5), 0, 1); a.ang = PI2 * ease(clamp((p - .14) / .72, 0, 1));
             a.cell = p < .14 ? 1 : p < .86 ? 0 : 2; a.sk = "juksun_nb"; a.pose = -1;
@@ -496,7 +521,7 @@ public final class SceneCore {
             double mx = a.x + a.dir * h * .3, my = zy(a.z) + a.y - h * .55; pr(a, jetProp(mx, my, mx + a.dir * 2, zy(a.z)));
             if (every2("hosefx", .07)) ptx("splash", mx + a.dir * 2, zy(a.z) - 1, 1, po().a(-PI * .95, -PI * .05).s(16, 40).g(170).l(.3, .6).jx(5));
         }
-        else if (kk.equals("pose")) a.ang = -.35 * ease(tf / .15);
+        else if (kk.equals("pose")) { a.ang = 0; a.sy = 1.06; a.sx = .96; a.pose = 2; }                 // 뽀푸: 몸을 쭉 펴고 두 발로 꼿꼿이 떨어진다
         a.vy += gg * dt; a.y += a.vy * dt;
         if (a.y >= 0) {
             a.y = 0; landFx(a);
@@ -565,12 +590,23 @@ public final class SceneCore {
         }
     }
     /** 물대포를 맞은 친구가 깜짝 놀라 달아난다(src 는 쏜 친구). 못 움직이는 상태(잡힘·낙하·착지 연출·퇴장·역 대기 대표)는 건드리지 않는다. */
-    void startle(Actor src, Actor o) {
-        if (o == null || o == src || o.dead || o.hidden || o.leaving || o.hero || o.held || o.nograb || o.onArrive != null || !o.vis) return;
-        String s = o.st; if (s.equals("fall") || s.equals("held") || s.equals("emerge") || s.equals("pan") || s.equals("hidden")) return;
-        if (s.equals("act") && o.act != null && (o.act.n.startsWith("L_") || o.act.n.equals("flee") || o.act.n.equals("flyaway"))) return;
-        o.chain = null; o.pr = null; o.cut = Double.NaN; o.alt = o.kind.equals("eagle") ? o.alt : 0;
-        startAct(o, "flee"); if (o.act != null) o.act.fx = src.x;
+    /** 움직일 수 있는 친구인가(잡힘·낙하·착지 연출·퇴장·역 대기 대표·다른 큰 연출 중이면 아니다). */
+    boolean freeFor(Actor o) {
+        if (o == null || o.dead || o.hidden || o.leaving || o.hero || o.held || o.nograb || o.onArrive != null || !o.vis) return false;
+        String s = o.st; if (s.equals("fall") || s.equals("held") || s.equals("emerge") || s.equals("pan") || s.equals("hidden")) return false;
+        return !bigAct(o);
+    }
+    /** 떨어뜨리기·놀람 같은 큰 연출 중인가(이때는 다른 연출이 끼어들거나 퇴장 시간이 되어도 끊지 않는다). */
+    boolean bigAct(Actor o) {
+        if (!o.st.equals("act") || o.act == null) return false; String n = o.act.n;
+        return n.startsWith("L_") || n.equals("flee") || n.equals("flyaway") || n.equals("carry") || n.equals("carried") || n.equals("dizzy") || n.equals("heli") || n.equals("rage") || n.equals("shock");
+    }
+    void startle(Actor src, Actor o) { startleK(src, o, ""); }
+    /** kind: "" 물대포(달아난다) · "scary" 러블의 눈빛(달아난다) · "shock" 뽀푸의 지진(깜짝 놀라 떤다). */
+    void startleK(Actor src, Actor o, String kind) {
+        if (o == src || !freeFor(o)) return;
+        o.chain = null; o.pr = null; o.cut = Double.NaN; o.alt = o.kind.equals("eagle") ? o.alt : 0; o.fearK = kind;
+        startAct(o, kind.equals("shock") ? "shock" : "flee"); if (o.act != null) o.act.fx = src.x;
     }
 
     // ═══ 버스 안(타고 가는 중) ═══
@@ -614,6 +650,12 @@ public final class SceneCore {
             c.save();
             if (k.equals("stars")) {
                 c.fillStyle("#ffd54f"); for (i = 0; i < 3; i++) { an = T * 5 + i * 2.1; SceneArt.star4(c, X + Math.cos(an) * h * .3, Y + Math.sin(an) * h * .08, 3.2 * zz, an); }
+            } else if (k.equals("rotor")) {                                                    // s354 챙챙: 헬리콥터 꼬리 날개(p.s = 지금 각도, p.r = 크기)
+                double rr = p.r != 0 ? p.r : h * .42, ph = p.s;
+                c.fillStyle("rgba(220,235,255,.28)"); c.beginPath(); c.ellipse(X, Y, rr, rr * .38, 0, 0, PI2); c.fill();
+                c.strokeStyle("rgba(70,80,100,.9)"); c.lineWidth(1.7 * zz); c.lineCapRound(true);
+                for (i = 0; i < 2; i++) { an = ph + i * PI; c.beginPath(); c.moveTo(X, Y); c.lineTo(X + Math.cos(an) * rr, Y + Math.sin(an) * rr * .38); c.stroke(); }
+                c.fillStyle("#55607a"); c.beginPath(); c.arc(X, Y, 1.7 * zz, 0, PI2); c.fill();
             } else if (k.equals("ball")) {
                 c.fillStyle("#ff7aa5"); c.beginPath(); c.arc(X, Y, p.r != 0 ? p.r : 4.4 * zz, 0, PI2); c.fill(); c.fillStyle("rgba(255,255,255,.7)"); c.beginPath(); c.arc(X - 1.3 * zz, Y - 1.4 * zz, 1.3 * zz, 0, PI2); c.fill();
             } else if (k.equals("glasses")) {
@@ -718,6 +760,16 @@ public final class SceneCore {
             } else if (k.equals("mound")) {
                 double mr = (gg.r != 0 ? gg.r : 10) * zz * pop; c.fillStyle("#8a6a45"); c.beginPath(); c.moveTo(x - mr, y); c.quadTo(x - mr * .6, y - mr * .95, x, y - mr * .95); c.quadTo(x + mr * .6, y - mr * .95, x + mr, y); c.closePath(); c.fill();
                 c.fillStyle("rgba(0,0,0,.16)"); c.beginPath(); c.ellipse(x + mr * .2, y - mr * .25, mr * .45, mr * .18, 0, 0, PI2); c.fill();
+            } else if (k.equals("bigheart")) {                                                 // s354 둘숑: 땅에 닿는 순간 머리 위에 커다란 하트가 뿅 떠오른다
+                double sc2 = ease(age / .28) * (1 + .09 * Math.sin(age * 11)), yy = y - (gg.r != 0 ? gg.r : hh * 1.6) - age * 8, hs2 = hh * .34 * sc2;
+                c.fillStyle("#ff5c8a"); SceneArt.heartP(c, x, yy, hs2);
+                c.fillStyle("rgba(255,255,255,.7)"); c.beginPath(); c.ellipse(x - hs2 * .6, yy - hs2 * .5, hs2 * .26, hs2 * .15, -.7, 0, PI2); c.fill();
+            } else if (k.equals("crack")) {                                                    // s354 뽀푸: 땅이 갈라진다
+                double cr = hh * pop; c.strokeStyle("rgba(60,45,32,.85)"); c.lineWidth(1.3 * zz); c.lineCapRound(true);
+                for (i = 0; i < 7; i++) {
+                    double an = i * PI2 / 7 + (i * 53 % 7) * .05, ln = cr * (.5 + ((i * 37) % 5) / 10.0), mx2 = Math.cos(an), my2 = Math.sin(an) * .3, px2 = -my2, py2 = mx2 * .3;
+                    c.beginPath(); c.moveTo(x, y); c.lineTo(x + mx2 * ln * .4 + px2 * 3, y + my2 * ln * .4 + py2 * 3); c.lineTo(x + mx2 * ln * .7 - px2 * 3, y + my2 * ln * .7 - py2 * 3); c.lineTo(x + mx2 * ln, y + my2 * ln); c.stroke();
+                }
             } else if (k.equals("flag")) {
                 double drop = age < .35 ? (1 - ease(age / .35)) * hh * 1.2 : 0, fh = hh * 1.05, wv = Math.sin(T * 6) * 2.2 * zz;
                 c.strokeStyle("#d7dbe3"); c.lineWidth(1.8 * zz + .4); c.beginPath(); c.moveTo(x, y - drop); c.lineTo(x, y - drop - fh); c.stroke();
@@ -781,12 +833,22 @@ public final class SceneCore {
             c.fillStyle(rgba(0, 0, 0, shA * (a.alt != 0 ? clamp(1 - a.alt / 60, .5, 1) : 1)));
             c.beginPath(); c.ellipse(a.x + a.ox, y + 1, D.cell * s * .2 * ((a.sq != 0 || a.sy < .9) ? 1.15 : 1) * Math.abs(a.sx != 0 ? a.sx : 1), 3.2 * zz, 0, 0, PI2); c.fill();
         }
-        double sx = (idx % 4) * 256, sy = Math.floor(idx / 4) * 256, dx = -D.ox * sc, dy = -D.base * sc - lift + a.y;
+        double sx = (idx % 4) * 256, sy = Math.floor(idx / 4) * 256, dx = -D.ox * sc, dy = -D.base * sc - lift + (a.feetScale ? 0 : a.y);
         c.save();
         if (!Double.isNaN(a.cut)) { c.beginPath(); c.rect(a.x - D.cell * s, y - D.cell * s * 2.4, D.cell * s * 2, D.cell * s * 2.4 - a.cut); c.clip(); }
-        c.translate(a.x + a.ox, y); if (a.dir < 0) c.scale(-1, 1); if (a.sx != 1 || a.sy != 1) c.scale(a.sx, a.sy);
+        c.translate(a.x + a.ox, y + (a.feetScale ? a.y : 0)); if (a.dir < 0) c.scale(-1, 1); if (a.sx != 1 || a.sy != 1) c.scale(a.sx, a.sy);
         if (a.ang != 0) { double px = a.pvx, py = a.pvy; c.translate(px, py); c.rotate(a.ang); c.translate(-px, -py); }
+        if (a.heart > 0) c.globalAlpha(clamp(1 - a.heart * 1.05, 0, 1));                               // 몸이 하트로 바뀌는 동안 원래 그림은 옅어진다
         c.drawImage(sheet, sx, sy, 256, 256, dx, dy, D.cell * s, D.cell * s);
+        if (a.heart > 0) {                                                                         // s354 둘숑: 하트 모양 몸(풍선처럼 부푼 몸이 땅에 닿는 순간)
+            double hs = TH * zz * .3, hk = ease(a.heart); c.globalAlpha(clamp(hk, 0, 1));
+            double hy = -TH * zz * .5, hr = hs * (.6 + .4 * hk);
+            c.fillStyle("#ee4d7e"); SceneArt.heartP(c, 0, hy, hr);                                  // 겉(진한 분홍) → 안쪽 밝은 분홍 → 반짝 하이라이트
+            c.fillStyle("#ff7ba5"); SceneArt.heartP(c, -hr * .03, hy - hr * .04, hr * .8);
+            c.fillStyle("rgba(255,255,255,.8)"); c.beginPath(); c.ellipse(-hr * .62, hy - hr * .52, hr * .26, hr * .15, -.7, 0, PI2); c.fill();
+            c.globalAlpha(1);
+        }
+        c.globalAlpha(1);
         c.restore();
         if (a.umb) SceneArt.drawUmbrella(c, a.x + a.dir * 2, y - TH * zz * .98 + a.y, zz, a.id);
         drawProps(c, a, true);
@@ -1168,8 +1230,36 @@ public final class SceneCore {
         } catch (RuntimeException e) { if (error == null) error = String.valueOf(e); }
     }
     void paintAll(SceneCv c, double dt) {
+        double shA = t < shkEnd ? shkAmp * Math.pow((shkEnd - t) / shkDur, 1.6) : 0;
+        if (shA > .05) {                                                                           // s354 땅이 흔들린다 — 가장자리가 비지 않게 아주 조금 키워 그린다
+            double cx = W / 2, cy = (H + stretch) / 2, zm = 1 + shA * 2.4 / Math.max(60, H);
+            c.save(); c.translate(cx + Math.sin(t * 83) * shA, cy + Math.cos(t * 71) * shA * .7); c.scale(zm, zm); c.translate(-cx, -cy);
+        }
         if ("train".equals(mode)) SceneTrain.draw(this, c); else if ("ride".equals(mode)) drawRide(c); else drawStreet(c, dt);
+        if (shA > .05) c.restore();
+        if (t - dkT < .12 && !"ride".equals(mode) && !"train".equals(mode)) drawDim(c);
         if (dark) { c.fillStyle("rgba(8,12,28,.10)"); c.fillRect(0, 0, W, H + stretch); }
+    }
+    /** s354 러블: 가운데(러블)만 밝고 주변이 어두워지며 두 눈에서 노란 빛이 난다. */
+    void drawDim(SceneCv c) {
+        double al = clamp(dkAmt, 0, 1), R0 = Math.max(W, H) * .95;
+        if (al > .01) {
+            SceneCv.Grad dg = c.radial(dkX, dkY, TH * .55, dkX, dkY, R0).stop(0, rgba(4, 6, 18, 0)).stop(.18, rgba(4, 6, 18, .08 * al)).stop(1, rgba(4, 6, 18, .9 * al));
+            c.fillGrad(dg); c.fillRect(0, 0, W, H + stretch);
+        }
+        double ea = clamp(eyeAmt, 0, 1);
+        if (ea > .01) {
+            double fl = .88 + .12 * Math.sin(t * 17);
+            for (int i = 0; i < 2; i++) {
+                double ex = i == 0 ? eyeX1 : eyeX2, ey = i == 0 ? eyeY1 : eyeY2;
+                SceneCv.Grad gg = c.radial(ex, ey, 0, ex, ey, eyeR * 3.2).stop(0, rgba(255, 244, 120, .95 * ea * fl)).stop(.22, rgba(255, 214, 40, .6 * ea * fl)).stop(1, rgba(255, 190, 0, 0));
+                c.fillGrad(gg); c.beginPath(); c.arc(ex, ey, eyeR * 3.2, 0, PI2); c.fill();
+                c.fillStyle(rgba(255, 252, 200, ea)); c.beginPath(); c.ellipse(ex, ey, eyeR * .55, eyeR * .95, 0, 0, PI2); c.fill();
+            }
+            double mx = (eyeX1 + eyeX2) / 2, my = (eyeY1 + eyeY2) / 2;                              // 눈 앞으로 번지는 빛줄기
+            SceneCv.Grad bg2 = c.linear(mx, my, mx + eyeDir * eyeR * 16, my).stop(0, rgba(255, 220, 60, .34 * ea * fl)).stop(1, rgba(255, 220, 60, 0));
+            c.fillGrad(bg2); c.beginPath(); c.moveTo(mx, my - eyeR * .7); c.lineTo(mx + eyeDir * eyeR * 16, my - eyeR * 5); c.lineTo(mx + eyeDir * eyeR * 16, my + eyeR * 5); c.lineTo(mx, my + eyeR * .7); c.closePath(); c.fill();
+        }
     }
     // ═══ TV 전원 전환 ═══
     //   꺼짐(0.30초): 옛 장면이 위아래로 납작해져 하얀 선이 되고, 선이 좌우로 줄어 점이 된다.
