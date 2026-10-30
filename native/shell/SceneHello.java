@@ -14,7 +14,6 @@ import java.util.Random;
  * 이 파일은 그 '대본'을 다루는 순수 계산이다(안드로이드 없음 · JVM 시험 가능).
  *   - Plan: 엔진이 만든 대본(assets/open.json 의 hello · 칸의 hello)을 지금 칸에 맞춰 담은 것. 시간 · 자리 · 차례 · 인사 글은 모두 엔진이 정했다 — 앱 코드에는 글도 숫자도 없다.
  *   - ext(ms): 카드가 늘어난 정도(0~1) — 늘어날 때와 줄어들 때 부드럽게(ease in-out)
- *   - mix(ms): 평소 장면에서 늘어난 장면으로 바뀌는 정도(0~1)
  *   - seats(seed): 어느 친구가 어느 자리에 설지(무작위 · 같은 seed 면 같은 배치)
  * 친구들이 걷고 인사하는 그림은 SceneCore.startHello 가 그린다(카드의 장면 엔진 그대로).
  */
@@ -51,16 +50,6 @@ public final class SceneHello {
         if (ms < p.collapse) return 1;
         if (ms >= p.end) return 0;
         return 1 - ease((ms - p.collapse) / (double) (p.end - p.collapse));
-    }
-
-    /** 평소 장면 → 늘어난 장면으로 바뀌는 정도 0~1: 늘어나는 동안 앞 80% 에 걸쳐 바뀌고, 줄어들 땐 뒤 40% 에 걸쳐 되돌아간다. */
-    public static double mix(Plan p, double ms) {
-        if (ms <= 0) return 0;
-        if (ms < p.expand) return ease(ms / (p.expand * 0.8));
-        if (ms < p.collapse + (p.end - p.collapse) * 0.6) return 1;
-        if (ms >= p.end) return 0;
-        double a = p.collapse + (p.end - p.collapse) * 0.6;
-        return 1 - ease((ms - a) / (p.end - a));
     }
 
     public static boolean done(Plan p, double ms) { return ms >= p.end; }
