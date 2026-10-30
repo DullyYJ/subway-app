@@ -236,7 +236,8 @@ public class SceneJvmTest {
             for (int i = 0; i < 30 * 9; i++) {
                 c.update(1.0 / 30);
                 if (ac.act != null && ac.act.n.startsWith("L_")) sawLand = true;
-                if (ex[1].equals("fly") && ac.act != null && ac.act.n.equals("flyaway")) sawLand = true;
+                if (ex[1].equals("fly") && ac.act != null && ac.act.n.equals("carry")) sawLand = true;                                  // s354: 독슐 = 고공낙하 → 친구 납치 비행
+                if (ex[1].equals("puddle") && ac.act != null && ac.act.n.equals("heli")) sawLand = true;                                 // s354: 챙챙 = 꼬리 헬리콥터
                 minSx = Math.min(minSx, ac.sx); maxSx = Math.max(maxSx, ac.sx); maxAng = Math.max(maxAng, Math.abs(ac.ang));
                 if (c.error != null) { fine = false; break; }
             }
@@ -246,8 +247,8 @@ public class SceneJvmTest {
             ok(h.hap.contains("release") && h.hap.contains(want), ex[0] + ": 진동 " + h.hap);
             if (ex[1].equals("flip")) ok(maxAng > 5.5, "고양이: 공중에서 한 바퀴(최대 각도 " + maxAng + ")");
             if (ex[1].equals("cotton")) ok(h.hap.contains("hearts"), "하얀 강아지: 하트 진동");
-            if (ex[1].equals("dig")) ok(h.hap.contains("thud") && h.hap.contains("angry"), "두더지: 땅 파고 들어가는 진동 → 나와서 화내는 진동 " + h.hap);
-            if (ex[1].equals("puddle")) ok(h.hap.contains("splash"), "올챙이: 첨벙 진동");
+            if (ex[1].equals("dig")) ok(h.hap.contains("thud") && h.hap.contains("land_dig"), "두더지: 땅 파고 들어가는 진동 → 구멍을 뚫고 나오는 진동 " + h.hap);
+            if (ex[1].equals("puddle")) ok(h.hap.contains("flap") && h.hap.contains("angry"), "챙챙: 날개 진동 → 내려앉는 진동 → 화내는 진동 " + h.hap);
         }
         // 3-c) 쮸르: 놓으면 죽순을 공중에 떨어뜨리고 앞으로 한 바퀴 → 착지 → 죽순을 찾아 집어 든다
         {
@@ -297,13 +298,42 @@ public class SceneJvmTest {
         {
             TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle); c.debugDrop("dolsom", 90, true);
             SceneCore.Actor ac = c.actors.get(0); double mx = 0; boolean overlay = false;
-            double back = Double.NaN;
-            for (int i = 0; i < 30 * 5; i++) {
+            double back = Double.NaN; boolean sawL = false, sawHeart = false;
+            for (int i = 0; i < 30 * 6; i++) {
                 c.update(1.0 / 30); mx = Math.max(mx, ac.sx); if (ac.pr != null) for (SceneCore.Prop p : ac.pr) if (p.k.equals("cotton")) overlay = true;
-                if (mx > 1.25 && !ac.st.equals("fall") && !ac.st.equals("L_cotton")) { back = ac.sx; break; }   // 착지 연출이 끝난 순간의 크기(그 뒤는 평소 동작이 마음대로 키울 수 있다)
+                if (ac.act != null && ac.act.n.equals("L_cotton")) { sawL = true; sawHeart |= ac.heart > .9; }
+                if (sawL && (ac.act == null || !ac.act.n.equals("L_cotton"))) { back = ac.sx; break; }   // 착지 연출이 끝난 순간의 크기(그 뒤는 평소 동작이 마음대로 키울 수 있다)
             }
             ac.sx = Double.isNaN(back) ? ac.sx : back;
-            ok(mx > 1.25 && mx < 1.42 && Math.abs(ac.sx - 1) < 1e-9 && !overlay, "솜사탕: 몸이 1.34배까지 커졌다 원래 크기(" + ac.sx + ")로 돌아온다(덧그림 없음) 최대=" + mx);
+            ok(mx > 2.9 && mx < 3.6 && Math.abs(ac.sx - 1) < 1e-9 && !overlay, "둘숑: 풍선처럼 3배까지 커졌다 원래 크기(" + ac.sx + ")로 돌아온다(덧그림 없음) 최대=" + mx);
+            ok(sawHeart, "둘숑: 땅에 닿으면 몸이 하트 모양으로 바뀐다");
+        }
+
+        // 3-e) s354 떨어뜨리기 연출: 뽀푸(지진·친구 깜짝) · 두덩(땅속 이동 뒤 다른 곳에서 점프) · 러블(어둠+눈빛+친구 도망) · 독슐(친구를 안고 한 바퀴 → 어질어질) · 챙챙(헬리콥터 → 화냄)
+        {
+            java.util.function.Supplier<SceneCore> many = () -> { TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle); for (int i = 0; i < 30 * 25 && c.actors.size() < 4; i++) c.update(1.0 / 30); return c; };
+            SceneCore c = many.get(); ok(c.actors.size() >= 3, "연출 시험: 친구가 여럿 모였다 " + c.actors.size());
+            c.debugDrop("ppopu", 90, false); SceneCore.Actor pp = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("ppopu")) pp = o;
+            boolean shake = false, shock = false, glass = false, smirk = false;
+            for (int i = 0; i < 30 * 7; i++) { c.update(1.0 / 30); shake |= c.shkEnd > c.t; for (SceneCore.Actor o : c.actors) if (o != pp && o.act != null && o.act.n.equals("shock")) shock = true; if (pp.pr != null) for (SceneCore.Prop p : pp.pr) if (p.k.equals("glasses")) glass = true; smirk |= pp.stk != null; if (c.error != null) break; }
+            ok(c.error == null && shake && shock && glass && smirk, "뽀푸: 땅이 흔들리고(" + shake + ") 친구가 깜짝 놀라고(" + shock + ") 선글라스(" + glass + ")·히힛 스티커(" + smirk + ") " + c.error);
+            c = many.get(); c.debugDrop("dudung", 90, false); SceneCore.Actor dd = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("dudung")) dd = o;
+            double x0 = Double.NaN, minY = 0, maxMove = 0; boolean hid = false, holes = false; int holeMax = 0;
+            for (int i = 0; i < 30 * 8; i++) { c.update(1.0 / 30); if (dd.act != null && dd.act.n.equals("L_dig")) { if (Double.isNaN(x0)) x0 = dd.x; maxMove = Math.max(maxMove, Math.abs(dd.x - x0)); hid |= !dd.vis; minY = Math.min(minY, dd.y); int hc = 0; for (SceneCore.Gfx g : c.gfx) if (g.k.equals("hole")) hc++; holeMax = Math.max(holeMax, hc); } if (c.error != null) break; }
+            ok(c.error == null && hid && maxMove > 40 && minY < -25 && holeMax >= 2 && dd.vis, "두덩: 땅속(안 보임)에서 다른 곳(" + Math.round(maxMove) + "px)으로 가 구멍을 뚫고 높이(" + Math.round(-minY) + "px) 점프, 구멍 " + holeMax + "개 " + c.error);
+            c = many.get(); c.debugDrop("lovel", 90, false); SceneCore.Actor lv = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("lovel")) lv = o;
+            double maxA = 0; boolean dim = false, eyes = false, scary = false;
+            for (int i = 0; i < 30 * 8; i++) { c.update(1.0 / 30); maxA = Math.max(maxA, lv.ang); dim |= c.t - c.dkT < .1 && c.dkAmt > .5; eyes |= c.eyeAmt > .5; for (SceneCore.Actor o : c.actors) if (o != lv && o.act != null && o.act.n.equals("flee") && o.fearK.equals("scary")) scary = true; if (c.error != null) break; }
+            ok(c.error == null && maxA > 17 && dim && eyes && scary, "러블: 앞구르기 3번(" + maxA + ") → 주변이 어두워지고(" + dim + ") 눈빛(" + eyes + ") 친구들이 무서워 도망(" + scary + ") " + c.error);
+            c = many.get(); c.debugDrop("sul", 90, false); SceneCore.Actor sl = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("sul")) sl = o;
+            boolean carried = false, high = false, dizzy = false; double maxAlt = 0;
+            for (int i = 0; i < 30 * 12; i++) { c.update(1.0 / 30); for (SceneCore.Actor o : c.actors) if (o != sl && o.act != null) { if (o.act.n.equals("carried")) { carried = true; maxAlt = Math.max(maxAlt, o.alt); } if (o.act.n.equals("dizzy")) dizzy = true; } if (c.error != null) break; }
+            ok(c.error == null && carried && maxAlt > 60 && dizzy, "독슐: 친구를 안고(" + carried + ") 하늘 높이(" + Math.round(maxAlt) + ") 한 바퀴 돈 뒤 내려놓으면 친구가 어질어질(" + dizzy + ") " + c.error);
+            for (SceneCore.Actor o : c.actors) if (!o.kind.equals("eagle")) ok(o.alt < 30, "독슐 연출 뒤 친구는 모두 땅에 있다 " + o.id + " alt=" + o.alt);
+            c = many.get(); c.debugDrop("chaeng", 90, false); SceneCore.Actor ch = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("chaeng")) ch = o;
+            boolean rotor = false, rage = false, up = false;
+            for (int i = 0; i < 30 * 14; i++) { c.update(1.0 / 30); if (ch.pr != null) for (SceneCore.Prop p : ch.pr) if (p.k.equals("rotor")) rotor = true; rage |= ch.act != null && ch.act.n.equals("rage"); up |= ch.alt > 30; if (c.error != null) break; }
+            ok(c.error == null && rotor && rage && up && ch.alt < 1, "챙챙: 꼬리 날개가 돌며(" + rotor + ") 하늘을 돌아다니다(" + up + ") 내려와서 화낸다(" + rage + ") alt=" + ch.alt + " " + c.error);
         }
 
         // 4) 꾹 눌러 옮기기(터치): 380ms · 10dp 안에서만 · 잡히면 웹뷰 터치 취소 요청 · 놓으면 떨어지고 바로 움직인다
@@ -481,7 +511,7 @@ public class SceneJvmTest {
             c.down(ac.x * c.k, (c.zy(ac.z) - 20) * c.k); ok(c.interactive(), "손가락이 닿으면 interactive");
             adv(c, .5); ok(c.isHeld() && c.interactive(), "잡고 있는 동안 interactive");
             c.up(); ok(c.interactive(), "놓은 직후(떨어짐·착륙 연출)도 interactive");
-            adv(c, 8); ok(!c.interactive(), "착륙 연출이 끝나면 다시 평소(60Hz)");
+            adv(c, 10); ok(!c.interactive(), "착륙 연출이 끝나면 다시 평소(60Hz)");
         }
         // 10-2) s257 지하철 대기 = 역 안 승강장(실내): 눈·강풍이 몰아쳐도 날씨 효과·차·우산이 없고, 간판에는 기다리는 역 이름이 뜬다
         {
