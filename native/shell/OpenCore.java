@@ -16,19 +16,21 @@ import java.util.Map;
 public final class OpenCore {
     private OpenCore() {}
 
-    public static final class Seg { public double t0, t1, x0, x1, hop, hz; public String k = "pose", say = "", fx = ""; public int p, f = 1; }
+    public static final class Seg { public double t0, t1, x0, x1, hop, hz; public boolean arc; public String k = "pose", say = "", fx = ""; public int p, f = 1; }
     public static final class Actor {
         public String id = ""; public Seg[] tr = new Seg[0];
         public int row;                                  // s338 전원 인사: 줄(0 앞 · 1 가운데 · 2 뒤) — 오프닝은 늘 0
-        public double scale = 1, gap;                    // 친구 키 배율 · 줄 간격(친구 키의 배수) — 오프닝은 1 · 0
+        public double scale = 1, gap, arrive;            // 친구 키 배율 · 줄 간격(친구 키의 배수) · 자리에 닿는 시각(ms · 전원 인사의 등장이 끝나는 때) — 오프닝은 1 · 0 · 0
         public String say = ""; public double sayAt = -1;     // 자기 차례에 하는 인사(전원 인사) — 동작 구간과 따로 시각을 정한다
     }
     /** 자리(왼쪽·가운데·오른쪽)마다의 연기 — 누가 서든 이 연기를 한다. t0 은 나타나는 시각. */
     public static final class Role { public double t0, hop, hz; public int p; public String say = "", fx = ""; }
     /** 전원 인사(s338)에서 한 칸의 모두의 모습: 친구별 인사 · 자세 · 콩콩 · 효과 · 전용 동작(죽순이·뽀송). */
     public static final class AllLook { public Map<String, String> say = new java.util.HashMap<String, String>(); public int p; public double hop, hz = 2; public String fx = ""; public Map<String, Seg[]> special = new java.util.HashMap<String, Seg[]>(); }
-    /** 전원 인사의 판: 길이 · 사라짐 · 첫 인사 · 인사 간격 · 친구 키 · 줄 간격 · 자리(x · 줄 · 나타남) · 인사 차례(자리 번호). */
-    public static final class All { public int dur = 8200, fade = 700; public double t0 = 900, step = 700, scale = .82, gap = .72; public double[] sx = new double[0], st = new double[0]; public int[] sr = new int[0], order = new int[0]; }
+    /** 전원 인사에서 친구 한 마리의 등장(s339): 시작 x(NaN 이면 자기 자리에서) · 시작 시각 · 걷는 빠르기(화면 폭/초) 또는 정해진 시간 · 콩콩/포물선 · 동작·자세·효과. */
+    public static final class Enter { public double from = Double.NaN, t0, speed, dur, hop, hz = 2; public boolean arc; public String k = "walk", fx = ""; public int p; }
+    /** 전원 인사의 판: 길이 · 사라짐 · 첫 인사 · 인사 간격 · 친구 키 · 줄 간격 · 자리(x · 줄) · 인사 차례(자리 번호) · 친구별 등장. */
+    public static final class All { public int dur = 10100, fade = 700; public double t0 = 2800, step = 700, scale = .82, gap = .72; public double[] sx = new double[0]; public int[] sr = new int[0], order = new int[0]; public Map<String, Enter> enter = new java.util.HashMap<String, Enter>(); }
     public static final class Slot {
         public String id = "", ko = "", kind = "pose", fx = ""; public boolean dark;
         public AllLook all;                              // 전원 인사 대본(없으면 null)
@@ -143,16 +145,26 @@ public final class OpenCore {
     private static All parseAll(Object o) {
         if (!(o instanceof Map)) return null;
         Map<String, Object> m = (Map<String, Object>) o; All a = new All();
-        a.dur = (int) num(m.get("dur"), 8200); a.fade = (int) num(m.get("fade"), 700); a.t0 = num(m.get("t0"), 900); a.step = num(m.get("step"), 700); a.scale = num(m.get("scale"), .82); a.gap = num(m.get("gap"), .72);
+        a.dur = (int) num(m.get("dur"), 10100); a.fade = (int) num(m.get("fade"), 700); a.t0 = num(m.get("t0"), 2800); a.step = num(m.get("step"), 700); a.scale = num(m.get("scale"), .82); a.gap = num(m.get("gap"), .72);
         Object so = m.get("seats"), oo = m.get("order");
         if (!(so instanceof List) || !(oo instanceof List)) return null;
         List<Object> sl = (List<Object>) so, ol = (List<Object>) oo; int n = sl.size();
         if (n < 3 || ol.size() != n) return null;
-        a.sx = new double[n]; a.st = new double[n]; a.sr = new int[n]; a.order = new int[n];
+        a.sx = new double[n]; a.sr = new int[n]; a.order = new int[n];
         for (int i = 0; i < n; i++) {
             if (!(sl.get(i) instanceof Map)) return null;
-            Map<String, Object> q = (Map<String, Object>) sl.get(i); a.sx[i] = num(q.get("x"), .5); a.sr[i] = (int) num(q.get("r"), 0); a.st[i] = num(q.get("t"), 0);
+            Map<String, Object> q = (Map<String, Object>) sl.get(i); a.sx[i] = num(q.get("x"), .5); a.sr[i] = (int) num(q.get("r"), 0);
             a.order[i] = (int) num(ol.get(i), i); if (a.order[i] < 0 || a.order[i] >= n) return null;
+        }
+        Object eo = m.get("enter");
+        if (eo instanceof Map) for (Map.Entry<String, Object> en : ((Map<String, Object>) eo).entrySet()) {
+            if (!(en.getValue() instanceof Map)) continue;
+            Map<String, Object> q = (Map<String, Object>) en.getValue(); Enter e = new Enter();
+            if (q.get("from") instanceof Number) e.from = num(q.get("from"), 0);
+            e.t0 = num(q.get("t0"), 0); e.speed = num(q.get("speed"), 0); e.dur = num(q.get("dur"), 0); e.hop = num(q.get("hop"), 0); e.hz = num(q.get("hz"), 2);
+            e.arc = Boolean.TRUE.equals(q.get("arc")); e.k = SceneModel.Json.strOr(q.get("k"), "walk"); e.fx = SceneModel.Json.strOr(q.get("fx"), ""); e.p = (int) num(q.get("p"), 0);
+            if (e.speed <= 0 && e.dur <= 0) continue;
+            a.enter.put(en.getKey(), e);
         }
         return a;
     }
@@ -275,15 +287,26 @@ public final class OpenCore {
         for (int i = 0; i < n; i++) {
             String id = pool.get(i); Actor a = new Actor(); a.id = id; a.row = al.sr[i]; a.scale = al.scale; a.gap = al.gap;
             a.say = s.all.say.get(id); a.sayAt = al.t0 + rank[i] * al.step;
+            // s339: 먼저 자기 방식으로 들어온다(걷기·달리기·날기·쏙 나타나기) — 도착 시각은 시작 x 에서 자리까지 거리 ÷ 빠르기(또는 정해진 시간)
+            List<Seg> tr = new ArrayList<Seg>(); double seat = al.sx[i]; Enter e = al.enter.get(id);
+            if (e != null) {
+                Seg w = new Seg(); double x0 = Double.isNaN(e.from) ? seat : e.from;
+                w.k = e.k; w.p = e.p; w.fx = e.fx; w.x0 = x0; w.x1 = seat; w.f = seat >= x0 ? 1 : -1; w.hop = e.hop; w.hz = e.hz; w.arc = e.arc;
+                w.t0 = e.t0; w.t1 = e.t0 + (e.dur > 0 ? e.dur : Math.abs(seat - x0) / e.speed * 1000.0);
+                tr.add(w); a.arrive = w.t1;
+            }
             Seg[] sp = s.all.special.get(id);
             if (sp != null) {
-                Seg[] tr = new Seg[sp.length];
-                for (int j = 0; j < sp.length; j++) { Seg q = sp[j], g = new Seg(); g.t0 = q.t0 + (j == 0 ? al.st[i] : 0); g.t1 = q.t1; g.x0 = g.x1 = al.sx[i]; g.hop = q.hop; g.hz = q.hz; g.k = q.k; g.p = q.p; g.f = q.f; g.fx = q.fx; tr[j] = g; }
-                a.tr = tr;
+                for (Seg q : sp) {
+                    if (q.t1 <= a.arrive) continue;
+                    Seg g = new Seg(); g.t0 = Math.max(q.t0, a.arrive); g.t1 = q.t1; g.x0 = g.x1 = seat; g.hop = q.hop; g.hz = q.hz; g.k = q.k; g.p = q.p; g.f = q.f; g.fx = q.fx;
+                    tr.add(g);
+                }
             } else {
-                Seg g = new Seg(); g.t0 = al.st[i]; g.t1 = al.dur; g.x0 = g.x1 = al.sx[i]; g.k = s.kind; g.p = s.all.p; g.hop = s.all.hop; g.hz = s.all.hz; g.fx = s.all.fx;
-                a.tr = new Seg[] { g };
+                Seg g = new Seg(); g.t0 = a.arrive; g.t1 = al.dur; g.x0 = g.x1 = seat; g.k = s.kind; g.p = s.all.p; g.hop = s.all.hop; g.hz = s.all.hz; g.fx = s.all.fx;
+                tr.add(g);
             }
+            a.tr = tr.toArray(new Seg[0]);
             list.add(a);
         }
         java.util.Collections.sort(list, new java.util.Comparator<Actor>() { @Override public int compare(Actor p, Actor q) { return q.row - p.row; } });          // 뒤 줄(2) 먼저 · 앞 줄(0) 마지막 — 안정 정렬이라 같은 줄은 자리 순서
@@ -316,7 +339,8 @@ public final class OpenCore {
         r.on = true; r.k = cur.k; r.pose = cur.p; r.face = cur.f; r.fx = t >= cur.t0 && t < cur.t1 + 1 ? cur.fx : "";
         double span = Math.max(1, cur.t1 - cur.t0), u = Math.max(0, Math.min(1, (t - cur.t0) / span));
         r.x = cur.x0 + (cur.x1 - cur.x0) * u; r.segT = (t - cur.t0) / 1000.0; r.tSec = tMs / 1000.0;
-        if (cur.hop > 0) r.hop = Math.abs(Math.sin(Math.PI * cur.hz * r.segT)) * cur.hop;
+        if (cur.arc) r.hop = Math.sin(Math.PI * u) * cur.hop;                                                                  // s339: 날아오기·쏙 나타나기 — 구간 동안 한 번 크게 포물선
+        else if (cur.hop > 0) r.hop = Math.abs(Math.sin(Math.PI * cur.hz * r.segT)) * cur.hop;
         r.alpha = Math.min(1, (t - first.t0) / 320.0);                                                                         // 처음 나타날 때 조용히 떠오른다(걸어 들어오지 않는다)
         for (Seg s : a.tr) if (s.say.length() > 0 && t >= s.t0 && t - s.t0 < SAY_MS) {                      // 말풍선: 말하기 시작한 뒤 1.5초 동안(가장 나중 것)
             r.say = s.say; double ts = t - s.t0; r.sayA = Math.min(1, ts / 160.0) * Math.min(1, (SAY_MS - ts) / 260.0);
