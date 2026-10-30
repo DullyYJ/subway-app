@@ -14960,12 +14960,15 @@ function foodScreenOf(f, all, allP) {
     else if (f.fail) body.push(foodMsgN('\ub9db\uc9d1 \uc815\ubcf4\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc5b4\uc694.\n\uc7a0\uc2dc \ub4a4 \uc0c8\ub85c\uace0\uce68\uc744 \ub20c\ub7ec\uc8fc\uc138\uc694.'));
     else body.push(foodMsgN('\ud574\ub2f9 \uce74\ud14c\uace0\ub9ac \uc74c\uc2dd\uc810\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.'));
   } else {
-    var n = 0, k;
-    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c', go));
-    if (pub.length) {
-      body.push({ t: 'divider', pad: [12, 8, 12, 0] });
-      body.push({ t: 'text', s: '\uacf5\uacf5\ub370\uc774\ud130 \u00b7 \uc8fc\ubcc0 ' + (f.flt === '\uc804\uccb4' ? '\uc74c\uc2dd\uc810' : f.flt) + ' ' + pub.length + '\uacf3', size: 12, bold: true, color: 'sub', pad: [14, 12, 14, 6] });
-      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p', go));
+    // s355(YJ: "\ud604\uc704\uce58 \uae30\uc900 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uac83\ubd80\ud130 \ucc28\ub840\ub300\ub85c"): \uc11c\ubc84 \uac00\uac8c\uc640 \uacf5\uacf5\ub370\uc774\ud130\ub97c \ud55c \uc904\ub85c \ud569\uccd0 \uac70\ub9ac\uc21c(\uac00\uae4c\uc6b4 \uac83 \uba3c\uc800 \u00b7 \uac70\ub9ac\ub97c \ubaa8\ub974\uba74 \ub9e8 \ub4a4 \u00b7 \uac19\uc73c\uba74 \uc11c\ubc84 \uac00\uac8c \uba3c\uc800)\uc73c\ub85c \ubcf4\uc778\ub2e4.
+    //   \uc11c\ubc84 \uac00\uac8c\ub294 \uc21c\uc704 \ubc88\ud638 \u00b7 \ubcc4\uc810, \uacf5\uacf5\ub370\uc774\ud130\ub294 '\uacf5\uacf5\ub370\uc774\ud130' \ub531\uc9c0(\ubc88\ud638 \uc5c6\uc74c) \u2014 \ub458\uc774 \uc11e\uc5ec\ub3c4 \uc5b4\ub290 \ucabd\uc778\uc9c0 \uc54c \uc218 \uc788\ub2e4.
+    var mix = [], k, n = 0;
+    cur.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: false, o: j }); });
+    pub.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: true, o: FOOD_MAX_SHOW + j }); });
+    mix.sort(function (x, y) { var dx = x.p.d == null ? 1e9 : x.p.d, dy = y.p.d == null ? 1e9 : y.p.d; return (dx - dy) || (x.o - y.o); });
+    for (k = 0; k < mix.length; k++) {
+      if (mix[k].pub) body.push(foodPlaceN(mix[k].p, '', true, 'p', go));
+      else { n++; body.push(foodPlaceN(mix[k].p, String(n), false, 'c', go)); }
     }
     body.push({ t: 'spacer', h: 80 });
   }
