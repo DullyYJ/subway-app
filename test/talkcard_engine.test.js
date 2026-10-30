@@ -48,7 +48,7 @@ ok(G(null).ok === true && G(undefined).head.length === 2 && G('x').ok === true, 
 // ④ 문구 · 행동
 {
   const o = G({ m: ROWS }), h = o.head[0], inb = o.foot[0];
-  ok(h.t === 'lth' && h.s === '실시간 대화' && h.tail === '›' && h.dot === '#ff3b30' && h.act.v === 'tk.open' && h.act.a === 'call', '머리줄 문구 · 색 점 · 행동');
+  ok(h.t === 'lth' && h.s === '실시간 대화' && h.tail === '›' && h.dot === '#ff3b30' && h.live === true && h.act.v === 'tk.open' && h.act.a === 'call', '머리줄 문구 · 색 점 · 행동');
   ok(inb.t === 'inbar' && inb.key === 'talk.in' && inb.hint === '실시간 대화 남기기...' && inb.maxlen === 100 && inb.act.v === 'tk.send' && inb.h === 38 && inb.bh === 38 && /^M2\.01 21L23 12/.test(inb.bicon), '입력줄 문구 · 최대 100자 · 보내기 행동 · 둥근 단추');
   ok(/placeholder="실시간 대화 남기기\.\.\." maxlength="100"/.test(html) && />실시간 대화 <span/.test(html), '문구가 웹과 같다');
   ok(o.cover === 'tab' && o.bg === 'card' && o.screen === 'talk' && o.body.length === 1 && o.body[0].h === 0, '화면 겉틀');
