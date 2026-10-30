@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s352";
+var ENGINE_VERSION = "route-v2-2026-10-30s353";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -22447,7 +22447,7 @@ function mapRegionBody(f, ctx) {
     var col = mapLineColor(g.line, f.th), kids = [];
     var xfer = function (s) { return lines.some(function (o) { return o.line !== g.line && o.stns.some(function (t) { return t[0] === s[0]; }); }); };
     kids.push({ t: 'pill', s: g.line + ' (' + g.stns.length + '\uac1c \uc5ed)', size: 13, bold: true, fill: col, tc: '#ffffff', ph: 12, pv: 6, r: 10, pad: [14, 8, 14, 8] });
-    kids.push({ t: 'chips', pad: [14, 0, 14, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214',
+    kids.push({ t: 'chips', pad: [14, 0, 14, 8], gap: 6, h: 30, onc: 'gold', onfg: '#121214', offf: 'card2', offb: 'border', offt: 'text',
       items: g.stns.map(function (s) {
         var idx = all.length; all.push([s[0], s[1]]);
         return { label: (xfer(s) ? '\ud658\uc2b9 ' : '') + s[0], on: false, act: { a: 'call', v: 'mr.' + idx } };
