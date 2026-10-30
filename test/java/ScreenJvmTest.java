@@ -1010,6 +1010,16 @@ public class ScreenJvmTest {
                 ScreenCore.Layout dl = ScreenCore.layout(ScreenCore.load(H + "{\"t\":\"chips\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"), 360f, M);
                 ok(!dl.head[0].owc && near(dl.head[0].size, 12f) && near(dl.head[0].sx, ScreenCore.CHIP_PADX), "chips: 값을 안 주면 옛 모양 그대로(글자 12 · 여백 12 · 꺼진 색 없음)");
             } catch (Exception ex) { ok(false, "chips 웹 모양: " + ex); }
+            // s353 (YJ: 지방 노선도에 역이 안 나온다): 본문(body) 칩 줄 — 폭이 차면 다음 줄로 흘러 쓰고, 눌림 행동·꺼진 칩 모양이 그대로다
+            try {
+                StringBuilder its = new StringBuilder();
+                for (int q = 0; q < 12; q++) its.append(q > 0 ? "," : "").append("{\"label\":\"역").append(q).append("역이름\",\"act\":{\"a\":\"call\",\"v\":\"mr.").append(q).append("\"}}");
+                ScreenCore.Layout bl = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"mapreg\",\"head\":[],\"body\":[{\"t\":\"chips\",\"pad\":[14,0,14,8],\"gap\":6,\"h\":30,\"onc\":\"gold\",\"offf\":\"card2\",\"offb\":\"border\",\"offt\":\"text\",\"items\":[" + its + "]}]}"), 360f, M);
+                int nChip = 0; float maxY = 0f, maxR = 0f; boolean allAct = true;
+                for (ScreenCore.Item bi : bl.body) if (bi.kind == ScreenCore.K_CHIP) { nChip++; maxY = Math.max(maxY, bi.y); maxR = Math.max(maxR, bi.x + bi.w); allAct &= bi.act != null && bi.owc; }
+                ok(nChip == 12 && allAct, "본문 chips: 칩 12개 모두 그려지고 눌림 행동 · 꺼진 칩 모양을 가진다 (" + nChip + ")");
+                ok(maxY > 30f && maxR <= 360f - 14f + 0.5f, "본문 chips: 폭이 차면 다음 줄로 흐른다(칸 밖으로 안 나간다) y=" + maxY + " r=" + maxR);
+            } catch (Exception ex) { ok(false, "본문 chips: " + ex); }
             boolean threw = false; try { ScreenCore.load(H + "{\"t\":\"chips\",\"offf\":\"not-a-color\",\"items\":[{\"label\":\"a\"}]}],\"body\":[]}"); } catch (Exception ex) { threw = true; } ok(threw, "chips: 읽을 수 없는 offf 는 거부");
         }
 
