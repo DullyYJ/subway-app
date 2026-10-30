@@ -3506,3 +3506,11 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **앱(OpenCore)**: `All.enter`(Enter) 파싱 · `castAll` 이 친구마다 등장 구간을 맨 앞에 붙임(도착 시각 = |자리−from| ÷ speed — 자리는 앱이 무작위로 정하므로 앱이 센다) · 전용 동작(쮸르 먹기·뽀송 하트)은 도착한 뒤부터 · `Actor.arrive` · `Seg.arc` · `at()` 의 arc = 구간 동안 한 번 큰 포물선. 자리의 `t`(나타남)는 없어졌다. OpenView/ScreenView/ShellActivity 는 안 바뀜(이미 걷기·콩콩·방향 그리기를 한다).
 - **시험**: 엔진(8마리 모두 등장 방식 · 가장 먼 자리여도 인사 0.2초 전에 도착 · 양쪽에서 입장 · 독슐 아크/두덩 제자리) + JVM ⑪(모든 칸 × 40 seed: 도착 후 자리 · 화면 밖에서 시작 · 한 방향으로만 · 가는 쪽을 봄 · 말은 도착 뒤 · 성격별 · 친구마다 빠르기 다름). 나머지 묶음 통과.
 - ⚠ 실기기 미확인: 걷는 발 모양이 속도와 정확히 안 맞을 수 있음(프레임 빠르기는 고정) · 뒤 줄에 서는 친구가 앞 줄 뒤로 지나가는 모습 · 독슐이 화면 위로 날아갈 때 높이. 조정은 `ALL_ENTER`/`ALL_T0` 만(앱 코드 수정 없음).
+
+## s340 (2026-10-30) — 인사 방식을 바꿈: 새 전체 화면 대신 '길동무 친구들' 카드가 배경 그대로 세로 2배로 슬라이드로 늘어나 인사 → 남을 친구만 남고 줄어든다 (YJ: "이 화면이 배경을 유지한 채 세로로 2배 확장되고 약 3초간 인사를 하고 다시 남을 친구들만 남고 들어가는 거야 … 새 화면이 나오는 인사 방식은 지워줘") — 워커 재배포 불필요(앱 assets/open.json v5 + 앱 다시 빌드)
+- **s338/s339 의 전체 화면 인사(OpenView all 모드 · ALL_* · castAll · All.enter)는 모두 삭제**(위 두 절은 옛 기록 — 대체됨).
+- **흐름(엔진 `engine/open.js` HELLO_T)**: 3초 꾹(ScreenView HELLO_LP_MS) → 0.65초 ease-in-out 로 카드가 2배 높이로 늘어남(아래 카드들이 같이 밀림) → 2.3초부터 380ms 간격 8마리 차례(HELLO_ORDER)로 시간대 인사(말풍선 0.9초) → 5.9초 손님 퇴장 → 6.15~6.8초 줄어듦. 한 번 더 누르면(탭) 바로 퇴장·축소.
+- **누가 남나**: 평소 카드에 지금 나와 있던 친구(SceneCore.folks)는 자리로 걸어가 인사하고 끝나면 평소로 돌아가 남음. 나머지(손님)는 양쪽 가장자리에서 자기 걸음(둘숑은 땅에서 솟음)으로 들어오고 끝나면 걸어 나감.
+- **구조**: `SceneHello`(순수 · Plan/ext/mix/seats/rank) · `SceneCore.startHello/helloManage/folks` · `SceneDriver.hcore`(늘어난 크기로 한 번만 layout 한 두 번째 장면, forceK 로 캐릭터 크기 고정 · 평소 장면과 mix 로 크로스페이드) · `ScreenView`(1.5초에 준비 → 3초 시작 · 높이 ext 를 foldDy 방식으로 그림) · `ShellActivity.helloPlan()` 이 open.json → `OpenCore.helloFor` 로 지금 칸의 대본만 넘김. 시간 · 자리 · 차례 · 인사 글은 전부 엔진(HELLO_*·HELLO_SAY) → `node tools/engine/gen-open.js`.
+- **시험**: open_native 9(엔진 hello · 앱에 글/숫자 없음 · 옛 전체 화면 없음) · OpenJvmTest ⑩(모든 칸 대본 · 곡선 단조 · 자리 순열 · seed 배치) · SceneJvmTest 6b(손님 입장/인사/퇴장/원래 친구 잔류/일찍 끝내기, 일반·잠자는 칸).
+- ⚠ 실기기 미확인(Android 클래스는 CI 컴파일만): 크로스페이드 이음새 · 뒤 줄 자리 겹침 · 3초 직전 준비 끊김 · 늘어난 높이에서 카드 배경 비율. 조정은 engine/open.js 의 HELLO_* 만 고치고 gen-open.
