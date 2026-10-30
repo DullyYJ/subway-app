@@ -200,12 +200,15 @@ function foodScreenOf(f, all, allP) {
     else if (f.fail) body.push(foodMsgN('맛집 정보를 불러오지 못했어요.\n잠시 뒤 새로고침을 눌러주세요.'));
     else body.push(foodMsgN('해당 카테고리 음식점이 없습니다.'));
   } else {
-    var n = 0, k;
-    for (k = 0; k < cur.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(cur[k], String(n + 1), false, 'c', go));
-    if (pub.length) {
-      body.push({ t: 'divider', pad: [12, 8, 12, 0] });
-      body.push({ t: 'text', s: '공공데이터 · 주변 ' + (f.flt === '전체' ? '음식점' : f.flt) + ' ' + pub.length + '곳', size: 12, bold: true, color: 'sub', pad: [14, 12, 14, 6] });
-      for (k = 0, n = 0; k < pub.length && n < FOOD_MAX_SHOW; k++, n++) body.push(foodPlaceN(pub[k], '', true, 'p', go));
+    // s355(YJ: "현위치 기준 가장 가까운 것부터 차례대로"): 서버 가게와 공공데이터를 한 줄로 합쳐 거리순(가까운 것 먼저 · 거리를 모르면 맨 뒤 · 같으면 서버 가게 먼저)으로 보인다.
+    //   서버 가게는 순위 번호 · 별점, 공공데이터는 '공공데이터' 딱지(번호 없음) — 둘이 섞여도 어느 쪽인지 알 수 있다.
+    var mix = [], k, n = 0;
+    cur.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: false, o: j }); });
+    pub.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: true, o: FOOD_MAX_SHOW + j }); });
+    mix.sort(function (x, y) { var dx = x.p.d == null ? 1e9 : x.p.d, dy = y.p.d == null ? 1e9 : y.p.d; return (dx - dy) || (x.o - y.o); });
+    for (k = 0; k < mix.length; k++) {
+      if (mix[k].pub) body.push(foodPlaceN(mix[k].p, '', true, 'p', go));
+      else { n++; body.push(foodPlaceN(mix[k].p, String(n), false, 'c', go)); }
     }
     body.push({ t: 'spacer', h: 80 });
   }
