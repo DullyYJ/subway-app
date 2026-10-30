@@ -99,7 +99,7 @@ t('엔진 대본(전원 인사): 8마리 모두 · 자리 3줄(뒤 3 · 가운�
   const A = E.allScript();
   assert.strictEqual(A.seats.length, 8); assert.deepStrictEqual(A.order.slice().sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
   const rows = [0, 1, 2].map(r => A.seats.filter(s => s.r === r).length); assert.deepStrictEqual(rows, [3, 2, 3]);
-  A.seats.forEach(s => assert.ok(s.x > 0.1 && s.x < 0.9 && s.t >= 0 && s.t < A.t0, '자리는 화면 안 · 인사 전에 모두 나온다'));
+  A.seats.forEach(s => assert.ok(s.x > 0.1 && s.x < 0.9 && s.t === undefined, '자리는 화면 안'));
   E.OPEN_SLOTS.forEach(s => {
     assert.deepStrictEqual(Object.keys(s.all.say).sort(), E.OPEN_CHARS.slice().sort(), s.id + ' 인사 글: 8마리 모두');
     Object.values(s.all.say).forEach(v => assert.ok([...v].length <= 10 && v.length > 0, s.id + ' 인사는 열 글자 안팎: ' + v));
@@ -107,6 +107,18 @@ t('엔진 대본(전원 인사): 8마리 모두 · 자리 3줄(뒤 3 · 가운�
     Object.keys(s.all.special).forEach(id => { assert.ok(['juksun', 'bbosong'].includes(id)); s.all.special[id].forEach(g => assert.ok(g.t0 >= 0 && g.t1 <= E.ALL_DUR && g.k !== 'walk')); });
   });
   assert.strictEqual(E.OPEN_SLOTS.find(s => s.id === 'sleep').all.fx, 'zzz', '잠자는 시간엔 zzz');
+  // s339: 친구마다 자기 방식으로 화면 밖에서 들어온다 — 어느 자리든 인사 시작 0.2초 전엔 도착
+  assert.deepStrictEqual(Object.keys(E.ALL_ENTER).sort(), E.OPEN_CHARS.slice().sort(), '8마리 모두 등장 방식이 있다');
+  Object.entries(E.ALL_ENTER).forEach(([id, e]) => {
+    assert.ok(e.speed > 0 || e.dur > 0, id + ': 빠르기나 정해진 시간');
+    assert.ok(e.from === undefined || e.from < 0 || e.from > 1, id + ': 화면 밖에서 시작하거나 자기 자리에서');
+    const dists = e.from === undefined ? [0] : E.ALL_SEATS.map(s => Math.abs(s.x - e.from));
+    const worst = e.t0 + (e.dur > 0 ? e.dur : Math.max(...dists) / e.speed * 1000);
+    assert.ok(worst <= E.ALL_T0 - 200, id + ' 가장 먼 자리여도 인사 전에 도착: ' + Math.round(worst));
+    assert.ok(e.arc ? e.hop > 0 : (e.hop || 0) <= 0.11, id + ' 콩콩 크기');
+  });
+  assert.ok(Object.values(E.ALL_ENTER).filter(e => e.from < 0).length >= 2 && Object.values(E.ALL_ENTER).filter(e => e.from > 1).length >= 2, '왼쪽 오른쪽 양쪽에서 들어온다');
+  assert.ok(E.ALL_ENTER.sul.arc && E.ALL_ENTER.dudung.arc && E.ALL_ENTER.dudung.from === undefined, '독슐은 날아오고 두덩은 제자리에서 쏙');
   assert.ok(E.ALL_T0 + 7 * E.ALL_STEP + 1700 <= E.ALL_DUR - E.ALL_FADE, '마지막 인사가 끝난 뒤에 사라지기 시작한다');
   const all = E.OPEN_SLOTS.map(s => Object.values(s.all.say)).flat();
   assert.strictEqual(new Set(all).size, all.length, '같은 인사가 둘로 겹치지 않는다(56가지)');
