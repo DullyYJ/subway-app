@@ -125,7 +125,7 @@ public final class OpenJvmTest {
         OpenCore.Slot mn = OpenCore.slotFor(sc, 7.5); ck(OpenCore.sunY(mn, 0, sc) > OpenCore.sunY(mn, 2000, sc), "아침 해는 떠오른다(y 가 줄어든다)");
         ck(OpenCore.sunY(OpenCore.slotFor(sc, 1), 0, sc) < 0, "밤엔 해가 없다");
         // ⑩ 전원 인사(s338): 홈 장면 3초 꾹 누르기 — 8마리 전원 · 3줄 · 차례대로 인사
-        ck(sc.all != null && sc.all.sx.length == 8 && sc.all.order.length == 8 && sc.all.dur == 8200 && sc.all.fade == 700, "전원 인사 판: 자리 8 · 차례 8 · 8.2초(+0.7초 녹아듦)");
+        ck(sc.all != null && sc.all.sx.length == 8 && sc.all.order.length == 8 && sc.all.dur == 10100 && sc.all.fade == 700 && sc.all.enter.size() == 8, "전원 인사 판: 자리 8 · 차례 8 · 친구별 등장 8 · 10.1초(+0.7초 녹아듦)");
         for (OpenCore.Slot s : sc.slots) {
             ck(OpenCore.canAll(sc, s), s.id + ": 전원 인사 가능(모든 친구에게 인사 글)");
             ck(s.all != null && s.all.say.size() == 8 && s.all.hop <= 0.051, s.id + ": 인사 글 8 · 콩콩 5% 안쪽");
@@ -134,7 +134,7 @@ public final class OpenJvmTest {
         ck(OpenCore.canAll(sc, OpenCore.withWeather(sc, OpenCore.slotFor(sc, 12), "rain")), "날씨를 입혀도 전원 인사 대본은 따라온다");
         { String noAll = json.replace("\"all\":{", "\"allx\":{"); OpenCore.Script s0 = OpenCore.parse(noAll); ck(s0 != null && s0.all == null && !OpenCore.canAll(s0, s0.slots[0]), "대본에 전원 인사 판이 없으면 쓰지 않는다(앱은 아무것도 안 한다)"); }
         OpenCore.Script as = OpenCore.forAll(sc);
-        ck(as.dur == 8200 && as.fade == 700 && as.slots == sc.slots && OpenCore.done(as, 8200) && !OpenCore.done(as, 8199) && OpenCore.alpha(as, 7500) == 1 && OpenCore.alpha(as, 8200) == 0, "전원 인사 시간표: 길이·사라짐만 다르다");
+        ck(as.dur == 10100 && as.fade == 700 && as.slots == sc.slots && OpenCore.done(as, 10100) && !OpenCore.done(as, 10099) && OpenCore.alpha(as, 9400) == 1 && OpenCore.alpha(as, 10100) == 0, "전원 인사 시간표: 길이·사라짐만 다르다");
         for (OpenCore.Slot s : sc.slots) {
             OpenCore.Actor[] cs = OpenCore.castAll(sc, s, 99L);
             java.util.HashSet<String> ids = new java.util.HashSet<String>(); int[] perRow = new int[3]; boolean order = true; int lastRow = 9;
@@ -155,20 +155,44 @@ public final class OpenJvmTest {
             ck(maxAt <= 3 && maxAt >= 2, s.id + ": 한꺼번에 뜨는 말풍선은 2~3개(" + maxAt + ")");
             for (OpenCore.Actor ac : cs) for (OpenCore.Actor bc : cs) if (ac != bc && ac.row == bc.row && Math.abs(ac.sayAt - bc.sayAt) < 1700) ck(Math.abs(OpenCore.at(ac, 3000).x - OpenCore.at(bc, 3000).x) >= 0.29, s.id + ": 같은 줄에서 동시에 말하는 친구는 멀리 있다 " + ac.id + "/" + bc.id);
             double endSay = 0; for (OpenCore.Actor ac : cs) endSay = Math.max(endSay, ac.sayAt + 1700); ck(endSay <= sc.all.dur - sc.all.fade, s.id + ": 마지막 인사가 끝난 뒤에 사라지기 시작한다(" + endSay + ")");
-            for (OpenCore.Actor ac : cs) for (OpenCore.Seg g : ac.tr) { ck(g.t1 <= sc.all.dur && g.hop <= 0.051 && g.say.isEmpty(), s.id + "/" + ac.id + ": 동작 구간은 길이 안 · 콩콩 5% 안쪽 · 말은 구간이 아니라 차례로"); }
+            for (OpenCore.Actor ac : cs) for (OpenCore.Seg g : ac.tr) { ck(g.t1 <= sc.all.dur && g.say.isEmpty() && (g.t0 < ac.arrive || g.hop <= 0.051), s.id + "/" + ac.id + ": 동작 구간은 길이 안 · 자리에 선 뒤 콩콩 5% 안쪽 · 말은 구간이 아니라 차례로"); }
         }
         // 같은 seed 는 같은 배치 · 다른 seed 는 다른 배치 · 모든 친구가 모든 자리에 서 본다
-        { OpenCore.Slot s0 = OpenCore.slotFor(sc, 12); String k1 = "", k2 = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k1 += ac.id + ac.row + (int) (ac.tr[0].x0 * 100) + ","; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k2 += ac.id + ac.row + (int) (ac.tr[0].x0 * 100) + ",";
+        { OpenCore.Slot s0 = OpenCore.slotFor(sc, 12); String k1 = "", k2 = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k1 += ac.id + ac.row + (int) (ac.tr[ac.tr.length - 1].x1 * 100) + ","; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k2 += ac.id + ac.row + (int) (ac.tr[ac.tr.length - 1].x1 * 100) + ",";
           ck(k1.equals(k2), "같은 seed 는 같은 배치");
           java.util.HashSet<String> arr = new java.util.HashSet<String>(), seat = new java.util.HashSet<String>();
-          for (long sd = 0; sd < 600; sd++) { String k = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, sd * 31L + 7)) { k += ac.id + "@" + ac.row + "/" + (int) (ac.tr[0].x0 * 100) + ","; seat.add(ac.id + "@" + ac.row + "/" + (int) (ac.tr[0].x0 * 100)); } arr.add(k); }
+          for (long sd = 0; sd < 600; sd++) { String k = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, sd * 31L + 7)) { k += ac.id + "@" + ac.row + "/" + (int) (ac.tr[ac.tr.length - 1].x1 * 100) + ","; seat.add(ac.id + "@" + ac.row + "/" + (int) (ac.tr[ac.tr.length - 1].x1 * 100)); } arr.add(k); }
           ck(arr.size() > 500, "seed 마다 배치가 다르다(" + arr.size() + "/600)"); ck(seat.size() == 64, "친구마다 8자리 모두에 서 본다(" + seat.size() + "/64)"); }
         // 전용 동작(죽순이 · 뽀송)은 전원 인사에서도 자기 자리에서 그대로 한다
         { OpenCore.Slot gr = OpenCore.slotFor(sc, 7.5); boolean jk = false, bb = false;
-          for (OpenCore.Actor ac : OpenCore.castAll(sc, gr, 3L)) { if (ac.id.equals("juksun")) jk = ac.tr.length > 1 && ac.tr[0].p == 6 && ac.tr[1].p == 7; if (ac.id.equals("bbosong")) bb = ac.tr.length == 2 && ac.tr[1].p == 6; }
+          for (OpenCore.Actor ac : OpenCore.castAll(sc, gr, 3L)) { if (ac.id.equals("juksun")) jk = ac.tr.length > 2 && (ac.tr[1].p == 6 || ac.tr[1].p == 7) && ac.tr[2].p != ac.tr[1].p && ac.tr[2].p >= 6 && ac.tr[1].t0 >= ac.arrive - 1e-6; if (ac.id.equals("bbosong")) bb = ac.tr.length == 2 && ac.tr[1].p == 6 && ac.tr[1].t0 >= ac.arrive - 1e-6; }
           ck(jk && bb, "아침: 죽순이는 먹고 뽀송은 하트(전용 동작)"); }
         // 잠자는 시간엔 모두 잠든 모습으로 인사한다
-        { OpenCore.Slot sl = OpenCore.slotFor(sc, 2); for (OpenCore.Actor ac : OpenCore.castAll(sc, sl, 11L)) ck("sleep".equals(OpenCore.at(ac, 2000).k) && "zzz".equals(OpenCore.at(ac, 2000).fx), "잠자기 칸: " + ac.id + " 는 잠든 모습 + zzz"); }
+        { OpenCore.Slot sl = OpenCore.slotFor(sc, 2); for (OpenCore.Actor ac : OpenCore.castAll(sc, sl, 11L)) ck("sleep".equals(OpenCore.at(ac, 5000).k) && "zzz".equals(OpenCore.at(ac, 5000).fx), "잠자기 칸: " + ac.id + " 는 잠든 모습 + zzz"); }
+        // ⑪ 등장(s339): 각자 성격대로 화면 밖에서 들어와 자리에 선 다음에야 인사한다
+        for (OpenCore.Slot s : sc.slots) for (long sd = 1; sd <= 40; sd++) {
+            for (OpenCore.Actor ac : OpenCore.castAll(sc, s, sd * 977L)) {
+                double seat = ac.tr[ac.tr.length - 1].x1; OpenCore.Seg w = ac.tr[0]; String w0 = s.id + "/" + ac.id + "#" + sd;
+                ck(ac.arrive > 0 && ac.arrive <= sc.all.t0 - 200 + 1e-6, w0 + ": 인사 시작 0.2초 전엔 자리에 선다(" + (int) ac.arrive + ")");
+                ck(ac.sayAt >= ac.arrive + 200 - 1e-6, w0 + ": 자리에 선 다음에 말한다");
+                ck(OpenCore.at(ac, (long) ac.arrive + 5).x == seat || Math.abs(OpenCore.at(ac, (long) ac.arrive + 5).x - seat) < 1e-9, w0 + ": 도착하면 자기 자리");
+                ck(OpenCore.at(ac, 0).alpha == 0 || w.t0 == 0, w0 + ": 들어올 차례 전엔 보이지 않는다");
+                if (w.x0 != w.x1) {
+                    ck(w.x0 < 0 || w.x0 > 1, w0 + ": 화면 밖에서 시작");
+                    ck(w.f == (seat >= w.x0 ? 1 : -1) && "walk".equals(w.k), w0 + ": 가는 쪽을 보며 걷는다");
+                    double pvx = w.x0; boolean mon = true; for (long t = (long) w.t0; t <= (long) w.t1; t += 20) { double x = OpenCore.at(ac, t).x; if (w.f > 0 ? x < pvx - 1e-9 : x > pvx + 1e-9) mon = false; pvx = x; }
+                    ck(mon, w0 + ": 한 방향으로만 걸어온다");
+                }
+                OpenCore.St mid = OpenCore.at(ac, (long) ((w.t0 + w.t1) / 2));
+                if (ac.id.equals("sul")) ck(w.arc && w.hop > 0.5 && mid.hop > 0.5 && OpenCore.at(ac, (long) w.t1 + 5).hop <= 0.051, w0 + ": 독수리는 날아와서 내려앉는다");
+                if (ac.id.equals("dudung")) ck(w.arc && w.x0 == w.x1 && "pose".equals(w.k) && mid.hop > 0.2, w0 + ": 두더지는 제자리에서 쏙 튀어나온다");
+                if (ac.id.equals("dolsom")) ck(w.hz >= 3 && w.hop >= 0.05, w0 + ": 둘숑은 신나게 달려온다");
+                if (ac.id.equals("lovel")) ck(w.hop == 0 && w.t1 - w.t0 >= 600 * Math.abs(seat - w.x0), w0 + ": 러블은 느긋하게 걸어온다");
+            }
+        }
+        { OpenCore.Slot gr = OpenCore.slotFor(sc, 12); double fastest = 9, slowest = 0;
+          for (OpenCore.Actor ac : OpenCore.castAll(sc, gr, 5L)) { double sp = Math.abs(ac.tr[0].x1 - ac.tr[0].x0) / Math.max(1, ac.tr[0].t1 - ac.tr[0].t0) * 1000.0; if (ac.tr[0].x0 != ac.tr[0].x1 && !ac.tr[0].arc) { fastest = Math.min(fastest, sp); slowest = Math.max(slowest, sp); } }
+          ck(slowest > fastest * 1.5, "친구마다 걷는 빠르기가 다르다(" + fastest + " ~ " + slowest + ")"); }
         // 오프닝(셋)은 그대로: 옛 방식의 친구에게는 자리 줄 · 배율이 기본값, 말은 구간에서
         { OpenCore.Slot gr = OpenCore.slotFor(sc, 7.5); for (OpenCore.Actor ac : OpenCore.cast(sc, gr, new String[] { "dolsom", "lovel", "dudung" })) ck(ac.row == 0 && ac.scale == 1 && ac.gap == 0 && ac.say.isEmpty() && ac.sayAt < 0, "오프닝 친구는 줄 0 · 배율 1 · 따로 인사 없음"); }
         System.out.println(bad == 0 ? "ALL OK" : bad + " FAIL");
