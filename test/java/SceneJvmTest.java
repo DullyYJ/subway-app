@@ -46,12 +46,37 @@ public class SceneJvmTest {
     public static void main(String[] a) throws Exception {
         System.setProperty("java.awt.headless", "true");
         if (a.length > 0 && a[0].equals("render")) { render(a); return; }
+        if (a.length > 0 && a[0].equals("helloframes")) { helloFrames(a); return; }
         if (a.length > 0 && a[0].equals("tvframes")) { tvFrames(a); return; }
         if (a.length > 0 && a[0].equals("trainframes")) { trainFrames(a); return; }
         if (a.length > 0 && a[0].equals("panframes")) { panFrames(a); return; }
         check(new File(a.length > 1 ? a[1] : "."));
         System.out.println(fails == 0 ? "ALL OK" : ("FAILED " + fails));
         System.exit(fails == 0 ? 0 : 1);
+    }
+
+    // ═══ 카드 확장 인사 눈으로 보기(s340): java SceneJvmTest helloframes <시트폴더> <출력접두> <idle.json> <open.json> <슬롯 시각> ═══
+    static void helloFrames(String[] a) throws Exception {
+        File sheets = new File(a[1]); int W = 340, H = 190; double dens = 1.5;
+        TestHost h = new TestHost();
+        for (String id : SceneModel.ORDER) { File f = new File(sheets, id + ".png"); if (f.exists()) h.sheets.put(id, new AwtCv.Img(ImageIO.read(f))); }
+        for (String id : SceneModel.ORDER) { File fp = new File(sheets, id + "_pose.png"); if (fp.exists()) h.sheets.put(id + "_pose", new AwtCv.Img(ImageIO.read(fp))); }
+        for (String id : SceneModel.ORDER) { File fa = new File(sheets, id + "_act.png"); if (fa.exists()) h.sheets.put(id + "_act", new AwtCv.Img(ImageIO.read(fa))); }
+        File fi = new File(sheets, "dudung_intro.png"); if (fi.exists()) h.intro = new AwtCv.Img(ImageIO.read(fi));
+        OpenCore.Script sc = OpenCore.parse(read(new File(a[4]))); SceneHello.Plan p = OpenCore.helloFor(sc, OpenCore.slotFor(sc, Double.parseDouble(a[5])));
+        SceneCore c = core(h, 7); c.layout(W, H, dens, false); c.apply(SceneModel.parse(read(new File(a[3])))); c.debugTick(8);
+        c.startHello(p, 3L);
+        int wpx = (int) Math.round(c.W * c.dpr), hpx = (int) Math.round(c.H * c.dpr);
+        double[] ts = { 0, .3, .6, .9, 1.4, 2.4, 3.4, 4.4, 5.4, 6.0, 6.3, 6.6, 6.9, 7.2, 7.6, 8.4, 9.5 }; double at = 0;
+        for (double tt : ts) {
+            double d = tt - at; at = tt; int n = (int) Math.round(d * 60);
+            for (int i = 0; i < n; i++) { c.setStretch(c.helloActive() ? SceneHello.ext(p, c.helloMs()) * c.H : 0); c.update(1.0 / 60); if (c.helloActive() && SceneHello.done(p, c.helloMs())) c.helloStop(); }
+            c.setStretch(c.helloActive() ? SceneHello.ext(p, c.helloMs()) * c.H : 0);
+            int ext = (int) Math.round(c.stretch() * c.dpr);
+            BufferedImage im = canvasImg(wpx, hpx + ext); draw(c, im);
+            ImageIO.write(im, "png", new File(a[2] + String.format("%03d", Math.round(tt * 10)) + ".png"));
+            System.out.println("t=" + tt + " ext=" + ext + " actors=" + c.actors.size());
+        }
     }
 
     // ═══ TV 전환 눈으로 보기: java SceneJvmTest tvframes <시트폴더> <출력접두> <idle.json> <wait.json> ═══
@@ -322,6 +347,20 @@ public class SceneJvmTest {
             ok(c.mode().equals("idle") && c.actors.isEmpty(), "대표 캐릭터가 없으면 캐릭터 없이 배경만(앱이 대신 고르지 않음): " + c.mode() + " " + c.actors.size());
             ok(!c.apply(SceneModel.parse("{\"ok\":true,\"mode\":null,\"look\":{\"slot\":\"noon\"}}")) && !c.isRunning(), "mode 가 없으면 장면을 멈춘다");
         }
+        // 6a) s340 카드 확장: 늘어나도 하늘 · 먼 도시 · 길은 그대로(같은 그림) — 인도만 아래로 늘어난다
+        {
+            TestHost h = fakeHost(); SceneCore c = core(h, 31); c.layout(340, 190, 2.75, false); c.apply(scn.get("scn_idle_noon_clear")); c.debugTick(3);
+            int wpx = (int) Math.round(c.W * c.dpr), hpx = (int) Math.round(c.H * c.dpr), epx = hpx;
+            BufferedImage a = canvasImg(wpx, hpx); draw(c, a); a = canvasImg(wpx, hpx); draw(c, a);
+            c.setStretch(c.H); BufferedImage b = canvasImg(wpx, hpx + epx); draw(c, b);
+            int topPx = (int) Math.floor(c.g.nearTop * c.dpr) - 3; long diff = 0; int cnt = 0;
+            for (int y = 0; y < topPx; y += 2) for (int x = 0; x < wpx; x += 3) { int pa = a.getRGB(x, y), pb = b.getRGB(x, y); for (int sh = 0; sh < 24; sh += 8) diff += Math.abs(((pa >> sh) & 255) - ((pb >> sh) & 255)); cnt += 3; }
+            ok(cnt > 100 && diff / (double) cnt < 1.0, "늘어나도 길 위쪽(하늘 · 도시 · 길)은 평소와 같은 그림이다 · 평균 차이 " + (diff / (double) cnt));
+            int filled = 0, tot = 0; for (int y = hpx + 4; y < hpx + epx - 16; y += 6) for (int x = 16; x < wpx - 16; x += 9) { tot++; if (((b.getRGB(x, y) >> 24) & 255) > 200) filled++; }
+            ok(filled == tot, "늘어난 아래쪽도 빈틈 없이 인도로 채워진다(" + filled + "/" + tot + ")");
+            ok(c.zy(1) > c.zy(0) + (c.g.floor - c.g.nearTop) * .9 && c.zy(1) <= c.g.floor + c.H + 1, "늘어난 만큼 앞줄 발 자리도 내려간다");
+            c.setStretch(0); ok(Math.abs(c.zy(1) - (c.g.floor)) < 1e-6, "줄어들면 평소 자리로 돌아온다");
+        }
         // 6b) s340 카드 확장 인사: 손님이 양쪽에서 들어와 자리에 서고 · 차례대로 말풍선 · 때가 되면 손님만 나가고 원래 친구는 남는다
         {
             String[] ids = {"dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"};
@@ -331,39 +370,44 @@ public class SceneJvmTest {
                 p.order = new int[]{5, 2, 3, 7, 0, 4, 6, 1};
                 for (String c0 : ids) p.say.put(c0, c0.substring(0, 2) + "!");
                 ok(SceneHello.ok(p), "시험용 인사 대본이 맞다");
-                TestHost h = fakeHost(); SceneCore c = core(h, 11 + rest); c.layout(340, 380, 2.75, true); c.apply(scn.get("scn_idle_noon_clear"));
-                ok(!c.startHello(p, 1, null) || true, "(시작 전 준비)");
+                TestHost h = fakeHost(); SceneCore c = core(h, 11 + rest); c.layout(340, 190, 2.75, true); c.apply(scn.get("scn_idle_noon_clear"));
                 c.debugTick(6);
-                java.util.List<SceneCore.Folk> fk = c.folks(); java.util.HashSet<String> orig = new java.util.HashSet<String>(); for (SceneCore.Folk f : fk) orig.add(f.id);
-                ok(c.startHello(p, 5L, fk) && c.helloActive(), "확장 인사가 시작된다(rest=" + p.rest + ")");
-                ok(!c.startHello(p, 5L, fk) || c.helloActive(), "다시 시작해도 안 깨진다");
+                java.util.HashSet<String> orig = new java.util.HashSet<String>(); for (SceneCore.Actor f : c.actors) if (!f.dead && !f.leaving) orig.add(f.id);
+                java.util.HashMap<String, double[]> before = new java.util.HashMap<String, double[]>(); for (SceneCore.Actor f : c.actors) before.put(f.id, new double[]{f.x, f.z});
+                int nTraffic = c.traffic.size();
+                ok(c.startHello(p, 5L) && c.helloActive(), "확장 인사가 시작된다(rest=" + p.rest + ")");
+                { boolean same = true; int kept = 0; for (SceneCore.Actor f : c.actors) { double[] b0 = before.get(f.id); if (b0 == null) continue; kept++; if (Math.abs(f.x - b0[0]) > .01 || Math.abs(f.z - b0[1]) > .01) same = false; }
+                  ok(same && kept == before.size(), "시작하는 순간 원래 친구는 있던 자리 그대로(" + kept + "/" + before.size() + ")"); ok(c.traffic.size() == nTraffic, "길의 차 · 버스는 그대로 이어진다"); }
+                ok(!c.startHello(p, 5L) || c.helloActive(), "다시 시작해도 안 깨진다");
                 boolean[] said = new boolean[8]; int maxVis = 0; java.util.HashSet<String> seenSay = new java.util.HashSet<String>(); double firstSay = -1; double lastSay = -1;
                 int steps = (int) Math.round(p.leave / 1000.0 * 30);
                 for (int i = 0; i < steps; i++) {
-                    c.update(1.0 / 30);
-                    int vis = 0; for (SceneCore.Actor a : c.actors) { if (a.vis) vis++; if (!a.bub.isEmpty() && seenSay.add(a.id)) { if (firstSay < 0) firstSay = c.helloMs(); lastSay = c.helloMs(); } }
+                    c.setStretch(SceneHello.ext(p, c.helloMs()) * c.H); c.update(1.0 / 30);
+                    int vis = 0; for (SceneCore.Actor a : c.actors) { if (a.vis) vis++; if (!a.bub.isEmpty() && seenSay.add(a.id)) { if (firstSay < 0) firstSay = c.helloMs(); lastSay = c.helloMs(); if (System.getenv("HV") != null) System.out.println("say " + a.id + " " + Math.round(c.helloMs())); } }
                     maxVis = Math.max(maxVis, vis);
                 }
                 ok(c.error == null, "인사 중 오류 없음: " + c.error);
                 ok(c.actors.size() == 8, "손님까지 8마리가 모두 나와 있다: " + c.actors.size());
                 ok(seenSay.size() == 8, "8마리 모두 말풍선을 띄웠다: " + seenSay.size());
                 ok(firstSay >= p.greet - 40 && lastSay <= p.greet + 7 * p.step + p.bubble, "말풍선은 인사 시각 안에서만 뜬다 first=" + firstSay + " last=" + lastSay);
-                int near = 0; for (SceneCore.Actor a : c.actors) { Integer si = null; for (int q = 0; q < 8; q++) if (ids[q].equals(a.id)) si = q; if (si != null) { String[] seats = SceneHello.seats(p, 5L); for (int q = 0; q < 8; q++) if (seats[q].equals(a.id) && Math.abs(a.x - p.sx[q] * c.designW()) < 14) near++; } }
-                ok(near >= 7, "대부분 자기 자리에 서 있다(" + near + "/8)");
+                int near = 0; StringBuilder nb = new StringBuilder();
+                for (SceneCore.Actor a : c.actors) { Integer qi = c.hello.seat.get(a.id); if (qi == null) continue; double dx = a.x - p.sx[qi] * c.designW(); if (Math.abs(dx) < 14) near++; else nb.append(a.id + ":" + a.st + ":dx" + Math.round(dx) + " "); }
+                ok(near >= 7, "대부분 자기 자리에 서 있다(" + near + "/8) " + nb);
+                { java.util.HashSet<Integer> ss = new java.util.HashSet<Integer>(c.hello.seat.values()); ok(ss.size() == 8, "8마리가 서로 다른 자리를 쓴다"); }
                 if (p.rest) { int sit = 0; for (SceneCore.Actor a : c.actors) if (a.st.equals("rest")) sit++; ok(sit >= 7, "잠자는 칸은 앉아 쉰다(" + sit + ")"); }
-                adv(c, (p.end - p.leave) / 1000.0 + 8);
+                for (int i = 0; i < (int) Math.round(((p.end - p.leave) / 1000.0 + 8) * 30); i++) { c.setStretch(SceneHello.ext(p, c.helloMs()) * c.H); c.update(1.0 / 30); if (c.helloMs() >= p.end) { c.helloStop(); } }
                 java.util.HashSet<String> now = new java.util.HashSet<String>(); for (SceneCore.Actor a : c.actors) if (!a.leaving) now.add(a.id);
                 ok(now.containsAll(orig) && now.size() <= 8, "나간 뒤에도 원래 친구들은 남아 있다 " + orig + " ⊂ " + now);
                 int guestsLeft = 0; for (SceneCore.Actor a : c.actors) if (!orig.contains(a.id)) guestsLeft++;
                 ok(guestsLeft == 0, "손님은 모두 나갔다(" + guestsLeft + ")");
                 ok(c.error == null, "끝난 뒤에도 오류 없음");
                 // 일찍 끝내기
-                TestHost h2 = fakeHost(); SceneCore c2 = core(h2, 21); c2.layout(340, 380, 2.75, true); c2.apply(scn.get("scn_idle_noon_clear")); c2.debugTick(5);
-                ok(c2.startHello(p, 9L, c2.folks()), "다시 시작"); adv(c2, .8); c2.helloSkip(); adv(c2, 4);
+                TestHost h2 = fakeHost(); SceneCore c2 = core(h2, 21); c2.layout(340, 190, 2.75, true); c2.apply(scn.get("scn_idle_noon_clear")); c2.debugTick(5);
+                ok(c2.startHello(p, 9L), "다시 시작"); adv(c2, .8); c2.helloSkip(); adv(c2, 4);
                 ok(c2.error == null, "일찍 끝내도 오류 없음");
             }
             TestHost hw = fakeHost(); SceneCore cw = core(hw, 4); cw.layout(340, 190, 2.75, true);
-            ok(!cw.startHello(new SceneHello.Plan(), 1, null), "장면이 안 돌거나 대본이 틀리면 시작하지 않는다");
+            ok(!cw.startHello(new SceneHello.Plan(), 1), "장면이 안 돌거나 대본이 틀리면 시작하지 않는다");
         }
         // 7) 장면이 바뀔 때 TV 전원 전환(꺼짐 → 암전 → 켜짐)
         {
