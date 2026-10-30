@@ -169,7 +169,7 @@ t('s351 반경 밖에만 가게가 있어도(한적한 역) 가장 가까운 카
 });
 t('Worker 에 내장되고 /reco-text 길이 있다', () => {
   assert.ok(/\/\/ ===== reco-text \(/.test(worker)); assert.ok(/reco-text \\ub05d =====/.test(worker));
-  assert.ok(/url\.pathname === "\/reco-text"\) return handleRecoText\(request\)/.test(worker));
+  assert.ok(/url\.pathname === "\/reco-text"\) return handleRecoText\(request, env, ctx\)/.test(worker));
 });
 t('Worker 내장본 결과가 모듈과 같다', () => {
   const m = worker.match(/\/\/ ===== reco-text \([^\n]*\n([\s\S]*?)\/\/ ===== reco-text \\ub05d =====/); assert.ok(m);
@@ -434,6 +434,20 @@ async function call(method, body) {
   t('POST aiCopy:1 · 점심이면 AI 서버를 부르지 않는다', () => { assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json)); });
   AIQ.length = 0; r = await call('POST', { op: 'pip', slot: 'night', dest: '강남', body: 'a\nb\nc\nd', nowMs: kst(20, 0), seed: 1, aiCopy: 1, a: { remMin: 5, menu: '피자', hook: '훅', cx: { h: 20 }, spots: ['A'], dinner: false } });
   t('POST op=pip: aiCopy 가 있어도 AI 서버를 부르지 않는다', () => { assert.strictEqual(AIQ.length, 0); assert.ok(!('aiTried' in r.json)); });
+  // s352: 맛집 탭과 같은 자료(맛집 서버 + 공공데이터)를 합쳐서 쓴다 — 서버가 비어도 공공데이터로 가게를 고른다
+  {
+    const PUB = [{ bizesNm: '아라국밥집', indsMclsNm: '한식', indsSclsNm: '국밥', rdnmAdr: '인천 서구 아라로 1', lnoAdr: '', lat: 37.5001, lon: 127.0301 }, { bizesNm: '아라커피', indsMclsNm: '비알코올', indsSclsNm: '카페', rdnmAdr: '인천 서구 아라로 2', lnoAdr: '', lat: 37.5, lon: 127.03 }];
+    let PUBRET = PUB, SRVRET = [];
+    R.rtxSetLoaders({ food: () => SRVRET, pub: () => { if (PUBRET === 'throw') throw new Error('p'); return PUBRET; }, wx: () => null });
+    const rows = R.rtxPubRows(PUB, { lat: 37.5, lng: 127.03 });
+    t('s352 공공데이터 행 → {n,c,a,d} (거리는 엔진이 계산)', () => { assert.strictEqual(rows[0].n, '아라국밥집'); assert.strictEqual(rows[0].c, '한식 국밥'); assert.strictEqual(rows[0].a, '인천 서구 아라로 1'); assert.ok(rows[0].d > 0 && rows[0].d < 300, rows[0].d); assert.strictEqual(rows[1].d, 0); });
+    t('s352 합치기: 이름+주소가 같으면 한 번만', () => { assert.strictEqual(R.rtxMergeFood([{ n: 'A 집', a: '서울 강남구 1' }], [{ n: 'A집', a: '서울 강남구 1' }, { n: 'B', a: 'x' }]).length, 2); });
+    r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '아라', loc: { lat: 37.5, lng: 127.03 }, weather: WX, foodPref: 'server', recent: [], seed: 7 });
+    t('s352 맛집 서버가 비어도 공공데이터로 구체적인 가게를 고른다(검색 줄이 아니다)', () => { assert.ok(r.json.foods && r.json.foods.length === 2, JSON.stringify(r.json.foods)); assert.ok(r.json.ad && r.json.ad.pn && /아라/.test(r.json.ad.pn), JSON.stringify(r.json.ad)); });
+    PUBRET = 'throw'; SRVRET = SRV;
+    r = await call('POST', { arrMs: kst(12, 5), nowMs: kst(12, 0), dest: '아라', loc: { lat: 37.5, lng: 127.03 }, weather: WX, foodPref: 'server', recent: [], seed: 7 });
+    t('s352 공공데이터가 실패해도 맛집 서버 목록으로 만든다', () => { assert.strictEqual(r.json.ok, true); assert.deepStrictEqual(r.json.foods, SRV); });
+  }
   R.rtxSetLoaders(null);
 
   console.log('reco_text: ' + pass + ' pass ' + fail + ' fail');
