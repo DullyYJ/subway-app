@@ -531,8 +531,8 @@ public class ScreenView extends View {
                 if (pressed != null && pressed.kind == ScreenCore.K_BCARD && "near".equals(pressed.value) && !inHead && !inFoot && roEnabled()) ui.postDelayed(lpRun, RO_LP_MS);       // 꾹 누르면 순서 바꾸기
                 sceneTouch = false;
                 { ScreenCore.Item si = sceneAt(x, y); if (si != null && scene.touchDown(sceneX(x, si), sceneY(y, si))) { sceneTouch = true; pressed = null; } }
-                ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(scenePrepRun);
-                if (helloFeed != null && !helloOn() && sceneAt(x, y) != null) { ui.postDelayed(scenePrepRun, HELLO_PREP_MS); ui.postDelayed(sceneLpRun, HELLO_LP_MS); }          // s340: 3초 꾹 누르면 카드 확장 인사(1.5초에 미리 만들어 둔다)
+                ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun);
+                if (helloFeed != null && !helloOn() && sceneAt(x, y) != null) { ui.postDelayed(sceneTickRun, HELLO_TICK_MS); ui.postDelayed(sceneLpRun, HELLO_LP_MS); }          // s340: 3초 꾹 누르면 카드 확장 인사(1.5초에 미리 만들어 둔다)
                 pgHit = pagerAt(x, y);
                 swX0 = x; swY0 = y; swT0 = downT; swOff = false; swScroll0 = scrollY; swCan = swipeHost != null && swipeHost.canSwipe();
                 pullAllowed = pullHost != null && lay != null && lay.footH <= 0f && !inHead && !inBand && pullHost.canPull(); if (pullRelT > 0L && mode != 1) { pullRelT = 0L; pullY = 0f; }
@@ -542,7 +542,7 @@ public class ScreenView extends View {
             }
             case MotionEvent.ACTION_MOVE: {
                 float dx = x - lastX, dy = y - lastY;
-                if (Math.hypot(x - downX, y - downY) > slop * 2f) { ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(scenePrepRun); }          // s340: 손가락이 움직이면 꾹 누르기가 아니다
+                if (Math.hypot(x - downX, y - downY) > slop * 2f) { ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); }          // s340: 손가락이 움직이면 꾹 누르기가 아니다
                 { float ay = Math.abs(y - swY0), ax = Math.abs(x - swX0); if (ay > SW_OFF_DP * dpr && ay > ax) swOff = true; }
                 if (sceneTouch && scene != null) {
                     ScreenCore.Item si = sceneAt(x, y);
@@ -595,7 +595,7 @@ public class ScreenView extends View {
                 return true;
             }
             case MotionEvent.ACTION_UP: {
-                ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(scenePrepRun);
+                ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun);
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
                 if (mode == 11 && pickHit != null) {
@@ -661,7 +661,7 @@ public class ScreenView extends View {
                 invalidate();
                 return true;
             }
-            case MotionEvent.ACTION_CANCEL: ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(scenePrepRun); if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } if (mode == 1 && pullY > 0f) { pullFrom = pullY; pullRelT = SystemClock.uptimeMillis(); } finishTouch(); invalidate(); return true;
+            case MotionEvent.ACTION_CANCEL: ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; } if (mode == 10) { pgDragOn = false; pgPage = Math.round(pgPos); } if (mode == 1 && pullY > 0f) { pullFrom = pullY; pullRelT = SystemClock.uptimeMillis(); } finishTouch(); invalidate(); return true;
             default: return true;
         }
     }
@@ -868,6 +868,7 @@ public class ScreenView extends View {
         sceneDrawn = true; sceneL = it.x; sceneW = it.w; sceneH = bh;
         sceneT = it.y + lay.headH - scrollY;
         if (!scene.isLoaded()) return;
+        scene.helloStretch(gh);                              // s340: 카드가 늘어난 만큼 장면의 인도를 늘린다(0 이면 평소)
         scene.frame(System.nanoTime());
         cv.save();
         sceneRect.set(it.x, it.y, it.x + it.w, it.y + it.h);
@@ -875,18 +876,7 @@ public class ScreenView extends View {
         cv.clipPath(sceneClip);
         cv.translate(it.x, it.y);
         cv.scale(1f / dpr, 1f / dpr);                      // 장면은 화면 픽셀 좌표로 그린다(밀도는 SceneCore 가 안다)
-        if (gh > 0f && helloPlan != null && scene.helloActive()) {
-            double mx = SceneHello.mix(helloPlan, helloNowMs());
-            cv.save(); cv.translate(0f, (gh - bh) * dpr); scene.drawHello(cv); cv.restore();            // 늘어난 장면은 카드 바닥에 맞춰(아래 정렬) — 카드가 커질수록 위가 드러난다
-            if (mx < 0.999) {                                                                           // 평소 장면은 위쪽에서 서서히 늘어난 장면으로 바뀐다(줄어들 땐 거꾸로)
-                float rw = it.w * dpr, rh = bh * dpr;
-                cv.save(); cv.clipRect(0f, 0f, rw, rh);
-                if (mx > 0.001) cv.saveLayerAlpha(0f, 0f, rw, rh, Math.round(255f * (float) (1.0 - mx)));
-                scene.draw(cv);
-                if (mx > 0.001) cv.restore();
-                cv.restore();
-            }
-        } else scene.draw(cv);
+        scene.draw(cv);                                    // 카드가 늘어난 동안에도 같은 장면 — 아래 인도만 늘려 그린다(장면 안에서)
         cv.restore();
         String tg = gh > 0f ? null : scene.core().tag();                                       // 웹 .cs-tag: 왼쪽 위 작은 알약(🌙 밤 …)
         if (tg != null && tg.length() > 0) {
@@ -1130,7 +1120,7 @@ public class ScreenView extends View {
     } };
     // ── s340: 홈 장면(길동무 친구들 카드)을 3초 꾹 누르면 카드가 배경 그대로 세로 2배로 슬라이드로 늘어나고, 나머지 친구들이 나와 인사한 뒤 줄어든다(YJ).
     //   무엇을(시간 · 자리 · 차례 · 인사 글)은 엔진 대본 · 누가 남는지는 카드에 지금 나온 친구 — 여기는 눌림 시간을 재고, 카드 높이만 그려 늘렸다 줄인다 ──
-    private static final long HELLO_PREP_MS = 1500L, HELLO_LP_MS = 3000L;
+    private static final long HELLO_TICK_MS = 1000L, HELLO_LP_MS = 3000L;
     /** 지금 시간대의 카드 확장 인사 대본을 준다(없으면 null → 아무것도 안 한다). */
     public interface HelloFeed { SceneHello.Plan get(); }
     private HelloFeed helloFeed;
@@ -1154,14 +1144,23 @@ public class ScreenView extends View {
     }
     private boolean helloOn() { return helloPlan != null && scene != null && scene.helloActive(); }
     private boolean helloHeld() { return helloFeed != null && lay != null && scene != null && (mode == 3 || mode == 4) && sceneAt(downX, downY) != null && !helloOn(); }       // 목록을 밀거나 쪽을 넘기는 중이면 아니다(3 = 가만히 누름 · 4 = 캐릭터를 잡은 채 가만히)
-    private final Runnable scenePrepRun = new Runnable() { @Override public void run() {
-        if (!helloHeld()) return;
+    private final Runnable sceneTickRun = new Runnable() { @Override public void run() {                       // 1초: 배경에 손이 올라가 있다 → 짧게 '톡'(진행 중이라는 알림) + 화면 주사율을 미리 올려 둔다
+        if (!helloHeld() || !scene.helloReady()) return;
         SceneHello.Plan pl = helloFeed.get(); if (!SceneHello.ok(pl)) return;
-        if (scene.helloPrepare(sceneW, sceneH * 2f, darkNow())) hiRate(true);                       // 화면 주사율을 미리 올려 둔다(바뀌는 데 시간이 걸린다)
+        hiRate(true);
+        tickBuzz();
     } };
+    /** 1초 알림: 시스템 '터치 진동' 설정과 상관없이 짧고 또렷하게 한 번(25ms). 못 울려도 인사는 그대로. */
+    private void tickBuzz() {
+        try {
+            android.os.Vibrator vb = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE);
+            if (vb != null && vb.hasVibrator()) vb.vibrate(android.os.VibrationEffect.createOneShot(25L, 200));
+            else performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+        } catch (Throwable e) { performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK); }
+    }
     private final Runnable sceneLpRun = new Runnable() { @Override public void run() {
         if (!helloHeld()) return;
-        SceneHello.Plan pl = helloFeed.get(); if (!SceneHello.ok(pl) || !scene.helloPrepare(sceneW, sceneH * 2f, darkNow())) return;
+        SceneHello.Plan pl = helloFeed.get(); if (!SceneHello.ok(pl) || !scene.helloReady()) return;
         if (sceneTouch) { scene.touchUp(); sceneTouch = false; }                                                                    // 잡고 있던 캐릭터는 놓는다
         if (!scene.helloStart(pl, System.nanoTime())) return;
         helloPlan = pl; helloT0Ns = System.nanoTime(); helloIgnoreUp = true;                                                                                       // 이 누름은 여기서 끝(놓을 때 '눌림'으로 안 치고 · 일찍 끝내기로도 안 친다)
@@ -2042,7 +2041,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(scenePrepRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
