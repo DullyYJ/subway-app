@@ -24,7 +24,7 @@ public class RideLocalJvmTest {
     static void cmp(Object a, Object b, String path) {
         if (diffs > 12) return;
         if (a == null && b == null) return;
-        if (!STRICT && b == null && (path.endsWith(".state.rtc") || path.contains(".state.rtc.bu") || path.contains(".state.mkFloor") || path.contains(".state.bl.cand") || path.endsWith(".state.wait.pf") || path.endsWith(".w.pf"))) return;      // s336: 이전에 녹화한 답에는 새 상태 키(승차 후보 열차 · 승강장 시각 · 종착 바닥 · 버스트)가 없다 — 새 녹화(v:336, -Dstrict=1)는 모두 비교한다      // s334: 녹화본 중 s334 이전에 녹화한 답에는 실시간 호출 장부(state.rtc)가 없다 — 새 녹화(s334 줄)는 있으면 모두 비교한다
+        if (!STRICT && b == null && (path.endsWith(".state.rtc") || path.contains(".state.rtc.bu") || path.contains(".state.mkFloor") || path.contains(".state.bl.cand") || path.endsWith(".state.wait.pf") || path.endsWith(".w.pf") || path.contains(".state.wait.lf") || path.endsWith(".w.lf") || path.contains(".w.lf[") || path.endsWith(".state.waitT0") || path.endsWith(".state.mtq"))) return;      // s337: 위치 없이 대기 · 마지막 위치 · 번호 붙이기 예약      // s336: 이전에 녹화한 답에는 새 상태 키(승차 후보 열차 · 승강장 시각 · 종착 바닥 · 버스트)가 없다 — 새 녹화(v:336, -Dstrict=1)는 모두 비교한다      // s334: 녹화본 중 s334 이전에 녹화한 답에는 실시간 호출 장부(state.rtc)가 없다 — 새 녹화(s334 줄)는 있으면 모두 비교한다
         if (!STRICT && a instanceof String && b instanceof String && ((String) a).startsWith((String) b + " · 거리")) return;      // s336: 이전 녹화의 '어긋남' 메모에는 거리 꼬리말이 없다
         if (a instanceof Map || b instanceof Map) {
             Map<String, Object> ma = a instanceof Map ? (Map<String, Object>) a : new HashMap<String, Object>(), mb = b instanceof Map ? (Map<String, Object>) b : new HashMap<String, Object>();
