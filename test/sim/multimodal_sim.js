@@ -128,6 +128,10 @@ function mockEnv() {
       if (rem <= 25) { cd = '1'; bd = '0'; } else if (rem <= 90) { cd = '0'; bd = '0'; }
       list.push({ subwayId: ({ '1호선': '1001', '2호선': '1002' })[L.line] || '1001', updnLine: '상행', bstatnNm: '종착', barvlDt: bd, arvlCd: cd, arvlMsg2: rem <= 25 ? '도착' : (rem <= 90 ? '진입' : '운행중'), recptnDt: kst(SIM.now), btrainNo: tn, statnNm: st });
     }
+    if (L.decoy != null) {      // 시각표에 없는 열차(다른 방면·지선·회송)가 우리 열차보다 먼저 들어오는 것처럼 목록에 낀다 — 번호 'X' + 우리 열차 번호
+      const dRem = Math.round((s.aA + L.decoy * 1000 - SIM.now) / 1000);
+      if (dRem >= -20 && dRem < 900) { let cd = '99', bd = String(Math.max(0, dRem)); if (dRem <= 25) { cd = '1'; bd = '0'; } else if (dRem <= 90) { cd = '0'; bd = '0'; } list.unshift({ subwayId: ({ '1호선': '1001', '2호선': '1002' })[L.line] || '1001', updnLine: '상행', bstatnNm: '지선', barvlDt: bd, arvlCd: cd, arvlMsg2: dRem <= 25 ? '도착' : (dRem <= 90 ? '진입' : '운행중'), recptnDt: kst(SIM.now), btrainNo: 'X' + L.tn, statnNm: st }); }
+    }
     return new Response(JSON.stringify({ realtimeArrivalList: list }), { status: 200 });
   } } };
 }
@@ -207,12 +211,20 @@ const SCENARIOS = {
       blackout: [[T(12, 16, 30), T(12, 25, 30)], [T(12, 36, 30), T(12, 45, 30)]],
       legs: [RT(0, [12, 10], 70, '4017'), RT2(7620, [12, 30], 60, '7788')]
     }
-  }
+  },
+  // ── s337 최종 안정화: 비실시간 · 위치 없음 · 버튼 · 환승 리셋 · 엉뚱한 열차 ──
+  N1: { name: 'N1 비실시간 첫 구간(GPS 정상 → 승강장에서 끊김)', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 12, 0), T(12, 20, 0)]], legs: [NR(0, [12, 10], 6, 50, 20)] } },
+  N2: { name: 'N2 실시간 첫 구간 · GPS 전혀 없음 · [탑승] 버튼', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 0, 0), T(12, 30, 0)]], legs: [RT(0, [12, 10], 70, '4017')] }, acts: [{ t: T(12, 10, 0) + 70000 + 12000, act: 'press' }] },
+  N3: { name: 'N3 실시간 첫 구간 · GPS 전혀 없음 · 버튼 없음', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 0, 0), T(12, 30, 0)]], legs: [RT(0, [12, 10], 70, '4017')] } },
+  N4: { name: 'N4 승강장 직전부터 GPS 끊김 · 버튼 없음', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 8, 0), T(12, 30, 0)]], legs: [RT(0, [12, 10], 70, '4017')] } },
+  N5: { name: 'N5 환승 · 환승역 GPS 없음 · [환승] 버튼', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 16, 30), T(12, 45, 30)]], legs: [RT(0, [12, 10], 70, '4017'), RT2(7620, [12, 30], 60, '7788')] }, acts: [{ t: T(12, 31, 12), act: 'press' }] },
+  N6: { name: 'N6 실시간 목록에 시각표에 없는 열차(95초 먼저) → 비실시간 환승', spec: { start: { x: -350, t: T(12, 3, 0) }, blackout: [[T(12, 16, 30), T(12, 25, 30)]], legs: [RT(0, [12, 10], 70, '4017', { decoy: -95 }), NR(7620, [12, 30], 5, 50, 20)] } }
 };
 
 // ── 5초 루프(앱 흉내) ────────────────────────────────────────────
 const clone = (o) => JSON.parse(JSON.stringify(o));
-async function run(sc, rec) {
+async function run(sc, rec, hook) {
+  const acts = (sc.acts || []).map((a) => Object.assign({}, a));
   const W = buildWorld(sc.spec); installMocks(W);
   const env = mockEnv();
   let st = initState(W), now = W.t0, last = now - 1, pending = null, prevMk = null;
@@ -222,6 +234,7 @@ async function run(sc, rec) {
     SIM.now = now;
     const req = { nowMs: now, fixes: W.fixesBetween(last, now), state: clone(st) };
     if (pending) { req.bl = pending; pending = null; }
+    for (const ac of acts) if (!ac.done && now >= ac.t) { ac.done = true; req.act = ac.act; if (ac.act === 'press') { try { E.rsAttachPressTT(req, await global.ntEnsure()); const pq = E.rsPressQuery(req); if (pq) E.rsAttachPressLive(req, await E.rsFetchSeoulArrivals(env, pq)); } catch (e0) { } } }
     const pre = rec ? clone(req) : null;
     const r = rideStandby(req);
     if (r.error) throw new Error('엔진 오류: ' + r.error);
@@ -235,6 +248,7 @@ async function run(sc, rec) {
       if (prevMk != null && mk < prevMk - 0.003) stat.regress++;
       prevMk = mk;
     }
+    if (hook) hook(now, r, st, W, req);
     if (r.done) break;
     now += Math.max(2500, Math.min(10000, r.nextMs || 5000));
   }
@@ -251,18 +265,18 @@ function summary(sc, res) {
 }
 // 대표 장면 고르기: 새 기능이 일어난 걸음의 입력(직전 상태) + 균등 표본
 function pick(R) {
-  const pats = [/승강장에서 신호가/, /집중 확인/, /거리 \d+m/, /종착 도착 뒤/, /내 열차 기억/, /승차 확정/, /실시간 보정:/, /실시간 보정 준비/, /도착 확정 역 되돌아감/, /실시간 재보정\(/];
+  const pats = [/위치 없/, /내 열차 번호를 붙이려/, /실시간 보정 거절/, /수동 확정/, /승강장에서 신호가/, /집중 확인/, /거리 \d+m/, /종착 도착 뒤/, /내 열차 기억/, /승차 확정/, /실시간 보정:/, /실시간 보정 준비/, /도착 확정 역 되돌아감/, /실시간 재보정\(/];
   const idx = new Set(), cnt = pats.map(() => 0);
-  R.forEach((r, i) => { const n = (r.out.notes || []).join('|'); pats.forEach((p, pi) => { if (p.test(n) && cnt[pi] < (pi <= 4 || pi === 8 ? 2 : 1)) { cnt[pi]++; idx.add(i); } }); });
+  R.forEach((r, i) => { const n = (r.out.notes || []).join('|'); pats.forEach((p, pi) => { if (p.test(n) && cnt[pi] < (pi <= 8 || pi === 12 ? 2 : 1)) { cnt[pi]++; idx.add(i); } }); });
   let nc = 0, np = 0;
   R.forEach((r, i) => { const s = r.out.state || {}; if (s.bl && s.bl.cand && nc < 3 && i % 7 === 0) { idx.add(i); nc++; } if (s.wait && s.wait.pf && np < 2) { idx.add(i); np++; } });
   const last = {}; R.forEach((r, i) => { last[r.sc] = i; });
   Object.keys(last).forEach((k) => { for (let j = 0; j < 2; j++) idx.add(last[k] - j); });
   for (let i = 0; i < R.length; i += 1200) idx.add(i);
-  return Array.from(idx).filter((i) => i >= 0).sort((a, b) => a - b).map((i) => JSON.stringify({ fn: 'standby', v: 336, in: R[i].in, out: R[i].out }));
+  return Array.from(idx).filter((i) => i >= 0).sort((a, b) => a - b).map((i) => JSON.stringify({ fn: 'standby', v: 337, in: R[i].in, out: R[i].out }));
 }
 async function recordLines() { const R = []; for (const k of Object.keys(SCENARIOS)) await run(SCENARIOS[k], R); return pick(R); }
-module.exports = { recordLines, run, summary, SCENARIOS };
+module.exports = { recordLines, run, summary, SCENARIOS, T, hms, E, RT, RT2, NR, BUS };
 if (require.main === module) (async () => {
   const a = process.argv.slice(2), ri = a.indexOf('--record');
   if (ri >= 0) { const lines = await recordLines(); require('fs').writeFileSync(a[ri + 1], lines.join('\n') + '\n'); console.log('recorded ' + lines.length); return; }
