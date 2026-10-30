@@ -124,6 +124,53 @@ public final class OpenJvmTest {
         ck(mono && fgFirst && OpenCore.bgAlpha(sc, sc.dur - sc.fade) == 1 && OpenCore.fgAlpha(sc, sc.dur - sc.fade) == 1 && OpenCore.bgAlpha(sc, sc.dur) == 0 && OpenCore.fgAlpha(sc, sc.dur) == 0 && OpenCore.fgAlpha(sc, sc.dur - sc.fade / 2) < 0.02 && OpenCore.bgAlpha(sc, sc.dur - sc.fade / 2) > 0.4, "녹아듦: 친구·글이 먼저 사라지고 배경이 뒤따른다(그라데이션)");
         OpenCore.Slot mn = OpenCore.slotFor(sc, 7.5); ck(OpenCore.sunY(mn, 0, sc) > OpenCore.sunY(mn, 2000, sc), "아침 해는 떠오른다(y 가 줄어든다)");
         ck(OpenCore.sunY(OpenCore.slotFor(sc, 1), 0, sc) < 0, "밤엔 해가 없다");
+        // ⑩ 전원 인사(s338): 홈 장면 3초 꾹 누르기 — 8마리 전원 · 3줄 · 차례대로 인사
+        ck(sc.all != null && sc.all.sx.length == 8 && sc.all.order.length == 8 && sc.all.dur == 8200 && sc.all.fade == 700, "전원 인사 판: 자리 8 · 차례 8 · 8.2초(+0.7초 녹아듦)");
+        for (OpenCore.Slot s : sc.slots) {
+            ck(OpenCore.canAll(sc, s), s.id + ": 전원 인사 가능(모든 친구에게 인사 글)");
+            ck(s.all != null && s.all.say.size() == 8 && s.all.hop <= 0.051, s.id + ": 인사 글 8 · 콩콩 5% 안쪽");
+            for (String c : sc.chars) ck(s.all.say.get(c) != null && s.all.say.get(c).codePointCount(0, s.all.say.get(c).length()) <= 10, s.id + "/" + c + ": 인사 글이 있고 열 글자 안쪽");
+        }
+        ck(OpenCore.canAll(sc, OpenCore.withWeather(sc, OpenCore.slotFor(sc, 12), "rain")), "날씨를 입혀도 전원 인사 대본은 따라온다");
+        { String noAll = json.replace("\"all\":{", "\"allx\":{"); OpenCore.Script s0 = OpenCore.parse(noAll); ck(s0 != null && s0.all == null && !OpenCore.canAll(s0, s0.slots[0]), "대본에 전원 인사 판이 없으면 쓰지 않는다(앱은 아무것도 안 한다)"); }
+        OpenCore.Script as = OpenCore.forAll(sc);
+        ck(as.dur == 8200 && as.fade == 700 && as.slots == sc.slots && OpenCore.done(as, 8200) && !OpenCore.done(as, 8199) && OpenCore.alpha(as, 7500) == 1 && OpenCore.alpha(as, 8200) == 0, "전원 인사 시간표: 길이·사라짐만 다르다");
+        for (OpenCore.Slot s : sc.slots) {
+            OpenCore.Actor[] cs = OpenCore.castAll(sc, s, 99L);
+            java.util.HashSet<String> ids = new java.util.HashSet<String>(); int[] perRow = new int[3]; boolean order = true; int lastRow = 9;
+            for (OpenCore.Actor ac : cs) { ids.add(ac.id); perRow[ac.row]++; if (ac.row > lastRow) order = false; lastRow = ac.row; ck(ac.scale == sc.all.scale && ac.gap == sc.all.gap, s.id + ": 배율·줄 간격은 대본 것"); }
+            ck(cs.length == 8 && ids.size() == 8 && ids.containsAll(java.util.Arrays.asList(sc.chars)), s.id + ": 8마리 전원이 한 번씩");
+            ck(perRow[0] == 3 && perRow[1] == 2 && perRow[2] == 3, s.id + ": 앞 3 · 가운데 2 · 뒤 3 (" + perRow[0] + "," + perRow[1] + "," + perRow[2] + ")");
+            ck(order, s.id + ": 뒤 줄부터 앞 줄 차례(앞 줄이 뒤 줄을 가린다)");
+            // 인사: 각자 자기 차례에 한 번만 · 차례는 서로 다르고 간격이 일정 · 같은 때 뜨는 말풍선은 서로 안 닿는다
+            java.util.HashSet<Double> times = new java.util.HashSet<Double>();
+            for (OpenCore.Actor ac : cs) {
+                times.add(ac.sayAt); ck(ac.say.equals(s.all.say.get(ac.id)) && ac.sayAt >= sc.all.t0 && ac.sayAt <= sc.all.t0 + 7 * sc.all.step + 1e-6, s.id + "/" + ac.id + ": 자기 글 · 차례 안");
+                int shown = 0; for (long t = 0; t <= sc.all.dur; t += 20) { OpenCore.St st = OpenCore.at(ac, t); if (st.say.equals(s.all.say.get(ac.id)) && st.sayA > 0.02) { shown++; ck(t >= ac.sayAt && t < ac.sayAt + 1700, s.id + "/" + ac.id + ": 차례 밖에서 말하지 않는다 t=" + t); } }
+                ck(shown > 40, s.id + "/" + ac.id + ": 충분히 읽을 시간 동안 보인다(" + shown + ")");
+                ck(OpenCore.at(ac, (long) ac.sayAt - 5).say.isEmpty() || !ac.say.equals(OpenCore.at(ac, (long) ac.sayAt - 5).say), s.id + ": 차례 전엔 말이 없다");
+            }
+            ck(times.size() == 8, s.id + ": 인사 차례 8개가 모두 다르다");
+            int maxAt = 0; for (long t = 0; t <= sc.all.dur; t += 20) { int n = 0; for (OpenCore.Actor ac : cs) if (OpenCore.at(ac, t).say.length() > 0 && OpenCore.at(ac, t).sayA > 0.02) n++; maxAt = Math.max(maxAt, n); }
+            ck(maxAt <= 3 && maxAt >= 2, s.id + ": 한꺼번에 뜨는 말풍선은 2~3개(" + maxAt + ")");
+            for (OpenCore.Actor ac : cs) for (OpenCore.Actor bc : cs) if (ac != bc && ac.row == bc.row && Math.abs(ac.sayAt - bc.sayAt) < 1700) ck(Math.abs(OpenCore.at(ac, 3000).x - OpenCore.at(bc, 3000).x) >= 0.29, s.id + ": 같은 줄에서 동시에 말하는 친구는 멀리 있다 " + ac.id + "/" + bc.id);
+            double endSay = 0; for (OpenCore.Actor ac : cs) endSay = Math.max(endSay, ac.sayAt + 1700); ck(endSay <= sc.all.dur - sc.all.fade, s.id + ": 마지막 인사가 끝난 뒤에 사라지기 시작한다(" + endSay + ")");
+            for (OpenCore.Actor ac : cs) for (OpenCore.Seg g : ac.tr) { ck(g.t1 <= sc.all.dur && g.hop <= 0.051 && g.say.isEmpty(), s.id + "/" + ac.id + ": 동작 구간은 길이 안 · 콩콩 5% 안쪽 · 말은 구간이 아니라 차례로"); }
+        }
+        // 같은 seed 는 같은 배치 · 다른 seed 는 다른 배치 · 모든 친구가 모든 자리에 서 본다
+        { OpenCore.Slot s0 = OpenCore.slotFor(sc, 12); String k1 = "", k2 = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k1 += ac.id + ac.row + (int) (ac.tr[0].x0 * 100) + ","; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, 5L)) k2 += ac.id + ac.row + (int) (ac.tr[0].x0 * 100) + ",";
+          ck(k1.equals(k2), "같은 seed 는 같은 배치");
+          java.util.HashSet<String> arr = new java.util.HashSet<String>(), seat = new java.util.HashSet<String>();
+          for (long sd = 0; sd < 600; sd++) { String k = ""; for (OpenCore.Actor ac : OpenCore.castAll(sc, s0, sd * 31L + 7)) { k += ac.id + "@" + ac.row + "/" + (int) (ac.tr[0].x0 * 100) + ","; seat.add(ac.id + "@" + ac.row + "/" + (int) (ac.tr[0].x0 * 100)); } arr.add(k); }
+          ck(arr.size() > 500, "seed 마다 배치가 다르다(" + arr.size() + "/600)"); ck(seat.size() == 64, "친구마다 8자리 모두에 서 본다(" + seat.size() + "/64)"); }
+        // 전용 동작(죽순이 · 뽀송)은 전원 인사에서도 자기 자리에서 그대로 한다
+        { OpenCore.Slot gr = OpenCore.slotFor(sc, 7.5); boolean jk = false, bb = false;
+          for (OpenCore.Actor ac : OpenCore.castAll(sc, gr, 3L)) { if (ac.id.equals("juksun")) jk = ac.tr.length > 1 && ac.tr[0].p == 6 && ac.tr[1].p == 7; if (ac.id.equals("bbosong")) bb = ac.tr.length == 2 && ac.tr[1].p == 6; }
+          ck(jk && bb, "아침: 죽순이는 먹고 뽀송은 하트(전용 동작)"); }
+        // 잠자는 시간엔 모두 잠든 모습으로 인사한다
+        { OpenCore.Slot sl = OpenCore.slotFor(sc, 2); for (OpenCore.Actor ac : OpenCore.castAll(sc, sl, 11L)) ck("sleep".equals(OpenCore.at(ac, 2000).k) && "zzz".equals(OpenCore.at(ac, 2000).fx), "잠자기 칸: " + ac.id + " 는 잠든 모습 + zzz"); }
+        // 오프닝(셋)은 그대로: 옛 방식의 친구에게는 자리 줄 · 배율이 기본값, 말은 구간에서
+        { OpenCore.Slot gr = OpenCore.slotFor(sc, 7.5); for (OpenCore.Actor ac : OpenCore.cast(sc, gr, new String[] { "dolsom", "lovel", "dudung" })) ck(ac.row == 0 && ac.scale == 1 && ac.gap == 0 && ac.say.isEmpty() && ac.sayAt < 0, "오프닝 친구는 줄 0 · 배율 1 · 따로 인사 없음"); }
         System.out.println(bad == 0 ? "ALL OK" : bad + " FAIL");
         System.exit(bad == 0 ? 0 : 1);
     }
