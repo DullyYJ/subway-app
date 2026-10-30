@@ -1466,6 +1466,8 @@ public class ShellJvmTest {
             RideCore.RecoAd ad2 = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"place\",\"a\":\"맛있는집\",\"b\":\"한식\",\"m\":\"120m\"},\"shopItem\":{\"u\":\"http://evil\"}}");
             RideCore.RecoAd adT = RideCore.textAd("🚇 하차 7분 전 · 캠퍼스타운 ☕", "하차 7분 전이에요.\n캠퍼스타운 도착 예정 07:18\n\n카푸치노");
             ok(adT != null && adT.n && adT.go.isEmpty() && adT.a.startsWith("🚇 하차 7분 전") && adT.b.equals("하차 7분 전이에요. 캠퍼스타운 도착 예정 07:18 카푸치노") && RideCore.textAd("", "x") == null && RideCore.textAd(null, null) == null && !ad1.n, "s295: 가게·상품 없는 글만 추천도 한 줄(제목+본문)로 만든다 — [보기] 없음(go 빈 값 · n)");
+            RideCore.RecoAd adQ = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"food\",\"a\":\"아라 초밥 맛집\",\"b\":\"x\",\"m\":\"\",\"go\":\"맛집 보기\",\"q\":\"초밥 맛집\",\"pn\":\"\"}}"), adP = RideCore.recoAd("{\"ok\":true,\"ad\":{\"k\":\"food\",\"a\":\"아라국밥 · 국밥\",\"b\":\"x\",\"go\":\"아라국밥 보기\",\"pn\":\"아라국밥\"}}");
+            ok(adQ != null && RideCore.recoQuery(adQ).equals("초밥 맛집") && adP != null && RideCore.recoQuery(adP).equals("아라국밥") && RideCore.recoQuery(adT).isEmpty() && RideCore.recoQuery(null).isEmpty(), "s350: 지도 검색어는 엔진이 정한 q(가게 이름·메뉴 맛집) · 글만 있는 추천은 안내 문구로 검색하지 않는다");
             ok(ad1 != null && ad1.go.equals("쿠팡 보기") && ad1.url.equals("https://link.coupang.com/a/abc") && ad2 != null && ad2.go.equals("맛집 보기") && ad2.url.isEmpty() && RideCore.recoAd("{\"ok\":true}") == null && RideCore.recoAd("x") == null, "추천 줄(ad) 읽기: 쿠팡은 https 주소만");
             {
                 RideCore rcx = new RideCore();
