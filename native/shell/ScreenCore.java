@@ -776,6 +776,7 @@ public final class ScreenCore {
             n.s = optStr(m, "s", "", 40); if (n.s.length() == 0) throw new ParseError("lth: s 없음");
             n.sub = optStr(m, "tail", "", 4);
             n.dot = roleOrCss(m, "dot", "#ff3b30"); if (n.dot.length() == 0) n.dot = "#ff3b30";
+            n.on = optBool(m, "live", false);                                                              // live: 점이 번졌다 잦아들며 깜박인다(실시간 느낌 — 앱은 그리기만)
             n.act = act(m.get("act"), false);
         } else if ("ltr".equals(t)) {                                                                      // 홈 '실시간 대화' 한 줄: 닉네임(굵게) + 글(한 줄 말줄임) + 오른쪽 시각
             pad(m, n);
@@ -1838,7 +1839,7 @@ public final class ScreenCore {
             float cw = n.sub.length() > 0 ? m.width(n.sub, LTH_TITLE, false) + 4f : 0f;
             it.t1 = ellipsize(n.s, Math.max(30f, innerW - LTH_DOT - LTH_GAP - cw), LTH_TITLE, true, m); it.f1 = tx;
             it.t2 = n.sub; it.f2 = tx + Math.min(tw, Math.max(30f, innerW - LTH_DOT - LTH_GAP - cw)) + 4f;
-            it.dotC = col(n.dot, new Col(null, 0xFFFF3B30)); it.act = n.act;
+            it.dotC = col(n.dot, new Col(null, 0xFFFF3B30)); it.act = n.act; it.on = n.on;
             out.add(it);
             return y + LTH_H + n.padB;
         }
