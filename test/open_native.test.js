@@ -105,6 +105,9 @@ t('카드 확장 인사(s340): 엔진이 대본(시간 · 자리 · 차례 · �
   for (const k of ['helloReady', 'helloStart', 'helloStretch', 'helloSkip']) assert.ok(sd.indexOf(k) > -1, 'SceneDriver: ' + k);
   assert.ok(!/hcore|drawHello|helloPrepare|forceK/.test(sd + sco + scr) && !/SceneHello\.mix/.test(scr + sh), '둘째 장면 · 크로스페이드 없음 — 같은 장면 하나가 이어진다(배경 · 친구 유지)');
   assert.ok(/void setStretch/.test(sco) && /void drawGnd/.test(sco) && /g\.floor \+ stretch/.test(sco) && /scene\.helloStretch\(gh\)/.test(scr), '늘어난 만큼 인도만 늘려 그린다(길 위 · 하늘 · 도시는 그대로) · 친구 발 자리도 같이 내려간다');
+  { const sa = fs.readFileSync(path.join(__dirname, '..', 'native', 'shell', 'SceneArt.java'), 'utf8'), spl = fs.readFileSync(path.join(__dirname, '..', 'native', 'shell', 'ScenePlaces.java'), 'utf8');
+    assert.ok(/bg\.gnd = root\.newLayer\(W, H \+ g\.ext, dpr\)/.test(sa) && /bg\.gnd = root\.newLayer\(W, H \+ g\.ext, dpr\)/.test(spl) && !/c\.scale\(1, sh\)|stretchImg|double sy\(/.test(sco), 's344: 바닥은 처음부터 늘어날 높이까지 같은 무늬로 이어 그려 두고(g.ext) 늘어나면 그만큼 더 보여 줄 뿐 그림을 늘이지 않는다 — 구조물 · 줄무늬가 안 일그러진다');
+    assert.ok((spl.match(/g\.ext/g) || []).length >= 14 && (sa.match(/g\.ext/g) || []).length >= 5, 's344: 거리 · 공원 · 강변 · 학교 앞 · 시장 · 바닷가 · 산길 모든 장소의 바닥이 같은 기울기로 아래까지 이어진다'); }
   assert.ok(/HELLO_TICK_MS = 1000L/.test(scr) && /sceneTickRun/.test(scr) && /createOneShot\(25L, 200\)/.test(scr), '배경에 손을 1초 올리면 짧게 진동(진행 중 알림)');
   assert.ok(/helloFor\(/.test(sa) && /open\.json/.test(sa) && /catch \(Throwable/.test(sa), 'ShellActivity 는 엔진 대본을 읽어 넘길 뿐(실패하면 아무것도 안 한다)');
   assert.ok(/bit\.kind == ScreenCore\.K_PANEL && bit\.y <= hY \+ 0\.5f && bit\.y \+ bit\.h >= hBot - 0\.5f\) gh \+= hExt/.test(scr), '장면을 담은 틀(테두리 · 그림자)도 같이 늘어난다');
