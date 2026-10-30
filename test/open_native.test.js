@@ -57,7 +57,7 @@ t('앱 assets/open.json 이 엔진 출력과 같다(고쳤으면 node tools/engi
 });
 t('OpenCore(OpenJvmTest)가 대본을 읽고 · 칸을 고르고 · 시각별 모습을 돌려준다', () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'open-'));
-  let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', out, N('OpenCore.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneCv.java'), path.join(ROOT, 'test/java/OpenJvmTest.java')], { env: ENV, encoding: 'utf8' });
+  let r = spawnSync('javac', ['-encoding', 'UTF-8', '-d', out, N('OpenCore.java'), N('SceneHello.java'), N('SceneModel.java'), N('SceneUtil.java'), N('SceneCv.java'), path.join(ROOT, 'test/java/OpenJvmTest.java')], { env: ENV, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, (r.stderr || r.stdout).slice(0, 1500));
   r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-cp', out, 'com.dullyyj.subway.OpenJvmTest', ASSET], { env: ENV, encoding: 'utf8', timeout: 60000 });
   assert.ok(/ALL OK/.test(r.stdout) && r.status === 0, (r.stdout || '') + (r.stderr || ''));
@@ -93,61 +93,19 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   // 켜는 준비(위치·정류장·탭 미리 받기)는 오프닝 호출보다 앞에서 이미 시작돼 있다
   const o = a.indexOf('showOpening();'); for (const k of ['launchLocate();', 'prefetchTabs();', 'preloadDisk();', 'preconnectBus();', 'gwSync(false);']) assert.ok(a.indexOf(k) > -1 && a.indexOf(k) < o, k + ' 가 오프닝보다 먼저 시작');
 });
-
-// ───────────── s338: 홈 장면 3초 꾹 누르기 → 길동무 친구들 전원 인사 ─────────────
-t('엔진 대본(전원 인사): 8마리 모두 · 자리 3줄(뒤 3 · 가운데 2 · 앞 3) · 차례는 자리의 순열 · 칸 7개 모두 친구별 인사 글', () => {
-  const A = E.allScript();
-  assert.strictEqual(A.seats.length, 8); assert.deepStrictEqual(A.order.slice().sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7]);
-  const rows = [0, 1, 2].map(r => A.seats.filter(s => s.r === r).length); assert.deepStrictEqual(rows, [3, 2, 3]);
-  A.seats.forEach(s => assert.ok(s.x > 0.1 && s.x < 0.9 && s.t === undefined, '자리는 화면 안'));
-  E.OPEN_SLOTS.forEach(s => {
-    assert.deepStrictEqual(Object.keys(s.all.say).sort(), E.OPEN_CHARS.slice().sort(), s.id + ' 인사 글: 8마리 모두');
-    Object.values(s.all.say).forEach(v => assert.ok([...v].length <= 10 && v.length > 0, s.id + ' 인사는 열 글자 안팎: ' + v));
-    assert.ok(s.all.hop <= 0.05 && s.all.p <= 2 && ['spark', 'note', 'food', 'heart', 'zzz'].includes(s.all.fx), s.id + ' 자세·효과');
-    Object.keys(s.all.special).forEach(id => { assert.ok(['juksun', 'bbosong'].includes(id)); s.all.special[id].forEach(g => assert.ok(g.t0 >= 0 && g.t1 <= E.ALL_DUR && g.k !== 'walk')); });
-  });
-  assert.strictEqual(E.OPEN_SLOTS.find(s => s.id === 'sleep').all.fx, 'zzz', '잠자는 시간엔 zzz');
-  // s339: 친구마다 자기 방식으로 화면 밖에서 들어온다 — 어느 자리든 인사 시작 0.2초 전엔 도착
-  assert.deepStrictEqual(Object.keys(E.ALL_ENTER).sort(), E.OPEN_CHARS.slice().sort(), '8마리 모두 등장 방식이 있다');
-  Object.entries(E.ALL_ENTER).forEach(([id, e]) => {
-    assert.ok(e.speed > 0 || e.dur > 0, id + ': 빠르기나 정해진 시간');
-    assert.ok(e.from === undefined || e.from < 0 || e.from > 1, id + ': 화면 밖에서 시작하거나 자기 자리에서');
-    const dists = e.from === undefined ? [0] : E.ALL_SEATS.map(s => Math.abs(s.x - e.from));
-    const worst = e.t0 + (e.dur > 0 ? e.dur : Math.max(...dists) / e.speed * 1000);
-    assert.ok(worst <= E.ALL_T0 - 200, id + ' 가장 먼 자리여도 인사 전에 도착: ' + Math.round(worst));
-    assert.ok(e.arc ? e.hop > 0 : (e.hop || 0) <= 0.11, id + ' 콩콩 크기');
-  });
-  assert.ok(Object.values(E.ALL_ENTER).filter(e => e.from < 0).length >= 2 && Object.values(E.ALL_ENTER).filter(e => e.from > 1).length >= 2, '왼쪽 오른쪽 양쪽에서 들어온다');
-  assert.ok(E.ALL_ENTER.sul.arc && E.ALL_ENTER.dudung.arc && E.ALL_ENTER.dudung.from === undefined, '독슐은 날아오고 두덩은 제자리에서 쏙');
-  assert.ok(E.ALL_T0 + 7 * E.ALL_STEP + 1700 <= E.ALL_DUR - E.ALL_FADE, '마지막 인사가 끝난 뒤에 사라지기 시작한다');
-  const all = E.OPEN_SLOTS.map(s => Object.values(s.all.say)).flat();
-  assert.strictEqual(new Set(all).size, all.length, '같은 인사가 둘로 겹치지 않는다(56가지)');
-});
-t('전원 인사 글은 앱 코드에 없다(대본에만) · OpenCore 는 안드로이드를 쓰지 않는다', () => {
-  const code = ['OpenView.java', 'OpenCore.java', 'ScreenView.java', 'ShellActivity.java'].map(f => fs.readFileSync(N(f), 'utf8')).join('\n');
-  E.OPEN_SLOTS.forEach(s => Object.values(s.all.say).forEach(v => assert.ok(!code.includes(v), '앱 코드에 인사 글이 있다: ' + v)));
-  assert.ok(!/import android\./.test(fs.readFileSync(N('OpenCore.java'), 'utf8')));
-});
-t('연결: 장면 카드를 3초(3000ms) 가만히 누르면 ShellActivity.showAllHello() — 움직이면 취소 · 이미 떠 있으면 안 띄움 · 실패해도 앱은 그대로', () => {
-  const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), v = fs.readFileSync(N('OpenView.java'), 'utf8');
-  assert.ok(/SCENE_LP_MS = 3000L/.test(sv) && /public void setSceneLongPress\(Runnable r\)/.test(sv), '3초');
-  assert.ok(/ui\.postDelayed\(sceneLpRun, SCENE_LP_MS\)/.test(sv) && /sceneAt\(x, y\) != null/.test(sv), '장면 카드 위에서 눌렀을 때만 잰다');
-  const mv = sv.slice(sv.indexOf('case MotionEvent.ACTION_MOVE: {'), sv.indexOf('case MotionEvent.ACTION_MOVE: {') + 400);
-  assert.ok(/slop \* 2f\) ui\.removeCallbacks\(sceneLpRun\)/.test(mv), '움직이면 취소');
-  assert.ok(/case MotionEvent\.ACTION_UP: \{\s*ui\.removeCallbacks\(sceneLpRun\)/.test(sv) && /ACTION_CANCEL: ui\.removeCallbacks\(sceneLpRun\)/.test(sv) && /private void finishTouch\(\) \{ ui\.removeCallbacks\(lpRun\); ui\.removeCallbacks\(sceneLpRun\)/.test(sv), '떼면 · 취소되면 취소');
-  const run = sv.slice(sv.indexOf('private final Runnable sceneLpRun'), sv.indexOf('private final Runnable roGuard'));
-  assert.ok(/\(mode != 3 && mode != 4\)/.test(run) && /scene\.touchUp\(\)/.test(run) && /downT = 0L; mode = 0/.test(run) && /LONG_PRESS/.test(run) && /sceneLong\.run\(\)/.test(run), '미는 중이면 아님 · 잡은 캐릭터는 놓음 · 놓을 때 눌림으로 안 침 · 진동');
-  assert.ok(/body\.setSceneLongPress\(new Runnable\(\) \{ @Override public void run\(\) \{ showAllHello\(\); \} \}\)/.test(a), '홈 본문 화면에 연결');
-  const f = a.slice(a.indexOf('private void showAllHello()'), a.indexOf('private void showOpening()'));
-  assert.ok(/if \(openV != null\) return;/.test(f) && /OpenCore\.canAll\(sc, sl\)/.test(f) && /OpenCore\.castAll\(sc, sl,/.test(f) && /OpenCore\.forAll\(sc\)/.test(f) && /\}, true\);/.test(f) && /catch \(Throwable ignored\) \{ openV = null; \}/.test(f) && /OpenCore\.withWeather\(sc, OpenCore\.slotFor\(sc, hour\), OpenWx\.read\(this\)\)/.test(f), '중복 방지 · 대본 확인 · 날씨 입힘 · 실패 무시');
-  assert.ok(/ACTION_UP\) finish\(\)/.test(v) && /if \(openV != null\) \{ openV\.finish\(\); return; \}/.test(a), '누르거나 뒤로 가기로 닫는다(오프닝과 같다)');
-});
-t('그리기: 전원 인사는 띠를 키우고 · 친구를 대본의 배율로 줄이고 · 줄마다 위로 올리고 · 말풍선은 모든 친구를 그린 뒤에 그린다(앞 줄 말이 가리지 않게)', () => {
-  const v = fs.readFileSync(N('OpenView.java'), 'utf8');
-  assert.ok(/allMode = all && script\.all != null/.test(v) && /sc\.all\.scale/.test(v) && /sc\.all\.gap/.test(v), '배율·간격은 대본');
-  assert.ok(/a\.row \* \(float\) a\.gap \* charH/.test(v), '줄이 뒤일수록 위');
-  assert.ok(/drawSky\(cv, pw, ph, gg, t\); drawGround\(cv, pw, ph, gg\)/.test(v), '땅은 맨 뒷줄 발 높이에서 시작');
-  assert.ok(/for \(int k = 0; k < bN; k\+\+\) bubble\(/.test(v) && !/ bubble\(cv, s\.say/.test(v), '말풍선은 나중에');
-  assert.ok(/ph = H \* 0\.40f/.test(v) && /gy = ph - 106f \* dp/.test(v) && /\* 0\.70f/.test(v), '오프닝 크기·자리는 그대로');
+t('카드 확장 인사(s340): 엔진이 대본(시간 · 자리 · 차례 · 칸별 인사 글)을 주고, 앱은 늘어난 카드에 그리기만 한다 · 옛 전체 화면 인사는 없다', () => {
+  const sc = JSON.parse(fs.readFileSync(ASSET, 'utf8')), eg = E.openScript();
+  assert.deepStrictEqual(sc.hello, eg.hello, '앱 assets 대본이 엔진과 같다(gen-open)');
+  assert.ok(sc.hello.seats.length === 8 && sc.hello.order.length === 8 && sc.hello.t.expand > 0 && sc.hello.t.collapse > sc.hello.t.leave, '엔진 대본: 8자리 · 8차례 · 시간');
+  for (const sl of sc.slots) { assert.ok(sl.hello && sl.hello.say && Object.keys(sl.hello.say).length === 8, sl.id + ' 칸별 인사 8마리'); }
+  const rd = f => fs.readFileSync(N(f), 'utf8'), scr = rd('ScreenView.java'), sd = rd('SceneDriver.java'), sa = rd('ShellActivity.java'), sh = rd('SceneHello.java'), sco = rd('SceneCore.java'), ov = rd('OpenView.java');
+  assert.ok(!/all-mode|allMode|helloAll|showAll/.test(ov) && !/OpenView[^;]*all/i.test(sa), '옛 전체 화면 인사(OpenView all 모드)가 없다');
+  for (const k of ['setHelloFeed', 'HELLO_LP_MS', 'HELLO_PREP_MS', 'helloEnd()', 'helloGh', 'SceneHello.ext', 'SceneHello.mix']) assert.ok(scr.indexOf(k) > -1, 'ScreenView: ' + k);
+  assert.ok(/3000L/.test(scr) && /sdy \+= hExt/.test(scr) && /gh \+= hExt/.test(scr), '3초 꾹 · 아래 카드들이 같이 밀린다(슬라이드)');
+  for (const k of ['helloPrepare', 'helloStart', 'drawHello', 'helloSkip', 'forceK']) assert.ok(sd.indexOf(k) > -1 || sco.indexOf(k) > -1, 'SceneDriver/SceneCore: ' + k);
+  assert.ok(/helloFor\(/.test(sa) && /open\.json/.test(sa) && /catch \(Throwable/.test(sa), 'ShellActivity 는 엔진 대본을 읽어 넘길 뿐(실패하면 아무것도 안 한다)');
+  const txt = (sc.slots.flatMap(sl => Object.values(sl.hello.say)));
+  for (const line of txt) for (const f of [scr, sd, sa, sh, sco]) assert.ok(f.indexOf(line) < 0, '인사 글이 앱 코드에 없다: ' + line);
+  assert.ok(!/Thread|new Handler|runOnUiThread|synchronized/.test(sh), '순수 계산이라 스레드 없음');
 });
 console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);
