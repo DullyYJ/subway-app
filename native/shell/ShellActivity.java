@@ -2887,7 +2887,7 @@ public class ShellActivity extends Activity {
             if ((map.svFail > 0 || busBadFetch > 0) && !busRefreshing && busShowing() && busRetryN < 3) {            // 몇 곳이 비었다 — 1.5 · 3 · 4.5초 뒤 그 곳만 다시(세 번까지, 사람이 탭 · 보기를 바꾸면 처음부터)
                 busRetryN++; final long wait = 1500L * busRetryN;
                 main.postDelayed(new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing) busRefresh(); } }, wait);
-            } else if (map.svFail == 0 && busBadFetch == 0) busRetryN = 0;
+            } else if (map.svFail == 0 && busBadFetch == 0) { busRetryN = 0; busEmptyCheck(); }
             busBadFetch = 0; }     // 처음 그릴 때 몇 곳이 비었으면 곧바로 한 번 더(8초 박자를 기다리지 않는다)
     }
     // ── 노선 정류장 목록 미리 받기: 도착정보가 뜬 가장 가까운 정류장의 앞 몇 개 노선은 목록을 기기에 7일 두어, 누르면 바로 그린다(정류장 목록은 거의 안 바뀐다) ──
@@ -3051,6 +3051,17 @@ public class ShellActivity extends Activity {
     private long busAt = 0L;
     private static final long BUS_POLL_MS = 30000L;                     // 위치 재확인 박자(탑승 중이 아니면 30초에 한 번) — 그 사이 초는 기기에서 줄어든다. 도착정보는 위치가 바뀔 때만 새로 받는다(YJ)
     private boolean busKeepArrived;
+    // s362 (YJ: 버스 정류장 도착시간이 늦게 나온다 · 다른 탭을 다녀오면 정상): 공공 API 가 '비어 있음'을 주면(받았지만 빔) 예전엔 그 자리에서 "도착정보 없음"으로 굳고, 탭 안에서는 아무도 다시 받지 않았다
+    //   (위치가 55m 넘게 바뀌거나 10분이 지나야 갱신 · 통신 실패만 1.5/3/4.5초 재시도). 탭을 나갔다 들어올 때 도착정보를 다시 받으니 그때서야 나았다. 이제 비어 있는 곳이 남아 있으면 보이는 동안 조용히 다시 받는다.
+    private static final long[] BUS_EMPTY_WAIT = { 1500L, 3000L, 4500L, 8000L, 8000L, 12000L };
+    private int busEmptyN; private final Runnable busEmptyRun = new Runnable() { @Override public void run() { if (busShowing() && !busRefreshing && map.emptyArrCount() > 0) busRefresh(); } };
+    private void busEmptyCheck() {
+        main.removeCallbacks(busEmptyRun);
+        if (busRefreshing || !busShowing()) return;
+        if (map.emptyArrCount() == 0) { busEmptyN = 0; return; }
+        if (busEmptyN >= BUS_EMPTY_WAIT.length) return;                                    // 밤처럼 정말 버스가 없는 곳은 여섯 번(약 37초)까지만 — 탭을 다시 열면 처음부터
+        main.postDelayed(busEmptyRun, BUS_EMPTY_WAIT[busEmptyN++]);
+    }
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
     private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
@@ -3199,7 +3210,7 @@ public class ShellActivity extends Activity {
         boolean shown = keyedShow(body, ShellCore.S_MAPB);
         if (!shown) showSkeleton(body, ShellCore.S_MAPB);                                   // 새 화면이 올 때까지 옛 모드의 화면(노선도 · 다른 정류장)을 두지 않는다 — 눌렀는데 아무 일도 없는 것처럼 보이지 않게
         syncMapView();
-        busRetryN = 0;
+        busRetryN = 0; busEmptyN = 0; main.removeCallbacks(busEmptyRun);
         if (shown && busShowing() && System.currentTimeMillis() - busAt > ShellCore.BUS_FRESH_MS) busRefresh();        // 캐시 화면을 먼저 보이고, 받은 지 10분이 넘었을 때만 도착정보를 새로 받는다(그 안에서는 시간만 줄어든다)
         else loadMapBodyFast(body, shown);
         if (shown) syncMapView();
