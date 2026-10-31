@@ -906,6 +906,7 @@ public class ShellJvmTest {
             MapCore bn = new MapCore(new ShellCore.MemStore());
             bn.addBusRes("a0", empty); bn.dropArrivals(); bn.addBusRes("a0", empty);
             ok(empty.equals(bn.busRes.get("a0")), "처음부터 비어 있던 정류장은 그대로 비어 있다");
+            ok(bn.emptyArrCount() == 1 && bm.emptyArrCount() == 0, "s362: 받았지만 빈 도착정보(a · f)만 센다 — 값이 있는 것 · 통신 실패(빈 본문)는 세지 않는다");
             // s170: 공공 API 오류 봉투(HTTP 200 으로 옴)는 받지 못한 것 — 'OpenAPI_ServiceResponse'. 통신 실패(빈 본문)도 '도착정보 없음'이 아니라 아직 못 받은 것으로 둔다
             String envl = "{\n  \"OpenAPI_ServiceResponse\": {\n    \"cmmMsgHeader\": {\n      \"errMsg\": \"HTTP_ERROR\",\n      \"returnReasonCode\": \"04\"\n    }\n  }\n}\n";
             ok(NetPost.busBodyBad(envl) && NetPost.busBodyBad("") && NetPost.busBodyBad(null) && !NetPost.busBodyBad(good) && !NetPost.busBodyBad(empty) && !NetPost.busBodyBad("<itemList><rtNm>1</rtNm></itemList>"), "버스 본문: 오류 봉투 · 빈 본문만 받지 못한 것");
