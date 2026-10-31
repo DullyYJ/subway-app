@@ -272,7 +272,8 @@ public class ScreenView extends View {
     // ── s347: 글자를 치는 동안 레이아웃이 바뀌어도(후보 줄이 늘고 줄어듦) 칸이 옛 자리에서 새 자리로 미끄러진다 ──
     private boolean shOn; private long shT0; private float shMax;
     private static final float SH_MS = 240f;
-    private float shE(long now) { float f = (now - shT0) / SH_MS; if (f >= 1f) return 1f; f = 1f - f; return 1f - f * f * f; }
+    private float shDur = SH_MS;
+    private float shE(long now) { float f = (now - shT0) / shDur; if (f >= 1f) return 1f; f = 1f - f; return 1f - f * f * f; }
     private static String shKey(ScreenCore.Item q) {
         return q.kind + "|" + q.key + "|" + (q.act != null ? q.act.v + "/" + q.act.id : "") + "|" + q.label + "|" + q.value + "|" + (q.lines != null && q.lines.length > 0 ? q.lines[0] : "");
     }
@@ -302,7 +303,83 @@ public class ScreenView extends View {
             if (Math.abs(dy) < 0.5f && Math.abs(dh) < 0.5f) continue;
             q.shy = dy; q.shh = dh; mx = Math.max(mx, Math.max(Math.abs(dy), Math.abs(dh)));
         }
-        if (mx > 0f) { shOn = true; shT0 = SystemClock.uptimeMillis(); shMax = mx; invalidate(); }
+        if (mx > 0f) { shOn = true; shT0 = SystemClock.uptimeMillis(); shMax = mx; shDur = SH_MS; invalidate(); }
+    }
+    // ── s360: 맛집 가게 지도 펼침/접힘 — 카드 아래에 끼운 칸 묶음이 아래로 미끄러지며 펼쳐지고(아래 카드들이 같이 내려간다), 접히는 묶음은 위로 접히며 사라진다.
+    //    다른 가게를 누르면 열려 있던 묶음은 접히면서 새 묶음이 펼쳐진다. 묶음이 뼈대에서 진짜 내용으로 바뀔 땐 같은 자리에서 서서히 바뀐다. 그리는 일만 한다(무엇을 끼울지는 엔진 · 껍데기).
+    private String sdPendOld, sdPendNew; private long sdPendAt, sdPendMs;
+    private int sdA, sdB;                                   // 새 묶음 = 본문 칸 [sdA, sdB)
+    private float sdTopN, sdHN, sdHFrom, sdShyN;            // 새 묶음의 위 · 높이 · 시작 높이(옛 묶음이 같은 자리에 있었으면 그 높이, 아니면 0) · 위 칸의 이동량
+    private boolean sdFill;                                 // 같은 자리에서 내용만 바뀐다(새것은 그대로 보이고 옛것이 위에서 사라진다)
+    private ScreenCore.Item[] sdGh; private float sdTopO, sdHO, sdHTo, sdShyO;     // 접히는(옛) 묶음: 칸들 · 위 · 높이 · 끝 높이 · 위 칸이 움직인 만큼
+    /** 다음 새 화면(같은 목록의 갱신)에서 끼운 묶음이 바뀐다 — oldAfter/newAfter = 묶음 바로 앞 카드의 act.v(없으면 ""). 1.5초 안에 오는 화면에만 쓴다. */
+    public void slideStruct(String oldAfter, String newAfter, long ms) { sdPendOld = oldAfter == null ? "" : oldAfter; sdPendNew = newAfter == null ? "" : newAfter; sdPendAt = SystemClock.uptimeMillis(); sdPendMs = Math.max(120L, ms); }
+    /** act.v 가 after 인 칸 바로 뒤에 끼운 묶음(패널 또는 뼈대 하나)의 본문 칸 번호 [시작, 끝). 없으면 null. */
+    private static int[] sdFind(ScreenCore.Layout L, String after) {
+        if (L == null || after == null || after.length() == 0) return null;
+        ScreenCore.Item[] b = L.body;
+        for (int i = 0; i + 1 < b.length; i++) {
+            ScreenCore.Item q = b[i];
+            if (q.act == null || !after.equals(q.act.v)) continue;
+            ScreenCore.Item f = b[i + 1];
+            if (f.kind != ScreenCore.K_PANEL && f.kind != ScreenCore.K_SKEL) return null;
+            float bot = f.y + f.h; int j = i + 2;
+            while (j < b.length && b[j].y < bot - 0.5f) j++;
+            return new int[] { i + 1, j };
+        }
+        return null;
+    }
+    private static String sdKey(ScreenCore.Item q, int[] pn, java.util.HashMap<String, Integer> cnt) {
+        String k = q.kind == ScreenCore.K_PANEL ? "P#" + (pn[0]++) : shKey(q);
+        Integer c = cnt.get(k); int n = c == null ? 0 : c; cnt.put(k, n + 1);
+        return k + "#" + n;
+    }
+    /** 묶음을 뺀 나머지 칸의 지금 자리(y). 움직이는 중이면 움직이는 중의 자리. 앞 카드(묶음 바로 위 칸)의 열쇠는 prevKey[0]에 적는다. */
+    private java.util.HashMap<String, Float> sdSnap(int[] grp, String[] prevKey) {
+        java.util.HashMap<String, Float> m = new java.util.HashMap<String, Float>();
+        java.util.HashMap<String, Integer> cnt = new java.util.HashMap<String, Integer>();
+        int[] pn = { 0 };
+        float rem = shOn ? 1f - shE(SystemClock.uptimeMillis()) : 0f;
+        for (int i = 0; i < lay.body.length; i++) {
+            if (grp != null && i >= grp[0] && i < grp[1]) continue;
+            ScreenCore.Item q = lay.body[i];
+            String k = sdKey(q, pn, cnt);
+            m.put(k, q.y + q.shy * rem);
+            if (grp != null && i == grp[0] - 1) prevKey[0] = k;
+        }
+        return m;
+    }
+    private void sdApply(java.util.HashMap<String, Float> old, String prevKey, String oldAfter, String newAfter, ScreenCore.Item[] oldGrp, float oTop, float oH, long ms) {
+        int[] nr = sdFind(lay, newAfter);
+        java.util.HashMap<String, Integer> cnt = new java.util.HashMap<String, Integer>();
+        int[] pn = { 0 };
+        float mx = 0f; sdShyO = 0f;
+        for (int i = 0; i < lay.body.length; i++) {
+            if (nr != null && i >= nr[0] && i < nr[1]) continue;
+            ScreenCore.Item q = lay.body[i];
+            String k = sdKey(q, pn, cnt);
+            Float o = old.get(k);
+            if (o == null) continue;
+            float dy = o - q.y;
+            if (prevKey != null && prevKey.equals(k)) sdShyO = dy;
+            if (Math.abs(dy) < 0.5f) continue;
+            q.shy = dy; q.shh = 0f; mx = Math.max(mx, Math.abs(dy));
+        }
+        boolean any = mx > 0f;
+        sdA = 0; sdB = 0; sdGh = null;
+        sdFill = nr != null && oldGrp != null && oldAfter != null && oldAfter.equals(newAfter);
+        if (nr != null) {
+            ScreenCore.Item f = lay.body[nr[0]];
+            sdA = nr[0]; sdB = nr[1]; sdTopN = f.y; sdHN = f.h; sdHFrom = sdFill ? oH : 0f;
+            sdShyN = nr[0] > 0 ? lay.body[nr[0] - 1].shy : 0f;
+            for (int i = sdA; i < sdB; i++) { lay.body[i].shy = sdShyN; lay.body[i].shh = 0f; }
+            any = true; mx = Math.max(mx, sdHN);
+        }
+        if (oldGrp != null) {
+            sdGh = oldGrp; sdTopO = oTop; sdHO = oH; sdHTo = sdFill ? sdHN : 0f;
+            any = true; mx = Math.max(mx, oH);
+        }
+        if (any) { shOn = true; shT0 = SystemClock.uptimeMillis(); shMax = mx; shDur = ms; invalidate(); }
     }
     public void setScreen(ScreenCore.Screen s, boolean keepScroll) {
         boolean stick = s != null && "bottom".equals(s.anchor) && (!keepScroll || nearBottom());
@@ -321,6 +398,14 @@ public class ScreenView extends View {
         final java.util.HashMap<String, float[]> shOld = keepScroll && editKey != null && lay != null ? shSnap() : null;          // s347: 글자를 치는 중 후보 줄이 늘고 줄어도 아래 칸이 순간이동하지 않고 미끄러진다
         final ScreenCore.Layout before = keepScroll && !stick && ancKey == null ? lay : null;      // 노선 상세: 바뀐 줄만 다시 그리려고 이전 배치를 쥔다
         screen = s;
+        sdA = 0; sdB = 0; sdGh = null;                                                      // 새 화면이 오면 지난 묶음 움직임은 끝낸다(필요하면 아래에서 다시 시작)
+        String sdO = null, sdN = null; long sdMs = 0L;
+        if (sdPendOld != null) { if (keepScroll && lay != null && nowSp - sdPendAt < 1500L) { sdO = sdPendOld; sdN = sdPendNew; sdMs = sdPendMs; } sdPendOld = null; sdPendNew = null; }
+        int[] sdOr = sdO == null ? null : sdFind(lay, sdO);
+        String[] sdPrev = new String[1];
+        java.util.HashMap<String, Float> sdOld = sdO == null ? null : sdSnap(sdOr, sdPrev);
+        ScreenCore.Item[] sdOg = null; float sdOtop = 0f, sdOh = 0f;
+        if (sdOr != null) { sdOg = java.util.Arrays.copyOfRange(lay.body, sdOr[0], sdOr[1]); sdOtop = lay.body[sdOr[0]].y; sdOh = lay.body[sdOr[0]].h; }
         mqT0 = SystemClock.uptimeMillis();
         if (pendSlide != 0) { if (mqT0 - pendSlideAt < 3000L) { slDir = pendSlide; slT0 = mqT0; followChip = true; } pendSlide = 0; }      // 밀어서 넘어온 화면이면 위 칩 줄도 켜진 칩을 따라간다
         hintUntil = 0L;                                                                    // 엔진이 준 실제 상태(감지 중 여부)가 오면 임시 표시는 거둔다
@@ -334,6 +419,7 @@ public class ScreenView extends View {
         relayout();
         partialFrom = null;
         if (shOld != null) shApply(shOld);
+        if (sdOld != null) sdApply(sdOld, sdPrev[0], sdO, sdN, sdOg, sdOtop, sdOh, sdMs);
         if (spOld != null) markChanged(spOld, nowSp);
         trackMsgs(keepScroll);
         syncMk(keepScroll);
@@ -2226,7 +2312,7 @@ public class ScreenView extends View {
             else for (ScreenCore.Item fi : lay.body) if (fi.kind == ScreenCore.K_PICKL && foldKey.equals(fi.key)) { foldY = fi.y; foldBot = fi.y + fi.h; foldDy = pickVisH(fi) - fi.h; foldOn = Math.abs(foldDy) > 0.2f; spAnim = true; break; }
         }
         float fmg = foldOn ? Math.abs(foldDy) : 0f;
-        if (shOn) { if (shE(now) >= 1f) shOn = false; else { spAnim = true; fmg = Math.max(fmg, shMax); if (editKey != null) syncLater(); } }
+        if (shOn) { if (shE(now) >= 1f) { shOn = false; sdA = 0; sdB = 0; sdGh = null; } else { spAnim = true; fmg = Math.max(fmg, shMax); if (editKey != null) syncLater(); } }
         float hExt = 0f, hY = 0f, hBot = 0f;                                                          // s340: 카드 확장 인사 — 늘어난 높이(dp) · 늘어나기 전 카드의 아래 끝
         if (helloPlan != null) {
             if (scene == null || !scene.helloActive() || SceneHello.done(helloPlan, helloNowMs())) helloEnd();
@@ -2246,12 +2332,26 @@ public class ScreenView extends View {
             if (hExt > 0f) { if (bit.kind == ScreenCore.K_SCENE) gh += hExt; else if (bit.kind == ScreenCore.K_PANEL && bit.y <= hY + 0.5f && bit.y + bit.h >= hBot - 0.5f) gh += hExt; else if (bit.y >= hBot - 0.5f) sdy += hExt; }          // 장면을 담은 틀(테두리 · 그림자)도 같이 늘어난다                  // s340: 카드가 늘어난 만큼 아래 칸이 내려간다
             if (bit.kind == ScreenCore.K_SCENE) helloGh = hExt;
             if (sdy != 0f) { cv.save(); cv.translate(0f, sdy); }
+            final boolean inGrp = shOn && i >= sdA && i < sdB;                              // 펼쳐지는 묶음: 위에서 아래로 열리는 만큼만 보이고(자르기) 서서히 나타난다
+            if (inGrp) {
+                float ge = shE(now), gb = sdTopN + sdHFrom + (sdHN - sdHFrom) * ge;
+                cv.save(); cv.clipRect(0f, sdTopN - 2f, w, gb);
+                if (!sdFill) cv.saveLayerAlpha(0f, sdTopN - 2f, w, gb, Math.round(255f * Math.min(1f, ge * 1.4f)), Canvas.ALL_SAVE_FLAG);
+            }
             if (gh != 0f) bit.h += gh;
             if (bit.band) { cv.save(); cv.clipRect(bit.cl, bit.y - 4f, bit.cr, bit.y + bit.h + 4f); cv.translate(-bandX, 0f); drawItem(cv, bit); cv.restore(); }      // 카드 안 타임라인: 틀 안에서 가로로 밀린다
             else drawItem(cv, bit);
             if (gh != 0f) bit.h -= gh;
             if (bit.kind == ScreenCore.K_SCENE) helloGh = 0f;
+            if (inGrp) { if (!sdFill) cv.restore(); cv.restore(); }
             if (sdy != 0f) cv.restore();
+        }
+        if (shOn && sdGh != null) {                                                          // 접히는(옛) 묶음: 위로 접히며 사라진다 — 아래 카드들이 올라오는 만큼 높이가 줄어든다
+            float ge = shE(now), gb = sdTopO + sdHO + (sdHTo - sdHO) * ge;
+            cv.save(); cv.translate(0f, -sdShyO * ge); cv.clipRect(0f, sdTopO - 2f, w, gb);
+            cv.saveLayerAlpha(0f, sdTopO - 2f, w, gb, Math.round(255f * (1f - ge)), Canvas.ALL_SAVE_FLAG);
+            for (ScreenCore.Item gi : sdGh) drawItem(cv, gi);
+            cv.restore(); cv.restore();
         }
         if (swReg) {
             cv.save(); cv.clipRect(rgL, rgT, rgR, rgB);
