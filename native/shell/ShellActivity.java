@@ -4974,8 +4974,12 @@ public class ShellActivity extends Activity {
     }
     private void ovlHintOnce() {
         ovlAuto();
-        try { if (!ovlAskedRun && RideOverlay.supported() && !RideOverlay.allowed(this) && !"0".equals(store.get(ShellCore.K_OVL, ""))) { ovlAskedRun = true; store.put(ShellCore.K_OVLASK, "0"); } } catch (Throwable ignored) { }          // 허용이 없으면 이번 실행에 한 번 다시 묻는다(끈 사람 제외)
-        setupLateOn(true);                                                                // 배터리 → (갤럭시) 절전 → 다른 앱 위 순서로 한 가지씩
+        try {
+            if (ovlAskedRun || !RideOverlay.supported() || RideOverlay.allowed(this) || "0".equals(store.get(ShellCore.K_OVL, ""))) return;       // 일부러 끈("0") 사람에게는 묻지 않는다
+            ovlAskedRun = true;
+            store.put(ShellCore.K_OVLASK, "1");
+            main.postDelayed(new Runnable() { @Override public void run() { if (resumed && (sheet == null || !sheet.isShowing())) openSetPage("askovl"); } }, 1800L);
+        } catch (Throwable ignored) { }
     }
     /** 경로를 확정하면 하단 탭의 탑승 시트를 바로 한 번 연다(웹은 도착 2분 전에 올라오지만, 확정 직후에도 쓸어 올리지 않고 볼 수 있게). 열고 닫기는 엔진이 정한다. */
     private void rsOpenSoon() {
@@ -5532,7 +5536,7 @@ public class ShellActivity extends Activity {
         }
         int r = cm.act(store, a, v, key, on, q);
         if ((r & CmCore.R_CLOSE) != 0) { closeSheet(); loadSlot(slots.length - 1, true); return; }
-        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); if (CmCore.on(store)) setupLateOn(false); }
+        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
         if (cmFromInline && cm.sub.length() == 0) { cmFromInline = false; cm.pop = false; closeSheet(); cmReload(); return; }          // 시각 고르기를 마쳤다 — 시트를 닫고 설정 화면의 패널을 새로
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
@@ -5549,7 +5553,7 @@ public class ShellActivity extends Activity {
     }
     private void cmInlineAct(String a, String v, String key, boolean on, String q) {
         int r = cm.act(store, a, v, key, on, q);
-        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); if (CmCore.on(store)) setupLateOn(false); }
+        if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(this); gwSync(false); }
         if ((r & CmCore.R_TEST) != 0) { testBrief(); return; }
         if ("tp".equals(cm.sub)) { cm.pop = true; openSetPage("cm"); cmFromInline = true; return; }
         if ((r & CmCore.R_BUS) != 0) { cmBusSearch(cm.pkQ); return; }
@@ -5571,7 +5575,7 @@ public class ShellActivity extends Activity {
             final String typed = value;
             main.postDelayed(new Runnable() { @Override public void run() {          // 후보 줄을 누른 게 아니면(그러면 이미 저장돼 inl 이 꺼져 있다) 친 글자를 그대로 자동 저장
                 int r = cm.blurInline(store, k, typed);
-                if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(ShellActivity.this); gwSync(false); if (CmCore.on(store)) setupLateOn(false); }
+                if ((r & CmCore.R_RESCHED) != 0) { CommuteAlarm.rescheduleAsync(ShellActivity.this); gwSync(false); }
                 if ((r & CmCore.R_RENDER) != 0) cmReload();
             } }, 350L);
         }
@@ -5715,27 +5719,24 @@ public class ShellActivity extends Activity {
 
 
     // ───────────── 처음 설치 승인을 한 가지씩 차례로(웹과 같은 순서 · 하나가 끝나야 다음이 나온다) ─────────────
-    // 처음 켤 때: ① 알림 권한(기기 창) → ② 위치 정보 이용 안내(동의) → 위치 권한(기기 창) 까지만. 그 뒤(s358)는 그 기능을 처음 쓰는 순간으로 미룬다 — 첫 경로 확정(③ 배터리 최적화 안내(갤럭시는 절전 제외까지 한 창) → ④ 다른 앱 위에 표시 안내) · 출퇴근 알람 켜기(③만).
+    // ① 알림 권한(기기 창) → ② 위치 정보 이용 안내(동의) → 위치 권한(기기 창) → ③ 배터리 최적화 안내(갤럭시는 자동 절전 제외까지 한 창) → ④ 다른 앱 위에 표시 안내.
     // 안내 글은 엔진(askbat · asksam · askovl), 여기는 차례와 기기 창 열기만 한다. 각 안내는 평생 한 번(저장소 열쇠) · 위치 안내를 거부하면 이번 실행엔 더 묻지 않는다.
     private static final int REQ_SETUP_NOTIF = 76;
     private int setupPhase;                                          // 0 없음 · 1 삼성 절전 목록에서 돌아오길 기다림(→ 기기 허용 창) · 2 기기 창/설정 화면에서 돌아오길 기다림
     private boolean setupDeclined;
     private final Runnable setupRun = new Runnable() { @Override public void run() { setupNext(); } };
     private void setupSoon() { main.removeCallbacks(setupRun); main.postDelayed(setupRun, 600L); }
-    private int setupPre;                                            // 미리 받기를 한 단계(1 = 처음 켠 직후 · 2 = 첫 기능 사용 때)
-    /** 안내 글을 뒤에서 미리 받아 둔다 — 안내 창이 열리는 순간 글이 이미 있다(스레드). 처음 켠 직후엔 위치 안내, 첫 기능을 쓰는 순간(late)엔 배터리 · 절전 · 다른 앱 위. */
-    private void setupPrefetch(boolean late) {
-        int bit = late ? 2 : 1;
-        if ((setupPre & bit) != 0) return;
-        setupPre |= bit;
+    private boolean setupPre;
+    /** 처음 설치 안내 글(위치 · 배터리 · 절전 · 다른 앱 위)을 뒤에서 미리 받아 둔다 — 알림 허용 창이 떠 있는 동안 끝나, 안내 창이 열리는 순간 글이 이미 있다(스레드). */
+    private void setupPrefetch() {
+        if (setupPre) return;
+        setupPre = true;
         final java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
         final boolean sam = PowerInfo.isSamsung();
-        if (!late) { if (!"1".equals(store.get(ShellCore.K_LOCDISC, "0"))) urls.add(ShellCore.pageUrlPlain("locd", null)); }
-        else {
-            if (!"1".equals(store.get(ShellCore.K_BATASK, "0"))) urls.add(ShellCore.pageUrlAsk("askbat", sam));
-            if (sam && !"1".equals(store.get(ShellCore.K_SAMASK, "0"))) urls.add(ShellCore.pageUrlAsk("asksam", sam));
-            if (!"1".equals(store.get(ShellCore.K_OVLASK, "0"))) urls.add(ShellCore.pageUrlAsk("askovl", sam));
-        }
+        if (!"1".equals(store.get(ShellCore.K_LOCDISC, "0"))) urls.add(ShellCore.pageUrlPlain("locd", null));
+        if (!"1".equals(store.get(ShellCore.K_BATASK, "0"))) urls.add(ShellCore.pageUrlAsk("askbat", sam));
+        if (sam && !"1".equals(store.get(ShellCore.K_SAMASK, "0"))) urls.add(ShellCore.pageUrlAsk("asksam", sam));
+        if (!"1".equals(store.get(ShellCore.K_OVLASK, "0"))) urls.add(ShellCore.pageUrlAsk("askovl", sam));
         if (urls.isEmpty()) return;
         new Thread(new Runnable() { @Override public void run() {
             for (String u : urls) {
@@ -5747,7 +5748,7 @@ public class ShellActivity extends Activity {
         } }, "shell-setpre").start();
     }
     private void setupResume() {
-        setupPrefetch(false);
+        setupPrefetch();
         if (setupPhase == 1) {
             setupPhase = 2;
             main.postDelayed(new Runnable() { @Override public void run() { PowerInfo.requestIgnore(ShellActivity.this); } }, 350L);   // 삼성 목록에서 돌아오면 기기 허용 창
@@ -5755,13 +5756,6 @@ public class ShellActivity extends Activity {
         else setupSoon();
     }
     private boolean setupNoEngine;
-    private boolean setupLate, setupOvl;                              // 첫 기능을 쓴 뒤에야 묻는 안내(배터리 · 절전 · 다른 앱 위) — 처음 켤 땐 알림 · 위치만
-    /** 첫 경로 확정(ovl = 오버레이도) 또는 출퇴근 알람을 켠 순간: 그 기능에 필요한 기기 설정 안내를 차례로 시작한다. */
-    private void setupLateOn(boolean ovl) {
-        setupLate = true; if (ovl) setupOvl = true;
-        setupPrefetch(true);
-        main.removeCallbacks(setupRun); main.postDelayed(setupRun, 1800L);
-    }
     /** 서버 엔진이 이 안내를 아직 모른다 — '이미 물었다' 표시를 지워, 엔진이 알게 되면 그때 보여 준다. */
     private void askUnburn(String page) {
         if ("askbat".equals(page)) store.put(ShellCore.K_BATASK, "0");
@@ -5783,8 +5777,6 @@ public class ShellActivity extends Activity {
             return;
         }
         if (!"1".equals(store.get(ShellCore.K_LOCDISC, "0"))) return;                // 위치 안내에 동의한 뒤에만 이어서 묻는다
-        if (!setupLate && !CmCore.on(store)) return;                                  // 처음 켤 땐 여기까지(알림 · 위치). 배터리 · 절전 · 다른 앱 위는 첫 경로 확정 · 출퇴근 알람을 켠 뒤에
-        setupPrefetch(true);
         PowerInfo pi = PowerInfo.read(this);
         boolean sam = PowerInfo.isSamsung();
         if (Build.VERSION.SDK_INT >= 23 && !"1".equals(store.get(ShellCore.K_BATASK, "0")) && !pi.ig) {
@@ -5799,7 +5791,7 @@ public class ShellActivity extends Activity {
             return;
         }
         boolean batSettled = Build.VERSION.SDK_INT < 23 || "1".equals(store.get(ShellCore.K_BATASK, "0")) || pi.ig;
-        if (batSettled && setupOvl && RideOverlay.supported() && !RideOverlay.allowed(this) && !"0".equals(store.get(ShellCore.K_OVL, "")) && !"1".equals(store.get(ShellCore.K_OVLASK, "0"))) {
+        if (batSettled && RideOverlay.supported() && !RideOverlay.allowed(this) && !"1".equals(store.get(ShellCore.K_OVLASK, "0"))) {
             store.put(ShellCore.K_OVLASK, "1");
             openSetPage("askovl");
         }
