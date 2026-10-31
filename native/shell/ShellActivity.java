@@ -3868,7 +3868,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    private void closeSheet() { if (mapView != null) mapView.setCover(0f); detLoading = null; brStop(); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
+    private void closeSheet() { popBox = null; popSlide = false; popRevealed = false; popRevealQ = false; popLeaving = false; popGot = false; if (mapView != null) mapView.setCover(0f); detLoading = null; brStop(); if (playView != null) { playView.end(); playView = null; } try { if (sheet != null) sheet.dismiss(); } catch (Throwable ignored) { } sheet = null; sheetView = null; sheetName = ""; }
 
     private final class SheetHost implements ScreenView.Listener {
         @Override public void onAction(ScreenCore.Act a) {
@@ -3900,7 +3900,7 @@ public class ShellActivity extends Activity {
             }
             if (fav.onText(key, value, kind)) { fav.sync(sheetView == null ? null : sheetView.fields()); fav.fs = "fvs".equals(key) ? value : fav.fs; fav.fd = "fvd".equals(key) ? value : fav.fd; if ("edit".equals(kind)) deb.trailing("favq", Debounce.TYPE_MS, new Runnable() { @Override public void run() { if (ShellCore.S_FAV.equals(sheetName)) loadFav(); } }); else loadFav(); }
         }
-        @Override public void onContentH(final float dp) { if (popSheet && ShellCore.S_SETPG.equals(sheetName)) main.post(new Runnable() { @Override public void run() { popResize(dp); } }); }
+        @Override public void onContentH(final float dp) { if (popSheet && ShellCore.S_SETPG.equals(sheetName)) main.post(new Runnable() { @Override public void run() { popResize(dp); popRevealSoon(); } }); }
     }
     private void submitWrite() {
         if (writeBusy || sheetView == null) return;
@@ -5323,12 +5323,63 @@ public class ShellActivity extends Activity {
         try {
             if (!popSheet || sheet == null || !sheet.isShowing() || dp <= 0f) return;
             float sh = getResources().getDisplayMetrics().heightPixels / dpr, sw = getResources().getDisplayMetrics().widthPixels / dpr;
+            if (popSlide && popBox != null) {                                                                  // 움직이는 창: 창은 화면 전체(투명) · 카드(box)만 글 높이로 — 카드가 창 밖으로 미끄러져도 잘리지 않는다
+                FrameLayout.LayoutParams bp = (FrameLayout.LayoutParams) popBox.getLayoutParams();
+                int nh = Math.round(Math.min(dp, sh * 0.9f) * dpr);
+                if (bp.height != nh) { bp.height = nh; bp.width = Math.round(Math.min(sw - 44f, 400f) * dpr); popBox.setLayoutParams(bp); }
+                return;
+            }
             android.view.Window w = sheet.getWindow();
             android.view.WindowManager.LayoutParams lp = w.getAttributes();
             if ("cm".equals(setPage) && cm.pop && "tp".equals(cm.sub)) tpPopH = Math.min(dp, sh * 0.9f);
             lp.width = Math.round(Math.min(sw - 44f, 400f) * dpr); lp.height = Math.round(Math.min(dp, sh * 0.9f) * dpr); lp.gravity = android.view.Gravity.CENTER; lp.y = 0;
             w.setAttributes(lp);
         } catch (Throwable ignored) { }
+    }
+    // ── 처음 설치 안내 창(위치 · 배터리 · 절전 · 다른 앱 위)의 움직임: 글이 준비된 뒤에만, 위에서 아래로 미끄러져 내려앉고 닫힐 땐 더 아래로 사라진다. 빈 상자가 먼저 뜨거나 크기가 뛰지 않는다.
+    private FrameLayout popBox;
+    private boolean popSlide, popRevealed, popRevealQ, popLeaving, popGot;
+    private boolean slidePop(String page) { return "locd".equals(page) || ShellCore.isAskPage(page); }
+    private void popDim(final android.app.Dialog dg, float to, long ms) {
+        try {
+            final android.view.Window w = dg.getWindow();
+            final android.animation.ValueAnimator va = android.animation.ValueAnimator.ofFloat(to > 0f ? 0f : 0.68f, to);
+            va.setDuration(ms);
+            va.addUpdateListener(new android.animation.ValueAnimator.AnimatorUpdateListener() { @Override public void onAnimationUpdate(android.animation.ValueAnimator a) { try { w.setDimAmount((Float) a.getAnimatedValue()); } catch (Throwable ignored) { } } });
+            va.start();
+        } catch (Throwable ignored) { }
+    }
+    /** 글 높이가 정해졌다 — 카드 크기가 자리 잡은 다음 프레임에 나타낸다(두 프레임 기다린다). */
+    private void popRevealSoon() {
+        if (!popSlide || popRevealed || popRevealQ || popBox == null) return;
+        popRevealQ = true;
+        final android.app.Dialog me = sheet; final FrameLayout box = popBox;
+        box.postOnAnimation(new Runnable() { @Override public void run() { box.postOnAnimation(new Runnable() { @Override public void run() { popReveal(me); } }); } });
+    }
+    private void popReveal(android.app.Dialog me) {
+        final FrameLayout box = popBox;
+        if (sheet != me || box == null || popRevealed || !me.isShowing()) return;
+        popRevealed = true;
+        try {
+            box.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            box.setAlpha(0f); box.setTranslationY(-34f * dpr);
+            box.animate().alpha(1f).translationY(0f).setDuration(440L).setInterpolator(new android.view.animation.PathInterpolator(0.22f, 1f, 0.36f, 1f))
+                .withEndAction(new Runnable() { @Override public void run() { box.setLayerType(View.LAYER_TYPE_NONE, null); } }).start();
+            popDim(me, 0.68f, 300L);
+        } catch (Throwable t) { box.setAlpha(1f); box.setTranslationY(0f); try { me.getWindow().setDimAmount(0.68f); } catch (Throwable ignored) { } }
+    }
+    /** 움직이는 안내 창을 아래로 사라지게 한 뒤 닫는다(그 밖의 창은 바로 닫는다). 누른 뒤 다음 일(기기 창 열기)은 기다리지 않고 바로 이어진다. */
+    private void closeSheetOut() {
+        final android.app.Dialog me = sheet; final FrameLayout box = popBox;
+        if (me == null || box == null || !popSlide || !popRevealed || popLeaving) { closeSheet(); return; }
+        popLeaving = true;
+        final Runnable fin = new Runnable() { @Override public void run() { if (sheet == me) closeSheet(); } };
+        try {
+            box.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+            box.animate().alpha(0f).translationY(30f * dpr).setDuration(240L).setInterpolator(new android.view.animation.PathInterpolator(0.4f, 0f, 0.8f, 0.6f)).withEndAction(fin).start();
+            popDim(me, 0f, 240L);
+            main.postDelayed(fin, 600L);                                                                   // 끝 알림이 안 와도 닫는다
+        } catch (Throwable t) { closeSheet(); }
     }
     private void openSetPage(String page) {
         closeSheet();
@@ -5339,6 +5390,7 @@ public class ShellActivity extends Activity {
         final boolean tpPop = "cm".equals(page) && cm.pop && "tp".equals(cm.sub);                        // 시각 고르기 · 출퇴근 브리핑 알림 창도 가운데 팝업
         final boolean pop = "locd".equals(page) || "cmb".equals(page) || tpPop || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
         popSheet = pop;
+        final boolean sp = pop && slidePop(page);
         sheetView = new ScreenView(this);
         sheetView.setDpr(dpr);
         int[] spal = ShellCore.palette(ShellCore.theme(store));
@@ -5353,7 +5405,13 @@ public class ShellActivity extends Activity {
             box.setBackground(g);
             if (Build.VERSION.SDK_INT >= 21) box.setClipToOutline(true);
             box.addView(sheetView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            sheet.setContentView(box);
+            if (sp) {                                                                                  // 창은 화면 전체(투명) · 카드는 가운데 — 카드만 움직인다
+                FrameLayout root = new FrameLayout(this);
+                float sw1 = getResources().getDisplayMetrics().widthPixels / dpr;
+                root.addView(box, new FrameLayout.LayoutParams(Math.round(Math.min(sw1 - 44f, 400f) * dpr), Math.round(200f * dpr), android.view.Gravity.CENTER));
+                box.setAlpha(0f); popBox = box; popSlide = true; popRevealed = false; popRevealQ = false; popLeaving = false; popGot = false;
+                sheet.setContentView(root);
+            } else sheet.setContentView(box);
             boolean soft = tpPop || "cmb".equals(page);                                              // 시각 · 브리핑 창은 바깥을 누르거나 뒤로 가기로도 닫힌다
             sheet.setCancelable(soft); sheet.setCanceledOnTouchOutside(soft);
             if (soft) sheet.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) {
@@ -5364,14 +5422,18 @@ public class ShellActivity extends Activity {
             float sw = getResources().getDisplayMetrics().widthPixels / dpr;
             float sh0 = getResources().getDisplayMetrics().heightPixels / dpr;
             float h0 = tpPop ? Math.min(tpPopH > 0f ? tpPopH : 390f, sh0 * 0.9f) : 200f;                // s346: 시각 고르기는 지난번 높이로 처음부터 알맞게(빈 작은 상자가 떴다 커지지 않게)
-            w.setLayout(Math.round(Math.min(sw - 44f, 400f) * dpr), Math.round(h0 * dpr));          // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
+            if (sp) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            else w.setLayout(Math.round(Math.min(sw - 44f, 400f) * dpr), Math.round(h0 * dpr));          // 높이는 엔진 화면이 정한 글 높이로 곧 맞춘다(onContentH)
             w.setGravity(android.view.Gravity.CENTER);
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
             w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            w.setDimAmount(0.68f);                                                                    // 웹 rgba(0,0,0,.68)
+            w.setDimAmount(sp ? 0f : 0.68f);                                                          // 웹 rgba(0,0,0,.68) — 움직이는 창은 카드가 내려앉을 때 함께 어두워진다
+            if (sp) w.setWindowAnimations(0);
             tpPresented = null;
+            if (sp) { String hit1 = tpCache.get(setPageUrl()); if (hit1 != null) { present(sheetView, hit1, true); tpPresented = hit1; popGot = true; } }          // 미리 받아 둔 안내 글은 창을 열기 전에 올려 둔다 — 열리는 순간 글이 이미 있다
             if (tpPop) { String hit0 = tpCache.get(ShellCore.pageUrlCm(cm.pageFacts(store))); if (hit0 != null) { present(sheetView, hit0, true); tpPresented = hit0; } }          // s346: 미리 받아 둔 시각 고르기 화면은 창을 열기 전에 먼저 올려 두어, 열리는 순간 글이 이미 있다
             try { sheet.show(); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
+            if (sp) { final android.app.Dialog me = sheet; main.postDelayed(new Runnable() { @Override public void run() { if (sheet == me && popGot) popRevealSoon(); } }, 4000L); }          // 글 높이 알림이 끝내 안 와도 4초 뒤엔 보인다(글이 올라온 뒤에만)
             loadSetPage();
             return;
         }
@@ -5380,8 +5442,8 @@ public class ShellActivity extends Activity {
         try { sheet.show(); slideIn(sheetView); } catch (Throwable t) { toast("설정을 열지 못했어요"); return; }
         loadSetPage();
     }
-    private void loadSetPage() {
-        final String url = "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
+    private String setPageUrl() {
+        return "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
             : "cmb".equals(setPage) ? ShellCore.pageUrlPlain("cmb", cmbFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
             : "gw".equals(setPage) ? ShellCore.pageUrlGw(GwCore.pageFacts(store))
@@ -5392,8 +5454,11 @@ public class ShellActivity extends Activity {
             : "dev".equals(setPage) ? ShellCore.pageUrlDev(DevCore.withPerf(DevCore.pageFacts(devPh, devLeft(), devStopped), PerfLog.snapshot()))
             : "arr".equals(setPage) ? ShellCore.pageUrlArr(arrStat, RideService.running, notifOk(), RideService.liveReco, RideService.recoStage + (RideService.recoRoute.length() > 0 ? " · " + RideService.recoRoute : ""), RideService.recoStageAt)
             : ShellCore.pageUrl(store, "ovl", RideOverlay.supported(), RideOverlay.allowed(this)));
-        final String hit = "cm".equals(setPage) && cm.pop ? tpCache.get(url) : null;                     // 미리 받아 둔 시각 고르기 화면이면 기다리지 않고 바로 올린다
-        if (hit != null) { if (!hit.equals(tpPresented)) present(sheetView, hit, true); tpPresented = null; return; }
+    }
+    private void loadSetPage() {
+        final String url = setPageUrl();
+        final String hit = ("cm".equals(setPage) && cm.pop) || (popSlide && slidePop(setPage)) ? tpCache.get(url) : null;                     // 미리 받아 둔 시각 고르기 화면이면 기다리지 않고 바로 올린다
+        if (hit != null) { if (!hit.equals(tpPresented)) present(sheetView, hit, true); tpPresented = null; popGot = true; return; }
         new Thread(new Runnable() {
             @Override public void run() {
                 NetPost.Res r = NetPost.get(url, 8000);
@@ -5407,9 +5472,9 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (sheet == null || !sheet.isShowing() || !ShellCore.S_SETPG.equals(sheetName)) return;
                     if (ShellCore.isAskPage(setPage) && txt.indexOf("\"body\"") < 0) { askUnburn(setPage); setupNoEngine = true; closeSheet(); if ("askovl".equals(setPage)) toast("설정에서 '다른 앱 위에 표시'를 켜 주세요"); return; }          // 서버 엔진이 아직 이 안내를 모르면(붙여넣기 전) 이번 실행엔 건너뛰고, '물었다' 표시는 지워 둔다
-                    if (txt.length() == 0) { toast("설정을 받지 못했어요" + (stCode > 0 ? " (" + stCode + ")" : " (연결 안 됨)")); return; }
+                    if (txt.length() == 0) { if (popSlide) { closeSheet(); return; } toast("설정을 받지 못했어요" + (stCode > 0 ? " (" + stCode + ")" : " (연결 안 됨)")); return; }          // 안내 창은 글을 못 받으면 보이지 않은 채 닫는다(빈 상자가 남지 않게)
                     if ("cm".equals(setPage)) cm.setStations(cmStations(txt));
-                    present(sheetView, txt, true);
+                    present(sheetView, txt, true); popGot = true;
                 } });
             }
         }, "shell-setpg").start();
@@ -5566,6 +5631,7 @@ public class ShellActivity extends Activity {
         new Thread(new Runnable() { @Override public void run() { CommuteAlarm.send(app, kind); } }, "shell-cmtest").start();
     }
     private void setPageAct(String a, String v, String key, boolean on) {
+        if (popLeaving) return;                                          // 사라지는 중인 안내 창의 단추는 이미 눌린 것
         if ("cm".equals(setPage)) { cmAct(a, v, key, on, null); return; }
         if ("cmb".equals(setPage)) { if ("call".equals(a)) cmbAct(v); return; }
         int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
@@ -5573,9 +5639,9 @@ public class ShellActivity extends Activity {
             if (locOk != null && ShellCore.isPolPage(setPage)) { openSetPage("locd"); return; }          // 안내에서 방침을 보러 갔다 오면 안내로 돌아온다
             closeSheet(); loadSlot(slots.length - 1, true); return;
         }
-        if (r == ShellCore.PG_LOCOK) { closeSheet(); Runnable ok = locOk; locOk = null; locNo = null; if (ok != null) ok.run(); return; }
-        if (r == ShellCore.PG_LOCNO) { closeSheet(); Runnable no = locNo; locOk = null; locNo = null; if (no != null) no.run(); return; }
-        if (r == ShellCore.PG_ASKOK || r == ShellCore.PG_ASKNO) { String pg = setPage; closeSheet(); askDone(pg, r == ShellCore.PG_ASKOK); return; }
+        if (r == ShellCore.PG_LOCOK) { closeSheetOut(); Runnable ok = locOk; locOk = null; locNo = null; if (ok != null) ok.run(); return; }
+        if (r == ShellCore.PG_LOCNO) { closeSheetOut(); Runnable no = locNo; locOk = null; locNo = null; if (no != null) no.run(); return; }
+        if (r == ShellCore.PG_ASKOK || r == ShellCore.PG_ASKNO) { String pg = setPage; closeSheetOut(); askDone(pg, r == ShellCore.PG_ASKOK); return; }
         if (r == ShellCore.PG_POLOPEN) { openSetPage("polp"); return; }
         if (r == ShellCore.PG_SAMOPEN) { PowerInfo.openSamsung(this); return; }          // 돌아오면 onResume 이 다시 읽어 그린다
         if (r == ShellCore.PG_BATREQ) { PowerInfo.requestIgnore(this); return; }
@@ -5660,7 +5726,29 @@ public class ShellActivity extends Activity {
     private boolean setupDeclined;
     private final Runnable setupRun = new Runnable() { @Override public void run() { setupNext(); } };
     private void setupSoon() { main.removeCallbacks(setupRun); main.postDelayed(setupRun, 600L); }
+    private boolean setupPre;
+    /** 처음 설치 안내 글(위치 · 배터리 · 절전 · 다른 앱 위)을 뒤에서 미리 받아 둔다 — 알림 허용 창이 떠 있는 동안 끝나, 안내 창이 열리는 순간 글이 이미 있다(스레드). */
+    private void setupPrefetch() {
+        if (setupPre) return;
+        setupPre = true;
+        final java.util.ArrayList<String> urls = new java.util.ArrayList<String>();
+        final boolean sam = PowerInfo.isSamsung();
+        if (!"1".equals(store.get(ShellCore.K_LOCDISC, "0"))) urls.add(ShellCore.pageUrlPlain("locd", null));
+        if (!"1".equals(store.get(ShellCore.K_BATASK, "0"))) urls.add(ShellCore.pageUrlAsk("askbat", sam));
+        if (sam && !"1".equals(store.get(ShellCore.K_SAMASK, "0"))) urls.add(ShellCore.pageUrlAsk("asksam", sam));
+        if (!"1".equals(store.get(ShellCore.K_OVLASK, "0"))) urls.add(ShellCore.pageUrlAsk("askovl", sam));
+        if (urls.isEmpty()) return;
+        new Thread(new Runnable() { @Override public void run() {
+            for (String u : urls) {
+                try {
+                    NetPost.Res r = NetPost.get(u, 8000);
+                    if (r.status == 200 && r.body.indexOf("\"body\"") > 0) { warm(r.body); tpPut(u, r.body); }
+                } catch (Throwable ignored) { }
+            }
+        } }, "shell-setpre").start();
+    }
     private void setupResume() {
+        setupPrefetch();
         if (setupPhase == 1) {
             setupPhase = 2;
             main.postDelayed(new Runnable() { @Override public void run() { PowerInfo.requestIgnore(ShellActivity.this); } }, 350L);   // 삼성 목록에서 돌아오면 기기 허용 창
