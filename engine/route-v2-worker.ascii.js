@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-10-30s353";
+var ENGINE_VERSION = "route-v2-2026-10-31s362";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -22500,7 +22500,7 @@ function mapTimetableSheet(f, cap) {
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
   // \uba38\ub9ac(\uc81c\ubaa9\uc904\u00b7\uce69\u00b7\uc694\uc57d)\ub294 head \uc5d0 \ub46c \uc2a4\ud06c\ub864\ud574\ub3c4 \uc81c\uc790\ub9ac\uc5d0 \uace0\uc815\ud55c\ub2e4(\uc6f9 #nmTtSheet \uc758 \uba38\ub9ac + \ub530\ub85c \uc2a4\ud06c\ub864\ud558\ub294 #nmTtBody). \ub2eb\uae30 \ub2e8\ucd94\ub294 \uc5c6\ub2e4 \u2014 \uc544\ub798\ub85c \ub04c\uc5b4 \ub2eb\ub294\ub2e4.
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' \uc2dc\uac04\ud45c' }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 12], rw: MAP_PLAY_RW, mq: true, title: name + ' \uc2dc\uac04\ud45c' }];                 // s362 (YJ: \ub180\uc774\ud130 \uc560\ub2c8\uba54\uc774\uc158\uacfc \ub178\uc120 \uce69\uc774 \ubd99\uc5b4 \ubcf4\uc778\ub2e4): \uc544\ub798 \uc5ec\ubc31 4 \u2192 12 \u2014 \ub180\uc774\ud130 \uce78(\uc81c\ubaa9 \uc904 \uc704\ub85c 24 + \ub192\uc774 70)\uc774 \uce69 \uc904\uc5d0 \ub2ff\uc9c0 \uc54a\uac8c(\uc5ed \ud31d\uc5c5 \uc774\ub984 \uc904\ub3c4 12)
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
