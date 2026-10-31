@@ -216,7 +216,7 @@ function mapTimetableSheet(f, cap) {
   var d = res[line + '|' + (day || '-')] || null;
   if (!day && d && d.dayCode) day = d.dayCode;
   // 머리(제목줄·칩·요약)는 head 에 둬 스크롤해도 제자리에 고정한다(웹 #nmTtSheet 의 머리 + 따로 스크롤하는 #nmTtBody). 닫기 단추는 없다 — 아래로 끌어 닫는다.
-  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 4], rw: MAP_PLAY_RW, mq: true, title: name + ' 시간표' }];
+  var kids = [{ t: 'bar', pad: [0, MAP_STN_TOP, 0, 12], rw: MAP_PLAY_RW, mq: true, title: name + ' 시간표' }];                 // s362 (YJ: 놀이터 애니메이션과 노선 칩이 붙어 보인다): 아래 여백 4 → 12 — 놀이터 칸(제목 줄 위로 24 + 높이 70)이 칩 줄에 닿지 않게(역 팝업 이름 줄도 12)
   if (lines.length) kids.push({ t: 'chips', pad: [0, 4, 0, 6], gap: 6, h: 30, onc: 'gold', onfg: '#ffffff', items: lines.map(function (l, i) {
     var kc = res[l + '|-'], nod = !!(kc && kc.noData);
     var o = { label: l, on: l === line, act: { a: 'call', v: 'mt.l.' + i } };
