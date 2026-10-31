@@ -607,6 +607,13 @@ function findAndroidJar() {
     assert.ok(/getIdentifier\(dk \? "GdmPickerDark" : "GdmPickerPastel", "style", getPackageName\(\)\)/.test(a) && /new android\.app\.DatePickerDialog\(this, pt,/.test(a) && /new android\.app\.TimePickerDialog\(ShellActivity\.this, pt,/.test(a), '날짜 · 시각 둘 다 같은 스타일');
     assert.ok(/pickRound\(dpd\)/.test(a) && /pickRound\(tpd\)/.test(a) && /setCornerRadius\(20f \* dpr\)/.test(a) && /setClipToOutline\(true\)/.test(a), '둥근 모서리 바탕');
   });
+  await t('s362: 버스 도착정보가 비어 오면(받았지만 빔) 탭 안에서 조용히 다시 받는다 — 탭을 다녀와야 나아지던 것', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/public int emptyArrCount\(\)/.test(mc) && /coreKey\(e\.getKey\(\)\) && NetPost\.busEmpty\(e\.getValue\(\)\)/.test(mc), 'a · f 중 받았지만 빈 것을 센다');
+    assert.ok(/BUS_EMPTY_WAIT = \{ 1500L, 3000L, 4500L, 8000L, 8000L, 12000L \}/.test(a) && /private void busEmptyCheck\(\)/.test(a), '1.5 · 3 · 4.5 · 8 · 8 · 12초 간격, 여섯 번까지');
+    assert.ok(/else if \(map\.svFail == 0 && busBadFetch == 0\) \{ busRetryN = 0; busEmptyCheck\(\); \}/.test(a), '도착정보 받기가 끝난 자리에서 빈 곳이 남았는지 본다');
+    assert.ok(/busRetryN = 0; busEmptyN = 0; main\.removeCallbacks\(busEmptyRun\);/.test(a) && /if \(busShowing\(\) && !busRefreshing && map\.emptyArrCount\(\) > 0\) busRefresh\(\);/.test(a), '탭을 다시 열면 처음부터 · 보이는 동안에만 다시 받는다');
+  });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/private boolean reviveRide\(\)/.test(a) && /RideService\.running\) && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)|!RideService\.running && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)/.test(a) && /reviveRide\(\);\s*rsApply\.run\(\)/.test(a), '앞으로 돌아오면 저장된 탑승 안내를 되살린다');
