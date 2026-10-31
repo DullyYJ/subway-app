@@ -207,6 +207,12 @@ public final class MapCore {
     public int fillFromStash() { int c = 0; for (Map.Entry<String, String> e : arrStash.entrySet()) if (!busRes.containsKey(e.getKey())) { busRes.put(e.getKey(), e.getValue()); c++; } return c; }
     public void restoreArrivals() { if (!arrStash.isEmpty()) { busRes.putAll(arrStash); arrAt = arrStashAt; arrStash.clear(); } busNeed.clear(); }
     public void commitArrivals() { arrStash.clear(); }
+    /** s362: 받았지만 비어 있는(공공 API 가 '버스 없음'을 준) 본문 도착정보(a · f) 주소 수. 통신 실패(빈 본문)와 달리 지금까지는 아무도 다시 받지 않아 "도착정보 없음"이 탭을 떠났다 돌아올 때까지 남았다. */
+    public int emptyArrCount() {
+        int n = 0;
+        for (Map.Entry<String, String> e : busRes.entrySet()) if (coreKey(e.getKey()) && NetPost.busEmpty(e.getValue())) n++;
+        return n;
+    }
     // ── 도착정보 미리 받기(투기적 선(先)받기): 엔진이 지난번에 "이 주소들을 받아 와라" 한 도착정보 주소(a0.. · f0..)를 기억해 두었다가, 같은 정류장 목록 · 같은 보기이면
     //    엔진에게 "무엇을 받을까"를 다시 묻지 않고 곧장 받아 한 번에 그리게 한다(엔진 왕복 1회 절약). 주소를 만드는 것은 여전히 엔진 — 앱은 엔진이 준 주소를 되쓸 뿐이다.
     //    정류장 목록 · 보기 · 즐겨찾기가 하나라도 달라졌으면(열쇠가 다르면) 쓰지 않는다 — 다른 정류장의 도착정보가 섞이지 않게.
