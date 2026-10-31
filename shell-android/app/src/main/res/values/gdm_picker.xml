@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 날짜 · 시각 고르기 대화상자를 앱 색에 맞춘다(ShellCore.palette 의 pastel / dark 와 같은 색). 이름으로 찾아 쓴다(ShellActivity.pickTheme). -->
+<resources>
+    <style name="GdmPickerPastel" parent="android:Theme.Material.Light.Dialog">
+        <item name="android:colorAccent">#0E7DD6</item>
+        <item name="android:colorControlActivated">#0E7DD6</item>
+        <item name="android:colorPrimary">#0E7DD6</item>
+        <item name="android:textColorPrimary">#1A2533</item>
+        <item name="android:textColorSecondary">#6B8299</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+    <style name="GdmPickerDark" parent="android:Theme.Material.Dialog">
+        <item name="android:colorAccent">#B8922F</item>
+        <item name="android:colorControlActivated">#B8922F</item>
+        <item name="android:colorPrimary">#B8922F</item>
+        <item name="android:textColorPrimary">#F2F2F7</item>
+        <item name="android:textColorSecondary">#8E8E93</item>
+        <item name="android:windowBackground">#1C1C1E</item>
+    </style>
+</resources>
