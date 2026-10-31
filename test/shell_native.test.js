@@ -220,7 +220,7 @@ function findAndroidJar() {
   });
   await t('맛집 가게 지도 펼침(웹 _foodShowMap): 가게를 누르면 팝업 대신 카드 바로 아래 펼침 · 경로 주소는 엔진이 정하고 앱은 받아 오기만 · 같은 카드를 또 누르면 접음 · 목록 캐시에는 펼침을 넣지 않음', async () => {
     const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), fc = fs.readFileSync(N('FoodCore.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');
-    assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,500}foodPanelRound\(\)/.test(sa) && !/case FoodCore\.R_SHEET: openFoodSheet/.test(sa), '가게 누름은 펼침(팝업 아님)');
+    assert.ok(/case FoodCore\.R_PANEL: \{[\s\S]{0,800}foodPanelRound\(\)/.test(sa) && !/case FoodCore\.R_SHEET: openFoodSheet/.test(sa), '가게 누름은 펼침(팝업 아님)');
     assert.ok(/R_UNPANEL/.test(sa) && /k\.equals\(openKey\)/.test(fc), '같은 카드를 또 누르면 접는다');
     assert.ok(/food\.panelNeed/.test(sa) && /NetPost\.get\(nd\[1\]/.test(sa) && /u\.startsWith\("https:\/\/"\)/.test(fc), '경로 주소는 엔진이 준 https 만 받아 온다');
     assert.ok(!/valhalla|osrm/i.test(sa + fc), '앱에는 경로 서버 주소·계산이 없다(엔진이 정한다)');
@@ -589,6 +589,23 @@ function findAndroidJar() {
     assert.ok(/w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(a) && /w\.setWindowAnimations\(0\)/.test(a), '창은 화면 전체(투명) · 카드만 움직여 잘리지 않는다');
     assert.ok(/private void setupPrefetch\(\)/.test(a) && /setupPrefetch\(\);\s*if \(setupPhase == 1\)/.test(a) && /tpPut\(u, r\.body\)/.test(a), '안내 글을 알림 허용 창이 떠 있는 동안 미리 받는다');
     assert.ok(/if \(r == ShellCore\.PG_LOCOK\) \{ closeSheetOut\(\);/.test(a) && /String pg = setPage; closeSheetOut\(\); askDone\(/.test(a) && /if \(popLeaving\) return;/.test(a), '단추를 누르면 아래로 사라지며 닫히고 중복 눌림은 막는다');
+  });
+  await t('s360: 맛집 가게 지도 — 카드 아래로 미끄러지며 펼쳐지고 · 열려 있던 다른 지도는 위로 접히며 사라지고 · 뼈대는 같은 자리에서 서서히 내용으로 바뀐다(그리는 일만)', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/public void slideStruct\(String oldAfter, String newAfter, long ms\)/.test(sv) && /private static int\[\] sdFind\(ScreenCore\.Layout L, String after\)/.test(sv) && /f\.kind != ScreenCore\.K_PANEL && f\.kind != ScreenCore\.K_SKEL\) return null;/.test(sv), '묶음 = 앞 카드 바로 뒤의 패널 또는 뼈대');
+    assert.ok(/if \(sdOld != null\) sdApply\(sdOld, sdPrev\[0\], sdO, sdN, sdOg, sdOtop, sdOh, sdMs\);/.test(sv) && /nowSp - sdPendAt < 1500L/.test(sv), '1.5초 안에 오는 같은 목록 갱신에만');
+    assert.ok(/final boolean inGrp = shOn && i >= sdA && i < sdB;/.test(sv) && /cv\.clipRect\(0f, sdTopN - 2f, w, gb\)/.test(sv) && /sdTopN \+ sdHFrom \+ \(sdHN - sdHFrom\) \* ge/.test(sv), '새 묶음은 열리는 만큼만 보이고 아래 카드들과 같은 곡선으로 내려간다');
+    assert.ok(/for \(ScreenCore\.Item gi : sdGh\) drawItem\(cv, gi\);/.test(sv) && /cv\.translate\(0f, -sdShyO \* ge\)/.test(sv) && /Math\.round\(255f \* \(1f - ge\)\)/.test(sv), '접히는 묶음은 위로 줄어들며 사라진다');
+    assert.ok(/shDur = ms;/.test(sv) && /private float shE\(long now\) \{ float f = \(now - shT0\) \/ shDur;/.test(sv), '움직임 길이는 하나의 시계(shT0)로 — 칸 이동 · 펼침 · 접힘이 함께 끝난다');
+    assert.ok(/foodSlide = true;\s*\/\/ 펼침/.test(a) && /case FoodCore\.R_UNPANEL: case FoodCore\.R_CLOSE: foodSlide = true;/.test(a) && /v\.slideStruct\(foodShownAfter, food\.panelAfter, 400L\)/.test(a) && /v\.slideStruct\(foodShownAfter, "", 400L\)/.test(a), '펼침 · 접힘 · 내용 도착 때만 미끄러진다(8초 갱신은 그대로)');
+  });
+  await t('s361: 기준시각 달력 · 시각 대화상자가 앱 테마(pastel 파랑 · dark 금색 · 둥근 카드 바탕)로 나온다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const x = fs.readFileSync(path.join(ROOT, 'shell-android/app/src/main/res/values/gdm_picker.xml'), 'utf8');
+    assert.ok(/name="GdmPickerPastel" parent="android:Theme\.Material\.Light\.Dialog"/.test(x) && /name="GdmPickerDark" parent="android:Theme\.Material\.Dialog"/.test(x), '밝은/어두운 대화상자 스타일 두 개');
+    assert.ok(/colorAccent">#0E7DD6/.test(x) && /colorAccent">#B8922F/.test(x), 'ShellCore.palette 의 nav 색(pastel 0E7DD6 · dark B8922F)과 같아야 한다');
+    assert.ok(/getIdentifier\(dk \? "GdmPickerDark" : "GdmPickerPastel", "style", getPackageName\(\)\)/.test(a) && /new android\.app\.DatePickerDialog\(this, pt,/.test(a) && /new android\.app\.TimePickerDialog\(ShellActivity\.this, pt,/.test(a), '날짜 · 시각 둘 다 같은 스타일');
+    assert.ok(/pickRound\(dpd\)/.test(a) && /pickRound\(tpd\)/.test(a) && /setCornerRadius\(20f \* dpr\)/.test(a) && /setClipToOutline\(true\)/.test(a), '둥근 모서리 바탕');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
@@ -1045,7 +1062,7 @@ function findAndroidJar() {
     {
       const aa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
       assert.ok(/public float shy, shh;/.test(sc) && /private java\.util\.HashMap<String, float\[\]> shSnap\(\)/.test(sv) && /if \(shOld != null\) shApply\(shOld\);/.test(sv) && /editKey != null && lay != null \? shSnap\(\) : null/.test(sv), 's347: 글자를 치는 중 화면이 바뀌면 옛 자리를 적어 두었다가 새 자리로 미끄러진다');
-      assert.ok(/sdy \+= bit\.shy \* sr; gh \+= bit\.shh \* sr;/.test(sv) && /SH_MS = 240f/.test(sv) && /if \(shOn\) \{ if \(shE\(now\) >= 1f\) shOn = false; else \{ spAnim = true; fmg = Math\.max\(fmg, shMax\)/.test(sv) && /sdy \+= foldDy/.test(sv), 's347: 아래 칸은 옛 자리에서 240ms 로 미끄러지고 틀 높이도 같이 변하며, 접기 애니메이션과 합쳐진다');
+      assert.ok(/sdy \+= bit\.shy \* sr; gh \+= bit\.shh \* sr;/.test(sv) && /SH_MS = 240f/.test(sv) && /if \(shOn\) \{ if \(shE\(now\) >= 1f\) \{ shOn = false; sdA = 0; sdB = 0; sdGh = null; \} else \{ spAnim = true; fmg = Math\.max\(fmg, shMax\)/.test(sv) && /sdy \+= foldDy/.test(sv), 's347: 아래 칸은 옛 자리에서 240ms 로 미끄러지고 틀 높이도 같이 변하며, 접기 애니메이션과 합쳐진다');
       assert.ok(/smoothScrollTo\(want\)/.test(sv) && /ensureEditVisible\(f, true\)/.test(sv) && /if \(editKey != null\) syncLater\(\);\s*\/\/ s347/.test(sv), 's347: 후보 줄 때문에 스크롤할 때도 부드럽게, 글자 칸 위의 입력칸이 따라온다');
       assert.ok(/w == ow && oh > 0 && lay != null && screen != null && "settings"\.equals\(screen\.id\)/.test(sv), 's347: 키보드가 오르내리며 높이만 바뀔 땐 설정 화면 전체를 다시 배치하지 않는다');
       assert.ok(/v\.springChanges\(400L\);[^\n]*\n\s*present\(v, txt, true\);/.test(aa), 's347: 새 후보 줄은 스프링으로 나타난다');
