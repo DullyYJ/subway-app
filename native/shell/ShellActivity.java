@@ -2370,6 +2370,7 @@ public class ShellActivity extends Activity {
         if (!"call".equals(a.a)) return;
         switch (food.act(a.v, a.id)) {                                         // a.id = 엔진이 눌림에 실어 준 가게 사실(없으면 번호표)
             case FoodCore.R_PANEL: {
+                foodSlide = true;                                                              // 펼침 · (열려 있던 다른 가게의) 접힘은 미끄러지며
                 if (panelCacheGet(food.panelRequest(ShellCore.CAP)) == null) {                  // 미리 받아 둔 답이 없으면 자리(뼈대)부터 바로 펼치고 답이 오면 그 자리에서 바뀐다
                     final String pk = food.openKey;
                     food.showPanelSkeleton();
@@ -2379,7 +2380,7 @@ public class ShellActivity extends Activity {
                 foodPanelRound();
                 break;
             }
-            case FoodCore.R_UNPANEL: case FoodCore.R_CLOSE: food.closePanel(); foodRedraw(); break;
+            case FoodCore.R_UNPANEL: case FoodCore.R_CLOSE: foodSlide = true; food.closePanel(); foodRedraw(); break;
             case FoodCore.R_LINK: {
                 String[] ln = food.sheetLink(a.v);
                 if (ln != null && "fm.ki".equals(a.v)) openKakaoPlace(ln); else if (ln != null) openExternal(ln[0], ln[1]);
@@ -2390,11 +2391,13 @@ public class ShellActivity extends Activity {
     }
     /** 목록 화면 글을 보이되, 가게 지도가 펼쳐져 있으면 엔진이 만든 펼침을 그 카드 뒤에 끼운다(캐시에는 펼침 없는 글만 남는다). */
     private String foodBase = "";
+    private boolean foodSlide; private String foodShownAfter = "";          // s360: 가게 지도 펼침/접힘 — 이번 다시 그리기가 묶음 바뀜(미끄러짐)인지 · 마지막으로 그린 묶음의 앞 카드
     private int seqFoodP; private Runnable foodAfter;          // 끼운 글이 올라온 직후 한 번 할 일(펼침이 보이게 스크롤)
     private void foodPresent(final ScreenView v, final String txt, final boolean keep) {
         if (txt == null || txt.length() == 0) { present(v, txt, keep); return; }
         if (!isNotMod(txt)) { foodBase = txt; main.removeCallbacks(foodPfRun); main.postDelayed(foodPfRun, 1200L); }
-        if (food.openKey.length() == 0 || isNotMod(txt)) { present(v, txt, keep); return; }
+        final boolean sl = foodSlide && !isNotMod(txt); foodSlide = false;
+        if (food.openKey.length() == 0 || isNotMod(txt)) { if (sl && foodShownAfter.length() > 0) v.slideStruct(foodShownAfter, "", 400L); if (!isNotMod(txt)) foodShownAfter = ""; present(v, txt, keep); return; }          // 접힘: 열려 있던 묶음이 위로 접히며 사라진다
         final int my = ++seqFoodP;
         final String base = foodBase;
         foodRender.execute(new Runnable() { @Override public void run() {                       // 목록 화면에 펼침을 끼우는 읽기·글 만들기는 주 스레드 밖에서
@@ -2404,7 +2407,7 @@ public class ShellActivity extends Activity {
             final ScreenCore.Screen scr = pre;
             main.post(new Runnable() { @Override public void run() {
                 if (my != seqFoodP) return;
-                if (scr != null) { v.setScreen(scr, keep); shownJson.put(v, withP); shownKey.remove(v); Runnable fa = foodAfter; foodAfter = null; if (fa != null) fa.run(); return; }
+                if (scr != null) { if (sl) v.slideStruct(foodShownAfter, food.panelAfter, 400L); foodShownAfter = food.panelAfter; v.setScreen(scr, keep); shownJson.put(v, withP); shownKey.remove(v); Runnable fa = foodAfter; foodAfter = null; if (fa != null) fa.run(); return; }
                 present(v, txt, keep);
             } });
         } });
@@ -2432,6 +2435,7 @@ public class ShellActivity extends Activity {
         final boolean first = food.panelNodes == null;
         if (!food.onPanel(txt)) { if (food.panelNodes == null || food.panelSkel) { food.closePanel(); foodRedraw(); toast("가게 지도를 열지 못했어요"); } return; }
         if (first) foodAfter = new Runnable() { @Override public void run() { body.revealBelow("fm." + key); } };
+        foodSlide = true;                                                                  // 뼈대 → 진짜 내용(또는 미리 받아 둔 내용으로 바로 펼침)도 미끄러지며
         foodRedraw();
         final java.util.List<String[]> need = new java.util.ArrayList<String[]>(food.panelNeed);
         if (need.isEmpty()) return;
@@ -4337,14 +4341,21 @@ public class ShellActivity extends Activity {
         setupSoon();                                                                 // 위치 창이 닫혔다 — 다음 승인(배터리 안내)으로
     }
 
-    // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자)
+    // 기준시각: 날짜 → 시각 고르기(네이티브 대화상자). s361: 앱 테마(pastel 파랑 · dark 금색 · 둥근 모서리)에 맞춘다 — res/values/gdm_picker.xml. 못 찾으면 기본 밝은 대화상자.
+    private int pickTheme() {
+        boolean dk = "dark".equals(ShellCore.theme(store));
+        int id = 0;
+        try { id = getResources().getIdentifier(dk ? "GdmPickerDark" : "GdmPickerPastel", "style", getPackageName()); } catch (Throwable ignored) { }
+        return id != 0 ? id : (dk ? android.R.style.Theme_Material_Dialog : android.R.style.Theme_Material_Light_Dialog);
+    }
     private void pickBase() {
         if (rideLocked()) return;
         final Calendar c = Calendar.getInstance();
         if (home.baseMs >= 0) c.setTimeInMillis(home.baseMs);
-        new android.app.DatePickerDialog(this, new android.app.DatePickerDialog.OnDateSetListener() {
+        final int pt = pickTheme();
+        android.app.DatePickerDialog dpd = new android.app.DatePickerDialog(this, pt, new android.app.DatePickerDialog.OnDateSetListener() {
             @Override public void onDateSet(android.widget.DatePicker dp, final int y, final int m, final int d) {
-                new android.app.TimePickerDialog(ShellActivity.this, new android.app.TimePickerDialog.OnTimeSetListener() {
+                final android.app.TimePickerDialog tpd = new android.app.TimePickerDialog(ShellActivity.this, pt, new android.app.TimePickerDialog.OnTimeSetListener() {
                     @Override public void onTimeSet(android.widget.TimePicker tp, int h, int mi) {
                         Calendar x = Calendar.getInstance();
                         x.set(y, m, d, h, mi, 0); x.set(Calendar.MILLISECOND, 0);
@@ -4352,9 +4363,19 @@ public class ShellActivity extends Activity {
                         if (home.hasRoute() && home.bothSet()) goRoute();          // 결과를 보는 중에 기준시각을 바꾸면 그 시각으로 다시 찾는다
                         else reloadHome();
                     }
-                }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false).show();
+                }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), false);
+                tpd.show(); pickRound(tpd);
             }
-        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show();
+        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH));
+        dpd.show(); pickRound(dpd);
+    }
+    private void pickRound(android.app.Dialog d) {                                   // 대화상자 바탕을 앱 카드 색 + 둥근 모서리로
+        try {
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setColor(ShellCore.palette(ShellCore.theme(store))[1]); g.setCornerRadius(20f * dpr);
+            d.getWindow().setBackgroundDrawable(g);
+            d.getWindow().getDecorView().setClipToOutline(true);                       // 맨 위 색 띠도 둥근 모서리 안으로
+        } catch (Throwable ignored) { }
     }
 
     /** 경로 탐색: 좌표가 있는 두 장소로 경로 서버에 묻는다. 빠른 응답(live=0)을 먼저 그리고, 엔진의 follow 지시대로 전체를 뒤따라 받는다. */
