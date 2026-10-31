@@ -149,6 +149,7 @@ ok(E.mapScreen({ cap: 17 }, {}, {}).ok === false && E.mapScreen({}, {}, {}).ok =
   ok(t.info.need && t.info.need.day === 'SAT', '요일 고르면 그 응답이 없을 때 앱이 받아야 할 것을 알려 준다');
   t = call({ part: 'tt', stn: '강남', tt: { st: 'loading', res: {} } });
   ok(/불러오는 중/.test(strs(t.body)) && t.info.need && t.info.need.line && t.head.length >= 2 && t.head[0].t === 'bar', '불러오는 중(제목줄·칩은 머리에 고정)');
+  ok(t.head[0].pad[3] === 12 && t.head[1].t === 'chips', 's362: 시간표 제목 줄 아래 여백 12 — 놀이터 애니메이션(제목 줄 위 24 + 높이 70)이 노선 칩 줄에 닿지 않는다 ' + JSON.stringify(t.head[0].pad));
   { const L = (st, res) => E.mapScreen({ cap: 26 }, { part: 'tt', stn: '강남', tt: { st, res } }).body.filter(n => n.t === 'lbar');
     const l1 = L('loading', {}), l2 = L('ok', {}), l3 = L('fail', {}), l4 = L('ok', { [lines[0] + '|-']: { noData: true } });
     ok(l1.length === 1 && /불러오는 중/.test(l1[0].ttl) && l2.length === 1 && l3.length === 0 && l4.length === 0, 's254: 자료를 아직 못 받았으면(받는 중 · 아직 요청 전) 불러오는 중 막대 · 실패/자료 없음 확정이면 아님');
