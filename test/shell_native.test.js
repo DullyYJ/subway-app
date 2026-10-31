@@ -513,7 +513,7 @@ function findAndroidJar() {
     assert.ok(!/K_OVL, "0"\)\)/.test(a) && /ShellCore\.ovlOn\(/.test(rs), '오버레이 읽는 곳 모두 ovlOn');
     const f = a.slice(a.indexOf('private void ovlHintOnce()'), a.indexOf('private void restoreRideCard()'));
     assert.ok(/appFront/.test(rs) && /on = on && !appFront;/.test(rs) && /RideService\.setAppFront\(true\)/.test(a) && /RideService\.setAppFront\(false\)/.test(a), '오버레이 창은 앱이 화면에 있는 동안 숨긴다');
-    assert.ok(/openSetPage\("askovl"\)/.test(f) && /ovlAskedRun/.test(f) && /RideService\.rsAct\("open"\)/.test(f) && /rsOpenSoon\(\);/.test(a), '확정하면 허용 안내(이번 실행 한 번) · 탑승 시트 열기');
+    assert.ok(/openSetPage\("askovl"\)/.test(a) && /store\.put\(ShellCore\.K_OVLASK, "0"\)/.test(f) && /setupLateOn\(true\)/.test(f) && /ovlAskedRun/.test(f) && /RideService\.rsAct\("open"\)/.test(f) && /rsOpenSoon\(\);/.test(a), '확정하면 허용 안내(이번 실행 한 번) · 탑승 시트 열기');
   });
   await t('s184: 오버레이 웹 규칙 — 접힌 알약은 1정거장 전·새 추천에만 펼침(맨 위로 갔다 원위치) · 2정거장 전 알약 무지개 6초 · 추천 줄 오른쪽에서 1.15초 입장', () => {
     const o = fs.readFileSync(N('RideOverlay.java'), 'utf8'), oc = fs.readFileSync(N('OvCore.java'), 'utf8');
@@ -587,8 +587,17 @@ function findAndroidJar() {
     assert.ok(/box\.setAlpha\(0f\); box\.setTranslationY\(-34f \* dpr\);/.test(a) && /translationY\(0f\)\.setDuration\(440L\)/.test(a) && /alpha\(0f\)\.translationY\(30f \* dpr\)/.test(a), '위에서 아래로 내려앉고, 닫힐 땐 더 아래로');
     assert.ok(/popResize\(dp\); popRevealSoon\(\);/.test(a) && /if \(popSlide && popBox != null\) \{/.test(a), '글 높이가 정해진 뒤에야 나타난다(빈 상자 · 크기 뜀 없음)');
     assert.ok(/w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(a) && /w\.setWindowAnimations\(0\)/.test(a), '창은 화면 전체(투명) · 카드만 움직여 잘리지 않는다');
-    assert.ok(/private void setupPrefetch\(\)/.test(a) && /setupPrefetch\(\);\s*if \(setupPhase == 1\)/.test(a) && /tpPut\(u, r\.body\)/.test(a), '안내 글을 알림 허용 창이 떠 있는 동안 미리 받는다');
+    assert.ok(/private void setupPrefetch\(boolean late\)/.test(a) && /setupPrefetch\(false\);\s*if \(setupPhase == 1\)/.test(a) && /tpPut\(u, r\.body\)/.test(a), '안내 글을 알림 허용 창이 떠 있는 동안 미리 받는다');
     assert.ok(/if \(r == ShellCore\.PG_LOCOK\) \{ closeSheetOut\(\);/.test(a) && /String pg = setPage; closeSheetOut\(\); askDone\(/.test(a) && /if \(popLeaving\) return;/.test(a), '단추를 누르면 아래로 사라지며 닫히고 중복 눌림은 막는다');
+  });
+  await t('s358: 처음 켤 땐 알림 · 위치만 — 배터리 · 절전 · 다른 앱 위 안내는 첫 경로 확정 · 출퇴근 알람을 켠 뒤로 미룬다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    const sn = a.slice(a.indexOf('private void setupNext()'), a.indexOf('private void askDone('));
+    assert.ok(sn.indexOf('K_NOTIFASK, "0"') < sn.indexOf('K_GPSASK, "0"') && sn.indexOf('K_GPSASK, "0"') < sn.indexOf('if (!setupLate && !CmCore.on(store)) return;') && sn.indexOf('if (!setupLate && !CmCore.on(store)) return;') < sn.indexOf('!"1".equals(store.get(ShellCore.K_BATASK'), '알림 → 위치까지 하고, 그 뒤 단계는 첫 기능을 쓴 뒤에만');
+    assert.ok(/batSettled && setupOvl && RideOverlay\.supported\(\)/.test(sn) && /!"0"\.equals\(store\.get\(ShellCore\.K_OVL, ""\)\)/.test(sn), '다른 앱 위 안내는 경로 확정 때만 · 일부러 끈 사람에게는 묻지 않는다');
+    assert.ok(/private void setupLateOn\(boolean ovl\)/.test(a) && /ovlAuto\(\);\s*try \{[^\n]*\n\s*setupLateOn\(true\);/.test(a), '첫 경로 확정이 배터리 → (갤럭시) 절전 → 다른 앱 위 순서를 시작한다');
+    assert.equal((a.match(/if \(CmCore\.on\(store\)\) setupLateOn\(false\);/g) || []).length, 3, '출퇴근 알람을 켜거나 바꿀 때 배터리 안내를 시작한다(세 곳)');
+    assert.ok(/private void setupPrefetch\(boolean late\)/.test(a) && /setupPrefetch\(true\);/.test(a), '안내 글은 단계별로 미리 받는다');
   });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
