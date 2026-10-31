@@ -209,7 +209,7 @@ function findAndroidJar() {
     const br = v.slice(v.indexOf('private static final long BR_POLL_MS'), v.indexOf('private void closeSheet()'));
     assert.ok(/BR_POLL_MS = 8000L/.test(br) && /BR_CACHE_MS = 7L \* 24L/.test(br) && /brc_/.test(br), '8초 · 정류장 7일 보관');
     assert.ok(/private boolean brShowing\(\) \{ return resumed && brAlive/.test(br) && /if \(!brShowing\(\)\) return;/.test(br), '앞에 있을 때만 돈다(없으면 다시 걸지 않는다)');
-    assert.ok(/private void closeSheet\(\) \{ if \(mapView != null\) mapView\.setCover\(0f\); detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; chatLive\.cancel\(\); chatLiveTok = null; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
+    assert.ok(/private void closeSheet\(\) \{[^\n]*?if \(mapView != null\) mapView\.setCover\(0f\); detLoading = null; brStop\(\);/.test(v) && /private void brStop\(\) \{ main\.removeCallbacks\(brTick\)/.test(br) && /onPause\(\) \{ resumed = false; chatLive\.cancel\(\); chatLiveTok = null; trackStop\(\); if \(vec != null\) vec\.onPause\(\); main\.removeCallbacks\(brTick\)/.test(v) && /brResume\(\); if \(ShellCore\.S_SETPG/.test(v), '닫기·뒤로가기·onPause 에서 즉시 멈추고 onResume 에서만 다시');
     assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{\s*if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
     assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
@@ -581,11 +581,20 @@ function findAndroidJar() {
     assert.ok(/rloadHideSoon\(\);/.test(a) && /if \(rloadWantHide && home\.hasRoute\(\)\) rloadHide\(\);/.test(a), '로딩 카드는 결과가 올라온 직후에 닫는다(받자마자 닫아 빈 화면이 보이지 않게)');
     assert.ok(/tc\.join\(hcFor\.startsWith\(\"r\" \+ home\.routeId \+ \"#\"\) \? 1500L : 500L\);/.test(a) && /cardsLate\.get\(\) && nj\.length\(\) > 0/.test(a), '경로 결과가 준비됐는데 홈 카드가 늦으면 0.5초만 기다리고 결과부터 올린다(카드는 도착하는 대로 끼운다 — s343: 같은 경로에서 탭·편을 넘길 때만 1.5초)');
   });
+  await t('s357: 처음 설치 안내 창 — 글이 준비된 뒤에만 위에서 아래로 내려앉고 · 닫힐 땐 더 아래로 사라지고 · 안내 글은 미리 받아 둔다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/private boolean slidePop\(String page\) \{ return "locd"\.equals\(page\) \|\| ShellCore\.isAskPage\(page\); \}/.test(a), '위치 · 설치 안내만 움직인다');
+    assert.ok(/box\.setAlpha\(0f\); box\.setTranslationY\(-34f \* dpr\);/.test(a) && /translationY\(0f\)\.setDuration\(440L\)/.test(a) && /alpha\(0f\)\.translationY\(30f \* dpr\)/.test(a), '위에서 아래로 내려앉고, 닫힐 땐 더 아래로');
+    assert.ok(/popResize\(dp\); popRevealSoon\(\);/.test(a) && /if \(popSlide && popBox != null\) \{/.test(a), '글 높이가 정해진 뒤에야 나타난다(빈 상자 · 크기 뜀 없음)');
+    assert.ok(/w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(a) && /w\.setWindowAnimations\(0\)/.test(a), '창은 화면 전체(투명) · 카드만 움직여 잘리지 않는다');
+    assert.ok(/private void setupPrefetch\(\)/.test(a) && /setupPrefetch\(\);\s*if \(setupPhase == 1\)/.test(a) && /tpPut\(u, r\.body\)/.test(a), '안내 글을 알림 허용 창이 떠 있는 동안 미리 받는다');
+    assert.ok(/if \(r == ShellCore\.PG_LOCOK\) \{ closeSheetOut\(\);/.test(a) && /String pg = setPage; closeSheetOut\(\); askDone\(/.test(a) && /if \(popLeaving\) return;/.test(a), '단추를 누르면 아래로 사라지며 닫히고 중복 눌림은 막는다');
+  });
   await t('s188: 경로 확정이 홈에 다녀와도 풀리지 않는다 · 설치 안내는 가운데 팝업 · 엔진이 모르는 안내는 "물었다"로 굳지 않는다 · 안 받아 둔 탭은 다시 채운다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/private boolean reviveRide\(\)/.test(a) && /RideService\.running\) && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)|!RideService\.running && \(System\.currentTimeMillis\(\) < rideGraceUntil \|\| reviveRide\(\)\)/.test(a) && /reviveRide\(\);\s*rsApply\.run\(\)/.test(a), '앞으로 돌아오면 저장된 탑승 안내를 되살린다');
     const o = a.slice(a.indexOf('private void openSetPage('), a.indexOf('private void loadSetPage()'));
-    assert.ok(/pop = "locd"\.equals\(page\) \|\| "cmb"\.equals\(page\) \|\| tpPop \|\| ShellCore\.isAskPage\(page\)/.test(o) && /Theme_Material_Light_Dialog_NoActionBar/.test(o) && /setDimAmount\(0\.68f\)/.test(o) && /Gravity\.CENTER/.test(o) && /setCancelable\((false|soft)\)/.test(o), '위치 · 설치 안내는 가운데 어두운 팝업(웹 .68)');
+    assert.ok(/pop = "locd"\.equals\(page\) \|\| "cmb"\.equals\(page\) \|\| tpPop \|\| ShellCore\.isAskPage\(page\)/.test(o) && /Theme_Material_Light_Dialog_NoActionBar/.test(o) && /setDimAmount\(sp \? 0f : 0\.68f\)/.test(o) && /Gravity\.CENTER/.test(o) && /setCancelable\((false|soft)\)/.test(o), '위치 · 설치 안내는 가운데 어두운 팝업(웹 .68)');
     assert.ok(/popResize\(dp\)/.test(a) && /private void popResize\(float dp\)/.test(a), '팝업 높이는 화면이 정한 글 높이에 맞춘다');
     assert.ok(/askUnburn\(setPage\); setupNoEngine = true;/.test(a) && /setupNoEngine \|\| setupPhase != 0/.test(a) && /K_SETUPV, ""\)\)\) \{ store\.put\(ShellCore\.K_SETUPV, "2"\)/.test(a) && /K_SETUPV = "setup_v"/.test(sc), '엔진이 모르는 안내는 건너뛰되 표시는 지우고 · 한 번 되돌린다');
     assert.ok(/RideService\.running && RideService\.liveRide\.length\(\) < 3\) return;/.test(a), '서비스가 돌지만 첫 값이 아직이면 확정을 지우지 않는다');
@@ -1025,7 +1034,7 @@ function findAndroidJar() {
     {
       const aa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
       assert.ok(!/tpPreAt/.test(aa) && /private final java\.util\.HashSet<String> tpFly/.test(aa) && /if \(tpCache\.containsKey\(url\) \|\| !tpFly\.add\(url\)\) continue;/.test(aa) && /warm\(r\.body\); tpPut\(url, r\.body\)/.test(aa), 's346: 시각 고르기 팝업 화면은 2분 제한 없이 바뀔 때마다(주소가 다르면) 미리 받아 두고, 받는 즉시 읽어 둔다');
-      assert.ok(/tpCache\.get\(ShellCore\.pageUrlCm\(cm\.pageFacts\(store\)\)\); if \(hit0 != null\) \{ present\(sheetView, hit0, true\); tpPresented = hit0; \}/.test(aa) && /try \{ sheet\.show\(\); \} catch \(Throwable t\) \{ toast\("설정을 열지 못했어요"\); return; \}\s*loadSetPage\(\);\s*return;/.test(aa) && /if \(!hit\.equals\(tpPresented\)\) present\(sheetView, hit, true\); tpPresented = null; return;/.test(aa), 's346: 미리 받은 시각 고르기 화면은 창을 열기 전에 올려 열리는 순간 글이 있다(흰 빈 상자 없음)');
+      assert.ok(/tpCache\.get\(ShellCore\.pageUrlCm\(cm\.pageFacts\(store\)\)\); if \(hit0 != null\) \{ present\(sheetView, hit0, true\); tpPresented = hit0; \}/.test(aa) && /try \{ sheet\.show\(\); \} catch \(Throwable t\) \{ toast\("설정을 열지 못했어요"\); return; \}\s*(if \(sp\) \{[^\n]*\s*)?loadSetPage\(\);\s*return;/.test(aa) && /if \(!hit\.equals\(tpPresented\)\) present\(sheetView, hit, true\); tpPresented = null; popGot = true; return;/.test(aa), 's346: 미리 받은 시각 고르기 화면은 창을 열기 전에 올려 열리는 순간 글이 있다(흰 빈 상자 없음)');
       assert.ok(/tpPopH > 0f \? tpPopH : 390f/.test(aa) && /tpPopH = Math\.min\(dp, sh \* 0\.9f\)/.test(aa), 's346: 시각 고르기 창은 지난번 높이로 처음부터 열려 열린 뒤 커지지 않는다');
       assert.ok(/private void settingsKb\(boolean on\)/.test(aa) && /SOFT_INPUT_ADJUST_RESIZE/.test(aa.slice(aa.indexOf('private void settingsKb'), aa.indexOf('private void settingsKb') + 900)) && !/hdr\.setVisibility\(View\.GONE\)/.test(aa) && /main\.postDelayed\(kbRestoreRun, 300L\)/.test(aa) && /settingsKb\(on\)/.test(aa), 's346: 설정 화면에서 글자를 칠 땐 창을 밀지 않고 줄이며(위 문구줄·아래 탭은 접는다), 칸을 떠나면 0.3초 뒤 되돌린다');
       assert.ok(/if \(kbEdit\) \{ main\.removeCallbacks\(kbRestoreRun\); kbRestoreRun\.run\(\); \}\s*applyIme\(\);/.test(aa), 's346: 탭을 바꾸면 접어 둔 줄을 곧바로 되돌린다');
