@@ -582,11 +582,14 @@ public class ShellActivity extends Activity {
     private ScreenView viewOfSlot(int i) { return slots.length > 1 && i == 0 ? head : body; }
 
     private final java.util.HashMap<String, Long> tabsAt = new java.util.HashMap<String, Long>();
+    /** s372: 마지막으로 잘 받은 아래 탭 막대 글(설정 파일에 둔다 · 주 스레드에서 바로 읽는다). 없으면 null. */
+    private String tabsLast(String tab) { try { String t = store.get("tabs.last|" + tab, ""); return t != null && t.length() > 20 ? t : null; } catch (Throwable e) { return null; } }
     private void loadTabs(final String tab) {
         final int my = ++seqTabs;
         final String url = ShellCore.tabsUrl(), json = ShellCore.tabsBody(tab), ck = "tabs|" + tab;
         viewKey.put(tabs, ck);
         String c = cacheGet(ck, true);
+        if (c == null) c = tabsLast(tab);                                  // s372: 디스크 캐시를 아직 못 읽었어도 마지막으로 받은 탭 막대를 바로(앱을 다시 켠 뒤 몇 초 동안 빈 띠가 초록으로 보이던 일)
         final boolean shown = c != null && showCached(tabs, c);
         Long at = tabsAt.get(ck);
         if (shown && at != null && System.currentTimeMillis() - at < 600000L) return;            // 하단 탭 막대는 10분 안에 받은 화면이면 그대로(탭을 옮길 때마다 다시 받지 않는다)
@@ -1581,6 +1584,7 @@ public class ShellActivity extends Activity {
             skelViews.remove(v);
             if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); if (ck != null && ck.startsWith(ShellCore.S_SETTINGS + "|")) { cmPrefetchTp(); if (kids != null) kids.warm(); } }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
+            if (v == tabs && ck != null && json.length() < 60000 && json.indexOf("tabbar") >= 0) store.put("tabs.last|" + ck.substring(ck.indexOf('|') + 1), json);          // s372
             if (!keep && v != sheetView && !(ck != null && ck.startsWith(ShellCore.S_CHAT + "|"))) fadeIn(v);          // 소통방은 흐릿하게 떠오르지 않고 바로 또렷하게(s286)
         } catch (Throwable e) {
             toast("화면이 올바르지 않아요: " + String.valueOf(e.getMessage()));
@@ -1754,6 +1758,7 @@ public class ShellActivity extends Activity {
             String cur = ShellCore.currentTab(store), ck = "tabs|" + cur;
             viewKey.put(tabs, ck);
             String c = cacheGet(ck, true);
+            if (c == null) c = tabsLast(cur);
             if (c != null) showCached(tabs, c); else loadTabs(cur);
             applyIme();
             if (tabs.itemCount() == 0) kidsTabsEnsure();
@@ -1803,6 +1808,7 @@ public class ShellActivity extends Activity {
         String ck = "tabs|" + cur;
         viewKey.put(tabs, ck);
         String c = cacheGet(ck, true);
+        if (c == null) c = tabsLast(cur);
         if (c == null || !showCached(tabs, c)) loadTabs(cur);
         tabs.requestLayout(); tabs.invalidate();
     }

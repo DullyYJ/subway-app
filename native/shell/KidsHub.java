@@ -650,7 +650,9 @@ public final class KidsHub {
                         if (sheetV != v || dp <= 0f) return;
                         float hh = bottom ? sh * 0.72f : Math.min(dp, sh * dg.maxh);
                         WindowManager.LayoutParams lp = w.getAttributes();
-                        lp.width = Math.round(maxW * dpr); lp.height = Math.round(hh * dpr);
+                        int nw = Math.round(maxW * dpr), nh = Math.round(hh * dpr);
+                        if (shown[0] && lp.width == nw && lp.height == nh) { revealSheet(box, shown, bottom, hh); return; }          // s372: 같은 크기면 창을 다시 손대지 않는다(글을 치는 중 새 화면이 와도 키보드가 닫히지 않게)
+                        lp.width = nw; lp.height = nh;
                         lp.gravity = bottom ? Gravity.BOTTOM : Gravity.CENTER; lp.y = 0;
                         w.setAttributes(lp);
                         revealSheet(box, shown, bottom, hh);

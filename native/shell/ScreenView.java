@@ -2203,7 +2203,7 @@ public class ScreenView extends View {
         float x = px / dpr, y = py / dpr;
         if (lay.footH > 0f && y >= footTop()) {
             float fy = y - footTop();
-            for (ScreenCore.Item it : lay.foot) if ((it.act != null || it.kind == ScreenCore.K_FIELD) && ScreenCore.Layout.hits(it, x, fy)) return it;
+            for (int i = lay.foot.length - 1; i >= 0; i--) { ScreenCore.Item it = lay.foot[i]; if ((it.act != null || it.kind == ScreenCore.K_FIELD) && ScreenCore.Layout.hits(it, x, fy)) return it; }      // s372: 위에 그려진 것(입력·단추)이 카드 전체 act 보다 먼저
             return null;
         }
         if (y < lay.headH) {
@@ -4079,10 +4079,12 @@ public class ScreenView extends View {
         float topDp = editInFoot ? footTop() + f.y : lay.headH + f.y - scrollY;
         if (!editInFoot && (topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) {
             if (SystemClock.uptimeMillis() - editBeganAt < 600L) return;
-            if (mode == 0 && flingY.isFinished() && SystemClock.uptimeMillis() - downT > 2500L) {                                                                // s346: 손가락이 닿은 게 아니면(키보드가 오르내리며 크기가 바뀐 것) 키보드를 내리지 말고 칸을 다시 보이게 한다
+            if (mode == 0 && flingY.isFinished()) {          // s372(YJ: 퀘스트 입력칸을 누르면 키보드가 올랐다 사라진다): 키보드가 올라 팝업이 줄어 칸이 가려져도 손가락을 막 뗀 직후라고 편집을 끝내지 않고 칸을 보이게 밀어 준다 — 끌고 있을 때만 접는다
+                                                                               // s346: 손가락이 닿은 게 아니면(키보드가 오르내리며 크기가 바뀐 것) 키보드를 내리지 말고 칸을 다시 보이게 한다
                 ensureEditVisible(f);
                 topDp = lay.headH + f.y - scrollY;
                 if (!(topDp < lay.headH - 1f || topDp + f.h > footTop() + 1f)) { invalidate(); }
+                else if (SystemClock.uptimeMillis() - editBeganAt < 3000L) { postDelayed(syncRun, 200L); return; }          // s372: 키보드가 올라오며 팝업 크기가 따라오는 중 — 잠시 기다렸다 다시 맞춘다
                 else { endEdit(); return; }
             } else { endEdit(); return; }
         }      // 막 시작한 때엔 크기가 따라오는 중이라 닫지 않는다     // 화면 밖으로 밀렸다(아래 고정 줄에 가려져도)

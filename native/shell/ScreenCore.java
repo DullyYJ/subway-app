@@ -509,7 +509,8 @@ public final class ScreenCore {
         } else if ("panel".equals(t)) {
             pad(m, n); n.ipL = n.ipR = 16f; n.ipT = n.ipB = 16f; ip(m, n);
             n.fill = roleOrCss(m, "fill", "card"); n.line = roleOrCss(m, "line", "border"); n.r = optNum(m, "r", 14f, 0f, 40f);
-            n.glow = optBool(m, "glow", false); n.swp = optBool(m, "swp", false);          // swp = 좌우 밀기가 이 카드 안에서만 먹는 카드(경로 결과 카드 · s311)
+            n.glow = optBool(m, "glow", false); n.swp = optBool(m, "swp", false);          // s372: 카드 전체를 누르면 가는 행동(act · 안의 입력·단추가 먼저 받는다)
+            n.act = act(m.get("act"), false);          // swp = 좌우 밀기가 이 카드 안에서만 먹는 카드(경로 결과 카드 · s311)
             n.sc2 = optStr(m, "sc2", "", SCENE_MAX); if (n.sc2.length() >= SCENE_MAX) n.sc2 = "";
             n.lbw = optNum(m, "lb", 0f, 0f, 12f); n.lbc = roleOrCss(m, "lc", "gold"); if (n.lbc.length() == 0) n.lbc = "gold";       // 왼쪽 굵은 띠(웹 border-left)
             for (Object ko : asArr(m.get("kids"), "panel.kids")) {
@@ -1037,12 +1038,31 @@ public final class ScreenCore {
         return n;
     }
 
+    /** s372(YJ: 지난 대화 보기 줄은 없애고 박스를 눌러 전체 대화 팝업을 연다): 옛 서버 화면의 '지난 대화 보기'(kc.open) 줄을 빼고, 대화 칸(입력줄 key khc)이 든 카드 전체를 누르면 같은 행동이 가게 한다. */
+    @SuppressWarnings("unchecked")
+    private static void legacyNav(List<Object> foot) {
+        try {
+            Object nav = null; Map<String, Object> target = null;
+            for (Object o : foot) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> pm = (Map<String, Object>) o;
+                if ("navrow".equals(pm.get("t")) && pm.get("act") instanceof Map && "kc.open".equals(((Map<String, Object>) pm.get("act")).get("v"))) nav = o;
+                Object ks = pm.get("kids");
+                if (target == null && "panel".equals(pm.get("t")) && ks instanceof List) for (Object ko : (List<Object>) ks) if (ko instanceof Map && "inbar".equals(((Map<String, Object>) ko).get("t")) && "khc".equals(((Map<String, Object>) ko).get("key"))) target = pm;
+            }
+            if (nav == null || target == null) return;
+            if (target.get("act") == null) target.put("act", ((Map<String, Object>) nav).get("act"));
+            foot.remove(nav);
+        } catch (RuntimeException ignored) { }
+    }
+
     /** s370(YJ: 서버를 새로 올리지 않아도 대화 칸이 처음부터 빈 자리를 채워야 한다): 키즈 확인 화면의 아래 고정 대화 칸(입력줄 key khc)인데 늘어나는 빈칸(spacer ffill)이 없고 말풍선에 fd 도 없는 옛 서버 화면이면, 같은 모양으로 채워 넣는다
      *  — 제목줄 바로 아래에 빈칸을 끼우고 말풍선에 오래된 순서 번호(fd)를 매긴다. 서버가 이미 준 화면은 건드리지 않는다. */
     @SuppressWarnings("unchecked")
     private static void legacyChat(Object footObj) {
         try {
             if (!(footObj instanceof List)) return;
+            legacyNav((List<Object>) footObj);
             for (Object o : (List<Object>) footObj) {
                 if (!(o instanceof Map)) continue;
                 Map<String, Object> pm = (Map<String, Object>) o;
@@ -2185,7 +2205,7 @@ public final class ScreenCore {
         if ("panel".equals(n.t)) {
             Item pn = new Item(); pn.kind = K_PANEL; pn.x = ox; pn.y = y; pn.w = innerW; pn.radius = n.r;
             pn.fill = col(n.fill, null); pn.line = col(n.line, null); pn.sw = n.lbw; if (n.lbw > 0f) pn.ac = col(n.lbc, new Col("gold", 0));
-            pn.pub = n.glow; pn.swp = n.swp;
+            pn.pub = n.glow; pn.swp = n.swp; pn.act = n.act;
             out.add(pn); final int pg0 = out.size();
             float cy = y + 1f + n.ipT, cx = ox + 1f + n.ipL, cw = Math.max(1f, innerW - 2f - n.ipL - n.ipR);
             Item sbox = null; float sy0 = 0f;
