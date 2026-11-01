@@ -86,7 +86,10 @@ public class ScreenView extends View {
     private float bandVel;
     private long bandUserT; private float bandX; private boolean flingBand, inBand; private String bandSig = "";   // 본문 안 타임라인 줄(경로 결과 카드)의 가로 위치 · 그 줄을 놓고 미는 중 · 손가락이 그 줄 위에서 시작했다
     private String ctrDone = null;                      // 24시간 차트: 지금 시각 막대를 가운데로 맞춘 막대 내용 표시(내용이 바뀔 때만 다시 맞춘다)
-    private final OverScroller flingY, flingX, flingP;
+    private final OverScroller flingY, flingX, flingP, flingV;
+    private float vsOff; private boolean vsStick = true, vsHit, vsFl;                // s370: 아래 고정 줄 대화 칸 안의 밀린 거리(dp) · 맨 아래에 붙어 있나 · 손가락이 그 칸에서 시작했나 · 미끄러지는 중
+    private float vsMax() { return lay != null && lay.vsOn ? Math.max(0f, lay.vsContent - (lay.vsBot - lay.vsTop)) : 0f; }
+    private void vsFix() { float mx = vsMax(); if (mx <= 0f) { vsOff = 0f; vsStick = true; } else if (vsStick) vsOff = mx; else vsOff = ScreenCore.clamp(vsOff, mx); }
     // s303: 위아래로 밀어 고르는 목록(pickl) — 목록마다(열쇠) 밀린 정도·마지막으로 맞춘 선택 줄·손가락이 잡은 목록·관성
     private final java.util.HashMap<String, Float> pickOff = new java.util.HashMap<String, Float>();
     private final java.util.HashMap<String, String> pickSig = new java.util.HashMap<String, String>();
@@ -182,7 +185,7 @@ public class ScreenView extends View {
         setWillNotDraw(false);
         ViewConfiguration vc = ViewConfiguration.get(c);
         slop = vc.getScaledTouchSlop(); minFling = vc.getScaledMinimumFlingVelocity(); maxFling = vc.getScaledMaximumFlingVelocity();
-        flingY = new OverScroller(c); flingX = new OverScroller(c); flingP = new OverScroller(c);
+        flingY = new OverScroller(c); flingX = new OverScroller(c); flingP = new OverScroller(c); flingV = new OverScroller(c);
         ImageBank.init(c);
         preloadFaces(c);
     }
@@ -436,7 +439,7 @@ public class ScreenView extends View {
         return q.act.id;
     }
     /** 그린 화면을 비운다(다른 탭의 옛 화면이 새 탭 자리에 남아 보이지 않게). */
-    public void clearScreen() { helloEnd(); foldOpen.clear(); foldSig.clear(); foldKey = null; msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; bandX = 0f; bandSig = ""; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
+    public void clearScreen() { vsOff = 0f; vsStick = true; vsFl = false; flingV.forceFinished(true); helloEnd(); foldOpen.clear(); foldSig.clear(); foldKey = null; msgSeen.clear(); msgBorn.clear(); roMode = false; roReset(); dgCards = new ScreenCore.Item[0]; screen = null; lay = null; fcDone = ""; scrollY = 0f; scrollX = 0f; bandX = 0f; bandSig = ""; openKey = null; ctrDone = null; pressed = null; mode = 0; mkHas = false; invalidate(); syncLater(); }
     /** 맨 아래에서 80dp 안에 있으면 참(채팅 자동 따라가기 판단). 아직 배치 전이면 참. */
     private boolean nearBottom() {
         if (lay == null) return true;
@@ -642,7 +645,7 @@ public class ScreenView extends View {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 if (!parentMayIntercept && getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);          // 끌어 닫는 시트 안이면 부모가 위아래 끌기를 가로챌 수 있게 둔다
-                flingY.forceFinished(true); flingX.forceFinished(true); ssOn = false;
+                flingY.forceFinished(true); flingX.forceFinished(true); flingV.forceFinished(true); vsFl = false; ssOn = false;
                 if (roMode && roDown(x, y)) { downX = lastX = x; downY = lastY = y; return true; }
                 if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); tmLpFired = false; ui.removeCallbacks(tmLpRun); ScreenCore.Item lm = liveMapAt(x, y); if (lm != null && lm.lp != null && lm.lp.length() > 0) { tmLp = lm.lp; ui.postDelayed(tmLpRun, TM_LP_MS); } return true; }
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
@@ -650,6 +653,7 @@ public class ScreenView extends View {
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
                 { float byy = y / dpr - lay.headH + scrollY; inBand = !inHead && lay.bandTop >= 0f && lay.bandMax() > 0f && byy >= lay.bandTop - 4f && byy < lay.bandBot + 4f && y < footTop() * dpr; }       // 본문 안 타임라인 줄 위에서 시작했나
                 inFoot = lay.footH > 0f && !inHead && y >= footTop() * dpr;
+                { float vfy = y / dpr - footTop(); vsHit = inFoot && lay.vsOn && vsMax() > 0f && vfy >= lay.vsTop && vfy <= lay.vsBot; }          // s370: 대화 칸 위에서 시작한 손가락은 그 칸만 민다
                 mode = 3;
                 fabDown = fabAt(x, y);
                 pressed = fabDown ? null : findItem(x, y);
@@ -685,6 +689,7 @@ public class ScreenView extends View {
                     if (Math.abs(x - downX) > slop || Math.abs(y - downY) > slop) {
                         pressed = null; fabDown = false; ui.removeCallbacks(lpRun);
                         float adx = Math.abs(x - downX), ady = Math.abs(y - downY);
+                        if (vsHit && ady > adx) { mode = 12; pressed = null; lastY = y; invalidate(); return true; }          // s370: 대화 칸 안에서 위아래로 밀면 그 칸만 민다(화면 전체가 아니다)
                         if (pickHit != null && pickHit.pickMax > 0f && ady > adx) { mode = 11; pressed = null; lastY = y; invalidate(); return true; }          // 고르기 목록 위에서 위아래로 밀면 그 목록만 민다
                         if (pgHit != null && adx > ady * SW_LOCK) { mode = 10; pgDragOn = true; pgDownPos = pgPos; pgLast = SystemClock.uptimeMillis(); lastX = x; blurInput(); invalidate(); return true; }          // 두 쪽 카드를 가로로 밀기 시작
                         if (swipeHost != null && !swBlock && !swOff && !inHead && !inFoot && !inBand && adx > ady * SW_LOCK_SW && swCan) { mode = 9; swShift = 0f; swRelT = 0L; lastX = x; blurInput(); invalidate(); return true; }          // 가로로 밀기 시작 — 가로로 잠가 세로 스크롤을 멈춘다(비스듬히 밀어도 목록이 흔들리지 않게)
@@ -693,6 +698,9 @@ public class ScreenView extends View {
                         if (mode == 1 && inBand && Math.abs(x - downX) > Math.abs(y - downY)) mode = 8;          // 타임라인 줄은 가로로 밀면 그 줄만 민다(세로로 쓸면 목록)
                         if (mode == 1) blurInput();                                              // 목록을 밀기 시작하면 키보드를 내린다
                     } else return true;
+                }
+                if (mode == 12) {
+                    float mx12 = vsMax(); vsOff = ScreenCore.clamp(vsOff - dy / dpr, mx12); vsStick = vsOff >= mx12 - 1f; lastY = y; invalidate(); return true;
                 }
                 if (mode == 11 && pickHit != null) {
                     float o11 = pickGet(pickHit); pickOff.put(pickHit.key, ScreenCore.clamp(o11 - dy / dpr, pickHit.pickMax)); lastY = y; invalidate(); return true;
@@ -727,6 +735,11 @@ public class ScreenView extends View {
                 ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun);
                 if (sceneTouch && scene != null) { scene.touchUp(); sceneTouch = false; }
                 if (mode == 4) { finishTouch(); invalidate(); return true; }
+                if (mode == 12) {
+                    vt.computeCurrentVelocity(1000, maxFling); float v12 = vt.getYVelocity(), mx12 = vsMax();
+                    if (Math.abs(v12) > minFling && mx12 > 0f) { vsFl = true; flingV.fling(0, Math.round(vsOff * dpr), 0, Math.round(-v12), 0, 0, 0, Math.round(mx12 * dpr)); }
+                    finishTouch(); invalidate(); return true;
+                }
                 if (mode == 11 && pickHit != null) {
                     vt.computeCurrentVelocity(1000, maxFling); float v11 = vt.getYVelocity();
                     if (Math.abs(v11) > minFling) { flingKey = pickHit.key; flingMax = pickHit.pickMax; flingP.fling(0, Math.round(pickGet(pickHit) * dpr), 0, Math.round(-v11), 0, 0, 0, Math.round(pickHit.pickMax * dpr)); }
@@ -2184,7 +2197,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(tmLpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(tmLpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); pickHit = null; vsHit = false; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;
@@ -2253,6 +2266,7 @@ public class ScreenView extends View {
             if (editKey != null) syncLater();                                                  // s347: 글자 칸 위에 얹힌 진짜 입력칸도 같이 따라온다
         }
         if (flingKey != null && flingP.computeScrollOffset()) { pickOff.put(flingKey, ScreenCore.clamp(flingP.getCurrY() / dpr, flingMax)); moving = true; }
+        if (vsFl && flingV.computeScrollOffset()) { float mxf = vsMax(); vsOff = ScreenCore.clamp(flingV.getCurrY() / dpr, mxf); vsStick = vsOff >= mxf - 1f; moving = true; } else if (vsFl) vsFl = false;
         if (flingY.computeScrollOffset()) { scrollY = ScreenCore.clamp(flingY.getCurrY() / dpr, lay.bodyMaxScroll(bodyViewH())); moving = true; }
         if (flingX.computeScrollOffset()) { if (flingBand) bandX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.bandMax()); else scrollX = ScreenCore.clamp(flingX.getCurrX() / dpr, lay.headMaxScroll()); moving = true; }
         if (flingBand && !flingX.isFinished()) bandUserT = SystemClock.uptimeMillis();         // 손가락으로 민 뒤 미끄러지는 동안도 '만지는 중' — 10초는 멈춘 뒤부터 센다
@@ -2401,7 +2415,12 @@ public class ScreenView extends View {
             cv.drawRect(0f, 0f, w, lay.footH, p);
             if (lay.fl) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER]); cv.drawLine(0f, 0.5f, w, 0.5f, p); }
             p.setStyle(Paint.Style.FILL);
-            for (int i = 0; i < lay.foot.length; i++) drawItem(cv, lay.foot[i]);
+            if (lay.vsOn) vsFix();
+            for (int i = 0; i < lay.foot.length; i++) {
+                ScreenCore.Item fit = lay.foot[i];
+                if (fit.vs && lay.vsOn) { cv.save(); cv.clipRect(0f, lay.vsTop, w, lay.vsBot); cv.translate(0f, -vsOff); drawItem(cv, fit); cv.restore(); }          // s370: 대화 칸 안만 밀린다(틀 밖은 잘린다)
+                else drawItem(cv, fit);
+            }
             cv.restore();
         }
         drawFab(cv, w, h);

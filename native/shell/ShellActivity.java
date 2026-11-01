@@ -1761,6 +1761,7 @@ public class ShellActivity extends Activity {
     }
     /** s369(YJ: 키즈 모드로 두고 껐다 켜면 아래 탭이 빈 띠로 나온다): 켠 직후 · 다시 앞으로 올 때 키즈 모드인데 탭 막대가 비어 있으면(받기 전 · 읽기 실패 · 늦은 답 버림) 곧 · 몇 초 뒤에 한 번씩 다시 받아 채운다. 이미 그려져 있으면 아무 일도 안 한다. */
     private void kidsTabsEnsure() {
+        kidsTabsWatchStart();
         for (final long d : new long[] { 600L, 2500L, 7000L }) main.postDelayed(new Runnable() { @Override public void run() {
             try {
                 if (kids == null || !kids.mode() || tabs == null) return;
@@ -1771,6 +1772,32 @@ public class ShellActivity extends Activity {
                 kidsTabsRedrawNow(cur);
             } catch (Throwable ignored) { }
         } }, d);
+    }
+    /** s370(YJ: 자녀 탭에서 계속 하단 탭이 사라진다): 키즈 모드가 켜져 있고 앞에 있는 동안 2.5초마다 아래 탭 막대를 살핀다.
+     *  안 보이거나 · 높이가 0이거나 · 투명하거나 · 칸이 하나도 없으면 상태를 오류 기록(TABS_BLANK)에 남기고 보이게 고쳐 다시 읽어 채운다. 멀쩡하면 아무 일도 안 한다. */
+    private boolean tabsWatchOn;
+    private int tabsFixN;
+    private final Runnable tabsWatch = new Runnable() {
+        @Override public void run() {
+            tabsWatchOn = false;
+            try {
+                if (!resumed || kids == null || !kids.mode() || tabs == null) return;
+                boolean bad = tabs.getVisibility() != View.VISIBLE || tabs.getHeight() <= 0 || tabs.getAlpha() < 0.9f || tabs.itemCount() == 0 || tabs.getTranslationY() != 0f;
+                if (bad) {
+                    final String dm = "TABS_BLANK vis=" + tabs.getVisibility() + " h=" + tabs.getHeight() + " a=" + tabs.getAlpha() + " ty=" + tabs.getTranslationY() + " n=" + tabs.itemCount() + " open=" + kids.isOpen() + " fix=" + tabsFixN;
+                    if (tabsFixN < 3) { tabsFixN++; ErrLog.record(ShellActivity.this, new IllegalStateException(dm), false); }
+                    tabs.setVisibility(View.VISIBLE); tabs.setAlpha(1f); tabs.setTranslationY(0f);
+                    String cur = ShellCore.currentTab(store);
+                    tabsAt.remove("tabs|" + cur); shownJson.remove(tabs); shownKey.remove(tabs);
+                    kidsTabsRedrawNow(cur);
+                }
+            } catch (Throwable ignored) { }
+            kidsTabsWatchStart();
+        }
+    };
+    private void kidsTabsWatchStart() {
+        if (tabsWatchOn || !resumed || kids == null || !kids.mode()) return;
+        tabsWatchOn = true; main.postDelayed(tabsWatch, 2500L);
     }
     private void kidsTabsRedrawNow(String cur) {
         String ck = "tabs|" + cur;

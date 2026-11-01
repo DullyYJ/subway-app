@@ -258,18 +258,20 @@ public final class KidsHub {
     public void open(boolean anim) {
         if (!linked || open) return;
         open = true;
-        store.put(K_MODE, "1"); fireTabs();
-        warm();
         layer.setVisibility(View.VISIBLE);
         layer.bringToFront();
-        showSaved();
-        if (paused) fetchHub(); else startLoop("hub");                       // 긴 대기의 첫 바퀴가 곧바로 화면을 내려 주므로 따로 한 번 더 받지 않는다
         float w = width();
-        if (anim) {
+        if (anim) {                                                           // s370: 빠르게 — 160ms, 아래 화면은 따로 밀지 않는다(그릴 것이 반으로 줄어 탭 전환이 바로 된다)
             layer.setTranslationX(w);
-            layer.animate().translationX(0f).setDuration(300L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
-            for (final View v : slide) if (v != null) v.animate().translationX(-w * 0.25f).setDuration(300L).setInterpolator(new DecelerateInterpolator(1.6f)).withEndAction(new Runnable() { @Override public void run() { v.setTranslationX(0f); } }).start();
-        } else layer.setTranslationX(0f);
+            layer.animate().translationX(0f).setDuration(160L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
+        } else { layer.animate().cancel(); layer.setTranslationX(0f); }
+        main.post(new Runnable() { @Override public void run() {              // 첫 그림이 끝난 뒤에 나머지(저장, 탭 막대, 저장본 읽기, 미리 받기, 긴 대기)를 한다
+            if (!open) return;
+            store.put(K_MODE, "1"); fireTabs();
+            showSaved();
+            if (paused) fetchHub(); else startLoop("hub");
+            main.postDelayed(new Runnable() { @Override public void run() { if (open) warm(); } }, 1500L);
+        } });
     }
 
     public void close(boolean anim) {
@@ -280,8 +282,7 @@ public final class KidsHub {
         stopLoop();
         float w = width();
         if (anim) {
-            layer.animate().translationX(w).setDuration(260L).setInterpolator(new AccelerateInterpolator(1.3f)).withEndAction(new Runnable() { @Override public void run() { if (!open) layer.setVisibility(View.GONE); layer.setTranslationX(0f); } }).start();
-            for (final View v : slide) if (v != null) { v.setTranslationX(-w * 0.25f); v.animate().translationX(0f).setDuration(260L).setInterpolator(new DecelerateInterpolator(1.4f)).start(); }
+            layer.animate().translationX(w).setDuration(140L).setInterpolator(new AccelerateInterpolator(1.3f)).withEndAction(new Runnable() { @Override public void run() { if (!open) layer.setVisibility(View.GONE); layer.setTranslationX(0f); } }).start();
         } else { layer.animate().cancel(); layer.setVisibility(View.GONE); layer.setTranslationX(0f); }
     }
 
@@ -577,7 +578,7 @@ public final class KidsHub {
                         else showSheet(kind.length() > 0 ? kind : kindOf(sc.id), sc, js);
                     }
                     ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
-                    if (clear.length() > 0 && cv != null) cv.setField(clear, "");
+                    if (clear.length() > 0 && cv != null && !"kh.say".equals(v)) cv.setField(clear, "");          // kh.say 는 누른 즉시 비웠다(그 사이 새로 쓴 글을 지우지 않는다)
                     if ("kqx".equals(clear)) qpt = 1;
                     if (close) { closeSheet(true); }
                     if (hub && open) fetchHub();
@@ -750,6 +751,17 @@ public final class KidsHub {
             if ("kq.tab".equals(a.v) || "kq.open".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
             if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 스타포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
             if ("kq.send".equals(a.v)) { send(a.v, a.id, String.valueOf(qpt), me().fields(), me()); return; }
+            if ("kh.say".equals(a.v) && me() == hubV) {                              // s370(YJ: 보내면 대화창에 바로 들어가야 한다): 서버 답을 기다리지 않고 내 말풍선을 먼저 그리고 입력칸을 비운다
+                Map<String, String> ff = me().fields();
+                String tx = ff.get("khc") == null ? "" : ff.get("khc").replaceAll("\\s+", " ").trim();
+                if (tx.length() == 0) return;                                          // 빈 글은 보내지 않는다
+                if (tx.length() > 100) tx = tx.substring(0, 100);
+                optimistic(tx);
+                hubV.setField("khc", "");
+                java.util.HashMap<String, String> sf = new java.util.HashMap<String, String>(ff); sf.put("khc", tx);
+                send(a.v, a.id, a.t, sf, hubV);
+                return;
+            }
             send(a.v, a.id, a.t, me().fields(), me());
         }
         @Override public void onSet(ScreenCore.Act a, boolean on) { }
@@ -763,6 +775,45 @@ public final class KidsHub {
             if (!f.equals(value)) { final ScreenView sv = me(); main.post(new Runnable() { @Override public void run() { sv.setField(key, f); } }); }
         }
         @Override public void onContentH(float dp) { }
+    }
+
+    /** 지금 키즈 화면의 대화 칸 맨 아래(입력줄 바로 위)에 내 말풍선 하나를 먼저 끼워 그린다. 서버 화면이 오면(긴 대기 0.6초 안) 그것으로 바뀐다. */
+    private void optimistic(String tx) {
+        try {
+            if (lastHubJson.length() == 0) return;
+            JSONObject o = new JSONObject(lastHubJson);
+            JSONArray foot = o.optJSONArray("foot");
+            if (foot == null) return;
+            for (int i = 0; i < foot.length(); i++) {
+                JSONObject pn = foot.optJSONObject(i);
+                JSONArray ks = pn == null ? null : pn.optJSONArray("kids");
+                if (ks == null) continue;
+                int at = -1, mx = 0; boolean empty = false;
+                for (int k = 0; k < ks.length(); k++) {
+                    JSONObject n = ks.optJSONObject(k);
+                    if (n == null) continue;
+                    if ("inbar".equals(n.optString("t")) && "khc".equals(n.optString("key"))) at = k;
+                    if (n.has("fd")) mx = Math.max(mx, n.optInt("fd"));
+                    if ("text".equals(n.optString("t")) && n.optString("s").startsWith("아직 대화가 없어요")) empty = true;
+                }
+                if (at < 0) continue;
+                java.util.Calendar c = java.util.Calendar.getInstance();
+                JSONObject m = new JSONObject();
+                m.put("t", "msg"); m.put("s", tx); m.put("mine", true); m.put("nick", "");
+                m.put("time", String.format(java.util.Locale.US, "%02d:%02d", c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE)));
+                m.put("pad", new JSONArray("[0,4,0,0]")); m.put("fd", mx + 1);
+                JSONArray out = new JSONArray();
+                for (int k = 0; k < ks.length(); k++) {
+                    JSONObject n = ks.optJSONObject(k);
+                    if (empty && n != null && "text".equals(n.optString("t")) && n.optString("s").startsWith("아직 대화가 없어요")) continue;
+                    if (k == at) out.put(m);
+                    out.put(ks.get(k));
+                }
+                pn.put("kids", out);
+                hubV.setScreen(ScreenCore.load(o.toString()), true);
+                return;
+            }
+        } catch (Throwable ignored) { }
     }
 
     private String klcPrev = "";

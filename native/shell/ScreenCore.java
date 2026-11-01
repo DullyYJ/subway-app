@@ -1198,6 +1198,7 @@ public final class ScreenCore {
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
         public boolean left;                         // 단추 글을 왼쪽에 붙임(입력칸 모양)
+        public boolean vs;                           // s370: 아래 고정 줄 대화 칸 안에서 위아래로 밀리는 말풍선(칸 안만 민다 — 화면 전체가 아니다)
         public boolean bold, on, spin;               // spin: inbar 단추에 도는 점(Node.spin 에서)
         public String color = "text", bg = "", align = "left";
         public float alpha = 1f;
@@ -1292,6 +1293,7 @@ public final class ScreenCore {
         public boolean part;                                               // 노선 상세 화면 — 새 화면이 와도 바뀐 줄만 다시 그린다
         public float fabW; public String fabLabel = ""; public float[] fabIcon = new float[0]; public Act fabAct;      // 떠 있는 단추(없으면 fabW 0)
         public float headH, headContentW, bodyH, footH, width, chipsTop = -1f, chipsBot = -1f;
+        public boolean vsOn; public float vsTop, vsBot, vsContent;       // s370: 아래 고정 줄의 대화 칸이 안에서 밀린다 — 보이는 틀(위·아래, 아래 고정 줄 좌표) · 안의 전체 높이(보이는 틀보다 클 때만 vsOn)
         public String bg = "bg";                                          // 화면 바탕 색 역할
         public boolean fl = true;                                         // 아래 고정 줄 맨 위 선
         public Col bgCol, lineCol;                                        // 안내창: 카드 바탕·테두리 색(없으면 null = bg 역할 · 테두리 없음)
@@ -1428,28 +1430,35 @@ public final class ScreenCore {
         return footGrow(sc, L, width, m, openKey, viewH);
     }
 
-    /** s369(YJ: 가족 실시간 대화 창을 늘려줘 — 아래가 최신, 위로 과거): 본문 아래 남는 세로가 있으면 아래 고정 줄의 대화 칸이 그만큼 위로 자란다.
-     *  엔진이 준 말풍선(fd: 오래된 순서)을 처음엔 최근 fk 개만 보이고, 남는 세로가 말풍선 한 줄(fdh)만큼씩 생길 때마다 더 오래된 것을 위로 펼치고, 그래도 남으면 빈칸(ffill)이 채운다. 입력줄은 그대로 맨 아래. 앱은 뺄셈만 한다. */
+    /** s369→s370(YJ: 가족 실시간 대화 창을 처음부터 아래 남는 자리까지 늘리고, 지난 대화는 그 칸 안에서만 위아래로 밀어 보게): 본문 아래 남는 세로를 대화 칸이 처음부터 다 차지한다.
+     *  말풍선(fd)은 모두 칸에 담고, 칸 높이(남는 세로 · 최소 fk×fdh)보다 길면 칸 안에서만 밀린다(최신이 아래 · 처음엔 맨 아래). 짧으면 아래에 붙고 위는 빈칸(ffill). 입력줄은 그대로 맨 아래. 앱은 뺄셈만 한다. */
     private static Layout footGrow(Screen sc, Layout L, float width, Measurer m, String openKey, float viewH) {
         Node ff = sc.footFill;
         if (ff == null && sc.footDrop.isEmpty()) return L;
+        float[] vv = VS.get(); vv[0] = 0f;
         if (ff != null) ff.h = 0f;
         int total = sc.footDrop.size(), keep = ff != null ? ff.fk : 3;
-        for (Node d : sc.footDrop) d.hide = total - d.fd >= keep;                    // fd 는 1 이 가장 오래됨 — 최근 keep 개만 보인다
-        L = layoutFit(sc, width, m, openKey, viewH);
-        if (!(viewH > 0f)) return L;
-        if (ff == null) return L;
-        float slack = viewH - L.headH - L.bodyH - L.footH;
-        if (!(slack >= 2f)) return L;
-        float row = ff.fdh;
-        int more = Math.min(total - Math.min(total, keep), (int) Math.floor(slack / row));
-        if (more > 0) {
-            for (Node d : sc.footDrop) d.hide = total - d.fd >= keep + more;
-            L = layoutFit(sc, width, m, openKey, viewH);
-            slack = viewH - L.headH - L.bodyH - L.footH;
+        if (!(viewH > 0f) || ff == null) {                                           // 높이를 모르면 예전처럼 최근 keep 개만
+            for (Node d : sc.footDrop) d.hide = total - d.fd >= keep;
+            return layoutFit(sc, width, m, openKey, viewH);
         }
-        if (slack >= 2f) { ff.h = Math.min(slack, ff.ffmax); L = layoutFit(sc, width, m, openKey, viewH); }
-        return L;
+        for (Node d : sc.footDrop) d.hide = true;                                    // 말풍선이 차지하는 높이를 재려고 모두 접어 본다
+        Layout L0 = layoutFit(sc, width, m, openKey, viewH);
+        for (Node d : sc.footDrop) d.hide = false;
+        Layout L1 = layoutFit(sc, width, m, openKey, viewH);
+        float msgsH = Math.max(0f, L1.footH - L0.footH);
+        float avail = viewH - L0.headH - L0.bodyH - L0.footH;                          // 말풍선 칸이 쓸 수 있는 세로
+        float minVh = Math.max(0f, keep * ff.fdh);
+        float vh = Math.max(msgsH > 0f ? minVh : 0f, avail);
+        if (msgsH <= vh + 0.5f) {                                                    // 다 들어간다 — 아래에 붙고 위는 빈칸이 채운다
+            ff.h = Math.max(0f, vh - msgsH);
+            return ff.h >= 2f ? layoutFit(sc, width, m, openKey, viewH) : L1;
+        }
+        ff.h = vh; vv[0] = vh;                                                       // 넘친다 — 보이는 틀(vh)만 흐름에 두고 말풍선은 틀 안에서 민다
+        Layout L2 = layoutFit(sc, width, m, openKey, viewH);
+        vv[0] = 0f;
+        if (!Float.isNaN(vv[2]) && !Float.isNaN(vv[3]) && vv[3] - vv[2] > vh + 0.5f) { L2.vsOn = true; L2.vsTop = vv[2]; L2.vsBot = vv[2] + vh; L2.vsContent = vv[3] - vv[2]; }
+        return L2;
     }
 
     private static Layout layoutFit(Screen sc, float width, Measurer m, String openKey, float viewH) {
@@ -1469,7 +1478,10 @@ public final class ScreenCore {
         return L;
     }
 
+    /** s370: 아래 고정 줄 대화 칸의 안쪽 밀림 계산용(스레드마다 따로): [0] 보이는 틀 높이(>0 이면 켜짐) · [1] 다음 말풍선 y · [2] 첫 말풍선 y · [3] 끝. */
+    private static final ThreadLocal<float[]> VS = new ThreadLocal<float[]>() { @Override protected float[] initialValue() { return new float[] { 0f, Float.NaN, Float.NaN, Float.NaN }; } };
     private static Layout layout0(Screen sc, float width, Measurer m, String openKey) {
+        { float[] v0 = VS.get(); v0[1] = Float.NaN; v0[2] = Float.NaN; v0[3] = Float.NaN; }
         Layout L = new Layout();
         L.width = width;
         L.bg = sc.bg; L.fl = sc.fl;
@@ -1825,6 +1837,18 @@ public final class ScreenCore {
     }
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
         if (n.hide && n.fd > 0) return y;                                              // s369: 접힌 아래 줄 말풍선
+        if (n.fd > 0) {                                                                // s370: 대화 칸 안에서 밀리는 말풍선 — 흐름 높이는 0, 말풍선은 빈칸(보이는 틀) 자리에서 시작해 아래로 이어 쌓는다(넘친 만큼은 칸 안에서 민다)
+            float[] vv = VS.get();
+            if (vv[0] > 0f) {
+                if (Float.isNaN(vv[1])) { vv[1] = y - vv[0]; vv[2] = vv[1]; }
+                float vh = vv[0]; vv[0] = -vh; int b0 = out.size();
+                float e = stack(n, x0, width, vv[1], out, m, ok);
+                vv[0] = vh;
+                for (int i = b0; i < out.size(); i++) out.get(i).vs = true;
+                vv[1] = e; vv[3] = e;
+                return y;
+            }
+        }
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다
