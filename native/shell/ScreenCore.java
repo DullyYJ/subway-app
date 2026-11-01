@@ -205,6 +205,7 @@ public final class ScreenCore {
         public int fo;                                      // ltr: 이 줄은 접는 줄 수가 fo 이상일 때 접힌다(0 이면 안 접힘)
         public boolean ps, hr;                             // trk 칸: 지나간 칸(흐리게) · 지금 칸(금색 강조)
         public boolean glow;                               // panel: 무지개 테두리가 도는 카드(웹 preview-glow, 예상 경로·혼잡도·브리핑)
+        public boolean ffill; public int fd, fk = 3; public float fdh = 38f, ffmax = 400f;      // s369 아래 고정 줄 늘이기: spacer.ffill = 남는 세로를 메우는 빈칸(fdh=말풍선 한 줄 높이 어림 · fk=최소로 보일 글 수 · ffmax=최대 높이) · msg.fd = 오래된 순서(1 이 가장 오래됨, 모자라면 오래된 것부터 접힘)
         public boolean hide, fit;                           // ltr 접힘(배치 때마다 다시 정한다) · scene 이 남는 세로를 채운다
         public boolean fold, open;                          // pickl(s307): 처음엔 고른 한 줄만 보이고 눌러 펼친다(fold) · 지금 펼쳐져 있나(open — 앱이 배치 전에 정한다)
         public float bw = 0f; public String ob = "";   // chip: 테두리 두께(0 이면 1) · 꺼진 칩의 테두리만 따로 칠하는 색
@@ -261,6 +262,8 @@ public final class ScreenCore {
         public String swK = "";                            // 이 화면이 지금 서 있는 칸(칩 행동의 v) — 엔진이 정한다
         public Map<String, Act[]> swT;                     // 칸마다 {왼쪽으로 밀면, 오른쪽으로 밀면}(엔진이 순환 전부를 준다) — 다음 칸 화면이 오기 전에도 이어 넘기려고. 없으면 null
         public Node fitNode;                               // 남는 세로를 채우는 장면 노드(웹 _sceneFit) — 엔진이 fit 을 켠 것만
+        public Node footFill;                              // s369: 아래 고정 줄의 늘어나는 빈칸(spacer ffill)
+        public List<Node> footDrop = new ArrayList<Node>();   // s369: 아래 고정 줄에서 오래된 것부터 접히는 말풍선(msg fd)
         public List<Node> foldRows = new ArrayList<Node>();   // 작은 폰에서 오래된 것부터 접히는 실시간 대화 줄(fo 1~3)
     }
 
@@ -1010,6 +1013,7 @@ public final class ScreenCore {
             n.s = optStr(m, "s", "", 600); if (n.s.length() == 0) throw new ParseError("msg: s 없음");
             n.time = optStr(m, "time", "", 12); n.badge = optStr(m, "badge", "", 10); n.accent = roleOrCss(m, "bc", "#ff453a"); if (n.accent.length() == 0) n.accent = "#ff453a";
             n.title = optStr(m, "go", "", 8);
+            n.fd = (int) optNum(m, "fd", 0f, 0f, 60f); if (n.fd > 0) sc.footDrop.add(n);
             n.act = act(m.get("act"), false);
             n.fill = roleOrCss(m, "fill", n.mine ? "gold" : "card2"); if (n.fill.length() == 0) n.fill = n.mine ? "gold" : "card2";
             n.tc = roleOrCss(m, "tc", n.mine ? "#121214" : "text"); if (n.tc.length() == 0) n.tc = n.mine ? "#121214" : "text";
@@ -1028,6 +1032,7 @@ public final class ScreenCore {
             pad(m, n); n.line = roleOrCss(m, "c", "");
         } else if ("spacer".equals(t)) {
             n.h = optNum(m, "h", 8f, 0f, 400f);
+            if (optNum(m, "ffill", 0f, 0f, 1f) > 0f && sc.footFill == null) { n.ffill = true; n.fdh = optNum(m, "fdh", 38f, 10f, 120f); n.fk = (int) optNum(m, "fk", 3f, 0f, 20f); n.ffmax = optNum(m, "ffmax", 400f, 0f, 900f); sc.footFill = n; }
         } else { sc.skipped++; return null; }
         return n;
     }
@@ -1419,6 +1424,35 @@ public final class ScreenCore {
     /** viewH: 본문 칸의 보이는 높이(dp, 0 이면 모름). 엔진이 fit 을 켠 장면은 웹 _sceneFit 처럼 남는 세로를 채우고(최소 fmin · 최대 fmax),
      *  모자라면 실시간 대화의 오래된 줄(fo)부터 접는다. 얼마나 키울지·접을지의 규칙값(fmin·fmax·frh·fo)은 엔진이 주고, 앱은 잰 높이로 뺄셈만 한다. */
     public static Layout layout(Screen sc, float width, Measurer m, String openKey, float viewH) {
+        Layout L = layoutFit(sc, width, m, openKey, viewH);
+        return footGrow(sc, L, width, m, openKey, viewH);
+    }
+
+    /** s369(YJ: 가족 실시간 대화 창을 늘려줘 — 아래가 최신, 위로 과거): 본문 아래 남는 세로가 있으면 아래 고정 줄의 대화 칸이 그만큼 위로 자란다.
+     *  엔진이 준 말풍선(fd: 오래된 순서)을 처음엔 최근 fk 개만 보이고, 남는 세로가 말풍선 한 줄(fdh)만큼씩 생길 때마다 더 오래된 것을 위로 펼치고, 그래도 남으면 빈칸(ffill)이 채운다. 입력줄은 그대로 맨 아래. 앱은 뺄셈만 한다. */
+    private static Layout footGrow(Screen sc, Layout L, float width, Measurer m, String openKey, float viewH) {
+        Node ff = sc.footFill;
+        if (ff == null && sc.footDrop.isEmpty()) return L;
+        if (ff != null) ff.h = 0f;
+        int total = sc.footDrop.size(), keep = ff != null ? ff.fk : 3;
+        for (Node d : sc.footDrop) d.hide = total - d.fd >= keep;                    // fd 는 1 이 가장 오래됨 — 최근 keep 개만 보인다
+        L = layoutFit(sc, width, m, openKey, viewH);
+        if (!(viewH > 0f)) return L;
+        if (ff == null) return L;
+        float slack = viewH - L.headH - L.bodyH - L.footH;
+        if (!(slack >= 2f)) return L;
+        float row = ff.fdh;
+        int more = Math.min(total - Math.min(total, keep), (int) Math.floor(slack / row));
+        if (more > 0) {
+            for (Node d : sc.footDrop) d.hide = total - d.fd >= keep + more;
+            L = layoutFit(sc, width, m, openKey, viewH);
+            slack = viewH - L.headH - L.bodyH - L.footH;
+        }
+        if (slack >= 2f) { ff.h = Math.min(slack, ff.ffmax); L = layoutFit(sc, width, m, openKey, viewH); }
+        return L;
+    }
+
+    private static Layout layoutFit(Screen sc, float width, Measurer m, String openKey, float viewH) {
         Node fit = sc.fitNode;
         if (fit != null) { fit.fitH = 0f; for (Node r : sc.foldRows) r.hide = false; }
         Layout L = layout0(sc, width, m, openKey);
@@ -1790,6 +1824,7 @@ public final class ScreenCore {
         return c;
     }
     private static float stack(Node n, float x0, float width, float y, List<Item> out, Measurer m, String ok) {
+        if (n.hide && n.fd > 0) return y;                                              // s369: 접힌 아래 줄 말풍선
         float innerW = Math.max(1f, width - n.padL - n.padR);
         float ox = x0 + n.padL;
         if ("trk".equals(n.t)) {                                                     // 본문(경로 결과 카드) 안의 구간 타임라인: 칸 줄이 이 틀 안에서 가로로 밀린다(밀림·마커는 ScreenView). 칸 치수는 머리의 것과 같다

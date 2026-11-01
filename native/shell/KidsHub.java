@@ -497,12 +497,14 @@ public final class KidsHub {
         long now = SystemClock.elapsedRealtime();
         if (!alive || !"1".equals(store.get(K_REG, "0")) || now - lastWarm < 300000L) return;
         lastWarm = now;
-        final String[] vs = linked ? new String[] { "kl.open", "kq.open", "kc.open" } : new String[] { "kl.open" };
+        final String[] vs = linked ? new String[] { "kl.open", "kq.open", "kq.open:p", "kc.open" } : new String[] { "kl.open" };          // kq.open:p = 미션 팝업의 부모님 미션 쪽
         io.execute(new Runnable() { @Override public void run() {
             try {
-                for (String v : vs) {
+                for (String key : vs) {
+                    String v = key.indexOf(':') > 0 ? key.substring(0, key.indexOf(':')) : key;
                     JSONObject b = new JSONObject();
                     b.put("v", v);
+                    if (key.endsWith(":p")) b.put("t", "p");
                     if (cid.length() > 0) b.put("cid", cid);
                     String r = call("POST", "/p/act", b.toString(), 12000);
                     if (r == null) { lastWarm = 0L; return; }
@@ -512,7 +514,7 @@ public final class KidsHub {
                     String js = fixQ(s.toString());
                     if (js.length() == 0 || js.length() >= 150000) continue;
                     ScreenCore.Screen sc = ScreenCore.load(js);
-                    store.put(K_SC + v, js); memScr.put(v, sc); memJs.put(v, js);
+                    store.put(K_SC + key, js); memScr.put(key, sc); memJs.put(key, js);
                 }
             } catch (Throwable ignored) { lastWarm = 0L; }
         } });
@@ -523,18 +525,24 @@ public final class KidsHub {
     // ───────── 눌림 보내기(엔진이 새 화면을 돌려준다) ─────────
     private void send(final String v, final String id, final String t, final Map<String, String> f, final ScreenView src) {
         final String sk = sheetKind;
+        final String ckey = "kq.open".equals(v) && "p".equals(t) ? "kq.open:p" : v;                 // 미션 팝업은 쪽(자녀 · 부모님)마다 따로 기억한다
         if (v != null && sheetD == null && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
-            ScreenCore.Screen ms = memScr.get(v); String mj = memJs.get(v);
+            ScreenCore.Screen ms = memScr.get(ckey); String mj = memJs.get(ckey);
             if (ms != null && mj != null) {
                 try { String mj2 = fixQ(mj); if (!mj2.equals(mj)) { ms = ScreenCore.load(mj2); mj = mj2; } } catch (Throwable ignored) { }          // 미션 팝업은 지금 고른 별 점수를 입혀서
                 showSheet(kindOf(ms.id), ms, mj);
             }
         }
+        if ("kq.tab".equals(v) && sheetD != null && "quest".equals(sheetKind)) {                    // 미션 팝업 쪽 바꾸기: 기억해 둔 그 쪽을 먼저 바로 보이고, 서버 답이 오면 새 것으로 바꾼다
+            String k2 = "p".equals(t) ? "kq.open:p" : "kq.open";
+            ScreenCore.Screen ms = memScr.get(k2); String mj = memJs.get(k2);
+            if (ms != null && mj != null) { try { String mj2 = fixQ(mj); if (!mj2.equals(mj)) { ms = ScreenCore.load(mj2); mj = mj2; } showSheet("quest", ms, mj); } catch (Throwable ignored) { } }
+        }
         io.execute(new Runnable() { @Override public void run() {
             try {
                 final boolean opener = v != null && v.matches("k[a-z]{1,2}\\.open");
                 if (opener && sheetD == null) {                                   // 마지막으로 본 팝업을 먼저 바로 띄우고, 서버 답이 오면 새 것으로 바꾼다(기다리는 느낌을 없앤다)
-                    String cj = store.get(K_SC + v, "");
+                    String cj = store.get(K_SC + ckey, "");
                     if (cj.length() > 0) {
                         final String cj2 = fixQ(cj);
                         final ScreenCore.Screen cs = ScreenCore.load(cj2);
@@ -555,7 +563,8 @@ public final class KidsHub {
                 final JSONObject s = o.optJSONObject("screen");
                 final String js = s == null ? "" : fixQ(s.toString());
                 final ScreenCore.Screen sc = js.length() == 0 ? null : ScreenCore.load(js);
-                if (opener && js.length() > 0 && js.length() < 150000 && sc != null) { store.put(K_SC + v, js); memScr.put(v, sc); memJs.put(v, js); }
+                if (opener && js.length() > 0 && js.length() < 150000 && sc != null) { store.put(K_SC + ckey, js); memScr.put(ckey, sc); memJs.put(ckey, js); }
+                if (sc != null && "kidquest".equals(sc.id) && js.length() < 150000) { String qk = "p".equals(sc.swK) ? "kq.open:p" : "kq.open"; store.put(K_SC + qk, js); memScr.put(qk, sc); memJs.put(qk, js); }          // 미션 팝업은 어느 쪽 답이든 그 쪽 기억을 새로 고친다
                 final String notice = o.optString("notice", ""), clear = o.optString("clear", ""), kind = o.optString("sheet", "");
                 final boolean close = o.optBoolean("close", false), hub = o.optInt("hub", 0) == 1;
                 if (o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
@@ -648,6 +657,15 @@ public final class KidsHub {
                 } });
             }
         });
+        if ("quest".equals(kind)) v.setSwipeHost(new ScreenView.SwipeHost() {                  // 미션 팝업: 좌우로 밀면 자녀 미션 ↔ 부모님 미션(엔진이 화면의 sw 에 어느 쪽으로 가는지 줬다)
+            @Override public boolean onSwipe(ScreenView sv, int dir) {
+                ScreenCore.Screen cs = sv.currentScreen();
+                ScreenCore.Act a = cs == null ? null : (dir == -1 ? cs.swL : cs.swR);
+                if (a != null) new Host(sv).onAction(a);
+                return true;
+            }
+            @Override public boolean canSwipe() { ScreenCore.Screen cs = v.currentScreen(); return cs != null && (cs.swL != null || cs.swR != null); }
+        });
         GradientDrawable g = new GradientDrawable();
         g.setColor(pal[ScreenView.R_CARD]);
         float rr = dg.r * dpr;
@@ -729,7 +747,7 @@ public final class KidsHub {
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
             if ("kl.scan".equals(a.v)) { scan(me()); return; }
-            if ("kq.tab".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
+            if ("kq.tab".equals(a.v) || "kq.open".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
             if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 스타포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
             if ("kq.send".equals(a.v)) { send(a.v, a.id, String.valueOf(qpt), me().fields(), me()); return; }
             send(a.v, a.id, a.t, me().fields(), me());

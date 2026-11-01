@@ -299,7 +299,7 @@ public class ShellActivity extends Activity {
         KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
         kids.tabsChanged = new Runnable() { @Override public void run() { kidsTabsRedraw(); } };
         kidsDeepLink(getIntent());
-        if (kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())))) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
+        if (kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())))) main.post(new Runnable() { @Override public void run() { if (kids != null) { kids.open(false); kidsTabsEnsure(); } } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -438,7 +438,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (kids != null) kids.destroy(); if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) kids.resume(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) { kids.resume(); if (kids.mode()) kidsTabsEnsure(); } RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; if (kids != null) kids.pause(); super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -1563,6 +1563,7 @@ public class ShellActivity extends Activity {
         int[] rh = ShellCore.retryHint(json);
         if (rh != null && v != sheetView && viewKey.get(v) != null) { showDelayed(v, json, keep, rh); return; }
         if (json == null || json.length() == 0) {
+            if (v == tabs) { if (v.itemCount() == 0) main.postDelayed(new Runnable() { @Override public void run() { tabsAt.clear(); loadTabs(ShellCore.currentTab(store)); } }, 2500L); return; }        // s369: 아래 탭 막대는 못 받아도 안내 화면을 얹지 않고 조용히 다시 받는다(키즈 모드로 켠 뒤 빈 띠가 되던 일)
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
                 try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); shownKey.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
@@ -1755,7 +1756,28 @@ public class ShellActivity extends Activity {
             String c = cacheGet(ck, true);
             if (c != null) showCached(tabs, c); else loadTabs(cur);
             applyIme();
+            if (tabs.itemCount() == 0) kidsTabsEnsure();
         } catch (Throwable ignored) { }
+    }
+    /** s369(YJ: 키즈 모드로 두고 껐다 켜면 아래 탭이 빈 띠로 나온다): 켠 직후 · 다시 앞으로 올 때 키즈 모드인데 탭 막대가 비어 있으면(받기 전 · 읽기 실패 · 늦은 답 버림) 곧 · 몇 초 뒤에 한 번씩 다시 받아 채운다. 이미 그려져 있으면 아무 일도 안 한다. */
+    private void kidsTabsEnsure() {
+        for (final long d : new long[] { 600L, 2500L, 7000L }) main.postDelayed(new Runnable() { @Override public void run() {
+            try {
+                if (kids == null || !kids.mode() || tabs == null) return;
+                if (tabs.itemCount() > 0 && tabs.getVisibility() == View.VISIBLE && tabs.getHeight() > 0) return;
+                String cur = ShellCore.currentTab(store);
+                tabs.setVisibility(View.VISIBLE);
+                tabsAt.remove("tabs|" + cur); shownJson.remove(tabs); shownKey.remove(tabs);
+                kidsTabsRedrawNow(cur);
+            } catch (Throwable ignored) { }
+        } }, d);
+    }
+    private void kidsTabsRedrawNow(String cur) {
+        String ck = "tabs|" + cur;
+        viewKey.put(tabs, ck);
+        String c = cacheGet(ck, true);
+        if (c == null || !showCached(tabs, c)) loadTabs(cur);
+        tabs.requestLayout(); tabs.invalidate();
     }
     /** 키즈 연결이 바뀌었다(연결 · 해제 · 시작 화면 스위치) — 설정 화면이 떠 있으면 맨 위 키즈 줄을 새로 끼워 다시 그린다. */
     private void kidsSettingsChanged() {
