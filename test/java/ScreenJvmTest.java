@@ -1356,7 +1356,7 @@ public class ScreenJvmTest {
         {   // s370: 아래 고정 줄 대화 칸이 처음부터 남는 세로를 다 차지 · 넘치면 칸 안에서만 밀림(입력줄은 맨 아래)
             StringBuilder fmsg = new StringBuilder();
             for (int i = 1; i <= 8; i++) fmsg.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":").append(i % 2 == 0).append(",\"time\":\"10:0").append(i).append("\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
-            String fj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"panel\",\"pad\":[10,6,10,8],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
+            String fj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"panel\",\"pad\":[10,6,10,8],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":0},"
                 + fmsg + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]}]}";
             ScreenCore.Screen fsc = ScreenCore.load(fj);
             ok(fsc.footDrop.size() == 8 && fsc.footFill != null && fsc.footFill.ffill, "foot 말풍선 8개(fd)와 늘어나는 빈칸을 읽는다");
@@ -1376,6 +1376,17 @@ public class ScreenJvmTest {
             ok(fl4.vsOn && fl4.vsBot - fl4.vsTop >= 3 * 42f - 1f, "키보드가 올라와 화면이 줄어도 보이는 틀은 최소 fk×fdh 를 지킨다");
             int vsN = 0; for (ScreenCore.Item q : fl1.foot) if (q.vs) vsN++;
             ok(vsN > 0, "밀리는 말풍선 조각에 표시(vs)가 붙는다");
+            // s378: 엔진이 준 최대 높이(ffmax)가 있으면 칸은 그 이상 자라지 않는다(글 수·화면 높이와 상관없이 같은 크기), 넘치는 글은 칸 안에서만 민다
+            String fjc = fj.replace("\"ffmax\":0", "\"ffmax\":230");
+            ScreenCore.Screen csc = ScreenCore.load(fjc);
+            ScreenCore.Layout cx1 = ScreenCore.layout(csc, 360f, M, null, 700f);
+            float vh1 = cx1.vsBot - cx1.vsTop;
+            ScreenCore.Layout cx2 = ScreenCore.layout(csc, 360f, M, null, 1200f);
+            float vh2 = cx2.vsBot - cx2.vsTop;
+            ok(cx1.vsOn && cx2.vsOn && Math.abs(vh1 - 230f) < 2f && Math.abs(vh2 - 230f) < 2f, "ffmax=230: 화면이 700 이어도 1200 이어도 대화 칸 글 영역은 230 으로 같다 · 넘치면 안에서 민다");
+            ok(cx2.headH + cx2.bodyH + cx2.footH < 1200f - 100f, "상한이 있으면 남는 세로를 다 먹지 않는다(위쪽 본문 칸이 그만큼 여유)");
+            ScreenCore.Layout cx3 = ScreenCore.layout(csc, 360f, M, null, 250f);
+            ok(cx3.vsOn && cx3.vsBot - cx3.vsTop >= 3 * 42f - 1f, "화면이 모자라면 상한이 아니라 남는 만큼(최소 fk×fdh)");
         }
         {   // s370: 서버를 새로 올리지 않은 옛 화면(빈칸 · fd 없음)도 대화 칸이 처음부터 빈 자리를 채운다
             StringBuilder om = new StringBuilder();
@@ -1392,7 +1403,7 @@ public class ScreenJvmTest {
         {   // s370: 제목은 칸 밖 · 칸 안은 위 내용 · 아래 입력줄 · 지난 대화 보기는 칸 밖(아래)
             StringBuilder nm2 = new StringBuilder();
             for (int i = 1; i <= 30; i++) nm2.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":true,\"time\":\"10:00\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
-            String nj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"dot\":\"#2f7cf6\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,2],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
+            String nj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"dot\":\"#2f7cf6\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,2],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":0},"
                 + nm2 + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]},{\"t\":\"navrow\",\"title\":\"지난 대화 보기\",\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"size\":12.5,\"vp\":6,\"pad\":[16,0,16,2]}]}";
             ScreenCore.Screen nsc = ScreenCore.load(nj);
             ScreenCore.Layout nl = ScreenCore.layout(nsc, 360f, M, null, 700f);
@@ -1402,7 +1413,7 @@ public class ScreenJvmTest {
         {   // s372: 지난 대화 보기 줄이 없고 박스 전체를 누르면 전체 대화 팝업(kc.open) · 옛 서버(줄이 있는 화면)도 같게
             StringBuilder m3 = new StringBuilder();
             for (int i = 1; i <= 30; i++) m3.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":true,\"time\":\"10:00\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
-            String cj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,6],\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
+            String cj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,6],\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":0},"
                 + m3 + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]}]}";
             ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(cj), 360f, M, null, 700f);
             int pa = 0, ibN = 0; for (ScreenCore.Item it : cl.foot) { if (it.kind == ScreenCore.K_PANEL && it.act != null && "kc.open".equals(it.act.v)) pa++; if (it.kind == ScreenCore.K_INBAR && it.act != null && "kh.say".equals(it.act.v)) ibN++; }
