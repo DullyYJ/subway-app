@@ -1085,7 +1085,7 @@ public final class ScreenCore {
                 List<Object> nl = new ArrayList<Object>(kl);
                 for (Object ko : nl) { if (ko instanceof Map && "msg".equals(((Map<String, Object>) ko).get("t"))) ((Map<String, Object>) ko).put("fd", Double.valueOf(++mi)); }
                 Map<String, Object> sp = new HashMap<String, Object>();
-                sp.put("t", "spacer"); sp.put("h", Double.valueOf(0)); sp.put("ffill", Double.valueOf(1)); sp.put("fk", Double.valueOf(3)); sp.put("fdh", Double.valueOf(42)); sp.put("ffmax", Double.valueOf(420));
+                sp.put("t", "spacer"); sp.put("h", Double.valueOf(0)); sp.put("ffill", Double.valueOf(1)); sp.put("fk", Double.valueOf(3)); sp.put("fdh", Double.valueOf(42)); sp.put("ffmax", Double.valueOf(0));
                 nl.add(lth + 1, sp);
                 pm.put("kids", nl);
             }
