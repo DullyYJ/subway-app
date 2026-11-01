@@ -1107,6 +1107,7 @@ function findAndroidJar() {
     assert.ok(/for \(int i = lay\.foot\.length - 1; i >= 0; i--\)/.test(sv), '아래 고정 줄은 위에 그려진 것(입력·단추)이 먼저 눌린다');
     assert.ok(/if \(mode == 0 && flingY\.isFinished\(\)\) \{/.test(sv) && !/downT > 2500L\) \{\s*\/\/ s372/.test(sv) && /editBeganAt < 3000L\) \{ postDelayed\(syncRun, 200L\)/.test(sv), '키보드가 올라 팝업이 줄어도 편집을 끝내지 않는다');
     assert.ok(/shown\[0\] && lp\.width == nw && lp\.height == nh/.test(kh), '같은 크기면 팝업 창을 다시 손대지 않는다');
+    assert.ok(/final boolean kidsStart = kids\.mode\(\)/.test(sa) && /if \(b == null && !kidsStart\) showOpening\(\);/.test(sa), 's373: 키즈 화면으로 켜면 오프닝(초록 바닥)을 건너뛴다 — 키즈 화면 아래 깔려 하단 탭 자리만 초록으로 비치던 일');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
