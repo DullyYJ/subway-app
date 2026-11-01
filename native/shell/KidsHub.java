@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
@@ -56,7 +56,11 @@ public final class KidsHub {
     private final Activity act;
     private final ShellCore.Store store;
     private final float dpr;
-    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Handler main = new Handler(Looper.getMainLooper()) {      // 키즈 화면의 어떤 후속 처리도 앱을 끝내지 않는다: 오류는 오류 로그에만 적는다
+        @Override public void dispatchMessage(android.os.Message m) {
+            try { super.dispatchMessage(m); } catch (Throwable e) { try { ErrLog.record(KidsHub.this.act, e, false); } catch (Throwable ignored) { } }
+        }
+    };
     private final FrameLayout layer;
     private final ScreenView hubV, noteV;
     private final View[] slide;
@@ -99,7 +103,7 @@ public final class KidsHub {
         cid = st.get(K_CID, "");
         String nodes = st.get(K_NODES, "");
         linked = nodes.length() > 2;
-        ShellCore.famOn = linked;
+        ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 키즈 화면 · 대화 열기 팝업에서)
         ScreenCore.settingsExtra = extraJson();
         layer = new FrameLayout(a);
         layer.setClickable(true);
@@ -211,8 +215,7 @@ public final class KidsHub {
         layer.setVisibility(View.VISIBLE);
         layer.bringToFront();
         showSaved();
-        fetchHub();
-        if (!paused) startLoop("hub");
+        if (paused) fetchHub(); else startLoop("hub");                       // 긴 대기의 첫 바퀴가 곧바로 화면을 내려 주므로 따로 한 번 더 받지 않는다
         float w = width();
         if (anim) {
             layer.setTranslationX(w);
@@ -316,7 +319,7 @@ public final class KidsHub {
             }
             JSONObject s = o.optJSONObject("screen");
             if (s == null) return true;
-            final String js = s.toString();
+            final String js = fixQ(s.toString());
             final ScreenCore.Screen sc = ScreenCore.load(js);
             main.post(new Runnable() { @Override public void run() { putScreen(view, sc, js, my); } });
         } catch (Throwable ignored) { }
@@ -437,6 +440,15 @@ public final class KidsHub {
         final String sk = sheetKind;
         io.execute(new Runnable() { @Override public void run() {
             try {
+                final boolean opener = v != null && v.matches("k[a-z]{1,2}\\.open");
+                if (opener && sheetD == null) {                                   // 마지막으로 본 팝업을 먼저 바로 띄우고, 서버 답이 오면 새 것으로 바꾼다(기다리는 느낌을 없앤다)
+                    String cj = store.get(K_SC + v, "");
+                    if (cj.length() > 0) {
+                        final String cj2 = fixQ(cj);
+                        final ScreenCore.Screen cs = ScreenCore.load(cj2);
+                        main.post(new Runnable() { @Override public void run() { if (sheetD == null) showSheet(kindOf(cs.id), cs, cj2); } });
+                    }
+                }
                 if (!ensureReg()) { note("연결하지 못했어요. 잠시 뒤에 다시 해 보세요"); return; }
                 JSONObject b = new JSONObject();
                 b.put("v", v == null ? "" : v);
@@ -449,8 +461,9 @@ public final class KidsHub {
                 final JSONObject o = new JSONObject(r);
                 if (!o.optBoolean("ok", false)) { note(o.optString("err", "처리하지 못했어요")); return; }
                 final JSONObject s = o.optJSONObject("screen");
-                final String js = s == null ? "" : s.toString();
+                final String js = s == null ? "" : fixQ(s.toString());
                 final ScreenCore.Screen sc = js.length() == 0 ? null : ScreenCore.load(js);
+                if (opener && js.length() > 0 && js.length() < 150000) store.put(K_SC + v, js);
                 final String notice = o.optString("notice", ""), clear = o.optString("clear", ""), kind = o.optString("sheet", "");
                 final boolean close = o.optBoolean("close", false), hub = o.optInt("hub", 0) == 1;
                 if (o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
@@ -464,6 +477,7 @@ public final class KidsHub {
                     }
                     ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
                     if (clear.length() > 0 && cv != null) cv.setField(clear, "");
+                    if ("kqx".equals(clear)) qpt = 1;
                     if (close) { closeSheet(true); }
                     if (hub && open) fetchHub();
                 } });
@@ -506,67 +520,111 @@ public final class KidsHub {
     }
 
     // ───────── 팝업(장소 등록 · 가족 대화 · 미션 · 응원문구 · 연결 관리) ─────────
+    private View sheetBox;
+    private boolean sheetBottom;
+
     private void showSheet(final String kind, ScreenCore.Screen sc, String js) {
+        if (act.isFinishing() || act.isDestroyed()) return;
         if (sheetD != null && sheetD.isShowing() && sheetKind.equals(kind)) { sheetJson = js; sheetV.setScreen(sc, true); return; }
         closeSheet(true);
+        final boolean bottom = "chat".equals(kind);                         // 대화 팝업은 아래에서 올라온다. 나머지는 가운데에 같은 넓은 폭으로 뜬다
         final ScreenCore.Dlg dg = sc.dlg != null ? sc.dlg : new ScreenCore.Dlg();
         final int[] pal = ShellCore.palette(ShellCore.theme(store));
         final ScreenView v = new ScreenView(act);
         v.setDpr(dpr); v.setPalette(pal);
         final DisplayMetrics dm = act.getResources().getDisplayMetrics();
         final float sw = dm.widthPixels / dpr, sh = dm.heightPixels / dpr;
-        final float maxW = Math.max(120f, Math.min(dg.w, sw - 2f * dg.mx));
-        final Dialog d = new Dialog(act, android.R.style.Theme_Material_Light_Dialog_NoActionBar);
+        final float maxW = bottom ? sw : Math.max(120f, Math.min(Math.max(dg.w, 460f), sw - 28f));      // 폭은 내용과 상관없이 늘 같게(화면 폭 - 양쪽 14dp, 최대 460dp)
+        final Dialog d = new Dialog(act, android.R.style.Theme_Material_Light_Dialog_NoActionBar) {
+            @Override public void cancel() { if (bottom) closeSheet(false); else super.cancel(); }
+        };
         final Window w = d.getWindow();
+        final FrameLayout box = new FrameLayout(act);
+        final boolean[] shown = new boolean[1];
         v.setListener(new Host(v) {
             @Override public void onContentH(final float dp) {
                 main.post(new Runnable() { @Override public void run() {
                     try {
                         if (sheetV != v || dp <= 0f) return;
-                        float ww = dg.fit && v.fitWidthDp() > 0f ? Math.min(maxW, v.fitWidthDp()) : maxW, hh = Math.min(dp, sh * dg.maxh);
+                        float hh = bottom ? sh * 0.72f : Math.min(dp, sh * dg.maxh);
                         WindowManager.LayoutParams lp = w.getAttributes();
-                        lp.width = Math.round(ww * dpr); lp.height = Math.round(hh * dpr);
-                        lp.gravity = Gravity.CENTER; lp.y = 0;
+                        lp.width = Math.round(maxW * dpr); lp.height = Math.round(hh * dpr);
+                        lp.gravity = bottom ? Gravity.BOTTOM : Gravity.CENTER; lp.y = 0;
                         w.setAttributes(lp);
+                        revealSheet(box, shown, bottom, hh);
                     } catch (Throwable ignored) { }
                 } });
             }
         });
-        FrameLayout box = new FrameLayout(act);
         GradientDrawable g = new GradientDrawable();
-        g.setColor(pal[ScreenView.R_CARD]); g.setCornerRadius(dg.r * dpr);
+        g.setColor(pal[ScreenView.R_CARD]);
+        float rr = dg.r * dpr;
+        if (bottom) g.setCornerRadii(new float[] { rr, rr, rr, rr, 0f, 0f, 0f, 0f }); else g.setCornerRadius(rr);
         box.setBackground(g);
         box.setClipToOutline(true);
+        box.setAlpha(0f);                                                  // 높이가 정해지기 전의 어정쩡한 크기는 보이지 않게 두었다가 한 번에 띄운다
         box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         d.setContentView(box);
         d.setCancelable(true); d.setCanceledOnTouchOutside(true);
-        w.setLayout(Math.round(maxW * dpr), Math.round(100f * dpr));
+        w.setLayout(Math.round(maxW * dpr), Math.round((bottom ? sh * 0.72f : 100f) * dpr));
+        w.setGravity(bottom ? Gravity.BOTTOM : Gravity.CENTER);
         w.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        w.setWindowAnimations(0);
         w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         w.setDimAmount(Math.max(0.2f, dg.dim));
-        sheetD = d; sheetV = v; sheetKind = kind; sheetJson = js; sheetQuiet = false;
+        sheetD = d; sheetV = v; sheetKind = kind; sheetJson = js; sheetQuiet = false; sheetBox = box; sheetBottom = bottom;
+        if ("quest".equals(kind)) qpt = 1;
         final String kd = kind;
         d.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
             @Override public void onDismiss(android.content.DialogInterface di) {
                 if (sheetD != d) return;
                 boolean quiet = sheetQuiet;
-                sheetD = null; sheetV = null; sheetKind = ""; sheetJson = "";
+                sheetD = null; sheetV = null; sheetKind = ""; sheetJson = ""; sheetBox = null; sheetBottom = false;
                 if ("place".equals(kd) && !quiet) send("kpl.cancel", "", "", null, null);      // 밖을 눌러 닫으면 쓰던 장소 초안은 버린다
                 if (open && !paused && !quiet) startLoop("hub");
             }
         });
         v.setScreen(sc, false);
-        try { d.show(); } catch (Throwable e) { sheetD = null; sheetV = null; sheetKind = ""; return; }
+        try { d.show(); } catch (Throwable e) { sheetD = null; sheetV = null; sheetKind = ""; sheetBox = null; return; }
+        main.postDelayed(new Runnable() { @Override public void run() { revealSheet(box, shown, bottom, 0f); } }, 450L);      // 높이 소식이 늦어도 보이게
         if ("chat".equals(kind) || "quest".equals(kind)) { if (!paused) startLoop(kind); }
     }
 
+    /** 팝업을 처음 보일 때 한 번: 대화는 아래에서 밀려 올라오고, 나머지는 살짝 커지며 떠오른다. */
+    private void revealSheet(View box, boolean[] shown, boolean bottom, float hh) {
+        if (shown[0]) return;
+        shown[0] = true;
+        try {
+            box.setAlpha(1f);
+            if (bottom) {
+                box.setTranslationY((hh > 0f ? hh * dpr : box.getHeight() > 0 ? box.getHeight() : 600f * dpr));
+                box.animate().translationY(0f).setDuration(300L).setInterpolator(new DecelerateInterpolator(1.8f)).start();
+            } else {
+                box.setScaleX(0.94f); box.setScaleY(0.94f); box.setAlpha(0f);
+                box.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(200L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
+            }
+        } catch (Throwable ignored) { box.setAlpha(1f); }
+    }
+
     private void closeSheet(boolean quiet) {
-        Dialog d = sheetD;
+        final Dialog d = sheetD;
         if (d == null) return;
         sheetQuiet = quiet;
+        final View bx = sheetBox;
+        final boolean bt = sheetBottom;
+        if ("quest".equals(sheetKind)) qpt = 1;
+        if (bt && bx != null && !quiet && d.isShowing()) {               // 아래로 부드럽게 내려간 뒤 닫는다
+            sheetD = null; sheetV = null; sheetKind = ""; sheetJson = ""; sheetBox = null; sheetBottom = false;
+            if (open && !paused) startLoop("hub");
+            try {
+                bx.animate().translationY(bx.getHeight() > 0 ? bx.getHeight() : 600f * dpr).setDuration(220L).setInterpolator(new AccelerateInterpolator(1.3f))
+                        .withEndAction(new Runnable() { @Override public void run() { try { d.dismiss(); } catch (Throwable ignored) { } } }).start();
+            } catch (Throwable e) { try { d.dismiss(); } catch (Throwable ignored) { } }
+            return;
+        }
         try { d.dismiss(); } catch (Throwable ignored) { }
-        sheetD = null; sheetV = null; sheetKind = ""; sheetJson = "";
+        sheetD = null; sheetV = null; sheetKind = ""; sheetJson = ""; sheetBox = null; sheetBottom = false;
         if (open && !paused && !quiet) startLoop("hub");
     }
 
@@ -580,14 +638,67 @@ public final class KidsHub {
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
             if ("kl.scan".equals(a.v)) { scan(me()); return; }
             if ("kq.tab".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
+            if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 스타포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
+            if ("kq.send".equals(a.v)) { send(a.v, a.id, String.valueOf(qpt), me().fields(), me()); return; }
             send(a.v, a.id, a.t, me().fields(), me());
         }
         @Override public void onSet(ScreenCore.Act a, boolean on) { }
         @Override public void onSearch(ScreenCore.Act a, String q) { }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
-        @Override public void onText(String key, String value, String kind) { }
+        @Override public void onText(final String key, final String value, String kind) {
+            if (!"klc".equals(key) || !"edit".equals(kind) || value == null) return;             // 시크릿 키 칸: 5자리 뒤에 - 가 저절로 붙는다
+            final String f = fmtKey(value, klcPrev);
+            klcPrev = f;
+            if (!f.equals(value)) { final ScreenView sv = me(); main.post(new Runnable() { @Override public void run() { sv.setField(key, f); } }); }
+        }
         @Override public void onContentH(float dp) { }
+    }
+
+    private String klcPrev = "";
+    /** 시크릿 키 글자를 XXXXX-XXXXX 모양으로 고친다. 지우는 중에는 끝의 - 를 다시 붙이지 않는다. */
+    static String fmtKey(String v, String prev) {
+        String s = v.toUpperCase(java.util.Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+        if (s.length() > 10) s = s.substring(0, 10);
+        if (s.length() > 5) return s.substring(0, 5) + "-" + s.substring(5);
+        if (s.length() == 5 && v.length() >= (prev == null ? 0 : prev.length())) return s + "-";
+        return s;
+    }
+
+    // ───────── 미션 스타포인트 고르기(통신 없이 바로 표시) ─────────
+    private int qpt = 1;
+    private void pickPt(String t) {
+        try { qpt = Math.max(1, Math.min(5, Integer.parseInt(t))); } catch (Throwable e) { return; }
+        ScreenView sv = sheetV;
+        if (sv == null || sheetJson.length() == 0) return;
+        try {
+            String nj = fixQ(sheetJson);
+            sheetJson = nj;
+            sv.setScreen(ScreenCore.load(nj), false);
+        } catch (Throwable ignored) { }
+    }
+    /** 미션 화면의 스타포인트 단추 가운데 고른 것만 금색으로 칠한다. */
+    private String fixQ(String js) {
+        if (js == null || js.indexOf("kq.pt") < 0) return js;
+        try {
+            JSONObject o = new JSONObject(js);
+            JSONArray b = o.optJSONArray("body");
+            if (b != null) markPt(b);
+            return o.toString();
+        } catch (Throwable e) { return js; }
+    }
+    private void markPt(JSONArray arr) {
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject n = arr.optJSONObject(i);
+            if (n == null) continue;
+            JSONArray kids = n.optJSONArray("kids");
+            if (kids != null) markPt(kids);
+            JSONObject a = n.optJSONObject("act");
+            if ("button".equals(n.optString("t")) && a != null && "kq.pt".equals(a.optString("v"))) {
+                boolean on = String.valueOf(qpt).equals(a.optString("t"));
+                try { n.put("fill", on ? "gold" : "card2"); n.put("tc", on ? "#121214" : "text"); n.put("line", on ? "gold" : "border"); } catch (Throwable ignored) { }
+            }
+        }
     }
 
     // ───────── QR 찍기(Google Play 서비스의 코드 스캐너 — 카메라 권한이 따로 필요 없다) ─────────
@@ -598,10 +709,12 @@ public final class KidsHub {
             com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(act, opts).startScan()
                     .addOnSuccessListener(new com.google.android.gms.tasks.OnSuccessListener<com.google.mlkit.vision.barcode.common.Barcode>() {
                         @Override public void onSuccess(com.google.mlkit.vision.barcode.common.Barcode bc) {
-                            String raw = bc == null ? "" : bc.getRawValue();
-                            String code = codeOf(raw);
-                            if (code.length() == 0) { note("길동무 키즈의 QR이 아니에요"); return; }
-                            send("kl.join", "", code, from.fields(), from);
+                            try {
+                                String raw = bc == null ? "" : bc.getRawValue();
+                                String code = codeOf(raw);
+                                if (code.length() == 0) { note("길동무 키즈의 QR이 아니에요"); return; }
+                                send("kl.join", "", code, from.fields(), from);
+                            } catch (Throwable e) { note("QR을 읽지 못했어요. 시크릿 키를 직접 넣어 주세요"); }
                         }
                     })
                     .addOnFailureListener(new com.google.android.gms.tasks.OnFailureListener() {
@@ -615,8 +728,22 @@ public final class KidsHub {
     /** QR 글(gildongmu-kids://pair?c=…&k=XXXXX-XXXXX) 또는 키 글자에서 시크릿 키만 뽑는다. */
     static String codeOf(String raw) {
         if (raw == null) return "";
+        try {
+            android.net.Uri u = android.net.Uri.parse(raw.trim());
+            String k = u.getQueryParameter("k");                               // https://…/q?k=XXXXX-XXXXX · gildongmu-kids://pair?c=…&k=XXXXX-XXXXX
+            if (k != null) { Matcher mk = CODE.matcher(k.toUpperCase()); if (mk.find()) return mk.group(); }
+        } catch (Throwable ignored) { }
         Matcher m = CODE.matcher(raw.toUpperCase());
         return m.find() ? m.group() : "";
+    }
+
+    /** 자녀 폰 QR 을 기본 카메라로 찍어 '길동무로 열기'를 누르면 들어오는 길(gildongmu-kids://pair?k=…). 바로 연결해 준다. */
+    public void joinFromUri(android.net.Uri u) {
+        try {
+            String code = codeOf(u == null ? "" : u.toString());
+            if (code.length() == 0) { note("길동무 키즈의 QR이 아니에요"); return; }
+            send("kl.join", "", code, new java.util.HashMap<String, String>(), null);
+        } catch (Throwable e) { note("연결하지 못했어요"); }
     }
 
     // ───────── 통신(모두 뒤 스레드) ─────────

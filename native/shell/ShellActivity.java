@@ -295,6 +295,7 @@ public class ShellActivity extends Activity {
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
         KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
+        kidsDeepLink(getIntent());
         if (b == null && (kids.wantStart() || kidsPushLaunch(getIntent()))) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
@@ -365,6 +366,14 @@ public class ShellActivity extends Activity {
         WidgetCore.captureLaunch(it); CommuteAlarm.captureBrief(it);
         widgetLaunch(); briefLaunch();
         if (kidsPushLaunch(it) && kids != null && !kids.isOpen()) kids.open(true);        // 키즈 알림을 눌러 들어왔다 — 키즈 화면으로
+        kidsDeepLink(it);
+    }
+    /** 자녀 폰 QR 을 카메라로 찍어 열린 링크(gildongmu-kids://pair?k=…)면 곧바로 연결한다. */
+    private void kidsDeepLink(Intent it) {
+        try {
+            android.net.Uri u = it == null ? null : it.getData();
+            if (u != null && "gildongmu-kids".equals(u.getScheme()) && kids != null) { it.setData(null); kids.joinFromUri(u); }
+        } catch (Throwable ignored) { }
     }
     /** 키즈 푸시 알림을 눌러 열었나(연결된 부모만 뜻이 있다). 한 번 쓰면 지운다. */
     private boolean kidsPushLaunch(Intent it) {
@@ -553,8 +562,8 @@ public class ShellActivity extends Activity {
         applyIme();
         hideMapView();
         if (kids != null) kids.hideFamily();
-        ShellCore.famOn = kids != null && kids.linked();
-        ScreenCore.famChip = !ShellCore.famOn ? 0 : "fam".equals(ShellCore.mode(store)) ? 2 : 1;
+        ShellCore.famOn = false;
+        ScreenCore.famChip = 0;                                                         // 커뮤니티의 '가족대화' 칩은 없앴다
         shownJson.remove(head); shownKey.remove(head);
         slots = ShellCore.slotsOf(store, tab);
         head.setVisibility(slots.length > 1 ? View.VISIBLE : View.GONE);
@@ -1239,7 +1248,6 @@ public class ShellActivity extends Activity {
         // 0순위: 가볍고 상태 없는 화면들(탭 막대 · 칩 줄 · 설정 · 노선도 지하철 방식)은 /screen/batch 한 번으로
         final java.util.ArrayList<String[]> ents = new java.util.ArrayList<String[]>();       // {열쇠, 경로, GET|POST, 본문}
         for (String t : ShellCore.TABS) if (!t.equals(cur)) ents.add(new String[] { "tabs|" + t, "/screen/tabs", "POST", ShellCore.tabsBody(t) });
-        if (ShellCore.famOn) ents.add(new String[] { ShellCore.cchipsKey("fam"), "/screen/cchips", "POST", ShellCore.cchipsBody("fam") });
         for (String m : ShellCore.MODES) {
             if (m.equals("set") && live.contains(ShellCore.S_SETTINGS)) continue;
             if (live.contains(ShellCore.S_CCHIPS) && m.equals(liveMode)) continue;
@@ -1758,8 +1766,7 @@ public class ShellActivity extends Activity {
         try {
             if (slots.length > 0 && ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) { shownJson.remove(body); shownKey.remove(body); loadSlot(slots.length - 1, true); }
             boolean fo = kids != null && kids.linked();
-            if (fo != ShellCore.famOn && "community".equals(ShellCore.currentTab(store))) showTab("community");          // 연결 · 해제되면 커뮤니티 맨 앞 '가족대화' 칩도 곧바로 붙거나 사라진다
-            else ShellCore.famOn = fo;
+            ShellCore.famOn = false;
         } catch (Throwable ignored) { }
     }
 

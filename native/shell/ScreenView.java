@@ -1107,7 +1107,7 @@ public class ScreenView extends View {
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
     private boolean lbDrawn; private long lbT0;
-    private boolean liveDrawn; private int liveCol; private android.graphics.RadialGradient liveSh; private final Matrix liveM = new Matrix();
+    private boolean liveDrawn; private float liveX, liveY, liveRd; private int liveCol; private android.graphics.RadialGradient liveSh; private final Matrix liveM = new Matrix();
     /** 불러오는 중 막대: 제목 · 0→100% 로 차오르는 막대 · 퍼센트. 받는 시간은 알 수 없어 시간으로 천천히 차오르게 그린다(99% 에서 멈춰 기다리다, 받으면 이 줄이 내용으로 바뀐다). 새 객체 없이 그린다. */
     private void drawLbar(Canvas cv, ScreenCore.Item it) {
         long now = SystemClock.uptimeMillis();
@@ -2416,7 +2416,11 @@ public class ScreenView extends View {
         if (!drewOnce) { drewOnce = true; post(firstDrawCb); }
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (!lbDrawn) lbT0 = 0L;                                                                                                            // 불러오는 막대가 안 보이면 다음에 보일 때 0% 부터
-        if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || liveDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
+        if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();
+        else if (liveDrawn) {                                                                                                               // 깜박이는 점만 보일 때: 점 자리만 초당 30번(화면 전체를 매 프레임 다시 그리지 않는다)
+            float oy = lay.headH - scrollY;
+            postInvalidateDelayed(33L, Math.max(0, Math.round((liveX - liveRd) * dpr)), Math.max(0, Math.round((oy + liveY - liveRd) * dpr)), Math.round((liveX + liveRd) * dpr) + 1, Math.round((oy + liveY + liveRd) * dpr) + 1);
+        }                                     // 흐르는 문구가 보이는 동안만 화면 박자로 계속 그린다
         if (brxPingN > 0 && isShown()) {                                                           // 버스·내 위치 마커 맥박: 그 마커 자리만 초당 15번(보이는 동안만; 화면을 벗어나면 저절로 멈춘다)
             float oy = lay.headH - scrollY;
             for (int i = 0; i < brxPingN; i++) {
@@ -3521,7 +3525,7 @@ public class ScreenView extends View {
             float gr = dr * 2.1f; liveM.reset(); liveM.setScale(gr, gr); liveM.postTranslate(dcx, dcy); liveSh.setLocalMatrix(liveM);        // 점 둘레의 은은한 후광(숨과 함께)
             p.setShader(liveSh); p.setAlpha(Math.round(255f * (0.35f + 0.5f * br))); cv.drawCircle(dcx, dcy, gr, p); p.setShader(null);
             p.setColor(dcol); p.setAlpha(Math.round(255f * (0.62f + 0.38f * br))); cv.drawCircle(dcx, dcy, dr * (0.92f + 0.12f * br), p); p.setAlpha(255);
-            liveDrawn = true;
+            liveDrawn = true; liveX = dcx; liveY = dcy; liveRd = dr * 4.2f;
         } else { p.setColor(dcol); cv.drawCircle(dcx, dcy, dr, p); }
         setText(ScreenCore.LTH_TITLE, true, pal[R_TEXT]);
         cv.drawText(it.t1, it.f1, base(it.y, it.h - 4f, 0), tp);
@@ -3905,8 +3909,16 @@ public class ScreenView extends View {
         if (tiles != null) { tiles.unwatch(tileTick); tiles = null; tmValue = ""; }
         if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();
-        if (editor != null && editor.getParent() instanceof ViewGroup) ((ViewGroup) editor.getParent()).removeView(editor);
-        if (input != null) { blurInput(); if (input.getParent() instanceof ViewGroup) ((ViewGroup) input.getParent()).removeView(input); inShown = false; inL = inT = inW = inH = -1; }
+        // 창이 닫히며 자식들을 하나씩 떼는 도중에 같은 부모에서 입력칸을 지우면 부모의 자식 목록이 어긋나 NullPointerException(ViewGroup.dispatchDetachedFromWindow)이 난다 — 떼는 일이 끝난 뒤에 지운다
+        final View ed = editor, inp = input;
+        if (input != null) { blurInput(); inShown = false; inL = inT = inW = inH = -1; }
+        ui.post(new Runnable() { @Override public void run() {
+            if (isAttachedToWindow()) return;
+            try {
+                if (ed != null && ed.getParent() instanceof ViewGroup) ((ViewGroup) ed.getParent()).removeView(ed);
+                if (inp != null && inp.getParent() instanceof ViewGroup) ((ViewGroup) inp.getParent()).removeView(inp);
+            } catch (Throwable ignored) { }
+        } });
     }
     // ───────────── 글자 입력칸(field) 편집 ─────────────
     private boolean editInFoot, editSilent, editEnding;

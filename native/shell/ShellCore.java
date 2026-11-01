@@ -776,6 +776,7 @@ public final class ShellCore {
     }
     /** 캐시 열쇠가 가리키는 칸에 올라와야 하는 엔진 화면 이름(다른 탭의 늦은 답이 이 칸을 덮지 못하게 가린다). */
     public static String expectId(String key) {
+        if (key == null) return "";                    // 화면 열쇠가 아직 없을 때(가족대화처럼 열쇠를 두지 않는 화면) 밀기에서 죽지 않게
         String s = key.indexOf('|') > 0 ? key.substring(0, key.indexOf('|')) : key;
         return S_MAPH.equals(s) || S_MAPB.equals(s) ? "map" : s;
     }
