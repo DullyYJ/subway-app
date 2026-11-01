@@ -1109,6 +1109,13 @@ function findAndroidJar() {
     assert.ok(/shown\[0\] && lp\.width == nw && lp\.height == nh/.test(kh), '같은 크기면 팝업 창을 다시 손대지 않는다');
     assert.ok(/final boolean kidsStart = kids\.mode\(\)/.test(sa) && /if \(b == null && !kidsStart\) showOpening\(\);/.test(sa), 's373: 키즈 화면으로 켜면 오프닝(초록 바닥)을 건너뛴다 — 키즈 화면 아래 깔려 하단 탭 자리만 초록으로 비치던 일');
   });
+  await t('s374: 키즈 탭 버튼 진동 · 장소 등록 팝업 즉시 반응(시각/요일 로컬 · 취소/저장 즉시 닫기) · 열림 단축', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), hp = fs.readFileSync(N('SceneHaptics.java'), 'utf8');
+    assert.ok(/buzz\(act, 14L\);/.test(kh) && /p\("tap"/.test(hp), '키즈 탭의 모든 버튼 눌림에 짧은 진동');
+    assert.ok(/placeLocal\(a\)/.test(kh) && /private boolean placeLocal\(ScreenCore\.Act a\)/.test(kh) && /"kpl\.cancel"\.equals\(a\.v\) && sheetD != null/.test(kh), '시각 · 요일 바꾸기와 취소는 서버를 기다리지 않는다');
+    assert.ok(/private boolean placeSave\(ScreenCore\.Act a\)/.test(kh) && /ff\.put\("kpm"/.test(kh) && /ff\.put\("kpd"/.test(kh) && /closeSheet\(true\);\s*send\(a\.v, a\.id, a\.t, ff, null\)/.test(kh), '저장은 바로 닫고 뒤에서 한 번에 보낸다(시각 · 요일 값을 함께)');
+    assert.ok(/revealSheet\(box, shown, bottom, 0f\); \} \}, 220L\)/.test(kh) && /setDuration\(110L\)/.test(kh) && /setDuration\(240L\)/.test(kh), '팝업 열림이 빨라졌다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
