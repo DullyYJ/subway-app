@@ -3755,3 +3755,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - KidsHub.Host.onAction: 모든 call 눌림에 buzz. 장소 팝업: kpl.t/kpl.d 는 placeLocal() 이 시트 JSON 을 고쳐 통신 없이 바로 그림, kpl.cancel 은 즉시 닫기(닫히며 초안 버리기 전송), kpl.save 는 이름·요일이 갖춰지면 즉시 닫고 뒤에서 kpm(분)/kpd(요일 비트)와 함께 전송. 열림 폴백 450→220ms, 애니메이션 단축.
 - kids-worker.js: kpl.save 가 f.kpm/f.kpd 를 받아 저장(없으면 서버 초안 값), kpl.new 는 초안을 다시 읽지 않고 바로 화면 반환, questSheet 의 제목·스타포인트·알약을 head(고정)로 옮김 — 밀기 연출은 head 아래(body)만 움직인다. 워커 재배포 필요.
 - 시험: node test/shell_native.test.js (s374). 기기 미확인.
+
+## s375 (YJ: 자녀 위치 점 · 지도 두 번 탭 · 키즈 전환 슬라이드)
+- kids-worker.js: 자녀 위치/퀘스트/가족 실시간 대화 머리줄을 lth(점)+live 로 — 자녀 위치는 검정 점(#111111). 모두 뭐하니처럼 깜박인다.
+- ScreenView: live 점이 한 화면에 여럿이면 점 자리 부분 갱신 대신 화면을 30fps 로 다시 그린다(liveN) · 색별 그라데이션 캐시. 끌 수 있는 지도(lp 가 있는 것)를 380ms 안에 두 번 탭하면 자녀 핀(m)으로 돌아온다(tmHome, ± 단추 자리는 제외).
+- KidsHub: preload() — 앱 켠 뒤 2.5초 · 앱 앞으로 올 때 · 키즈 화면을 나갈 때 뒤에서 hub 화면을 받아 해석까지 해 둔다(45초 제한). open() 은 미리 받은 화면을 먼저 꽂고, 첫 프레임(preDraw)에 오른쪽→왼쪽 200ms 로 민다.
+- 워커 재배포 필요(점). 기기 미확인.
