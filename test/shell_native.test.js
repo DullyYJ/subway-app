@@ -1136,6 +1136,10 @@ function findAndroidJar() {
     assert.ok(/if \(it\.plog\) \{\s*\/\/ 활동 기록/.test(sv) && /if \(bottom\) pickOff\.put\(it\.key, it\.pickMax\)/.test(sv) && /if \(it\.plog\) \{ setText\(r\.size, r\.on/.test(sv), '처음엔 맨 아래에서 시작 · 새 줄이 오면 맨 아래를 보던 중일 때만 따라 내려간다 · 카드 모양 없이 글만 그린다');
     assert.ok(/if \(it\.plog\) \{ blurInput\(\); if \(listener != null\) listener\.onAction\(r\.act\); return; \}/.test(sv), '활동 기록을 누르면 전체 기록 창(켜진 줄 표시는 안 바뀐다)');
   });
+  await t('s378: 키즈 홈 아래 칸은 글 수와 상관없이 고정 — 대화 칸은 엔진이 준 최대 높이(ffmax)까지만 자라고 넘치면 안에서만 민다', () => {
+    const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/if \(ff\.ffmax > 0f\) avail = Math\.min\(avail, ff\.ffmax\);/.test(sc) && /float vh = Math\.max\(msgsH > 0f \? minVh : 0f, avail\);/.test(sc), '대화 칸 높이는 ffmax 를 넘지 않는다(모자라는 화면에서는 남는 만큼)');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
