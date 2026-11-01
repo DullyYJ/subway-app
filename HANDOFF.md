@@ -3749,3 +3749,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 ## s373 — 키즈 화면으로 켤 때 하단 탭 자리 초록 (2026-11-01)
 - 원인: 오프닝(OpenView · 바닥색 slot.ground = #80AB7B)이 켤 때 전체 화면으로 얹히는데, 키즈 화면(KidsHub layer)이 그 위로 bringToFront 되며 탭 막대 자리(아래 56dp)만 덮지 않아 오프닝 바닥이 초록 띠로 비쳤다(탭 막대는 오프닝 아래라 안 보임). s372 의 마지막 탭 막대 즉시 표시는 이 원인이 아니었음(그대로 둠 — 무해).
 - 수정: 키즈 화면으로 시작하는 경우(kidsStart) 오프닝을 건너뛴다.
+
+## s374 (YJ: 키즈 밥·응가 대기 / 버튼 진동 / 장소 팝업 느림 / 미션 팝업 밀기)
+- SceneHaptics: "tap"(12ms, 100) 추가 — 키즈 앱(Buzz.play "tap")과 부모 KidsHub(buzz 14ms)가 버튼 눌림마다 울린다.
+- KidsHub.Host.onAction: 모든 call 눌림에 buzz. 장소 팝업: kpl.t/kpl.d 는 placeLocal() 이 시트 JSON 을 고쳐 통신 없이 바로 그림, kpl.cancel 은 즉시 닫기(닫히며 초안 버리기 전송), kpl.save 는 이름·요일이 갖춰지면 즉시 닫고 뒤에서 kpm(분)/kpd(요일 비트)와 함께 전송. 열림 폴백 450→220ms, 애니메이션 단축.
+- kids-worker.js: kpl.save 가 f.kpm/f.kpd 를 받아 저장(없으면 서버 초안 값), kpl.new 는 초안을 다시 읽지 않고 바로 화면 반환, questSheet 의 제목·스타포인트·알약을 head(고정)로 옮김 — 밀기 연출은 head 아래(body)만 움직인다. 워커 재배포 필요.
+- 시험: node test/shell_native.test.js (s374). 기기 미확인.
