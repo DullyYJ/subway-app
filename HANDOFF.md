@@ -3670,3 +3670,15 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **고침(앱만, 새 APK)**: `MapCore.emptyArrCount()`(a·f 중 받았지만 빈 것) · `ShellActivity.busEmptyCheck()` — 도착정보 받기가 끝난 자리에서 비어 있는 곳이 남아 있으면 버스 탭이 보이는 동안 1.5 · 3 · 4.5 · 8 · 8 · 12초 뒤(여섯 번, 약 37초)에 조용히 다시 받는다(`busRefresh` — 보던 화면 유지, 값이 오면 그 줄만 바뀜). 정말 버스가 없는 밤에도 여섯 번에서 멈춘다. 탭을 다시 열면 처음부터(`reloadMap`). 시험 `shell_native` s362 · `ShellJvmTest`(emptyArrCount).
 - 하지 않은 것(제안): 비어 있는 동안 "도착정보 없음" 대신 "불러오는 중…"으로 그리기(엔진이 다시 받는 횟수를 알아야 해서 엔진 변경) · 서버 `workers/src/bus.js` 가 빈 응답도 15초 캐시하는 것(`okBody` 가 빈 본문을 정상으로 봄 — 같은 주소 첫 시도만 영향, 재질문은 `_r=` 로 우회) — 필요하면 다음 단계.
 - 배포: 엔진 `engine/route-v2-worker.ascii.js`(`route-v2-2026-10-31s362`)를 route-v2 에 붙여 넣어야 시간표 간격이 적용된다. 앱은 새 APK. ⚠ ShellActivity · MapCore 는 로컬 컴파일 불가(MapCore 는 JVM 시험으로 컴파일 확인됨) → CI · 실기기 확인.
+
+## s363 (2026-11-01) — 길동무 ↔ 길동무 키즈 연동 (부모 쪽) · 키즈 캐릭터 진동
+**원칙**: 계산·글·결정은 전부 키즈 엔진(Cloudflare 워커 `kids-worker.js`, D1)이 하고 앱은 화면 글(ScreenCore JSON)을 그리기만 한다. 실시간은 D1 `rev` 카운터 + 긴 대기(`/c/wait`·`/p/wait` 최대 15초) + 같은 isolate 안 즉시 깨우기.
+- **새 `KidsHub.java`**: 연동 상태 보관 · 홈 버튼 3초 꾹 → 키즈 감시 화면이 오른쪽에서 왼쪽으로 · 다시 3초 꾹 → 왼쪽에서 오른쪽(연동 안 된 사람은 아무 변화 없음) · 시크릿 키 입력 / QR 스캔(Google 코드 스캐너, `play-services-code-scanner:16.1.0`) · 긴 대기 · 화면 안 알림(`note()`, 토스트 금지 규칙).
+- **ScreenCore**: 노드 `tmap`(live·pts·lp) · `lp`(지도 3초 꾹 → 엔진 `kpl.new`) · `settingsExtra`(엔진이 준 설정 줄 3개를 설정 탭에 끼움 — 연동된 사람에게만 키즈 설정/응원문구 줄이 나온다). **ScreenView**: 지도 3초 꾹(`tmLpRun`) + 짧은 진동.
+- **ShellActivity**: `kids` 훅(onPause/onResume 뒤에 `kids.pause()/resume()`, 래퍼는 `android.R.id.content` 위에 올림 — `setContentView(root)` 순서 시험 때문).
+- **엔진 규칙**: 장소(hh:mm · 요일 비트 Mon=0) → 30분 전 `due` → 자녀 `seen`(확인)/`go`(출발) → 100m 이내 + GPS 90초 이내 → `done` + 별 50개(한 번만). 150m 안에 있으면 도착 시각 기록. 지도 알림 글("00이가 00에 도착하지 않았어요" / "가고 있어요")도 엔진이 만든다. 응원문구는 부모당 최대 20개(`MAX_CHEER`, 40자) → 키즈 맨 위 흐르는 문구가 부모 문구로 바뀜.
+- **키즈 앱(`gildongmu-kids`, 번들 p-kids23)**: 시크릿 키·QR 표시, 긴 대기 `waitLoop`, 알림 시트(`promptSheet`: 확인/출발), 5초 안내, 하단 남은 km 알약(`pill`), 응원문구(`cheers`). 
+- **키즈 진동(p-kids24)**: 키즈 매니페스트에 `VIBRATE` 권한이 없어 홈 장면의 길동무식 진동이 조용히 막혀 있었다 → 권한 추가. 마을(`VillageView`)에 새 `Buzz.java`(SceneHaptics 무늬 재사용): 친구 터치=캐릭터별 착지(dolsom cotton · ppopu pose · dudung dig · lovel flip · sul fly · chaeng puddle) · 응가 치우기=squirt · 응가 생김=thud · 동작 시작=grin.
+- **시험**: `shell_native.test.js` 컴파일 목록에 `KidsHub.java` 추가, `test/java/maplibre-stubs/ml/` 에 QR 스캐너 스텁 추가. ⚠ 진동 상수 `FLAG_IGNORE_GLOBAL_SETTINGS` 는 쓰지 말 것(CI android.jar 에서 컴파일 오류).
+- **배포**: 워커(`kids-worker.js`)는 YJ 가 붙여 넣는다(D1 표는 첫 요청에 자동 생성 · 응답 모양이 바뀌었으니 키즈 앱과 함께 배포). 앱은 새 APK.
+- **남은 것**: 커뮤니티 '가족대화' 카테고리 연동(지금은 허브 대화가 시트로 열림) · 앱이 꺼져 있을 때 푸시는 FCM 없이 불가 · 키즈 알약은 버스 대기 알약과 비슷하지만 같은 뷰는 아님 · 응원문구 "ㅈ0개" 는 20개로 해석.
