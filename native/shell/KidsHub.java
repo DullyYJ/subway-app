@@ -77,6 +77,29 @@ public final class KidsHub {
     private boolean open, paused;
     private long lastRefresh = 0L;
     private String lastHubJson = "";
+    private volatile ScreenCore.Screen hubPre; private volatile String hubPreJs = ""; private long lastPre;          // s375: 키즈 화면은 미리 받아 해석까지 마쳐 둔다 — 홈에서 키즈로 넘어올 때 빈 화면이 없게
+    /** 키즈 화면이 아닐 때(홈 등) 뒤 스레드에서 키즈 화면을 미리 받아 둔다(저장본 → 서버 최신). 45초에 한 번만. */
+    public void preload() {
+        if (!linked) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastPre < 45000L) return;
+        lastPre = now;
+        io.execute(new Runnable() { @Override public void run() {
+            try {
+                if (hubPre == null) { String c = store.get(K_HUB, ""); if (c.length() > 0) { hubPre = ScreenCore.load(c); hubPreJs = c; } }
+                if (!"1".equals(store.get(K_REG, "0"))) return;
+                String r = call("GET", "/p/screen?v=hub&cid=" + enc(cid), null, 10000);
+                if (r == null) { lastPre = 0L; return; }
+                JSONObject o = new JSONObject(r);
+                JSONObject sj = o.optBoolean("ok", false) ? o.optJSONObject("screen") : null;
+                if (sj == null) return;
+                String js = fixQ(sj.toString());
+                if (js.equals(hubPreJs)) return;
+                hubPre = ScreenCore.load(js); hubPreJs = js;
+                if (js.length() < 150000) store.put(K_HUB, js);
+            } catch (Throwable ignored) { lastPre = 0L; }
+        } });
+    }
     // 떠 있는 팝업(장소 · 대화 · 미션 · 응원문구 · 연결)
     private Dialog sheetD;
     private ScreenView sheetV;
@@ -106,6 +129,7 @@ public final class KidsHub {
         ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 키즈 화면 · 대화 열기 팝업에서)
         ScreenCore.settingsExtra = extraJson();
         SceneCore.quietAuto = mode();                                         // 키즈 모드에서는 홈 장면의 친구들 활동 진동을 울리지 않는다
+        main.postDelayed(new Runnable() { @Override public void run() { if (!open) preload(); } }, 2500L);          // s375: 앱을 켜면 키즈 화면을 미리 받아 둔다
         layer = new FrameLayout(a);
         layer.setClickable(true);
         layer.setVisibility(View.GONE);
@@ -206,7 +230,7 @@ public final class KidsHub {
         if (sheetV != null) sheetV.setPalette(pal);
     }
 
-    public void resume() { paused = false; KidsPush.fg = true; if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
+    public void resume() { paused = false; KidsPush.fg = true; if (!open) preload(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
     public void pause() { paused = true; KidsPush.fg = false; stopLoop(); famEp++; }
     public void destroy() { alive = false; stopLoop(); closeSheet(true); }
 
@@ -261,9 +285,21 @@ public final class KidsHub {
         layer.setVisibility(View.VISIBLE);
         layer.bringToFront();
         float w = width();
+        final ScreenCore.Screen pre = hubPre; final String preJs = hubPreJs;
+        if (pre != null && !preJs.equals(lastHubJson)) { boolean first = lastHubJson.length() == 0; lastHubJson = preJs; hubV.setScreen(pre, !first); }          // s375: 미리 받아 둔 화면을 슬라이드가 시작되기 전에 먼저 꽂는다(빈 화면 없음)
         if (anim) {                                                           // s370: 빠르게 — 160ms, 아래 화면은 따로 밀지 않는다(그릴 것이 반으로 줄어 탭 전환이 바로 된다)
             layer.setTranslationX(w);
-            layer.animate().translationX(0f).setDuration(160L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
+            final boolean[] go = new boolean[1];
+            final Runnable start = new Runnable() { @Override public void run() {
+                if (go[0]) return; go[0] = true;
+                if (open) layer.animate().translationX(0f).setDuration(200L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
+            } };
+            try {                                                             // s375: 화면이 한 번 배치된 첫 프레임에 밀기 시작 — 오른쪽에서 왼쪽으로 내용이 찬 채 들어온다
+                layer.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                    @Override public boolean onPreDraw() { layer.getViewTreeObserver().removeOnPreDrawListener(this); start.run(); return true; }
+                });
+            } catch (Throwable ignored) { }
+            main.postDelayed(start, 90L);
         } else { layer.animate().cancel(); layer.setTranslationX(0f); }
         main.post(new Runnable() { @Override public void run() {              // 첫 그림이 끝난 뒤에 나머지(저장, 탭 막대, 저장본 읽기, 미리 받기, 긴 대기)를 한다
             if (!open) return;
@@ -277,6 +313,7 @@ public final class KidsHub {
     public void close(boolean anim) {
         if (!open) return;
         open = false;
+        lastPre = 0L; main.postDelayed(new Runnable() { @Override public void run() { if (!open) preload(); } }, 800L);          // s375: 나간 뒤에 다음번에 쓸 최신 화면을 미리 받아 둔다
         fireTabs();
         closeSheet(true);
         stopLoop();
@@ -385,6 +422,7 @@ public final class KidsHub {
     private void putScreen(String view, ScreenCore.Screen sc, String js, int my) {
         if (my != epoch && !"hub".equals(view)) return;
         if ("hub".equals(view)) {
+            hubPre = sc; hubPreJs = js;
             if (!open || js.equals(lastHubJson)) return;
             lastHubJson = js;
             hubV.setScreen(sc, true);

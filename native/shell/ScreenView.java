@@ -1120,7 +1120,7 @@ public class ScreenView extends View {
     // ───────────── 맨 위 흐르는 문구(문구 목록은 엔진이 정한 값 · 앱은 오른쪽에서 왼쪽으로 흘리며 색을 돌리기만) ─────────────
     private boolean skelDrawn;
     private boolean lbDrawn; private long lbT0;
-    private boolean liveDrawn; private float liveX, liveY, liveRd; private int liveCol; private android.graphics.RadialGradient liveSh; private final Matrix liveM = new Matrix();
+    private boolean liveDrawn; private int liveN; private float liveX, liveY, liveRd; private int liveCol; private android.graphics.RadialGradient liveSh; private final Matrix liveM = new Matrix(); private final java.util.HashMap<Integer, android.graphics.RadialGradient> liveShCache = new java.util.HashMap<Integer, android.graphics.RadialGradient>();
     /** 불러오는 중 막대: 제목 · 0→100% 로 차오르는 막대 · 퍼센트. 받는 시간은 알 수 없어 시간으로 천천히 차오르게 그린다(99% 에서 멈춰 기다리다, 받으면 이 줄이 내용으로 바뀐다). 새 객체 없이 그린다. */
     private void drawLbar(Canvas cv, ScreenCore.Item it) {
         long now = SystemClock.uptimeMillis();
@@ -2077,13 +2077,33 @@ public class ScreenView extends View {
             }
             case MotionEvent.ACTION_UP: {
                 ui.removeCallbacks(tmLpRun);
-                if (!tmMoved && !tmLpFired && SystemClock.uptimeMillis() - tmDT < 600L) tmTap(x - tmL * dpr, y - tmT * dpr);
+                if (!tmMoved && !tmLpFired && SystemClock.uptimeMillis() - tmDT < 600L) {
+                    long nt = SystemClock.uptimeMillis(); float lx = x - tmL * dpr, ly = y - tmT * dpr;
+                    if (tmLp.length() > 0 && tmTapT > 0L && nt - tmTapT < 380L && Math.hypot(x - tmTapX, y - tmTapY) < 44f * dpr && !tmOnBtn(lx, ly)) { tmTapT = 0L; tmHome(); }          // s375(YJ): 지도를 두 번 탭하면 자녀 위치로 돌아온다
+                    else { tmTapT = nt; tmTapX = x; tmTapY = y; tmTap(lx, ly); }
+                }
                 finishTouch(); invalidate();
                 return true;
             }
             case MotionEvent.ACTION_CANCEL: finishTouch(); invalidate(); return true;
             default: return true;
         }
+    }
+    private long tmTapT; private float tmTapX, tmTapY;
+    private boolean tmOnBtn(float lx, float ly) {
+        float bsz = 30f * dpr, bm = 10f * dpr, bx = tmWd * dpr - bm - bsz, by = tmHt * dpr - bm - 2f * bsz;
+        return lx >= bx && lx < bx + bsz && ly >= by && ly < by + 2f * bsz;
+    }
+    /** 자녀(내 핀 m) 위치로 지도를 되돌린다 — 핀이 없으면 첫 핀. */
+    private void tmHome() {
+        if (tmView == null || tmPins.isEmpty()) return;
+        int at = 0;
+        for (int i = 0; i < tmPins.size(); i++) if ("m".equals(tmPins.get(i).k)) { at = i; break; }
+        TileMapCore.Pin pn = tmPins.get(at);
+        tmFocus = at; tmFocApplied = at; tmLabel = false;
+        tmGoTo(pn.la, pn.lo, Math.max(tmView.zoom, 15.0));
+        try { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); } catch (Throwable ignored) { }
+        invalidate();
     }
     private void tmTap(float lx, float ly) {
         float bsz = 30f * dpr, bm = 10f * dpr, bx = tmWd * dpr - bm - bsz, by = tmHt * dpr - bm - 2f * bsz;
@@ -2258,7 +2278,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; liveDrawn = false; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; liveDrawn = false; liveN = 0; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -2436,6 +2456,7 @@ public class ScreenView extends View {
         if (sceneDrawn && scene != null && scene.isRunning() && !scene.isPaused()) postInvalidateOnAnimation();        // 장면이 보이는 동안만 화면 박자로 계속 그린다(안 보이면 저절로 멈춘다)
         if (!lbDrawn) lbT0 = 0L;                                                                                                            // 불러오는 막대가 안 보이면 다음에 보일 때 0% 부터
         if (marqDrawn || mqDrawn || skelDrawn || lbDrawn || runDrawn || inbarBusy) postInvalidateOnAnimation();
+        else if (liveDrawn && liveN > 1) postInvalidateDelayed(33L);                                                                       // s375: 깜박이는 점이 여럿(머리·본문·아래 줄)이면 점마다 자리가 달라 화면을 초당 30번 다시 그린다
         else if (liveDrawn) {                                                                                                               // 깜박이는 점만 보일 때: 점 자리만 초당 30번(화면 전체를 매 프레임 다시 그리지 않는다)
             float oy = lay.headH - scrollY;
             postInvalidateDelayed(33L, Math.max(0, Math.round((liveX - liveRd) * dpr)), Math.max(0, Math.round((oy + liveY - liveRd) * dpr)), Math.round((liveX + liveRd) * dpr) + 1, Math.round((oy + liveY + liveRd) * dpr) + 1);
@@ -3538,13 +3559,13 @@ public class ScreenView extends View {
             long ms = SystemClock.uptimeMillis();
             float ph = (ms % 1800L) / 1800f, br = 0.5f - 0.5f * (float) Math.cos(ph * 6.2831855f);              // 0→1→0 부드러운 숨
             float hr = dr * (1.2f + 2.6f * ph), ha = (1f - ph) * (1f - ph);                                     // 번지는 고리: 커질수록 옅어진다
-            if (liveSh == null || liveCol != dcol) { liveCol = dcol; liveSh = new android.graphics.RadialGradient(0f, 0f, 1f, new int[] { dcol & 0x00FFFFFF | 0xB0000000, dcol & 0x00FFFFFF | 0x55000000, dcol & 0x00FFFFFF }, new float[] { 0f, 0.45f, 1f }, Shader.TileMode.CLAMP); }
+            if (liveSh == null || liveCol != dcol) { liveCol = dcol; liveSh = liveShCache.get(dcol); if (liveSh == null) { liveSh = new android.graphics.RadialGradient(0f, 0f, 1f, new int[] { dcol & 0x00FFFFFF | 0xB0000000, dcol & 0x00FFFFFF | 0x55000000, dcol & 0x00FFFFFF }, new float[] { 0f, 0.45f, 1f }, Shader.TileMode.CLAMP); liveShCache.put(dcol, liveSh); } }
             liveM.reset(); liveM.setScale(hr, hr); liveM.postTranslate(dcx, dcy); liveSh.setLocalMatrix(liveM);
             p.setShader(liveSh); p.setAlpha(Math.round(255f * ha)); cv.drawCircle(dcx, dcy, hr, p); p.setShader(null);
             float gr = dr * 2.1f; liveM.reset(); liveM.setScale(gr, gr); liveM.postTranslate(dcx, dcy); liveSh.setLocalMatrix(liveM);        // 점 둘레의 은은한 후광(숨과 함께)
             p.setShader(liveSh); p.setAlpha(Math.round(255f * (0.35f + 0.5f * br))); cv.drawCircle(dcx, dcy, gr, p); p.setShader(null);
             p.setColor(dcol); p.setAlpha(Math.round(255f * (0.62f + 0.38f * br))); cv.drawCircle(dcx, dcy, dr * (0.92f + 0.12f * br), p); p.setAlpha(255);
-            liveDrawn = true; liveX = dcx; liveY = dcy; liveRd = dr * 4.2f;
+            liveDrawn = true; liveN++; liveX = dcx; liveY = dcy; liveRd = dr * 4.2f;
         } else { p.setColor(dcol); cv.drawCircle(dcx, dcy, dr, p); }
         setText(ScreenCore.LTH_TITLE, true, pal[R_TEXT]);
         cv.drawText(it.t1, it.f1, base(it.y, it.h - 4f, 0), tp);
