@@ -246,7 +246,7 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/chat', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(JSON.stringify({ cap: 6, f: base, d: { g: G } })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'chat' && j.anchor === 'bottom' && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'chat' && j.anchor === 'bottom' && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     const ra = await (await post(JSON.stringify({ cap: 6, f: base, d: { g: G }, alts: { '2호선': { f: Object.assign({}, base, { sel: '2호선' }), d: { r: [] } } } }))).json();
     ok(ra.ok && ra.alts && ra.alts['2호선'].info.sel === '2호선', '워커: alts 응답(방 화면이 함께 온다)');
     ok((await (await post(JSON.stringify({ cap: 5, f: {}, d: {} }))).json()).ok === false, '워커: cap 부족이면 거절');

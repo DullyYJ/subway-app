@@ -694,7 +694,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     const mod = await import(tmp), wk = mod.default, c2 = (u, init) => wk.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => c2('https://x/screen/map', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(JSON.stringify({ cap: 18, f: { part: 'stn', stn: '강남', th: 'dark' } })), j2 = await r.json();
-    ok(r.status === 200 && j2.ok && j2.screen === 'mapstn' && /route-v2-2026-10-\d\ds\d\d/.test(j2.ver), '워커 응답 200');
+    ok(r.status === 200 && j2.ok && j2.screen === 'mapstn' && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j2.ver), '워커 응답 200');
     ok(JSON.stringify(j2.body) === JSON.stringify(call({ part: 'stn', stn: '강남', th: 'dark' }).body), '워커와 직접 계산이 같다');
     ok((await (await post(JSON.stringify({ cap: 3, f: {} }))).json()).ok === false && (await post('{oops')).status === 400 && (await c2('https://x/screen/map')).status === 405, '워커: cap 부족·깨진 본문·GET 거절');
     const hb = await (await post(JSON.stringify({ cap: 18, f: { part: 'h', mode: 'subway', q: '부평' } }))).json();

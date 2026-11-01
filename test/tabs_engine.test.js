@@ -70,7 +70,7 @@ const html = fs.readFileSync(R('ios-reference/index.html'), 'utf8');
     const ra = await (await post(JSON.stringify({ cap: 6, f: { tab: 'map' }, alts: 'tabs' }))).json();
     ok(ra.ok && Object.keys(ra.alts).length === 5, '워커: alts 응답(탭 다섯 화면이 함께 온다)');
     const r = await post(JSON.stringify({ cap: 6, f: { tab: 'map' } })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'tabs' && j.body[0].items[1].on && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'tabs' && j.body[0].items[1].on && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 5, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(20001))).status === 413 && (await call('https://x/screen/tabs')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/tabs', { method: 'OPTIONS' });

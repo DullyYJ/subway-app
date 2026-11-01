@@ -193,7 +193,7 @@ const parseBars = (h) => h.split('<div class="bar24-col').slice(1).map(c => {
     const post = b => call('https://x/screen/cong', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     for (const f of [S(), S({ mode: 'none' }), { mode: 'bus', now: at(14), tz: TZ, bus: { no: '100', stop: '서울역', pr: [['14', '20'], ['14', '30']] } }]) {
       const r = await post(JSON.stringify({ cap: 13, f })), j = await r.json();
-      ok(r.status === 200 && j.ok && j.screen === 'cong' && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + f.mode + ') ' + j.ver);
+      ok(r.status === 200 && j.ok && j.screen === 'cong' && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + f.mode + ') ' + j.ver);
       const direct = G(f); ok(JSON.stringify(Object.assign({}, j, { ver: undefined })) === JSON.stringify(Object.assign({}, direct, { ver: undefined })), '워커 응답 = 직접 계산(' + f.mode + ')');
     }
     ok((await (await post(JSON.stringify({ cap: 12, f: S() }))).json()).ok === false, '워커: cap 부족이면 거절');

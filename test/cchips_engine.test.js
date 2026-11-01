@@ -68,7 +68,7 @@ const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
     const ra = await (await post(JSON.stringify({ cap: 6, f: { mode: 'chat' }, alts: 'chips' }))).json();
     ok(ra.ok && Object.keys(ra.alts).length === 4, '워커: alts 응답(칸 네 화면이 함께 온다)');
     const r = await post(JSON.stringify({ cap: 6, f: { mode: 'set' } })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'cchips' && j.head[0].items[3].on && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'cchips' && j.head[0].items[3].on && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 5, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await post('{oops')).status === 400 && (await post('x'.repeat(20001))).status === 413 && (await call('https://x/screen/cchips')).status === 405, '워커: 깨진 본문 400 · 큰 본문 413 · GET 405');
     const ro = await call('https://x/screen/cchips', { method: 'OPTIONS' });

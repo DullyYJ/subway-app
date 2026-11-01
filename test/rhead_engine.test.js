@@ -351,7 +351,7 @@ const web = new Function(
     const f = { m: 31, a: '신도림역', b: '수원역', fav: 1, sp: { ride: 25, wait: 2, walk: 4 }, why: '가장 빨리 도착하는 경로예요.', xs: [{ at: '신도림', fromType: 1, fromLine: '1호선', toType: 1, toLine: '2호선', walkMin: 3 }], tab: 'sub', ld: 0 };
     for (const part of ['h', 't', 'n', 'l']) {
       const r = await post(JSON.stringify({ cap: 10, part, f })), j = await r.json();
-      ok(r.status === 200 && j.ok && j.screen === 'rhead' && j.info.part === part && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + part + ') ' + j.ver);
+      ok(r.status === 200 && j.ok && j.screen === 'rhead' && j.info.part === part && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200(' + part + ') ' + j.ver);
       const direct = E.rheadScreen({ cap: 10, part }, f); ok(JSON.stringify(Object.assign({}, j, { ver: undefined })) === JSON.stringify(Object.assign({}, direct, { ver: undefined })), '워커 응답 = 직접 계산(' + part + ')');
     }
     ok((await (await post(JSON.stringify({ cap: 9, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');

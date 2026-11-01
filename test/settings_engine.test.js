@@ -408,7 +408,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     const f = encodeURIComponent(JSON.stringify(full));
     const r = await call('https://x/screen/settings?cap=3&f=' + f), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'settings', '워커 응답 200');
-    ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    ok(/route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     ok(JSON.stringify(j.body) === JSON.stringify(s.body) && j.rev === s.rev, '워커와 직접 계산이 같은 결과');
     ok((await (await call('https://x/screen/settings?cap=2&f=' + f)).json()).ok === false, '워커: cap 부족이면 거절');
     ok((await call('https://x/screen/settings?cap=3&f=' + encodeURIComponent('{oops'))).status === 400, '워커: 깨진 사실은 400');

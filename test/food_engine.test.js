@@ -306,7 +306,7 @@ const FoodRowsOk = j => !!(j && j.response && j.response.body && Array.isArray(j
     const post = b => call('https://x/screen/food', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(body), j = await r.json();
     ok(r.status === 200 && j.ok && j.screen === 'food', '워커 응답 200');
-    ok(/route-v2-2026-10-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
+    ok(/route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '엔진 버전 표시 ' + j.ver);
     ok(JSON.stringify(j.body) === JSON.stringify(S.body) && j.rev === S.rev, '워커와 직접 계산이 같은 결과');
     const ra = await (await post(JSON.stringify({ cap: 4, f: { stn: '강남', st: 'ready', flt: '전체' }, alts: 'chips', c: C, p: P }))).json();
     ok(ra.ok && Object.keys(ra.alts).join() === '전체,카페,밥집,육식,회집,주점', '워커: alts 응답(칩 6개 화면이 함께 온다)');

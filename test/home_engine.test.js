@@ -156,7 +156,7 @@ const U = n => Array.from({ length: n }, (_, i) => ({ n: '강남' + i, l: '2호�
     const w = (await import(tmp)).default, call = (u, init) => w.fetch(new Request(u, init), {}, { waitUntil() { } });
     const post = b => call('https://x/screen/home', { method: 'POST', body: b, headers: { 'Content-Type': 'text/plain;charset=UTF-8' } });
     const r = await post(JSON.stringify({ cap: 7, f: { start: '강', active: 'start' }, d: { u: [{ n: '강남', l: '2호선' }] } })), j = await r.json();
-    ok(r.status === 200 && j.ok && j.screen === 'home' && j.body[0].kids.some(x => x.t === 'sug' && x.act.v === 'sg.u.0') && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
+    ok(r.status === 200 && j.ok && j.screen === 'home' && j.body[0].kids.some(x => x.t === 'sug' && x.act.v === 'sg.u.0') && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답 200 ' + j.ver);
     ok((await (await post(JSON.stringify({ cap: 6, f: {} }))).json()).ok === false, '워커: cap 부족이면 거절');
     { const j2 = await (await post(JSON.stringify({ cap: 7, f: { start: '강남', active: 'start' }, d: { b: [], p: [] } }))).json(), want = E.homeStnFind('강남');
       ok(j2.ok && j2.info.sx === 1 && j2.info.pk.u.length === want.u.length && j2.info.pk.u[0].name === want.pk[0].name && j2.body[0].kids.filter(x => x.t === 'sug').length >= want.u.length, '워커: u 를 안 보내면 엔진이 역을 거른다(내장된 역 표) ' + (j2.info && j2.info.pk && j2.info.pk.u.length)); }

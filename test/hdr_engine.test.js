@@ -37,7 +37,7 @@ ok(E.hdrScreen({}).ok && E.hdrScreen({ nowMs: NaN, tzOffsetMin: 99999 }).ok, '�
     const mod = await import(tmp);
     const r = await mod.default.fetch(new Request('https://x/screen/hdr?tz=540&now=' + at(19)), {}, { waitUntil() {} });
     const j = await r.json();
-    ok(r.status === 200 && j.ok && j.info.cat === 'evening' && j.body[0].msgs.length >= 50 && /route-v2-2026-10-\d\ds\d\d/.test(j.ver), '워커 응답');
+    ok(r.status === 200 && j.ok && j.info.cat === 'evening' && j.body[0].msgs.length >= 50 && /route-v2-2026-1[0-2]-\d\ds\d\d/.test(j.ver), '워커 응답');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`hdr_engine: ${pass} pass, ${fail} fail`);
