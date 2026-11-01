@@ -1377,6 +1377,18 @@ public class ScreenJvmTest {
             int vsN = 0; for (ScreenCore.Item q : fl1.foot) if (q.vs) vsN++;
             ok(vsN > 0, "밀리는 말풍선 조각에 표시(vs)가 붙는다");
         }
+        {   // s370: 서버를 새로 올리지 않은 옛 화면(빈칸 · fd 없음)도 대화 칸이 처음부터 빈 자리를 채운다
+            StringBuilder om = new StringBuilder();
+            for (int i = 1; i <= 3; i++) om.append("{\"t\":\"msg\",\"s\":\"옛글").append(i).append("\",\"mine\":true,\"time\":\"10:0").append(i).append("\",\"pad\":[0,4,0,0]},");
+            String oj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"panel\",\"pad\":[10,6,10,8],\"kids\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"dot\":\"#2f7cf6\",\"pad\":[2,0,2,2]},"
+                + om + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]}]}";
+            ScreenCore.Screen osc = ScreenCore.load(oj);
+            ok(osc.footFill != null && osc.footDrop.size() == 3, "옛 화면: 늘어나는 빈칸을 끼우고 말풍선에 번호를 매긴다");
+            ScreenCore.Layout ol = ScreenCore.layout(osc, 360f, M, null, 640f);
+            ok(Math.abs((ol.headH + ol.bodyH + ol.footH) - 640f) < 3f, "옛 화면도 대화 칸이 남는 세로를 처음부터 다 채운다");
+            int fdN = 0; for (ScreenCore.Node d : osc.footDrop) if (d.fd > 0) fdN++;
+            ok(fdN == 3 && osc.footDrop.get(0).fd == 1 && osc.footDrop.get(2).fd == 3, "오래된 순서 번호");
+        }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
