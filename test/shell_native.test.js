@@ -1123,6 +1123,12 @@ function findAndroidJar() {
     assert.ok(/private void tmHome\(\)/.test(sv) && /nt - tmTapT < 380L/.test(sv) && /tmLp\.length\(\) > 0 && tmTapT > 0L/.test(sv) && /!tmOnBtn\(lx, ly\)/.test(sv), '장소 등록 지도를 두 번 탭하면 자녀 위치로');
     assert.ok(/liveN > 1\) postInvalidateDelayed\(33L\)/.test(sv) && /liveShCache/.test(sv), '깜박이는 점이 여러 줄에 있어도 모두 깜박인다');
   });
+  await t('s376: 쓰지 않는 입력칸은 포커스를 못 받는다(키즈는 커뮤니티를 다녀오면 키보드가 저절로 오르던 일)', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/private static void focusOk\(EditText e, boolean ok\)/.test(sv) && /e\.setFocusable\(ok\); e\.setFocusableInTouchMode\(ok\)/.test(sv), '입력칸 포커스 켜고 끄기');
+    assert.ok(/focusOk\(e, false\);\s*e\.addTextChangedListener/.test(sv) && /EditText e = new EditText\(getContext\(\)\);\s*focusOk\(e, false\);/.test(sv), '만들 때는 포커스를 받지 않는다(편집 칸 · 검색 칸)');
+    assert.ok(/focusOk\(editor, true\);\s*editor\.requestFocus\(\);/.test(sv) && /focusOk\(input, true\);\s*input\.requestFocus\(\);/.test(sv) && /if \(editor != null\) focusOk\(editor, false\);/.test(sv) && /focusOk\(input, false\);/.test(sv), '누른 순간에만 포커스를 주고 끝나면 거둔다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
