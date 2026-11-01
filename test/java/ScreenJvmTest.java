@@ -1389,6 +1389,16 @@ public class ScreenJvmTest {
             int fdN = 0; for (ScreenCore.Node d : osc.footDrop) if (d.fd > 0) fdN++;
             ok(fdN == 3 && osc.footDrop.get(0).fd == 1 && osc.footDrop.get(2).fd == 3, "오래된 순서 번호");
         }
+        {   // s370: 제목은 칸 밖 · 칸 안은 위 내용 · 아래 입력줄 · 지난 대화 보기는 칸 밖(아래)
+            StringBuilder nm2 = new StringBuilder();
+            for (int i = 1; i <= 30; i++) nm2.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":true,\"time\":\"10:00\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
+            String nj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"dot\":\"#2f7cf6\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,2],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
+                + nm2 + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]},{\"t\":\"navrow\",\"title\":\"지난 대화 보기\",\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"size\":12.5,\"vp\":6,\"pad\":[16,0,16,2]}]}";
+            ScreenCore.Screen nsc = ScreenCore.load(nj);
+            ScreenCore.Layout nl = ScreenCore.layout(nsc, 360f, M, null, 700f);
+            ok(Math.abs((nl.headH + nl.bodyH + nl.footH) - 700f) < 3f, "제목을 칸 밖에 둬도 대화 칸이 남는 세로를 다 채운다");
+            ok(nl.vsOn && nl.vsContent > nl.vsBot - nl.vsTop, "글이 많으면 칸 안에서만 밀린다");
+        }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
