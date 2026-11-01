@@ -299,7 +299,8 @@ public class ShellActivity extends Activity {
         KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
         kids.tabsChanged = new Runnable() { @Override public void run() { kidsTabsRedraw(); } };
         kidsDeepLink(getIntent());
-        if (kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())))) main.post(new Runnable() { @Override public void run() { if (kids != null) { kids.open(false); kidsTabsEnsure(); } } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
+        final boolean kidsStart = kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())));
+        if (kidsStart) main.post(new Runnable() { @Override public void run() { if (kids != null) { kids.open(false); kidsTabsEnsure(); } } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -316,7 +317,7 @@ public class ShellActivity extends Activity {
         } }, 1500L);
         captureLastLoc();
         ioExec.execute(new Runnable() { @Override public void run() { main.post(new Runnable() { @Override public void run() { prefetchTabs(); } }); } });     // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다 — 캐시 파일 목록 훑기가 끝난 뒤(주 스레드가 파일을 확인하지 않게)
-        if (b == null) showOpening();                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
+        if (b == null && !kidsStart) showOpening();          // s373(YJ: 키즈 화면으로 켜면 하단 탭 자리가 계속 초록으로 나온다): 오프닝(초록 바닥)은 키즈 화면 아래에 깔려 탭 막대 자리만 비쳤다 — 키즈 화면으로 시작할 땐 오프닝을 건너뛴다                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
     }
 
     // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸을 고르고, 나올 친구 셋은 켤 때마다 무작위로 고른다 ──
