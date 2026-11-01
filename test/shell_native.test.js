@@ -1129,6 +1129,13 @@ function findAndroidJar() {
     assert.ok(/focusOk\(e, false\);\s*e\.addTextChangedListener/.test(sv) && /EditText e = new EditText\(getContext\(\)\);\s*focusOk\(e, false\);/.test(sv), '만들 때는 포커스를 받지 않는다(편집 칸 · 검색 칸)');
     assert.ok(/focusOk\(editor, true\);\s*editor\.requestFocus\(\);/.test(sv) && /focusOk\(input, true\);\s*input\.requestFocus\(\);/.test(sv) && /if \(editor != null\) focusOk\(editor, false\);/.test(sv) && /focusOk\(input, false\);/.test(sv), '누른 순간에만 포커스를 주고 끝나면 거둔다');
   });
+  await t('s377: 활동 기록(pickl plain) — 박스는 4줄에서 안 늘어나고 안에서만 밀린다 · 처음엔 맨 아래(최근) · 눌러도 켜진 줄은 그대로', () => {
+    const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/n\.plain = optBool\(m, "plain", false\); n\.h = optNum\(m, "h", 38f, n\.plain \? 16f : 28f, 60f\)/.test(sc) && /it\.plog = n\.plain;/.test(sc) && /float tail = n\.plain \? 0f : 4f;/.test(sc), '글줄만 있는 목록(plain)은 줄 높이가 낮고 보이는 줄 수(vis)만큼만 자리를 차지한다');
+    assert.ok(/c\.act = act\(im\.get\("act"\), !n\.plain\)/.test(sc), 'plain 줄은 행동이 없어도 된다');
+    assert.ok(/if \(it\.plog\) \{\s*\/\/ 활동 기록/.test(sv) && /if \(bottom\) pickOff\.put\(it\.key, it\.pickMax\)/.test(sv) && /if \(it\.plog\) \{ setText\(r\.size, r\.on/.test(sv), '처음엔 맨 아래에서 시작 · 새 줄이 오면 맨 아래를 보던 중일 때만 따라 내려간다 · 카드 모양 없이 글만 그린다');
+    assert.ok(/if \(it\.plog\) \{ blurInput\(\); if \(listener != null\) listener\.onAction\(r\.act\); return; \}/.test(sv), '활동 기록을 누르면 전체 기록 창(켜진 줄 표시는 안 바뀐다)');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
