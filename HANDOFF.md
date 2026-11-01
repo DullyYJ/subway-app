@@ -3766,3 +3766,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 원인(코드 추적, 기기 미확인): ScreenView 의 입력칸 EditText(편집 칸 editor · 검색 칸 input)는 편집 때만 쓰는데 포커스를 받을 수 있는 채로 부모 틀에 붙어 있었다. 창에 포커스 가진 뷰가 없으면 안드로이드가 첫 입력칸에 포커스를 주고, 키즈 화면이 열려 있는 동안은 adjustResize(applyIme) 라 키보드가 저절로 뜬다. 커뮤니티(검색·채팅 입력)를 다녀오면 그 칸이 다시 보이며 포커스를 가져갔다.
 - 수정: focusOk() — 입력칸은 만들 때 포커스 불가, 누른 순간(beginEdit · tapSearch)에만 가능, commitEdit · blurInput · hideInput 에서 다시 불가.
 - 시험: shell_native s376.
+
+## s377 (YJ: 홈에서 체크한 부분 활동을 최대 4줄 · 박스 크기 고정 · 위아래로 밀어 지난 글 보기)
+- 키즈 확인 화면 '뭐하니?' 박스의 활동 기록을 pickl(plain:true) 로 바꿈 — 최대 4줄(vis)만 보이고 박스는 안 늘어난다. 처음엔 맨 아래(가장 최근)에서 시작, 위로 밀면 지난 활동(최대 50줄). 줄을 누르면 전체 기록 창(kd.open).
+- ScreenCore: pickl 에 plain(글줄만 · 줄 높이 16~60 · size) · 줄 act 선택 · 줄 최대 60. ScreenView.drawPick: plain 은 카드 없이 글만(켜진 줄=굵게) · 맨 아래 따라가기(pickLastMax).
+- 워커(kids-worker.js) 재배포 필요: EV_SHOW 50 · EV_VIS 4 · '지난 활동 보기' 줄 제거. 옛 앱은 카드형 줄로 보인다(행동 act 를 같이 보내 파싱은 된다).
+- 시험: shell_native s377 + 검증기로 1·2·4·8·50 줄 높이 확인(4줄 이상은 같은 높이).
+
