@@ -783,6 +783,19 @@ function rsActs(st, req, now, notes) {
 var RS_DOOR_M = 250, RS_DOOR_ACC_M = 80, RS_DOOR_LOST_MS = 10000, RS_DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — 반경 · 최대 오차 · 끊김으로 보는 시간 · 최대 정차
 var RS_GO_WIN_MS = 12000, RS_GO_SPAN_MS = 6000, RS_GO_MOVE_M = 40;      // s323: 신호가 안 끊겨도(지상 · 고가) 움직이기 시작하면 출발 — 최근 12초(4점 이상 · 6초 이상)의 앞 절반→뒤 절반 무게중심이 RS_XGO_MPS 이상 · 40m 이상 역에서 멀어짐
 var RS_DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
+// ★ s379 (YJ: "확정역은 시간이 바뀌면 안 돼 — 지나온 역의 도착 시간을 건드니까 뒤가 다 꼬인다"): 이미 지난 역(도착 시각 ≤ 지금)의 시각을 처음 지나는 걸음에 붙잡아 st.fz.m 에 둔다. 이후 계산은 입력(ein.frozen)으로 그 값을 받아 지난 역을 고정한다.
+//   GPS 영점(gps 통과)이 새로 잡히면 그 역은 실제 통과 시각으로 한 번 갱신한다(g=1 이후엔 다시 안 바꾼다).
+function rsFzKey(eta) { var nd = (eta && eta.nodes) || []; return nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || ''); }
+function rsFreeze(st, r, now, passes, key) {
+  var fz = st.fz && st.fz.key === key ? st.fz : (st.fz = { key: key, m: {}, g: {} }), i, ps = passes || [], gps = {}, maxEv = -1;
+  for (i = 0; i < ps.length; i++) { var pe = ps[i], ie = +(pe && pe.idx); if (!isFinite(ie)) continue; if (pe.src === 'gps') gps[ie] = 1; if (pe.src === 'gps' && ie > maxEv) maxEv = ie; }
+  for (i = 0; i < r.etaMs.length; i++) {
+    var ms = r.etaMs[i]; if (ms == null || !isFinite(ms)) continue;
+    // 확정 = 통과 증거(gps·move·pf)가 그 역 이후에 있는 지난 역. 증거 없이 시각표로만 지난 역은 뒤 증거가 오면 바로잡힐 수 있어 잠그지 않는다.
+    if (fz.m[i] == null) { if (ms <= now && i <= maxEv) { fz.m[i] = ms; if (gps[i]) fz.g[i] = 1; } }
+    else if (gps[i] && !fz.g[i]) { fz.m[i] = ms; fz.g[i] = 1; }
+  }
+}
 // s323: 구간이 서로 겹치지 않게 뒤 구간을 밀어 이어 붙인다(앞 구간 도착 t1 보다 일찍 시작하는 구간만 그만큼 민다 — 엔진이 이미 늦어짐을 알면 밀지 않는다)
 function rsChainSegs(segs, k0) {
   for (var i = k0 + 1; i < segs.length; i++) {
@@ -802,11 +815,12 @@ var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000;
 //   마커가 GPS 가 확정한 역 p 보다 앞서 있는데(시각표가 앞섰다) ① 마커가 닿은 역에 '아직 안 옴' 증거가 45초 안에 있고 가드가 실제로 마커를 붙잡는 중(held) 이거나
 //   ② p 에서 '지금도' 문이 열려 있다(8초 안의 좋은 위치가 p 의 문 열림 반경 RS_DOOR_M 안, 출발 판정·정차 종료가 없음) — 열차는 아직 p 에 서 있으니 마커를 p 로 내린다.
 //   풀면 정차 시계가 지금부터 다시 시작해 s322 규칙대로(신호가 끊기고 10초 뒤) 출발한다. 같은 GPS 확정은 한 번만 푼다.
-function rsMkRelease(st, prevP, now, held) {
+function rsMkRelease(st, prevP, now, held, nrt) {
   try {
     var eta = st.eta || {}, ny = st.notYet || {}, passes = eta.passes || [], tr = st.trail || [], k, i, best = null;
     if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) best = { i: i }; } }
     if (best) return { n: best.i - 1, why: best.i + '번 역 아직 안 옴(GPS)' };
+    if (nrt) return null;      // s379: 실시간 없는 노선은 '문 열림'으로 마커를 역에 다시 내리지 않는다(시각표 기준 — 마커가 뒤로 튀지 않는다)
     var last = tr.length ? tr[tr.length - 1] : null;
     if (!last || now - last[0] > RS_REL_FIX_MS || (last[3] != null && last[3] > RS_DOOR_ACC_M)) return null;
     for (k = 0; k < passes.length; k++) {
@@ -821,6 +835,8 @@ function rsMkRelease(st, prevP, now, held) {
   } catch (e) { }
   return null;
 }
+// s379: 지금 달리는 구간(승차 노드 a → 도착 노드 b)이 실시간 위치가 없는 지하철 노선인가
+function rsNrtLeg(nd, a, b) { var n1 = nd[b] || nd[a]; return !!(n1 && n1.isSub && !n1.isBus && !n1.isWalk && n1.lineName && !rsSubwayId(n1.lineName)); }
 function rsMonoPos(st, r, now, notes) {
   var pos = r && r.pos; if (!pos || pos.from == null || !isFinite(+pos.from)) { return; }
   var eta = st.eta || {}, nd = eta.nodes || [], key = nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || '');
@@ -854,7 +870,7 @@ function rsMonoPos(st, r, now, notes) {
   var cur = null;
   for (i = 0; i < segs.length; i++) if (now < segs[i].t1) { cur = i; break; }
   var newP = cur == null ? +segs[segs.length - 1].to : (now < segs[cur].t0 ? +segs[cur].from : +segs[cur].from + Math.max(0, Math.min(1, (now - segs[cur].t0) / (segs[cur].t1 - segs[cur].t0))) * (segs[cur].to - segs[cur].from));
-  var rel = prevP != null ? rsMkRelease(st, prevP, now, newP < prevP - 0.002) : null;
+  var rel = prevP != null ? rsMkRelease(st, prevP, now, newP < prevP - 0.002, rsNrtLeg(nd, Math.floor(prevP + 0.0001), Math.floor(prevP + 0.0001) + 1)) : null;
   if (rel) {
     var pfR = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
     if (pfR.n > rel.n) pfR.n = rel.n;
@@ -917,6 +933,7 @@ function rsMonoPos(st, r, now, notes) {
     // ★ s322 (YJ: "GPS 가 잡혔다는 건 문이 열려서다 — 잡히는 동안은 계속 추적하다가 끊기면 열차가 출발했다고 판단"): 역 근처(RS_DOOR_M) 좋은 위치(정확도 RS_DOOR_ACC_M 이하)가 정차 시작 뒤에 들어오는 동안은 문이 열린 것으로 보고 마커를 세워 둔다.
     //   마지막으로 들어온 시각을 dw.h 에 붙잡고, 끊긴 뒤 RS_DOOR_LOST_MS 가 지나면 출발로 본다(dw.h 는 그대로라 그 시각이 정차 끝으로 굳어 마커가 튀지 않는다). 기존 15초 정차는 바닥(최소) — GPS 가 없으면 예전 그대로. 길게 서 있어도 RS_DOOR_MAX_MS 에서 끝낸다.
     var dwStop = rsStopOf(st, dwf), dwTr = st.trail || [], dwEnd, g0s = segs[0];
+    var dwNrt = rsNrtLeg(nd, dwf, +g0s.to);      // s379: 실시간 없는 노선 — 시각표가 기준, 문 열림·속도로 정차를 늘리거나 다음 도착을 밀지 않는다
     if (dw.e != null) dwEnd = dw.e;                                  // 이미 출발로 굳은 정차 — 끝 시각을 고정(그 뒤 역 근처에서 GPS 가 더 들어와도 마커를 다시 세우지 않는다 = 되돌아감 방지)
     else {
       if (dwStop && isFinite(dwStop.lat) && isFinite(dwStop.lng)) {
@@ -945,7 +962,8 @@ function rsMonoPos(st, r, now, notes) {
         }
       }
       dwEnd = dw.s + RS_DWELL_MS;
-      if (dw.go != null) dwEnd = Math.max(dwEnd, dw.go);
+      if (dwNrt) { }
+      else if (dw.go != null) dwEnd = Math.max(dwEnd, dw.go);
       else if (dw.h != null) dwEnd = Math.max(dwEnd, Math.min(dw.h + RS_DOOR_LOST_MS, dw.s + RS_DOOR_MAX_MS));
       if (now >= dwEnd) dw.e = dwEnd;
     }
@@ -953,7 +971,7 @@ function rsMonoPos(st, r, now, notes) {
     if (now >= dwEnd && !dw.dl) {                                    // s323: 실측 출발(dwEnd)이 계획 출발보다 늦으면 그만큼 구간 끝(다음 역 도착)도 늦춘다 — 남은 거리를 같은 속도로
       dw.dl = 1;
       var dlt = dwEnd - +g0s.t0;
-      if (dlt > 1000) { g0s.t1 = +g0s.t1 + dlt; st.dly = { key: key, i: dwf, d: dlt, to: +g0s.to, arr: g0s.t1 }; rsChainSegs(segs, 0); notes.push('출발 ' + Math.round(dlt / 1000) + '초 늦음 → 다음 역 도착도 그만큼 늦춤'); }
+      if (dlt > 1000 && !dwNrt) { g0s.t1 = +g0s.t1 + dlt; st.dly = { key: key, i: dwf, d: dlt, to: +g0s.to, arr: g0s.t1 }; rsChainSegs(segs, 0); notes.push('출발 ' + Math.round(dlt / 1000) + '초 늦음 → 다음 역 도착도 그만큼 늦춤'); }
     }
     var dwT0 = Math.min(dwEnd, +g0s.t1 - 1000);
     if (+g0s.t0 < dwT0) {
@@ -1854,10 +1872,12 @@ function rideStandby(req) {
     else if (st.dr && newPass) { st.dr = false; notes.push('GPS 통과 증거 복귀 — 시각표 이어가기 해제'); }
   } else st.dr = false;
   var ein = rsClone(eta); ein.nowMs = now; if (ttNow || st.dr) ein.timetableFirst = true; else delete ein.timetableFirst; ein.passes = passes; if (nyList.length && ttNow) ein.notYet = nyList; else delete ein.notYet;
+  var fzKey = rsFzKey(eta); if (st.fz && st.fz.key === fzKey) ein.frozen = st.fz.m; else { delete ein.frozen; delete st.fz; }      // s379: 지난(확정) 역 시각 잠금
   var fired = (st.fired = st.fired || {});
   var r = rsEtaFn()(ein);
   if (!r || !r.etaMs) return { v: 1, state: st, ongoing: { title: O.ongoingTitle, text: '' }, alert: null, done: false, nextMs: O.stepMs, notes: ['도착 시각 계산 실패'] };
   st.etaMs = r.etaMs;
+  rsFreeze(st, r, now, passes, fzKey);
   try { rsMonoPos(st, r, now, notes); } catch (eMk) { notes.push('마커 보정 실패: ' + (eMk && eMk.message)); }
   if (st.wait && eta.boardNext && r.etaMs[st.wait.i] != null && isFinite(r.etaMs[st.wait.i])) st.wait.arrMs = r.etaMs[st.wait.i];     // 다음 차가 밀리면(당겨지면) 감지 유예도 그 시각 기준(s196)
   if (r.delayMin != null) { eta.prevLevelMin = r.delayMin; eta.prevAnchorIdx = r.anchorIdx; }

@@ -95,6 +95,9 @@ var RIDE_ETA_DEFAULTS = {
   //   당김(arriveEarlySec)은 GPS 영점(src 'gps' 통과)이 하나라도 잡힌 뒤, 그 영점 역보다 뒤의 중간역에만 적용한다 — 영점이 없으면(승차 직후·지하) 시각표 그대로.
   //   영점이 잡히면 뒤 도착 시각(etaMs)이 초 단위로 맞춰지고(ride-track 영점 보간), 그 맞춰진 시각에서 5초만 당긴다. false 로 두면 예전처럼 항상 당긴다.
   arriveEarlyAfterZero: true,
+  // ★ 2026-11-02 s379 (YJ: "실시간 없는 호선만 도착 시간을 20초 앞으로 · 지금 기준 · 확정(지난) 역은 건드리지 않는다"): 실시간 위치가 없는 지하철 노선(예: 인천1호선)의 '아직 통과 증거가 없는 뒤 역'(가장 뒤 통과 증거보다 뒤)
+  //   도착 시각을 이만큼(초) 당겨 보인다. 서울 실시간 노선(1~9호선 등)·버스·도보·승차역·이미 통과 증거가 있는 역은 그대로. 0 이면 끔.
+  nrtEarlySec: 20,
   // ★ 2026-10-14 (실기기 로그: 부평에서 마커가 멈췄다 — 구간표가 14구간뿐이라 응답이 끊긴 26분 뒤 끝났다): 남은 구간 전부를 준다(상한은 안전장치).
   // ★ 2026-10-28 s268 (YJ: "GPS 영점 실패 → 시간표대로 가다가 연속 3회 실패하면 실시간 API 로 내 차량 위치 맞추기" — s231 의 '역 앞 대기'는 없앴다):
   //   지하철 구간(pos 가 있을 때)에서 승차역 뒤 holdAfterStops 번째 정류장부터, 통과 증거(gps·move·pf)가 그 정류장 이후로 없고 예정 시각 + holdGraceSec 이 지났으면 '도착 확정 실패'다.
@@ -660,7 +663,23 @@ function _rideEtaCore(input) {
   if (frozenTail) notes.push('앞 구간 마지막 통과 뒤 역 ' + frozenTail + '곳: 그 구간 자신의 지연 수준으로 고정');
   if (interp) notes.push('통과 기록 없는 역 ' + interp + '곳: 앞뒤 기록 사이를 예정 비율로 나눔');
 
+  _reNrtFreeze(out, nodes, passesIn, input.frozen, O, nowMs, notes);
   return _reFinish(out, tz, O, anchor.idx, level, notes, n, nowMs);
+}
+
+// ★ 2026-11-02 s379: 실시간 위치가 있는 노선(서울 도착정보 subwayId 가 있는 노선) — ride-standby RS_SUBWAY_ID 와 같은 표. 이름이 '인천1호선'처럼 접두가 붙으면 해당 없다(= 실시간 없음).
+var RE_RT_LINES = { '1호선': 1, '2호선': 1, '3호선': 1, '4호선': 1, '5호선': 1, '6호선': 1, '7호선': 1, '8호선': 1, '9호선': 1, '경의중앙선': 1, '수인분당선': 1, '공항철도': 1, '경춘선': 1, '신분당선': 1, '서해선': 1, '경강선': 1, '신림선': 1, '우이신설선': 1 };
+function _reNrtNode(nd) { return !!(nd && nd.isSub && !nd.isBus && !nd.isWalk && nd.lineName && !RE_RT_LINES[nd.lineName] && !RE_RT_LINES[String(nd.lineName).replace(/호선$/, '') + '호선']); }
+// ① 지난(확정) 역 시각 잠금: 앱이 이미 지난 역의 시각(input.frozen = {idx: ms})을 보내 오면 GPS 영점(gps 통과)이 없는 한 그 값으로 고정한다 — 뒤 역을 다시 맞추다 지난 역 시각이 바뀌는 일이 없다.
+// ② 실시간 없는 노선의 뒤 역 도착을 nrtEarlySec 당겨 보인다(가장 뒤 통과 증거보다 뒤 역만).
+function _reNrtFreeze(out, nodes, passes, frozen, O, nowMs, notes) {
+  var n = out.length, k, i, gps = {}, maxP = -1, nz = 0, ne = 0;
+  for (i = 0; i < (passes || []).length; i++) { var pp = passes[i], ix = +(pp && pp.idx); if (!isFinite(ix)) continue; if (ix > maxP) maxP = ix; if (pp.src === 'gps') gps[ix] = 1; }
+  var early = Math.max(0, +O.nrtEarlySec || 0) * 1000;
+  if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (out[k] != null && _reNrtNode(nodes[k])) { out[k] -= early; ne++; }
+  if (frozen) for (k = 0; k < n; k++) { var fm = frozen[k]; if (fm != null && isFinite(+fm) && out[k] != null && !gps[k] && Math.abs(out[k] - fm) > 0) { out[k] = +fm; nz++; } }
+  if (ne) notes.push('실시간 없는 노선 도착 ' + O.nrtEarlySec + '초 당김 ' + ne + '곳');
+  if (nz) notes.push('지난 역 시각 잠금 ' + nz + '곳');
 }
 
 // 표시 마지막 안전망: 시각이 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다) + 도착 예정이 이미 지난 시각이 되지 않게 + 서식
