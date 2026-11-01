@@ -3721,3 +3721,12 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **키즈 앱(자녀)**: 퀘스트 화면 — 자녀 미션은 누르는 단추 없음(부모가 완료해 주면 스타 + 완료 표시), 부모님 미션은 `부모님이 해 주셨으면 눌러서 완료해요` 카드를 눌러 완료. `Engine.questLocal` · `quest.pdone:` 은 눌린 즉시 로컬 완료 표시.
 - **시험**: 워커 — `node:sqlite` 가짜 D1 로 연결 → 위치 → 허브(spacer·fd·입력줄) → 미션 보내기/완료/스타/부모님 미션 완료 20개 통과(`/tmp` 임시 하니스, 저장소에는 안 넣음). 앱 — `ScreenJvmTest`(foot 늘리기) + `shell_native.test.js` s369. 안드로이드 컴파일은 CI.
 - **배포**: 워커 `kids-worker.js` 는 YJ 가 붙여 넣는다(새 표 없음). 부모 앱(길동무 native-shell)과 키즈 앱(p-kids35 이후) 모두 새 APK.
+
+## s370 — 키즈 대화 칸 안쪽 스크롤 · 보내기/탭 전환 속도 · 하단 탭 감시 (2026-11-01)
+- **대화 칸이 처음부터 빈 자리를 다 채우고, 지난 글은 칸 안에서만 민다**: `ScreenCore.footGrow` 를 다시 썼다. 말풍선(`fd`)을 전부 담아 높이(`msgsH`)를 재고, 칸 높이 `vh = max(fk×fdh, 남는 세로)` 보다 짧으면 아래에 붙이고 위는 빈칸(`ffill`)이, 길면 `Layout.vsOn/vsTop/vsBot/vsContent` 를 켜서 `ScreenView` 가 그 칸만 민다(모드 12 · `flingV` · 처음엔 맨 아래에 붙음 `vsStick` · `clipRect` 로 틀 밖 자름). 계산은 `ThreadLocal VS` 로 `stack()` 이 `fd` 말풍선을 흐름 높이 0 으로 쌓고 칸 자리에서 이어 그린다. 높이를 모르면(viewH 0) 예전처럼 최근 `fk` 개만. 입력줄은 항상 맨 아래. 화면 전체는 이 칸에서 시작한 세로 밀기로는 움직이지 않는다.
+- **보내기**: 앱(`KidsHub.Host.onAction` → `optimistic`)이 `kh.say` 를 누른 즉시 내 말풍선을 마지막 화면 JSON 에 끼워 그리고 입력칸을 비운다(서버 답을 기다리지 않음). 워커 `kh.say` 는 화면을 다시 만들지 않고 `{cid, clear, light:1}` 만 돌려주며, 새 화면은 긴 대기(0.6초 안)가 이어 받는다. `HUB_CHAT` 12→40.
+- **탭 전환(홈/키즈 버튼)**: `KidsHub.open` 160ms · `close` 140ms, 아래 화면(slide)은 더 밀지 않는다, 저장·탭 막대 다시 그리기·저장본 읽기·긴 대기는 첫 프레임 뒤(`main.post`), `warm()` 은 1.5초 뒤.
+- **하단 탭이 계속 사라짐**: 원인은 실기기에서 못 봤다. `ShellActivity.tabsWatch` 가 키즈 모드가 켜져 있고 앞에 있는 동안 2.5초마다 `tabs` 의 보임·높이·투명도·이동·칸 수를 보고 이상하면 보이게 고쳐 다시 읽는다. 이때 `TABS_BLANK vis h a ty n open fix` 를 `ErrLog` 에 최대 3번 남긴다 — 다음에 또 보이면 이 기록으로 원인을 좁힐 것. **기기 확인 못 함**.
+- **BUS_ARR g0 받았지만 빔 … ICB168001467**: 충돌이 아니라 진단 기록(`busDiag`/`ErrLog`). 그 정류장 도착정보 API 가 `totalCount 0`(빈 items)을 돌려줬다는 뜻(막차 후/운행 없음 시간대).
+- **시험**: `ScreenJvmTest` 대화 칸 블록을 새 동작으로 다시 씀(569점검) · `shell_native` s370 소스 점검 추가(109). 안드로이드 계층은 이 컨테이너에서 컴파일하지 못했다(CI 가 한다).
+- **배포**: 워커 `kids-worker.js`(HUB_CHAT 40 · kh.say 가볍게 · 자녀 행동만 보이는 활동 목록) 는 YJ 가 붙여 넣는다. 부모 앱 새 APK, 키즈 앱 새 빌드(수동).
