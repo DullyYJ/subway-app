@@ -36,6 +36,25 @@ final class RideEtaJ {
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
         boardMaxWaitMin = 30, planSecMin = 20, planSecMax = 30, holdAfterStops = 1, holdGraceSec = 60;
     static final boolean burstRamp = true, arriveEarlyAfterZero = true;
+    /** s379 (engine nrtEarlySec): 실시간 위치가 없는 지하철 노선(예: 인천1호선)의 '가장 뒤 통과 증거보다 뒤' 역 도착을 이만큼(초) 당겨 보인다. */
+    static final double nrtEarlySec = 20;
+    private static final java.util.Set<String> RT_LINES = new java.util.HashSet<String>(java.util.Arrays.asList("1호선", "2호선", "3호선", "4호선", "5호선", "6호선", "7호선", "8호선", "9호선", "경의중앙선", "수인분당선", "공항철도", "경춘선", "신분당선", "서해선", "경강선", "신림선", "우이신설선"));
+    /** s379: 서울 실시간 도착정보가 있는 노선인가(engine RE_RT_LINES · ride-standby RS_SUBWAY_ID 와 같은 표) */
+    static boolean rtLine(String ln) { return RT_LINES.contains(ln) || RT_LINES.contains(ln.replaceAll("호선$", "") + "호선"); }
+    static boolean nrtNode(Object nd) { return truthy(nd) && truthy(g(nd, "isSub")) && !truthy(g(nd, "isBus")) && !truthy(g(nd, "isWalk")) && truthy(g(nd, "lineName")) && !rtLine(str(g(nd, "lineName"))); }
+    /** s379 (engine _reNrtFreeze): ① 실시간 없는 노선의 뒤 역 도착 당김 ② 지난(확정) 역 시각 잠금(frozen = {역번호: ms}, GPS 영점이 있는 역은 제외) */
+    static void nrtFreeze(double[] out, List<Object> nodes, List<Object> passes, Map<String, Object> frozen, double nowMs, List<Object> notes) {
+        int n = out.length, k, i, maxP = -1, nz = 0, ne = 0; java.util.Set<Integer> gps = new java.util.HashSet<Integer>();
+        for (i = 0; i < passes.size(); i++) { Object pp = passes.get(i); double ix = gn(pp, "idx"); if (!fin(ix)) continue; if ((int) ix > maxP) maxP = (int) ix; if ("gps".equals(g(pp, "src"))) gps.add((int) ix); }
+        double early = Math.max(0, nrtEarlySec) * 1000;
+        if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (!Double.isNaN(out[k]) && k < nodes.size() && nrtNode(nodes.get(k))) { out[k] -= early; ne++; }
+        if (frozen != null) for (k = 0; k < n; k++) {
+            Object fm = frozen.get(String.valueOf(k)); if (fm == null || !fin(fm) || Double.isNaN(out[k]) || gps.contains(k)) continue;
+            if (Math.abs(out[k] - num(fm)) > 0) { out[k] = num(fm); nz++; }
+        }
+        if (ne != 0) notes.add("실시간 없는 노선 도착 " + ns(nrtEarlySec) + "초 당김 " + ne + "곳");
+        if (nz != 0) notes.add("지난 역 시각 잠금 " + nz + "곳");
+    }
     static final String rounding = "floor", overdueMode = "clamp";
 
     /** s294: 노드마다 정시에서 20~30초 뒤(FNV-1a, engine/ride-eta.js _rePlanSec 와 같은 식). */
@@ -542,6 +561,7 @@ final class RideEtaJ {
         if (frozenTail != 0) notes.add("앞 구간 마지막 통과 뒤 역 " + frozenTail + "곳: 그 구간 자신의 지연 수준으로 고정");
         if (interp != 0) notes.add("통과 기록 없는 역 " + interp + "곳: 앞뒤 기록 사이를 예정 비율로 나눔");
 
+        nrtFreeze(out, nodes, passesIn, m(input.get("frozen")), nowMs, notes);
         return finish(out, tz, anchor.idx, level, notes, n, nowMs);
     }
 
