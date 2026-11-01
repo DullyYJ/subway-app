@@ -1399,6 +1399,20 @@ public class ScreenJvmTest {
             ok(Math.abs((nl.headH + nl.bodyH + nl.footH) - 700f) < 3f, "제목을 칸 밖에 둬도 대화 칸이 남는 세로를 다 채운다");
             ok(nl.vsOn && nl.vsContent > nl.vsBot - nl.vsTop, "글이 많으면 칸 안에서만 밀린다");
         }
+        {   // s372: 지난 대화 보기 줄이 없고 박스 전체를 누르면 전체 대화 팝업(kc.open) · 옛 서버(줄이 있는 화면)도 같게
+            StringBuilder m3 = new StringBuilder();
+            for (int i = 1; i <= 30; i++) m3.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":true,\"time\":\"10:00\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
+            String cj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"lth\",\"s\":\"가족 실시간 대화\",\"pad\":[16,8,16,2]},{\"t\":\"panel\",\"pad\":[10,2,10,6],\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
+                + m3 + "{\"t\":\"inbar\",\"key\":\"khc\",\"hint\":\"메시지\",\"btn\":\"보내기\",\"act\":{\"a\":\"call\",\"v\":\"kh.say\"}}]}]}";
+            ScreenCore.Layout cl = ScreenCore.layout(ScreenCore.load(cj), 360f, M, null, 700f);
+            int pa = 0, ibN = 0; for (ScreenCore.Item it : cl.foot) { if (it.kind == ScreenCore.K_PANEL && it.act != null && "kc.open".equals(it.act.v)) pa++; if (it.kind == ScreenCore.K_INBAR && it.act != null && "kh.say".equals(it.act.v)) ibN++; }
+            ok(pa == 1 && ibN == 1, "박스(panel)에 전체 대화 팝업 행동이 붙고 입력줄 단추 행동은 따로 남는다");
+            ok(Math.abs((cl.headH + cl.bodyH + cl.footH) - 700f) < 3f, "지난 대화 보기 줄을 빼도 박스가 맨 아래까지 닿는다");
+            String lj2 = cj.replace("\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"kids\"", "\"kids\"").replace("]}]}", "]},{\"t\":\"navrow\",\"title\":\"지난 대화 보기\",\"act\":{\"a\":\"call\",\"v\":\"kc.open\"},\"size\":12.5,\"vp\":6}]}");
+            ScreenCore.Screen ls2 = ScreenCore.load(lj2);
+            int nvN = 0, pa2 = 0; for (ScreenCore.Node fn : ls2.foot) { if ("navrow".equals(fn.t)) nvN++; if ("panel".equals(fn.t) && fn.act != null && "kc.open".equals(fn.act.v)) pa2++; }
+            ok(nvN == 0 && pa2 == 1, "옛 서버 화면: 지난 대화 보기 줄은 없애고 박스에 같은 행동을 붙인다");
+        }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
     }
