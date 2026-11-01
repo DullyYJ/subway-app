@@ -74,7 +74,9 @@ public class ShellActivity extends Activity {
         while (it.hasNext() && (parsedScr.size() > PARSED_MAX || parsedChars > PARSED_CHARS) && parsedScr.size() > 1) { parsedChars -= it.next().getKey().length(); it.remove(); }
     }
     private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
-        final String pk = json.indexOf("\"settings\"") >= 0 ? json + "\u0001" + ScreenCore.settingsExtra.hashCode() : json;      // 설정 화면은 맨 위에 끼우는 키즈 줄이 바뀌면 다른 화면이다
+        String pk0 = json.indexOf("\"settings\"") >= 0 ? json + "\u0001" + ScreenCore.settingsExtra.hashCode() : json;
+        if (ScreenCore.famChip > 0 && json.indexOf("\"cchips\"") >= 0) pk0 = pk0 + "\u0002" + ScreenCore.famChip;          // 커뮤니티 칩 줄은 '가족대화' 칩이 붙고 눌린 상태에 따라 다른 화면이다
+        final String pk = pk0;      // 설정 화면은 맨 위에 끼우는 키즈 줄이 바뀌면 다른 화면이다
         synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(pk); if (c != null) return c; }
         ScreenCore.Screen sc = ScreenCore.load(json);
         synchronized (parsedScr) { if (parsedScr.put(pk, sc) == null) parsedChars += json.length(); parsedTrim(); }
@@ -292,7 +294,8 @@ public class ShellActivity extends Activity {
         applyTheme();
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
-        if (b == null && kids.wantStart()) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
+        KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
+        if (b == null && (kids.wantStart() || kidsPushLaunch(getIntent()))) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -361,6 +364,12 @@ public class ShellActivity extends Activity {
         setIntent(it);
         WidgetCore.captureLaunch(it); CommuteAlarm.captureBrief(it);
         widgetLaunch(); briefLaunch();
+        if (kidsPushLaunch(it) && kids != null && !kids.isOpen()) kids.open(true);        // 키즈 알림을 눌러 들어왔다 — 키즈 화면으로
+    }
+    /** 키즈 푸시 알림을 눌러 열었나(연결된 부모만 뜻이 있다). 한 번 쓰면 지운다. */
+    private boolean kidsPushLaunch(Intent it) {
+        try { if (it != null && it.hasExtra("kids_open")) { it.removeExtra("kids_open"); return kids != null && kids.linked(); } } catch (Throwable ignored) { }
+        return false;
     }
     @Override protected void onStart() { super.onStart(); if (vec != null) vec.onStart(); }
     @Override protected void onStop() { RideService.setAppFront(false); if (vec != null) vec.onStop(); super.onStop(); WidgetCore.onAppLeft(this); }
@@ -543,6 +552,10 @@ public class ShellActivity extends Activity {
         if (kbEdit) { main.removeCallbacks(kbRestoreRun); kbRestoreRun.run(); }
         applyIme();
         hideMapView();
+        if (kids != null) kids.hideFamily();
+        ShellCore.famOn = kids != null && kids.linked();
+        ScreenCore.famChip = !ShellCore.famOn ? 0 : "fam".equals(ShellCore.mode(store)) ? 2 : 1;
+        shownJson.remove(head); shownKey.remove(head);
         slots = ShellCore.slotsOf(store, tab);
         head.setVisibility(slots.length > 1 ? View.VISIBLE : View.GONE);
         loadTabs(tab);
@@ -854,6 +867,7 @@ public class ShellActivity extends Activity {
         final ScreenView v = viewOfSlot(i);
         boolean keepX = keep0;
         if (ShellCore.S_PENDING.equals(screen)) { viewKey.remove(v); present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
+        if (ShellCore.S_FAM.equals(screen)) { viewKey.remove(v); shownJson.remove(v); shownKey.remove(v); if (kids != null) kids.showFamily(v); return; }          // 가족대화: 키즈 엔진이 실시간으로 그려 준다
         if (ShellCore.S_FOOD.equals(screen)) foodSyncSig();                // 맛집 캐시 열쇠에 도착지(없으면 지금 동네)를 넣는다 — 미리 받아 둔 그 장소의 화면이 바로 뜬다
         final String ck = ShellCore.cacheKey(screen, store);
         viewKey.put(v, ck);
@@ -1225,6 +1239,7 @@ public class ShellActivity extends Activity {
         // 0순위: 가볍고 상태 없는 화면들(탭 막대 · 칩 줄 · 설정 · 노선도 지하철 방식)은 /screen/batch 한 번으로
         final java.util.ArrayList<String[]> ents = new java.util.ArrayList<String[]>();       // {열쇠, 경로, GET|POST, 본문}
         for (String t : ShellCore.TABS) if (!t.equals(cur)) ents.add(new String[] { "tabs|" + t, "/screen/tabs", "POST", ShellCore.tabsBody(t) });
+        if (ShellCore.famOn) ents.add(new String[] { ShellCore.cchipsKey("fam"), "/screen/cchips", "POST", ShellCore.cchipsBody("fam") });
         for (String m : ShellCore.MODES) {
             if (m.equals("set") && live.contains(ShellCore.S_SETTINGS)) continue;
             if (live.contains(ShellCore.S_CCHIPS) && m.equals(liveMode)) continue;
@@ -1700,6 +1715,7 @@ public class ShellActivity extends Activity {
 
         void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
+            if (which != 2 && kids != null && ShellCore.S_FAM.equals(screenName()) && which == 1) { kids.familyAct(a); return; }          // 가족대화 안의 보내기 · 응원은 키즈 엔진이 맡는다
             if (which != 2 && kids != null && ShellCore.S_SETTINGS.equals(screenName()) && kids.settingsAct(a, on)) return;          // 설정 안의 키즈 줄(연결 · 응원문구 · 시작 화면)은 키즈 엔진이 맡는다
             if (which != 2) swc.note(a);                          // 칩을 눌러 고른 칸도 적어 둔다 — 그 칸 화면이 오기 전에 밀어도 거기서부터 넘어간다
             if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
@@ -1741,6 +1757,9 @@ public class ShellActivity extends Activity {
     private void kidsSettingsChanged() {
         try {
             if (slots.length > 0 && ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) { shownJson.remove(body); shownKey.remove(body); loadSlot(slots.length - 1, true); }
+            boolean fo = kids != null && kids.linked();
+            if (fo != ShellCore.famOn && "community".equals(ShellCore.currentTab(store))) showTab("community");          // 연결 · 해제되면 커뮤니티 맨 앞 '가족대화' 칩도 곧바로 붙거나 사라진다
+            else ShellCore.famOn = fo;
         } catch (Throwable ignored) { }
     }
 

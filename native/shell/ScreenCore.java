@@ -1035,7 +1035,29 @@ public final class ScreenCore {
     /** 읽고 검증한다. 틀리면 ParseError. */
     /** 설정 화면 맨 위에 끼울 노드 목록(JSON 배열 글). 길동무 키즈 연동 상태가 바뀔 때 앱이 바꿔 둔다. 빈 글이면 끼우지 않는다. */
     public static volatile String settingsExtra = "";
+    /** 길동무 키즈: 커뮤니티 맨 위 칩 줄 맨 앞에 '가족대화' 칩을 끼울지(0 안 끼움 · 1 끼움 · 2 끼우고 고른 상태). 연결된 부모만 켜진다. */
+    public static volatile int famChip = 0;
+    @SuppressWarnings("unchecked")
+    private static void injectFam(Map<String, Object> m) {
+        Object h = m.get("head");
+        if (!(h instanceof List)) return;
+        for (Object o : (List<Object>) h) {
+            if (!(o instanceof Map)) continue;
+            Map<String, Object> cm = (Map<String, Object>) o;
+            if (!"chips".equals(cm.get("t")) || !(cm.get("items") instanceof List)) continue;
+            List<Object> items = (List<Object>) cm.get("items");
+            boolean sel = famChip == 2;
+            if (sel) for (Object it : items) if (it instanceof Map) ((Map<String, Object>) it).put("on", Boolean.FALSE);
+            Map<String, Object> f = new HashMap<String, Object>(), act = new HashMap<String, Object>();
+            act.put("a", "call"); act.put("v", "cc.fam");
+            f.put("label", "가족대화"); f.put("on", Boolean.valueOf(sel)); f.put("act", act);
+            items.add(0, f);
+            return;
+        }
+    }
+
     public static Screen validate(Object root) throws ParseError {
+        if (famChip > 0 && root instanceof Map && "cchips".equals(((Map<?, ?>) root).get("screen"))) injectFam((Map<String, Object>) root);
         Map<String, Object> m = asObj(root, "루트");
         Object ok = m.get("ok");
         if (ok instanceof Boolean && !((Boolean) ok)) throw new ParseError("엔진이 실패를 알렸다");

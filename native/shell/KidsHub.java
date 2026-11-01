@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
@@ -99,6 +99,7 @@ public final class KidsHub {
         cid = st.get(K_CID, "");
         String nodes = st.get(K_NODES, "");
         linked = nodes.length() > 2;
+        ShellCore.famOn = linked;
         ScreenCore.settingsExtra = extraJson();
         layer = new FrameLayout(a);
         layer.setClickable(true);
@@ -160,8 +161,8 @@ public final class KidsHub {
         if (sheetV != null) sheetV.setPalette(pal);
     }
 
-    public void resume() { paused = false; if (open) { startLoop(loopView()); } refreshLink(false); }
-    public void pause() { paused = true; stopLoop(); }
+    public void resume() { paused = false; KidsPush.fg = true; if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
+    public void pause() { paused = true; KidsPush.fg = false; stopLoop(); famEp++; }
     public void destroy() { alive = false; stopLoop(); closeSheet(true); }
 
     // ───────── 홈 버튼 3초 꾹 ─────────
@@ -274,6 +275,8 @@ public final class KidsHub {
                 store.put(K_START, o.optInt("start", 0) == 1 ? "1" : "0");
                 linked = nl;
                 ScreenCore.settingsExtra = extraJson();
+                if (!nl) hideFamily();
+                if (nl) KidsPush.start(act, store);                              // 연결된 부모만: 푸시 토큰을 엔진에 맡긴다
                 if (!changed) return;
                 main.post(new Runnable() { @Override public void run() {
                     if (!linked && open) close(true);
@@ -364,6 +367,69 @@ public final class KidsHub {
         } });
     }
 
+    // ───────── 커뮤니티 '가족대화'(웹뷰 · 시트가 아니라 엔진이 그려 주는 화면을 커뮤니티 본문에 바로 끼운다) ─────────
+    private volatile ScreenView famV;
+    private volatile int famEp = 0;
+    private String famJson = "";
+
+    /** 커뮤니티 '가족대화' 칸이 열렸다 — 저장해 둔 마지막 화면을 먼저 보이고, 엔진에서 새로 받은 뒤 긴 대기로 실시간을 건다. */
+    public void showFamily(ScreenView v) {
+        if (v == null || !linked) return;
+        famV = v; famJson = "";
+        final int my = ++famEp;
+        final String c = store.get(K_FAM, "");
+        if (c.length() > 0) io.execute(new Runnable() { @Override public void run() {
+            try { final ScreenCore.Screen sc = ScreenCore.load(c); main.post(new Runnable() { @Override public void run() { ScreenView f = famV; if (my == famEp && f != null && famJson.length() == 0) f.setScreen(sc, false); } }); } catch (Throwable ignored) { }
+        } });
+        startFam(my);
+    }
+    /** 다른 칸으로 옮기거나 연결이 풀렸다 — 대기를 그만둔다. */
+    public void hideFamily() { famV = null; famEp++; }
+
+    private void startFam(final int my) {
+        io.execute(new Runnable() { @Override public void run() {
+            long since = -1L; int fails = 0;
+            boolean first = true;
+            while (alive && my == famEp && linked) {
+                String r = first ? call("GET", "/p/screen?v=fam&cid=" + enc(cid), null, 10000)
+                                 : call("GET", "/p/wait?v=fam&cid=" + enc(cid) + "&since=" + since, null, 22000);
+                if (!alive || my != famEp) return;
+                if (r == null) { fails++; nap(Math.min(500L * fails, 4000L)); continue; }
+                fails = 0;
+                try {
+                    JSONObject o = new JSONObject(r);
+                    if (!o.optBoolean("ok", false)) { nap(1500L); continue; }
+                    since = o.optLong("rev", since);
+                    if (o.optBoolean("gone", false) || (o.has("linked") && o.optInt("linked", 1) == 0)) { refreshLink(true); return; }
+                    if (o.has("cid") && o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
+                    JSONObject s = o.optJSONObject("screen");
+                    if (s != null) putFam(s.toString(), my);
+                } catch (Throwable e) { nap(1500L); continue; }
+                first = false;
+            }
+        } });
+    }
+
+    private void putFam(final String js, final int my) {
+        try {
+            final ScreenCore.Screen sc = ScreenCore.load(js);
+            main.post(new Runnable() { @Override public void run() {
+                ScreenView f = famV;
+                if (my != famEp || f == null || js.equals(famJson)) return;
+                famJson = js;
+                f.setScreen(sc, true);
+                if (js.length() < 150000) store.put(K_FAM, js);
+            } });
+        } catch (Throwable ignored) { }
+    }
+
+    /** 가족대화 칸 안의 눌림(보내기 등) — 엔진에 보내고 돌아온 화면을 그 칸에 다시 그린다. */
+    public void familyAct(ScreenCore.Act a) {
+        ScreenView f = famV;
+        if (f == null || a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
+        send(a.v, a.id, a.t, f.fields(), f);
+    }
+
     private static void nap(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignored) { } }
 
     // ───────── 눌림 보내기(엔진이 새 화면을 돌려준다) ─────────
@@ -392,10 +458,12 @@ public final class KidsHub {
                 main.post(new Runnable() { @Override public void run() {
                     if (notice.length() > 0 && sheetD == null) note(notice);          // 팝업 안의 안내는 엔진이 팝업 화면 안에 넣어 준다
                     if (sc != null) {
-                        if ("kids".equals(sc.id)) { if (open && !js.equals(lastHubJson)) { lastHubJson = js; hubV.setScreen(sc, true); } }
+                        if ("kidfam".equals(sc.id)) { putFam(js, famEp); }
+                        else if ("kids".equals(sc.id)) { if (open && !js.equals(lastHubJson)) { lastHubJson = js; hubV.setScreen(sc, true); } }
                         else showSheet(kind.length() > 0 ? kind : kindOf(sc.id), sc, js);
                     }
-                    if (clear.length() > 0 && sheetV != null) sheetV.setField(clear, "");
+                    ScreenView cv = src != null && src == famV ? famV : sheetV;
+                    if (clear.length() > 0 && cv != null) cv.setField(clear, "");
                     if (close) { closeSheet(true); }
                     if (hub && open) fetchHub();
                 } });
@@ -619,6 +687,51 @@ public final class KidsHub {
 
     private static String enc(String s) {
         try { return URLEncoder.encode(s == null ? "" : s, "UTF-8"); } catch (Throwable e) { return ""; }
+    }
+
+    /** 푸시 토큰을 엔진에 올린다(푸시 서비스 · 앱 시작에서 부르는 정적 길). 성공하면 true. */
+    static boolean postFt(ShellCore.Store st, String tk) {
+        String id = st.get(K_ID, ""), sec = st.get(K_SEC, "");
+        if (id.length() == 0 || sec.length() == 0) return false;
+        HttpURLConnection c = null;
+        try {
+            if (!"1".equals(st.get(K_REG, "0"))) {
+                JSONObject o = new JSONObject(); o.put("id", id); o.put("sec", sec); o.put("role", "p");
+                String r = httpPost("/reg", o.toString(), null, null);
+                if (r == null || !new JSONObject(r).optBoolean("ok", false)) return false;
+                st.put(K_REG, "1");
+            }
+            JSONObject b = new JSONObject(); b.put("tk", tk);
+            String r = httpPost("/p/ft", b.toString(), id, sec);
+            return r != null && new JSONObject(r).optBoolean("ok", false);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private static String httpPost(String path, String body, String id, String sec) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(BASE + path).openConnection();
+            c.setConnectTimeout(8000); c.setReadTimeout(10000); c.setRequestMethod("POST"); c.setInstanceFollowRedirects(false);
+            if (id != null) { c.setRequestProperty("x-id", id); c.setRequestProperty("x-sec", sec); }
+            byte[] b = body.getBytes("UTF-8");
+            c.setDoOutput(true); c.setRequestProperty("Content-Type", "application/json; charset=utf-8"); c.setFixedLengthStreamingMode(b.length);
+            OutputStream os = c.getOutputStream();
+            try { os.write(b); } finally { os.close(); }
+            int code = c.getResponseCode();
+            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+            if (in == null) return null;
+            try {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                return bo.toString("UTF-8");
+            } finally { in.close(); }
+        } catch (Throwable e) {
+            return null;
+        } finally {
+            if (c != null) { try { c.disconnect(); } catch (Throwable ignored) { } }
+        }
     }
 
     static void buzz(Context c, long ms) {

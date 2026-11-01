@@ -293,7 +293,7 @@ public final class ShellCore {
     public static Effect route(String screen, Store st, String a, String v, String key, boolean on, String url, Map<String, String> fields) {
         if (S_SETTINGS.equals(screen)) return routeSettings(st, a, v, key, on, fields);
         if (S_CCHIPS.equals(screen)) {
-            if ("call".equals(a) && v != null && v.startsWith("cc.") && isMode(v.substring(3))) {
+            if ("call".equals(a) && v != null && v.startsWith("cc.") && (isMode(v.substring(3)) || (famOn && "fam".equals(v.substring(3))))) {
                 st.put(K_MODE, v.substring(3));
                 return new Effect(E_TAB, currentTab(st));
             }
@@ -330,9 +330,12 @@ public final class ShellCore {
     public static final String[] MODES = { "chat", "board", "news", "set" };
     public static boolean isMode(String m) { for (String x : MODES) if (x.equals(m)) return true; return false; }
     /** 커뮤니티 머리(칩 줄)를 방식 m 으로 그려 달라는 본문과 그 캐시 열쇠(다른 방식을 눌러도 바로 뜨게 미리 받는 데 쓴다). */
-    public static String cchipsBody(String m) { return "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q(isMode(m) ? m : MODE_DEFAULT) + "}}"; }
-    public static String cchipsKey(String m) { return S_CCHIPS + "|" + (isMode(m) ? m : MODE_DEFAULT); }
-    public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); return isMode(m) ? m : MODE_DEFAULT; }
+    public static String cchipsBody(String m) { return "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q("fam".equals(m) ? "chat" : isMode(m) ? m : MODE_DEFAULT) + "}}"; }
+    public static String cchipsKey(String m) { return S_CCHIPS + "|" + ("fam".equals(m) ? "fam" : isMode(m) ? m : MODE_DEFAULT); }
+    /** 길동무 키즈와 연결돼 있으면 참 — 커뮤니티 맨 앞에 '가족대화'가 붙는다(연결 상태는 키즈 엔진이 알려 준 것). */
+    public static volatile boolean famOn = false;
+    public static final String S_FAM = "fam";
+    public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); if ("fam".equals(m)) return famOn ? "fam" : MODE_DEFAULT; return isMode(m) ? m : MODE_DEFAULT; }
 
     public static final String S_SETTINGS = "settings", S_SHOP = "shop", S_NEWS = "news", S_CCHIPS = "cchips", S_PENDING = "pending", S_HOME = "home", S_BOARD = "board", S_WRITE = "write", S_CHAT = "chat", S_FOOD = "food", S_FOODSHEET = "foodsheet", S_MAPH = "maph", S_MAPB = "mapb", S_MAPSTN = "mapstn", S_MAPTT = "maptt", S_MAPBR = "mapbr", S_FAV = "fav", S_DETAIL = "detail", S_WALK = "walk", S_SETPG = "setpg", S_HDR = "hdr";
     /** 다른 앱 위 안내: 켜기로 직접 고른 적이 있을 때만(저장값 "1") 켜진 것이다(웹 _ovlEnabled — YJ: "처음엔 꺼 두기"). 실제로 뜨려면 '다른 앱 위에 표시' 허용도 있어야 하고, 앱이 화면에 없을 때만 뜬다. */
@@ -343,6 +346,7 @@ public final class ShellCore {
     public static String[] slotsOf(Store st, String tab) {
         if ("community".equals(tab)) {
             String m = mode(st);
+            if ("fam".equals(m)) return new String[] { S_CCHIPS, S_FAM };
             return new String[] { S_CCHIPS, "news".equals(m) ? S_NEWS : "set".equals(m) ? S_SETTINGS : "board".equals(m) ? S_BOARD : "chat".equals(m) ? S_CHAT : S_PENDING };
         }
         if ("shop".equals(tab)) return new String[] { S_SHOP };
