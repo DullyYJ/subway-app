@@ -1097,7 +1097,7 @@ function findAndroidJar() {
     assert.ok(/public boolean vsOn; public float vsTop, vsBot, vsContent;/.test(sc) && /ThreadLocal<float\[\]> VS/.test(sc) && /L2\.vsOn = true/.test(sc), '대화 칸 안쪽 밀림 계산(코어)');
     assert.ok(/mode = 12/.test(sv) && /flingV/.test(sv) && /cv\.clipRect\(0f, lay\.vsTop, w, lay\.vsBot\)/.test(sv) && /vsHit = inFoot && lay\.vsOn/.test(sv), '대화 칸에서 시작한 위아래 밀기는 그 칸만 민다(화면 전체가 아니다) · 틀 밖은 잘린다');
     assert.ok(/private void optimistic\(String tx\)/.test(kh) && /"kh\.say"\.equals\(a\.v\) && me\(\) == hubV/.test(kh) && /hubV\.setField\("khc", ""\)/.test(kh) && /!"kh\.say"\.equals\(v\)/.test(kh), '보내면 서버를 기다리지 않고 내 말풍선을 먼저 그리고 입력칸을 바로 비운다');
-    assert.ok(/setDuration\(160L\)/.test(kh) && /setDuration\(140L\)/.test(kh) && !/for \(final View v : slide\) if \(v != null\) v\.animate/.test(kh) && /main\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(open\) warm\(\); \} \}, 1500L\)/.test(kh), '열고 닫기 연출 단축 · 아래 화면은 따로 밀지 않는다 · 미리 받기는 첫 그림 뒤로');
+    assert.ok(/setDuration\(200L\)/.test(kh) && /setDuration\(140L\)/.test(kh) && !/for \(final View v : slide\) if \(v != null\) v\.animate/.test(kh) && /main\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(open\) warm\(\); \} \}, 1500L\)/.test(kh), '열고 닫기 연출 단축 · 아래 화면은 따로 밀지 않는다 · 미리 받기는 첫 그림 뒤로');
     assert.ok(/TABS_BLANK/.test(sa) && /private void kidsTabsWatchStart\(\)/.test(sa) && /tabs\.itemCount\(\) == 0 \|\| tabs\.getTranslationY\(\) != 0f/.test(sa), '하단 탭 감시: 비면 상태를 오류 기록에 남기고 다시 채운다');
   });
   await t('s372: 키즈 탭 막대 마지막 화면 즉시 · 박스 전체 누르면 대화 팝업 · 입력칸 키보드 유지', () => {
@@ -1115,6 +1115,13 @@ function findAndroidJar() {
     assert.ok(/placeLocal\(a\)/.test(kh) && /private boolean placeLocal\(ScreenCore\.Act a\)/.test(kh) && /"kpl\.cancel"\.equals\(a\.v\) && sheetD != null/.test(kh), '시각 · 요일 바꾸기와 취소는 서버를 기다리지 않는다');
     assert.ok(/private boolean placeSave\(ScreenCore\.Act a\)/.test(kh) && /ff\.put\("kpm"/.test(kh) && /ff\.put\("kpd"/.test(kh) && /closeSheet\(true\);\s*send\(a\.v, a\.id, a\.t, ff, null\)/.test(kh), '저장은 바로 닫고 뒤에서 한 번에 보낸다(시각 · 요일 값을 함께)');
     assert.ok(/revealSheet\(box, shown, bottom, 0f\); \} \}, 220L\)/.test(kh) && /setDuration\(110L\)/.test(kh) && /setDuration\(240L\)/.test(kh), '팝업 열림이 빨라졌다');
+  });
+  await t('s375: 키즈 화면 미리 받기 + 오른쪽에서 왼쪽 슬라이드 · 지도 두 번 탭 자녀 위치 · 깜박이는 점 여럿', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/public void preload\(\)/.test(kh) && /hubPre = ScreenCore\.load\(js\)/.test(kh) && /if \(!open\) preload\(\); \} \}, 2500L\)/.test(kh) && /public void resume\(\) \{ paused = false; KidsPush\.fg = true; if \(!open\) preload\(\);/.test(kh), '키즈 화면을 홈에서 미리 받아 해석까지 해 둔다');
+    assert.ok(/hubV\.setScreen\(pre, !first\)/.test(kh) && /addOnPreDrawListener/.test(kh) && /translationX\(0f\)\.setDuration\(200L\)/.test(kh), '열 때 미리 받은 화면을 먼저 꽂고 첫 프레임에 오른쪽에서 왼쪽으로 민다');
+    assert.ok(/private void tmHome\(\)/.test(sv) && /nt - tmTapT < 380L/.test(sv) && /tmLp\.length\(\) > 0 && tmTapT > 0L/.test(sv) && /!tmOnBtn\(lx, ly\)/.test(sv), '장소 등록 지도를 두 번 탭하면 자녀 위치로');
+    assert.ok(/liveN > 1\) postInvalidateDelayed\(33L\)/.test(sv) && /liveShCache/.test(sv), '깜박이는 점이 여러 줄에 있어도 모두 깜박인다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
