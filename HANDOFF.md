@@ -3682,3 +3682,12 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **시험**: `shell_native.test.js` 컴파일 목록에 `KidsHub.java` 추가, `test/java/maplibre-stubs/ml/` 에 QR 스캐너 스텁 추가. ⚠ 진동 상수 `FLAG_IGNORE_GLOBAL_SETTINGS` 는 쓰지 말 것(CI android.jar 에서 컴파일 오류).
 - **배포**: 워커(`kids-worker.js`)는 YJ 가 붙여 넣는다(D1 표는 첫 요청에 자동 생성 · 응답 모양이 바뀌었으니 키즈 앱과 함께 배포). 앱은 새 APK.
 - **남은 것**: 커뮤니티 '가족대화' 카테고리 연동(지금은 허브 대화가 시트로 열림) · 앱이 꺼져 있을 때 푸시는 FCM 없이 불가 · 키즈 알약은 버스 대기 알약과 비슷하지만 같은 뷰는 아님 · 응원문구 "ㅈ0개" 는 20개로 해석.
+
+## s364 — 푸시(FCM) · 커뮤니티 '가족대화' · 키즈 진동 보강 (2026-11-01)
+- **Firebase 프로젝트** `gildongmu-311b3`(앱 2개: `com.dullyyj.subway` · `com.dullyyj.kids`). `shell-android/app/google-services.json` 이 있으면 빌드에서 구글 서비스 플러그인을 켠다(없으면 푸시만 빠지고 빌드는 그대로). 공개 저장소라 이 파일의 클라이언트 키가 보이지만 FCM 클라이언트용 공개 키다(서버 키 아님). 서비스 계정 비공개 키는 저장소에 올리지 말 것 — 워커 시크릿 `FCM_SA` 로만.
+- **부모 앱**: `KidsPush.java`(FirebaseMessagingService · 토큰을 `/p/ft` 로 올림 · 앞에 떠 있으면 알림 생략 · 탭하면 키즈 허브). `KidsHub.postFt` · `KidsPush.start`(연결된 부모만). 매니페스트 서비스 등록 · gradle `firebase-bom 33.5.1` + `firebase-messaging`.
+- **커뮤니티 '가족대화'**: 칩 줄 맨 앞(연결된 부모에게만). `ScreenCore.famChip`(0 없음 · 1 보임 · 2 선택) 이 `/screen/cchips` 답에 칩 `{가족대화 · cc.fam}` 을 맨 앞에 끼운다(엔진 답은 안 고침). `ShellCore.S_FAM` · `famOn` · `mode()`(연결 안 됐으면 기본 방식으로) · `slotsOf`. 본문은 `KidsHub.showFamily/hideFamily/familyAct` 가 키즈 워커 `/p/screen?v=fam` + `/p/wait?v=fam` 긴 대기로 그린다(웹뷰·시트 아님). 보내기는 `kf.send`.
+- **워커(kids-worker.js)**: `/c/ft` · `/p/ft` 토큰 저장(devices.ft), FCM v1 발송(JWT RS256 · 죽은 토큰 정리), 크론 `scheduled()`(출발 30분 전 자녀 푸시 · 도착 예정+5분 미도착 부모 푸시), 채팅·미션·출발·도착 푸시. 필요: 시크릿 `FCM_SA`(서비스 계정 JSON 통째) + 크론 트리거 `* * * * *`.
+- **키즈 앱(p-kids26/27)**: `Push.java`(토큰 `/c/ft` · 알림 채널 kids_push · 앞이면 생략) · `Buzz.java` 보강(VibratorManager · 세기 조절 없으면 세기 없이 · 무늬 거부되면 짧은 진동) · gradle 조건부 플러그인.
+- **키즈 알약**: 키즈 앱은 처음부터 `pillView`(엔진 `pill()` 의 `trip` 화면)로 버스 대기 알약과 코드·뷰를 공유하지 않는다(버스 알약은 길동무 쪽).
+- **확인 못 한 것**: 실기기 푸시 도착 · 실기기 진동 · 가족대화 화면의 실제 터치 · 안드로이드 컴파일은 CI 통과(#753)로만 확인.
