@@ -76,9 +76,11 @@ public class ShellActivity extends Activity {
     private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
         String pk0 = json.indexOf("\"settings\"") >= 0 ? json + "\u0001" + ScreenCore.settingsExtra.hashCode() : json;
         if (ScreenCore.famChip > 0 && json.indexOf("\"cchips\"") >= 0) pk0 = pk0 + "\u0002" + ScreenCore.famChip;          // 커뮤니티 칩 줄은 '가족대화' 칩이 붙고 눌린 상태에 따라 다른 화면이다
+        String pj = json;
+        if (kids != null && json.indexOf("tab.home") >= 0) { String tk = kids.tabKey(); if (tk.length() > 0) { pk0 = pk0 + "\u0003" + tk; pj = kids.patchTabs(json); } }          // 키즈 모드: 아래 탭의 가운데 칸은 엔진이 준 '키즈' 모양으로, 켜진 칸은 키즈 화면이 떠 있는지로
         final String pk = pk0;      // 설정 화면은 맨 위에 끼우는 키즈 줄이 바뀌면 다른 화면이다
         synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(pk); if (c != null) return c; }
-        ScreenCore.Screen sc = ScreenCore.load(json);
+        ScreenCore.Screen sc = ScreenCore.load(pj);
         synchronized (parsedScr) { if (parsedScr.put(pk, sc) == null) parsedChars += json.length(); parsedTrim(); }
         return sc;
     }
@@ -295,8 +297,9 @@ public class ShellActivity extends Activity {
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
         KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
+        kids.tabsChanged = new Runnable() { @Override public void run() { kidsTabsRedraw(); } };
         kidsDeepLink(getIntent());
-        if (b == null && (kids.wantStart() || kidsPushLaunch(getIntent()))) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
+        if (kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())))) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -317,7 +320,6 @@ public class ShellActivity extends Activity {
     }
 
     // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸을 고르고, 나올 친구 셋은 켤 때마다 무작위로 고른다 ──
-    private OpenView openV;
     private OpenCore.Script helloScript;
     /** s340: 홈 장면(길동무 친구들 카드)을 3초 꾹 누르면 카드가 늘어나 나머지 친구들이 인사한다(YJ). 대본(시간 · 자리 · 차례 · 인사 글)은 엔진이 만든 assets/open.json 의 hello 와 지금 시(時) 칸. 없으면 null(아무것도 안 한다). */
     private SceneHello.Plan helloPlan() {
@@ -331,25 +333,7 @@ public class ShellActivity extends Activity {
             return OpenCore.helloFor(helloScript, OpenCore.slotFor(helloScript, cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0));
         } catch (Throwable ignored) { return null; }
     }
-    private void showOpening() {
-        try {
-            OpenCore.Script sc; java.io.InputStream in = getAssets().open("open.json");
-            try { java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream(); byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) bo.write(buf, 0, n); sc = OpenCore.parse(bo.toString("UTF-8")); } finally { in.close(); }
-            if (sc == null) return;
-            java.util.Calendar cal = java.util.Calendar.getInstance();
-            double hour = cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0;
-            OpenCore.Slot sl = OpenCore.withWeather(sc, OpenCore.slotFor(sc, hour), OpenWx.read(this));          // 마지막으로 받은 날씨(6시간 안)를 배경에 입힌다 — 없으면 맑은 그림 그대로
-            String prev = ""; try { prev = store.get("open_last", ""); } catch (Throwable ignored) { }
-            String[] ids = OpenCore.pickIds(sc, System.nanoTime() ^ cal.getTimeInMillis(), prev);          // 켤 때마다 친구 셋이 무작위로(방금 나온 조합은 피한다)
-            try { store.put("open_last", ids[0] + "," + ids[1] + "," + ids[2]); } catch (Throwable ignored) { }
-            openV = new OpenView(this, sc, sl, OpenCore.cast(sc, sl, ids), new OpenView.Done() { @Override public void onDone() { closeOpening(); } });
-            addContentView(openV, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        } catch (Throwable ignored) { openV = null; }                                  // 오프닝이 실패해도 앱은 그대로 연다
-    }
-    private void closeOpening() {
-        OpenView v = openV; openV = null; if (v == null) return;
-        try { ViewGroup pr = (ViewGroup) v.getParent(); if (pr != null) pr.removeView(v); } catch (Throwable ignored) { }
-    }
+    private void showOpening() { OpenHost.show(this); }                          // 길동무 키즈와 똑같은 오프닝 한 갈래(OpenHost)
 
     /** 앱을 켜면 출발지를 내 위치로 자동으로 잡는다(이미 경로를 보고 있거나 출발지를 골랐으면 건드리지 않는다). 권한 안내는 처음 한 번만 묻는다. */
     private void autoGps() {
@@ -459,11 +443,13 @@ public class ShellActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (kids != null && kids.onBack()) return;                                       // 키즈 팝업 · 화면이 떠 있으면 그것부터 닫는다
-        if (openV != null) { openV.finish(); return; }                                  // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
+        if (OpenHost.back()) return;                                                    // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
         String t = ShellCore.currentTab(store);
-        if (!ShellCore.DEFAULT_TAB.equals(t)) {
+        boolean kidsTop = kids != null && kids.isOpen();                                 // 키즈 화면이 맨 위: 홈에서처럼 바로 종료 확인
+        if (!kidsTop && !ShellCore.DEFAULT_TAB.equals(t)) {
             store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);
             showTab(ShellCore.DEFAULT_TAB);
+            if (kids != null && kids.mode()) kids.open(true);                             // 키즈 모드에서는 홈 자리가 키즈 화면
         } else if (!dlgKind("exit", new Runnable() { @Override public void run() { finish(); } }, null)) super.onBackPressed();      // 웹처럼 한 번 더 확인(엔진 카드) — 못 받았으면 바로 닫는다
     }
 
@@ -553,7 +539,7 @@ public class ShellActivity extends Activity {
      *  단 채팅(아래 입력줄이 화면 밑에 붙은 화면)은 입력줄이 키보드 위에 붙어야 하므로 예전처럼 줄인다. */
     private void applyIme() {
         try {
-            boolean chat = "community".equals(ShellCore.currentTab(store)) && "chat".equals(ShellCore.mode(store));
+            boolean chat = ("community".equals(ShellCore.currentTab(store)) && "chat".equals(ShellCore.mode(store))) || (kids != null && kids.isOpen());          // 키즈 화면의 아래 대화 칸도 키보드 위에 붙는다
             getWindow().setSoftInputMode(chat ? android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE : android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
         } catch (Throwable ignored) { }
     }
@@ -1761,6 +1747,16 @@ public class ShellActivity extends Activity {
         }
     }
 
+    /** 키즈 모드 · 키즈 화면 열림 · 엔진이 준 탭 모양이 바뀌었다 — 아래 탭 막대를 다시 읽어 그린다(글 · 아이콘은 엔진 것). */
+    private void kidsTabsRedraw() {
+        try {
+            String cur = ShellCore.currentTab(store), ck = "tabs|" + cur;
+            viewKey.put(tabs, ck);
+            String c = cacheGet(ck, true);
+            if (c != null) showCached(tabs, c); else loadTabs(cur);
+            applyIme();
+        } catch (Throwable ignored) { }
+    }
     /** 키즈 연결이 바뀌었다(연결 · 해제 · 시작 화면 스위치) — 설정 화면이 떠 있으면 맨 위 키즈 줄을 새로 끼워 다시 그린다. */
     private void kidsSettingsChanged() {
         try {

@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
@@ -105,6 +105,7 @@ public final class KidsHub {
         linked = nodes.length() > 2;
         ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 키즈 화면 · 대화 열기 팝업에서)
         ScreenCore.settingsExtra = extraJson();
+        SceneCore.quietAuto = mode();                                         // 키즈 모드에서는 홈 장면의 친구들 활동 진동을 울리지 않는다
         layer = new FrameLayout(a);
         layer.setClickable(true);
         layer.setVisibility(View.GONE);
@@ -143,8 +144,48 @@ public final class KidsHub {
     // ───────── 상태 ─────────
     public boolean linked() { return linked; }
     public boolean isOpen() { return open; }
+    /** 키즈 모드(아래 탭의 가운데 칸이 '키즈'): 연결되어 있고 켜 둔 상태. 다른 탭을 눌러도 · 앱을 껐다 켜도 이어진다. */
+    public boolean mode() { return linked && "1".equals(store.get(K_MODE, "0")); }
+    /** 탭 막대가 바뀌어야 할 때 불린다(모드 · 열림 · 엔진이 준 탭 모양이 바뀜). 주 스레드에서 부른다. */
+    public Runnable tabsChanged;
+    private void fireTabs() { SceneCore.quietAuto = mode(); final Runnable r = tabsChanged; if (r != null) main.post(r); }
+    private void setMode(boolean on) { if (on == "1".equals(store.get(K_MODE, "0"))) { SceneCore.quietAuto = mode(); return; } store.put(K_MODE, on ? "1" : "0"); fireTabs(); }
+    /** 탭 막대 화면에 키즈 모드를 입힌다: 홈 칸의 글자 · 아이콘은 엔진이 준 것(/p/setrow 의 tab), 켜진 칸은 키즈 화면이 떠 있는지로. 이 모드가 아니면 그대로. */
+    public String patchTabs(String json) {
+        if (!mode() || json == null || json.indexOf("tab.home") < 0) return json;
+        try {
+            JSONObject root = new JSONObject(json), tab = null;
+            String tx = store.get(K_TABX, "");
+            if (tx.length() > 2) { try { tab = new JSONObject(tx); } catch (Throwable ignored) { } }
+            String[] parts = { "body", "head" };
+            for (String part : parts) {
+                JSONArray arr = root.optJSONArray(part);
+                if (arr == null) continue;
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject n = arr.optJSONObject(i);
+                    if (n == null || !"tabbar".equals(n.optString("t"))) continue;
+                    JSONArray its = n.optJSONArray("items");
+                    if (its == null) continue;
+                    for (int k = 0; k < its.length(); k++) {
+                        JSONObject it = its.optJSONObject(k);
+                        if (it == null) continue;
+                        JSONObject ac = it.optJSONObject("act");
+                        boolean home = ac != null && "tab.home".equals(ac.optString("v"));
+                        if (home) {
+                            it.put("label", tab != null && tab.optString("label").length() > 0 ? tab.optString("label") : "키즈");
+                            if (tab != null && tab.optString("icon").length() > 0) it.put("icon", tab.optString("icon"));
+                            it.put("on", open);
+                        } else if (open) it.put("on", false);
+                    }
+                }
+            }
+            return root.toString();
+        } catch (Throwable e) { return json; }
+    }
+    /** 탭 막대 캐시 글을 다시 읽게 하는 열쇠(모드 · 열림이 다르면 다른 화면). */
+    public String tabKey() { return mode() ? (open ? "K1" : "K0") + store.get(K_TABX, "").hashCode() : ""; }
     /** 앱을 켤 때 키즈 화면으로 시작할지 — 연결되어 있고 설정이 켜졌을 때만. */
-    public boolean wantStart() { return linked && "1".equals(store.get(K_START, "0")); }
+    public boolean wantStart() { return linked && ("1".equals(store.get(K_START, "0")) || "1".equals(store.get(K_MODE, "0"))); }
 
     private String extraJson() {
         if (!linked) return UNLINKED_ROW;
@@ -191,7 +232,12 @@ public final class KidsHub {
         if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
             boolean was = holdFired;
             holdArmed = false; holdFired = false; main.removeCallbacks(holdRun);
-            if (!was && a == MotionEvent.ACTION_UP && open) closeNow();        // 다른 탭을 짧게 누르면 키즈 화면은 바로 내려간다
+            if (!was && a == MotionEvent.ACTION_UP && linked) {
+                float w = tabs.getWidth(), x = e.getX();
+                boolean center = w > 0f && x >= w * 2f / 5f && x < w * 3f / 5f;
+                if (center) { if (mode() && !open) open(true); }                  // 키즈 모드에서 '키즈' 칸을 짧게 누르면 키즈 화면으로 돌아온다
+                else if (open) closeNow();                                         // 다른 탭을 짧게 누르면 키즈 화면은 내려가지만 키즈 모드(가운데 칸)는 남는다
+            }
             return was;
         }
         return holdFired;
@@ -199,19 +245,20 @@ public final class KidsHub {
 
     public boolean onBack() {
         if (sheetD != null && sheetD.isShowing()) { closeSheet(false); return true; }
-        if (open) { close(true); return true; }
-        return false;
+        return false;                                                          // 키즈 화면에서 뒤로 가기는 홈에서처럼 '종료할까요' 로 이어진다(앱을 켜면 다시 키즈 화면)
     }
 
+    /** 가운데 칸 3초 꾹: 키즈 모드를 켜고 끈다(끄면 홈으로 돌아온다). */
     public void toggle() {
         if (!linked) return;                                                   // 연결 안 된 사람은 아무 변화 없음
-        if (open) close(true); else open(true);
+        if (mode()) { setMode(false); if (open) close(true); else fireTabs(); } else open(true);
     }
 
     // ───────── 키즈 화면 열고 닫기(오른쪽에서 왼쪽으로 · 돌아갈 땐 왼쪽에서 오른쪽으로 넘어간다) ─────────
     public void open(boolean anim) {
         if (!linked || open) return;
         open = true;
+        store.put(K_MODE, "1"); fireTabs();
         layer.setVisibility(View.VISIBLE);
         layer.bringToFront();
         showSaved();
@@ -227,6 +274,7 @@ public final class KidsHub {
     public void close(boolean anim) {
         if (!open) return;
         open = false;
+        fireTabs();
         closeSheet(true);
         stopLoop();
         float w = width();
@@ -276,7 +324,13 @@ public final class KidsHub {
                 boolean changed = nl != linked || !nj.equals(store.get(K_NODES, "")) || o.optInt("start", 0) != ("1".equals(store.get(K_START, "0")) ? 1 : 0);
                 store.put(K_NODES, nj);
                 store.put(K_START, o.optInt("start", 0) == 1 ? "1" : "0");
+                JSONObject tj = o.optJSONObject("tab");
+                String tjs = tj == null ? "" : tj.toString();
+                boolean tabDiff = !tjs.equals(store.get(K_TABX, ""));
+                store.put(K_TABX, tjs);
                 linked = nl;
+                if (!nl) store.put(K_MODE, "0");                                  // 연결이 끊기면 키즈 모드도 끝
+                if (tabDiff || !nl) fireTabs();
                 ScreenCore.settingsExtra = extraJson();
                 if (!nl) hideFamily();
                 if (nl) KidsPush.start(act, store);                              // 연결된 부모만: 푸시 토큰을 엔진에 맡긴다
