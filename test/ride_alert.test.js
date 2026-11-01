@@ -4,6 +4,7 @@
 //   · 덧말: 그 노드 도착 예정까지 0~240분 · 자정 넘김 · 예정이 없으면 여정 전체 남은 분 · 목적지 도착은 없음 (예전 웹 _fireTransitAlert 와 같다)
 //   · 대기 모드(ride-standby)의 규칙과 같은 문구·진동 무늬 · Worker 내장본이 모듈과 같은 판단 · /ride-alert 길
 'use strict';
+require('../engine/ride-eta.js').RIDE_ETA_DEFAULTS.nrtEarlySec = 0;      // s379: 이 시험은 시각표 그대로(실시간 없는 노선 20초 당김은 ride_dwell.test.js 에서 시험)
 const assert = require('assert');
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');

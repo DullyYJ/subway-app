@@ -1,5 +1,6 @@
 // s266 (YJ: 환승역(아라)에서 14분에 대기를 눌렀더니 14분 탑승처럼 나옴 — 그 시각엔 열차가 없다)
 //   환승 대기(st.xw) 중인 지하철 구간도 시각표 다음 차를 물어(ask boardlive) 그 답으로 역 시각을 옮긴다. 실행: node test/ride_xfer_next.test.js
+require('../engine/ride-eta.js').RIDE_ETA_DEFAULTS.nrtEarlySec = 0;      // s379: 이 시험은 시각표 그대로(실시간 없는 노선 20초 당김은 ride_dwell.test.js 에서 시험)
 const RS = require('../engine/ride-start'), SB = require('../engine/ride-standby');
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL', m); } };

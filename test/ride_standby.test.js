@@ -2,6 +2,7 @@
 // 실행: node test/ride_standby.test.js
 //   웹뷰가 사라져도 네이티브가 5초마다 이 엔진을 불러 영점·시각 밀고 당기기·하차 알림을 이어간다. 상태(state)는 요청에 실려 오가고 서버는 기억하지 않는다.
 'use strict';
+require('../engine/ride-eta.js').RIDE_ETA_DEFAULTS.nrtEarlySec = 0;      // s379: 이 시험은 시각표 그대로(실시간 없는 노선 20초 당김은 ride_dwell.test.js 에서 시험)
 const assert = require('assert');
 const path = require('path');
 const { rsRecoFresh, rsMonoPos, rideStandby, rsAlerts, handleRideStandby, rsPressQuery, rsAttachPressTT, rsPickMs, rsPickLive, rsAttachPressLive, rsFetchSeoulArrivals } = require(path.join(__dirname, '..', 'engine', 'ride-standby.js'));

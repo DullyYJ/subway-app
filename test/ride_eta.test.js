@@ -5,6 +5,7 @@
 //   · 통과 기록의 출처는 src 로 구분한다: 'board'(승차 확정) 'pf'(위치 채택) 'cell'(기지국 선행) 'gps' 'drift'
 //   · 표시는 HH:MM(가장 가까운 분). 그래서 ±1분 안쪽은 "같다"로 본다(시험에서 쓰는 허용치는 각 줄에 적었다).
 'use strict';
+require('../engine/ride-eta.js').RIDE_ETA_DEFAULTS.nrtEarlySec = 0;      // s379: 이 시험은 시각표 그대로(실시간 없는 노선 20초 당김은 ride_dwell.test.js 에서 시험)
 const assert = require('assert');
 const path = require('path');
 const { execFileSync } = require('child_process');

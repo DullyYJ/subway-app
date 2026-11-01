@@ -1,5 +1,6 @@
 // 탑승 시작 엔진(engine/ride-start.js) 시험.  실행: node test/ride_start_engine.test.js
 //  ① 경로 → 대기 모드 state ② 이상한 입력 ③ 그 state 로 /ride-standby 를 5초마다 불러 끝까지 달려 보기(네이티브 흉내) ④ 워커 내장
+require('../engine/ride-eta.js').RIDE_ETA_DEFAULTS.nrtEarlySec = 0;      // s379: 이 시험은 시각표 그대로(실시간 없는 노선 20초 당김은 ride_dwell.test.js 에서 시험)
 const fs = require('fs'), path = require('path');
 const RS = require('../engine/ride-start'), SB = require('../engine/ride-standby');
 let pass = 0, fail = 0;

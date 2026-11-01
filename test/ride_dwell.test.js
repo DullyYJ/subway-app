@@ -8,11 +8,13 @@ const DAY = Date.parse('2026-10-13T00:00:00+09:00');
 const at = (h, m, s) => DAY + ((h * 60 + m) * 60 + (s || 0)) * 1000;
 const LAT = 37.5, LNG0 = 126.9, DL = 0.0137;
 const PLAN = [null, 12 * 60 + 52, 12 * 60 + 54, 12 * 60 + 56, 12 * 60 + 58, 13 * 60];
-const nodes = [{ name: '출발', isOrigin: true }].concat([0, 1, 2, 3, 4].map(i => ({ name: 'S' + i, isSub: true, lineName: '인천1호선', planMin: PLAN[i + 1] })));
-function mkState() {
+// s379: 옛 규칙(문 열림 정차 연장 · 늦은 출발 → 다음 도착 밀기)은 서울 실시간 노선('1호선')에서 시험한다. 실시간 없는 노선('인천1호선')은 아래 s379 시험.
+const mkNodes = line => [{ name: '출발', isOrigin: true }].concat([0, 1, 2, 3, 4].map(i => ({ name: 'S' + i, isSub: true, lineName: line, planMin: PLAN[i + 1] })));
+const nodes = mkNodes('1호선');
+function mkState(line) {
   const stops = [], seq = [1, 2, 3, 4, 5];
   for (let i = 1; i <= 5; i++) stops.push({ i: i, lat: LAT, lng: LNG0 + DL * (i - 1), arrMs: DAY + PLAN[i] * 60000, pass: i > 1, fin: i === 5 });
-  return { v: 1, tripSig: 'T1', eta: { nodes: nodes, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }], boarded: true, notDeparted: false, timetableFirst: true, tzOffsetMin: 540 },
+  return { v: 1, tripSig: 'T1', eta: { nodes: line ? mkNodes(line) : nodes, passes: [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }], boarded: true, notDeparted: false, timetableFirst: true, tzOffsetMin: 540 },
     stops: stops, trail: [], cfg: { targets: [{ seqPos: 4, nodeIdx: 5, name: 'S4', kind: 'dest' }], seq: seq, allowed: {}, destName: 'S4' }, fired: {} };
 }
 
@@ -159,4 +161,34 @@ t('s323: 걷는 속도(1.2m/s)나 제자리 흔들림은 출발로 보지 않는
   assert.ok(!go, '출발 오판 없음');
 });
 
+
+// ★ s379 (YJ: "07:01 신연수 도착인데 선학에서 멈춤 · 도착 알람이 내린 뒤 울림 — 실시간 없는 호선은 시각표 기준 · 확정역 시간 불변 · 도착 20초 앞당김")
+const NRT = '인천1호선';
+t('s379: 실시간 없는 노선은 문 열림 GPS 가 길게 잡혀도 정차를 늘리지 않고 다음 도착을 밀지 않는다', () => {
+  const st0 = mkState(NRT); let st = st0, base = null, arrive = null;
+  const fixes = [];
+  for (let ms = at(12, 52, 5); ms <= at(12, 56, 0); ms += 5000) {
+    const f = ms >= at(12, 54, 0) && ms <= at(12, 55, 30) ? [[ms - 1000, LAT, LNG0 + DL, 20]] : [];      // S2(1번 노드 다음 역) 근처 GPS 가 90초 이어진다
+    const r = rideStandby({ nowMs: ms, fixes: f, state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    if (r.pos && r.pos.t1 && !base) base = r.pos.t1;
+    arrive = r.etaMs ? r.etaMs : arrive;
+    assert.ok(!(st.dly), '늦은 출발로 다음 도착을 밀지 않는다 ' + ms);
+    if (ms === at(12, 55, 30)) { assert.ok(r.pos.from === 2 && r.pos.ratio > 0.5 && r.pos.moving, '시각표대로 이미 출발해 달리는 중(역에 붙잡지 않는다) ' + JSON.stringify(r.pos).slice(0, 100)); assert.ok(r.pos.t1 <= at(12, 56, 0), '다음 도착이 시각표보다 늦어지지 않는다 ' + r.pos.t1); }
+  }
+  const fin = rideStandby({ nowMs: at(12, 56, 0), fixes: [], state: JSON.parse(JSON.stringify(st)) });
+  assert.ok(fin.state.etaMs, 'etaMs'); 
+});
+t('s379: 실시간 없는 노선의 뒤 역 도착은 20초 당겨 보이고 · 실시간 노선은 그대로', () => {
+  const a = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState(NRT) }), b = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState('1호선') });
+  for (let i = 2; i <= 5; i++) assert.strictEqual(b.state.etaMs[i] - a.state.etaMs[i], 20000, i + '번 역 20초 차이 ' + (b.state.etaMs[i] - a.state.etaMs[i]));
+  assert.strictEqual(a.state.etaMs[1], b.state.etaMs[1], '승차(영점) 역은 그대로');
+});
+t('s379: 지난 역의 시각은 이후 걸음에서 바뀌지 않는다(확정역 잠금)', () => {
+  let st = mkState(NRT), seen = {};
+  for (let ms = at(12, 52, 5); ms <= at(12, 59, 0); ms += 5000) {
+    const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); st = r.state;
+    for (let i = 1; i <= 5; i++) { const v = r.state.etaMs[i]; if (v != null && v <= ms) { if (seen[i] == null) seen[i] = v; assert.strictEqual(v, seen[i], i + '번 역 시각이 바뀜 ' + ms); } }
+  }
+  assert.ok(Object.keys(seen).length >= 3, '여러 역을 지났다');
+});
 console.log('ride_dwell: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);
