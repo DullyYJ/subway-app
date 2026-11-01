@@ -2,6 +2,9 @@ plugins {
     id 'com.android.application'
 }
 
+// 푸시(FCM): Firebase 설정 파일(app/google-services.json)이 있을 때만 켠다 — 없는 빌드도 그대로 만들어진다(푸시만 꺼짐).
+if (file('google-services.json').exists()) { apply plugin: 'com.google.gms.google-services' }
+
 // 웹이 전혀 없는 순수 네이티브 앱. 소스는 저장소의 native/shell 하나뿐이다.
 android {
     namespace 'com.dullyyj.subway'
@@ -50,4 +53,7 @@ dependencies {
     implementation 'com.google.android.gms:play-services-location:21.3.0'
     // 길동무 키즈 연결: 자녀 폰의 QR 을 찍는다(Google Play 서비스가 카메라 화면을 띄워 주므로 카메라 권한이 따로 필요 없다).
     implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+    // 길동무 키즈 푸시(FCM): 앱이 꺼져 있어도 자녀의 출발 · 도착 · 대화 · 미션 알림이 온다.
+    implementation platform('com.google.firebase:firebase-bom:33.5.1')
+    implementation 'com.google.firebase:firebase-messaging'
 }
