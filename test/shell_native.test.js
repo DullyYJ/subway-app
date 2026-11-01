@@ -1064,7 +1064,7 @@ function findAndroidJar() {
       assert.ok(/if \(kbEdit\) \{ main\.removeCallbacks\(kbRestoreRun\); kbRestoreRun\.run\(\); \}\s*applyIme\(\);/.test(aa), 's346: 탭을 바꾸면 접어 둔 줄을 곧바로 되돌린다');
       assert.ok(/scrollY > 1f && editKey == null\)/.test(sv), 's346: 글자를 치는 중엔 키 기준 위치 맞춤을 하지 않는다(후보 줄이 바뀌어도 화면이 따라 움직이지 않음)');
       assert.ok(/float sb = sugBottom\(f\); if \(sb > 0f\) bottom = Math\.max\(bottom, sb \+ 8f\)/.test(sv) && /if \(f\.y - 8f < want\) want = f\.y - 8f;/.test(sv) && /private float sugBottom\(ScreenCore\.Item f\)/.test(sv), 's346: 입력줄 바로 아래 후보 줄까지 보이게 스크롤하되 입력칸은 위로 밀려 나가지 않는다');
-      assert.ok(/if \(mode == 0 && flingY\.isFinished\(\) && SystemClock\.uptimeMillis\(\) - downT > 2500L\) \{\s*\/\/ s346[^\n]*\n\s*ensureEditVisible\(f\);/.test(sv), 's346: 키보드로 크기가 바뀌어 칸이 밀렸을 땐 키보드를 내리지 않고 칸을 다시 보이게 한다(손으로 민 때는 예전처럼 끝낸다)');
+      assert.ok(/if \(mode == 0 && flingY\.isFinished\(\)\) \{\s*\/\/ s372[^\n]*\n\s*\/\/ s346[^\n]*\n\s*ensureEditVisible\(f\);/.test(sv), 's346: 키보드로 크기가 바뀌어 칸이 밀렸을 땐 키보드를 내리지 않고 칸을 다시 보이게 한다(손으로 민 때는 예전처럼 끝낸다)');
     }
     {
       const aa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
@@ -1099,6 +1099,14 @@ function findAndroidJar() {
     assert.ok(/private void optimistic\(String tx\)/.test(kh) && /"kh\.say"\.equals\(a\.v\) && me\(\) == hubV/.test(kh) && /hubV\.setField\("khc", ""\)/.test(kh) && /!"kh\.say"\.equals\(v\)/.test(kh), '보내면 서버를 기다리지 않고 내 말풍선을 먼저 그리고 입력칸을 바로 비운다');
     assert.ok(/setDuration\(160L\)/.test(kh) && /setDuration\(140L\)/.test(kh) && !/for \(final View v : slide\) if \(v != null\) v\.animate/.test(kh) && /main\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(open\) warm\(\); \} \}, 1500L\)/.test(kh), '열고 닫기 연출 단축 · 아래 화면은 따로 밀지 않는다 · 미리 받기는 첫 그림 뒤로');
     assert.ok(/TABS_BLANK/.test(sa) && /private void kidsTabsWatchStart\(\)/.test(sa) && /tabs\.itemCount\(\) == 0 \|\| tabs\.getTranslationY\(\) != 0f/.test(sa), '하단 탭 감시: 비면 상태를 오류 기록에 남기고 다시 채운다');
+  });
+  await t('s372: 키즈 탭 막대 마지막 화면 즉시 · 박스 전체 누르면 대화 팝업 · 입력칸 키보드 유지', () => {
+    const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/private String tabsLast\(String tab\)/.test(sa) && /store\.put\("tabs\.last\|"/.test(sa) && (sa.match(/tabsLast\(/g) || []).length >= 4, '마지막으로 받은 탭 막대를 설정 파일에서 바로 읽어 먼저 보인다');
+    assert.ok(/pn\.act = n\.act;/.test(sc) && /n\.act = act\(m\.get\("act"\), false\);/.test(sc) && /private static void legacyNav/.test(sc), '박스 전체 행동(panel act) + 옛 서버 지난 대화 보기 줄 정리');
+    assert.ok(/for \(int i = lay\.foot\.length - 1; i >= 0; i--\)/.test(sv), '아래 고정 줄은 위에 그려진 것(입력·단추)이 먼저 눌린다');
+    assert.ok(/if \(mode == 0 && flingY\.isFinished\(\)\) \{/.test(sv) && !/downT > 2500L\) \{\s*\/\/ s372/.test(sv) && /editBeganAt < 3000L\) \{ postDelayed\(syncRun, 200L\)/.test(sv), '키보드가 올라 팝업이 줄어도 편집을 끝내지 않는다');
+    assert.ok(/shown\[0\] && lp\.width == nw && lp\.height == nh/.test(kh), '같은 크기면 팝업 창을 다시 손대지 않는다');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
