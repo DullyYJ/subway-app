@@ -3841,9 +3841,15 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_SEARCH) return it;
         return null;
     }
+    /** s376(YJ: 키즈는 커뮤니티만 다녀오면 키보드가 계속 올라온다): 쓰지 않는 입력칸이 포커스를 받으면(창에 포커스 받을 칸이 없을 때 안드로이드가 첫 입력칸에 포커스를 준다) 키즈 화면이 키보드 자동 표시 모드(adjustResize)일 때 키보드가 저절로 뜬다 — 편집 중일 때만 포커스를 받게 한다. */
+    private static void focusOk(EditText e, boolean ok) {
+        if (e == null) return;
+        e.setFocusable(ok); e.setFocusableInTouchMode(ok);
+    }
     private void ensureInput() {
         if (input != null) return;
         EditText e = new EditText(getContext());
+        focusOk(e, false);
         e.setBackground(null);
         e.setPadding(0, 0, 0, 0);
         e.setSingleLine(true);
@@ -3881,15 +3887,18 @@ public class ScreenView extends View {
         if (onBtn) { inAct = it.act; submitSearch(); return; }
         ensureInput(); syncInput();
         if (input != null && input.getVisibility() == View.VISIBLE) {                // 알약의 다른 곳을 눌러도 입력칸에 커서를 준다
+            focusOk(input, true);
             input.requestFocus();
             try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(input, 0); } catch (Throwable ignored) { }
         }
     }
     private void blurInput() {
         endEdit();
-        if (input == null || !input.hasFocus()) return;
+        if (input == null) return;
+        if (!input.hasFocus()) { focusOk(input, false); return; }
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
         input.clearFocus();
+        focusOk(input, false);
     }
     /** 검색 입력칸만 내린다. 글자 입력칸(field)의 편집은 건드리지 않는다 — 배치가 바뀔 때마다(키보드가 올라와 크기가 줄 때 포함) 불리므로, 여기서 편집을 끝내면 키보드가 올라오다 사라진다. */
     private void hideInput() {
@@ -3898,6 +3907,7 @@ public class ScreenView extends View {
             try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(), 0); } catch (Throwable ignored) { }
             input.clearFocus();
         }
+        focusOk(input, false);
         if (input.getVisibility() != View.GONE) input.setVisibility(View.GONE);
         inShown = false;
     }
@@ -3973,6 +3983,7 @@ public class ScreenView extends View {
     private void ensureEditor() {
         if (editor != null) return;
         EditText e = new EditText(getContext());
+        focusOk(e, false);
         e.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence c, int a, int b, int d) { }
             @Override public void onTextChanged(CharSequence c, int a, int b, int d) { }
@@ -4042,6 +4053,7 @@ public class ScreenView extends View {
         syncEditor();
         editor.bringToFront();
         editBeganAt = SystemClock.uptimeMillis();
+        focusOk(editor, true);
         editor.requestFocus();
         editor.setSelection(editor.getText().length());
         try { ((InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(editor, 0); } catch (Throwable ignored) { }
@@ -4125,6 +4137,7 @@ public class ScreenView extends View {
         if (editKey != null && editor != null) fieldVals.put(editKey, String.valueOf(editor.getText()));
         editKey = null;
         if (ek != null && ek.equals(watchKey)) { watchKey = null; if (listener != null) listener.onText(ek, fieldVals.get(ek) == null ? "" : fieldVals.get(ek), "blur"); }
+        if (editor != null) focusOk(editor, false);
         if (editor != null && editor.getVisibility() != View.GONE) editor.setVisibility(View.GONE);
         invalidate();
     }
