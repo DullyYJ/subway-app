@@ -34,6 +34,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <!-- 자녀 폰의 길동무 키즈 QR 을 기본 카메라로 찍어 '길동무로 열기'를 누르면 들어오는 길 -->
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="gildongmu-kids" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <receiver
