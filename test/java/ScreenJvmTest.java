@@ -1353,7 +1353,7 @@ public class ScreenJvmTest {
             int nb2 = 0; for (ScreenCore.Item q : rl2.body) if (q.kind == ScreenCore.K_ROWANIM) nb2++;
             ok(nb2 == 0, "모르는 전환 종류는 무시");
         }
-        {   // s369: 아래 고정 줄 대화 칸이 남는 세로만큼 위로 자란다(오래된 글이 위로 펼쳐지고 · 입력줄은 맨 아래 · 모자라면 최근 3개만)
+        {   // s370: 아래 고정 줄 대화 칸이 처음부터 남는 세로를 다 차지 · 넘치면 칸 안에서만 밀림(입력줄은 맨 아래)
             StringBuilder fmsg = new StringBuilder();
             for (int i = 1; i <= 8; i++) fmsg.append("{\"t\":\"msg\",\"s\":\"글").append(i).append("\",\"mine\":").append(i % 2 == 0).append(",\"time\":\"10:0").append(i).append("\",\"pad\":[0,4,0,0],\"fd\":").append(i).append("},");
             String fj = "{\"ok\":true,\"v\":1,\"screen\":\"kids\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"본문\",\"size\":13,\"pad\":[16,10,16,0]}],\"foot\":[{\"t\":\"panel\",\"pad\":[10,6,10,8],\"kids\":[{\"t\":\"spacer\",\"h\":0,\"ffill\":1,\"fk\":3,\"fdh\":42,\"ffmax\":420},"
@@ -1362,20 +1362,20 @@ public class ScreenJvmTest {
             ok(fsc.footDrop.size() == 8 && fsc.footFill != null && fsc.footFill.ffill, "foot 말풍선 8개(fd)와 늘어나는 빈칸을 읽는다");
             ScreenCore.Layout fl0 = ScreenCore.layout(fsc, 360f, M, null, 0f);
             int sh0 = 0; for (ScreenCore.Node d : fsc.footDrop) if (!d.hide) sh0++;
-            ok(sh0 == 3 && fl0.footH > 0f, "화면 높이를 모를 때는 최근 3개만 보인다");
+            ok(sh0 == 3 && fl0.footH > 0f && !fl0.vsOn, "화면 높이를 모를 때는 최근 3개만 보인다(밀림 없음)");
             ScreenCore.Layout fl1 = ScreenCore.layout(fsc, 360f, M, null, 300f);
             int sh1 = 0; for (ScreenCore.Node d : fsc.footDrop) if (!d.hide) sh1++;
-            ok(sh1 == 3 && fl1.headH + fl1.bodyH + fl1.footH >= 300f - 1f || sh1 >= 3, "남는 세로가 없으면 최근 3개 그대로(입력줄 맨 아래)");
+            ok(sh1 == 8, "높이를 알면 말풍선은 모두 칸에 담긴다(접지 않는다)");
+            ok(fl1.vsOn && fl1.vsContent > fl1.vsBot - fl1.vsTop + 0.5f, "칸보다 글이 길면 칸 안에서 밀린다(안 전체 > 보이는 틀)");
+            ok(Math.abs((fl1.headH + fl1.bodyH + fl1.footH) - 300f) < 3f, "대화 칸이 남는 세로를 처음부터 다 채운다");
             ScreenCore.Layout fl2 = ScreenCore.layout(fsc, 360f, M, null, 640f);
-            int sh2 = 0; for (ScreenCore.Node d : fsc.footDrop) if (!d.hide) sh2++;
-            ok(sh2 > 3 && fsc.footDrop.get(7).hide == false && fsc.footDrop.get(0).hide == (sh2 < 8), "남는 세로가 있으면 오래된 글이 위로 펼쳐진다(최신이 항상 아래)");
-            ok(Math.abs((fl2.headH + fl2.bodyH + fl2.footH) - 640f) < 3f || sh2 < 8, "펼쳐 넣은 만큼 늘어나 빈 자리를 메운다");
+            ok(Math.abs((fl2.headH + fl2.bodyH + fl2.footH) - 640f) < 3f, "더 높은 화면도 빈 자리를 다 채운다");
             ScreenCore.Layout fl3 = ScreenCore.layout(fsc, 360f, M, null, 1400f);
-            int sh3 = 0; for (ScreenCore.Node d : fsc.footDrop) if (!d.hide) sh3++;
-            ok(sh3 == 8 && fsc.footFill.h > 0f && fl3.footH > fl2.footH, "글을 다 펼치고도 남으면 빈칸이 대화 칸을 채운다(글은 아래에 붙는다)");
+            ok(!fl3.vsOn && fsc.footFill.h > 0f && Math.abs((fl3.headH + fl3.bodyH + fl3.footH) - 1400f) < 3f, "글이 다 들어가고도 남으면 위쪽은 빈칸(글은 아래에 붙는다) · 밀림 없음");
             ScreenCore.Layout fl4 = ScreenCore.layout(fsc, 360f, M, null, 250f);
-            int sh4 = 0; for (ScreenCore.Node d : fsc.footDrop) if (!d.hide) sh4++;
-            ok(sh4 == 3 && near(fsc.footFill.h, 0f), "키보드가 올라와 화면이 줄면 다시 최근 3개로 접힌다(되돌림)");
+            ok(fl4.vsOn && fl4.vsBot - fl4.vsTop >= 3 * 42f - 1f, "키보드가 올라와 화면이 줄어도 보이는 틀은 최소 fk×fdh 를 지킨다");
+            int vsN = 0; for (ScreenCore.Item q : fl1.foot) if (q.vs) vsN++;
+            ok(vsN > 0, "밀리는 말풍선 조각에 표시(vs)가 붙는다");
         }
         System.out.println(fails == 0 ? "ALL OK (" + oks + ")" : fails + " FAIL");
         System.exit(fails == 0 ? 0 : 1);
