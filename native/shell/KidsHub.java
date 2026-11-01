@@ -700,7 +700,7 @@ public final class KidsHub {
         });
         v.setScreen(sc, false);
         try { d.show(); } catch (Throwable e) { sheetD = null; sheetV = null; sheetKind = ""; sheetBox = null; return; }
-        main.postDelayed(new Runnable() { @Override public void run() { revealSheet(box, shown, bottom, 0f); } }, 450L);      // 높이 소식이 늦어도 보이게
+        main.postDelayed(new Runnable() { @Override public void run() { revealSheet(box, shown, bottom, 0f); } }, 220L);      // 높이 소식이 늦어도 보이게
         if ("chat".equals(kind) || "quest".equals(kind)) { if (!paused) startLoop(kind); }
     }
 
@@ -712,10 +712,10 @@ public final class KidsHub {
             box.setAlpha(1f);
             if (bottom) {
                 box.setTranslationY((hh > 0f ? hh * dpr : box.getHeight() > 0 ? box.getHeight() : 600f * dpr));
-                box.animate().translationY(0f).setDuration(300L).setInterpolator(new DecelerateInterpolator(1.8f)).start();
+                box.animate().translationY(0f).setDuration(240L).setInterpolator(new DecelerateInterpolator(1.8f)).start();
             } else {
-                box.setScaleX(0.94f); box.setScaleY(0.94f); box.setAlpha(0f);
-                box.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(200L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
+                box.setScaleX(0.97f); box.setScaleY(0.97f); box.setAlpha(0f);
+                box.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(110L).setInterpolator(new DecelerateInterpolator(1.6f)).start();
             }
         } catch (Throwable ignored) { box.setAlpha(1f); }
     }
@@ -748,7 +748,11 @@ public final class KidsHub {
         private ScreenView me() { return self != null ? self : hubV; }
         @Override public void onAction(ScreenCore.Act a) {
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
+            buzz(act, 14L);                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
+            if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
+            if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
+            if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;
             if ("kl.scan".equals(a.v)) { scan(me()); return; }
             if ("kq.tab".equals(a.v) || "kq.open".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
             if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 스타포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
@@ -777,6 +781,75 @@ public final class KidsHub {
             if (!f.equals(value)) { final ScreenView sv = me(); main.post(new Runnable() { @Override public void run() { sv.setField(key, f); } }); }
         }
         @Override public void onContentH(float dp) { }
+    }
+
+    // ───────── 장소 등록 팝업: 시각 · 요일은 이 안에서 바로 고치고, 저장할 때 한 번만 서버에 보낸다 ─────────
+    private static final Pattern HHMM = Pattern.compile("^\\d\\d:\\d\\d$");
+    /** 팝업 화면(JSON 마디 묶음)에서 시각 글 · 요일 단추 · 이름 칸을 찾아 고친다. kind: t=분 더하기 · d=요일 뒤집기 · s=읽기만. 결과는 mask[0]=분(0~1439) · mask[1]=요일 비트. */
+    private boolean placeWalk(JSONArray arr, String kind, int arg, int[] out, String name) {
+        boolean hit = false;
+        for (int i = 0; arr != null && i < arr.length(); i++) {
+            JSONObject n = arr.optJSONObject(i);
+            if (n == null) continue;
+            String t = n.optString("t");
+            if ("text".equals(t) && HHMM.matcher(n.optString("s")).matches()) {
+                int mins = Integer.parseInt(n.optString("s").substring(0, 2)) * 60 + Integer.parseInt(n.optString("s").substring(3, 5));
+                if ("t".equals(kind)) { mins = ((mins + arg) % 1440 + 1440) % 1440; try { n.put("s", String.format(java.util.Locale.US, "%02d:%02d", mins / 60, mins % 60)); } catch (Exception ignored) { } }
+                out[0] = mins; hit = true;
+            } else if ("button".equals(t)) {
+                JSONObject ac = n.optJSONObject("act");
+                if (ac != null && "kpl.d".equals(ac.optString("v"))) {
+                    int di = 0; try { di = Integer.parseInt(ac.optString("t", "0")); } catch (Exception ignored) { }
+                    boolean on = "gold".equals(n.optString("fill"));
+                    if ("d".equals(kind) && di == arg) {
+                        on = !on;
+                        try { n.put("fill", on ? "gold" : "card2"); n.put("tc", on ? "#121214" : "text"); n.put("line", on ? "gold" : "border"); } catch (Exception ignored) { }
+                    }
+                    if (on && di >= 0 && di < 7) out[1] |= (1 << di);
+                    hit = true;
+                }
+            } else if ("field".equals(t) && "kpn".equals(n.optString("key")) && name != null) {
+                try { n.put("value", name); } catch (Exception ignored) { }
+            }
+            JSONArray ks = n.optJSONArray("kids");
+            if (ks != null && placeWalk(ks, kind, arg, out, name)) hit = true;
+        }
+        return hit;
+    }
+
+    private boolean placeLocal(ScreenCore.Act a) {
+        try {
+            ScreenView sv = sheetV;
+            if (sv == null || sheetD == null || !"place".equals(sheetKind) || sheetJson.length() == 0) return false;
+            JSONObject o = new JSONObject(sheetJson);
+            int arg = 0;
+            try { arg = Integer.parseInt(a.t == null ? "0" : a.t); } catch (Exception ignored) { }
+            String nm = sv.fields().get("kpn");
+            int[] out = new int[2];
+            if (!placeWalk(o.optJSONArray("body"), "kpl.t".equals(a.v) ? "t" : "d", arg, out, nm == null ? "" : nm)) return false;
+            String js = o.toString();
+            sheetJson = js;
+            sv.setScreen(ScreenCore.load(js), true);
+            return true;
+        } catch (Throwable e) { return false; }
+    }
+
+    /** 저장: 이름과 요일이 갖춰졌으면 서버 답을 기다리지 않고 바로 닫고 뒤에서 저장한다(안내는 저장이 끝나면 뜬다). 모자라면 서버가 알려 주는 대로 둔다. */
+    private boolean placeSave(ScreenCore.Act a) {
+        try {
+            ScreenView sv = sheetV;
+            if (sv == null || sheetD == null || !"place".equals(sheetKind) || sheetJson.length() == 0) return false;
+            Map<String, String> ff = new java.util.HashMap<String, String>(sv.fields());
+            String nm = ff.get("kpn") == null ? "" : ff.get("kpn").replaceAll("\\s+", " ").trim();
+            int[] out = new int[2];
+            if (!placeWalk(new JSONObject(sheetJson).optJSONArray("body"), "s", 0, out, null)) return false;
+            ff.put("kpm", String.valueOf(out[0])); ff.put("kpd", String.valueOf(out[1]));
+            if (nm.length() == 0 || out[1] == 0) { send(a.v, a.id, a.t, ff, sv); return true; }
+            sheetQuiet = true;
+            closeSheet(true);
+            send(a.v, a.id, a.t, ff, null);
+            return true;
+        } catch (Throwable e) { return false; }
     }
 
     /** 지금 키즈 화면의 대화 칸 맨 아래(입력줄 바로 위)에 내 말풍선 하나를 먼저 끼워 그린다. 서버 화면이 오면(긴 대기 0.6초 안) 그것으로 바뀐다. */

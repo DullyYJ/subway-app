@@ -30,6 +30,7 @@ public final class SceneHaptics {
     static {
         // 손가락 동작
         p("grab",         new long[]{0, 14},                    new int[]{0, 110});                    // 꾹 눌러 집었다: 짧고 또렷
+        p("tap",          new long[]{0, 12},                    new int[]{0, 100});                    // 버튼을 눌렀다: 짧고 또렷하게 한 번
         p("release",      new long[]{0, 10},                    new int[]{0, 70});                     // 놓았다: 더 가볍게
         // 착륙(캐릭터마다 다르게)
         p("land",         new long[]{0, 22},                    new int[]{0, 170});
