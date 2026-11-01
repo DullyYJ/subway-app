@@ -149,7 +149,10 @@ public final class SceneCore {
     void stk(Actor a, String k, double sec) { Stk s = new Stk(); s.k = k; s.t0 = t; s.dur = sec; a.stk = s; }
     boolean every(AS A, String key, double gap) { Double v = A.ev.get(key); if (v == null || t - v >= gap) { A.ev.put(key, t); return true; } return false; }
     boolean once(AS A, String key) { if (A.on.containsKey(key)) return false; A.on.put(key, true); return true; }
-    void haptic(String n) { try { host.haptic(n); } catch (RuntimeException e) { /* 진동 실패는 그림에 영향 없다 */ } }
+    /** 키즈 앱 등: true 이면 친구들이 스스로 놀 때(SceneActs 의 S.haptic)의 진동을 모두 끈다 — 손으로 잡고 놓는 진동(tHaptic)은 그대로. */
+    public static volatile boolean quietAuto = false;
+    void haptic(String n) { if (quietAuto) return; tHaptic(n); }
+    void tHaptic(String n) { try { host.haptic(n); } catch (RuntimeException e) { /* 진동 실패는 그림에 영향 없다 */ } }
 
     // 입자 옵션
     static final class PO {
@@ -460,7 +463,7 @@ public final class SceneCore {
         Actor a = P.a; double zc = zy(a.z);
         DRAG = new Drag(); DRAG.a = a; DRAG.fx = a.x; DRAG.fy = zc; DRAG.px = a.x; DRAG.py = zc;
         a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.feetScale = false; a.heart = 0; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
-        haptic("grab"); try { host.held(); } catch (RuntimeException e) { /* 무시 */ }
+        tHaptic("grab"); try { host.held(); } catch (RuntimeException e) { /* 무시 */ }
         addPart("puff", a.x, zy(a.z) - 2, 3);
     }
     void heldStep(Actor a, double dt) {
@@ -484,10 +487,10 @@ public final class SceneCore {
         double h = HH(a), H0y = Math.max(0, -a.y), gg = 560;
         a.held = false; a.pinned = true; a.pinX = a.x; a.lastBounce = false; a.landK = landOf(a); a.t0 = t; a.fy0 = a.y; a.vy = 0; a.sx = a.sy = 1;
         a.feetScale = false; a.heart = 0;
-        haptic("release"); hotUntil = t + hotFor(a.landK);
+        tHaptic("release"); hotUntil = t + hotFor(a.landK);
         // s354 (YJ: 떨어뜨릴 때 친구마다 다른 연출): 엔진의 land 값이 연출 갈래를 정한다 — cotton 둘숑(풍선) · pose 뽀푸(지진 착지) · dig 두덩(땅속 이동) · flip 러블(3회전) · fly 독슐(친구 납치 비행) · puddle 챙챙(꼬리 헬리콥터) · tumble 쮸르 · hose 베비히포
-        if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "carry"); haptic("flap"); return; }      // 고공낙하 → 친구를 안고 하늘로 → 한 바퀴 → 내려놓기
-        if (a.landK.equals("puddle")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "heli"); haptic("flap"); return; }      // 꼬리를 헬리콥터처럼 돌려 하늘을 돌다 천천히 내려와 화낸다
+        if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "carry"); tHaptic("flap"); return; }      // 고공낙하 → 친구를 안고 하늘로 → 한 바퀴 → 내려놓기
+        if (a.landK.equals("puddle")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "heli"); tHaptic("flap"); return; }      // 꼬리를 헬리콥터처럼 돌려 하늘을 돌다 천천히 내려와 화낸다
         boolean flipLike = a.landK.equals("flip") || a.landK.equals("tumble");
         if (flipLike && H0y < 40) a.vy = -190;                                                                                     // 낮게 놓아도 한 바퀴 돌 시간을 번다
         if (a.landK.equals("cotton") || a.landK.equals("hose")) gg = 150;
@@ -539,7 +542,7 @@ public final class SceneCore {
     }
     void touchdown(Actor a) {
         String kk = a.landK; settle(a);
-        haptic(kk.isEmpty() ? "land" : "land_" + kk);
+        tHaptic(kk.isEmpty() ? "land" : "land_" + kk);
         if (!kk.isEmpty() && ACT.containsKey("L_" + kk)) startAct(a, "L_" + kk); else dropEnd(a);
     }
     void dropEnd(Actor a) {

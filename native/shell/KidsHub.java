@@ -462,7 +462,7 @@ public final class KidsHub {
                         else if ("kids".equals(sc.id)) { if (open && !js.equals(lastHubJson)) { lastHubJson = js; hubV.setScreen(sc, true); } }
                         else showSheet(kind.length() > 0 ? kind : kindOf(sc.id), sc, js);
                     }
-                    ScreenView cv = src != null && src == famV ? famV : sheetV;
+                    ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
                     if (clear.length() > 0 && cv != null) cv.setField(clear, "");
                     if (close) { closeSheet(true); }
                     if (hub && open) fetchHub();
@@ -476,6 +476,7 @@ public final class KidsHub {
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
         if ("kidcheer".equals(id)) return "cheer";
+        if ("kidev".equals(id)) return "ev";
         return "link";
     }
 
