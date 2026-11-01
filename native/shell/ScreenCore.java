@@ -185,6 +185,7 @@ public final class ScreenCore {
     public static final class Node {
         public String t = "";
         public String s2 = "";                          // sec: 두 번째 제목(두 쪽 카드의 둘째 쪽이 보일 때) — 밀리는 정도에 맞춰 첫째 제목과 바뀐다
+        public boolean plain;                            // pickl: 카드 모양 없이 글줄만(활동 기록) — 맨 아래(최근)에서 시작하고 위로 밀어 지난 줄을 본다
         public boolean swp;                              // panel: 이 카드 안에서 시작한 좌우 밀기만 화면의 sw 로 넘긴다(그 밖은 세로 스크롤)
         public String sc2 = "";                          // panel: 옆으로 밀면 보이는 두 번째 쪽(지하철 객실 장면)의 엔진 글(JSON). 없으면 한 쪽짜리 카드
         public float padL, padT, padR, padB;
@@ -702,15 +703,15 @@ public final class ScreenCore {
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }
         } else if ("pickl".equals(t)) {                                                                    // s303: 위아래로 밀어 고르는 목록 — 최대 vis 줄이 보이고 더 있으면 안에서 민다(수단 · 출발 시각 · 소요)
-            pad(m, n); n.h = optNum(m, "h", 38f, 28f, 60f); n.cols = (int) optNum(m, "vis", 5f, 1f, 8f); n.key = optStr(m, "key", "pick", 40);
+            pad(m, n); n.plain = optBool(m, "plain", false); n.h = optNum(m, "h", 38f, n.plain ? 16f : 28f, 60f); n.cols = (int) optNum(m, "vis", 5f, 1f, 8f); n.key = optStr(m, "key", "pick", 40); if (n.plain) n.size = optNum(m, "size", 12.5f, 9f, 18f);
             n.fold = optBool(m, "fold", false);
             for (Object io : asArr(m.get("rows"), "pickl.rows")) {
                 Map<String, Object> im = asObj(io, "row");
                 Node c = new Node(); c.t = "prow";
-                c.label = optStr(im, "a", "", 40); c.sub = optStr(im, "b", "", 30); c.value = optStr(im, "c", "", 16);
-                c.on = optBool(im, "on", false); c.act = act(im.get("act"), true);
+                c.label = optStr(im, "a", "", n.plain ? 70 : 40); c.sub = optStr(im, "b", "", 30); c.value = optStr(im, "c", "", 16);
+                c.on = optBool(im, "on", false); c.act = act(im.get("act"), !n.plain);
                 n.items.add(c); sc.nodes++;
-                if (n.items.size() > 40 || sc.nodes > MAX_NODES) throw new ParseError("pickl: 줄이 너무 많다");
+                if (n.items.size() > 60 || sc.nodes > MAX_NODES) throw new ParseError("pickl: 줄이 너무 많다");
             }
             if (n.items.isEmpty()) throw new ParseError("pickl: rows 없음");
         } else if ("inbar".equals(t)) {
@@ -1252,6 +1253,7 @@ public final class ScreenCore {
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
         public boolean left;                         // 단추 글을 왼쪽에 붙임(입력칸 모양)
+        public boolean plog;                        // pickl: 글줄만(카드 없음) · 맨 아래에서 시작
         public boolean vs;                           // s370: 아래 고정 줄 대화 칸 안에서 위아래로 밀리는 말풍선(칸 안만 민다 — 화면 전체가 아니다)
         public boolean bold, on, spin;               // spin: inbar 단추에 도는 점(Node.spin 에서)
         public String color = "text", bg = "", align = "left";
@@ -2517,15 +2519,17 @@ public final class ScreenCore {
             return y + it.h + n.padB;
         }
         if ("pickl".equals(t0(n))) {                                                 // 고르기 목록: 보이는 줄 수만큼의 높이, 안은 ScreenView 가 밀어 그린다
-            Item it = new Item(); it.kind = K_PICKL; it.x = ox; it.y = y; it.w = innerW; it.rowH = n.h; it.key = n.key;
+            Item it = new Item(); it.kind = K_PICKL; it.x = ox; it.y = y; it.w = innerW; it.rowH = n.h; it.key = n.key; it.plog = n.plain;
             it.rows = new ArrayList<Item>();
             for (int i = 0; i < n.items.size(); i++) {
-                Node c = n.items.get(i); Item r = new Item(); r.kind = K_RBTN; r.x = 0f; r.y = i * n.h; r.w = innerW; r.h = n.h - 4f; r.on = c.on; r.act = c.act;
-                r.label = ellipsize(c.label, innerW * .46f, 13f, true, m); r.value = c.sub; r.lines = new String[]{c.value}; r.size = 13f;
+                Node c = n.items.get(i); Item r = new Item(); r.kind = K_RBTN; r.x = 0f; r.y = i * n.h; r.w = innerW; r.h = n.plain ? n.h : n.h - 4f; r.on = c.on; r.act = c.act;
+                if (n.plain) { r.label = ellipsize(c.label, innerW - 4f, n.size, c.on, m); r.value = ""; r.lines = new String[]{""}; r.size = n.size; }
+                else { r.label = ellipsize(c.label, innerW * .46f, 13f, true, m); r.value = c.sub; r.lines = new String[]{c.value}; r.size = 13f; }
                 it.rows.add(r);
             }
             int vis = Math.min(n.items.size(), Math.max(1, n.cols));
-            it.h = vis * n.h - 4f; it.pickMax = Math.max(0f, n.items.size() * n.h - 4f - it.h);
+            float tail = n.plain ? 0f : 4f;
+            it.h = vis * n.h - tail; it.pickMax = Math.max(0f, n.items.size() * n.h - tail - it.h);
             if (n.fold && n.items.size() > 1) {                                       // s307: 접힌 채로는 고른 줄 하나만, 눌러 펼치면 vis 줄(밀어 고르기)
                 it.fold = true; it.open = n.open; it.openH = it.h; it.collH = n.h - 4f;
                 for (int i = 0; i < n.items.size(); i++) if (n.items.get(i).on) { it.onIdx = i; break; }

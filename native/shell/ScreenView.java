@@ -93,6 +93,7 @@ public class ScreenView extends View {
     // s303: 위아래로 밀어 고르는 목록(pickl) — 목록마다(열쇠) 밀린 정도·마지막으로 맞춘 선택 줄·손가락이 잡은 목록·관성
     private final java.util.HashMap<String, Float> pickOff = new java.util.HashMap<String, Float>();
     private final java.util.HashMap<String, String> pickSig = new java.util.HashMap<String, String>();
+    private final java.util.HashMap<String, Float> pickLastMax = new java.util.HashMap<String, Float>();
     private ScreenCore.Item pickHit; private String flingKey; private float flingMax;
     // s307: 접었다 펼치는 고르기 목록(pickl fold) — 펼친 목록의 열쇠 · 마지막으로 본 선택 줄 · 펼침/접힘 스프링(어느 목록 · 시작 시각 · 시작 때 보이던 높이 · 시작 때 안쪽 밀린 정도)
     private final java.util.HashSet<String> foldOpen = new java.util.HashSet<String>();
@@ -3335,6 +3336,7 @@ public class ScreenView extends View {
         int i = (int) Math.floor(ry / it.rowH);
         if (it.rows == null || i < 0 || i >= it.rows.size()) return;
         ScreenCore.Item r = it.rows.get(i); if (r.act == null || ry - i * it.rowH > r.h) return;
+        if (it.plog) { blurInput(); if (listener != null) listener.onAction(r.act); return; }          // 활동 기록: 누르면 전체 기록 창(켜진 줄은 그대로)
         if (it.fold && !it.open) { blurInput(); toggleFold(it, true); return; }          // 접힌 한 줄을 누르면 아래로 펼친다
         boolean same = r.on;
         for (ScreenCore.Item q : it.rows) q.on = q == r;                                  // 새 화면이 오기 전에 먼저 그 줄을 켜 보인다
@@ -3346,7 +3348,15 @@ public class ScreenView extends View {
     private void drawPick(Canvas cv, ScreenCore.Item it) {
         if (it.rows == null || it.rows.isEmpty()) return;
         int on = -1; for (int i = 0; i < it.rows.size(); i++) if (it.rows.get(i).on) { on = i; break; }
-        if (!it.fold) {
+        if (it.plog) {                                                                           // 활동 기록: 처음엔 맨 아래(최근)에서 시작 · 새 줄이 와도 맨 아래를 보던 중이면 따라 내려간다 · 위로 밀어 둔 자리는 그대로
+            String sg = it.rows.size() + ":" + Math.round(it.pickMax), old = pickSig.get(it.key);
+            if (!sg.equals(old)) {
+                Float raw = pickOff.get(it.key), lm = pickLastMax.get(it.key);
+                boolean bottom = old == null || raw == null || lm == null || raw >= lm - 1f;
+                pickSig.put(it.key, sg); pickLastMax.put(it.key, it.pickMax);
+                if (bottom) pickOff.put(it.key, it.pickMax);
+            }
+        } else if (!it.fold) {
             String sg = on + ":" + it.rows.size(), old = pickSig.get(it.key);
             if (!sg.equals(old)) {                                                            // 고른 줄이 바뀌었으면(새 화면) 그 줄이 보이게만 맞춘다 — 사용자가 민 자리는 그대로 둔다
                 pickSig.put(it.key, sg); float o = pickGet(it);
@@ -3358,6 +3368,7 @@ public class ScreenView extends View {
         cv.save(); cv.clipRect(it.x, it.y, it.x + it.w, it.y + Math.max(1f, vh));
         for (ScreenCore.Item r : it.rows) {
             float ry = it.y + r.y - off; if (ry + r.h < it.y || ry > it.y + vh) continue;
+            if (it.plog) { setText(r.size, r.on, r.on ? pal[R_TEXT] : pal[R_SUB]); cv.drawText(r.label, it.x, base(ry, r.h, 0), tp); continue; }
             rf.set(it.x, ry, it.x + it.w, ry + r.h);
             p.setStyle(Paint.Style.FILL); p.setColor(r.on ? pal[R_GOLD] : pal[R_CARD2]); cv.drawRoundRect(rf, 9f, 9f, p);
             if (!r.on) { p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1f); p.setColor(pal[R_BORDER2]); rf2.set(it.x + 0.5f, ry + 0.5f, it.x + it.w - 0.5f, ry + r.h - 0.5f); cv.drawRoundRect(rf2, 8.5f, 8.5f, p); p.setStyle(Paint.Style.FILL); }
