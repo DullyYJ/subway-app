@@ -1086,6 +1086,12 @@ function findAndroidJar() {
       assert.ok((aa.match(/home\.clearRoute\(\); chatRouteSync\(\);/g) || []).length === 3 && /home\.endJourney\(\); chatRouteSync\(\);/.test(aa) && /home\.onResult\(rsf\); chatRouteSync\(\);/.test(aa) && /if \(home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) \{ chatRouteSync\(\); reloadHome\(\); \}/.test(aa) && /chatRouteSync\(false\);\n        final Latest\.Token my = chatLatest\.begin\(\);/.test(aa), 's318: 경로 종료 · 새로 찾기 · 결과 · 탑승 위치 바뀜 · 소통방 열 때마다 맞춘다');
     }
   });
+  await t('s369: 키즈 모드로 켜면 하단 탭이 비지 않는다(켠 직후 · 앞으로 올 때 비었으면 다시 받는다) · 미션 팝업은 좌우로 밀어 자녀 ↔ 부모님 미션 · 대화 칸은 남는 세로만큼 위로 자란다', () => {
+    const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/private void kidsTabsEnsure\(\)/.test(sa) && /kids\.open\(false\); kidsTabsEnsure\(\);/.test(sa) && /if \(kids\.mode\(\)\) kidsTabsEnsure\(\);/.test(sa) && /if \(v == tabs\) \{ if \(v\.itemCount\(\) == 0\)/.test(sa), '켠 직후 · 다시 앞으로 올 때 · 못 받았을 때 모두 탭 막대를 채운다');
+    assert.ok(/"quest"\.equals\(kind\)\) v\.setSwipeHost\(/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /"kq\.open"\.equals\(a\.v\)\) qt = /.test(kh), '미션 팝업 좌우 밀기는 엔진이 준 sw 대로');
+    assert.ok(/footGrow\(sc, L, width, m, openKey, viewH\)/.test(sc) && /n\.hide && n\.fd > 0/.test(sc) && /sc\.footFill = n/.test(sc), '아래 고정 줄 대화 칸 늘리기(남는 세로 → 오래된 글 → 빈칸)');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
