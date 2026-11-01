@@ -259,6 +259,7 @@ public final class KidsHub {
         if (!linked || open) return;
         open = true;
         store.put(K_MODE, "1"); fireTabs();
+        warm();
         layer.setVisibility(View.VISIBLE);
         layer.bringToFront();
         showSaved();
@@ -487,11 +488,48 @@ public final class KidsHub {
         send(a.v, a.id, a.t, f.fields(), f);
     }
 
+    // ───────── 팝업 미리 받기(연결 · 미션 · 대화): 눌렀을 때 서버를 기다리지 않게 메모리에 해석까지 마쳐 둔다 ─────────
+    private final java.util.concurrent.ConcurrentHashMap<String, ScreenCore.Screen> memScr = new java.util.concurrent.ConcurrentHashMap<String, ScreenCore.Screen>();
+    private final java.util.concurrent.ConcurrentHashMap<String, String> memJs = new java.util.concurrent.ConcurrentHashMap<String, String>();
+    private long lastWarm = 0L;
+    /** 이미 한 번 연결을 시도한(등록된) 기기만, 5분에 한 번 뒤 스레드에서 팝업 화면을 미리 받는다. 처음 쓰는 사람의 서버 등록은 첫 누름 때 한다(설정만 열어 본 사람까지 등록하지 않는다). */
+    public void warm() {
+        long now = SystemClock.elapsedRealtime();
+        if (!alive || !"1".equals(store.get(K_REG, "0")) || now - lastWarm < 300000L) return;
+        lastWarm = now;
+        final String[] vs = linked ? new String[] { "kl.open", "kq.open", "kc.open" } : new String[] { "kl.open" };
+        io.execute(new Runnable() { @Override public void run() {
+            try {
+                for (String v : vs) {
+                    JSONObject b = new JSONObject();
+                    b.put("v", v);
+                    if (cid.length() > 0) b.put("cid", cid);
+                    String r = call("POST", "/p/act", b.toString(), 12000);
+                    if (r == null) { lastWarm = 0L; return; }
+                    JSONObject o = new JSONObject(r);
+                    JSONObject s = o.optJSONObject("screen");
+                    if (!o.optBoolean("ok", false) || s == null) continue;
+                    String js = fixQ(s.toString());
+                    if (js.length() == 0 || js.length() >= 150000) continue;
+                    ScreenCore.Screen sc = ScreenCore.load(js);
+                    store.put(K_SC + v, js); memScr.put(v, sc); memJs.put(v, js);
+                }
+            } catch (Throwable ignored) { lastWarm = 0L; }
+        } });
+    }
+
     private static void nap(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignored) { } }
 
     // ───────── 눌림 보내기(엔진이 새 화면을 돌려준다) ─────────
     private void send(final String v, final String id, final String t, final Map<String, String> f, final ScreenView src) {
         final String sk = sheetKind;
+        if (v != null && sheetD == null && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
+            ScreenCore.Screen ms = memScr.get(v); String mj = memJs.get(v);
+            if (ms != null && mj != null) {
+                try { String mj2 = fixQ(mj); if (!mj2.equals(mj)) { ms = ScreenCore.load(mj2); mj = mj2; } } catch (Throwable ignored) { }          // 미션 팝업은 지금 고른 별 점수를 입혀서
+                showSheet(kindOf(ms.id), ms, mj);
+            }
+        }
         io.execute(new Runnable() { @Override public void run() {
             try {
                 final boolean opener = v != null && v.matches("k[a-z]{1,2}\\.open");
@@ -517,7 +555,7 @@ public final class KidsHub {
                 final JSONObject s = o.optJSONObject("screen");
                 final String js = s == null ? "" : fixQ(s.toString());
                 final ScreenCore.Screen sc = js.length() == 0 ? null : ScreenCore.load(js);
-                if (opener && js.length() > 0 && js.length() < 150000) store.put(K_SC + v, js);
+                if (opener && js.length() > 0 && js.length() < 150000 && sc != null) { store.put(K_SC + v, js); memScr.put(v, sc); memJs.put(v, js); }
                 final String notice = o.optString("notice", ""), clear = o.optString("clear", ""), kind = o.optString("sheet", "");
                 final boolean close = o.optBoolean("close", false), hub = o.optInt("hub", 0) == 1;
                 if (o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }

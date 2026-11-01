@@ -1578,7 +1578,7 @@ public class ShellActivity extends Activity {
             if (ck != null && v != sheetView && !ShellCore.expectId(ck).equals(sc.id)) return;     // 다른 탭 화면의 늦은 답
             v.setScreen(sc, keep && !skelViews.contains(v));
             skelViews.remove(v);
-            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); if (ck != null && ck.startsWith(ShellCore.S_SETTINGS + "|")) cmPrefetchTp(); }
+            if (v != sheetView) { shownJson.put(v, json); shownKeyPut(v); neighborPre(v, sc, ck); if (ck != null && ck.startsWith(ShellCore.S_SETTINGS + "|")) { cmPrefetchTp(); if (kids != null) kids.warm(); } }
             if (ck != null && v != sheetView && !partialScreen(ck)) cachePut(ck, json);
             if (!keep && v != sheetView && !(ck != null && ck.startsWith(ShellCore.S_CHAT + "|"))) fadeIn(v);          // 소통방은 흐릿하게 떠오르지 않고 바로 또렷하게(s286)
         } catch (Throwable e) {

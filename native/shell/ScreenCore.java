@@ -570,7 +570,7 @@ public final class ScreenCore {
             pad(m, n);
             n.key = optStr(m, "key", "", 40); if (!ident(n.key)) throw new ParseError("field: key 가 올바르지 않다");
             n.hint = optStr(m, "hint", "", 60); n.value = optStr(m, "value", "", 1000); n.maxlen = (int) optNum(m, "maxlen", 60f, 1f, 1000f); n.multi = optBool(m, "multi", false);
-            n.h = optNum(m, "h", 44f, 28f, 160f); n.size = optNum(m, "size", 14f, 8f, 30f); n.r = optNum(m, "r", 9f, 0f, 30f);
+            n.h = optNum(m, "h", 44f, 28f, 160f); n.size = optNum(m, "size", 14f, 8f, 30f); n.r = optNum(m, "r", 9f, 0f, 30f); n.watch = optBool(m, "watch", false);          // watch: 글자가 바뀔 때마다 앱이 알린다(시크릿 키의 - 자동 입력 등 · 엔진이 정한다)
             n.fill = roleOrCss(m, "fill", "bg"); n.line = roleOrCss(m, "line", "border2"); n.tc = roleOrCss(m, "tc", "text"); n.sc = roleOrCss(m, "sc", "sub");
         } else if ("box".equals(t)) {
             pad(m, n); ip(m, n);
@@ -1080,7 +1080,8 @@ public final class ScreenCore {
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
         if ("settings".equals(sc.id) && settingsExtra.length() > 0) {                 // 길동무 키즈: 설정 맨 위에 끼울 노드들(키즈 서버 엔진이 준 것 — 연결된 부모에게만 · 연결 전엔 '연결하기' 한 줄). 없으면 아무것도 끼우지 않는다
-            try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0; for (Object o : (List<Object>) eo) { Node n = node(o, sc); if (n != null) sc.body.add(at++, n); } } } catch (ParseError ignored) { }
+            try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0; for (int bi = 0; bi < sc.body.size(); bi++) { Node bn = sc.body.get(bi); if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "약관 및 정책".equals(bn.kids.get(0).s)) { at = bi; break; } }          // 키즈 줄은 '약관 및 정책' 카드 바로 위에(못 찾으면 맨 위)
+                for (Object o : (List<Object>) eo) { Node n = node(o, sc); if (n != null) sc.body.add(at++, n); } } } catch (ParseError ignored) { }
         }
         if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
         if (m.get("sw") != null) {
@@ -2161,7 +2162,7 @@ public final class ScreenCore {
         }
         if ("field".equals(n.t)) {
             Item it = new Item(); it.kind = K_FIELD; it.x = ox; it.y = y; it.w = innerW; it.h = n.h; it.radius = n.r;
-            it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.multi = n.multi;
+            it.key = n.key; it.label = n.hint; it.value = n.value; it.maxlen = n.maxlen; it.size = n.size; it.multi = n.multi; it.watch = n.watch;
             it.fill = col(n.fill, null); it.line = col(n.line, null); it.tc = col(n.tc, new Col("text", 0)); it.sc = col(n.sc, new Col("sub", 0));
             it.textX = ox + 13f;
             out.add(it);
