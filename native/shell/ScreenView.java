@@ -2036,7 +2036,7 @@ public class ScreenView extends View {
         if (mode != 5 || tmMoved || tmScaling || tmView == null || tmLp.length() == 0 || listener == null) return;
         double[] ll = tmView.toLatLng(tmLX - tmL * dpr, tmLY - tmT * dpr);
         tmLpFired = true;
-        try { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS, android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTINGS); } catch (Throwable ignored) { }
+        try { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) { }
         try { android.os.Vibrator vb = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE); if (vb != null) { if (android.os.Build.VERSION.SDK_INT >= 26) vb.vibrate(android.os.VibrationEffect.createOneShot(40L, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); else vb.vibrate(40L); } } catch (Throwable ignored) { }
         ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = tmLp; a.t = String.format(java.util.Locale.US, "%.6f,%.6f", ll[0], ll[1]);
         listener.onAction(a);
