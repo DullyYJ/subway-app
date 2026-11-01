@@ -1037,6 +1037,40 @@ public final class ScreenCore {
         return n;
     }
 
+    /** s370(YJ: 서버를 새로 올리지 않아도 대화 칸이 처음부터 빈 자리를 채워야 한다): 키즈 확인 화면의 아래 고정 대화 칸(입력줄 key khc)인데 늘어나는 빈칸(spacer ffill)이 없고 말풍선에 fd 도 없는 옛 서버 화면이면, 같은 모양으로 채워 넣는다
+     *  — 제목줄 바로 아래에 빈칸을 끼우고 말풍선에 오래된 순서 번호(fd)를 매긴다. 서버가 이미 준 화면은 건드리지 않는다. */
+    @SuppressWarnings("unchecked")
+    private static void legacyChat(Object footObj) {
+        try {
+            if (!(footObj instanceof List)) return;
+            for (Object o : (List<Object>) footObj) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> pm = (Map<String, Object>) o;
+                Object ks = pm.get("kids");
+                if (!(ks instanceof List)) continue;
+                List<Object> kl = (List<Object>) ks;
+                boolean hasIn = false, hasSp = false, hasFd = false; int lth = -1, mi = 0;
+                for (int i = 0; i < kl.size(); i++) {
+                    Object ko = kl.get(i);
+                    if (!(ko instanceof Map)) continue;
+                    Map<String, Object> km = (Map<String, Object>) ko;
+                    Object t = km.get("t");
+                    if ("inbar".equals(t) && "khc".equals(km.get("key"))) hasIn = true;
+                    if ("spacer".equals(t) && km.get("ffill") != null) hasSp = true;
+                    if ("msg".equals(t) && km.get("fd") != null) hasFd = true;
+                    if ("lth".equals(t) && lth < 0) lth = i;
+                }
+                if (!hasIn || hasSp || hasFd) continue;
+                List<Object> nl = new ArrayList<Object>(kl);
+                for (Object ko : nl) { if (ko instanceof Map && "msg".equals(((Map<String, Object>) ko).get("t"))) ((Map<String, Object>) ko).put("fd", Double.valueOf(++mi)); }
+                Map<String, Object> sp = new HashMap<String, Object>();
+                sp.put("t", "spacer"); sp.put("h", Double.valueOf(0)); sp.put("ffill", Double.valueOf(1)); sp.put("fk", Double.valueOf(3)); sp.put("fdh", Double.valueOf(42)); sp.put("ffmax", Double.valueOf(420));
+                nl.add(lth + 1, sp);
+                pm.put("kids", nl);
+            }
+        } catch (RuntimeException ignored) { }
+    }
+
     /** 읽고 검증한다. 틀리면 ParseError. */
     /** 설정 화면 맨 위에 끼울 노드 목록(JSON 배열 글). 길동무 키즈 연동 상태가 바뀔 때 앱이 바꿔 둔다. 빈 글이면 끼우지 않는다. */
     public static volatile String settingsExtra = "";
@@ -1088,7 +1122,7 @@ public final class ScreenCore {
             try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0; for (int bi = 0; bi < sc.body.size(); bi++) { Node bn = sc.body.get(bi); if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "약관 및 정책".equals(bn.kids.get(0).s)) { at = bi; break; } }          // 키즈 줄은 '약관 및 정책' 카드 바로 위에(못 찾으면 맨 위)
                 for (Object o : (List<Object>) eo) { Node n = node(o, sc); if (n != null) sc.body.add(at++, n); } } } catch (ParseError ignored) { }
         }
-        if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
+        if (m.get("foot") != null) { legacyChat(m.get("foot")); for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); } }
         if (m.get("sw") != null) {
             Map<String, Object> wm = asObj(m.get("sw"), "sw");
             sc.swL = act(wm.get("l"), false); sc.swR = act(wm.get("r"), false);
