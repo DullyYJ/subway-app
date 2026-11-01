@@ -644,7 +644,7 @@ public class ScreenView extends View {
                 if (!parentMayIntercept && getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);          // 끌어 닫는 시트 안이면 부모가 위아래 끌기를 가로챌 수 있게 둔다
                 flingY.forceFinished(true); flingX.forceFinished(true); ssOn = false;
                 if (roMode && roDown(x, y)) { downX = lastX = x; downY = lastY = y; return true; }
-                if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); return true; }
+                if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); tmLpFired = false; ui.removeCallbacks(tmLpRun); ScreenCore.Item lm = liveMapAt(x, y); if (lm != null && lm.lp != null && lm.lp.length() > 0) { tmLp = lm.lp; ui.postDelayed(tmLpRun, TM_LP_MS); } return true; }
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
@@ -2029,6 +2029,18 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_TMAP && it.on && x >= it.x && x < it.x + it.w && y >= it.y && y < it.y + it.h) return it;
         return null;
     }
+    /** 지도를 3초 꾹 누르면(움직이지 않고 한 손가락) 짧게 진동하고, 누른 자리의 좌표를 엔진이 정한 행동 이름(lp)과 함께 보낸다 — 무엇을 할지는 엔진이 정한다. */
+    private static final long TM_LP_MS = 3000L;
+    private String tmLp = ""; private boolean tmLpFired;
+    private final Runnable tmLpRun = new Runnable() { @Override public void run() {
+        if (mode != 5 || tmMoved || tmScaling || tmView == null || tmLp.length() == 0 || listener == null) return;
+        double[] ll = tmView.toLatLng(tmLX - tmL * dpr, tmLY - tmT * dpr);
+        tmLpFired = true;
+        try { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS, android.view.HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTINGS); } catch (Throwable ignored) { }
+        try { android.os.Vibrator vb = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE); if (vb != null) { if (android.os.Build.VERSION.SDK_INT >= 26) vb.vibrate(android.os.VibrationEffect.createOneShot(40L, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); else vb.vibrate(40L); } } catch (Throwable ignored) { }
+        ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = tmLp; a.t = String.format(java.util.Locale.US, "%.6f,%.6f", ll[0], ll[1]);
+        listener.onAction(a);
+    } };
     private boolean tmMoved, tmScaling; private float tmDX, tmDY, tmLX, tmLY; private long tmDT;
     private final android.view.ScaleGestureDetector tmSg = new android.view.ScaleGestureDetector(getContext(), new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
         @Override public boolean onScale(android.view.ScaleGestureDetector d) {
@@ -2042,16 +2054,17 @@ public class ScreenView extends View {
         tmSg.onTouchEvent(e);
         float x = e.getX(), y = e.getY();
         switch (e.getActionMasked()) {
-            case MotionEvent.ACTION_POINTER_DOWN: tmScaling = true; tmMoved = true; return true;
+            case MotionEvent.ACTION_POINTER_DOWN: tmScaling = true; tmMoved = true; ui.removeCallbacks(tmLpRun); return true;
             case MotionEvent.ACTION_MOVE: {
                 if (tmSg.isInProgress() || e.getPointerCount() > 1) { tmScaling = true; tmLX = x; tmLY = y; return true; }
                 if (tmScaling) { tmLX = x; tmLY = y; tmScaling = false; return true; }                // 두 손가락 뒤 남은 한 손가락이 튀지 않게
                 if (!tmMoved && Math.abs(x - tmDX) < 8f * dpr && Math.abs(y - tmDY) < 8f * dpr) return true;
-                tmMoved = true; tmAnimOn = false; tmView.pan(x - tmLX, y - tmLY); tmLX = x; tmLY = y; invalidate();
+                tmMoved = true; ui.removeCallbacks(tmLpRun); tmAnimOn = false; tmView.pan(x - tmLX, y - tmLY); tmLX = x; tmLY = y; invalidate();
                 return true;
             }
             case MotionEvent.ACTION_UP: {
-                if (!tmMoved && SystemClock.uptimeMillis() - tmDT < 600L) tmTap(x - tmL * dpr, y - tmT * dpr);
+                ui.removeCallbacks(tmLpRun);
+                if (!tmMoved && !tmLpFired && SystemClock.uptimeMillis() - tmDT < 600L) tmTap(x - tmL * dpr, y - tmT * dpr);
                 finishTouch(); invalidate();
                 return true;
             }
@@ -2171,7 +2184,7 @@ public class ScreenView extends View {
         if (editor != null && key.equals(editKey)) { editSilent = true; editor.setText(v); editor.setSelection(editor.getText().length()); editSilent = false; }
         invalidate();
     }
-    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
+    private void finishTouch() { if (!helloOn()) hiRate(false); ui.removeCallbacks(lpRun); ui.removeCallbacks(tmLpRun); ui.removeCallbacks(sceneLpRun); ui.removeCallbacks(sceneTickRun); pickHit = null; pressed = null; fabDown = false; mode = 0; if (vt != null) { vt.recycle(); vt = null; } }
 
     private ScreenCore.Item findItem(float px, float py) {
         float x = px / dpr, y = py / dpr;

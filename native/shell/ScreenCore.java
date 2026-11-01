@@ -194,6 +194,7 @@ public final class ScreenCore {
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public String ak = "", aoS = "", aoF = "", aoT = "", abg = "card"; public int ams; public float[] aez; public long asq;   // row: 버튼 줄 전환 연출(엔진이 정한 종류·시간·곡선·시각, 옛 칸 모양, 가리개 색)
+        public String lp = "";                              // tmap: 3초 꾹 누르면 보낼 행동 이름(call v) — 누른 자리의 위도,경도가 t 로 간다(엔진이 정하고 앱은 보내기만)
         public String path = ""; public float fpad = 0f, fzmax = 0f, hv = 0f, hmin = 0f, hmax = 0f;   // tmap: 높이 = 창 높이의 hv% 를 hmin~hmax 로(웹 height:24vh;min 137;max 231) · 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
@@ -839,6 +840,7 @@ public final class ScreenCore {
             n.on = optNum(m, "live", 0f, 0f, 1f) > 0f;                                                          // 끌기 · 두 손가락 확대 · ± 단추 · 핀 누르기를 받는 고정 지도
             n.ci = Math.round(optNum(m, "foc", -1f, -1f, 39f)); n.top = optNum(m, "bl", 0f, 0f, 1f) > 0f;       // 고른 핀 번호 · 아래 구분선
             n.hint = optStr(m, "hint", "", 60);
+            n.lp = optStr(m, "lp", "", 40); if (n.lp.length() > 0 && !ident(n.lp)) throw new ParseError("tmap: lp 가 올바르지 않다");
             n.hv = optNum(m, "hv", 0f, 0f, 60f); n.hmin = optNum(m, "hmin", 0f, 0f, 420f); n.hmax = optNum(m, "hmax", 0f, 0f, 600f);
             n.fpad = optNum(m, "fp", 0f, 0f, 120f); n.fzmax = optNum(m, "fz", 0f, 0f, 19f);                    // 맞춤: 여백(dp) · 최대 배율(0 이면 기본)
             if (m.get("line") != null) {                                                                        // 걷는 길(엔진이 정한 점들): [[위도,경도],…] 최대 400개
@@ -1031,6 +1033,8 @@ public final class ScreenCore {
     }
 
     /** 읽고 검증한다. 틀리면 ParseError. */
+    /** 설정 화면 맨 위에 끼울 노드 목록(JSON 배열 글). 길동무 키즈 연동 상태가 바뀔 때 앱이 바꿔 둔다. 빈 글이면 끼우지 않는다. */
+    public static volatile String settingsExtra = "";
     public static Screen validate(Object root) throws ParseError {
         Map<String, Object> m = asObj(root, "루트");
         Object ok = m.get("ok");
@@ -1053,6 +1057,9 @@ public final class ScreenCore {
         sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
+        if ("settings".equals(sc.id) && settingsExtra.length() > 0) {                 // 길동무 키즈: 설정 맨 위에 끼울 노드들(키즈 서버 엔진이 준 것 — 연결된 부모에게만 · 연결 전엔 '연결하기' 한 줄). 없으면 아무것도 끼우지 않는다
+            try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0; for (Object o : (List<Object>) eo) { Node n = node(o, sc); if (n != null) sc.body.add(at++, n); } } } catch (ParseError ignored) { }
+        }
         if (m.get("foot") != null) for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); }
         if (m.get("sw") != null) {
             Map<String, Object> wm = asObj(m.get("sw"), "sw");
@@ -1158,6 +1165,7 @@ public final class ScreenCore {
         public List<Item> rows; public float pickMax;     // pickl: 고르기 목록의 줄들(칸 안 좌표) · 줄 높이 · 안에서 밀 수 있는 최대 거리
         public boolean fold, open; public int onIdx; public float collH, openH;       // pickl 접기(s307): 접을 수 있나 · 펼쳐 있나 · 고른 줄 번호 · 접힌 높이 · 펼친 높이
         public float x, y, w, h;
+        public String lp = "";
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
@@ -1950,7 +1958,7 @@ public final class ScreenCore {
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
             float th = n.h;
             if (n.hv > 0f && winH > 0f) { th = winH * n.hv / 100f; if (n.hmin > 0f) th = Math.max(th, n.hmin); if (n.hmax > 0f) th = Math.min(th, n.hmax); }          // 웹 vh 높이: 창 높이에 맞춰 늘고 준다
-            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = th; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.fpad = n.fpad; it.fzmax = n.fzmax;
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = th; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.lp = n.lp; it.fpad = n.fpad; it.fzmax = n.fzmax;
             out.add(it);
             return y + th + n.padB;
         }

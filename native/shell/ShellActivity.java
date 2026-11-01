@@ -43,6 +43,7 @@ public class ShellActivity extends Activity {
     private RsSheetView rs, rsF;                      // rs = 하단 탭 아래에 올라오는 탑승 시트, rsF = 탭 위에 뜨는 대기 알약 · 되돌리기 캡슐
     private final Runnable rsApply = new Runnable() { @Override public void run() { rerouteAsk(); legAsk(); if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
+    private KidsHub kids;                                  // 길동무 키즈 연동(부모 쪽): 연결된 부모에게만 켜진다 — 연결 전에는 아무것도 하지 않는다
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
@@ -73,9 +74,10 @@ public class ShellActivity extends Activity {
         while (it.hasNext() && (parsedScr.size() > PARSED_MAX || parsedChars > PARSED_CHARS) && parsedScr.size() > 1) { parsedChars -= it.next().getKey().length(); it.remove(); }
     }
     private ScreenCore.Screen parsedGet(String json) throws ScreenCore.ParseError {
-        synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(json); if (c != null) return c; }
+        final String pk = json.indexOf("\"settings\"") >= 0 ? json + "\u0001" + ScreenCore.settingsExtra.hashCode() : json;      // 설정 화면은 맨 위에 끼우는 키즈 줄이 바뀌면 다른 화면이다
+        synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(pk); if (c != null) return c; }
         ScreenCore.Screen sc = ScreenCore.load(json);
-        synchronized (parsedScr) { if (parsedScr.put(json, sc) == null) parsedChars += json.length(); parsedTrim(); }
+        synchronized (parsedScr) { if (parsedScr.put(pk, sc) == null) parsedChars += json.length(); parsedTrim(); }
         return sc;
     }
     /** s277: 방금 올린 커뮤니티·쇼핑·뉴스 화면의 이웃 분류(엔진이 sw.t 표에 담은 왼쪽·오른쪽)를 뒤에서 미리 읽고 '배치'까지 해 둔다 — 밀었다가 돌아올 때 주 스레드가 큰 화면을 다시 읽고 재지 않는다. 글·표는 엔진 것, 앱은 준비만. */
@@ -252,6 +254,7 @@ public class ShellActivity extends Activity {
         tabs.setOnTouchListener(new View.OnTouchListener() {         // 하단 탭 막대를 위로 쓸면 탑승 시트를 연다(웹 _rsInitSwipe) — 탭 누름은 그대로 두려고 이벤트를 먹지 않는다
             private float tx, ty;
             @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                if (kids != null && kids.tabsTouch(e, v)) return true;                    // 홈 버튼 3초 꾹(키즈와 연결된 부모만) — 아닐 때는 아무 일 없다
                 int a = e.getActionMasked();
                 if (a == android.view.MotionEvent.ACTION_DOWN) { tx = e.getX() / dpr; ty = e.getY() / dpr; }
                 else if (a == android.view.MotionEvent.ACTION_UP && RideService.running) {
@@ -267,6 +270,7 @@ public class ShellActivity extends Activity {
         rs.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
         root.addView(rs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
+        kids = new KidsHub(this, store, dpr, (FrameLayout) findViewById(android.R.id.content), new View[] { hdr, head, holder }, new Runnable() { @Override public void run() { kidsSettingsChanged(); } });          // 키즈 감시 화면이 홈 위로 덮어 올라올 자리(연결 전에는 보이지 않고 아무것도 하지 않는다)
 
         // 설정 값이 필요한 준비는 칸을 만든 뒤에(그때쯤 설정 파일 읽기가 끝나 있어 기다림이 없다)
         if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
@@ -281,12 +285,14 @@ public class ShellActivity extends Activity {
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
                 v.setPadding(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(), in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
+                if (kids != null) kids.insets(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(), in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
                 return in;
             }
         });
         applyTheme();
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
+        if (b == null && kids.wantStart()) main.post(new Runnable() { @Override public void run() { if (kids != null) kids.open(false); } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -429,11 +435,12 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
-    @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; super.onPause(); }
+    @Override protected void onDestroy() { if (kids != null) kids.destroy(); if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) kids.resume(); RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
+    @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; if (kids != null) kids.pause(); super.onPause(); }
 
     @Override public void onBackPressed() {
+        if (kids != null && kids.onBack()) return;                                       // 키즈 팝업 · 화면이 떠 있으면 그것부터 닫는다
         if (openV != null) { openV.finish(); return; }                                  // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
         String t = ShellCore.currentTab(store);
         if (!ShellCore.DEFAULT_TAB.equals(t)) {
@@ -452,6 +459,7 @@ public class ShellActivity extends Activity {
         head.setPalette(pal);
         body.setPalette(pal);
         tabs.setPalette(pal);
+        if (kids != null) kids.setPalette(pal);
         if (rs != null) { rs.setPalette(pal); rsF.setPalette(pal); }
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
@@ -1692,6 +1700,7 @@ public class ShellActivity extends Activity {
 
         void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
+            if (which != 2 && kids != null && ShellCore.S_SETTINGS.equals(screenName()) && kids.settingsAct(a, on)) return;          // 설정 안의 키즈 줄(연결 · 응원문구 · 시작 화면)은 키즈 엔진이 맡는다
             if (which != 2) swc.note(a);                          // 칩을 눌러 고른 칸도 적어 둔다 — 그 칸 화면이 오기 전에 밀어도 거기서부터 넘어간다
             if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
             if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { if (deb.gate("retry", 600L)) showTab(ShellCore.currentTab(store)); return; }
@@ -1726,6 +1735,13 @@ public class ShellActivity extends Activity {
             }
             apply(e);
         }
+    }
+
+    /** 키즈 연결이 바뀌었다(연결 · 해제 · 시작 화면 스위치) — 설정 화면이 떠 있으면 맨 위 키즈 줄을 새로 끼워 다시 그린다. */
+    private void kidsSettingsChanged() {
+        try {
+            if (slots.length > 0 && ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) { shownJson.remove(body); shownKey.remove(body); loadSlot(slots.length - 1, true); }
+        } catch (Throwable ignored) { }
     }
 
     private void apply(ShellCore.Effect e) {
