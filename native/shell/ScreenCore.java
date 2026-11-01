@@ -1504,6 +1504,7 @@ public final class ScreenCore {
         Layout L1 = layoutFit(sc, width, m, openKey, viewH);
         float msgsH = Math.max(0f, L1.footH - L0.footH);
         float avail = viewH - L0.headH - L0.bodyH - L0.footH;                          // 말풍선 칸이 쓸 수 있는 세로
+        if (ff.ffmax > 0f) avail = Math.min(avail, ff.ffmax);                          // s378(YJ: 칸 크기는 글 수와 상관없이 고정): 엔진이 준 최대 높이(ffmax)를 넘겨 키우지 않는다 — 그 안에서 글이 많으면 칸 안에서만 민다
         float minVh = Math.max(0f, keep * ff.fdh);
         float vh = Math.max(msgsH > 0f ? minVh : 0f, avail);
         if (msgsH <= vh + 0.5f) {                                                    // 다 들어간다 — 아래에 붙고 위는 빈칸이 채운다
