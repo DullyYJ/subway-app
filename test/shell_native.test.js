@@ -1092,6 +1092,14 @@ function findAndroidJar() {
     assert.ok(/"quest"\.equals\(kind\)\) v\.setSwipeHost\(/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /"kq\.open"\.equals\(a\.v\)\) qt = /.test(kh), '미션 팝업 좌우 밀기는 엔진이 준 sw 대로');
     assert.ok(/footGrow\(sc, L, width, m, openKey, viewH\)/.test(sc) && /n\.hide && n\.fd > 0/.test(sc) && /sc\.footFill = n/.test(sc), '아래 고정 줄 대화 칸 늘리기(남는 세로 → 오래된 글 → 빈칸)');
   });
+  await t('s370: 키즈 대화 칸은 처음부터 남는 자리를 채우고 안쪽만 밀린다 · 보내면 바로 말풍선 · 열고 닫기 빠르게 · 하단 탭 감시', () => {
+    const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/public boolean vsOn; public float vsTop, vsBot, vsContent;/.test(sc) && /ThreadLocal<float\[\]> VS/.test(sc) && /L2\.vsOn = true/.test(sc), '대화 칸 안쪽 밀림 계산(코어)');
+    assert.ok(/mode = 12/.test(sv) && /flingV/.test(sv) && /cv\.clipRect\(0f, lay\.vsTop, w, lay\.vsBot\)/.test(sv) && /vsHit = inFoot && lay\.vsOn/.test(sv), '대화 칸에서 시작한 위아래 밀기는 그 칸만 민다(화면 전체가 아니다) · 틀 밖은 잘린다');
+    assert.ok(/private void optimistic\(String tx\)/.test(kh) && /"kh\.say"\.equals\(a\.v\) && me\(\) == hubV/.test(kh) && /hubV\.setField\("khc", ""\)/.test(kh) && /!"kh\.say"\.equals\(v\)/.test(kh), '보내면 서버를 기다리지 않고 내 말풍선을 먼저 그리고 입력칸을 바로 비운다');
+    assert.ok(/setDuration\(160L\)/.test(kh) && /setDuration\(140L\)/.test(kh) && !/for \(final View v : slide\) if \(v != null\) v\.animate/.test(kh) && /main\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(open\) warm\(\); \} \}, 1500L\)/.test(kh), '열고 닫기 연출 단축 · 아래 화면은 따로 밀지 않는다 · 미리 받기는 첫 그림 뒤로');
+    assert.ok(/TABS_BLANK/.test(sa) && /private void kidsTabsWatchStart\(\)/.test(sa) && /tabs\.itemCount\(\) == 0 \|\| tabs\.getTranslationY\(\) != 0f/.test(sa), '하단 탭 감시: 비면 상태를 오류 기록에 남기고 다시 채운다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
