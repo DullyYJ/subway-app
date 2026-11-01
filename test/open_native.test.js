@@ -46,9 +46,9 @@ t('날씨 연동: 대본(wx)이 날씨 종류별 색·효과를 정하고 · 앱
   assert.deepStrictEqual(Object.keys(E.OPEN_WX).sort(), WK.slice().sort(), '엔진 장면의 날씨 종류(맑음 제외)와 같다');
   assert.ok(E.OPEN_WX.rain.fx === 'rain' && E.OPEN_WX.snow.fx === 'snow' && E.OPEN_WX.fog.fx === 'fog' && E.OPEN_WX.snow.ground && !E.OPEN_WX.rain.sun, '비·눈·안개 효과 · 눈은 하얀 땅 · 비엔 해가 없다');
   ['sleep', 'night'].forEach(id => assert.ok(E.OPEN_SLOTS.find(x => x.id === id).dark, id + ' 은 어두운 칸'));
-  const w = fs.readFileSync(N('OpenWx.java'), 'utf8'), d = fs.readFileSync(N('SceneDriver.java'), 'utf8'), a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), v = fs.readFileSync(N('OpenView.java'), 'utf8');
+  const w = fs.readFileSync(N('OpenWx.java'), 'utf8'), d = fs.readFileSync(N('SceneDriver.java'), 'utf8'), a = fs.readFileSync(N('OpenHost.java'), 'utf8'), v = fs.readFileSync(N('OpenView.java'), 'utf8');
   assert.ok(/MAX_AGE_MS = 6L \* 3600_000L/.test(w) && /wxKnown/.test(d) && /OpenWx\.save\(ctx, r\.look\.wk\)/.test(d), '엔진이 날씨를 확실히 알 때만(wxKnown) 적어 둔다');
-  assert.ok(/OpenCore\.withWeather\(sc, OpenCore\.slotFor\(sc, hour\), OpenWx\.read\(this\)\)/.test(a), '켤 때 읽어 입힌다');
+  assert.ok(/OpenCore\.withWeather\(sc, OpenCore\.slotFor\(sc, hour\), OpenWx\.read\(a\)\)/.test(a), '켤 때 읽어 입힌다(길동무 · 키즈 공용 OpenHost)');
   assert.ok(/weatherFx\(cv, W, H, tt\)/.test(v) && /slot\.fx/.test(v) && !/"rain"\.equals\(wk|"snow"\.equals\(wk/.test(v), '효과는 대본의 fx 글을 그린다');
   assert.ok(!/import android\./.test(fs.readFileSync(N('OpenCore.java'), 'utf8')));
 });
@@ -71,9 +71,11 @@ t('OpenCore 는 안드로이드를 쓰지 않는다(순수 계산) · 대본에 
 t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱은 열고 · 누르거나 뒤로 가기로 닫는다', () => {
   const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
   assert.ok(/if \(b == null\) showOpening\(\)/.test(a), '회전 같은 다시 만들기(b != null)에는 안 띄움');
-  assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(a) && /OpenCore\.slotFor\(/.test(a) && /OpenCore\.cast\(sc, sl, ids\)/.test(a) && /OpenCore\.pickIds\(/.test(a) && /"open_last"/.test(a) && /addContentView\(openV/.test(a), '대본을 읽어 칸을 고르고 · 친구 셋은 켤 때마다 무작위(방금 조합 기억)');
-  assert.ok(/catch \(Throwable ignored\) \{ openV = null; \}/.test(a), '실패해도 앱은 연다');
-  assert.ok(/if \(openV != null\) \{ openV\.finish\(\); return; \}/.test(a), '뒤로 가기는 오프닝만 닫는다');
+  const h = fs.readFileSync(N('OpenHost.java'), 'utf8');
+  assert.ok(/OpenHost\.show\(this\)/.test(a) && /public static void show\(Activity a\)/.test(h), '길동무와 길동무 키즈가 같은 OpenHost.show 한 갈래를 쓴다');
+  assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(h) && /OpenCore\.slotFor\(/.test(h) && /OpenCore\.cast\(sc, sl, ids\)/.test(h) && /OpenCore\.pickIds\(/.test(h) && /K_LAST/.test(h) && /addContentView\(v,/.test(h), '대본을 읽어 칸을 고르고 · 친구 셋은 켤 때마다 무작위(방금 조합 기억)');
+  assert.ok(/catch \(Throwable ignored\) \{ cur = null; \}/.test(h), '실패해도 앱은 연다');
+  assert.ok(/if \(OpenHost\.back\(\)\) return;/.test(a) && /public static boolean back\(\)/.test(h), '뒤로 가기는 오프닝만 닫는다');
   const v = fs.readFileSync(N('OpenView.java'), 'utf8'), c0 = fs.readFileSync(N('OpenCore.java'), 'utf8');
   assert.ok(/ACTION_UP\) finish\(\)/.test(v) && /OpenCore\.done\(sc, t\)/.test(v), '누르면 닫고 · 시간이 되면 닫는다');
   assert.ok(/Chars\.file\(k\)/.test(v), '뽀송 신발 시트');
