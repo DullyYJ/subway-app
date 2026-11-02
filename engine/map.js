@@ -672,8 +672,7 @@ function mapBusAliases(b) {
 function mapBusToggle(vw) {
   return { t: 'btog', v: 'p', pad: [10, 12, 10, 12], h: 38, items: [
     { label: '📍 주변 정류장', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
-    { label: '⭐ 즐겨찾기', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }],
-    rf: { label: '🔄', act: { a: 'call', v: 'mp.rf' } } };
+    { label: '⭐ 즐겨찾기', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }] };          // s383: 🔄 단추는 없앴다 — 새로고침은 아래로 당기기만(앱의 당기기가 mp.rf 를 보낸다)
 }
 function mapBusRows(rows, info, si) {                              // 노선+방면마다 한 줄: 노선 번호 · → 방면 · 첫 도착(+둘째 도착). 노선 id 가 있으면 줄을 눌러 노선 상세(info.rts[si][줄] = [노선 id, 번호, 종류])
   var by = {}, order = [];

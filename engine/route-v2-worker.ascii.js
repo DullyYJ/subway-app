@@ -22997,8 +22997,7 @@ function mapBusAliases(b) {
 function mapBusToggle(vw) {
   return { t: 'btog', v: 'p', pad: [10, 12, 10, 12], h: 38, items: [
     { label: '\ud83d\udccd \uc8fc\ubcc0 \uc815\ub958\uc7a5', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
-    { label: '\u2b50 \uc990\uaca8\ucc3e\uae30', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }],
-    rf: { label: '\ud83d\udd04', act: { a: 'call', v: 'mp.rf' } } };
+    { label: '\u2b50 \uc990\uaca8\ucc3e\uae30', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }] };          // s383: \ud83d\udd04 \ub2e8\ucd94\ub294 \uc5c6\uc574\ub2e4 \u2014 \uc0c8\ub85c\uace0\uce68\uc740 \uc544\ub798\ub85c \ub2f9\uae30\uae30\ub9cc(\uc571\uc758 \ub2f9\uae30\uae30\uac00 mp.rf \ub97c \ubcf4\ub0b8\ub2e4)
 }
 function mapBusRows(rows, info, si) {                              // \ub178\uc120+\ubc29\uba74\ub9c8\ub2e4 \ud55c \uc904: \ub178\uc120 \ubc88\ud638 \u00b7 \u2192 \ubc29\uba74 \u00b7 \uccab \ub3c4\ucc29(+\ub458\uc9f8 \ub3c4\ucc29). \ub178\uc120 id \uac00 \uc788\uc73c\uba74 \uc904\uc744 \ub20c\ub7ec \ub178\uc120 \uc0c1\uc138(info.rts[si][\uc904] = [\ub178\uc120 id, \ubc88\ud638, \uc885\ub958])
   var by = {}, order = [];
