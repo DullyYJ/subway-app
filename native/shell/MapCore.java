@@ -81,9 +81,11 @@ public final class MapCore {
     public int svb = 300;
     /** true 면 이 상태기가 실제 화면의 것이다(미리 받기용 유령 상태기는 false) — 위치 칸을 기기 저장소(ShellCore.K_BUSCELL)에 적어 화면 캐시 열쇠가 따라가게 한다. */
     public boolean primary;
-    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; if (primary) st.put(ShellCore.K_BUSCELL, stopsKey()); loadStopsCache(); }
-    /** 새로고침(아래로 당기기 · 🔄 · 📍): 새로 확인한 위치로 바꾼다. 같은 칸(약 110m)의 정류장 목록 보관본은 쓴다 — 정류장은 거의 안 바뀌고, 그래야 3초 안에 뜬다(도착정보는 늘 새로). */
-    public void setBusLocFresh(double la, double lo) { setBusLoc(la, lo); }
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; stopsFresh = false; if (primary) st.put(ShellCore.K_BUSCELL, stopsKey()); loadStopsCache(); }
+    /** s383: 새로고침으로 위치를 잡은 직후 true — 정류장 목록을 보관본(기기 · 서버 캐시) 없이 공공 API 에서 새로 받는다(원하는 정류장이 안 나온다는 제보). */
+    public boolean stopsFresh;
+    /** 새로고침(아래로 당기기 · 🔄 · 📍): 새로 확인한 위치로 바꾸고 정류장 목록도 보관본 없이 다시 조회한다(s383 — 보관본·서버 캐시를 건너뛴다). 처음 켤 때·탭 전환은 보관본을 써 빠르게 뜬다. */
+    public void setBusLocFresh(double la, double lo) { setBusLoc(la, lo); busRes.clear(); stopsSaved = false; stopsT = 0; stopsFresh = true; }
     /** 즐겨찾기 새로고침도 현재 위치를 다시 확인해야 한다 — mp.rf 가 켜 두고, 껍데기가 한 번 읽는다. */
     private boolean refLoc;
     public boolean takeRefLoc() { boolean r = refLoc; refLoc = false; return r; }
@@ -366,7 +368,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme, boolean skel) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(stopsFresh && !skel ? ",\"nf\":1" : "").append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             b.append(",\"res\":{");
             boolean first = true;
