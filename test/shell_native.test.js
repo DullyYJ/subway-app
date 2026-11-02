@@ -885,6 +885,11 @@ function findAndroidJar() {
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
     assert.ok(/fresh \? null : await cache\.match/.test(w) && /fresh \? '' : await mapSvKvGet/.test(w) && /b && b\.nf/.test(w), '서버: nf 면 데이터센터 캐시·KV 를 건너뛴다');
   });
+  await t('s384: 키즈 가족대화방은 카톡처럼 전체 화면 — 창을 화면에 꽉 채워(키보드가 올라오면 창이 줄어 입력줄이 키보드 바로 위에 남는다) · 돌아가기 줄 · 안쪽 여백은 상태줄/키보드만큼', () => {
+    const k = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/float hh = bottom \? sh : Math\.min\(dp, sh \* dg\.maxh\)/.test(k) && /if \(bottom\) w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(k) && !/sh \* 0\.72f/.test(k), '대화방 창이 화면 전체(옛 72% 높이는 키보드에 입력줄이 가렸다)');
+    assert.ok(/SOFT_INPUT_ADJUST_RESIZE/.test(k) && /if \(!bottom\) \{ w\.addFlags\(WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(k) && /Type\.systemBars\(\) \| android\.view\.WindowInsets\.Type\.ime\(\)/.test(k) && /closeSheet\(false\); \} \}\);\s*col\.addView\(back/.test(k), '키보드에 맞춰 줄어듦 · 흐림 없음 · 키보드/상태줄 여백 · 돌아가기');
+  });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
