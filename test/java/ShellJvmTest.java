@@ -1645,6 +1645,11 @@ public class ShellJvmTest {
             boolean rpk = true;
             for (String rprev : RunnerCore.ORDER) for (double r = 0d; r < 1d; r += 0.07d) { String n = RunnerCore.pick(rprev, r); if (n.equals(rprev) || RunnerCore.spec(n) == null) rpk = false; }
             ok(rpk && RunnerCore.pick("", 0.0).equals("dolsom") && RunnerCore.pick("dolsom", 0.0).equals("lovel") && RunnerCore.pick("dolsom", 5d).equals("bbosong") && RunnerCore.pick("dolsom", -1d).equals("lovel"), "로딩 캐릭터: 방금 나온 것은 다시 안 뽑고, 범위 밖 값도 안전하다");
+            {   // s389: 뷰가 난수를 뽑지 않는다 — 고르는 값은 시각에서 정해지는 값(RunnerCore.unit)
+                boolean ur = true; java.util.HashSet<String> seen = new java.util.HashSet<String>();
+                for (long um = 0L; um < 400000L; um += 997L) { double uq = RunnerCore.unit(um); if (uq < 0d || uq >= 1d || uq != RunnerCore.unit(um)) ur = false; seen.add(RunnerCore.pick("dolsom", uq)); }
+                ok(ur && seen.size() >= 5, "로딩 캐릭터 고르기: 시각 → 0 이상 1 미만의 같은 값(무작위 아님) · 여러 캐릭터가 골고루 나온다 (" + seen.size() + "종)");
+            }
             RunnerCore.Frame rf0 = RunnerCore.at("dolsom", 0L, 236f), rf1 = RunnerCore.at("dolsom", 1350L, 236f), rf2 = RunnerCore.at("dolsom", 2700L, 236f);
             ok(!rf0.done && rf0.x < 0f && rf0.idx == 0 && !rf1.done && rf1.x > 0f && rf1.x < 236f && rf2.done, "로딩 캐릭터: 왼쪽 밖에서 시작해 가로지르고 끝나면 done");
             ok(RunnerCore.at("dolsom", 500L, 236f).idx == (int) (Math.floor(0.5d * 19d) % 16) && RunnerCore.at("dolsom", 100000L, 236f).idx < 16 && RunnerCore.at("dolsom", -50L, 236f).idx == 0, "로딩 캐릭터: 프레임은 fps 로 돌고 0~15 안");
