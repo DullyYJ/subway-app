@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-02s380";
+var ENGINE_VERSION = "route-v2-2026-11-02s381";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -18182,7 +18182,7 @@ function rtxAd(a, slot, destStn){
         if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
       var shopB = line || say;
-      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel(it.n) };
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: '\uc0c1\ud488 \ubcf4\uae30' };      // s380(YJ: \uc0c1\ud488\uc774\uba74 \ubc84\ud2bc \uc774\ub984\uc744 '<\uc0c1\ud488\uba85> \ubcf4\uae30' \ub300\uc2e0 '\uc0c1\ud488 \ubcf4\uae30'\ub85c)
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;

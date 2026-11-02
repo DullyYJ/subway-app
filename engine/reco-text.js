@@ -475,7 +475,7 @@ function rtxAd(a, slot, destStn){
         if(typeof rtxShopSay === 'function') say = rtxShopSay(it, { temp: cxs.temp, rain: cxs.rain, weekend: !!cxs.weekend });
       }catch(e){}
       var shopB = line || say;
-      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: rtxGoLabel(it.n) };
+      return { k: 'shop', a: clean(it.n), b: clean(shopB), m: rtxTeaser('shop', a.cx), go: '상품 보기' };      // s380(YJ: 상품이면 버튼 이름을 '<상품명> 보기' 대신 '상품 보기'로)
     }
     var sl = (slot === 'morning') ? 'morning' : (slot === 'lunch' ? 'lunch' : (a.dinner ? 'dinner' : 'night'));
     var list = null;
