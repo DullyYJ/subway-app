@@ -573,6 +573,18 @@ public class SceneJvmTest {
                 // 같은 여정의 새 값은 자리를 바꾸지 않고, 시각표·시계는 크기가 바뀌어도 이어진다
                 int[] before = c.tr.spotOf.clone(); c.apply(tr); ok(java.util.Arrays.equals(before, c.tr.spotOf), "같은 여정 재적용은 자리 그대로");
                 c.layout(300, 150, 2.75, true); c.trainClock(150000); c.update(1.0 / 30); ok(c.tr.posOk && c.tr.stop && c.tr.k == 1, "크기가 바뀌어도 시각표는 이어진다");
+                // s388: 탑승 엔진 시각표는 환승 뒤 다른 호선·지난 구간까지 이어서 온다 — 장면의 역 범위 밖 구간이 섞여도 죽지 않고 범위 안 구간만 따른다
+                {
+                    int n3 = tr.train.names.size(), f3 = tr.train.first; String base = trainPos(f3, n3 - 1);
+                    String extra = "{\"segs\":[{\"from\":" + (f3 - 3) + ",\"to\":" + (f3 - 2) + ",\"a\":0,\"t0\":1000,\"t1\":2000}," + base.substring(base.indexOf('[') + 1, base.lastIndexOf(']'))
+                        + ",{\"from\":" + (f3 + n3 - 1) + ",\"to\":" + (f3 + n3 + 4) + ",\"a\":900000,\"t0\":930000,\"t1\":1100000}]}";
+                    TestHost hx = fakeHost(); SceneCore cx = core(hx, 5); cx.layout(340, 190, 2.75, true); cx.apply(tr); cx.trainPos(extra);
+                    boolean fineX = true; String whyX = "";
+                    long[] ts = { 500, 1500, 10000, 80000, 148000, 400000, 920000, 1000000, 1200000 };
+                    for (long tq : ts) { cx.trainClock(tq); cx.update(1.0 / 30); try { draw(cx, canvasImg(680, 380)); } catch (RuntimeException e) { fineX = false; whyX = String.valueOf(e); break; } if (cx.error != null) { fineX = false; whyX = cx.error; break; } if (cx.tr.k >= n3 || cx.tr.toK >= n3) { fineX = false; whyX = "k=" + cx.tr.k + " toK=" + cx.tr.toK; break; } }
+                    ok(fineX, "범위 밖(환승 뒤·지난) 구간이 섞인 시각표에도 객실 장면이 오류 없이 돈다 " + whyX);
+                    cx.trainClock(1200000); cx.update(1.0 / 30); ok(cx.tr.stop && cx.tr.k == n3 - 1, "범위 안 마지막 구간이 끝나면 마지막 역에 선다 k=" + cx.tr.k);
+                }
                 // s233 안무: 달리는 동안 친구들이 자리를 바꾸고(일어서서 걸어가 다른 자리에 앉는다) · 졸고 · 기지개를 켠다 — 자리는 늘 겹치지 않는다
                 {
                     TestHost hc = fakeHost(); SceneCore cc = core(hc, 5); cc.layout(340, 190, 2.75, true); cc.apply(tr); cc.trainPos("");
