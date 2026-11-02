@@ -230,6 +230,7 @@ public final class ScreenCore {
         public String rol = "", rod = "";                  // bcard: 순서 바꾸기 줄 글('끌어서 순서 변경' · '완료') — 첫 주변 카드에만 온다
         public boolean mine, right, ind;
         public String nick = "", pre = "", time = "";
+        public boolean un;                                  // 말풍선: 상대가 아직 안 읽었다(내 글 곁에 노란 '1' — 카톡처럼)
         public float[] pathOps = new float[0];
         public List<Node> kids = new ArrayList<Node>();
         public int[][] hl = new int[0][];
@@ -1011,7 +1012,7 @@ public final class ScreenCore {
             n.act = act(m.get("act"), true);
         } else if ("msg".equals(t)) {
             pad(m, n);
-            n.mine = optBool(m, "mine", false); n.nick = optStr(m, "nick", "", 40); n.pre = optStr(m, "pre", "", 24);
+            n.mine = optBool(m, "mine", false); n.un = optBool(m, "un", false); n.nick = optStr(m, "nick", "", 40); n.pre = optStr(m, "pre", "", 24);
             n.s = optStr(m, "s", "", 600); if (n.s.length() == 0) throw new ParseError("msg: s 없음");
             n.time = optStr(m, "time", "", 12); n.badge = optStr(m, "badge", "", 10); n.accent = roleOrCss(m, "bc", "#ff453a"); if (n.accent.length() == 0) n.accent = "#ff453a";
             n.title = optStr(m, "go", "", 8);
@@ -1278,6 +1279,7 @@ public final class ScreenCore {
         public String label = "", badge = "", tag = "", img = "", fb = "";
         public ScreenCore.Item[] subs; public String ak = ""; public int ams; public float[] aez; public long sq; public float gap;   // K_ROWANIM: 조각 네 개(A·B·C·O)와 전환 연출 값
         public boolean mq; public float mqW, mqVis;  // 흐르는 글(넘칠 때만 mq): 글 전체 폭 · 보이는 폭
+        public float unW;                           // 말풍선: 안 읽음 '1' 이 차지하는 폭(시각 앞)
         public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
         public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
@@ -2600,6 +2602,7 @@ public final class ScreenCore {
             it.textX = it.x + MSG_PADX; it.textY = it.sy + MSG_PADY + badgeH; it.bx = it.x + MSG_PADX; it.by = it.sy + MSG_PADY;
             it.fill = col(n.fill, new Col("card2", 0)); it.tc = col(n.tc, new Col("text", 0));
             it.label = n.time; it.metaY = it.sy + bubH + 3f; it.labelW = n.time.length() > 0 ? m.width(n.time, MSG_TIME, false) : 0f;
+            it.unW = n.un ? m.width("1", MSG_TIME, true) + 5f : 0f; it.labelW += it.unW;            // 안 읽음 '1' 은 시각 바로 앞(왼쪽)에 — 아래 글자 자리도 그만큼 민다
             it.go = (n.act != null && n.title.length() > 0) ? n.title : "";
             if (it.go.length() > 0) {
                 float sepW = m.width(" · ", MSG_TIME, false);

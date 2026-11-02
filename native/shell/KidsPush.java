@@ -18,12 +18,12 @@ import java.util.Map;
  * 길동무 키즈 푸시(FCM) 받는 쪽 — 앱이 백그라운드이거나 꺼져 있어도 자녀의 출발 · 도착 · 미도착 · 대화 · 미션이 알림으로 온다.
  *  · 무엇을 알릴지(제목 · 글)는 키즈 서버 엔진이 정해서 데이터 메시지로 보낸다. 여기는 그걸 알림으로 그리기만 한다.
  *  · 연결(키즈 시크릿 키)을 시도한 적이 없는 기기는 토큰을 받지도 보내지도 않는다. 설정 파일(google-services.json)이 없는 빌드에서는 조용히 아무 일도 하지 않는다.
- *  · 앱이 화면에 떠 있을 땐 알림을 띄우지 않는다(키즈 화면은 긴 대기로 이미 실시간이다).
+ *  · 키즈 화면을 보고 있을 땐 알림을 띄우지 않는다(긴 대기로 이미 실시간이다). 다른 탭을 보거나 앱이 뒤에 있으면 알림이 온다.
  */
 public final class KidsPush extends FirebaseMessagingService {
     static final String CH = "kids_push", K_FT = "kid.ft", K_FTSENT = "kid.ftsent";
     /** 앱이 화면 앞에 있나(KidsHub.resume/pause 가 알린다). */
-    static volatile boolean fg = false;
+    static volatile KidsHub hub;
 
     /** 토큰을 받아 키즈 엔진에 맡긴다(백그라운드 스레드). 이미 보낸 같은 토큰이면 건너뛴다. */
     static void start(final Context c, final ShellCore.Store st) {
@@ -59,7 +59,8 @@ public final class KidsPush extends FirebaseMessagingService {
         try {
             Map<String, String> d = m.getData();
             if (d == null || d.isEmpty()) return;
-            if (fg) return;                                                      // 화면에 떠 있으면 키즈 화면이 이미 실시간으로 받는다
+            KidsHub h = hub;
+            if (h != null && h.viewing()) return;                               // s385: 키즈 화면(대화 칸·대화방)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림이 온다(카톡처럼). 키즈 화면은 긴 대기로 이미 실시간이다
             show(getApplicationContext(), d.get("title"), d.get("body"), d.get("tag"), d.get("k"));
         } catch (Throwable ignored) { }
     }

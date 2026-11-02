@@ -241,8 +241,10 @@ public final class KidsHub {
         if (sheetV != null) sheetV.setPalette(pal);
     }
 
-    public void resume() { paused = false; KidsPush.fg = true; if (!open) preload(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
-    public void pause() { paused = true; KidsPush.fg = false; stopLoop(); famEp++; }
+    public void resume() { paused = false; KidsPush.hub = this; if (!open) preload(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
+    public void pause() { paused = true; stopLoop(); famEp++; }
+    /** s385: 키즈 화면(허브 아래 대화 칸 · 대화방 · 커뮤니티 가족대화)을 지금 실제로 보고 있나 — 알림은 이때만 숨긴다(다른 탭을 보고 있으면 카톡처럼 알림이 온다). */
+    public boolean viewing() { return open && !paused; }
     public void destroy() { alive = false; stopLoop(); closeSheet(true); }
 
     // ───────── 홈 버튼 3초 꾹 ─────────
@@ -941,7 +943,7 @@ public final class KidsHub {
                 if (at < 0) continue;
                 java.util.Calendar c = java.util.Calendar.getInstance();
                 JSONObject m = new JSONObject();
-                m.put("t", "msg"); m.put("s", tx); m.put("mine", true); m.put("nick", "");
+                m.put("t", "msg"); m.put("s", tx); m.put("mine", true); m.put("un", true); m.put("nick", "");
                 m.put("time", String.format(java.util.Locale.US, "%02d:%02d", c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE)));
                 m.put("pad", new JSONArray("[0,4,0,0]")); m.put("fd", mx + 1);
                 JSONArray out = new JSONArray();

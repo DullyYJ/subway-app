@@ -3791,7 +3791,8 @@ public class ScreenView extends View {
         setText(it.size, false, cc(it.tc, pal[R_TEXT]));
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
         float th = ScreenCore.MSG_TIME * 1.35f;
-        if (it.label.length() > 0) { setText(ScreenCore.MSG_TIME, false, pal[R_SUB]); cv.drawText(it.label, it.x, base(it.metaY, th, 0), tp); }
+        if (it.unW > 0f) { setText(ScreenCore.MSG_TIME, true, pal[R_GOLD]); cv.drawText("1", it.x, base(it.metaY, th, 0), tp); }          // 안 읽음 표시(카톡의 노란 1)
+        if (it.label.length() > 0) { setText(ScreenCore.MSG_TIME, false, pal[R_SUB]); cv.drawText(it.label, it.x + it.unW, base(it.metaY, th, 0), tp); }
         if (it.go.length() > 0) {
             int sub = alpha(pal[R_SUB], it == pressed ? 1f : 0.75f);
             setText(ScreenCore.MSG_TIME, false, sub);
