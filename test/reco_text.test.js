@@ -138,7 +138,7 @@ t('s237 오버레이 추천 줄: 버튼은 추천한 그 가게·상품 이름("
     const T = R.RTX_TEASE[kd], pool = (w === 'rainy' ? T.rainy : (w === 'cold' ? T.cold : T.hot)).concat(T.base.slice(0, 2)).concat(T.weekend || [], T.late || [], T.early || []);
     for (let sd = 1; sd < 25; sd++) { const a = ask(h, { weather: wxs[w], seed: sd }).ad; assert.ok(a && pool.indexOf(a.m) >= 0 && a.go.endsWith(' 보기') && a.go.length <= 8, kd + ' ' + w + ' ' + JSON.stringify(a)); }
   }
-  for (const [h, kd] of kinds) { const a = ask(h).ad; const nm = kd === 'shop' ? '우산' : a.pn; assert.ok(a.go === R.rtxGoLabel(nm) && a.a.indexOf(nm) === 0, kd + ' 버튼은 추천한 대상 이름: ' + JSON.stringify(a)); }
+  for (const [h, kd] of kinds) { const a = ask(h).ad; const nm = kd === 'shop' ? '우산' : a.pn; assert.ok(a.go === (kd === 'shop' ? '상품 보기' : R.rtxGoLabel(nm)) && a.a.indexOf(nm) === 0, kd + ' 버튼은 추천한 대상 이름: ' + JSON.stringify(a)); }
   for (const [h, kd] of kinds) { const set = new Set(); for (let sd = 1; sd < 60; sd++) { const a = ask(h, { seed: sd }).ad; set.add(a.a + '|' + a.m); } assert.ok(set.size >= 3, kd + ' 여러 모양: ' + set.size); }
   assert.deepStrictEqual(ask(12, { seed: 5 }).ad, ask(12, { seed: 5 }).ad, '같은 씨앗은 같은 글');
   const late = new Set(); for (let sd = 1; sd < 80; sd++) late.add(R.recoAlert({ arrMs: kst(23, 30), nowMs: kst(23, 25), dest: '강남', weather: null, shop: { n: '우산', _t: '우천대비' }, seed: sd }).ad.m); assert.ok(late.has('자기 전에 확인하세요'), '밤늦게엔 밤 문구도 섞인다');
