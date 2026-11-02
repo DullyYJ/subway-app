@@ -74,6 +74,9 @@ jobs:
           rc=$?
           tail -n 80 /tmp/t.log
           if [ $rc -ne 0 ]; then
+            # 로그가 길면 실패 줄이 위로 밀려 안 보인다 — 실패한 시험과 이유(컴파일 오류 포함)를 맨 끝에 다시 보인다
+            echo "===== 실패 요약 ====="
+            grep -a -A6 -E "^  FAIL" /tmp/t.log | head -60
             # 로그를 직접 내려받기 어려우므로 실패 줄을 주석(annotation)으로도 남긴다
             grep -a -A8 -m3 -E "FAIL|Error|error:" /tmp/t.log | tr '\n' ' ' | cut -c1-1800 | while IFS= read -r l; do echo "::error::$l"; done
           fi
