@@ -3853,3 +3853,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `test/boundary_native.test.js` 신설(42건). ① 그림 클래스(ScreenView · SceneDriver · AndroidCv · MetroRenderer/MapView · RunnerArt · OpenView · PlayView · RsSheetView · ShareAnim · SceneCv)는 시드 없는 무작위 · SharedPreferences · 직접 네트워크를 쓰지 않는다 ② 계산 클래스 42개(*Core · Scene 계산 · Chars)는 android/Handler/Looper/Context 를 모른다 ③ 앱 어디서든 시드 없는 무작위는 허용 목록에서만 ④ 허용 목록이 낡으면(사라진 예외) 실패. 예외는 이유와 함께 파일 안에 적혀 있다: ScreenView 이미지 내려받기 · PlayView/SceneDriver 난수 공급기 · HcardsCore(AI 문구 씨앗을 엔진에 넘김) · NetPost/ShellActivity(재시도 간격 흔들기) · WidgetCore(위젯 접착).
 - 이 점검으로 찾아 고친 것: ScreenView 로딩 캐릭터 고르기가 `Math.random()` 을 직접 뽑던 것 → `RunnerCore.unit(시각)`(같은 시각이면 같은 값). ShellJvmTest 에 1건.
 - 일부러 남긴 것(예외 목록에 이유 기록): PlayView·SceneDriver 가 난수 공급기(`new Random()`)를 코어에 꽂아 준다 — 값을 쓰는 규칙은 코어. 더 줄이려면 코어가 시드를 엔진에서 받게 바꿔야 한다.
+
+## s390 — CI 복구: 안드로이드 컴파일 깨짐(s383 이후 CI 실패 전부)의 원인과 재발 방지
+- **원인**: `ShellActivity.java` R_BUS_REF(즐겨찾기 새로고침 위치 재확인) 줄에서 s383 때 넣은 한 줄 뒤 주석(`// s383: …`)이 같은 줄의 `loadMapBody(body, true); }` 를 주석으로 삼켜 `fix()` 가 닫히지 않았다 → 진짜 android.jar 컴파일(shell_native 의 '안드로이드 계층' 시험)만 실패(JVM 시험·로컬은 android.jar 가 없어 건너뛰므로 통과로 보였다). 그 결과 `build` 잡(APK)이 #817 부터 한 번도 돌지 않았다.
+- **고침**: 주석을 윗줄로 올리고 코드는 그대로(`fix` 가 위치를 옮겼으면 `setBusLoc` 후 `loadMapBody`). 즐겨찾기 새로고침 동작은 s383 설계 그대로.
+- **재발 방지**: `test/boundary_native.test.js` ⑤ — 모든 자바 파일의 `{ } ( ) [ ]` 개수를 문자열·주석을 뺀 뒤 센다. 같은 사고를 일부러 되살려 시험이 잡는 것을 확인(43 통과). 키즈 저장소 자바도 같은 점검에서 이상 없음.
+- **CI 로그**: `.github/workflows/build-shell.yml` — 시험이 실패하면 로그 맨 끝 `===== 실패 요약 =====` 에 실패한 시험과 이유(컴파일 오류 줄 포함)를 다시 찍는다(앞부분이 잘려 안 보이던 문제).
+- **기기 미확인**: 앱 쪽 동작은 CI(android.jar 컴파일) 통과 뒤 APK 로 확인해야 한다.
