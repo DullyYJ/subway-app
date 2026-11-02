@@ -591,6 +591,24 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const fv = b.info.stops[0];
   ok(fv.id === 'SEOUL:11111' && fv.src === 'topis' && fv.ars === '11111' && !('dist' in fv), 'info.stops: 도착정보를 다시 물을 수 있는 최소 값');
   ok(b.info.favp && b.info.favp.max === 12 && b.info.favp.al === 10 && b.info.favp.add === '즐겨찾기 추가' && b.info.favp.rm === '즐겨찾기 해제' && /최대 12/.test(b.info.favp.full), 's207: 버스 즐겨찾기 규칙(곳 수 · 별명 글자 수 · 안내 글)을 엔진이 알린다');
+  {   // s389 (키즈 노선도 탭): 즐겨찾기 넣고 빼기 · 별명 · 갱신 박자를 엔진이 정한다 — 앱은 누른 것(act)만 보내고 돌려받은 목록을 저장한다
+    ok(b.info.poll && b.info.poll.tick === 10000 && b.info.poll.stale === 20000 && b.info.poll.retry === 8000, 's389: 갱신 박자(확인 10초 · 20초 지나면 새로 · 실패 땐 8초 앞당김)를 엔진이 알린다');
+    ok(!('edit' in b.info), 's389: act 가 없으면 edit 도 없다');
+    let e1 = near({ fav: [], act: { k: 'fv', stop: fv } });
+    ok(e1.info.edit && e1.info.edit.fav.length === 1 && e1.info.edit.fav[0].id === fv.id && e1.info.edit.msg === '즐겨찾기 추가' && e1.body.filter(n => n.t === 'bcard')[0].fv === 1, 's389: 별 누름 → 목록에 넣고 안내 글 · 같은 응답의 카드가 바로 ★');
+    let e2 = near({ fav: e1.info.edit.fav, act: { k: 'fv', stop: fv } });
+    ok(e2.info.edit.fav.length === 0 && e2.info.edit.msg === '즐겨찾기 해제' && e2.body.filter(n => n.t === 'bcard')[0].fv === 0, 's389: 이미 즐겨찾기면 뺀다');
+    const full = []; for (let i = 0; i < 12; i++) full.push(Object.assign({}, fv, { id: 'X' + i }));
+    let e3 = near({ fav: full, act: { k: 'fv', stop: fv } });
+    ok(e3.info.edit.fav.length === 12 && !e3.info.edit.fav.some(x => x.id === fv.id) && /최대 12/.test(e3.info.edit.msg), 's389: 12곳이 차 있으면 넣지 않고 안내 글');
+    ok(near({ fav: [], act: { k: 'fv', stop: { nm: '', id: '' } } }).info.edit.fav.length === 0 && near({ fav: [], act: { k: 'fv', stop: 'x' } }).info.edit.msg === '', 's389: 이상한 정류장은 무시');
+    let a1 = near({ al: {}, act: { k: 'al', id: fv.id, t: '  출근길 정류장입니다 아주 길게  ' } });
+    ok(a1.info.edit.al[fv.id] === '출근길 정류장입니다'.slice(0, 10) || a1.info.edit.al[fv.id].length <= 10, 's389: 별명은 엔진이 다듬는다(앞뒤 공백 · 10글자) → ' + a1.info.edit.al[fv.id]);
+    ok(a1.body.filter(n => n.t === 'bcard')[0].al === a1.info.edit.al[fv.id], 's389: 같은 응답의 카드에 별명이 바로 보인다');
+    let a2 = near({ al: a1.info.edit.al, act: { k: 'al', id: fv.id, t: '   ' } });
+    ok(!(fv.id in a2.info.edit.al), 's389: 빈 별명은 지운다');
+    ok(!('edit' in near({ act: { k: 'zz' } }).info) && near({ fav: [fv], act: { k: 'zz' } }).info.stops, 's389: 모르는 동작은 아무것도 바꾸지 않는다');
+  }
   b = near({ fav: [fv], al: { 'SEOUL:11111': '출근길' } });
   const c0 = b.body.filter(n => n.t === 'bcard')[0];
   ok(c0.fv === 1 && c0.al === '출근길', '즐겨찾기한 정류장은 ★, 별명이 있으면 별명');
