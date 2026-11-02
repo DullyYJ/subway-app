@@ -240,7 +240,7 @@ public class ShellActivity extends Activity {
                 String ct = ShellCore.currentTab(store);
                 ScreenCore.Act a = new ScreenCore.Act();
                 if ("food".equals(ct)) { a.a = "refresh"; foodAct(a); return; }
-                a.a = "call"; a.v = "mp.rf"; hostBody.handle(a, false);              // 위 🔄 단추와 같은 행동
+                a.a = "call"; a.v = "mp.rf"; hostBody.handle(a, false);              // 당기기 = 새로고침(s383: 🔄 단추는 없앴다)
             }
         });
         body.setHelloFeed(new ScreenView.HelloFeed() { @Override public SceneHello.Plan get() { return helloPlan(); } });          // s340: 홈 장면 3초 꾹 누르기 → 카드가 늘어나 친구들 인사
@@ -3361,7 +3361,8 @@ public class ShellActivity extends Activity {
                 busRetryN = 0;
                 if (map.takeRefLoc() && hasLocPerm()) {                                      // 즐겨찾기 새로고침: 도착정보만이 아니라 현재 위치도 다시 확인(옮겼으면 주변 정류장도 그 동네로 — 즐겨찾기는 그대로)
                     locateFresh(REQ_MAP_LOC, new LocCb() {
-                        @Override public void fix(Location l) { if (farLL(map.busLL, l.getLatitude(), l.getLongitude(), BUS_MOVE_DEG)) map.setBusLoc(l.getLatitude(), l.getLongitude());       // s383: 옮겼을 때는 보관본 그대로(공공 API 보호) — 정류장을 다시 조회하는 것은 주변 새로고침 단추뿐 loadMapBody(body, true); }
+                        // s383: 옮겼을 때는 보관본 그대로(공공 API 보호) — 정류장을 다시 조회하는 것은 주변 새로고침 단추뿐
+                        @Override public void fix(Location l) { if (farLL(map.busLL, l.getLatitude(), l.getLongitude(), BUS_MOVE_DEG)) map.setBusLoc(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
                         @Override public void fail(boolean noperm) { loadMapBody(body, true); }
                     });
                 } else loadMapBody(body, true);
