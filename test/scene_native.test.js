@@ -94,6 +94,15 @@ const { sceneDecide } = require('../engine/scene.js');
     assert.ok(sc.includes('"train".equals(mode)') && /SceneTrain\.(step|draw|setup)/.test(sc), 'SceneCore 가 train 장면을 그린다');
     assert.ok(!/Math\.random|new java\.util\.Random\(\)|new Random\(\)/.test(tr.replace(/new java\.util\.Random\(z\.seed[^)]*\)/, '')), '객실 장면의 자리·승하차 무작위는 엔진이 준 시드로만(앱이 따로 뽑지 않는다)');
   });
+  await t('두 쪽 카드 복구(s388): 장면이 죽어도 제목이 겹친 채 멈추지 않고 · 자동으로 다시 시도하고 · 제목은 차례로 바뀐다 · 환승 뒤 구간이 섞여도 안 죽는다', async () => {
+    const v = fs.readFileSync(N('ScreenView.java'), 'utf8'), tr = fs.readFileSync(N('SceneTrain.java'), 'utf8');
+    assert.ok(/onError\(String message\) \{ sceneFail\(message\); \}/.test(v) && /private void sceneFail\(String message\)[\s\S]{0,400}pgPage = 0; pgPos = 0f; pgDragOn = false/.test(v), '장면 오류 → 쪽 위치를 첫 쪽으로 되돌린다(반쯤 겹친 제목으로 멈추지 않는다)');
+    assert.ok(/sceneRetryRun/.test(v) && /SCENE_RETRY_MAX = 3/.test(v) && /ui\.removeCallbacks\(sceneRetryRun\); sceneRetries = 0;/.test(v), '장면 오류 뒤 잠시 있다가 다시 시도(최대 3번) · 창에서 떨어지면 멈춘다');
+    assert.ok(/private float pgSceneShare\(\) \{\s*if \(sceneFailed\) return 0f;/.test(v), '장면이 죽었으면 제목 몫은 0');
+    assert.ok(/if \(!sceneFailed && hasPager\(\)\) pgStep\(now\);/.test(v) && /float o = pgPos;/.test(v) && !/float o = pgStep\(now\);/.test(v), '쪽 위치는 그릴 때 맨 앞에서 한 번만 나아간다(카드가 화면 밖이어도 멈춘 채 남지 않는다)');
+    assert.ok(/sh \* 2f - 1f/.test(v) && /1f - sh \* 2f/.test(v), '제목은 차례로 바뀐다 — 한가운데에서도 두 글이 함께 보이지 않는다');
+    assert.ok(/g\.from < lo \|\| g\.to > hi/.test(tr), '객실 시각표는 장면의 역 범위 안 구간만 쓴다');
+  });
   await t('둘숑 거울(s306): 거울을 보며 짖을 때 거울 유리에 둘숑 얼굴이 옅게 비친다 — 거울이 주인을 알고(own) · 유리 안에서만(clip) 뒤집어 그린다', async () => {
     const sc = fs.readFileSync(N('SceneCore.java'), 'utf8'), ac = fs.readFileSync(N('SceneActs.java'), 'utf8');
     assert.ok(/Actor own;/.test(sc) && /A\.g\.own = a;/.test(ac), '거울 그림(Gfx)이 주인을 기억한다');
