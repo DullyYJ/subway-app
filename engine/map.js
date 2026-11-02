@@ -669,6 +669,30 @@ function mapBusAliases(b) {
   if (b && b.al && typeof b.al === 'object' && !Array.isArray(b.al)) Object.keys(b.al).slice(0, 60).forEach(function (k) { var v = mapStr(b.al[k], MAP_ALIAS_MAX).trim(); if (v) out[mapStr(k, 40)] = v; });
   return out;
 }
+// ── 즐겨찾기·별명 편집과 갱신 주기(s389, 키즈 노선도 탭): 넣을지 뺄지 · 몇 곳까지 · 별명 다듬기 · 안내 글 · 몇 초마다 새로 받을지는 엔진이 정한다.
+//   앱은 요청(f.bus.act)에 '누른 것'만 실어 보내고, 돌려받은 info.edit(새 목록·별명·안내 글)을 저장·표시하며, info.poll 박자대로 다시 받을 뿐이다.
+//   act = { k:'fv', stop:{nm,id,src,la,lo,…} }(별 누름: 있으면 빼고 없으면 넣는다) | { k:'al', id, t }(별명 저장: 빈 글이면 지운다)
+var MAP_POLL = { tick: 10000, stale: 20000, retry: 8000 };           // 확인 박자(ms) · 이만큼 지나면 새로 받는다 · 못 받았을 때 다시 받기까지 앞당기는 만큼
+function mapBusAct(b, info) {
+  var a = b && b.act;
+  if (!a || typeof a !== 'object') return b;
+  var nb = Object.assign({}, b), favs = mapBusFavs(b), al = mapBusAliases(b), msg = '', i, at = -1;
+  if (a.k === 'fv') {
+    var st = mapBusFavs({ fav: [a.stop] })[0];
+    if (st) {
+      for (i = 0; i < favs.length; i++) if (favs[i].id === st.id) { at = i; break; }
+      if (at >= 0) { favs.splice(at, 1); msg = MAP_FAVP.rm; }
+      else if (favs.length >= MAP_FAV_MAX) msg = MAP_FAVP.full;
+      else { favs.push(st); msg = MAP_FAVP.add; }
+    }
+  } else if (a.k === 'al') {
+    var id = mapStr(a.id, 40), t = mapStr(a.t, MAP_ALIAS_MAX).trim();
+    if (id) { if (t) al[id] = t; else delete al[id]; }
+  } else return b;
+  nb.fav = favs; nb.al = al; delete nb.act;
+  info.edit = { fav: favs, al: al, msg: msg };
+  return nb;
+}
 function mapBusToggle(vw) {
   return { t: 'btog', v: 'p', pad: [10, 12, 10, 12], h: 38, items: [
     { label: '📍 주변 정류장', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
@@ -921,6 +945,8 @@ function mapBusTmap(pts, foc) {                                    // 고정 지
   return { t: 'tmap', h: 213, hv: 24, hmin: 137, hmax: 231, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '숫자를 누르면 아래 정류장으로 이동해요' };
 }
 function mapBusBody(f, info) {
+  info.poll = MAP_POLL;
+  if (f.bus) f.bus = mapBusAct(f.bus, info);
   var b = f.bus, vw = (b && b.vw === 'fav') ? 'fav' : 'near', al = mapBusAliases(b), sel = (b && isFinite(Number(b.sel))) ? Math.floor(Number(b.sel)) : -1;
   var head = [mapBusToggle(vw)], note = function (s) { return { t: 'text', s: s, size: 13, color: 'sub', align: 'center', lh: 1.7, pad: [28, 20, 20, 20] }; };
   if (vw === 'fav') {
