@@ -3841,3 +3841,15 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 고친 것(ScreenView): ① sceneFail() — 오류 때 쪽 위치를 첫 쪽으로 되돌리고(제목 겹침 불가) 1.5·3·4.5초 뒤 장면을 처음부터 다시 만들어 본다(최대 3번, 창에서 떨어지면 멈춤) ② 장면이 죽었으면 pgSceneShare()=0 ③ pgStep 을 drawAll 맨 앞에서 프레임당 한 번만(카드가 화면 밖이어도, 제목줄이 카드보다 먼저 그려져도 같은 값) ④ 제목은 차례로 바뀐다(0~½ 앞 글 사라짐, ½~1 뒤 글 나타남 — 한가운데에서도 두 글이 같이 안 보임) ⑤ 오류 문구는 Log.w("ScreenView","scene failed: …") 로 남김(adb logcat 으로 진짜 원인 확인 가능).
 - 시험: test/scene_native.test.js(복구 규칙) · test/java/SceneJvmTest.java(범위 밖 구간이 섞인 시각표) 추가. 전체 통과. 안드로이드 계층은 여기서 컴파일 못 함 → 기기 미확인.
 - 엔진 JS 는 안 바뀜(워커 재배포 불필요). 부모 앱 APK 만 다시 빌드.
+
+## s389 — 키즈 노선도 탭(버스): 즐겨찾기·별명·갱신 박자 판단을 엔진으로 (개선 1번)
+- **옮긴 것**: 이전엔 키즈 `MapPane` 이 ① 별을 누르면 목록에 넣을지/뺄지·12곳 상한 검사·안내 글 고르기 ② 별명 다듬기(공백·글자 수) ③ 확인 10초 · 20초 지나면 새로 받기 · 실패 땐 8초 앞당기기를 직접 판단했다. 이제 모두 엔진(`engine/map.js`)이 정한다.
+- **엔진**: 요청 `f.bus.act` = `{k:'fv', stop:{…}}`(별 누름) | `{k:'al', id, t}`(별명 저장). `mapBusAct` 가 새 목록·별명을 만들어 같은 응답의 카드에도 바로 반영하고 `info.edit = {fav, al, msg}` 로 돌려준다(msg = 추가/해제/최대 12개 안내). `info.poll = {tick:10000, stale:20000, retry:8000}`(MAP_POLL). act 가 없으면 edit 도 없다.
+- **키즈 앱**: 눌린 정류장/쓴 글을 `pendAct` 로 한 번만 실어 보내고, 돌려받은 `info.edit` 를 저장(응답이 늦어 화면에 못 그려도 저장은 한다)·`msg` 만 토스트, 박자는 `info.poll` 값. 앱에서 목록 넣고 빼기·상한·안내 글·20000/12000 같은 상수가 사라졌다. 끌어서 바꾼 순서(ord)는 보기 쪽이 알려 주는 입력이라 그대로 두고, 검증(60개·64자)은 엔진.
+- **시험**: `test/map_engine.test.js` s389 10건(박자 · 추가/해제/가득 · 이상한 정류장 · 별명 다듬기/삭제 · 모르는 동작 · 같은 응답 카드 반영). 244 통과. 워커 번들 `route-v2-2026-11-03s389` 동기화(`engine/route-v2-worker.ascii.js` 맵 엔진 구간 통째 교체).
+- **⚠ 워커 재배포 필요**(Cloudflare 에 route-v2-worker.ascii.js 다시 붙여넣기) · 키즈 APK 재빌드. 워커를 먼저 올려야 별 누름이 먹는다(옛 워커는 act 를 모르므로 별이 안 바뀐다). 기기 미확인.
+
+### s389 (이어서) — 개선 3번: 계산 ↔ 그림 경계 자동 시험
+- `test/boundary_native.test.js` 신설(42건). ① 그림 클래스(ScreenView · SceneDriver · AndroidCv · MetroRenderer/MapView · RunnerArt · OpenView · PlayView · RsSheetView · ShareAnim · SceneCv)는 시드 없는 무작위 · SharedPreferences · 직접 네트워크를 쓰지 않는다 ② 계산 클래스 42개(*Core · Scene 계산 · Chars)는 android/Handler/Looper/Context 를 모른다 ③ 앱 어디서든 시드 없는 무작위는 허용 목록에서만 ④ 허용 목록이 낡으면(사라진 예외) 실패. 예외는 이유와 함께 파일 안에 적혀 있다: ScreenView 이미지 내려받기 · PlayView/SceneDriver 난수 공급기 · HcardsCore(AI 문구 씨앗을 엔진에 넘김) · NetPost/ShellActivity(재시도 간격 흔들기) · WidgetCore(위젯 접착).
+- 이 점검으로 찾아 고친 것: ScreenView 로딩 캐릭터 고르기가 `Math.random()` 을 직접 뽑던 것 → `RunnerCore.unit(시각)`(같은 시각이면 같은 값). ShellJvmTest 에 1건.
+- 일부러 남긴 것(예외 목록에 이유 기록): PlayView·SceneDriver 가 난수 공급기(`new Random()`)를 코어에 꽂아 준다 — 값을 쓰는 규칙은 코어. 더 줄이려면 코어가 시드를 엔진에서 받게 바꿔야 한다.
