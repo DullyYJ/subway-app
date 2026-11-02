@@ -550,7 +550,7 @@ final class RideStandbyJ {
     // ★ 2026-10-27 s257 (JS rsMonoPos 와 같은 계산): 새 시각표가 지난번 마커 자리보다 뒤로 가면 그 구간의 출발 시각만 당겨 자리를 유지한다(도착 시각 t1 은 그대로).
     static final double DOOR_M = 250, DOOR_ACC_M = 80, DOOR_LOST_MS = 10000, DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — engine/ride-standby.js 와 같은 값
     static final double GO_WIN_MS = 12000, GO_SPAN_MS = 6000, GO_MOVE_M = 40;      // s323: 속도 기반 출발 — engine/ride-standby.js 와 같은 값
-    static final double DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(RideEtaJ stopDwellSec 와 같은 값)
+    static final double DWELL_MS = 18000;      // s321: 역에 닿은 마커가 서 있는 시간(RideEtaJ stopDwellSec 와 같은 값)
     // s323: 구간이 겹치지 않게 뒤 구간을 민다 / pos 를 지금 구간으로 다시 맞춘다(engine rsChainSegs · rsPosFromSegs)
     static void chainSegs(List<Object> segs, int k0) {
         for (int i = k0 + 1; i < segs.size(); i++) {

@@ -29,7 +29,7 @@ final class RideTrackJ {
         subRideWinSec = 120, subRideMinFixes = 4, subRideMinSpanSec = 90, subRideOffM = 600, subRideMaxAcc = 60,
         busTrailMaxAgeSec = 570, busTrailCap = 240, busCoverSlackSec = 20, busAheadSec = 300, busAheadMinStops = 2,
         busStopNearReachM = 200, busGpsSnapM = 500, busAdvanceSec = 8,
-        trailMaxSpeedMps = 60, zeroLeadSec = 25, zeroWinSec = 55, zeroSlideSec = 45, zeroNearM = 200, zeroFinalNearM = 250, zeroFarM = 600,
+        trailMaxSpeedMps = 60, zeroLeadSec = 25, zeroWinSec = 55, zeroSlideSec = 45, zeroNearM = 150, zeroFinalNearM = 250, zeroFarM = 600, zeroAccCapM = 50, zeroAccMaxM = 100,
         zeroApplyLeadSec = 3, zeroKeepSec = 20, zeroFinalKeepMin = 30,
         passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 100, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
         notYetFarM = 400, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
@@ -315,8 +315,8 @@ final class RideTrackJ {
         boolean hasBest = false;
         for (Fix q : tr) {
             if (q.ts < from || q.ts > to + 1000) continue;
-            if (!q.noAcc() && q.acc > 150) continue;
-            double acc = q.noAcc() ? 50 : q.acc, dd = hav(q.lat, q.lng, lat, lng) - acc;
+            if (!q.noAcc() && q.acc > zeroAccMaxM) continue;
+            double acc = Math.min(q.noAcc() ? 50 : q.acc, zeroAccCapM), dd = hav(q.lat, q.lng, lat, lng) - acc;
             n++;
             if (!hasBest || dd < best) { best = dd; hasBest = true; }
             if (dd <= R) near++; else if (dd > zeroFarM) far++;
