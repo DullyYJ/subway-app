@@ -1140,6 +1140,11 @@ function findAndroidJar() {
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/if \(ff\.ffmax > 0f\) avail = Math\.min\(avail, ff\.ffmax\);/.test(sc) && /float vh = Math\.max\(msgsH > 0f \? minVh : 0f, avail\);/.test(sc), '대화 칸 높이는 ffmax 를 넘지 않는다(모자라는 화면에서는 남는 만큼)');
   });
+  await t('s382: 키즈 확인 화면 — 자녀가 여럿이면 좌우로 밀어 다음·이전 자녀로(행동은 엔진의 sw, 앱은 그대로 보낸다)', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/hubV\.setSwipeHost\(new ScreenView\.SwipeHost\(\)/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /sv\.slideNext\(dir\);\s*new Host\(sv\)\.onAction\(a\);/.test(kh), '확인 화면 밀기: 엔진이 준 swL/swR 행동을 Host 로 보낸다');
+    assert.ok(/canSwipe\(\) \{ ScreenCore\.Screen cs = hubV\.currentScreen\(\); return cs != null && \(cs\.swL != null \|\| cs\.swR != null\); \}/.test(kh), 'sw 가 없으면(자녀 한 명) 밀기를 쓰지 않는다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
