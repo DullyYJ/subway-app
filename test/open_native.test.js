@@ -70,7 +70,7 @@ t('OpenCore 는 안드로이드를 쓰지 않는다(순수 계산) · 대본에 
 });
 t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱은 열고 · 누르거나 뒤로 가기로 닫는다', () => {
   const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
-  assert.ok(/if \(b == null\) showOpening\(\)/.test(a), '회전 같은 다시 만들기(b != null)에는 안 띄움');
+  assert.ok(/if \(b == null( && !kidsStart)?\) showOpening\(\)/.test(a), '회전 같은 다시 만들기(b != null)에는 안 띄움');
   const h = fs.readFileSync(N('OpenHost.java'), 'utf8');
   assert.ok(/OpenHost\.show\(this\)/.test(a) && /public static void show\(Activity a\)/.test(h), '길동무와 길동무 키즈가 같은 OpenHost.show 한 갈래를 쓴다');
   assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(h) && /OpenCore\.slotFor\(/.test(h) && /OpenCore\.cast\(sc, sl, ids\)/.test(h) && /OpenCore\.pickIds\(/.test(h) && /K_LAST/.test(h) && /addContentView\(v,/.test(h), '대본을 읽어 칸을 고르고 · 친구 셋은 켤 때마다 무작위(방금 조합 기억)');
