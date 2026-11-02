@@ -65,4 +65,24 @@ for (const f of all) {
 ok(bad.length === 0, '시드 없는 무작위는 허용 목록의 곳에서만' + (bad.length ? ' ← ' + bad.join(', ') : ''));
 for (const [c, a] of Object.entries(ALLOW_RANDOM)) ok((code(c + '.java').match(RULES.random.re) || []).length > 0, `무작위 예외 ${c} 가 아직 쓰인다 — ${a.why.slice(0, 24)}…`);
 
+// ⑤ 괄호 균형(s390): 한 줄 뒤 주석(//)이 같은 줄 코드를 삼키면 { } ( ) 가 어긋난다 — 기기 컴파일(android.jar)이 없는 곳에서도 이 사고를 잡는다
+const strip = s => s.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map(l => {
+  let o = '', q = '';
+  for (let i = 0; i < l.length; i++) {
+    const ch = l[i];
+    if (q) { if (ch === '\\') { i++; continue; } if (ch === q) q = ''; continue; }
+    if (ch === '"' || ch === "'") { q = ch; continue; }
+    if (ch === '/' && l[i + 1] === '/') break;
+    o += ch;
+  }
+  return o;
+}).join('\n');
+const unbal = [];
+for (const f of all) {
+  const s = strip(fs.readFileSync(path.join(DIR, f), 'utf8'));
+  const cnt = ch => s.split(ch).length - 1;
+  if (cnt('{') !== cnt('}') || cnt('(') !== cnt(')') || cnt('[') !== cnt(']')) unbal.push(f.replace('.java', '') + `{${cnt('{') - cnt('}')} (${cnt('(') - cnt(')')} [${cnt('[') - cnt(']')}`);
+}
+ok(unbal.length === 0, '모든 자바 파일의 { } ( ) [ ] 가 맞는다(주석이 코드를 삼키지 않았다)' + (unbal.length ? ' ← ' + unbal.join(', ') : ''));
+
 console.log(`\n${pass} 통과, ${fail} 실패`); process.exit(fail ? 1 : 0);
