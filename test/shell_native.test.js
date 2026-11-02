@@ -876,6 +876,15 @@ function findAndroidJar() {
     assert.ok(/LOC_BUDGET_MS = 1300L/.test(a) && /private Location bestKnownLoc\(\)/.test(a) && /map\.svb = 2200; jf =/.test(a) && /jsonFull, 5000\)/.test(a), 's283b: 위치는 1.3초 안에 안 오면 아는 위치로 진행 · 서버 도착정보 대기 2.2초 · 전체 요청 5초(3초 약속)');
     assert.ok(/map\.takeRefLoc\(\) && hasLocPerm\(\)/.test(a) && /public void setBusLocFresh\(/.test(m) && /refLoc = true; return R_BUS_REF/.test(m), '즐겨찾기 새로고침도 위치를 다시 확인(옮겼으면 주변 정류장 갱신)');
   });
+  await t('s383: 버스 새로고침은 정류장 목록을 보관본 없이 다시 조회(앱 보관본 건너뛰기 + 서버 nf) · TAGO 가 빠뜨린 정류장은 D1 로 채운다', () => {
+    const m = fs.readFileSync(N('MapCore.java'), 'utf8');
+    assert.ok(/setBusLoc\(la, lo\); busRes\.clear\(\); stopsSaved = false; stopsT = 0; stopsFresh = true;/.test(m), '새로고침: 위치를 잡은 뒤 보관본으로 채운 목록을 비운다');
+    assert.ok(/FRESH_GAP_MS = 60000L/.test(m) && /cell\.equals\(freshCell\) && now - freshAt < FRESH_GAP_MS/.test(m), '공공 API 보호: 같은 칸 1분 안 재새로고침은 보관본');
+    assert.ok(/farLL\(map\.busLL, l\.getLatitude\(\), l\.getLongitude\(\), BUS_MOVE_DEG\)\) map\.setBusLoc\(/.test(fs.readFileSync(N('ShellActivity.java'), 'utf8')), '즐겨찾기 새로고침으로 위치가 옮겨진 때는 보관본(정류장 재조회는 주변 새로고침 단추만)');
+    assert.ok(/stopsFresh && !skel \? ",\\"nf\\":1"/.test(m) && /stopsFresh = false; if \(primary\)/.test(m), '서버에 nf=1 을 실어 보낸다 · 일반 위치 설정은 끈다');
+    const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
+    assert.ok(/fresh \? null : await cache\.match/.test(w) && /fresh \? '' : await mapSvKvGet/.test(w) && /b && b\.nf/.test(w), '서버: nf 면 데이터센터 캐시·KV 를 건너뛴다');
+  });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');

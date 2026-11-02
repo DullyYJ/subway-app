@@ -6,7 +6,7 @@ const R = p => path.join(__dirname, '..', p);
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
-const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.mapSvOne = mapSvOne;';
+const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
 function load(extra) {
   const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
   vm.runInNewContext(code, ctx);
@@ -80,6 +80,27 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     off = 6000;
     await post(c.H, { BUSAPI: binding(log3) }, base(true));
     ok(log3.filter(u => /getStationByUid/.test(u)).length === 3, '5초가 지나면 도착정보만 새로 받는다');
+  }
+  // ②-1 s383: 새로고침(f.bus.nf=1)은 정류장 목록 캐시를 건너뛰고 공공 API 에서 새로 받는다
+  {
+    const store = new Map();
+    const caches = { default: { match: async (rq) => store.has(rq.url) ? new Response(store.get(rq.url)) : undefined, put: async (rq, rs) => { store.set(rq.url, await rs.text()); } } };
+    const log1 = [], log2 = [], log3 = [], c = load({ caches });
+    await post(c.H, { BUSAPI: binding(log1) }, base(true));
+    const fb = base(true); fb.f.bus.nf = 1;
+    await post(c.H, { BUSAPI: binding(log2) }, fb);
+    ok(log2.some(u => /getStationByPos/.test(u)), 's383: 새로고침(nf)은 캐시가 있어도 정류장 목록을 다시 조회');
+    await post(c.H, { BUSAPI: binding(log3) }, base(true));
+    ok(!log3.some(u => /getStationByPos/.test(u)), 's383: 새로고침으로 받은 새 목록이 보관본이 된다(그 뒤 일반 열기는 캐시)');
+  }
+  // ②-1b s383: TAGO(tn)가 빠뜨린 정류장은 D1 로 채운다(같은 TAGO 열쇠는 하나로)
+  {
+    const c = load();
+    const tn = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'ICB3A', nodenm: '아라역6번출구', gpslati: 37.5005, gpslong: 127.0, citycode: 23 }] } } } });
+    const d1 = JSON.stringify({ stops: [{ node_id: 'ICB1A', node_nm: '아라역6번출구', lat: 37.5005, lng: 127.0, city_code: '23' }, { node_id: 'ICB1B', node_nm: '아라역8번출구', lat: 37.5012, lng: 127.0, city_code: '23' }] });
+    const st = c.mapBusStops({ bus: { lat: 37.5, lng: 127.0, res: { tn, d1 } } });
+    ok(st.length === 2 && st.some(x => x.nm === '아라역8번출구') && st.filter(x => x.nm === '아라역6번출구').length === 1, 's383: TAGO + D1 합침(같은 정류장은 하나): ' + st.map(x => x.nm).join());
+    ok(c.mapBusStops({ bus: { lat: 37.5, lng: 127.0, res: { tn } } }).length === 1, 'D1 이 없으면 TAGO 만');
   }
   // ②-2 s290: 동시에 같은 도착정보를 부르면 하나로 합친다 · 빈 값은 기억하지 않는다
   {
