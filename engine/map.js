@@ -449,6 +449,7 @@ function mapBusStops(f) {
   if (!s.length) {
     var gg = res.gg ? mapGbisStops(res.gg, la, lo) : [], tn = res.tn ? mapTagoStops(res.tn, la, lo) : [];
     s = mapGGPreferred(la, lo) ? (gg.length ? gg : tn) : (tn.length ? tn : gg);          // 경기(인천 상자 밖)는 GBIS 먼저, 인천 상자 안은 TAGO 먼저
+    if (s === tn && tn.length && res.d1) s = tn.concat(mapD1Stops(res.d1, la, lo));      // s383: TAGO 가 빠뜨린 정류장은 우리 정류장 표(D1)로 채운다 — 같은 TAGO 열쇠라 같은 정류장은 하나로 합쳐진다(원하는 정류장이 안 나온다는 제보)
   }
   if (!s.length && res.d1) s = mapD1Stops(res.d1, la, lo);
   return mapStopOrder(mapDedupStops(s));

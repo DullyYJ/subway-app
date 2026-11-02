@@ -36,17 +36,17 @@ function mapSvAttempts(env, url, seq) {                    // → [() => Promise
   if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
   return out;
 }
-async function mapSvOne0(env, k, url) {                    // → 본문 글(실패는 '')
+async function mapSvOne0(env, k, url, fresh) {                    // → 본문 글(실패는 '')
   var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
   if (cacheable) {
     try {
       if (typeof caches !== 'undefined' && caches.default) {
         cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?k=' + k + '&u=' + encodeURIComponent(url));
-        var hit = await cache.match(ck);
+        var hit = fresh ? null : await cache.match(ck);                                          // s383: 새로고침(fresh)은 보관본을 건너뛰고 공공 API 에서 새로 — 받은 뒤 보관본은 새것으로 덮는다
         if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
       }
     } catch (e0) { cache = null; }
-    var kvb = await mapSvKvGet(env, k, url);                                                   // s290: 이 데이터센터 캐시에 없으면 전국 공용 저장소(KV)에서 — 다른 곳에서 한 번이라도 받았으면 바로 나온다
+    var kvb = fresh ? '' : await mapSvKvGet(env, k, url);                                                   // s290: 이 데이터센터 캐시에 없으면 전국 공용 저장소(KV)에서 — 다른 곳에서 한 번이라도 받았으면 바로 나온다
     if (kvb) {
       if (cache && ck) { try { await cache.put(ck, new Response(kvb, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eK) { /* 무시 */ } }
       return kvb;
@@ -155,8 +155,8 @@ async function mapBusWarmCron(env, nowMs) {
   if (n > 0) { try { await env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); } catch (e3) { /* 다음에 */ } }
   return n;
 }
-function mapSvOne(env, k, url) {                            // → Promise<본문 글> (정류장 목록은 mapSvOne0 의 캐시 · 도착정보는 합치기 + 5초 기억)
-  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url);
+function mapSvOne(env, k, url, fresh) {                            // → Promise<본문 글> (정류장 목록은 mapSvOne0 의 캐시 · 도착정보는 합치기 + 5초 기억)
+  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url, fresh);
   var now = Date.now(), e = MAPSV_MEMO[url];
   if (e && now - e.t < MAPSV_MEMO_MS) return e.p;
   var ent = { t: now, p: null };
@@ -168,7 +168,7 @@ function mapSvOne(env, k, url) {                            // → Promise<본�
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
-  var f = body.f, b = f.bus, res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
+  var f = body.f, b = f.bus, fresh = !!(b && b.nf), res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
   for (round = 0; round < 3; round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
@@ -177,7 +177,7 @@ async function mapSvResolve(env, cap, body, out) {
     var arrWave = need.every(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });
     var slot = new Array(need.length);
     var done = new Array(need.length);
-    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || '')).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
+    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && isFinite(Number(b.lat)) && isFinite(Number(b.lng)) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
     if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
     else if (stopWave) {                                    // s177: 정류장 목록 — 우선순위 앞 출처가 정류장을 주면 나머지(느린 TAGO)는 기다리지 않고 도착정보로 넘어간다. 못 기다린 출처는 빈 값으로 둔다.
