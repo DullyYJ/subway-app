@@ -105,8 +105,11 @@ final class SceneTrain {
     static void phase(SceneCore s, St z) {
         double now = z.nowMs; z.stop = false; z.k = -1; z.toK = -1; z.e = 0; z.dwell = 1e9; z.el = 0; z.rem = 0; z.dur = 0; z.platform = false; z.shift = 0;
         if (!z.posOk) { z.v = 1; return; }
-        Seg cur = null; for (Seg g : z.segs) if (now < g.t1) { cur = g; break; }
-        if (cur == null) { Seg l = z.segs.get(z.segs.size() - 1); z.stop = true; z.k = l.to - z.T.first; z.e = Math.max(0, (now - l.t1) / 1000); z.dwell = 1e9; z.v = 0; z.platform = true; return; }
+        // 탑승 엔진의 시각표는 환승 뒤 다른 호선·지난 구간까지 이어서 온다 — 이 객실 장면의 역(first … first+n-1) 안에 든 구간만 쓴다(밖의 번호로 역을 찾다 죽지 않게)
+        int lo = z.T.first, hi = z.T.first + z.T.names.size() - 1;
+        Seg cur = null, last = null; for (Seg g : z.segs) { if (g.from < lo || g.to > hi) continue; last = g; if (cur == null && now < g.t1) cur = g; }
+        if (last == null) { z.v = 1; return; }
+        if (cur == null) { Seg l = last; z.stop = true; z.k = l.to - z.T.first; z.e = Math.max(0, (now - l.t1) / 1000); z.dwell = 1e9; z.v = 0; z.platform = true; return; }
         if (now < cur.t0) { z.stop = true; z.k = cur.from - z.T.first; z.e = Math.max(0, (now - cur.a) / 1000); z.dwell = Math.max(1, (cur.t0 - cur.a) / 1000); z.v = 0; z.platform = true; return; }
         z.el = (now - cur.t0) / 1000; z.rem = (cur.t1 - now) / 1000; z.dur = (cur.t1 - cur.t0) / 1000; z.k = cur.from - z.T.first; z.toK = cur.to - z.T.first;
         double ta = Math.min(7, z.dur * .25), td = Math.min(8, z.dur * .3);

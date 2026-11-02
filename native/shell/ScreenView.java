@@ -550,7 +550,7 @@ public class ScreenView extends View {
         ScreenCore.applyFold(screen, foldOpen, foldSig);                                           // s307: 접힌 고르기 목록은 이번 배치에 접힌 채로 · 고른 줄이 바뀐 새 화면이면 다시 접는다
         { ScreenCore.Layout pl = takePre(getWidth() / dpr, getHeight() / dpr); lay = pl != null ? pl : ScreenCore.layout(screen, getWidth() / dpr, measurer, openKey, getHeight() / dpr); }
         PerfLog.layout(plt0);
-        if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; }
+        if (!hasPager()) { pgPage = 0; pgPos = 0f; pgDragOn = false; sceneRetries = 0; }
         if (lay.bandTop < 0f) { bandSig = ""; bandX = 0f; }
         else if (!lay.bandSig.equals(bandSig)) { bandSig = lay.bandSig; bandX = lay.mkBody && lay.mk != null ? ScreenCore.clamp(lay.mk.x(lay.mk.r) - lay.bandL - lay.bandView / 2f, lay.bandMax()) : 0f; }      // 새 경로면 내 위치(없으면 처음)가 보이게
         if (lay.ctrSig.length() == 0) ctrDone = null;
@@ -942,12 +942,13 @@ public class ScreenView extends View {
     }
     /** 두 쪽 카드에서 객실 장면(둘째 쪽)이 보이는 정도(0~1) — 미는 위치(pgPos)에서 바로 계산한다. 제목줄이 이 값으로 글을 바꿔 보인다. */
     private float pgSceneShare() {
+        if (sceneFailed) return 0f;                                           // 장면이 죽었으면 쪽 위치가 어디에 멈췄든 제목은 첫째 것만
         float o = pgPos; int base = (int) Math.floor(o); float fr = o - base; int pa = ((base % 2) + 2) % 2;
         return Math.max(0f, Math.min(1f, pa == 1 ? 1f - fr : fr));
     }
     /** 두 쪽 카드 그리기: 틀(둥근 카드)은 그대로 두고 안쪽만 가로로 민다. 0쪽=원래 칸들(혼잡도), 1쪽=객실 장면. 두 쪽이 끝없이 돈다(왼쪽·오른쪽 어느 쪽으로 밀어도 다음 쪽). 반환: 건너뛸 칸 수. */
     private int drawPager(Canvas cv, ScreenCore.Item pn, int i, long now) {
-        float o = pgStep(now);
+        float o = pgPos;                                                     // 박자는 그리기 맨 앞(drawAll)에서 한 번만 나아간다 — 제목줄도 같은 값을 본다
         drawItem(cv, pn);
         cv.save();
         cv.clipRect(pn.x + 1f, pn.y + 1f, pn.x + pn.w - 1f, pn.y + pn.h - 1f);
@@ -981,6 +982,22 @@ public class ScreenView extends View {
     private SceneDriver scene;
     private String sceneJson = "";
     private boolean sceneFailed, sceneDrawn, sceneTouch;
+    private int sceneRetries; private String sceneErr = "";
+    private static final int SCENE_RETRY_MAX = 3;
+    private final Runnable sceneRetryRun = new Runnable() { @Override public void run() {          // 장면이 한 번 죽었다고 두 쪽 카드를 영영 끄지 않는다 — 잠시 뒤 스프라이트부터 다시 만든다
+        if (!sceneFailed) return;
+        if (scene != null) { scene.destroy(); scene = null; }
+        sceneJson = ""; sceneFailed = false; invalidate();
+    } };
+    /** 장면(SceneDriver)이 알려 온 오류. 쪽 위치를 첫 쪽으로 되돌려(제목이 반쯤 겹친 채 멈추지 않게) 한 쪽짜리 카드로 두고, 잠시 뒤 다시 시도한다(최대 3번). */
+    private void sceneFail(String message) {
+        sceneFailed = true; sceneErr = message == null ? "" : message;
+        pgPage = 0; pgPos = 0f; pgDragOn = false; pgHit = null; pgAnim = false;
+        android.util.Log.w("ScreenView", "scene failed: " + sceneErr);
+        ui.removeCallbacks(sceneRetryRun);
+        if (sceneRetries < SCENE_RETRY_MAX) { sceneRetries++; ui.postDelayed(sceneRetryRun, 1500L * sceneRetries); }
+        invalidate();
+    }
     private float sceneL, sceneT, sceneW, sceneH;          // 마지막으로 그린 장면 자리(화면 dp)
     private final Path sceneClip = new Path();
     private final RectF sceneRect = new RectF();
@@ -994,7 +1011,7 @@ public class ScreenView extends View {
         if (scene == null) {
             scene = new SceneDriver(getContext(), new SceneDriver.Listener() {
                 @Override public void onReady() { invalidate(); }
-                @Override public void onError(String message) { sceneFailed = true; invalidate(); }
+                @Override public void onError(String message) { sceneFail(message); }
                 @Override public void onHeld() { }
                 @Override public void onHot(boolean hot) { }
             });
@@ -2279,7 +2296,7 @@ public class ScreenView extends View {
         cv.drawRect(0, 0, getWidth(), getHeight(), p);
         if (lay == null) return;
         boolean moving = false;
-        sceneDrawn = false; pgAnim = false; hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; liveDrawn = false; liveN = 0; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
+        sceneDrawn = false; pgAnim = false; if (!sceneFailed && hasPager()) pgStep(now); hrDrawn = false; glowDrawn = false; tdDrawn = false; tdAct = false; tdAnim = false; marqDrawn = false; mqDrawn = false; skelDrawn = false; lbDrawn = false; liveDrawn = false; liveN = 0; runDrawn = false; bcAnim = false; spAnim = false; rtAnim = false; arAnim = false; msgAnimOn = false; tmDrawn = false; cdDrawn = false; brxPingN = 0; inbarBusy = false;
         if (ssOn) {                                                                       // 핀을 눌러 카드로 부드럽게 가는 중
             float f = (now - ssT0) / 350f;
             if (f >= 1f) { f = 1f; ssOn = false; }
@@ -2697,7 +2714,8 @@ public class ScreenView extends View {
     /** 카드 위 제목줄(웹 .sec): 제목(글자 사이 0.4) · 알약 · 가운데 작은 글 · 오른쪽 테두리 단추. */
     private void drawSec(Canvas cv, ScreenCore.Item it) {
         // 제목이 둘이면(두 쪽 카드: 혼잡도 ↔ 객실 친구들) 옆으로 미는 정도에 맞춰 첫째 글이 사라지며 둘째 글이 나타난다(손가락을 따라 되돌아가기도 한다)
-        float sw = it.lines.length > 1 ? pgSceneShare() : 0f, keep = 1f - sw;
+        float sh = it.lines.length > 1 ? pgSceneShare() : 0f;
+        float sw = Math.max(0f, Math.min(1f, sh * 2f - 1f)), keep = Math.max(0f, Math.min(1f, 1f - sh * 2f));      // 차례로 바뀐다: 앞 글이 먼저 사라지고(0~½) 뒤 글이 나타난다(½~1) — 두 글이 한꺼번에 겹쳐 보이지 않는다
         tp.setLetterSpacing(0.4f / it.size);
         if (keep > 0.003f) { setText(it.size, false, alpha(pal[R_SUB], keep)); tp.setLetterSpacing(0.4f / it.size); cv.drawText(it.lines[0], it.textX, base(it.y, it.h, 0) - 3f * sw, tp); }
         if (sw > 0.003f) { setText(it.size, false, alpha(pal[R_SUB], sw)); tp.setLetterSpacing(0.4f / it.size); cv.drawText(it.lines[1], it.textX, base(it.y, it.h, 0) + 3f * keep, tp); }
@@ -3969,6 +3987,7 @@ public class ScreenView extends View {
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (tiles != null) { tiles.unwatch(tileTick); tiles = null; tmValue = ""; }
+        ui.removeCallbacks(sceneRetryRun); sceneRetries = 0;
         if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();
         // 창이 닫히며 자식들을 하나씩 떼는 도중에 같은 부모에서 입력칸을 지우면 부모의 자식 목록이 어긋나 NullPointerException(ViewGroup.dispatchDetachedFromWindow)이 난다 — 떼는 일이 끝난 뒤에 지운다
