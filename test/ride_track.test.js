@@ -164,13 +164,17 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   ok(z.zero.stops[0].state === 'near' && !z.zero.stops[0].apply, '15초 전 창 안: near 이지만 아직 apply 아님(도착 시각 3초 전부터) ' + JSON.stringify(z.zero.stops[0]));
   z = Z(-2, [{ t: -8 }]);
   ok(z.zero.stops[0].state === 'near' && z.zero.stops[0].apply, '도착 2초 전: near + apply');
-  z = Z(5, [{ t: -3, lng: 3150 / KX }]);
-  ok(z.zero.stops[0].state === 'near' && z.zero.stops[0].apply, '정류장에서 150m(정확도 20 빼면 130m) → near');
+  z = Z(5, [{ t: -3, lng: 3120 / KX }]);
+  ok(z.zero.stops[0].state === 'near' && z.zero.stops[0].apply, '정류장에서 120m(정확도 20 빼면 100m) → near');
   const E = 111190;   // 적도(시험 좌표계)에서 1도 = 111.19km — 정류장 기준 동쪽 m 만큼
-  z = Z(5, [{ t: -3, lng: 3000 / KX + 215 / E, acc: 20 }]);
-  ok(z.zero.stops[0].state === 'near', '215m − 정확도 20 = 195m ≤ 200m → near');
-  z = Z(5, [{ t: -3, lng: 3000 / KX + 235 / E, acc: 20 }]);
-  ok(z.zero.stops[0].state === 'pending' && z.zero.stops[0].distM > 200, '235m − 20 = 215m 는 중간 역 기준(200m) 밖 → near 아님(창 안이라 pending) ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 165 / E, acc: 20 }]);
+  ok(z.zero.stops[0].state === 'near', '165m − 정확도 20 = 145m ≤ 150m → near (s380: 중간 역 반경 200 → 150m)');
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 185 / E, acc: 20 }]);
+  ok(z.zero.stops[0].state === 'pending' && z.zero.stops[0].distM > 150, '185m − 20 = 165m 는 중간 역 기준(150m) 밖 → near 아님(창 안이라 pending) ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 300 / E, acc: 100 }]);
+  ok(z.zero.stops[0].state === 'pending' && z.zero.stops[0].distM >= 249, 's380: 정확도 100m 좌표가 300m 밖이면 오차 반영은 50m 까지만 → 250m 로 보아 near 아님 ' + JSON.stringify(z.zero.stops[0]));
+  z = Z(5, [{ t: -3, lng: 3000 / KX + 60 / E, acc: 120 }]);
+  ok(z.zero.stops[0].state === 'pending' && z.zero.stops[0].n === 0, 's380: 정확도 120m 좌표는 증거로 쓰지 않는다(100m 이하만)');
   z = Z(5, []);
   ok(z.zero.stops[0].state === 'pending' && !z.zero.stops[0].apply, '창 안에 위치가 없으면 pending(벌 없음)');
   z = Z(40, [{ t: -2, lng: 3000 / KX }]);

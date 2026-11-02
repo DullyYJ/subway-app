@@ -41,8 +41,8 @@ t('s321: 서 있는 도중 GPS 영점이 잡혀도 15초 타이머는 리셋하�
   const b = rideStandby({ nowMs: t1, fixes: [], state: zero });
   assert.strictEqual(b.state.dw.s, snap.s, '영점이 잡혀도 정차 시작은 그대로(리셋 없음)');
   assert.ok(b.pos.from === 2 && b.pos.ratio === 0 && !b.pos.moving, '여전히 정차');
-  const end = snap.s + 15000, c = rideStandby({ nowMs: end + 6000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) });
-  assert.ok(c.pos.ratio > 0 || c.pos.from > 2, '15초 뒤에는 이동 ' + JSON.stringify(c.pos).slice(0, 120));
+  const end = snap.s + 18000, c = rideStandby({ nowMs: end + 6000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) });
+  assert.ok(c.pos.ratio > 0 || c.pos.from > 2, '18초 뒤에는 이동 ' + JSON.stringify(c.pos).slice(0, 120));
 });
 t('s321: GPS 도착 확정이 처음이면 그 확정 시각부터 15초(통과 시각이 더 일러도) · 이미 멀리 간 마커는 되돌리지 않는다', () => {
   const st0 = mkState(); st0.eta.passes = [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }];
@@ -58,8 +58,8 @@ t('s321: GPS 도착 확정이 처음이면 그 확정 시각부터 15초(통과 
   const b = rideStandby({ nowMs: early + 5000, fixes: [], state: g2 });
   assert.ok(b.state.dw && b.state.dw.i === 2 && b.state.dw.g === 1 && b.state.dw.s === early + 5000, 'GPS 확정 시각 = 정차 시작 ' + JSON.stringify(b.state.dw));
   assert.ok(b.pos.from === 2 && b.pos.ratio === 0 && !b.pos.moving, '확정 직후 정차(노랑)');
-  const c = rideStandby({ nowMs: early + 5000 + 14000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) }), d = rideStandby({ nowMs: early + 5000 + 17000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) });
-  assert.ok(c.pos.ratio === 0 && d.pos.ratio > 0, '14초엔 정차 · 17초엔 이동');
+  const c = rideStandby({ nowMs: early + 5000 + 17000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) }), d = rideStandby({ nowMs: early + 5000 + 20000, fixes: [], state: JSON.parse(JSON.stringify(b.state)) });
+  assert.ok(c.pos.ratio === 0 && d.pos.ratio > 0, '17초엔 정차 · 20초엔 이동');
 });
 t('s321: 지하라 GPS 가 늦게 들어와 시각표보다 일찍 도착을 확정해도(간석오거리 18:00 vs 시각표 18:01) 확정한 순간부터 15초 선다', () => {
   let st = mkState(), conf = null, still = [];
@@ -178,9 +178,9 @@ t('s379: 실시간 없는 노선은 문 열림 GPS 가 길게 잡혀도 정차�
   const fin = rideStandby({ nowMs: at(12, 56, 0), fixes: [], state: JSON.parse(JSON.stringify(st)) });
   assert.ok(fin.state.etaMs, 'etaMs'); 
 });
-t('s379: 실시간 없는 노선의 뒤 역 도착은 20초 당겨 보이고 · 실시간 노선은 그대로', () => {
+t('s380: 실시간 없는 노선의 뒤 역 도착은 10초 당겨 보이고(s379 의 20초에서 10초 미룸) · 실시간 노선은 그대로', () => {
   const a = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState(NRT) }), b = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState('1호선') });
-  for (let i = 2; i <= 5; i++) assert.strictEqual(b.state.etaMs[i] - a.state.etaMs[i], 20000, i + '번 역 20초 차이 ' + (b.state.etaMs[i] - a.state.etaMs[i]));
+  for (let i = 2; i <= 5; i++) assert.strictEqual(b.state.etaMs[i] - a.state.etaMs[i], 10000, i + '번 역 10초 차이 ' + (b.state.etaMs[i] - a.state.etaMs[i]));
   assert.strictEqual(a.state.etaMs[1], b.state.etaMs[1], '승차(영점) 역은 그대로');
 });
 t('s379: 지난 역의 시각은 이후 걸음에서 바뀌지 않는다(확정역 잠금)', () => {
