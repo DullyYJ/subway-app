@@ -85,7 +85,15 @@ public final class MapCore {
     /** s383: 새로고침으로 위치를 잡은 직후 true — 정류장 목록을 보관본(기기 · 서버 캐시) 없이 공공 API 에서 새로 받는다(원하는 정류장이 안 나온다는 제보). */
     public boolean stopsFresh;
     /** 새로고침(아래로 당기기 · 🔄 · 📍): 새로 확인한 위치로 바꾸고 정류장 목록도 보관본 없이 다시 조회한다(s383 — 보관본·서버 캐시를 건너뛴다). 처음 켤 때·탭 전환은 보관본을 써 빠르게 뜬다. */
-    public void setBusLocFresh(double la, double lo) { setBusLoc(la, lo); busRes.clear(); stopsSaved = false; stopsT = 0; stopsFresh = true; }
+    public void setBusLocFresh(double la, double lo) {
+        long now = System.currentTimeMillis();
+        String cell = cellOf(la, lo);
+        if (cell.equals(freshCell) && now - freshAt < FRESH_GAP_MS) { setBusLoc(la, lo); return; }          // 공공 API 보호: 같은 칸을 1분 안에 또 새로고침하면 방금 새로 받아 둔 보관본을 쓴다
+        freshCell = cell; freshAt = now;
+        setBusLoc(la, lo); busRes.clear(); stopsSaved = false; stopsT = 0; stopsFresh = true;
+    }
+    private static final long FRESH_GAP_MS = 60000L;
+    private static String freshCell = ""; private static long freshAt;
     /** 즐겨찾기 새로고침도 현재 위치를 다시 확인해야 한다 — mp.rf 가 켜 두고, 껍데기가 한 번 읽는다. */
     private boolean refLoc;
     public boolean takeRefLoc() { boolean r = refLoc; refLoc = false; return r; }

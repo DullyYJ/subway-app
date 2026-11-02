@@ -3361,7 +3361,7 @@ public class ShellActivity extends Activity {
                 busRetryN = 0;
                 if (map.takeRefLoc() && hasLocPerm()) {                                      // 즐겨찾기 새로고침: 도착정보만이 아니라 현재 위치도 다시 확인(옮겼으면 주변 정류장도 그 동네로 — 즐겨찾기는 그대로)
                     locateFresh(REQ_MAP_LOC, new LocCb() {
-                        @Override public void fix(Location l) { if (farLL(map.busLL, l.getLatitude(), l.getLongitude(), BUS_MOVE_DEG)) map.setBusLocFresh(l.getLatitude(), l.getLongitude()); loadMapBody(body, true); }
+                        @Override public void fix(Location l) { if (farLL(map.busLL, l.getLatitude(), l.getLongitude(), BUS_MOVE_DEG)) map.setBusLoc(l.getLatitude(), l.getLongitude());       // s383: 옮겼을 때는 보관본 그대로(공공 API 보호) — 정류장을 다시 조회하는 것은 주변 새로고침 단추뿐 loadMapBody(body, true); }
                         @Override public void fail(boolean noperm) { loadMapBody(body, true); }
                     });
                 } else loadMapBody(body, true);
