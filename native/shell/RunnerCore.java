@@ -32,6 +32,13 @@ public final class RunnerCore {
         }
     }
 
+    /** 시각(ms)에서 정해지는 0 이상 1 미만의 값(무작위 아님 — 같은 시각이면 같은 값). 뷰가 난수를 뽑지 않도록 pick 의 r 로 쓴다. */
+    public static double unit(long ms) {
+        long x = ms * 0x9E3779B97F4A7C15L;
+        x ^= x >>> 32; x *= 0xD6E8FEB86659FD93L; x ^= x >>> 32;
+        return (x & 0xFFFFFFFFL) / 4294967296.0;
+    }
+
     /** 방금 나온 것(prev)이 아닌 캐릭터 하나. r 은 0 이상 1 미만의 무작위 값(시험이 고정할 수 있게 밖에서 받는다). */
     public static String pick(String prev, double r) {
         int cnt = 0; String[] a = new String[ORDER.length];

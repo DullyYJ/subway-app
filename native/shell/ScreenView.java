@@ -1075,14 +1075,14 @@ public class ScreenView extends View {
     private void drawRunner(Canvas cv, ScreenCore.Item it) {
         long now = SystemClock.uptimeMillis();
         if (runId.length() == 0 || now - runLast > 400L) {                                   // 새로 보이기 시작 — 방금 나온 것이 아닌 캐릭터를 하나 뽑는다
-            runId = RunnerCore.pick(runPrev, Math.random()); runPrev = runId; runT0 = now; runBorn = now;
+            runId = RunnerCore.pick(runPrev, RunnerCore.unit(now)); runPrev = runId; runT0 = now; runBorn = now;
             RunnerArt.warm(getContext(), runId, new Handler(Looper.getMainLooper()), new RunnerArt.Ready() { @Override public void onSheet() { post(runReady); } });
         }
         runLast = now;
         float wc = it.w, hc = ScreenCore.RUN_TRACK_H;
         RunnerCore.Frame f = RunnerCore.at(runId, now - runT0, wc);
         if (f.done) {                                                                            // 화면을 다 가로질렀다 → 다음 캐릭터
-            runId = RunnerCore.pick(runId, Math.random()); runPrev = runId; runT0 = now;
+            runId = RunnerCore.pick(runId, RunnerCore.unit(now)); runPrev = runId; runT0 = now;
             f = RunnerCore.at(runId, 0L, wc);
         }
         String key = f.intro ? runId + "_intro" : runId;
