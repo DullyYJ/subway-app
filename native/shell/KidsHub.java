@@ -137,6 +137,17 @@ public final class KidsHub {
         hubV.setDpr(dpr);
         hubV.setPalette(ShellCore.palette(ShellCore.theme(st)));
         hubV.setListener(new Host(null));
+        hubV.setSwipeHost(new ScreenView.SwipeHost() {                        // s382: 자녀가 여럿이면 확인 화면을 좌우로 밀어 다음·이전 자녀로 — 어느 자녀로 갈지(kc.<자녀>)는 엔진이 화면의 sw 에 줬고, 앱은 그 행동을 그대로 보낸다(새 화면은 그 자녀의 지도·뭐하니·퀘스트·대화)
+            @Override public boolean onSwipe(ScreenView sv, int dir) {
+                ScreenCore.Screen cs = sv.currentScreen();
+                ScreenCore.Act a = cs == null ? null : (dir == -1 ? cs.swL : cs.swR);
+                if (a == null) return true;
+                sv.slideNext(dir);
+                new Host(sv).onAction(a);
+                return true;
+            }
+            @Override public boolean canSwipe() { ScreenCore.Screen cs = hubV.currentScreen(); return cs != null && (cs.swL != null || cs.swR != null); }
+        });
         layer.addView(hubV, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         noteV = new ScreenView(a);                                           // 짧은 안내 한 줄(아래 토스트 대신 위에 잠깐 뜨는 알약) — 글은 엔진이 준 것
         noteV.setDpr(dpr);
