@@ -890,6 +890,12 @@ function findAndroidJar() {
     assert.ok(/float hh = bottom \? sh : Math\.min\(dp, sh \* dg\.maxh\)/.test(k) && /if \(bottom\) w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(k) && !/sh \* 0\.72f/.test(k), '대화방 창이 화면 전체(옛 72% 높이는 키보드에 입력줄이 가렸다)');
     assert.ok(/SOFT_INPUT_ADJUST_RESIZE/.test(k) && /if \(!bottom\) \{ w\.addFlags\(WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(k) && /Type\.systemBars\(\) \| android\.view\.WindowInsets\.Type\.ime\(\)/.test(k) && /closeSheet\(false\); \} \}\);\s*col\.addView\(back/.test(k), '키보드에 맞춰 줄어듦 · 흐림 없음 · 키보드/상태줄 여백 · 돌아가기');
   });
+  await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 키즈 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
+    const k = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
+    assert.ok(/m\.put\("mine", true\); m\.put\("un", true\);/.test(k), '방금 보낸 글(낙관적 표시)도 안 읽음으로');
+    assert.ok(/static volatile KidsHub hub;/.test(kp) && /h != null && h\.viewing\(\)\) return;/.test(kp) && !/KidsPush\.fg/.test(k) && /public boolean viewing\(\) \{ return open && !paused; \}/.test(k), '알림 숨김: 키즈 화면을 볼 때만(앱이 앞이어도 다른 탭이면 알림)');
+    assert.ok(/n\.un = optBool\(m, "un", false\)/.test(sc) && /it\.unW = n\.un/.test(sc) && /it\.unW > 0f\) \{ setText\(ScreenCore\.MSG_TIME, true, pal\[R_GOLD\]\); cv\.drawText\("1"/.test(sv), '말풍선 un → 시각 앞 노란 1');
+  });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), cm = fs.readFileSync(N('CmCore.java'), 'utf8'), al = fs.readFileSync(N('CommuteAlarm.java'), 'utf8');
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
@@ -1132,7 +1138,7 @@ function findAndroidJar() {
   });
   await t('s375: 키즈 화면 미리 받기 + 오른쪽에서 왼쪽 슬라이드 · 지도 두 번 탭 자녀 위치 · 깜박이는 점 여럿', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
-    assert.ok(/public void preload\(\)/.test(kh) && /hubPre = ScreenCore\.load\(js\)/.test(kh) && /if \(!open\) preload\(\); \} \}, 2500L\)/.test(kh) && /public void resume\(\) \{ paused = false; KidsPush\.fg = true; if \(!open\) preload\(\);/.test(kh), '키즈 화면을 홈에서 미리 받아 해석까지 해 둔다');
+    assert.ok(/public void preload\(\)/.test(kh) && /hubPre = ScreenCore\.load\(js\)/.test(kh) && /if \(!open\) preload\(\); \} \}, 2500L\)/.test(kh) && /public void resume\(\) \{ paused = false; KidsPush\.hub = this; if \(!open\) preload\(\);/.test(kh), '키즈 화면을 홈에서 미리 받아 해석까지 해 둔다');
     assert.ok(/hubV\.setScreen\(pre, !first\)/.test(kh) && /addOnPreDrawListener/.test(kh) && /translationX\(0f\)\.setDuration\(200L\)/.test(kh), '열 때 미리 받은 화면을 먼저 꽂고 첫 프레임에 오른쪽에서 왼쪽으로 민다');
     assert.ok(/private void tmHome\(\)/.test(sv) && /nt - tmTapT < 380L/.test(sv) && /tmLp\.length\(\) > 0 && tmTapT > 0L/.test(sv) && /!tmOnBtn\(lx, ly\)/.test(sv), '장소 등록 지도를 두 번 탭하면 자녀 위치로');
     assert.ok(/liveN > 1\) postInvalidateDelayed\(33L\)/.test(sv) && /liveShCache/.test(sv), '깜박이는 점이 여러 줄에 있어도 모두 깜박인다');
