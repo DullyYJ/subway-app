@@ -198,7 +198,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(b.info.view === 'bus' && b.info.bus.st === 'noloc' && JSON.stringify(b.body).includes('mp.loc') && b.head[0].t === 'btog' && b.head[0].v === 'p', '버스: 위치 없으면 안내 + 내 위치 단추(토글 줄은 머리에 고정)');
   b = mk({ lat: 37.5, lng: 127.0, res: {} });
   ok(b.info.bus.st === 'need' && b.info.bus.need.map(n => n.k).join() === 'tp,gg,tn,d1' && /getStationByPos\?tmX=127&tmY=37\.5/.test(b.info.bus.need[0].url) && /busstationservice\/v2\/getBusStationAroundListv2\?x=127&y=37\.5&format=json/.test(b.info.bus.need[1].url) && /gpsLati=37\.5&gpsLong=127/.test(b.info.bus.need[2].url), '버스 1단계: 서울 좌표면 TOPIS + 경기 GBIS + TAGO 주소를 요청');
-  ok(b.head[0].items.map(i => i.label).join() === '📍 주변 정류장,⭐ 즐겨찾기' && b.head[0].items[0].on && b.head[0].rf.act.v === 'mp.rf' && b.head[1].t === 'tmap' && b.head[1].live === 1 && b.head[1].pts.length === 1 && b.head[1].pts[0].k === 'm' && b.head[1].pts[0].la === 37.5, '정류장을 찾는 중에도 토글 줄 + 내 위치 지도가 머리에 먼저 뜬다');
+  ok(b.head[0].items.map(i => i.label).join() === '📍 주변 정류장,⭐ 즐겨찾기' && b.head[0].items[0].on && !b.head[0].rf && b.head[1].t === 'tmap' && b.head[1].live === 1 && b.head[1].pts.length === 1 && b.head[1].pts[0].k === 'm' && b.head[1].pts[0].la === 37.5, '정류장을 찾는 중에도 토글 줄 + 내 위치 지도가 머리에 먼저 뜬다');
   b = mk({ lat: 35.1, lng: 129.0, res: {} });
   ok(b.info.bus.need.map(n => n.k).join() === 'tn,d1' && /\/bus-stops\?lat=35\.1&lng=129&radius=450$/.test(b.info.bus.need[1].url), '서울 밖이면 TAGO + 서버 정류장 표(D1)');
   b = mk({ lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '' } });
