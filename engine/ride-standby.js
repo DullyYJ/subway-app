@@ -782,7 +782,7 @@ function rsActs(st, req, now, notes) {
 //   마커는 멈추거나 느려질 수는 있어도 뒤로 가지 않는다. 승차 되돌리기·다른 여정이면 풀린다.
 var RS_DOOR_M = 250, RS_DOOR_ACC_M = 80, RS_DOOR_LOST_MS = 10000, RS_DOOR_MAX_MS = 180000;      // s322: 문 열림(역 근처 GPS) 판단 — 반경 · 최대 오차 · 끊김으로 보는 시간 · 최대 정차
 var RS_GO_WIN_MS = 12000, RS_GO_SPAN_MS = 6000, RS_GO_MOVE_M = 40;      // s323: 신호가 안 끊겨도(지상 · 고가) 움직이기 시작하면 출발 — 최근 12초(4점 이상 · 6초 이상)의 앞 절반→뒤 절반 무게중심이 RS_XGO_MPS 이상 · 40m 이상 역에서 멀어짐
-var RS_DWELL_MS = 15000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
+var RS_DWELL_MS = 18000;      // s321: 역에 닿은 마커가 서 있는 시간(ride-eta stopDwellSec 와 같은 값)
 // ★ s379 (YJ: "확정역은 시간이 바뀌면 안 돼 — 지나온 역의 도착 시간을 건드니까 뒤가 다 꼬인다"): 이미 지난 역(도착 시각 ≤ 지금)의 시각을 처음 지나는 걸음에 붙잡아 st.fz.m 에 둔다. 이후 계산은 입력(ein.frozen)으로 그 값을 받아 지난 역을 고정한다.
 //   GPS 영점(gps 통과)이 새로 잡히면 그 역은 실제 통과 시각으로 한 번 갱신한다(g=1 이후엔 다시 안 바꾼다).
 function rsFzKey(eta) { var nd = (eta && eta.nodes) || []; return nd.length + '|' + ((nd[0] && nd[0].name) || '') + '|' + ((nd[nd.length - 1] && nd[nd.length - 1].name) || ''); }

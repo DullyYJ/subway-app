@@ -75,7 +75,7 @@ var RIDE_TRACK_DEFAULTS = {
   busStopNearReachM: 200, // 뒤 정류장 '닿았다' 반경
   busGpsSnapM: 500,       // 버스 탑승 중 GPS 를 정류장 투영에 쓰는 반경(지하철/기본 200)
   busAdvanceSec: 8,       // 버스 탑승 중 GPS 로 정류장을 하나 더 올려도 되는 간격(기본 15)
-  trailMaxSpeedMps: 60, zeroLeadSec: 25, zeroWinSec: 55, zeroSlideSec: 45, zeroNearM: 200, zeroFinalNearM: 250, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30,
+  trailMaxSpeedMps: 60, zeroLeadSec: 25, zeroWinSec: 55, zeroSlideSec: 45, zeroNearM: 150, zeroFinalNearM: 250, zeroAccCapM: 50, zeroAccMaxM: 100, zeroFarM: 600, zeroApplyLeadSec: 3, zeroKeepSec: 20, zeroFinalKeepMin: 30,
   // ★ 2026-10-13 (YJ: "시간표보다 빠르게 선학에 왔어. 위치는 맞혔는데 시간이 안맞춰져. 시간도 같이 밀거나 당기며 계속 영점"): 시각표 창(도착 15초 전~30초 뒤) 밖에서 닿은 열차(일찍·늦게)도 놓치지 않도록
   //   pass:true 인 정류장은 '표시 도착 시각 앞뒤' 넓은 창에서 GPS 가 그 정류장 150m 안(정확도 60m 이하 좌표)에 든 가장 가까운 순간을 통과 시각(passMs)으로 돌려준다 — 앱은 그 시각을 통과 증거로 엔진에 다시 보낸다.
   passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 100,   // ★ 2026-10-26 s230 (YJ: 지하에서 영점이 안 잡혀 마커가 열차보다 2~3정거장 뒤처짐): 정확도 60 → 100m — 터널·역사 안 좌표는 정확도가 60m 넘게 나와 전부 버려졌다
@@ -315,8 +315,8 @@ function rtZeroStop(s, tr, now, O) {
   for (var i = 0; i < tr.length; i++) {
     var q = tr[i];
     if (q.ts < from || q.ts > to + 1000) continue;
-    if (q.acc != null && q.acc > 150) continue;
-    var acc = q.acc == null ? 50 : q.acc, d = rtHav(q.lat, q.lng, s.lat, s.lng) - acc;
+    if (q.acc != null && q.acc > O.zeroAccMaxM) continue;      // s380: 정확도 150 → 100m 이하만 증거
+    var acc = Math.min(q.acc == null ? 50 : q.acc, O.zeroAccCapM), d = rtHav(q.lat, q.lng, s.lat, s.lng) - acc;      // s380: 오차 반경을 거리에서 빼 주는 양은 50m 까지만(정확도 150m 좌표가 350m 밖에서 '도착'으로 잡히던 것을 막는다)
     n++;
     if (best == null || d < best) best = d;
     if (d <= R) near++; else if (d > O.zeroFarM) far++;
