@@ -607,6 +607,9 @@ public class ScreenJvmTest {
         ok(near(m0.x, 12f) && m0.w <= (336f * 0.74f) + 0.01f && m0.lines.length >= 2, "남의 말풍선: 왼쪽 12, 폭은 336 의 74% 이하, 긴 글은 줄바꿈");
         ok(near(m1.x + m1.w, 12f + 336f) && near(m1.w, M.width("안녕하세요", 13f, false) + 22f), "내 말풍선: 오른쪽 끝, 폭은 글 + 좌우 11");
         ok(m0.tag.equals("(2호선) 지하철러") && m1.tag.length() == 0, "남의 것에만 글쓴이 줄");
+        { String unJ = mineJ.replace("\"mine\":true", "\"mine\":true,\"un\":true");                                    // s385: 상대가 아직 안 읽은 내 글 — 시각 앞에 '1' 자리
+          ScreenCore.Layout UL = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"chat\",\"head\":[],\"body\":[" + mineJ + "," + unJ + "]}"), 360f, M);
+          ok(UL.body[0].unW == 0f && UL.body[1].unW > 0f && UL.body[1].labelW > UL.body[0].labelW && near(UL.body[1].h, UL.body[0].h), "s385: un 이면 시각 앞에 안 읽음 '1' 자리(높이는 그대로) — 읽으면 없다"); }
         ok(near(m0.h, 11f * 1.35f + 3f + 16f + 13f * 1.45f * m0.lines.length + 3f + 10f) && near(m1.y, m0.h + 10f), "말풍선 높이 = 글쓴이 + 풀 + 글 + 시각, 사이 10");
         ScreenCore.Act ra = CHL.hitBody(m0.zoneX + 2f, m0.zoneY + 3f), rb2 = CHL.hitBody(m0.x + 5f, m0.sy + 8f);
         ok(ra != null && ra.v.equals("ch.x.7") && rb2 == null, "'신고' 글자 자리만 눌리고 말풍선 몸통은 안 눌린다");
