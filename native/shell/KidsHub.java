@@ -678,7 +678,7 @@ public final class KidsHub {
         if (act.isFinishing() || act.isDestroyed()) return;
         if (sheetD != null && sheetD.isShowing() && sheetKind.equals(kind)) { sheetJson = js; sheetV.setScreen(sc, true); return; }
         closeSheet(true);
-        final boolean bottom = "chat".equals(kind);                         // 대화 팝업은 아래에서 올라온다. 나머지는 가운데에 같은 넓은 폭으로 뜬다
+        final boolean bottom = "chat".equals(kind);                         // 대화방(s384)은 카톡처럼 전체 화면 — 아래에서 올라오고, 키보드가 올라와도 입력줄이 키보드 바로 위에 남는다. 나머지는 가운데에 같은 넓은 폭으로 뜬다
         final ScreenCore.Dlg dg = sc.dlg != null ? sc.dlg : new ScreenCore.Dlg();
         final int[] pal = ShellCore.palette(ShellCore.theme(store));
         final ScreenView v = new ScreenView(act);
@@ -697,9 +697,9 @@ public final class KidsHub {
                 main.post(new Runnable() { @Override public void run() {
                     try {
                         if (sheetV != v || dp <= 0f) return;
-                        float hh = bottom ? sh * 0.72f : Math.min(dp, sh * dg.maxh);
+                        float hh = bottom ? sh : Math.min(dp, sh * dg.maxh);
                         WindowManager.LayoutParams lp = w.getAttributes();
-                        int nw = Math.round(maxW * dpr), nh = Math.round(hh * dpr);
+                        int nw = bottom ? ViewGroup.LayoutParams.MATCH_PARENT : Math.round(maxW * dpr), nh = bottom ? ViewGroup.LayoutParams.MATCH_PARENT : Math.round(hh * dpr);
                         if (shown[0] && lp.width == nw && lp.height == nh) { revealSheet(box, shown, bottom, hh); return; }          // s372: 같은 크기면 창을 다시 손대지 않는다(글을 치는 중 새 화면이 와도 키보드가 닫히지 않게)
                         lp.width = nw; lp.height = nh;
                         lp.gravity = bottom ? Gravity.BOTTOM : Gravity.CENTER; lp.y = 0;
@@ -721,20 +721,38 @@ public final class KidsHub {
         GradientDrawable g = new GradientDrawable();
         g.setColor(pal[ScreenView.R_CARD]);
         float rr = dg.r * dpr;
-        if (bottom) g.setCornerRadii(new float[] { rr, rr, rr, rr, 0f, 0f, 0f, 0f }); else g.setCornerRadius(rr);
+        if (bottom) g.setColor(pal[ScreenView.R_BG]); else g.setCornerRadius(rr);
         box.setBackground(g);
         box.setClipToOutline(true);
         box.setAlpha(0f);                                                  // 높이가 정해지기 전의 어정쩡한 크기는 보이지 않게 두었다가 한 번에 띄운다
-        box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (bottom) {                                                       // 대화방: 맨 위에 돌아가기 줄 + 아래 대화(남는 높이를 다 쓴다). 상태 표시줄·키보드가 가리는 만큼은 안쪽 여백으로 비운다
+            android.widget.LinearLayout col = new android.widget.LinearLayout(act);
+            col.setOrientation(android.widget.LinearLayout.VERTICAL);
+            android.widget.TextView back = new android.widget.TextView(act);
+            back.setText("\u2039  \ub4a4\ub85c"); back.setTextSize(16f); back.setTextColor(pal[ScreenView.R_TEXT]); back.setGravity(Gravity.CENTER_VERTICAL);
+            back.setPadding(Math.round(14f * dpr), 0, Math.round(14f * dpr), 0);
+            back.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View vw) { closeSheet(false); } });
+            col.addView(back, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Math.round(48f * dpr)));
+            col.addView(v, new android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+            box.addView(col, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            box.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+                @Override public android.view.WindowInsets onApplyWindowInsets(View vw, android.view.WindowInsets in) {
+                    int t, bt;
+                    if (android.os.Build.VERSION.SDK_INT >= 30) { android.graphics.Insets i = in.getInsets(android.view.WindowInsets.Type.systemBars() | android.view.WindowInsets.Type.ime()); t = i.top; bt = i.bottom; }
+                    else { t = in.getSystemWindowInsetTop(); bt = in.getSystemWindowInsetBottom(); }
+                    vw.setPadding(0, t, 0, bt);
+                    return in;
+                }
+            });
+        } else box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         d.setContentView(box);
         d.setCancelable(true); d.setCanceledOnTouchOutside(true);
-        w.setLayout(Math.round(maxW * dpr), Math.round((bottom ? sh * 0.72f : 100f) * dpr));
+        if (bottom) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); else w.setLayout(Math.round(maxW * dpr), Math.round(100f * dpr));
         w.setGravity(bottom ? Gravity.BOTTOM : Gravity.CENTER);
         w.setBackgroundDrawable(new ColorDrawable(0x00000000));
         w.setWindowAnimations(0);
         w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        w.setDimAmount(Math.max(0.2f, dg.dim));
+        if (!bottom) { w.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); w.setDimAmount(Math.max(0.2f, dg.dim)); }
         sheetD = d; sheetV = v; sheetKind = kind; sheetJson = js; sheetQuiet = false; sheetBox = box; sheetBottom = bottom;
         if ("quest".equals(kind)) qpt = 1;
         final String kd = kind;
