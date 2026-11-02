@@ -3788,3 +3788,11 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **지난(확정) 역 시각 잠금(`rsFreeze`/`freeze` · `st.fz{key,m,g}` → 입력 `ein.frozen` → `_reNrtFreeze`/`nrtFreeze`)**: GPS 영점(src 'gps')이 있는 역 이하(idx ≤ 가장 뒤 gps 통과)에서 도착 시각이 지금 이전인 역의 시각을 처음 본 값으로 고정. 뒤 역을 다시 맞춰도 바뀌지 않는다(그 역에 gps 통과가 새로 생기면 한 번만 실제 통과 시각으로 갱신). 증거 없이 시각표로만 지난 역은 잠그지 않는다(뒤 증거가 오면 바로잡을 수 있게).
 - **시험**: `test/ride_dwell.test.js` — 옛 s321~s323 시험은 서울 실시간 노선('1호선')으로 옮겨 그대로 통과, s379 3건 추가(실시간 없는 노선: 문 열림 90초 GPS 에도 정차 안 늘림·다음 도착 안 밂 / 20초 당김 · 실시간 노선은 그대로 / 지난 역 시각 불변). 옛 시험(ride_eta·standby·alert·xfer_next·start_engine)은 `RIDE_ETA_DEFAULTS.nrtEarlySec = 0` 으로 시각표 그대로 시험. `test/ride_local.test.js`: eta 줄도 지금 서버 엔진으로 다시 계산해 자바와 비교(standby 791·eta 14·track 92·s336 58 모두 같음). Worker 번들은 `tools/engine/sync-module.js` 로 맞춤(`route-v2-2026-11-02s379`, **재배포 필요**).
 - **한계 / 이어서**: 기기 미확인. GPS 영점이 시각표와 1~2분 안으로 어긋날 때 시각표 유지 · 2분 넘게 어긋나면 시각표 전진(YJ 규칙)은 기존 영점 보간(ride-eta level)·s334 `rsTlErr`(실시간 노선) 그대로라 이번엔 건드리지 않았다. 영점 정확도·반경 점검(`ride-track` zeroNearM 등)과 영점 신뢰 필터(정확도 80m · 신선도 · 같은 좌표 반복 제외)는 다음 후보.
+
+## s380 (2026-11-02) — 도착 확정이 너무 빠름: 실시간 없는 호선 당김 20→10초 · 역 대기 15→18초 · GPS 영점 조임 (YJ, 22:03 동막)
+- **증상(YJ 22:03)**: 인천1호선 동막 도착이 너무 빨리 확정됨. 요청: GPS 영점 재검토 · 도착시간 10초 미루기 · 역에 도착해 대기하는 시간 3초 늘리기.
+- **도착 시각**: `ride-eta` `nrtEarlySec` 20 → **10초**(s379 의 실시간 없는 노선 당김; 자바 `RideEtaJ.nrtEarlySec`). `arriveEarlySec`(영점 뒤 중간역 5초)는 그대로.
+- **역 대기**: `stopDwellSec`·`markerDwellSec` 15 → **18초**(`RideEtaJ` 같음), 대기 모드 `RS_DWELL_MS`/`RideStandbyJ.DWELL_MS` 15000 → 18000.
+- **영점 재검토(`ride-track` `rtZeroStop` · `RideTrackJ`)**: 원인 후보 — 오차 반경(정확도)을 거리에서 전부 빼 주어(정확도 150m 좌표가 350m 밖에서도 '근처') 도착 확정이 일렀다. ① 거리에서 빼는 정확도는 `zeroAccCapM` **50m 까지만** ② 증거로 쓰는 정확도 상한 `zeroAccMaxM` 150 → **100m** ③ 중간 역 반경 `zeroNearM` 200 → **150m**(최종 목적지 250m 그대로). 통과 시각 보간(`rtPassTime`: 150m·정확도 100m·확인 20초)은 이미 보수적이라 그대로.
+- **시험**: ride_eta 102 · ride_dwell 13 · ride_track 148(+정확도 캡·상한 2건) · ride_standby 117 · ride_local(track 줄도 지금 서버 엔진으로 다시 계산) 모두 통과. 워커 번들 `route-v2-2026-11-02s380`(**재배포 필요**).
+- **한계**: 기기 미확인. 영점 반경을 줄이면 지하·고가에서 영점이 덜 잡힐 수 있다(그땐 시각표 기준으로 감 — 벌 없음).
