@@ -779,6 +779,7 @@ public class ScreenView extends View {
                         else if (pi.kind == ScreenCore.K_RHD) { blurInput(); ScreenCore.Act ra = ScreenCore.Layout.rhdAct(pi, x / dpr); if (ra != null) listener.onAction(ra); }
                         else if (pi.kind == ScreenCore.K_BCARD) tapBcard(pi, x / dpr, y / dpr - lay.headH + scrollY);
                         else if (pi.kind == ScreenCore.K_BRX && "h".equals(pi.dk)) tapBrh(pi, x / dpr);
+                        else if (pi.kind == ScreenCore.K_TMAP && !pi.on && a != null && "kpg.map".equals(a.v)) { blurInput(); tmPickAt(pi, a, x, y); }          // 장소 등록 지도: 누른 곳의 위도 · 경도를 t 에 실어 보낸다
                         else if (pi.kind == ScreenCore.K_BTOG) { blurInput(); pickBtog(pi); listener.onAction(a); }
                         else if (pi.kind == ScreenCore.K_TOGGLE) { blurInput(); pi.on = !pi.on; invalidate(); listener.onSet(a, pi.on); }     // 화면은 바로 뒤집는다(엔진 새 화면을 기다리지 않는다)
                         else { blurInput(); if (pi.kind == ScreenCore.K_CHIP && a != null && "cat".equals(a.a)) pickChip(pi); else if (pi.kind == ScreenCore.K_BUTTON && a != null && a.v != null && a.v.startsWith("rh.tab.")) pickRtab(pi); else if (pi.kind == ScreenCore.K_BUTTON && pi.gk.length() > 0) pickGrp(pi); listener.onAction(a); }
@@ -2200,6 +2201,18 @@ public class ScreenView extends View {
         }
     }
     private long tmTapT; private float tmTapX, tmTapY;
+    /** 고정 지도(장소 등록 팝업)를 한 번 눌렀다: 누른 자리를 위도|경도| 로 바꿔 엔진이 준 행동(v)과 함께 보낸다. 지도 밖이면 무시. */
+    private void tmPickAt(ScreenCore.Item it, ScreenCore.Act a, float x, float y) {
+        if (tmView == null || listener == null || lay == null) return;
+        float top = inHead ? it.y : lay.headH + it.y - scrollY;
+        float lx = x - it.x * dpr, ly = y - top * dpr;
+        if (lx < 0f || ly < 0f || lx > it.w * dpr || ly > it.h * dpr) return;
+        double[] ll = tmView.toLatLng(lx, ly);
+        if (!(Math.abs(ll[0]) <= 85.0) || !(Math.abs(ll[1]) <= 180.0)) return;
+        try { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); } catch (Throwable ignored) { }
+        ScreenCore.Act b = new ScreenCore.Act(); b.a = "call"; b.v = a.v; b.id = a.id; b.t = String.format(java.util.Locale.US, "%.6f|%.6f|", ll[0], ll[1]);
+        listener.onAction(b);
+    }
     private boolean tmOnBtn(float lx, float ly) {
         float bsz = 30f * dpr, bm = 10f * dpr, bx = tmWd * dpr - bm - bsz, by = tmHt * dpr - bm - 2f * bsz;
         return lx >= bx && lx < bx + bsz && ly >= by && ly < by + 2f * bsz;
@@ -3082,7 +3095,7 @@ public class ScreenView extends View {
         t -= pause; return over * (1f - t / run);
     }
     private void drawTextBlock(Canvas cv, ScreenCore.Item it) {
-        int c = alpha(roleColor(it.color), it.alpha);
+        int c = alpha(it.tc != null ? cc(it.tc, 0) : roleColor(it.color), it.alpha);
         setText(it.size, it.bold, c);
         if (it.mq && it.lines.length > 0) {                                                  // 놀이터 칸을 남기고 넘치는 이름: 보이는 칸 안에서 좌우로 흐른다
             cv.save(); cv.clipRect(it.x, it.y, it.x + it.mqVis, it.y + it.h);

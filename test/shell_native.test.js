@@ -1167,11 +1167,17 @@ function findAndroidJar() {
   });
   await t('s409: 장소 등록 팝업 — 주소 찾기는 곧바로 "찾는 중", 결과 고르기는 앱에서 바로(저장만 뒤에서), 등록은 바로 닫고 뒤에서', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
-    assert.ok(/\("kpg\.find"\.equals\(a\.v\) \|\| "kpg\.pick"\.equals\(a\.v\) \|\| "kpg\.add"\.equals\(a\.v\)\) && sheetD != null && regFast\(a\)\) return;/.test(kh), '세 눌림이 서버 답을 기다리지 않는 길(regFast)로 먼저 간다');
+    assert.ok(/\("kpg\.find"\.equals\(a\.v\) \|\| "kpg\.pick"\.equals\(a\.v\) \|\| "kpg\.map"\.equals\(a\.v\) \|\| "kpg\.add"\.equals\(a\.v\)\) && sheetD != null && regFast\(a\)\) return;/.test(kh), '세 눌림이 서버 답을 기다리지 않는 길(regFast)로 먼저 간다');
     assert.ok(/regBusy\(true\);\s*send\(a\.v, a\.id, a\.t, ff, null\);/.test(kh) && /now - regAt < 2500L\) return true;/.test(kh), '찾는 중 글을 바로 보이고 연타는 한 번만');
     assert.ok(/send\("kpg\.sv", a\.id, a\.t, ff, null\);/.test(kh) && /regRewrite\("pick"/.test(kh), '고른 곳은 지도 · 이름을 앱에서 고치고 저장만 뒤에서 보낸다');
     assert.ok(/sheetQuiet = true;\s*closeSheet\(true\);\s*send\(a\.v, a\.id, t, ff, null\);/.test(kh) && /%\.6f,%\.6f/.test(kh), '등록은 바로 닫고 지도 좌표와 함께 뒤에서 보낸다');
     assert.ok(/boolean lateOpen = "kpg\.open"\.equals\(v\) && sheetD != null/.test(kh) && /finally \{ if \(!applied\[0\] && "kpg\.find"\.equals\(v\)\)/.test(kh), '늦은 열기 답이 쓰던 글을 덮지 않고, 실패하면 찾는 중 글을 되돌린다');
+  });
+  await t('s410: 장소 등록 지도를 한 번 누르면 그 자리의 위도·경도가 엔진 행동(kpg.map)으로 가고, 앱이 점을 옮긴다 · 글 색은 cc(옛 앱은 무시)', () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/pi\.kind == ScreenCore\.K_TMAP && !pi\.on && a != null && "kpg\.map"\.equals\(a\.v\)\) \{ blurInput\(\); tmPickAt\(pi, a, x, y\); \}/.test(sv) && /tmView\.toLatLng\(lx, ly\)/.test(sv) && /"%\.6f\|%\.6f\|"/.test(sv), '고정 지도 한 번 누르기 → 위도|경도| 를 t 로 보낸다');
+    assert.ok(/n\.cc = optStr\(m, "cc", "", 9\)/.test(sc) && /if \(n\.cc\.length\(\) > 0\) it\.tc = col\(n\.cc, null\);/.test(sc) && /it\.tc != null \? cc\(it\.tc, 0\) : roleColor\(it\.color\), it\.alpha/.test(sv), '글 색을 CSS 색으로(cc)');
+    assert.ok(/"kpg\.pick"\.equals\(a\.v\) \|\| "kpg\.map"\.equals\(a\.v\)\) \{/.test(kh) && /"kpg\.map"\.equals\(a\.v\) \|\| "kpg\.add"/.test(kh), 'KidsHub: 지도 눌림도 결과 고르기와 같은 길');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

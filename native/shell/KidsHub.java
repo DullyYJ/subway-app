@@ -938,7 +938,7 @@ public final class KidsHub {
             }
             if ("kx.open".equals(a.v)) { JSONObject lp = lastPop; if (lp != null && showCallPop(lp, true)) return; }          // 이미 받아 둔 팝업 값이 있으면 통신 없이 바로
             if ("kpg.cancel".equals(a.v) && sheetD != null) { closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // 장소 찾기 취소도 서버 답을 기다리지 않고 바로 닫는다(초안 버리기는 뒤에서)
-            if (("kpg.find".equals(a.v) || "kpg.pick".equals(a.v) || "kpg.add".equals(a.v)) && sheetD != null && regFast(a)) return;          // s419: 장소 등록 — 누르는 즉시 화면이 반응한다(찾는 중 표시 · 고른 곳으로 지도 이동 · 바로 닫고 뒤에서 등록)
+            if (("kpg.find".equals(a.v) || "kpg.pick".equals(a.v) || "kpg.map".equals(a.v) || "kpg.add".equals(a.v)) && sheetD != null && regFast(a)) return;          // s419: 장소 등록 — 누르는 즉시 화면이 반응한다(찾는 중 표시 · 고른 곳으로 지도 이동 · 바로 닫고 뒤에서 등록)
             if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;
@@ -1083,7 +1083,7 @@ public final class KidsHub {
                 send(a.v, a.id, a.t, ff, null);
                 return true;
             }
-            if ("kpg.pick".equals(a.v)) {
+            if ("kpg.pick".equals(a.v) || "kpg.map".equals(a.v)) {          // 결과 줄 · 지도를 눌러 고른 곳: 같은 길(지도 점 · 위치 글을 앱이 고치고 저장만 뒤에서)
                 String[] p = a.t == null ? new String[0] : a.t.split("\\|", 3);
                 if (p.length < 3) return false;                                                            // 옛 모양이면 서버가 처리
                 double la = Double.parseDouble(p[0]), lo = Double.parseDouble(p[1]);

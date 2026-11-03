@@ -195,6 +195,7 @@ public final class ScreenCore {
         public float bh = 0f, bsize = 0f;                  // inbar: 단추 높이·글자 크기(0 이면 줄 높이·입력칸 글자 크기)
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public String ak = "", aoS = "", aoF = "", aoT = "", abg = "card"; public int ams; public float[] aez; public long asq;   // row: 버튼 줄 전환 연출(엔진이 정한 종류·시간·곡선·시각, 옛 칸 모양, 가리개 색)
+        public String cc = "";                              // text: 글 색을 CSS 색으로 직접(옛 앱은 모르는 열쇠라 무시하고 color 로 그린다)
         public String lp = "";                              // tmap: 3초 꾹 누르면 보낼 행동 이름(call v) — 누른 자리의 위도,경도가 t 로 간다(엔진이 정하고 앱은 보내기만)
         public boolean fol;                                 // tmap: 따라가기(s393) — 엔진이 fol:1 을 주면 내 위치 점이 부드럽게 움직이고 지도가 그 점을 따라간다
         public String path = ""; public float fpad = 0f, fzmax = 0f, hv = 0f, hmin = 0f, hmax = 0f;   // tmap: 높이 = 창 높이의 hv% 를 hmin~hmax 로(웹 height:24vh;min 137;max 231) · 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
@@ -498,6 +499,7 @@ public final class ScreenCore {
         } else if ("text".equals(t)) {
             pad(m, n); n.s = optStr(m, "s", "", MAX_STR); n.size = optNum(m, "size", 12f, 6f, 40f); n.bold = optBool(m, "bold", false);
             n.color = optStr(m, "color", "text", 12); if (!role(n.color)) throw new ParseError("color: 모르는 색 " + n.color);
+            n.cc = optStr(m, "cc", "", 9); if (n.cc.length() > 0 && color(n.cc, BAD_COLOR) == BAD_COLOR) throw new ParseError("cc: 읽을 수 없는 색 " + n.cc);
             n.alpha = optNum(m, "alpha", 1f, 0f, 1f); n.lh = optNum(m, "lh", 1.35f, 1f, 3f);
             n.align = optStr(m, "align", "left", 8); if (!"left".equals(n.align) && !"center".equals(n.align) && !"right".equals(n.align)) throw new ParseError("align");
             n.maxLines = (int) optNum(m, "lines", 0f, 0f, 50f);
@@ -2152,6 +2154,7 @@ public final class ScreenCore {
             Item it = new Item(); it.kind = K_TEXT; it.x = ox; it.y = y; it.w = n.mq && n.rw > 0f ? vis : innerW;
             if (n.mq && n.rw > 0f) { it.mqW = fullW; it.mqVis = vis; it.mq = fullW > vis + 0.5f; }
             it.lines = ls.toArray(new String[0]); it.size = n.size; it.bold = n.bold; it.color = n.color; it.alpha = n.alpha; it.align = n.align;
+            if (n.cc.length() > 0) it.tc = col(n.cc, null);
             it.lineH = n.size * n.lh; it.h = it.lineH * ls.size(); it.textX = ox; it.textY = y;
             if (rich) richSegs(it, n.s, n.hl, n.hlc);
             out.add(it);
