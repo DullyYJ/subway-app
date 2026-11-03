@@ -53,6 +53,8 @@ public final class KidsHub {
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
     private static final String UNLINKED_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,6,16,6],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"navrow\",\"title\":\"길동무 키즈 연결\",\"sub\":\"자녀 폰의 QR이나 시크릿 키로 연결해요\",\"act\":{\"a\":\"call\",\"v\":\"kl.open\"},\"size\":14,\"top\":true}]}]";
 
+    /** 연결 전에 '길동무 키즈 연결'을 처음 누를 때 서버(등록 + 화면 요청 두 번의 통신)를 기다리지 않고 바로 띄우는 기본 화면 — 서버 linkSheet(연결된 자녀 없음 · 내 이름 비어 있음)와 같은 모양이고, 서버 답이 오면 그것으로 바뀐다. */
+    private static final String LINK_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidlink\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":15,\"color\":\"text\",\"pad\":[16,14,16,2],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀 폰의 길동무 키즈 설정에서 QR 이나 시크릿 키를 만들어 주세요(10분 동안 쓸 수 있어요).\",\"size\":11,\"color\":\"sub\",\"pad\":[16,0,16,6]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"내 이름 (자녀에게 보여요)\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"kpn\",\"hint\":\"예: 엄마 · 아빠\",\"value\":\"\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"이름 저장\",\"act\":{\"a\":\"call\",\"v\":\"kl.pname\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"새 자녀 연결\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"klc\",\"hint\":\"시크릿 키 입력 (XXXXX-XXXXX)\",\"maxlen\":12,\"h\":42,\"watch\":true},{\"t\":\"field\",\"key\":\"kln\",\"hint\":\"자녀 이름 (선택)\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"QR 찍기\",\"act\":{\"a\":\"call\",\"v\":\"kl.scan\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"},{\"t\":\"button\",\"s\":\"키로 연결\",\"act\":{\"a\":\"call\",\"v\":\"kl.join\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,14],\"kids\":[{\"t\":\"button\",\"s\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"kl.close\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"1afbxw9\"}";
     private final Activity act;
     private final ShellCore.Store store;
     private final float dpr;
@@ -580,6 +582,9 @@ public final class KidsHub {
         final String ckey = "kq.open".equals(v) && "p".equals(t) ? "kq.open:p" : v;                 // 미션 팝업은 쪽(자녀 · 부모님)마다 따로 기억한다
         if (v != null && sheetD == null && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
             ScreenCore.Screen ms = memScr.get(ckey); String mj = memJs.get(ckey);
+            if (ms == null && "kl.open".equals(v) && !linked && store.get(K_SC + ckey, "").length() == 0) {          // 처음 · 연결 전: 기본 화면을 바로(통신 없이)
+                try { ms = ScreenCore.load(LINK_SEED); mj = LINK_SEED; } catch (Throwable ignored) { }
+            }
             if (ms != null && mj != null) {
                 try { String mj2 = fixQ(mj); if (!mj2.equals(mj)) { ms = ScreenCore.load(mj2); mj = mj2; } } catch (Throwable ignored) { }          // 미션 팝업은 지금 고른 별 점수를 입혀서
                 showSheet(kindOf(ms.id), ms, mj);
