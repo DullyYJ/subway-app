@@ -1923,7 +1923,8 @@ public class ScreenView extends View {
     private String tmHint = "";
     private static final long TM_ANIM_MS = 260L;
     // ── 따라가기(s393): 엔진이 fol:1 을 주면 내 위치 점(핀 'm')이 새 자리로 부드럽게 미끄러지고 지도가 그 점을 따라간다. 손으로 지도를 움직이면 10초 동안은 따라가지 않는다. 지도는 북쪽이 위로 고정.
-    private boolean tmFol;                                  // 지금 따라가기 지도인가
+    private boolean tmFol;                                  // 지금 '살아 있는 지도'인가(자녀 점만 옮기고 시점은 지킨다 — 따라가기든 아니든)
+    private boolean tmFolCam;                               // 그중 카메라가 점을 따라가는 중인가(엔진이 fol:1 을 줄 때)
     private long tmFolPauseUntil, tmFolT0, tmFolUpdT; private int tmFolDur = 1200;
     private double tmFolFromLa, tmFolFromLo, tmFolToLa, tmFolToLo, tmFolLastLa, tmFolLastLo;
     private boolean tmFolRunning;
@@ -1944,9 +1945,27 @@ public class ScreenView extends View {
             tmFolDur = (int) Math.max(700L, Math.min(3000L, gap));                      // 보고 간격만큼 천천히 — 멈췄다 가는 느낌이 없게
             tmFolT0 = now; tmFolUpdT = now;
             nm.la = fa; nm.lo = fo;                                                    // 이 자리에서 출발해 tmFolStep 이 옮긴다
+            if (it.fol && !tmFolCam && now >= tmFolPauseUntil) {                       // 따라가기가 새로 켜졌다(손으로 옮기는 중이 아니면) — 시점이 훌쩍 건너뛰지 않고 점 쪽으로 부드럽게 미끄러진다
+                tmFolPauseUntil = now + 600L; tmFolLastLa = nm.la; tmFolLastLo = nm.lo;
+                tmGoTo(tmFolToLa, tmFolToLo, tmView.zoom);
+            }
+            tmFolCam = it.fol;
         }
         tmPins = np;
         tmFolKick();
+    }
+    /** 장소 핀(자녀 점 'm' 이 아닌 것)이 그대로인가 — 그대로면 자녀가 움직인 것뿐이라 시점을 다시 맞추지 않는다. */
+    private boolean tmPlacesSame(List<TileMapCore.Pin> a, List<TileMapCore.Pin> b) {
+        if (tmMe(a) < 0 || tmMe(b) < 0 || a.size() != b.size()) return false;
+        List<TileMapCore.Pin> x = new ArrayList<TileMapCore.Pin>(), y = new ArrayList<TileMapCore.Pin>();
+        for (TileMapCore.Pin q : a) if (!"m".equals(q.k)) x.add(q);
+        for (TileMapCore.Pin q : b) if (!"m".equals(q.k)) y.add(q);
+        if (x.size() != y.size()) return false;
+        for (int i = 0; i < x.size(); i++) {
+            TileMapCore.Pin p1 = x.get(i), p2 = y.get(i);
+            if (Math.abs(p1.la - p2.la) > 1e-6 || Math.abs(p1.lo - p2.lo) > 1e-6 || !p1.k.equals(p2.k) || !p1.n.equals(p2.n)) return false;
+        }
+        return true;
     }
     private void tmFolKick() {
         if (tmFolRunning) return;
@@ -1969,7 +1988,7 @@ public class ScreenView extends View {
         if (f < 0f) f = 0f;
         double la = tmFolFromLa + (tmFolToLa - tmFolFromLa) * f, lo = tmFolFromLo + (tmFolToLo - tmFolFromLo) * f;
         tmPins.get(mi).la = la; tmPins.get(mi).lo = lo;
-        if (now >= tmFolPauseUntil && tmView != null) {
+        if (tmFolCam && now >= tmFolPauseUntil && tmView != null) {
             tmFolLastLa = la; tmFolLastLo = lo;
             tmView.cla = la; tmView.clo = lo; tmView.clamp();
             if (vecHost != null && vecHost.ready()) vecHost.setCamera(la, lo, tmView.zoom);
@@ -1983,8 +2002,8 @@ public class ScreenView extends View {
         if (pw <= 0 || ph <= 0) return;
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
         boolean tmChanged = !it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH;
-        if (tmChanged && it.fol && it.on && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty()) {
-            tmFollowUpdate(it);                                                         // 따라가기: 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다
+        if (tmChanged && it.on && it.lp.length() > 0 && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty() && tmPlacesSame(tmPins, TileMapCore.parsePins(it.value))) {
+            tmFollowUpdate(it);                                                         // 자녀가 움직였을 뿐(장소는 그대로): 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다 — 따라가기가 켜지고 꺼질 때 지도가 튀지 않는다
         } else if (tmChanged) {
             tmValue = it.value; tmPathStr = it.path; tmW = pw; tmH = ph;
             tmPins = TileMapCore.parsePins(it.value);
@@ -2007,8 +2026,10 @@ public class ScreenView extends View {
                 if (tmPins.size() == 1) tmView.zoom = 17.0 + kk;
                 else tmView.zoom = Math.max(1.0 + kk, Math.floor(tmView.zoom - kk + 1e-6) + kk);
             }
-            tmFol = it.fol && it.on;
-            if (tmFol) {                                                                // 따라가기 시작: 내 위치 점이 가운데 · 걷는 길이 보이는 17 배율
+            tmFolCam = it.fol && it.on;
+            tmFol = it.on && it.lp.length() > 0 && tmMe(tmPins) >= 0;                      // 자녀 점이 있는 살아 있는 지도 — 이다음부터는 점만 옮긴다
+            if (tmFol) { int me1 = tmMe(tmPins); tmFolFromLa = tmFolToLa = tmFolLastLa = tmPins.get(me1).la; tmFolFromLo = tmFolToLo = tmFolLastLo = tmPins.get(me1).lo; tmFolUpdT = SystemClock.uptimeMillis(); }
+            if (tmFolCam) {                                                             // 따라가기 시작: 내 위치 점이 가운데 · 걷는 길이 보이는 17 배율
                 int me0 = tmMe(tmPins);
                 if (me0 >= 0) {
                     double kk2 = Math.log(dpr) / Math.log(2.0);
@@ -2088,7 +2109,7 @@ public class ScreenView extends View {
     /** 지도(MapLibre)가 움직였다 — 핀 계산이 같은 가운데 · 배율을 쓰게 맞춘다. */
     void vecCamera(double la, double lo, double zPx) {
         if (tmView == null) return;
-        if (tmFol && SystemClock.uptimeMillis() >= tmFolPauseUntil && tmFolLastLa != 0.0) {          // 내가 건 카메라와 많이 다르면 손으로 옮긴 것
+        if (tmFolCam && SystemClock.uptimeMillis() >= tmFolPauseUntil && tmFolLastLa != 0.0) {          // 내가 건 카메라와 많이 다르면 손으로 옮긴 것
             double ddx = Math.abs(TileMapCore.xOf(lo, zPx) - TileMapCore.xOf(tmFolLastLo, zPx)), ddy = Math.abs(TileMapCore.yOf(la, zPx) - TileMapCore.yOf(tmFolLastLa, zPx));
             if (ddx > 60.0 || ddy > 60.0) tmFolPauseUntil = SystemClock.uptimeMillis() + TM_FOL_PAUSE_MS;
         }
@@ -4058,7 +4079,7 @@ public class ScreenView extends View {
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (tiles != null) { tiles.unwatch(tileTick); tiles = null; tmValue = ""; }
-        removeCallbacks(tmFolRun); tmFolRunning = false; tmFol = false;                  // 따라가기 반복을 멈춘다(다시 붙으면 새로 맞춘다)
+        removeCallbacks(tmFolRun); tmFolRunning = false; tmFol = false; tmFolCam = false;                  // 따라가기 반복을 멈춘다(다시 붙으면 새로 맞춘다)
         ui.removeCallbacks(sceneRetryRun); sceneRetries = 0;
         if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();
