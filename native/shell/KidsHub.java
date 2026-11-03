@@ -978,7 +978,7 @@ public final class KidsHub {
         markerPend = k;
         try {
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
-            i.setType("image/" + "*");          // (별표를 따로 쓴다 — 괄호 검사가 /* 를 주석으로 읽지 않게) i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("image/" + "*"); i.addCategory(Intent.CATEGORY_OPENABLE);          // 별표를 따로 쓴다(괄호 검사가 슬래시 별표를 주석으로 읽지 않게)
             act.startActivityForResult(Intent.createChooser(i, "마커로 쓸 사진 고르기"), RQ_PHOTO);
         } catch (Throwable t) { note("사진을 고르는 화면을 열지 못했어요"); }
     }
