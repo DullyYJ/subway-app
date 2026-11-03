@@ -4426,6 +4426,10 @@ public class ShellActivity extends Activity {
         home.setGpsStart(l.getLatitude(), l.getLongitude(), hc.dongNow());
         setHomeFields(); reloadHome();
     }
+    @Override protected void onActivityResult(int rq, int rs, Intent data) {
+        super.onActivityResult(rq, rs, data);
+        try { if (kids != null && kids.onPick(rq, rs, data)) return; } catch (Throwable ignored) { }          // 길동무 키즈 마커 사진 고르기
+    }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         if (code == REQ_SETUP_NOTIF) { setupSoon(); return; }                    // 알림 창이 닫혔다(허용이든 거부든) — 다음 승인으로
         if (code == REQ_FOOD_LOC || code == REQ_MAP_LOC) {

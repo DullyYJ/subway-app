@@ -4,6 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 
@@ -16,6 +17,7 @@ final class TileMapArt {
     static final int C_STOP = 0xFF0066FF, C_FOCUS = 0xFFE8482E, C_ME = 0xFFFF9F0A, C_WHITE = 0xFFFFFFFF, C_BG = 0xFFE8EEF4;       // 웹 .bus-map-pin(#0066FF) · .on(#e8482e) · .bus-me-dot(#ff9f0a)
     private static final Paint P = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private static final RectF R = new RectF();
+    private static final Rect SR = new Rect();
 
     /**
      * cv 는 (0,0)~(vw.w, vw.h) 픽셀 영역에 그린다. focus 는 강조할 핀 번호(없으면 -1) — 그 핀은 이름표를 단다.
@@ -113,7 +115,10 @@ final class TileMapArt {
                 if (pass == 2 && !isMe) continue;
                 double[] s = vw.toScreen(p.la, p.lo);
                 if (s[0] < -40 || s[1] < -40 || s[0] > vw.w + 40 || s[1] > vw.h + 40) continue;
-                if (isMe) drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h);
+                if (isMe) {
+                    Bitmap ph = p.g.startsWith("kid.") ? MarkerPhoto.get(p.g.substring(4)) : null;          // 자녀 마커: 부모님이 사진으로 바꿔 둔 게 있으면 사진(동그란 그림)
+                    if (ph != null) drawMePhoto(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h, ph); else drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h);
+                }
                 else if ("a".equals(p.k) || "b".equals(p.k)) drawEnd(cv, (float) s[0], (float) s[1], dpr, p.n.length() > 0 ? p.n : ("a".equals(p.k) ? "출발" : "도착"), "a".equals(p.k) ? C_FROM : C_TO);
                 else drawPin(cv, (float) s[0], (float) s[1], dpr, p.n, isF);
             }
@@ -158,6 +163,30 @@ final class TileMapArt {
             cv.restore();
         }
         P.setColor(C_ME); cv.drawCircle(x, y, 5.5f * dpr, P);
+    }
+    /** 사진 마커: 퍼지는 고리 → 그림자 → 흰 테두리 → 동그란 사진, 가는 방향 화살표는 사진 둘레에. */
+    private static void drawMePhoto(Canvas cv, float x, float y, float dpr, long nowMs, int heading, Bitmap ph) {
+        float rr = 19f * dpr;
+        P.setStyle(Paint.Style.FILL);
+        if (nowMs > 0L) {
+            float f = (nowMs % 1600L) / 1600f, e = 1f - (1f - f) * (1f - f);
+            P.setColor((((int) (255f * 0.55f * (1f - e))) << 24) | (C_ME & 0x00FFFFFF));
+            cv.drawCircle(x, y, rr * (1f + 0.9f * e), P);
+        }
+        P.setColor(0x4D000000); cv.drawCircle(x, y + 1.5f * dpr, rr + 1.2f * dpr, P);
+        P.setColor(C_WHITE); cv.drawCircle(x, y, rr, P);
+        if (heading >= 0) {
+            cv.save(); cv.translate(x, y); cv.rotate((float) heading);
+            ARROW.rewind(); ARROW.moveTo(0f, -(rr + 11f * dpr)); ARROW.lineTo(7f * dpr, -(rr + 1.5f * dpr)); ARROW.lineTo(-7f * dpr, -(rr + 1.5f * dpr)); ARROW.close();
+            P.setColor(0xFFFFFFFF); P.setStyle(Paint.Style.STROKE); P.setStrokeWidth(4f * dpr); P.setStrokeJoin(Paint.Join.ROUND); cv.drawPath(ARROW, P);
+            P.setColor(C_ME); P.setStyle(Paint.Style.FILL); cv.drawPath(ARROW, P);
+            cv.restore();
+        }
+        P.setStyle(Paint.Style.FILL);
+        float ri = rr - 2.5f * dpr;
+        SR.set(0, 0, ph.getWidth(), ph.getHeight());
+        R.set(x - ri, y - ri, x + ri, y + ri);
+        cv.drawBitmap(ph, SR, R, P);
     }
     private static void drawLabel(Canvas cv, float x, float y, float dpr, String text, int vw) {
         P.setTextSize(12f * dpr); P.setTypeface(ScreenView.face(true)); P.setTextAlign(Paint.Align.LEFT);

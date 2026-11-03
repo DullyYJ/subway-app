@@ -346,6 +346,22 @@ public class ShellJvmTest {
             ok(bf != null && bf.length == 3 && "eve".equals(bf[2]) && "morn".equals(CmCore.parseBrief("{\"ok\":true,\"title\":\"t\",\"body\":\"b\"}")[2]), "브리핑 응답에서 엔진이 정한 출근/퇴근 종류도 읽는다");
         }
         // ── 설정 사실 ──
+        {   // 마커 사진 자르기 계산
+            int w = 1000, h = 600; float cx = 200f, cy = 300f, rad = 150f;
+            float[] in = MarkerCropCore.initial(w, h, cx, cy, rad);
+            ok(Math.abs(in[0] - 0.5f) < 1e-6f && in[1] == cx && in[2] == cy, "마커 자르기: 처음엔 짧은 변에 동그라미가 꽉 찬다");
+            float[] c0 = MarkerCropCore.srcCircle(w, h, cx, cy, rad, in[0], in[1], in[2]);
+            ok(Math.abs(c0[0] - 500f) < 1e-3f && Math.abs(c0[1] - 300f) < 1e-3f && Math.abs(c0[2] - 300f) < 1e-3f, "마커 자르기: 처음 동그라미 = 사진 가운데, 반지름은 짧은 변의 절반");
+            float[] cl = MarkerCropCore.clamp(w, h, cx, cy, rad, 0.1f, 9999f, -9999f);
+            ok(Math.abs(cl[0] - 0.5f) < 1e-6f, "마커 자르기: 너무 작게 줄이면 최소 배율");
+            float[] cs = MarkerCropCore.srcCircle(w, h, cx, cy, rad, cl[0], cl[1], cl[2]);
+            ok(cs[0] - cs[2] >= -1e-3f && cs[0] + cs[2] <= w + 1e-3f && cs[1] - cs[2] >= -1e-3f && cs[1] + cs[2] <= h + 1e-3f, "마커 자르기: 아무리 끌어도 동그라미는 사진 안에 있다");
+            float[] big = MarkerCropCore.clamp(w, h, cx, cy, rad, 99f, cx, cy);
+            ok(Math.abs(big[0] - 0.5f * MarkerCropCore.MAX_ZOOM) < 1e-5f, "마커 자르기: 확대는 6배까지");
+            float[] z = MarkerCropCore.zoomAbout(1f, 100f, 100f, 2f, 150f, 150f);
+            ok(z[0] == 2f && z[1] == 50f && z[2] == 50f, "마커 자르기: 손가락 밑 점은 확대해도 그 자리");
+            ok("c_ab-1".equals(MarkerCropCore.key("c_ab-1")) && "a_b_c".equals(MarkerCropCore.key("a.b/c")) && MarkerCropCore.key("x".repeat(60)).length() == 34 && MarkerCropCore.key(null).isEmpty(), "마커 열쇠: 영문·숫자·_·- 만 · 34자까지(워커 markerKey 와 같다)");
+        }
         ShellCore.MemStore s2 = new ShellCore.MemStore();
         String f = ShellCore.settingsFacts(s2);
         ok(f.equals("{\"id\":\"\",\"np\":{\"arrive\":1,\"transfer\":1,\"arrive_reco\":1},\"ovl\":0,\"sam\":0,\"samw\":0,\"cm\":0,\"cmi\":1,\"cmh\":1,\"cmf\":{\"nat\":true,\"nv\":true,\"on\":false,\"morn\":\"07:30\",\"eve\":\"18:30\",\"days\":[1,2,3,4,5],\"from\":\"\",\"to\":\"\",\"eFrom\":\"\",\"eTo\":\"\"},\"errn\":0,\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\",\"notif\",\"conv\"],\"rl\":1,\"th\":\"pastel\"}"), "기본 기기 사실: " + f);

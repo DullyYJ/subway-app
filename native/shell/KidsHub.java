@@ -3,6 +3,9 @@ package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한�
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
@@ -131,6 +134,7 @@ public final class KidsHub {
 
     public KidsHub(Activity a, ShellCore.Store st, float dpr, FrameLayout wrap, View[] slide, Runnable settingsChanged) {
         this.act = a; this.store = st; this.dpr = dpr; this.slide = slide; this.settingsChanged = settingsChanged;
+        MarkerPhoto.init(a.getApplicationContext());                          // 자녀 마커 사진(이 폰에만 저장) 불러오기
         cid = st.get(K_CID, "");
         String nodes = st.get(K_NODES, "");
         linked = nodes.length() > 2;
@@ -360,12 +364,13 @@ public final class KidsHub {
     public boolean settingsAct(ScreenCore.Act a, boolean on) {
         if (a == null) return false;
         if ("set".equals(a.a) && "kidsHome".equals(a.key)) { setStart(on); return true; }
-        if ("call".equals(a.a) && a.v != null && (a.v.startsWith("kl.") || a.v.startsWith("kh."))) { send(a.v, a.id, a.t, null, null); return true; }
+        if ("call".equals(a.a) && a.v != null && (a.v.startsWith("kl.") || a.v.startsWith("kh.") || a.v.startsWith("kn."))) { send(a.v, a.id, a.t, null, null); return true; }
         return false;
     }
 
     private void setStart(final boolean on) {
         store.put(K_START, on ? "1" : "0");
+        memScr.remove("kn.open"); memJs.remove("kn.open"); store.put(K_SC + "kn.open", "");          // 길동무 키즈 팝업을 다시 열 때 옛 스위치 모양이 먼저 보이지 않게
         send("kl.start", "", on ? "1" : "0", null, null);
     }
 
@@ -376,7 +381,7 @@ public final class KidsHub {
         if (!force && now - lastRefresh < 20000L) return;
         lastRefresh = now;
         io.execute(new Runnable() { @Override public void run() {
-            String r = call("GET", "/p/setrow", null, 10000);
+            String r = call("GET", "/p/setrow?kn=1", null, 10000);
             if (r == null) return;
             try {
                 JSONObject o = new JSONObject(r);
@@ -670,7 +675,7 @@ public final class KidsHub {
         if ("kidcall".equals(id)) return "call";
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
-        if ("kidcheer".equals(id)) return "cheer";
+        if ("kidcheer".equals(id) || "kidmenu".equals(id) || "kidmk".equals(id)) return "cheer";          // 길동무 키즈 팝업 · 응원문구 · 마커 변경은 서로 오가도 같은 창에서 글만 바뀐다
         if ("kidev".equals(id) || "kidreg".equals(id) || "kidrt".equals(id) || "kidpls".equals(id)) return "ev";          // 서버가 sheet:"ev" 로 답하는 화면들 — 종류가 다르면 미리 띄운 팝업을 닫았다 다시 열어 화면이 두 번 열렸다
         return "link";
     }
@@ -933,6 +938,8 @@ public final class KidsHub {
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;
             if ("kl.scan".equals(a.v)) { scan(me()); return; }
+            if ("km.pick".equals(a.v)) { pickMarker(a.id); return; }                    // 마커 사진: 고르기 · 기본으로는 이 폰 안에서만(서버에 보내지 않는다)
+            if ("km.clr".equals(a.v)) { clearMarker(a.id); return; }
             if ("kq.tab".equals(a.v) || "kq.open".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
             if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 길동무포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
             if ("kq.send".equals(a.v)) { send(a.v, a.id, String.valueOf(qpt), me().fields(), me()); return; }
@@ -949,7 +956,7 @@ public final class KidsHub {
             }
             send(a.v, a.id, a.t, me().fields(), me());
         }
-        @Override public void onSet(ScreenCore.Act a, boolean on) { }
+        @Override public void onSet(ScreenCore.Act a, boolean on) { if (a != null && "kidsHome".equals(a.key)) setStart(on); }          // 길동무 키즈 팝업의 '키즈 화면으로 시작' 알약
         @Override public void onSearch(ScreenCore.Act a, String q) { }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
@@ -960,6 +967,42 @@ public final class KidsHub {
             if (!f.equals(value)) { final ScreenView sv = me(); main.post(new Runnable() { @Override public void run() { sv.setField(key, f); } }); }
         }
         @Override public void onContentH(float dp) { }
+    }
+
+    // ───────── 마커 변경: 사진 고르기 → 동그라미 자르기 → 지도 자녀 마커 ─────────
+    private static final int RQ_PHOTO = 0x4B4D;
+    private String markerPend = "";
+    private void pickMarker(String cid) {
+        String k = MarkerCropCore.key(cid.length() > 0 ? cid : this.cid);
+        if (k.length() == 0) { note("자녀를 찾지 못했어요"); return; }
+        markerPend = k;
+        try {
+            Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+            i.setType("image/*"); i.addCategory(Intent.CATEGORY_OPENABLE);
+            act.startActivityForResult(Intent.createChooser(i, "마커로 쓸 사진 고르기"), RQ_PHOTO);
+        } catch (Throwable t) { note("사진을 고르는 화면을 열지 못했어요"); }
+    }
+    private void clearMarker(String cid) {
+        MarkerPhoto.clear(MarkerCropCore.key(cid.length() > 0 ? cid : this.cid));
+        hubV.invalidate();
+        note("기본 마커로 되돌렸어요");
+    }
+    /** ShellActivity.onActivityResult 에서 부른다 — 사진 고르기 결과면 true. */
+    public boolean onPick(int rq, int rs, Intent data) {
+        if (rq != RQ_PHOTO) return false;
+        final String key = markerPend; markerPend = "";
+        if (rs != Activity.RESULT_OK || data == null || data.getData() == null || key.length() == 0) return true;
+        final Uri u = data.getData();
+        io.execute(new Runnable() { @Override public void run() {
+            final Bitmap b = MarkerPhoto.decode(act.getContentResolver(), u, 1600);
+            main.post(new Runnable() { @Override public void run() {
+                if (b == null) { note("사진을 읽지 못했어요"); return; }
+                MarkerCropDialog.show(act, b, dpr, new MarkerCropDialog.Done() { @Override public void ok(Bitmap circle) {
+                    if (MarkerPhoto.put(key, circle)) { hubV.invalidate(); note("마커를 바꿨어요"); } else note("마커 사진을 저장하지 못했어요");
+                } });
+            } });
+        } });
+        return true;
     }
 
     // ───────── 장소 등록 팝업: 시각 · 요일은 이 안에서 바로 고치고, 저장할 때 한 번만 서버에 보낸다 ─────────
