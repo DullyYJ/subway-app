@@ -226,7 +226,7 @@ public class SceneJvmTest {
         }
 
         // 3) 잡았다 놓기: 캐릭터별 착지 연출 + 진동
-        String[][] expect = {{"dolsom", "cotton"}, {"ppopu", "pose"}, {"dudung", "dig"}, {"lovel", "flip"}, {"sul", "fly"}, {"chaeng", "puddle"}, {"juksun", "tumble"}, {"bbosong", "hose"}};
+        String[][] expect = {{"dolsom", "cotton"}, {"ppopu", "star"}, {"dudung", "dig"}, {"lovel", "flip"}, {"sul", "fly"}, {"chaeng", "puddle"}, {"juksun", "tumble"}, {"bbosong", "hose"}};
         for (String[] ex : expect) {
             ok(idle.traits.get(ex[0]).land.equals(ex[1]), ex[0] + ": 엔진의 착지 연출 = " + ex[1]);
             TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle);
@@ -314,9 +314,18 @@ public class SceneJvmTest {
             java.util.function.Supplier<SceneCore> many = () -> { TestHost h = fakeHost(); SceneCore c = core(h, 5); c.layout(340, 190, 2.75, true); c.apply(idle); for (int i = 0; i < 30 * 25 && c.actors.size() < 4; i++) c.update(1.0 / 30); return c; };
             SceneCore c = many.get(); ok(c.actors.size() >= 3, "연출 시험: 친구가 여럿 모였다 " + c.actors.size());
             c.debugDrop("ppopu", 90, false); SceneCore.Actor pp = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("ppopu")) pp = o;
-            boolean shake = false, shock = false, glass = false, smirk = false;
-            for (int i = 0; i < 30 * 7; i++) { c.update(1.0 / 30); shake |= c.shkEnd > c.t; for (SceneCore.Actor o : c.actors) if (o != pp && o.act != null && o.act.n.equals("shock")) shock = true; if (pp.pr != null) for (SceneCore.Prop p : pp.pr) if (p.k.equals("glasses")) glass = true; smirk |= pp.stk != null; if (c.error != null) break; }
-            ok(c.error == null && shake && shock && glass && smirk, "뽀푸: 땅이 흔들리고(" + shake + ") 친구가 깜짝 놀라고(" + shock + ") 선글라스(" + glass + ")·히힛 스티커(" + smirk + ") " + c.error);
+            // s415 뽀푸 별빛: 낙하 중 별빛이 몸을 감싸고(sl=1) → 닿으면 몸이 빛으로 풀려(fade→0) 흩어지고(sl=2) → 다시 모여(sl=3) 몸이 돌아오고(fade→1) → 웃는 칸으로 여운(sl=4)
+            boolean wrap = false, scat = false, gath = false, glow = false, back = false, smileOk = true, shake = false; double minFade = 1; int seq = 0, last = 0; boolean ordered = true;
+            for (int i = 0; i < 30 * 9; i++) {
+                c.update(1.0 / 30); shake |= c.shkEnd > c.t;
+                wrap |= pp.sl == 1 && pp.st.equals("fall") && pp.cell == 15; scat |= pp.sl == 2; gath |= pp.sl == 3; glow |= pp.sl == 4; minFade = Math.min(minFade, pp.fade);
+                if (pp.sl > 0) { if (pp.sl < last && last != 0) ordered = false; last = pp.sl; }
+                if (pp.sl == 4 && pp.fade >= 1 && !(pp.cell == 15 || pp.cell == 7 || pp.cell == 0 || pp.cell == 1 || pp.cell == 8)) smileOk = false;
+                if (c.error != null) break;
+            }
+            ok(c.error == null && wrap && scat && gath && glow && ordered, "뽀푸(s415): 별빛이 몸을 감싸고(" + wrap + ") → 흩어지고(" + scat + ") → 다시 모여(" + gath + ") → 여운(" + glow + ") 순서대로(" + ordered + ") " + c.error);
+            ok(minFade <= .01 && pp.fade >= .99 && pp.sl == 0 && smileOk, "뽀푸(s415): 몸이 빛으로 사라졌다가(" + minFade + ") 되돌아오고(" + pp.fade + ") 끝나면 별빛 상태가 풀리고(" + pp.sl + ") 웃는 칸만 쓴다(" + smileOk + ")");
+            { BufferedImage im = canvasImg(680, 380); SceneCore c2 = core(fakeHost(), 5); c2.layout(340, 190, 2.0, true); c2.apply(idle); c2.debugDrop("ppopu", 90, true); for (int i = 0; i < 12; i++) c2.update(1.0 / 30); draw(c2, im); ok(c2.error == null, "뽀푸(s415): 별빛 그리기가 오류 없이 돈다 " + c2.error); }
             c = many.get(); c.debugDrop("dudung", 90, false); SceneCore.Actor dd = null; for (SceneCore.Actor o : c.actors) if (o.id.equals("dudung")) dd = o;
             double x0 = Double.NaN, minY = 0, maxMove = 0; boolean hid = false, holes = false; int holeMax = 0;
             for (int i = 0; i < 30 * 8; i++) { c.update(1.0 / 30); if (dd.act != null && dd.act.n.equals("L_dig")) { if (Double.isNaN(x0)) x0 = dd.x; maxMove = Math.max(maxMove, Math.abs(dd.x - x0)); hid |= !dd.vis; minY = Math.min(minY, dd.y); int hc = 0; for (SceneCore.Gfx g : c.gfx) if (g.k.equals("hole")) hc++; holeMax = Math.max(holeMax, hc); } if (c.error != null) break; }

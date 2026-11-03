@@ -284,4 +284,27 @@ public final class SceneArt {
         for (int i = 0; i < 8; i++) { double an = rot + i * PI / 4, rd = i % 2 != 0 ? r * .4 : r; if (i != 0) c.lineTo(x + Math.cos(an) * rd, y + Math.sin(an) * rd); else c.moveTo(x + Math.cos(an) * rd, y + Math.sin(an) * rd); }
         c.closePath(); c.fill();
     }
+
+    /** ✨ 모양 반짝이: 오목한 네 갈래 별(곡선) + 겹쳐 입체감을 내는 안쪽 흰 심지와 가는 십자 빛줄기. 모든 모양·크기·투명도는 호출하는 쪽(장면 계산)이 정한다. */
+    public static void sparkle(SceneCv c, double x, double y, double r, double rot, double al) {
+        if (r <= .05 || al <= 0) return;
+        double k = .16 * r;
+        c.save(); c.translate(x, y); c.rotate(rot);
+        c.globalAlpha(Math.min(1, al * .55)); c.fillGrad(c.radial(0, 0, 0, 0, 0, r * 1.25).stop(0, 0xCCFFF2B0).stop(.45, 0x66FFD54A).stop(1, 0x00FFC83C)); c.beginPath(); c.arc(0, 0, r * 1.25, 0, 2 * PI); c.fill();   // 바깥 번짐(노란 빛)
+        c.globalAlpha(Math.min(1, al));
+        c.fillGrad(c.linear(-r, -r, r, r).stop(0, 0xFFFFF0A0).stop(.5, 0xFFFFD23C).stop(1, 0xFFFFB300));                                                      // 겉 별: 위는 밝고 아래는 짙은 금빛
+        c.beginPath(); c.moveTo(0, -r);
+        c.quadTo(k, -k, r, 0); c.quadTo(k, k, 0, r); c.quadTo(-k, k, -r, 0); c.quadTo(-k, -k, 0, -r); c.closePath(); c.fill();
+        c.globalAlpha(Math.min(1, al * .95)); c.fillStyle(0xFFFFFFFF); double q = r * .5, kk = .07 * r;                                                    // 안쪽 흰 심지(반짝 하이라이트)
+        c.beginPath(); c.moveTo(0, -q); c.quadTo(kk, -kk, q, 0); c.quadTo(kk, kk, 0, q); c.quadTo(-kk, kk, -q, 0); c.quadTo(-kk, -kk, 0, -q); c.closePath(); c.fill();
+        c.globalAlpha(Math.min(1, al * .7)); c.fillStyle(0xFFFFFFFF); c.beginPath(); c.arc(0, 0, r * .13, 0, 2 * PI); c.fill();
+        c.restore(); c.globalAlpha(1);
+    }
+    /** 부드러운 노란 빛무리(몸을 감싸는 후광). */
+    public static void halo(SceneCv c, double x, double y, double rx, double ry, double al) {
+        if (al <= 0) return;
+        c.save(); c.translate(x, y); c.scale(1, ry / rx); c.globalAlpha(Math.min(1, al));
+        c.fillGrad(c.radial(0, 0, 0, 0, 0, rx).stop(0, 0x66FFF4C0).stop(.55, 0x55FFD95A).stop(1, 0x00FFC83C)); c.beginPath(); c.arc(0, 0, rx, 0, 2 * PI); c.fill();
+        c.restore(); c.globalAlpha(1);
+    }
 }

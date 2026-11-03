@@ -739,6 +739,27 @@ final class SceneActs {
             if (tt > 3.9) a.ang *= 1 - ease((tt - 3.9) / .7);
         }, null);
 
+        // ── 뽀푸(s415): 노란 별빛이 몸을 감싸고 내려온 뽀푸 — 땅에 닿는 순간 별빛으로 흩어졌다가 → 빛이 다시 모여 뽀푸가 되고 → 활짝 웃는다 ──
+        //    (감싸는 별빛은 낙하 중 SceneCore.fallStep 이 그린다. 여기서는 흩어짐 · 모임 · 되살아남 · 웃음 · 여운의 때만 정한다.)
+        A_(S, "L_star", 3.9, (a, t, A) -> {
+            S.shake(2.6, .4); S.flash(255, 243, 185, .32, .28);
+        }, (a, u, dt, A) -> {
+            double h = S.HH(a), tt = u * 3.9; S.standF(a); a.pose = 2; a.ang = 0;
+            final double SC = .75, GA = 1.65, MT0 = 1.3, MT1 = 1.78;                                                                                   // 흩어짐 끝 · 모임 끝 · 몸이 나타나기 시작/끝
+            a.fade = tt < .16 ? 1 - ease(tt / .16) : clamp((tt - MT0) / (MT1 - MT0), 0, 1);                                                          // 닿자마자 몸이 빛으로 풀리고, 빛이 모이면 다시 몸이 된다
+            if (tt < SC) { a.sl = 2; a.slU = tt / SC; }
+            else if (tt < GA) { a.sl = 3; a.slU = (tt - SC) / (GA - SC); }
+            else { a.sl = 4; a.slU = clamp((tt - GA) / (3.9 - GA), 0, 1); }
+            double pp = clamp((tt - MT0) / (MT1 - MT0), 0, 1), x1 = pp - 1, bk = 1 + 2.70158 * x1 * x1 * x1 + 1.70158 * x1 * x1;                         // 몸이 나타날 때 살짝 넘치게 커졌다 자리잡는다
+            double sc = tt < MT0 ? .55 : .55 + .45 * bk; a.sx = sc; a.sy = sc;
+            if (tt >= MT0 + .2 && S.once(A, "fl")) { S.flash(255, 240, 170, .3, .3); S.haptic("grin"); S.ptx("gold", a.x, S.feetY(a) - h * .5, 8, po().a(-PI * 1.05, PI * .05).s(60, 120).g(25).l(.6, 1.0).jx(h * .2).jy(h * .2).r(1.1)); }
+            int[] sm = {15, 7, 0, 1, 15, 8};                                                                                                            // 웃는 얼굴 칸을 돌려가며 활짝 웃는다
+            a.cell = tt < GA ? 15 : sm[Math.min(sm.length - 1, (int) ((tt - GA) / .42))];
+            if (tt >= MT1 && tt < MT1 + .75) { double hp = (tt - MT1) / .75; a.y = -Math.abs(Math.sin(hp * PI * 2)) * 7 * SceneCore.zs(a.z) * (1 - hp * .5); }  // 신나서 콩콩
+            if (tt >= MT1 && S.once(A, "sy")) { S.say(a, "히히~", 2.2); }
+            if (tt >= MT1 + .1 && tt < 3.3 && S.every(A, "tw", .34)) S.ptx("gold", a.x + (S.rnd() < .5 ? -1 : 1) * h * (.75 + S.rnd() * .4), S.feetY(a) - h * (.2 + S.rnd() * .9), 1, po().a(-PI, 0).s(4, 10).g(0).l(.4, .7).r(.75));
+        }, null);
+
         // ── 두덩: 떨어지자마자 땅을 파고 들어가 → 땅속을 지나 → 다른 곳 구멍을 뚫고 높이 점프해 착지 ──
         A_(S, "L_dig", 5.4, (a, t, A) -> {
             double W = S.W, h = S.HH(a); A.x0 = a.x; A.z0 = a.z; double[] r = S.inRange(a); int sd = a.x < W / 2 ? 1 : -1;

@@ -82,6 +82,7 @@ public final class SceneCore {
         Integer lastCyc; double dirT; String afterEmerge, prevSt, landK = "";
         double pinX = Double.NaN, altSave, altStart, fy0, vy, airT, lookUntil, boost;
         boolean feetScale; double heart; String fearK = "";     // s354: feetScale — 늘어나는 몸이 발(공중이면 떠 있는 발)을 기준으로 커진다 · heart — 몸이 하트로 바뀐 정도(0~1) · fearK — 놀란 까닭(flee 문구)
+        int sl; double slU, fade = 1;     // s415 뽀푸 별빛: sl 0 없음 · 1 감싸는 별빛(낙하) · 2 흩어짐 · 3 다시 모임 · 4 여운 / slU 진행(1·3·4 는 0~1, 2 는 0~1) / fade 몸 투명도
         int cell = -1; String sk, chain;     // cell: 전용 동작 시트(<id>_act 4×4) 칸, -1 이면 안 씀 · sk: 걷기 시트 대신 쓸 시트 열쇠(대나무 없는 죽순이 juksun_nb) · chain: 지금 동작이 끝나면 이어서 할 동작
     }
 
@@ -251,7 +252,7 @@ public final class SceneCore {
         a.st = "act"; AS A = new AS(); A.n = name; A.t0 = t; A.dur = d.dur; A.d0 = a.dir; a.act = A; if (d.init != null) d.init.f(a, t, A);
     }
     void endAct(Actor a) {
-        a.pr = null; a.cut = Double.NaN; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.ang = 0; a.act = null; a.stk = null; a.feetScale = false; a.heart = 0; if (a.pinned) a.pinX = a.x;
+        a.pr = null; a.cut = Double.NaN; a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.ang = 0; a.act = null; a.stk = null; a.feetScale = false; a.heart = 0; a.sl = 0; a.fade = 1; if (a.pinned) a.pinX = a.x;
         if (hello != null && !hello.free.contains(a.id)) { helloSettle(a); return; }                  // s340: 카드 확장 인사 중에는 어떤 동작이든 끝나면 자리에 서서 인사를 기다린다
         if (a.hero && ("wait".equals(mode) || "alight".equals(mode))) { a.st = "stand"; waitNext = t + rnd(1.0, 2.2); if ("wait".equals(mode) && a.lookUntil == 0) a.dir = baseDir; }
         else nextAct(a);
@@ -271,7 +272,7 @@ public final class SceneCore {
         SceneModel.Spec D = a.D; double u = a.until > a.t0 ? (t - a.t0) / (a.until - a.t0) : 0; String st = a.st;
         if (!a.bub.isEmpty() && t > a.bubUntil && !st.equals("rest")) a.bub = "";
         if (st.equals("fall")) { fallStep(a, dt); return; }
-        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1; a.cell = -1; a.sk = null; a.feetScale = false; a.heart = 0;
+        a.ang = 0; a.vis = true; a.y = 0; a.sq = 0; a.intro = false; a.sx = 1; a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.cut = Double.NaN; a.pr = null; a.nograb = false; a.pose = -1; a.cell = -1; a.sk = null; a.feetScale = false; a.heart = 0; a.sl = 0; a.fade = 1;
         if (a.kind.equals("eagle") && !a.hero) a.alt = 16 + Math.sin(t * 1.7 + a.x * .03) * 5;
         if (st.equals("emerge")) {
             a.intro = true; a.ii = (int) Math.min(D.intro - 1, Math.floor(u * D.intro));
@@ -462,7 +463,7 @@ public final class SceneCore {
         Pend P = PEND; PEND = null; if (P == null || P.a == null || P.a.dead || !actors.contains(P.a) || "ride".equals(mode)) return;
         Actor a = P.a; double zc = zy(a.z);
         DRAG = new Drag(); DRAG.a = a; DRAG.fx = a.x; DRAG.fy = zc; DRAG.px = a.x; DRAG.py = zc;
-        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.feetScale = false; a.heart = 0; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
+        a.prevSt = a.st; a.act = null; a.pr = null; a.cut = Double.NaN; a.stk = null; a.cell = -1; a.sk = null; a.chain = null; dropBams(a); a.sx = a.sy = 1; a.ox = 0; a.pvx = a.pvy = 0; a.afterEmerge = null; a.feetScale = false; a.heart = 0; a.sl = 0; a.fade = 1; a.held = true; a.st = "held"; a.altSave = Math.min(a.alt, 24); a.alt = 0; a.bub = ""; a.vis = true; a.vy = 0;
         tHaptic("grab"); try { host.held(); } catch (RuntimeException e) { /* 무시 */ }
         addPart("puff", a.x, zy(a.z) - 2, 3);
     }
@@ -481,12 +482,12 @@ public final class SceneCore {
         Drag d = DRAG; DRAG = null; if (d == null) return;
         releaseActor(d.a);
     }
-    double hotFor(String k) { return k.equals("cotton") ? 6.5 : k.equals("pose") ? 7 : k.equals("dig") ? 7.5 : k.equals("flip") ? 8 : k.equals("fly") ? 10 : k.equals("puddle") ? 12.5 : 3.2; }
+    double hotFor(String k) { return k.equals("cotton") ? 6.5 : k.equals("pose") ? 7 : k.equals("star") ? 6.5 : k.equals("dig") ? 7.5 : k.equals("flip") ? 8 : k.equals("fly") ? 10 : k.equals("puddle") ? 12.5 : 3.2; }
     String landOf(Actor a) { SceneModel.Traits T = res != null ? res.traits.get(a.id) : null; return T != null ? T.land : ""; }
     void releaseActor(Actor a) {
         double h = HH(a), H0y = Math.max(0, -a.y), gg = 560;
         a.held = false; a.pinned = true; a.pinX = a.x; a.lastBounce = false; a.landK = landOf(a); a.t0 = t; a.fy0 = a.y; a.vy = 0; a.sx = a.sy = 1;
-        a.feetScale = false; a.heart = 0;
+        a.feetScale = false; a.heart = 0; a.sl = 0; a.fade = 1;
         tHaptic("release"); hotUntil = t + hotFor(a.landK);
         // s354 (YJ: 떨어뜨릴 때 친구마다 다른 연출): 엔진의 land 값이 연출 갈래를 정한다 — cotton 둘숑(풍선) · pose 뽀푸(지진 착지) · dig 두덩(땅속 이동) · flip 러블(3회전) · fly 독슐(친구 납치 비행) · puddle 챙챙(꼬리 헬리콥터) · tumble 쮸르 · hose 베비히포
         if (a.landK.equals("fly")) { a.altStart = H0y; a.y = 0; a.alt = H0y; startAct(a, "carry"); tHaptic("flap"); return; }      // 고공낙하 → 친구를 안고 하늘로 → 한 바퀴 → 내려놓기
@@ -508,7 +509,7 @@ public final class SceneCore {
     }
     void fallStep(Actor a, double dt) {                                          // 놓으면 떨어진다 — 어떻게 내려앉는지는 엔진의 land 값
         if (dt <= 0) dt = .033; String kk = a.landK; double tf = t - a.t0, h = HH(a), gg = 560;
-        a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8; a.feetScale = false; a.heart = 0;
+        a.vis = true; a.sx = a.sy = 1; a.ox = 0; a.pvx = 0; a.pvy = 0; a.pr = null; a.cut = Double.NaN; a.ang *= .8; a.feetScale = false; a.heart = 0; a.sl = 0; a.fade = 1;
         if (kk.equals("cotton")) {                                                            // 둘숑: 몸이 풍선처럼 3배로 부풀며 천천히 내려온다(발 기준으로 커진다)
             gg = 110; a.vy = Math.min(a.vy, 52); double gp = ease(clamp(tf / .95, 0, 1));
             a.sx = a.sy = 1 + 2 * gp; a.feetScale = true; a.ang = Math.sin(tf * 3.1) * .05 * gp; a.pose = 2; a.cell = 15;
@@ -526,6 +527,9 @@ public final class SceneCore {
             gg = 150; a.vy = Math.min(a.vy, 85); a.ang = 0; a.cell = 1; a.pose = -1;
             double mx = a.x + a.dir * h * .3, my = zy(a.z) + a.y - h * .55; pr(a, jetProp(mx, my, mx + a.dir * 2, zy(a.z)));
             if (every2("hosefx", .07)) ptx("splash", mx + a.dir * 2, zy(a.z) - 1, 1, po().a(-PI * .95, -PI * .05).s(16, 40).g(170).l(.3, .6).jx(5));
+        }
+        else if (kk.equals("star")) {                                                          // s415 뽀푸: 노란 별빛이 몸을 감싼 채 활짝 웃으며 내려온다(느긋하게 떠서 별빛이 보이도록)
+            gg = 230; a.vy = Math.min(a.vy, 150); a.ang = Math.sin(tf * 2.6) * .06; a.pose = 2; a.cell = 15; a.sl = 1; a.slU = ease(clamp(tf / .3, 0, 1));
         }
         else if (kk.equals("pose")) { a.ang = 0; a.sy = 1.06; a.sx = .96; a.pose = 2; a.cell = 11; }                 // 뽀푸: 몸을 쭉 펴고 두 발로 꼿꼿이 떨어진다
         a.vy += gg * dt; a.y += a.vy * dt;
@@ -633,6 +637,7 @@ public final class SceneCore {
         c.globalAlpha(clamp(al, 0, 1));
         if (kk.equals("heart")) { c.fillStyle("#ff6b9a"); SceneArt.heartP(c, p.x, p.y, 3.4 * r); }
         else if (kk.equals("star")) { c.fillStyle("#ffd54f"); SceneArt.star4(c, p.x, p.y, 3.4 * r, p.rot + p.age * 4); }
+        else if (kk.equals("gold")) { double ga = clamp(al, 0, 1); c.globalAlpha(1); SceneArt.sparkle(c, p.x, p.y, 3.4 * r, p.rot + p.age * 3, ga); }      // s415 노란 ✨
         else if (kk.equals("spark")) { c.fillStyle("#fffbe0"); SceneArt.star4(c, p.x, p.y, 2.6 * r, p.rot); }
         else if (kk.equals("leaf")) { c.fillStyle(p.hasCol ? p.col : css("#d9772b")); c.save(); c.translate(p.x, p.y); c.rotate(p.rot + p.age * 5); c.beginPath(); c.ellipse(0, 0, 2.6, 1.4, 0, 0, PI2); c.fill(); c.restore(); }
         else if (kk.equals("drop")) { c.fillStyle("rgba(130,190,250,.95)"); c.beginPath(); c.arc(p.x, p.y, 2.1, 0, PI2); c.fill(); c.fillStyle("rgba(255,255,255,.8)"); c.beginPath(); c.arc(p.x - .6, p.y - .6, .7, 0, PI2); c.fill(); }
@@ -842,16 +847,17 @@ public final class SceneCore {
         boolean sunk = !Double.isNaN(a.cut) && a.y > TH * zz * .9;
         if (!sunk) {
             double air = Math.max(0, -a.y) + a.alt;                                                                // s354: 떠 있는 높이만큼 그림자가 작고 옅어진다(떨어질수록 커지며 짙어진다)
-            c.fillStyle(rgba(0, 0, 0, shA * (air > 0 ? clamp(1 - air / 110, .3, 1) : 1)));
+            c.fillStyle(rgba(0, 0, 0, shA * a.fade * (air > 0 ? clamp(1 - air / 110, .3, 1) : 1)));
             c.beginPath(); c.ellipse(a.x + a.ox, y + 1, D.cell * s * .2 * ((a.sq != 0 || a.sy < .9) ? 1.15 : 1) * Math.abs(a.sx != 0 ? a.sx : 1) * (air > 0 ? clamp(1 - air / 300, .6, 1) : 1), 3.2 * zz * (air > 0 ? clamp(1 - air / 300, .6, 1) : 1), 0, 0, PI2); c.fill();
         }
         double sx = (idx % 4) * 256, sy = Math.floor(idx / 4) * 256, dx = -D.ox * sc, dy = -D.base * sc - lift + (a.feetScale ? 0 : a.y);
+        if (a.sl > 0) starLight(c, a, false, s, y);                                                  // s415 뽀푸: 몸 뒤쪽 노란 빛무리(몸에 거는 변환 밖 — 화면 좌표)
         c.save();
         if (!Double.isNaN(a.cut)) { c.beginPath(); c.rect(a.x - D.cell * s, y - D.cell * s * 2.4, D.cell * s * 2, D.cell * s * 2.4 - a.cut); c.clip(); }
         c.translate(a.x + a.ox, y + (a.feetScale ? a.y : 0)); if (a.dir < 0) c.scale(-1, 1); if (a.sx != 1 || a.sy != 1) c.scale(a.sx, a.sy);
         if (a.ang != 0) { double px = a.pvx, py = a.pvy; c.translate(px, py); c.rotate(a.ang); c.translate(-px, -py); }
-        if (a.heart > 0) c.globalAlpha(clamp(1 - a.heart * 1.05, 0, 1));                               // 몸이 하트로 바뀌는 동안 원래 그림은 옅어진다
-        c.drawImage(sheet, sx, sy, 256, 256, dx, dy, D.cell * s, D.cell * s);
+        if (a.heart > 0 || a.fade < 1) c.globalAlpha(clamp((a.heart > 0 ? 1 - a.heart * 1.05 : 1) * a.fade, 0, 1));    // 몸이 하트로 바뀌는 동안 · 별빛으로 흩어졌다 모이는 동안 원래 그림은 옅어진다
+        if (a.fade > .004) c.drawImage(sheet, sx, sy, 256, 256, dx, dy, D.cell * s, D.cell * s);
         if (a.heart > 0) {                                                                         // s354 둘숑: 하트 모양 몸(풍선처럼 부푼 몸이 땅에 닿는 순간)
             double hs = TH * zz * .3, hk = ease(a.heart); c.globalAlpha(clamp(hk, 0, 1));
             double hy = -TH * zz * .5, hr = hs * (.6 + .4 * hk);
@@ -864,6 +870,50 @@ public final class SceneCore {
         c.restore();
         if (a.umb) SceneArt.drawUmbrella(c, a.x + a.dir * 2, y - TH * zz * .98 + a.y, zz, a.id);
         drawProps(c, a, true);
+        if (a.sl > 0) starLight(c, a, true, s, y);                                                  // s415 뽀푸: 몸 앞쪽 ✨ 별빛
+    }
+    /**
+     * s415 뽀푸 별빛(YJ 2026-11-03: 공중에서 노란 별빛이 몸을 감싸고 → 땅에 닿는 순간 흩어지고 → 빛이 다시 모여 뽀푸가 된다, ✨ 모양으로 반짝).
+     * 언제 어떤 단계인지(a.sl) · 얼마나 진행됐는지(a.slU)는 엔진이 고른 land 동작(L_star)이 정한다. 여기서는 그 값대로 점 위치·크기·투명도만 계산해 그린다(무작위 없음 — 같은 값이면 같은 그림).
+     * 별 위치는 황금각(2.39996 rad)으로 흩어 놓은 N 개: 각 별마다 각도 · 거리 · 크기 · 반짝임 박자가 고정돼 있다.
+     */
+    static final int SL_N = 16;
+    void starLight(SceneCv c, Actor a, boolean front, double s, double footY) {
+        double zz = zs(a.z), h = HH(a), u = a.slU, T = t, cx = a.x + a.ox, cy = footY + a.y - h * .5, i;
+        if (a.sl == 1) {                                                                           // 감싸는 별빛: 후광 + 몸 둘레를 도는 ✨ + 위로 흩날리는 꼬리
+            if (!front) { SceneArt.halo(c, cx, cy, h * .95, h * .95, .9 * u); return; }
+            for (i = 0; i < SL_N; i++) {
+                double ph = i * 2.39996, orb = T * (1.9 + (i % 3) * .35) + ph, rr = h * (.52 + .2 * ((i * 7) % 5) / 4.0), bz = Math.sin(orb);
+                double tw = .55 + .45 * Math.sin(T * 8.5 + i * 1.7), sz = h * (.09 + .06 * ((i * 5) % 4) / 3.0) * (.7 + .5 * tw);
+                if (i < 10) SceneArt.sparkle(c, cx + Math.cos(orb) * rr, cy + bz * rr * .55 - h * .04, sz, T * 1.3 + ph, u * (bz < 0 && i % 2 == 0 ? .75 : 1) * tw);       // 몸 둘레를 도는 별빛
+                else {                                                                             // 떨어지는 몸 위쪽으로 길게 이어지는 꼬리 별빛
+                    double fl = (T * 1.6 + (i - 10) * .17) % 1.0;
+                    SceneArt.sparkle(c, cx + Math.sin(ph * 3 + T) * h * .38, cy - h * (.55 + fl * 1.5), sz * (1 - fl * .7), T * 2 + ph, u * (1 - fl) * tw);
+                }
+            }
+        } else if (a.sl == 2) {                                                                    // 흩어짐: 몸이 있던 자리에서 별빛이 사방으로 퍼지며 사라진다
+            if (!front) { SceneArt.halo(c, cx, cy, h * (1 + 1.6 * u), h * (1 + 1.6 * u), .85 * (1 - u) * (1 - u)); return; }
+            double eo = 1 - (1 - u) * (1 - u) * (1 - u);
+            for (i = 0; i < SL_N + 10; i++) {
+                double ph = i * 2.39996, d = h * (.25 + 1.55 * (.45 + .55 * ((i * 11) % 7) / 6.0) * eo), an = ph, tw = .6 + .4 * Math.sin(T * 12 + i * 2.1);
+                double sz = h * (.1 + .09 * ((i * 5) % 4) / 3.0) * (1 - .5 * u) * (.75 + .4 * tw);
+                SceneArt.sparkle(c, cx + Math.cos(an) * d * 1.15, cy + Math.sin(an) * d * .8 - eo * h * .15, sz, T * 2.2 + ph, (1 - u * u) * tw);
+            }
+        } else if (a.sl == 3) {                                                                    // 다시 모임: 흩어졌던 빛이 한 점으로 소용돌이치며 모여 뽀푸의 모습이 된다
+            double gi = 1 - u, eg = gi * gi;
+            if (!front) { SceneArt.halo(c, cx, cy, h * (.55 + .5 * u), h * (.55 + .5 * u), (.25 + .65 * u * u)); return; }
+            for (i = 0; i < SL_N + 10; i++) {
+                double ph = i * 2.39996, d = h * (.18 + 1.65 * (.45 + .55 * ((i * 11) % 7) / 6.0) * eg), an = ph + gi * 2.6, tw = .6 + .4 * Math.sin(T * 12 + i * 2.1);
+                double sz = h * (.1 + .1 * ((i * 5) % 4) / 3.0) * (.6 + .5 * u) * (.75 + .4 * tw);
+                SceneArt.sparkle(c, cx + Math.cos(an) * d * 1.15, cy + Math.sin(an) * d * .8, sz, -T * 2.2 + ph, clamp(u * 2.2, 0, 1) * (u > .92 ? (1 - u) / .08 : 1) * tw);
+            }
+        } else if (a.sl == 4) {                                                                    // 여운: 뽀푸가 웃는 동안 몇 개의 ✨ 가 반짝이며 사그라든다
+            if (!front) { SceneArt.halo(c, cx, cy, h * 1.05, h * 1.05, .5 * (1 - u)); return; }
+            for (i = 0; i < 7; i++) {
+                double ph = i * 2.39996, an = ph + T * .9, rr = h * (.88 + .12 * (i % 3)), tw = .5 + .5 * Math.sin(T * 7 + i * 1.9);
+                SceneArt.sparkle(c, cx + Math.cos(an) * rr, cy + Math.sin(an) * rr * .75 - h * .05, h * (.055 + .04 * (i % 3) / 2.0) * (.6 + .6 * tw), T + ph, (1 - u) * tw);
+            }
+        }
     }
     SceneArt.Pal pal() { return L; }
     void drawSkyFx(SceneCv c, double tt) {

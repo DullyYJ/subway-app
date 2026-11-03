@@ -11,12 +11,12 @@
 'use strict';
 var SCENE_CHARS = ["dolsom", "lovel", "dudung", "sul", "ppopu", "chaeng", "juksun", "bbosong"];   // ★ 끝에만 덧붙인다(객실 장면의 비트 번호 = 이 순서) — juksun 판다 죽순이 · bbosong 아기하마 뽀송
 // ★ 캐릭터 특성(YJ 2026-10-16): 어떤 동작을 어떤 순서로 하는지 · 잡았다 놓았을 때 어떤 연출을 하는지는 엔진이 정한다. 앱은 이 이름대로 그리기만 한다.
-//   land: cotton(솜사탕처럼 부풀어 안전 착륙+하트) | pose(두 발 착지 멋진 포즈+씨익 웃음) | dig(땅속으로 숨었다 2초 뒤 나와 화냄) | flip(공중 앞 한 바퀴 안전 착지)
+//   land: cotton(솜사탕처럼 부풀어 안전 착륙+하트) | star(노란 ✨ 별빛이 몸을 감싸고 내려와 닿는 순간 흩어졌다가 다시 모여 뽀푸가 되고 웃음) | pose(두 발 착지 멋진 포즈+씨익 웃음 — 지금은 쓰지 않는 예전 연출) | dig(땅속으로 숨었다 2초 뒤 나와 화냄) | flip(공중 앞 한 바퀴 안전 착지)
 //         | fly(날개를 펴 날아가 다른 곳에 착지) | puddle(웅덩이가 생기고 첨벙)
 //         | tumble(쮸르: 들고 있던 죽순을 공중에 떨어뜨리고 앞으로 한 바퀴 돌아 착지 → 죽순을 찾으러 가서 집어 듦)
 //         | hose(베비히포: 입에서 땅으로 물대포를 쏴 안전하게 착지 → 주변 친구들에게 물대포를 쏘면 친구들이 놀라 도망)
 //   acts: 기본(walk·hop·spin·rest)과 캐릭터 전용 동작 이름. 앱은 순서대로 한 동작씩 그린다(끝나면 다음).
-var SCENE_LAND = { dolsom: "cotton", ppopu: "pose", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "tumble", bbosong: "hose" };
+var SCENE_LAND = { dolsom: "cotton", ppopu: "star", dudung: "dig", lovel: "flip", sul: "fly", chaeng: "puddle", juksun: "tumble", bbosong: "hose" };
 var SCENE_ACTS = {
   // 나머지 여섯 친구도 전용 동작 10가지(s301): 기존 5 + 새 5 (ppopu 는 낙엽 다이빙이 계절 한정이라 새 동작 6개)
   dolsom: ["shake", "tailchase", "loaf", "ball", "mirror", "sit", "howl", "snuffle", "rollover", "zoomies"],        // 흔들기·꼬리잡기·식빵·공놀이·거울 + 앉아·아우~·킁킁·배 보이기·우다다
