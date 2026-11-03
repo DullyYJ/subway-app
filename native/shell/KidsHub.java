@@ -643,7 +643,7 @@ public final class KidsHub {
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
         if ("kidcheer".equals(id)) return "cheer";
-        if ("kidev".equals(id) || "kidreg".equals(id) || "kidrt".equals(id)) return "ev";          // 서버가 sheet:"ev" 로 답하는 화면들 — 종류가 다르면 미리 띄운 팝업을 닫았다 다시 열어 화면이 두 번 열렸다
+        if ("kidev".equals(id) || "kidreg".equals(id) || "kidrt".equals(id) || "kidpls".equals(id)) return "ev";          // 서버가 sheet:"ev" 로 답하는 화면들 — 종류가 다르면 미리 띄운 팝업을 닫았다 다시 열어 화면이 두 번 열렸다
         return "link";
     }
 
