@@ -631,7 +631,7 @@ public final class KidsHub {
                     ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
                     if (clear.length() > 0 && cv != null && !"kh.say".equals(v)) cv.setField(clear, "");          // kh.say 는 누른 즉시 비웠다(그 사이 새로 쓴 글을 지우지 않는다)
                     if ("kqx".equals(clear)) qpt = 1;
-                    if (close) { closeSheet(true); }
+                    if (close && (v == null || !v.endsWith(".cancel"))) { closeSheet(true); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
                     if (hub && open) fetchHub();
                 } });
             } catch (Throwable e) { note("처리하지 못했어요"); }
@@ -643,7 +643,7 @@ public final class KidsHub {
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
         if ("kidcheer".equals(id)) return "cheer";
-        if ("kidev".equals(id)) return "ev";
+        if ("kidev".equals(id) || "kidreg".equals(id) || "kidrt".equals(id)) return "ev";          // 서버가 sheet:"ev" 로 답하는 화면들 — 종류가 다르면 미리 띄운 팝업을 닫았다 다시 열어 화면이 두 번 열렸다
         return "link";
     }
 
@@ -819,6 +819,7 @@ public final class KidsHub {
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
             buzz(act, 14L);                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
+            if ("kpg.cancel".equals(a.v) && sheetD != null) { closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // 장소 찾기 취소도 서버 답을 기다리지 않고 바로 닫는다(초안 버리기는 뒤에서)
             if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;

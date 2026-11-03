@@ -3869,3 +3869,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **ScreenView 따라가기**: `fol` 지도에서 값(핀 · 걷는 길)이 바뀌어도 다시 맞추지(fit) 않고 `tmFollowUpdate` — 줌과 손으로 옮긴 자리를 지키며 내 위치 점만 지금 보이는 자리에서 새 자리로 보고 간격(0.7~3초)만큼 천천히 옮긴다(`tmFolRun` 33ms 반복). 그동안 카메라도 점을 따라간다(`setCamera`). 손으로 지도를 60px 넘게 옮기면 10초 동안은 따라가지 않는다(`vecCamera` 가 감지). `fol` 이 처음 오면 점이 가운데 · 17 배율. 화면에서 떨어지면(`onDetachedFromWindow`) 반복을 멈춘다.
 - **한계 · 기기 미확인**: 안드로이드 계층은 여기서 컴파일하지 못했다(괄호 균형 시험 통과, CI android.jar 컴파일 확인 필요). MapLibre 카메라를 33ms 마다 `setCamera` 하는 부하 · 손으로 옮김 감지 임계값(60px)은 기기에서 봐야 한다. 화살표 크기(점 둘레 20dp)도 실제 화면에서 확인.
 - **시험**: 키즈 저장소 `test/watch.test.mjs` 가 엔진 쪽(보는 중 · 방향 · 따라가기)을 시험하고, 실제 `ScreenCore.load` + `TileMapCore.parsePins` 로 `fol` · `h` 해석을 확인했다(JVM).
+
+## s397 (2026-11-03) — 장소 등록 팝업이 두 번 열리고 취소가 느리던 것
+- 원인(영상): ① `KidsHub.kindOf` 가 `kidreg`·`kidrt` 를 모르고 "link" 로 돌려줘서, 미리 띄운 팝업(종류 link)에 서버 답(`sheet:"ev"`)이 오면 종류가 달라 팝업을 닫고 새로 열었다(화면이 다시 열리는 것처럼 보임). ② `kpg.cancel` 은 서버 답이 올 때까지 안 닫혔다(약 1.5초).
+- 고침(KidsHub.java): `kindOf` 가 `kidreg`·`kidrt` 도 "ev" 로 돌려준다 · `kpg.cancel` 은 누르자마자 `closeSheet(false)` 하고 서버 알림은 뒤에서 보낸다 · `.cancel` 답의 `close` 는 무시한다(그 사이 새로 연 팝업을 닫지 않게).
+- 한계: 안드로이드 계층은 CI 컴파일로만 확인. 기기 체감은 미확인.
