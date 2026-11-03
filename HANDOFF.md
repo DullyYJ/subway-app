@@ -3907,3 +3907,6 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **앱**: `ShellCore.popFacts`(팝업용 작은 사실) · `isMenuPage` · `routePage` 의 notif/conv 분기(`PG_SUB`=하위 화면 열기, `PG_BATOFF`=끄기는 앱 정보로) · `ShellActivity.openSetPage(page, back)` — 팝업에서 연 위젯/하차/갤럭시 절전 화면은 [뒤로]에서 그 팝업으로 돌아온다(`setBack`). 팝업은 바깥을 눌러도 닫힌다.
 - **마커 사진(키즈)**: `MarkerCropCore`(순수: 동그라미가 사진 안에만 있게 끌기·확대 제한) · `MarkerCropDialog`(사진 위 동그라미, 끌기 + 두 손가락 확대, [취소][적용]) · `MarkerPhoto`(`files/markers/<열쇠>.png` 160px 동그란 그림 + 메모리 캐시 — 이 폰에만 저장, 서버로 안 보냄) · `TileMapArt.drawMePhoto`(핀 `g="kid.<열쇠>"` 인 내 핀 'm' 만 사진으로: 퍼지는 고리 · 흰 테두리 · 방향 화살표). `KidsHub`: `km.pick`(ACTION_GET_CONTENT) · `km.clr` · `onPick` ← `ShellActivity.onActivityResult` · 설정 줄은 `/p/setrow?kn=1` 로 받아 새 레이아웃.
 - 시험: settings_engine 292(팝업·메뉴·옛 앱) · shell_native 119(JVM: 팝업 routePage · 자르기 계산) · 새 팝업 JSON 을 실제 ScreenCore 검증기에 넣어 전부 통과. **안드로이드 계층(사진 고르기·자르기 화면·지도 그리기)은 CI 컴파일로만 확인, 기기 미확인. 워커 두 개(route-v2 · kids) 배포 필요.**
+
+## s407 (2026-11-04) — 부모 앱 키즈 알림: 진동 + 알림음 확실히 (가족대화 포함, 자녀 앱은 gildongmu-kids s417)
+- `KidsPush`: 채널 `kids_alert2`(기기 알림음 + 진동 0.3초×3 + 잠금화면 표시, 옛 `kids_push` 삭제) · 카드를 숨기던 두 경우(키즈 화면을 보는 중 · 호출 팝업으로 보여 준 때)에도 `cue()` 로 진동 + 알림음. 긴급(sos) 채널은 그대로(알람음). **기기 미확인.**
