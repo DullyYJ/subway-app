@@ -893,7 +893,7 @@ function findAndroidJar() {
   await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 키즈 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/m\.put\("mine", true\); m\.put\("un", true\);/.test(k), '방금 보낸 글(낙관적 표시)도 안 읽음으로');
-    assert.ok(/static volatile KidsHub hub;/.test(kp) && /h != null && h\.viewing\(\)\) return;/.test(kp) && !/KidsPush\.fg/.test(k) && /public boolean viewing\(\) \{ return open && !paused; \}/.test(k), '알림 숨김: 키즈 화면을 볼 때만(앱이 앞이어도 다른 탭이면 알림)');
+    assert.ok(/static volatile KidsHub hub;/.test(kp) && /h != null && h\.viewing\(\)\) \{ cue\(getApplicationContext\(\)\); return; \}/.test(kp) && !/KidsPush\.fg/.test(k) && /public boolean viewing\(\) \{ return open && !paused; \}/.test(k), '알림 숨김: 키즈 화면을 볼 때만(앱이 앞이어도 다른 탭이면 알림)');
     assert.ok(/n\.un = optBool\(m, "un", false\)/.test(sc) && /it\.unW = n\.un/.test(sc) && /it\.unW > 0f\) \{ setText\(ScreenCore\.MSG_TIME, true, pal\[R_GOLD\]\); cv\.drawText\("1"/.test(sv), '말풍선 un → 시각 앞 노란 1');
   });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
