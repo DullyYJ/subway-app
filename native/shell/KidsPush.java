@@ -21,7 +21,7 @@ import java.util.Map;
  *  · 키즈 화면을 보고 있을 땐 알림을 띄우지 않는다(긴 대기로 이미 실시간이다). 다른 탭을 보거나 앱이 뒤에 있으면 알림이 온다.
  */
 public final class KidsPush extends FirebaseMessagingService {
-    static final String CH = "kids_push", K_FT = "kid.ft", K_FTSENT = "kid.ftsent";
+    static final String CH = "kids_push", CH_SOS = "kids_sos", K_FT = "kid.ft", K_FTSENT = "kid.ftsent";
     /** 앱이 화면 앞에 있나(KidsHub.resume/pause 가 알린다). */
     static volatile KidsHub hub;
 
@@ -60,7 +60,8 @@ public final class KidsPush extends FirebaseMessagingService {
             Map<String, String> d = m.getData();
             if (d == null || d.isEmpty()) return;
             KidsHub h = hub;
-            if (h != null && h.viewing()) return;                               // s385: 키즈 화면(대화 칸·대화방)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림이 온다(카톡처럼). 키즈 화면은 긴 대기로 이미 실시간이다
+            boolean urgent = "sos".equals(d.get("k"));                          // s399: 자녀의 긴급 호출은 화면을 보고 있어도 항상 크게 알린다
+            if (!urgent && h != null && h.viewing()) return;                               // s385: 키즈 화면(대화 칸·대화방)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림이 온다(카톡처럼). 키즈 화면은 긴 대기로 이미 실시간이다
             show(getApplicationContext(), d.get("title"), d.get("body"), d.get("tag"), d.get("k"));
         } catch (Throwable ignored) { }
     }
@@ -69,14 +70,22 @@ public final class KidsPush extends FirebaseMessagingService {
         if (body == null || body.length() == 0) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
+        final boolean urgent = "sos".equals(kind);
+        final String chId = urgent ? CH_SOS : CH;
         if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch = new NotificationChannel(CH, "길동무 키즈 알림", NotificationManager.IMPORTANCE_HIGH);
+            NotificationChannel ch = new NotificationChannel(chId, urgent ? "길동무 긴급 호출" : "길동무 키즈 알림", NotificationManager.IMPORTANCE_HIGH);
             ch.enableVibration(true);
+            if (urgent) {                                                       // 긴급 호출: 알람 소리(무음 모드여도 알람 소리는 난다) + 길게 떠는 진동
+                ch.setVibrationPattern(new long[] {0, 500, 200, 500, 200, 500, 200, 500});
+                ch.setSound(android.provider.Settings.System.DEFAULT_ALARM_ALERT_URI, new android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            }
             nm.createNotificationChannel(ch);
         }
         Intent it = new Intent(c, ShellActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("kids_open", kind == null ? "1" : kind);
         PendingIntent pi = PendingIntent.getActivity(c, 7701, it, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, CH) : new Notification.Builder(c);
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, chId) : new Notification.Builder(c);
+        if (urgent) b.setCategory(Notification.CATEGORY_ALARM);
         b.setSmallIcon(android.R.drawable.ic_dialog_map).setContentTitle(title == null || title.length() == 0 ? "길동무" : title).setContentText(body)
                 .setStyle(new Notification.BigTextStyle().bigText(body)).setAutoCancel(true).setContentIntent(pi).setWhen(System.currentTimeMillis());
         if (Build.VERSION.SDK_INT < 26) b.setPriority(Notification.PRIORITY_HIGH).setDefaults(Notification.DEFAULT_ALL);

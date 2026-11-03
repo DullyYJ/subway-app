@@ -3874,3 +3874,6 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 원인(영상): ① `KidsHub.kindOf` 가 `kidreg`·`kidrt` 를 모르고 "link" 로 돌려줘서, 미리 띄운 팝업(종류 link)에 서버 답(`sheet:"ev"`)이 오면 종류가 달라 팝업을 닫고 새로 열었다(화면이 다시 열리는 것처럼 보임). ② `kpg.cancel` 은 서버 답이 올 때까지 안 닫혔다(약 1.5초).
 - 고침(KidsHub.java): `kindOf` 가 `kidreg`·`kidrt` 도 "ev" 로 돌려준다 · `kpg.cancel` 은 누르자마자 `closeSheet(false)` 하고 서버 알림은 뒤에서 보낸다 · `.cancel` 답의 `close` 는 무시한다(그 사이 새로 연 팝업을 닫지 않게).
 - 한계: 안드로이드 계층은 CI 컴파일로만 확인. 기기 체감은 미확인.
+
+## s399 (2026-11-03) — 키즈 긴급 호출 알림(부모 쪽)
+- `KidsPush`: 푸시 k=sos 는 키즈 화면을 보고 있어도 숨기지 않고, 전용 채널 `kids_sos`(알람 용도 소리 · 긴 진동 · CATEGORY_ALARM)로 알린다. 카드 · 버튼 · 판단은 모두 키즈 서버(`/p/screen` 의 맨 위 카드, `kx.ack`/`kx.done`)가 그린다 — 자세한 것은 gildongmu-kids HANDOFF s399.
