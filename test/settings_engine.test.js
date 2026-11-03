@@ -52,7 +52,7 @@ ok(callIds === 'pol.privacy,pol.location,pol.opensource,errlog', '앱 함수 호
 ok(navs.find(n => n.act.v === 'errlog').sub === '3' && navs.find(n => n.act.v === 'cm').sub === '켜짐' && navs.find(n => n.act.v === 'ovl').sub === '꺼짐', '오른쪽 글: 오류 3 · 켜짐 · 꺼짐');
 {
   const titles = s.body.filter(n => n.t === 'panel' && n.kids[0] && n.kids[0].t === 'text').map(n => n.kids[0].s);
-  ok(titles.join() === '커뮤니티 아이디,알림 설정,갤럭시 백그라운드 유지,안내 정확도 향상,출퇴근 브리핑 알림,캐릭터 시계 위젯,하차 5분 전 추천,다른 앱 위에 표시,개발자 도구,테마 설정,약관 및 정책', '카드 순서가 웹 설정 탭과 같다(아이디 · 알림 · 갤럭시 · 정확도 · 출퇴근 · 위젯 · 하차 추천 · 오버레이 · 개발자 · 테마 · 약관): ' + titles.join());
+  ok(titles.join() === '알림 설정,갤럭시 백그라운드 유지,안내 정확도 향상,출퇴근 브리핑 알림,캐릭터 시계 위젯,하차 5분 전 추천,다른 앱 위에 표시,개발자 도구,테마 설정,약관 및 정책', '카드 순서가 웹 설정 탭과 같다(아이디 · 알림 · 갤럭시 · 정확도 · 출퇴근 · 위젯 · 하차 추천 · 오버레이 · 개발자 · 테마 · 약관): ' + titles.join());
   ok(!s.body.some(n => n.t === 'panel' && n.kids[0] && n.kids[0].s === '기능 설정'), '한 칸짜리 \'기능 설정\' 묶음은 없다');
 }
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
@@ -163,6 +163,15 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
     ok(bad.length === 0, p + ': 모든 행동이 허용 목록 안 ' + JSON.stringify(bad.slice(0, 2)));
   });
+  // s407: 아이디 옆 작은 회색 글 · 새 앱 카드 순서(아이디 → 출퇴근 → 테마 → 알림·편의 → 개발자 → 약관)
+  {
+    const NEW = E.settingsScreen({ cap: 8 }, { pgs: ['sam', 'ovl', 'arr', 'cm', 'gw', 'dev', 'notif', 'conv'], id: 'ab', np: {} });
+    const first = NEW.body[0].kids[0];
+    ok(first.t === 'row' && first.kids[0].s === '커뮤니티 아이디' && first.kids[1].s === '아이디는 기기에만 저장됩니다' && first.kids[1].color === 'sub' && first.kids[1].size < 12, '아이디 제목 옆에 작은 회색 글');
+    ok(!texts(NEW).some(x => /이 기기에만 저장되며/.test(x)), '아이디 아래 안내 글은 없다');
+    const ttl = NEW.body.filter(n => n.t === 'panel').map(n => n.kids[0].t === 'row' ? n.kids[0].kids[0].s : n.kids[0].s);
+    ok(ttl.join() === '커뮤니티 아이디,출퇴근 브리핑 알림,테마 설정,알림 · 편의 기능,개발자 도구,약관 및 정책', '카드 순서: ' + ttl.join());
+  }
   // s406: 알림 설정 · 편의 기능 팝업 + 첫 화면 메뉴
   {
     const F = { np: { arrive: 1, transfer: 0, arrive_reco: 1 }, npd: 1, ovl: 1, gr: 0, sup: 1, sam: 1, samw: 1, ig: 0, rl: 1 };

@@ -77,7 +77,7 @@ function settingsScreen(inp, factsIn) {
   var pgAct = function (k) { return pg ? { a: 'call', v: 'pg.' + k } : { a: 'web', v: k }; };
 
   // 1) 커뮤니티 아이디
-  var idKids = [settingsTitleN('커뮤니티 아이디', 6)];
+  var idKids = [{ t: 'row', gap: 8, pad: [0, 0, 0, 6], kids: [settingsTitleN('커뮤니티 아이디', 0), { t: 'text', s: '아이디는 기기에만 저장됩니다', size: 10.5, color: 'sub', lh: 1.3, align: 'right', pad: [0, 4, 0, 0] }] }];          // s407: 제목 옆 작은 회색 글(아래 안내 글은 없앴다)
   var d1 = settingsBoldN([['아이디를 등록하면 게시글 작성과 실시간 채팅에 참여할 수 있어요.\n아이디 없이도 글과 채팅을 ', 0], ['구경', 1], ['하는 건 자유롭게 가능합니다.', 0]]);
   idKids.push(settingsDescN(d1.s, 14, d1.hl));
   if (f.id) {
@@ -88,15 +88,14 @@ function settingsScreen(inp, factsIn) {
   idKids.push({ t: 'button', s: '아이디 저장', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
   if (f.id) idKids.push({ t: 'button', s: '아이디 삭제', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
   body.push(settingsPanelN(idKids, 16));
-  body.push({ t: 'text', s: '아이디는 이 기기에만 저장되며,\n작성한 글·채팅에 표시됩니다.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
 
   // 2~4) 새 앱(pgs 에 notif · conv 가 있다): 알림 · 편의 기능은 줄 하나로 줄이고, 누르면 가운데 팝업에서 설정한다 / 옛 앱: 예전 긴 화면 그대로
-  var menu = pg && pgHas('notif') && pgHas('conv') && !!f.pgs;
+  var menu = pg && pgHas('notif') && pgHas('conv') && !!f.pgs, menuPanel = null;
   if (menu) {
     var nOn = 0; SETTINGS_NOTIF.forEach(function (n) { if (f.np[n.key]) nOn++; });
-    body.push(settingsPanelN([settingsTitleN('알림 · 편의 기능', 4), settingsDescN('눌러서 따로 설정해요.', 4),
+    menuPanel = settingsPanelN([settingsTitleN('알림 · 편의 기능', 4), settingsDescN('눌러서 따로 설정해요.', 4),
       settingsNavN('알림 설정', '켜짐 ' + nOn + '/' + SETTINGS_NOTIF.length, { a: 'call', v: 'pg.notif' }, true),
-      settingsNavN('편의 기능', '', { a: 'call', v: 'pg.conv' }, true)]));
+      settingsNavN('편의 기능', '', { a: 'call', v: 'pg.conv' }, true)]);
   } else {
     // 2) 알림 설정
     var nk = [settingsTitleN('알림 설정', 4), settingsDescN('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.', 12)];
@@ -141,19 +140,22 @@ function settingsScreen(inp, factsIn) {
   if (pgHas('ovl') && !menu) body.push(settingsPanelN([settingsTitleN('다른 앱 위에 표시', 4),
     settingsDescN('다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 안내 정보만 보여주고 광고는 넣지 않아요.', 6),
     settingsNavN('표시 설정', onTxt(f.ovl), pgAct('ovl'), true)]));
-  if (pgHas('dev')) body.push(settingsPanelN([settingsTitleN('개발자 도구', 4),
+  var devP = pgHas('dev') ? settingsPanelN([settingsTitleN('개발자 도구', 4),
     settingsDescN('오버레이 시나리오 시험 같은 진단 도구예요.', 6),
-    settingsNavN('도구 열기', '', pgAct('dev'), true)]));
+    settingsNavN('도구 열기', '', pgAct('dev'), true)]) : null;
+  if (!menu && devP) body.push(devP);
 
   // 7) 테마
   var dk = f.th === 'dark';
-  body.push(settingsPanelN([
+  var themeP = settingsPanelN([
     settingsTitleN('테마 설정', 4), settingsDescN('앱 전체 색상 테마를 변경할 수 있어요.', 14),
     { t: 'select', title: '다크 블랙', sub: '깊고 선명한 다크 테마', on: dk, act: { a: 'sel', v: 'dark' }, fill: '#18181a', line: 'border', onl: '#d4af37', tc: '#f2f2f7', sc: '#8e8e93', chk: '#d4af37', ckf: '#121214',
       prev: ['#121214', '#1c1c1e', '#3a3a3c', '#d4af37', '#3a3a3c'], pad: [0, 0, 0, 10] },
     { t: 'select', title: '하늘 파스텔', sub: '맑고 시원한 하늘색 테마', on: !dk, act: { a: 'sel', v: 'pastel' }, fill: 'card', line: 'border', onl: '#1d9bf0', chk: '#1d9bf0', ckf: '#ffffff',
       prev: ['#f0f4f8', '#ffffff', '#dce8f0', '#1d9bf0', '#dce8f0'] }
-  ]));
+  ]);
+  if (menu) { body.push(themeP, menuPanel); if (devP) body.push(devP); }          // s407 순서: 커뮤니티 아이디 → 출퇴근 브리핑 → 테마 → 알림 · 편의 기능 → (앱이 끼우는 길동무 키즈) → 개발자 도구 → 약관
+  else body.push(themeP);
 
   // 8) 약관
   body.push(settingsPanelN([

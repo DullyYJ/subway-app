@@ -14187,7 +14187,7 @@ function settingsScreen(inp, factsIn) {
   var pgAct = function (k) { return pg ? { a: 'call', v: 'pg.' + k } : { a: 'web', v: k }; };
 
   // 1) \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514
-  var idKids = [settingsTitleN('\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514', 6)];
+  var idKids = [{ t: 'row', gap: 8, pad: [0, 0, 0, 6], kids: [settingsTitleN('\ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514', 0), { t: 'text', s: '\uc544\uc774\ub514\ub294 \uae30\uae30\uc5d0\ub9cc \uc800\uc7a5\ub429\ub2c8\ub2e4', size: 10.5, color: 'sub', lh: 1.3, align: 'right', pad: [0, 4, 0, 0] }] }];          // s407: \uc81c\ubaa9 \uc606 \uc791\uc740 \ud68c\uc0c9 \uae00(\uc544\ub798 \uc548\ub0b4 \uae00\uc740 \uc5c6\uc574\ub2e4)
   var d1 = settingsBoldN([['\uc544\uc774\ub514\ub97c \ub4f1\ub85d\ud558\uba74 \uac8c\uc2dc\uae00 \uc791\uc131\uacfc \uc2e4\uc2dc\uac04 \ucc44\ud305\uc5d0 \ucc38\uc5ec\ud560 \uc218 \uc788\uc5b4\uc694.\n\uc544\uc774\ub514 \uc5c6\uc774\ub3c4 \uae00\uacfc \ucc44\ud305\uc744 ', 0], ['\uad6c\uacbd', 1], ['\ud558\ub294 \uac74 \uc790\uc720\ub86d\uac8c \uac00\ub2a5\ud569\ub2c8\ub2e4.', 0]]);
   idKids.push(settingsDescN(d1.s, 14, d1.hl));
   if (f.id) {
@@ -14198,15 +14198,14 @@ function settingsScreen(inp, factsIn) {
   idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc800\uc7a5', size: 14, h: 42, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: { a: 'call', v: 'saveId' } });
   if (f.id) idKids.push({ t: 'button', s: '\uc544\uc774\ub514 \uc0ad\uc81c', size: 12, h: 38, r: 10, bold: true, fill: 'none', line: 'border2', tc: '#ff453a', pad: [0, 8, 0, 0], act: { a: 'call', v: 'clearId' } });
   body.push(settingsPanelN(idKids, 16));
-  body.push({ t: 'text', s: '\uc544\uc774\ub514\ub294 \uc774 \uae30\uae30\uc5d0\ub9cc \uc800\uc7a5\ub418\uba70,\n\uc791\uc131\ud55c \uae00\u00b7\ucc44\ud305\uc5d0 \ud45c\uc2dc\ub429\ub2c8\ub2e4.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
 
   // 2~4) \uc0c8 \uc571(pgs \uc5d0 notif \u00b7 conv \uac00 \uc788\ub2e4): \uc54c\ub9bc \u00b7 \ud3b8\uc758 \uae30\ub2a5\uc740 \uc904 \ud558\ub098\ub85c \uc904\uc774\uace0, \ub204\ub974\uba74 \uac00\uc6b4\ub370 \ud31d\uc5c5\uc5d0\uc11c \uc124\uc815\ud55c\ub2e4 / \uc61b \uc571: \uc608\uc804 \uae34 \ud654\uba74 \uadf8\ub300\ub85c
-  var menu = pg && pgHas('notif') && pgHas('conv') && !!f.pgs;
+  var menu = pg && pgHas('notif') && pgHas('conv') && !!f.pgs, menuPanel = null;
   if (menu) {
     var nOn = 0; SETTINGS_NOTIF.forEach(function (n) { if (f.np[n.key]) nOn++; });
-    body.push(settingsPanelN([settingsTitleN('\uc54c\ub9bc \u00b7 \ud3b8\uc758 \uae30\ub2a5', 4), settingsDescN('\ub20c\ub7ec\uc11c \ub530\ub85c \uc124\uc815\ud574\uc694.', 4),
+    menuPanel = settingsPanelN([settingsTitleN('\uc54c\ub9bc \u00b7 \ud3b8\uc758 \uae30\ub2a5', 4), settingsDescN('\ub20c\ub7ec\uc11c \ub530\ub85c \uc124\uc815\ud574\uc694.', 4),
       settingsNavN('\uc54c\ub9bc \uc124\uc815', '\ucf1c\uc9d0 ' + nOn + '/' + SETTINGS_NOTIF.length, { a: 'call', v: 'pg.notif' }, true),
-      settingsNavN('\ud3b8\uc758 \uae30\ub2a5', '', { a: 'call', v: 'pg.conv' }, true)]));
+      settingsNavN('\ud3b8\uc758 \uae30\ub2a5', '', { a: 'call', v: 'pg.conv' }, true)]);
   } else {
     // 2) \uc54c\ub9bc \uc124\uc815
     var nk = [settingsTitleN('\uc54c\ub9bc \uc124\uc815', 4), settingsDescN('\ubc1b\uace0 \uc2f6\uc740 \uc54c\ub9bc\ub9cc \uace8\ub77c\uc11c \ucf1c\uace0 \ub04c \uc218 \uc788\uc5b4\uc694. \ub044\uba74 \uc9c4\ub3d9\ub3c4 \ud568\uaed8 \uaebc\uc838\uc694.', 12)];
@@ -14251,19 +14250,22 @@ function settingsScreen(inp, factsIn) {
   if (pgHas('ovl') && !menu) body.push(settingsPanelN([settingsTitleN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', 4),
     settingsDescN('\ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \ud604\uc7ac\uc5ed \u00b7 \ub0a8\uc740\uc2dc\uac04\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc\uc694. \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694.', 6),
     settingsNavN('\ud45c\uc2dc \uc124\uc815', onTxt(f.ovl), pgAct('ovl'), true)]));
-  if (pgHas('dev')) body.push(settingsPanelN([settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4),
+  var devP = pgHas('dev') ? settingsPanelN([settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4),
     settingsDescN('\uc624\ubc84\ub808\uc774 \uc2dc\ub098\ub9ac\uc624 \uc2dc\ud5d8 \uac19\uc740 \uc9c4\ub2e8 \ub3c4\uad6c\uc608\uc694.', 6),
-    settingsNavN('\ub3c4\uad6c \uc5f4\uae30', '', pgAct('dev'), true)]));
+    settingsNavN('\ub3c4\uad6c \uc5f4\uae30', '', pgAct('dev'), true)]) : null;
+  if (!menu && devP) body.push(devP);
 
   // 7) \ud14c\ub9c8
   var dk = f.th === 'dark';
-  body.push(settingsPanelN([
+  var themeP = settingsPanelN([
     settingsTitleN('\ud14c\ub9c8 \uc124\uc815', 4), settingsDescN('\uc571 \uc804\uccb4 \uc0c9\uc0c1 \ud14c\ub9c8\ub97c \ubcc0\uacbd\ud560 \uc218 \uc788\uc5b4\uc694.', 14),
     { t: 'select', title: '\ub2e4\ud06c \ube14\ub799', sub: '\uae4a\uace0 \uc120\uba85\ud55c \ub2e4\ud06c \ud14c\ub9c8', on: dk, act: { a: 'sel', v: 'dark' }, fill: '#18181a', line: 'border', onl: '#d4af37', tc: '#f2f2f7', sc: '#8e8e93', chk: '#d4af37', ckf: '#121214',
       prev: ['#121214', '#1c1c1e', '#3a3a3c', '#d4af37', '#3a3a3c'], pad: [0, 0, 0, 10] },
     { t: 'select', title: '\ud558\ub298 \ud30c\uc2a4\ud154', sub: '\ub9d1\uace0 \uc2dc\uc6d0\ud55c \ud558\ub298\uc0c9 \ud14c\ub9c8', on: !dk, act: { a: 'sel', v: 'pastel' }, fill: 'card', line: 'border', onl: '#1d9bf0', chk: '#1d9bf0', ckf: '#ffffff',
       prev: ['#f0f4f8', '#ffffff', '#dce8f0', '#1d9bf0', '#dce8f0'] }
-  ]));
+  ]);
+  if (menu) { body.push(themeP, menuPanel); if (devP) body.push(devP); }          // s407 \uc21c\uc11c: \ucee4\ubba4\ub2c8\ud2f0 \uc544\uc774\ub514 \u2192 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \u2192 \ud14c\ub9c8 \u2192 \uc54c\ub9bc \u00b7 \ud3b8\uc758 \uae30\ub2a5 \u2192 (\uc571\uc774 \ub07c\uc6b0\ub294 \uae38\ub3d9\ubb34 \ud0a4\uc988) \u2192 \uac1c\ubc1c\uc790 \ub3c4\uad6c \u2192 \uc57d\uad00
+  else body.push(themeP);
 
   // 8) \uc57d\uad00
   body.push(settingsPanelN([
