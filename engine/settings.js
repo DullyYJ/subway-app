@@ -40,7 +40,7 @@ function settingsFacts(f) {
   var np = (f.np && typeof f.np === 'object') ? f.np : {};
   var o = {
     id: settingsStr(f.id, 12), np: {}, npd: settingsFlag(f.npd, false), rl: settingsFlag(f.rl, true), th: f.th === 'dark' ? 'dark' : 'pastel',
-    sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
+    sam: settingsFlag(f.sam, false), samw: settingsFlag(f.samw, false), ig: f.ig == null ? null : settingsFlag(f.ig, false), gr: f.gr == null ? null : settingsFlag(f.gr, false), sup: f.sup == null ? null : settingsFlag(f.sup, true), errn: Math.max(0, Math.min(999, Math.floor(Number(f.errn) || 0))),
     cm: f.cm == null ? null : settingsFlag(f.cm, false), ovl: f.ovl == null ? null : settingsFlag(f.ovl, false),
     cmi: settingsFlag(f.cmi, false), cmh: settingsFlag(f.cmh, false),                                                      // s278: 새 앱은 출퇴근 브리핑을 설정 화면 안에 그대로 펼친다(옛 앱은 '시간 · 장소 · 요일 설정' 줄 → 하위 화면)
     cmf: f.cmf && typeof f.cmf === 'object' ? settingsPageFacts(f.cmf) : null,
@@ -90,29 +90,38 @@ function settingsScreen(inp, factsIn) {
   body.push(settingsPanelN(idKids, 16));
   body.push({ t: 'text', s: '아이디는 이 기기에만 저장되며,\n작성한 글·채팅에 표시됩니다.', size: 11, color: 'sub', lh: 1.5, align: 'center', pad: [16, 14, 16, 0] });
 
-  // 2) 알림 설정
-  var nk = [settingsTitleN('알림 설정', 4), settingsDescN('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.', 12)];
-  if (f.npd) nk.push({ t: 'box', s: '알림 권한이 꺼져 있어요. 기기 설정 > 앱 > 길동무 > 알림에서 허용해주세요.', size: 12, lh: 1.5, tc: '#ff453a', color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-  SETTINGS_NOTIF.forEach(function (n, i) {
-    nk.push({ t: 'toggle', key: 'n.' + n.key, title: n.title, sub: n.desc, on: !!f.np[n.key], top: true, vp: 9, size: 13.5, ssize: 11, onc: '#30d158' });
-  });
-  body.push(settingsPanelN(nk));
+  // 2~4) 새 앱(pgs 에 notif · conv 가 있다): 알림 · 편의 기능은 줄 하나로 줄이고, 누르면 가운데 팝업에서 설정한다 / 옛 앱: 예전 긴 화면 그대로
+  var menu = pg && pgHas('notif') && pgHas('conv') && !!f.pgs;
+  if (menu) {
+    var nOn = 0; SETTINGS_NOTIF.forEach(function (n) { if (f.np[n.key]) nOn++; });
+    body.push(settingsPanelN([settingsTitleN('알림 · 편의 기능', 4), settingsDescN('눌러서 따로 설정해요.', 4),
+      settingsNavN('알림 설정', '켜짐 ' + nOn + '/' + SETTINGS_NOTIF.length, { a: 'call', v: 'pg.notif' }, true),
+      settingsNavN('편의 기능', '', { a: 'call', v: 'pg.conv' }, true)]));
+  } else {
+    // 2) 알림 설정
+    var nk = [settingsTitleN('알림 설정', 4), settingsDescN('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.', 12)];
+    if (f.npd) nk.push({ t: 'box', s: '알림 권한이 꺼져 있어요. 기기 설정 > 앱 > 길동무 > 알림에서 허용해주세요.', size: 12, lh: 1.5, tc: '#ff453a', color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+    SETTINGS_NOTIF.forEach(function (n, i) {
+      nk.push({ t: 'toggle', key: 'n.' + n.key, title: n.title, sub: n.desc, on: !!f.np[n.key], top: true, vp: 9, size: 13.5, ssize: 11, onc: '#30d158' });
+    });
+    body.push(settingsPanelN(nk));
 
-  // 3) 갤럭시 전용
-  if (f.sam) {
-    var sk = [settingsTitleN('갤럭시 백그라운드 유지', 4)];
-    var sd = settingsBoldN([['갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 두면 안전해요.', 0]]);
-    sk.push(settingsDescN(sd.s, 8, sd.hl));
-    if (f.samw) sk.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
-    if (pgHas('sam')) sk.push({ t: 'button', s: '자동 절전 제외 설정 열기', size: 13, h: 40, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: pgAct('sam') });      // 웹 samSetCard 의 금색 전체 폭 단추
-    body.push(settingsPanelN(sk));
+    // 3) 갤럭시 전용
+    if (f.sam) {
+      var sk = [settingsTitleN('갤럭시 백그라운드 유지', 4)];
+      var sd = settingsBoldN([['갤럭시는 며칠 안 쓴 앱을 자동 절전시켜 화면이 꺼진 동안의 하차 알림이 멈출 수 있어요. 길동무를 ', 0], ['자동으로 절전하지 않는 앱', 1], ['에 넣어 두면 안전해요.', 0]]);
+      sk.push(settingsDescN(sd.s, 8, sd.hl));
+      if (f.samw) sk.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+      if (pgHas('sam')) sk.push({ t: 'button', s: '자동 절전 제외 설정 열기', size: 13, h: 40, r: 10, bold: true, fill: 'gold', line: 'none', tc: '#121214', act: pgAct('sam') });      // 웹 samSetCard 의 금색 전체 폭 단추
+      body.push(settingsPanelN(sk));
+    }
+
+    // 4) 안내 정확도
+    body.push(settingsPanelN([
+      settingsTitleN('안내 정확도 향상', 2),
+      { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
+    ]));
   }
-
-  // 4) 안내 정확도
-  body.push(settingsPanelN([
-    settingsTitleN('안내 정확도 향상', 2),
-    { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
-  ]));
 
   // 6) 웹 설정 탭과 같은 순서의 기능 카드: 출퇴근 브리핑 → 캐릭터 시계 위젯 → 하차 추천 → 다른 앱 위에 표시 → 개발자 도구 (웹은 카드 안에 입력칸을 펼치고, 앱은 카드 아래 줄을 눌러 같은 내용의 하위 화면을 연다)
   var onTxt = function (v) { return v == null ? '' : (v ? '켜짐' : '꺼짐'); };
@@ -123,13 +132,13 @@ function settingsScreen(inp, factsIn) {
     var cmd = settingsBoldN([['설정한 시각에 ', 0], [f.pgs ? '날씨 + 혼잡도 + 준비물 한마디' : '날씨 + AI 역무원 요약', 1], ['를 알림으로 보내드려요.', 0]]);
     body.push(settingsPanelN([settingsTitleN('출퇴근 브리핑 알림', 4), settingsDescN(cmd.s, 6, cmd.hl), settingsNavN('시간 · 장소 · 요일 설정', onTxt(f.cm), pgAct('cm'), true)]));
   }
-  if (pgHas('gw')) body.push(settingsPanelN([settingsTitleN('캐릭터 시계 위젯', 4),
+  if (pgHas('gw') && !menu) body.push(settingsPanelN([settingsTitleN('캐릭터 시계 위젯', 4),
     settingsDescN('평소엔 캐릭터들이 각자 집에서 자고 있다가, 화면을 켜면 일어나 시계 주변을 돌아다니며 시계에 매달리고 응가도 해요. 출·퇴근 시각이 되면 캐릭터가 모여 응원하고 [출근하기]·[퇴근하기] 버튼이 나와요.', 6),
     settingsNavN('위젯 추가 · 돌아다니는 시간', '', pgAct('gw'), true)]));
-  if (pgHas('arr')) body.push(settingsPanelN([settingsTitleN(f.pgs ? '하차 7분 전 추천' : '하차 5분 전 추천', 4),
+  if (pgHas('arr') && !menu) body.push(settingsPanelN([settingsTitleN(f.pgs ? '하차 7분 전 추천' : '하차 5분 전 추천', 4),
     settingsDescN(f.pgs ? '도착 7분 전에 시간대별로 보내는 추천이에요. 시험 버튼으로 실제 알림과 같은 내용을 미리 받아 볼 수 있어요.' : '도착 5분 전에 시간대별로 보내는 추천이에요. 시험 버튼으로 실제 알림과 같은 내용을 미리 받아 볼 수 있어요.', 6),
     settingsNavN('시험 알림 · 상태 확인', '', pgAct('arr'), true)]));
-  if (pgHas('ovl')) body.push(settingsPanelN([settingsTitleN('다른 앱 위에 표시', 4),
+  if (pgHas('ovl') && !menu) body.push(settingsPanelN([settingsTitleN('다른 앱 위에 표시', 4),
     settingsDescN('다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 안내 정보만 보여주고 광고는 넣지 않아요.', 6),
     settingsNavN('표시 설정', onTxt(f.ovl), pgAct('ovl'), true)]));
   if (pgHas('dev')) body.push(settingsPanelN([settingsTitleN('개발자 도구', 4),
@@ -168,7 +177,7 @@ function settingsScreen(inp, factsIn) {
 //   gw.add.<hb|hw|vb|vw> · gw.roam.<dn|up> · erl.copy · erl.clear · locd.ok · locd.no · ask.ok · ask.no · cm.day.<0-6> · cm.preset.<weekday|weekend|all> · cm.tp.<morn|eve> · cm.test · cm.pick.<from|to|eFrom|eTo> ·
 //   tp.ap.<am|pm> · tp.h.<1-12> · tp.m.<0-55> · tp.ok · tp.cancel · pk.save · pk.clear · pk.u.<번호> · pk.b.<번호> · pk.cancel.   스위치(toggle) 키: cm · ovl.
 // ══════════════════════════════════════════════════════════════════════════
-var SETTINGS_PAGES = { cmb: '출퇴근 브리핑', sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내', askbat: '화면을 꺼도 끊기지 않게', asksam: '갤럭시 절전 제외', askovl: '다른 앱 위에 표시' };
+var SETTINGS_PAGES = { notif: '알림 설정', conv: '편의 기능', cmb: '출퇴근 브리핑', sam: '갤럭시 백그라운드 유지', ovl: '다른 앱 위에 표시', dev: '개발자 도구', arr: '하차 5분 전 추천', gw: '캐릭터 시계 위젯', cm: '출퇴근 브리핑 알림', polp: '개인정보처리방침', poll: '위치기반서비스 이용약관', polo: '데이터 출처 및 고지', erl: '오류 로그', locd: '위치 정보 이용 안내', askbat: '화면을 꺼도 끊기지 않게', asksam: '갤럭시 절전 제외', askovl: '다른 앱 위에 표시' };
 var SETTINGS_ASK = { askbat: 1, asksam: 1, askovl: 1 };      // 처음 설치 때 이어서 묻는 기기 설정 안내 — 뒤로 가기 없이 [나중에]/[설정하기] 만
 var SETTINGS_DAY_NM = ['일', '월', '화', '수', '목', '금', '토'];
 var SETTINGS_BK = ['알 수 없음', '활성', '작업 집합', '자주 사용', '드물게 사용', '제한'];
@@ -653,10 +662,45 @@ function settingsPageAskOvl() {
     [['[설정하기]를 누르면 기기 설정 화면이 열려요\n① ', 0], ['길동무', 1], ['를 찾아 눌러서\n② ', 0], ['다른 앱 위에 표시', 1], ['를 ', 0], ['켬', 1], ['으로 바꾸고 돌아오세요', 0]],
     [['· 안내정보를 보여줘요.', 0]]);
 }
+// ── 알림 설정(가운데 팝업): 모든 알림 스위치 + 하차 7분 전 추천 ──
+function settingsPageNotif(f) {
+  var k = [settingsTitleN('알림 설정', 4), settingsDescN('받고 싶은 알림만 골라서 켜고 끌 수 있어요. 끄면 진동도 함께 꺼져요.', 12)];
+  if (f.npd) k.push({ t: 'box', s: '알림 권한이 꺼져 있어요. 기기 설정 > 앱 > 길동무 > 알림에서 허용해주세요.', size: 12, lh: 1.5, tc: '#ff453a', color: 'text', fill: 'rgba(255,69,58,0.12)', line: 'rgba(255,69,58,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 0, 0, 4] });
+  SETTINGS_NOTIF.forEach(function (n) {
+    var d = n.key === 'arrive_reco' ? '도착 7분 전 카페·야식 추천 (오버레이 하단·앱 안 팝업)' : n.desc;
+    var t = n.key === 'arrive_reco' ? '하차 7분 전 추천' : n.title;
+    k.push({ t: 'toggle', key: 'n.' + n.key, title: t, sub: d, on: !!f.np[n.key], top: true, vp: 9, size: 13.5, ssize: 11, onc: '#30d158' });
+  });
+  k.push(settingsNavN('하차 7분 전 추천 시험 · 상태 확인', '', settingsCall('pg.arr'), true));
+  return [settingsPanelN(k, 8), settingsBtnN('닫기', 'pg.back', { size: 14, h: 44, mb: 0 })];
+}
+// ── 편의 기능(가운데 팝업): 캐릭터 시계 위젯 · 다른 앱 위에 표시 · 백그라운드 유지 · 안내 정확도 향상 ──
+function settingsPageConv(f) {
+  var out = [];
+  out.push(settingsPanelN([settingsTitleN('캐릭터 시계 위젯', 4),
+    settingsDescN('평소엔 캐릭터들이 각자 집에서 자고 있다가, 화면을 켜면 일어나 시계 주변을 돌아다녀요. 출·퇴근 시각이 되면 캐릭터가 모여 응원해요.', 6),
+    settingsNavN('위젯 추가 · 돌아다니는 시간', '', settingsCall('pg.gw'), true)], 8));
+  var ovlOn = f.ovl === true, ovlGr = f.gr === true;
+  var ovlSub = f.sup === false ? '이 기기에서는 지원하지 않아요' : (ovlOn ? (ovlGr ? '사용 중 · 다른 앱을 쓰는 동안 위쪽에 표시돼요' : '권한이 필요해요 · 설정에서 허용해 주세요') : '꺼져 있어요');
+  out.push(settingsPanelN([{ t: 'toggle', key: 'ovl', title: '다른 앱 위에 표시', sub: '현재역 · 남은시간을 화면 위쪽 작은 막대로 띄워요. 광고는 넣지 않아요.\n' + ovlSub, on: ovlOn, top: true, vp: 4, size: 13.5, ssize: 11, onc: '#30d158' }]));
+  var bgK = [{ t: 'toggle', key: 'bg', title: '백그라운드 유지', sub: f.ig === true ? '켜짐 · 화면이 꺼져 있어도 하차 알림이 멈추지 않게 지켜요.' : '꺼짐 · 켜면 기기가 길동무를 자동으로 절전하지 않아요.', on: f.ig === true, top: true, vp: 4, size: 13.5, ssize: 11, onc: '#30d158' }];
+  if (f.samw) bgK.push({ t: 'box', s: '이 앱의 배터리 사용이 제한됨으로 되어 있어요. 앱 정보 > 배터리에서 제한 없음으로 바꿔 주세요.', size: 12, lh: 1.5, tc: '#ff9f0a', color: 'text', fill: 'rgba(255,159,10,0.12)', line: 'rgba(255,159,10,0.35)', r: 10, ip: [12, 10, 12, 10], pad: [0, 6, 0, 2] });
+  if (f.sam) bgK.push(settingsNavN('갤럭시 자동 절전 제외 설정', '', settingsCall('pg.sam'), true));
+  out.push(settingsPanelN(bgK));
+  out.push(settingsPanelN([{ t: 'toggle', key: 'rl', title: '안내 정확도 향상', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, top: true, vp: 4, size: 13.5, ssize: 11, onc: '#30d158' }]));
+  out.push(settingsBtnN('닫기', 'pg.back', { size: 14, h: 44, mb: 0 }));
+  return out.map(function (n, i) { if (i > 0 && n.t === 'panel') n.pad = [16, 12, 16, 0]; return n; });
+}
+
 function settingsPageScreen(inp, factsIn) {
   var p = String(inp.p || '');
   if (!(Number(inp.cap) >= SETTINGS_PAGE_CAP)) return { ok: false, error: 'cap' };
   if (!Object.prototype.hasOwnProperty.call(SETTINGS_PAGES, p)) return { ok: false, error: 'page' };
+  if (p === 'notif' || p === 'conv') {                                // 팝업 두 개는 첫 화면과 같은 기기 사실(f)을 쓴다 — 뒤로 가기 줄 없이 [닫기] 단추로
+    var tf = settingsFacts(factsIn), tk = p === 'notif' ? settingsPageNotif(tf) : settingsPageConv(tf);
+    var tb = tk.concat([{ t: 'spacer', h: 12 }]);
+    return { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [], body: tb, info: { page: p, sub: '' }, rev: 's' + SETTINGS_SCREEN_V + 'p:' + settingsHash(JSON.stringify(tb)) };
+  }
   var pf = settingsPageFacts(factsIn && typeof factsIn === 'object' ? factsIn.pf : null);
   pf.bus = (factsIn && factsIn.pf && Array.isArray(factsIn.pf.bus)) ? factsIn.pf.bus.slice(0, 12).map(function (x) { return settingsStr(x, 60).trim(); }) : [];
   var info = { page: p, sub: '' }, kids;

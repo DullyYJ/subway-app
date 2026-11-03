@@ -149,19 +149,37 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   names.forEach(p => {
     const sc = PG(p, {});
     ok(sc.ok && sc.screen === 'settings' && sc.cover === 'tab' && sc.info.page === p && /^s2p:/.test(sc.rev), p + ': 기본 모양/정보/rev');
-    if (p === 'locd' || p === 'cmb' || /^ask/.test(p)) ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), p + ': 안내 화면은 뒤로 가기 단추가 없다(단추 둘만)');
+    if (p === 'notif' || p === 'conv') ok(sc.body[0].t === 'panel' && JSON.stringify(sc).includes('pg.back'), p + ': 팝업은 위 뒤로 가기 줄 없이 [닫기] 단추');
+    else if (p === 'locd' || p === 'cmb' || /^ask/.test(p)) ok(sc.body[0].t === 'panel' && !JSON.stringify(sc).includes('pg.back'), p + ': 안내 화면은 뒤로 가기 단추가 없다(단추 둘만)');
     else ok(sc.body[0].t === 'button' && sc.body[0].s === '\u2039 \uc124\uc815' && sc.body[0].act.v === 'pg.back', p + ': 맨 위가 ‹ 설정(pg.back)');
     ok(!texts(sc).some(x => EMOJI.test(x)), p + ': 이모지 없음');
     ok(JSON.stringify(PG(p, {})) === JSON.stringify(sc) && PG(p, { x: 1 }).rev === sc.rev, p + ': 같은 입력 → 같은 출력, 모르는 사실은 무시');
   });
   ok(PG('cm', { sub: 'tp', tp: { t: 'morn', ap: 'am', h: 7, m: 30 } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc' && PG('cm', { sub: 'pick', pick: { k: 'to', q: '' } }).body[0].s === '\u2039 \ucd9c\ud1f4\uadfc \ube0c\ub9ac\ud551 \uc54c\ub9bc', '시각/장소 고르기의 뒤로 단추는 출퇴근 브리핑 알림으로 돌아간다');
   // 행동 이름은 허용 목록 모양만
-  const ALLOW = /^(pg\.back|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|ask\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|cmb\.(ok|go)|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
+  const ALLOW = /^(pg\.(back|arr|gw|sam)|pol\.(privacy|location|opensource)|erl\.(copy|clear)|locd\.(ok|no)|ask\.(ok|no)|sam\.open|bat\.req|ovl\.diag|pf\.(live|rec)|dev\.(start\.(all|plain|reco|alert2|alert1|quit)|stop)|arr\.(t\.(morning|lunch|night|shop)|demo|stat)|gw\.(add\.(hb|hw|vb|vw)|roam\.(dn|up))|cm\.(day\.[0-6]|preset\.(weekday|weekend|all)|tp\.(morn|eve)|test|pick\.(from|to|eFrom|eTo))|cmb\.(ok|go)|tp\.(ap\.(am|pm)|h\.([1-9]|1[0-2])|m\.([0-9]|[1-5][05])|ok|cancel)|pk\.(save|clear|cancel|u\.\d{1,2}|b\.\d{1,2}))$/;
   names.concat(['tp', 'pick']).forEach(p => {
     const sc = p === 'tp' ? PG('cm', { sub: 'tp', tp: { t: 'eve', ap: 'pm', h: 6, m: 30 } }) : p === 'pick' ? PG('cm', { sub: 'pick', pick: { k: 'to', q: '강' }, bus: ['강남역', '강남역', '강동'] }) : PG(p, {});
     const bad = acts(sc).filter(a => !(a.a === 'call' && ALLOW.test(a.v)));
     ok(bad.length === 0, p + ': 모든 행동이 허용 목록 안 ' + JSON.stringify(bad.slice(0, 2)));
   });
+  // s406: 알림 설정 · 편의 기능 팝업 + 첫 화면 메뉴
+  {
+    const F = { np: { arrive: 1, transfer: 0, arrive_reco: 1 }, npd: 1, ovl: 1, gr: 0, sup: 1, sam: 1, samw: 1, ig: 0, rl: 1 };
+    const N = E.settingsScreen({ cap: 8, p: 'notif' }, F), C = E.settingsScreen({ cap: 8, p: 'conv' }, F);
+    const tg = sc => flat(sc.body).filter(n => n.t === 'toggle');
+    ok(tg(N).map(n => n.key).join() === 'n.arrive,n.transfer,n.arrive_reco' && tg(N).map(n => n.on).join() === 'true,false,true', '알림 설정 팝업: 알림 알약 3개와 켜짐 상태');
+    ok(tg(N).some(n => n.title === '하차 7분 전 추천') && !JSON.stringify(N).includes('5분') && texts(N).some(x => /알림 권한이 꺼져/.test(x)), '알림 설정 팝업: 하차 7분 전 추천 · 권한 안내');
+    ok(flat(N.body).some(n => n.t === 'navrow' && n.act.v === 'pg.arr') && flat(N.body).some(n => n.t === 'button' && n.act.v === 'pg.back'), '알림 설정 팝업: 시험 줄 · 닫기');
+    ok(tg(C).map(n => n.key).join() === 'ovl,bg,rl' && tg(C).map(n => n.on).join() === 'true,false,true', '편의 기능 팝업: 오버레이 · 백그라운드 유지 · 안내 정확도 알약');
+    ok(flat(C.body).some(n => n.t === 'navrow' && n.act.v === 'pg.gw') && flat(C.body).some(n => n.t === 'navrow' && n.act.v === 'pg.sam') && texts(C).some(x => /제한됨/.test(x)), '편의 기능 팝업: 캐릭터 시계 위젯 줄 · 갤럭시 절전 줄 · 배터리 제한 안내');
+    ok(!flat(E.settingsScreen({ cap: 8, p: 'conv' }, Object.assign({}, F, { sam: 0, samw: 0 })).body).some(n => n.act && n.act.v === 'pg.sam') && tg(E.settingsScreen({ cap: 8, p: 'conv' }, Object.assign({}, F, { ig: 1 }))).find(n => n.key === 'bg').on === true, '편의 기능 팝업: 갤럭시가 아니면 절전 줄 없음 · 배터리 최적화 제외면 켜짐');
+    const M = E.settingsScreen({ cap: 8 }, { pgs: ['sam', 'ovl', 'arr', 'cm', 'gw', 'dev', 'notif', 'conv'], np: { arrive: 1, transfer: 0, arrive_reco: 1 } });
+    const mv = flat(M.body).filter(n => n.t === 'navrow' && n.act && /^pg\./.test(n.act.v)).map(n => n.act.v);
+    ok(mv.includes('pg.notif') && mv.includes('pg.conv') && !mv.includes('pg.gw') && !mv.includes('pg.arr') && !mv.includes('pg.ovl') && !flat(M.body).some(n => n.t === 'toggle' && (n.key === 'rl' || /^n\./.test(n.key))), '첫 화면(새 앱): 알림 설정 · 편의 기능 줄만 남고 알약 · 위젯 · 하차 · 오버레이 카드는 팝업으로 옮겨졌다');
+    ok(flat(M.body).find(n => n.t === 'navrow' && n.act.v === 'pg.notif').sub === '켜짐 2/3', '첫 화면: 알림 켜짐 개수');
+    ok(flat(E.settingsScreen({ cap: 8 }, { pgs: ['sam', 'ovl', 'arr', 'cm', 'gw', 'dev'] }).body).some(n => n.t === 'toggle' && n.key === 'rl'), '옛 앱(notif · conv 를 모름): 예전 긴 화면 그대로');
+  }
   // 갤럭시 절전
   let sc = PG('sam', { w: 1, ig: 1, bk: 5, sok: 1 }), tx = texts(sc);
   ok(tx.some(x => x === '현재 상태 · 배터리 최적화 제외: 예 · 앱 배터리 제한: 제한됨 · 기기가 보는 앱 등급: 제한'), '갤럭시: 읽은 상태를 문장으로');

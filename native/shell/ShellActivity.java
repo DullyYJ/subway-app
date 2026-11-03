@@ -1829,7 +1829,7 @@ public class ShellActivity extends Activity {
             case ShellCore.E_TOAST: toast(e.arg); loadSlot(slots.length - 1, true); break;
             case ShellCore.E_LINK: openLink(e.arg); break;
             case ShellCore.E_NEWS: openNews(e.arg); break;
-            case ShellCore.E_PAGE: if ("ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg) || "dev".equals(e.arg) || ShellCore.isPolPage(e.arg) || "locd".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
+            case ShellCore.E_PAGE: if (ShellCore.isMenuPage(e.arg) || "ovl".equals(e.arg) || "sam".equals(e.arg) || "arr".equals(e.arg) || "cm".equals(e.arg) || "gw".equals(e.arg) || "dev".equals(e.arg) || ShellCore.isPolPage(e.arg) || "locd".equals(e.arg)) openSetPage(e.arg); else toast("아직 옮기는 중이에요"); break;
             default: break;
         }
     }
@@ -5508,14 +5508,16 @@ public class ShellActivity extends Activity {
             main.postDelayed(fin, 600L);                                                                   // 끝 알림이 안 와도 닫는다
         } catch (Throwable t) { closeSheet(); }
     }
-    private void openSetPage(String page) {
+    private String setBack = null;                                   // 알림 설정 · 편의 기능 팝업에서 연 하위 화면이면 그 팝업 이름 — [뒤로]를 누르면 거기로 돌아온다
+    private void openSetPage(String page) { openSetPage(page, null); }
+    private void openSetPage(String page, String back) {
         closeSheet();
-        setPage = page; arrStat = false;
+        setPage = page; arrStat = false; setBack = back;
         if (!"cm".equals(page)) { cm.pop = false; cmFromInline = false; }
         if ("cm".equals(page) && !"tp".equals(cm.sub)) { cm.sub = ""; cm.pop = false; cm.clearBus(); }          // 설정 화면 안 패널이 시각 고르기만 시트로 열 때(sub=tp)는 그대로
         sheetName = ShellCore.S_SETPG;
         final boolean tpPop = "cm".equals(page) && cm.pop && "tp".equals(cm.sub);                        // 시각 고르기 · 출퇴근 브리핑 알림 창도 가운데 팝업
-        final boolean pop = "locd".equals(page) || "cmb".equals(page) || tpPop || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
+        final boolean pop = "locd".equals(page) || "cmb".equals(page) || ShellCore.isMenuPage(page) || tpPop || ShellCore.isAskPage(page);                              // 위치 안내 · 처음 설치 안내는 웹처럼 가운데 팝업(바깥은 어둡게)
         popSheet = pop;
         final boolean sp = pop && slidePop(page);
         sheetView = new ScreenView(this);
@@ -5539,7 +5541,7 @@ public class ShellActivity extends Activity {
                 box.setAlpha(0f); popBox = box; popSlide = true; popRevealed = false; popRevealQ = false; popLeaving = false; popGot = false;
                 sheet.setContentView(root);
             } else sheet.setContentView(box);
-            boolean soft = tpPop || "cmb".equals(page);                                              // 시각 · 브리핑 창은 바깥을 누르거나 뒤로 가기로도 닫힌다
+            boolean soft = tpPop || "cmb".equals(page) || ShellCore.isMenuPage(page);                                              // 시각 · 브리핑 창은 바깥을 누르거나 뒤로 가기로도 닫힌다
             sheet.setCancelable(soft); sheet.setCanceledOnTouchOutside(soft);
             if (soft) sheet.setOnCancelListener(new android.content.DialogInterface.OnCancelListener() { @Override public void onCancel(android.content.DialogInterface di) {
                 if (tpPop) { cm.sub = ""; cm.pop = false; cmFromInline = false; }
@@ -5570,6 +5572,7 @@ public class ShellActivity extends Activity {
         loadSetPage();
     }
     private String setPageUrl() {
+        if (ShellCore.isMenuPage(setPage)) return ShellCore.pageUrlPlain(setPage, ShellCore.popFacts(store, PowerInfo.read(this).ig, RideOverlay.allowed(this), RideOverlay.supported(), !notifOk()));
         return "sam".equals(setPage) ? ShellCore.pageUrlSam(PowerInfo.read(this).pageFacts())
             : "cmb".equals(setPage) ? ShellCore.pageUrlPlain("cmb", cmbFacts())
             : ("cm".equals(setPage) ? ShellCore.pageUrlCm(cm.pageFacts(store))
@@ -5762,7 +5765,10 @@ public class ShellActivity extends Activity {
         if ("cm".equals(setPage)) { cmAct(a, v, key, on, null); return; }
         if ("cmb".equals(setPage)) { if ("call".equals(a)) cmbAct(v); return; }
         int r = ShellCore.routePage(store, setPage, a, v, key, on, RideOverlay.allowed(this));
+        if (r == ShellCore.PG_SUB) { openSetPage(v.substring(3), setPage); return; }                      // 팝업 안 줄 → 그 하위 화면(돌아오면 이 팝업)
+        if (r == ShellCore.PG_BATOFF) { toast("기기 설정 > 배터리에서 '제한 없음'을 바꿀 수 있어요"); PowerInfo.openAppInfo(this); return; }
         if (r == ShellCore.PG_CLOSE) {
+            if (setBack != null && !ShellCore.isMenuPage(setPage)) { String bk = setBack; openSetPage(bk); return; }
             if (locOk != null && ShellCore.isPolPage(setPage)) { openSetPage("locd"); return; }          // 안내에서 방침을 보러 갔다 오면 안내로 돌아온다
             closeSheet(); loadSlot(slots.length - 1, true); return;
         }

@@ -75,18 +75,34 @@ public final class ShellCore {
         b.append(",\"cm\":").append(CmCore.on(st) ? 1 : 0);
         b.append(",\"cmi\":1,\"cmh\":1,\"cmf\":").append(CmCore.inlineFacts(st));                          // s278: 출퇴근 브리핑을 설정 화면 안에 펼친다(옛 엔진은 모르는 칸이라 무시)
         b.append(",\"errn\":").append(ErrCore.count(st));
-        b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
+        b.append(",\"pgs\":[\"sam\",\"ovl\",\"arr\",\"cm\",\"gw\",\"dev\",\"notif\",\"conv\"]");                           // 이 앱이 열 수 있는 하위 화면(나머지 줄은 엔진이 감춘다)
         b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1);
         b.append(",\"th\":").append(q(theme(st))).append('}');
         return b.toString();
     }
+    /** 알림 설정 · 편의 기능 팝업의 기기 사실 — 첫 화면 사실에서 큰 출퇴근 입력값은 빼고, 팝업이 쓰는 것(알림 스위치 · 오버레이 · 배터리 · 정확도)만 싣는다. */
+    public static String popFacts(Store st, boolean ig, boolean granted, boolean supported, boolean notifDenied) {
+        StringBuilder b = new StringBuilder("{\"np\":{");
+        for (int i = 0; i < NOTIF.length; i++) {
+            if (i > 0) b.append(',');
+            b.append(q(NOTIF[i])).append(':').append("0".equals(st.get("np_" + NOTIF[i], "1")) ? 0 : 1);
+        }
+        b.append('}').append(",\"npd\":").append(notifDenied ? 1 : 0);
+        b.append(",\"ovl\":").append(ovlOn(st.get(K_OVL, "")) ? 1 : 0).append(",\"gr\":").append(granted ? 1 : 0).append(",\"sup\":").append(supported ? 1 : 0);
+        b.append(",\"sam\":").append("1".equals(st.get(K_SAM, "0")) ? 1 : 0).append(",\"samw\":").append("1".equals(st.get(K_SAMW, "0")) ? 1 : 0);
+        b.append(",\"ig\":").append(ig ? 1 : 0);
+        b.append(",\"rl\":").append("1".equals(st.get(K_RIDELOG_OFF, "0")) ? 0 : 1).append('}');
+        return b.toString();
+    }
+    /** 알림 설정(notif) · 편의 기능(conv) 팝업인가. */
+    public static boolean isMenuPage(String p) { return "notif".equals(p) || "conv".equals(p); }
     public static String settingsUrl(Store st) {
         try { return BASE + "/screen/settings?cap=" + SETTINGS_CAP + "&f=" + URLEncoder.encode(settingsFacts(st), "UTF-8"); }
         catch (java.io.UnsupportedEncodingException e) { return BASE + "/screen/settings?cap=" + SETTINGS_CAP; }
     }
 
     // ═════════════ 설정 하위 화면: 다른 앱 위에 표시(ovl) ═════════════
-    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6, PG_GWADD = 7, PG_GWCFG = 8, PG_DEVSTART = 9, PG_DEVSTOP = 10, PG_ERLCOPY = 11, PG_ERLCLEAR = 12, PG_LOCOK = 13, PG_LOCNO = 14, PG_POLOPEN = 15, PG_ASKOK = 16, PG_ASKNO = 17;
+    public static final int PG_NONE = 0, PG_RENDER = 1, PG_CLOSE = 2, PG_NEEDPERM = 3, PG_SAMOPEN = 4, PG_BATREQ = 5, PG_ARRTEST = 6, PG_GWADD = 7, PG_GWCFG = 8, PG_DEVSTART = 9, PG_DEVSTOP = 10, PG_ERLCOPY = 11, PG_ERLCLEAR = 12, PG_LOCOK = 13, PG_LOCNO = 14, PG_POLOPEN = 15, PG_ASKOK = 16, PG_ASKNO = 17, PG_SUB = 18, PG_BATOFF = 19;
     /** 하위 화면 주소. 지원 여부·허용 여부는 기기 사실이라 껍데기가 알려 준다(글은 엔진이 만든다). */
     /** 출퇴근 브리핑 화면(cm · 시각 고르기 · 장소 고르기) 주소 — pfJson 은 CmCore.pageFacts(). */
     public static String pageUrlCm(String pfJson) {
@@ -213,6 +229,24 @@ public final class ShellCore {
             if ("pg.back".equals(v)) return PG_CLOSE;
             if (arrKind(v) != null) return PG_ARRTEST;
             if ("arr.stat".equals(v)) return PG_RENDER;
+            return PG_NONE;
+        }
+        if (isMenuPage(page)) {                                                                // 알림 설정 · 편의 기능 팝업의 눌림
+            if ("set".equals(a)) {
+                if (key != null && key.startsWith("n.") && "notif".equals(page)) {
+                    String k = key.substring(2);
+                    for (String n : NOTIF) if (n.equals(k)) { st.put("np_" + k, on ? "1" : "0"); return PG_RENDER; }
+                    return PG_NONE;
+                }
+                if (!"conv".equals(page)) return PG_NONE;
+                if ("rl".equals(key)) { st.put(K_RIDELOG_OFF, on ? "0" : "1"); return PG_RENDER; }
+                if ("ovl".equals(key)) { st.put(K_OVL, on ? "1" : "0"); return on && !granted ? PG_NEEDPERM : PG_RENDER; }
+                if ("bg".equals(key)) return on ? PG_BATREQ : PG_BATOFF;                     // 켜기 = 기기의 '배터리 최적화 제외' 창 · 끄기는 앱이 직접 못 끄니 앱 정보로
+                return PG_NONE;
+            }
+            if (!"call".equals(a)) return PG_NONE;
+            if ("pg.back".equals(v)) return PG_CLOSE;
+            if (("pg.arr".equals(v) && "notif".equals(page)) || (("pg.gw".equals(v) || "pg.sam".equals(v)) && "conv".equals(page))) return PG_SUB;
             return PG_NONE;
         }
         if (!"ovl".equals(page)) return PG_NONE;
