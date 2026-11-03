@@ -654,6 +654,9 @@ public final class KidsHub {
                 if (v != null && v.startsWith("kl.") && !"kl.open".equals(v) && !"kl.close".equals(v) && !"kl.scan".equals(v)) refreshLink(true);
                 main.post(new Runnable() { @Override public void run() {
                     applied[0] = true;
+                    if (v != null && (v.equals("kr.live") || v.matches("kr\\.\\d{1,12}"))) { main.removeCallbacks(noteHide); noteV.setVisibility(View.GONE); }          // 경로가 왔다 — '불러오는 중' 글을 걷는다
+                    final boolean wasShown = sheetD != null;
+                    if (close && sc != null && "kids".equals(sc.id) && (v == null || !v.endsWith(".cancel"))) closeSheet(true);          // 허브 화면을 새로 그리기 전에 팝업부터 걷는다(허브가 다시 그려지는 동안 팝업이 남아 보이지 않게)
                     if (notice.length() > 0 && sheetD == null) note(notice);          // 팝업 안의 안내는 엔진이 팝업 화면 안에 넣어 준다
                     boolean lateOpen = "kpg.open".equals(v) && sheetD != null && "ev".equals(sheetKind) && regTyped();          // s419: 미리 띄운 등록 팝업에 벌써 글을 쓰고 있으면 늦게 온 열기 답으로 덮어쓰지 않는다
                     if (sc != null && !lateOpen) {
@@ -664,7 +667,7 @@ public final class KidsHub {
                     ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
                     if (clear.length() > 0 && cv != null && !"kh.say".equals(v)) cv.setField(clear, "");          // kh.say 는 누른 즉시 비웠다(그 사이 새로 쓴 글을 지우지 않는다)
                     if ("kqx".equals(clear)) qpt = 1;
-                    if (close && (v == null || !v.endsWith(".cancel"))) { boolean shown = sheetD != null; closeSheet(true); if (shown && notice.length() > 0) note(notice); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
+                    if (close && (v == null || !v.endsWith(".cancel"))) { closeSheet(true); if (wasShown && notice.length() > 0) note(notice); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
                     if (hub && open) fetchHub();
                     if (popR != null && "kx.open".equals(v)) showCallPop(popR, true);                  // 허브의 호출 줄을 눌렀다 — 그 호출의 팝업
                 } });
@@ -672,6 +675,9 @@ public final class KidsHub {
             finally { if (!applied[0] && "kpg.find".equals(v)) main.post(new Runnable() { @Override public void run() { regBusy(false); } }); }          // 못 찾고 끝났으면 '찾는 중' 글을 되돌린다
         } });
     }
+
+    /** 지난 경로 · 실시간 전환을 누른 즉시: 서버 답이 오기 전까지 키즈 화면 위에 짧은 안내를 보인다(note 는 3초 뒤 저절로 사라지고, 답이 오면 바로 걷는다). */
+    private void routeWait(String m) { if (open) note(m); }
 
     private static String kindOf(String id) {
         if ("kidchat".equals(id)) return "chat";
@@ -939,6 +945,8 @@ public final class KidsHub {
             if ("kx.open".equals(a.v)) { JSONObject lp = lastPop; if (lp != null && showCallPop(lp, true)) return; }          // 이미 받아 둔 팝업 값이 있으면 통신 없이 바로
             if ("kpg.cancel".equals(a.v) && sheetD != null) { closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // 장소 찾기 취소도 서버 답을 기다리지 않고 바로 닫는다(초안 버리기는 뒤에서)
             if (("kpg.find".equals(a.v) || "kpg.pick".equals(a.v) || "kpg.map".equals(a.v) || "kpg.add".equals(a.v)) && sheetD != null && regFast(a)) return;          // s419: 장소 등록 — 누르는 즉시 화면이 반응한다(찾는 중 표시 · 고른 곳으로 지도 이동 · 바로 닫고 뒤에서 등록)
+            if (a.v.matches("kr\\.\\d{1,12}") && sheetD != null && "ev".equals(sheetKind)) { closeSheet(true); routeWait("\uacbd\ub85c\ub97c \ubd88\ub7ec\uc624\ub294 \uc911\uc774\uc5d0\uc694\u2026"); send(a.v, a.id, a.t, null, null); return; }          // s411: 지난 경로를 고르면 서버 답을 기다리지 않고 바로 팝업을 닫고 '불러오는 중'을 보인다(옛 모양은 답이 올 때까지 팝업이 남아 느려 보였다)
+            if ("kr.live".equals(a.v)) routeWait("\uc2e4\uc2dc\uac04 \uc704\uce58\ub85c \ub3cc\uc544\uac00\ub294 \uc911\u2026");
             if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;

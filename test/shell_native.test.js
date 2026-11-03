@@ -1179,6 +1179,12 @@ function findAndroidJar() {
     assert.ok(/n\.cc = optStr\(m, "cc", "", 9\)/.test(sc) && /if \(n\.cc\.length\(\) > 0\) it\.tc = col\(n\.cc, null\);/.test(sc) && /it\.tc != null \? cc\(it\.tc, 0\) : roleColor\(it\.color\), it\.alpha/.test(sv), '글 색을 CSS 색으로(cc)');
     assert.ok(/"kpg\.pick"\.equals\(a\.v\) \|\| "kpg\.map"\.equals\(a\.v\)\) \{/.test(kh) && /"kpg\.map"\.equals\(a\.v\) \|\| "kpg\.add"/.test(kh), 'KidsHub: 지도 눌림도 결과 고르기와 같은 길');
   });
+  await t('s411: 지난 경로 고르기 — 누르자마자 팝업을 닫고 "불러오는 중", 답이 오면 안내를 걷고 팝업부터 걷은 뒤 허브를 다시 그린다', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/a\.v\.matches\("kr\\\\\.\\\\d\{1,12\}"\) && sheetD != null && "ev"\.equals\(sheetKind\)\) \{ closeSheet\(true\); routeWait\([^;]*\); send\(a\.v, a\.id, a\.t, null, null\); return; \}/.test(kh), '경로 한 줄을 누르면 바로 닫고 보낸다');
+    assert.ok(/"kr\.live"\.equals\(a\.v\)\) routeWait\(/.test(kh) && /private void routeWait\(String m\) \{ if \(open\) note\(m\); \}/.test(kh), '실시간으로 돌아가기도 즉시 안내');
+    assert.ok(/final boolean wasShown = sheetD != null;\s*if \(close && sc != null && "kids"\.equals\(sc\.id\)[^)]*\)[^)]*\)\) closeSheet\(true\);/.test(kh) && /if \(wasShown && notice\.length\(\) > 0\) note\(notice\);/.test(kh), '허브 화면을 그리기 전에 팝업부터 걷는다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
