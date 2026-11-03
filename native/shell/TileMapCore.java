@@ -15,7 +15,7 @@ public final class TileMapCore {
     public static final double MIN_ZOOM = 2.0, MAX_ZOOM = 19.0, MAX_LAT = 85.0;
 
     /** 핀: k = s(정류장·장소) · m(내 위치) · f(고른 것), n = 핀 안 글자(번호), name = 이름. */
-    public static final class Pin { public double la, lo; public String k = "s", n = "", name = "", v = "", g = ""; }   // v = 핀을 눌렀을 때 부를 행동 · g = 같이 움직일 카드의 열쇠(엔진이 정함)
+    public static final class Pin { public double la, lo; public String k = "s", n = "", name = "", v = "", g = ""; public int h = -1; }   // v = 핀을 눌렀을 때 부를 행동 · g = 같이 움직일 카드의 열쇠(엔진이 정함)
 
     private static String clean(String s, int max) {
         if (s == null) return "";
@@ -58,6 +58,7 @@ public final class TileMapCore {
                 if (!(Math.abs(p.la) <= MAX_LAT) || !(Math.abs(p.lo) <= 180.0) || (p.la == 0.0 && p.lo == 0.0)) continue;
                 p.k = "m".equals(f[2]) || "f".equals(f[2]) || "a".equals(f[2]) || "b".equals(f[2]) ? f[2] : "s";
                 p.n = f.length > 3 ? f[3] : ""; p.name = f.length > 4 ? f[4] : ""; p.v = f.length > 5 ? f[5] : ""; p.g = f.length > 6 ? f[6] : "";
+                if (f.length > 7 && f[7].length() > 0) { try { int hh = Integer.parseInt(f[7].trim()); if (hh >= 0 && hh <= 359) p.h = hh; } catch (NumberFormatException e) { /* 방향을 모르면 화살표 없음 */ } }
                 out.add(p);
                 if (out.size() >= MAX_PINS) break;
             } catch (NumberFormatException e) { /* 건너뜀 */ }

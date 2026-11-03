@@ -3,6 +3,7 @@ package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한�
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 
@@ -112,7 +113,7 @@ final class TileMapArt {
                 if (pass == 2 && !isMe) continue;
                 double[] s = vw.toScreen(p.la, p.lo);
                 if (s[0] < -40 || s[1] < -40 || s[0] > vw.w + 40 || s[1] > vw.h + 40) continue;
-                if (isMe) drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs);
+                if (isMe) drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h);
                 else if ("a".equals(p.k) || "b".equals(p.k)) drawEnd(cv, (float) s[0], (float) s[1], dpr, p.n.length() > 0 ? p.n : ("a".equals(p.k) ? "출발" : "도착"), "a".equals(p.k) ? C_FROM : C_TO);
                 else drawPin(cv, (float) s[0], (float) s[1], dpr, p.n, isF);
             }
@@ -139,7 +140,8 @@ final class TileMapArt {
         }
         P.setTextAlign(Paint.Align.LEFT); P.setTypeface(ScreenView.face(false));
     }
-    private static void drawMe(Canvas cv, float x, float y, float dpr, long nowMs) {
+    private static final Path ARROW = new Path();
+    private static void drawMe(Canvas cv, float x, float y, float dpr, long nowMs, int heading) {
         P.setStyle(Paint.Style.FILL);
         if (nowMs > 0L) {                                                      // 웹: 점 뒤에서 1배 → 2.8배로 퍼지며 사라지는 같은 색 원(.55 → 0)
             float f = (nowMs % 1600L) / 1600f, e = 1f - (1f - f) * (1f - f);
@@ -148,6 +150,13 @@ final class TileMapArt {
         }
         P.setColor(0x4D000000); cv.drawCircle(x, y + 1.2f * dpr, 8.7f * dpr, P);
         P.setColor(C_WHITE); cv.drawCircle(x, y, 7.5f * dpr, P);               // 15px 점 + 2px 흰 테두리
+        if (heading >= 0) {                                                    // 가는 방향(s393): 점 둘레에 작은 화살표 — 지도는 북쪽이 위로 고정, 화살표만 돌린다
+            cv.save(); cv.translate(x, y); cv.rotate((float) heading);
+            ARROW.rewind(); ARROW.moveTo(0f, -20f * dpr); ARROW.lineTo(7f * dpr, -10.5f * dpr); ARROW.lineTo(-7f * dpr, -10.5f * dpr); ARROW.close();
+            P.setColor(0xFFFFFFFF); P.setStyle(Paint.Style.STROKE); P.setStrokeWidth(4f * dpr); P.setStrokeJoin(Paint.Join.ROUND); cv.drawPath(ARROW, P);
+            P.setColor(C_ME); P.setStyle(Paint.Style.FILL); cv.drawPath(ARROW, P);
+            cv.restore();
+        }
         P.setColor(C_ME); cv.drawCircle(x, y, 5.5f * dpr, P);
     }
     private static void drawLabel(Canvas cv, float x, float y, float dpr, String text, int vw) {

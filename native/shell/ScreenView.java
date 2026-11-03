@@ -1922,13 +1922,70 @@ public class ScreenView extends View {
     private boolean tmLive, tmDrawn;
     private String tmHint = "";
     private static final long TM_ANIM_MS = 260L;
+    // ── 따라가기(s393): 엔진이 fol:1 을 주면 내 위치 점(핀 'm')이 새 자리로 부드럽게 미끄러지고 지도가 그 점을 따라간다. 손으로 지도를 움직이면 10초 동안은 따라가지 않는다. 지도는 북쪽이 위로 고정.
+    private boolean tmFol;                                  // 지금 따라가기 지도인가
+    private long tmFolPauseUntil, tmFolT0, tmFolUpdT; private int tmFolDur = 1200;
+    private double tmFolFromLa, tmFolFromLo, tmFolToLa, tmFolToLo, tmFolLastLa, tmFolLastLo;
+    private boolean tmFolRunning;
+    private static final long TM_FOL_PAUSE_MS = 10000L;
+    private int tmMe(List<TileMapCore.Pin> ps) { for (int i = 0; i < ps.size(); i++) if ("m".equals(ps.get(i).k)) return i; return -1; }
+    /** 따라가기 지도의 값이 바뀌었다(자녀가 움직였다) — 줌과 손으로 옮긴 자리는 그대로 두고, 내 위치 점만 지금 보이는 자리에서 새 자리로 보낸다. */
+    private void tmFollowUpdate(ScreenCore.Item it) {
+        List<TileMapCore.Pin> np = TileMapCore.parsePins(it.value);
+        tmValue = it.value; tmPathStr = it.path; tmPath = TileMapCore.parsePath(it.path);
+        if (np.isEmpty()) return;
+        int mi = tmMe(np), oi = tmMe(tmPins);
+        long now = SystemClock.uptimeMillis();
+        if (mi >= 0) {
+            TileMapCore.Pin nm = np.get(mi);
+            double fa = oi >= 0 ? tmPins.get(oi).la : nm.la, fo = oi >= 0 ? tmPins.get(oi).lo : nm.lo;
+            tmFolFromLa = fa; tmFolFromLo = fo; tmFolToLa = nm.la; tmFolToLo = nm.lo;
+            long gap = tmFolUpdT > 0L ? now - tmFolUpdT : 1500L;
+            tmFolDur = (int) Math.max(700L, Math.min(3000L, gap));                      // 보고 간격만큼 천천히 — 멈췄다 가는 느낌이 없게
+            tmFolT0 = now; tmFolUpdT = now;
+            nm.la = fa; nm.lo = fo;                                                    // 이 자리에서 출발해 tmFolStep 이 옮긴다
+        }
+        tmPins = np;
+        tmFolKick();
+    }
+    private void tmFolKick() {
+        if (tmFolRunning) return;
+        tmFolRunning = true;
+        postDelayed(tmFolRun, 16L);
+    }
+    private final Runnable tmFolRun = new Runnable() { @Override public void run() {
+        boolean more = tmFolStep();
+        invalidate();
+        if (more && tmFol) postDelayed(this, 33L); else tmFolRunning = false;
+    } };
+    /** 점을 보내고 카메라를 맞춘다. 더 움직일 것이 남았으면 true. */
+    private boolean tmFolStep() {
+        int mi = tmMe(tmPins);
+        if (!tmFol || mi < 0) return false;
+        long now = SystemClock.uptimeMillis();
+        float f = (now - tmFolT0) / (float) tmFolDur;
+        boolean more = f < 1f;
+        if (f > 1f) f = 1f;
+        if (f < 0f) f = 0f;
+        double la = tmFolFromLa + (tmFolToLa - tmFolFromLa) * f, lo = tmFolFromLo + (tmFolToLo - tmFolFromLo) * f;
+        tmPins.get(mi).la = la; tmPins.get(mi).lo = lo;
+        if (now >= tmFolPauseUntil && tmView != null) {
+            tmFolLastLa = la; tmFolLastLo = lo;
+            tmView.cla = la; tmView.clo = lo; tmView.clamp();
+            if (vecHost != null && vecHost.ready()) vecHost.setCamera(la, lo, tmView.zoom);
+        }
+        return more;
+    }
     private final Paint tmp = new Paint(Paint.ANTI_ALIAS_FLAG);
     private LinearGradient tmHintGrad; private float tmHintH = -1f;
     private void drawTmap(Canvas cv, ScreenCore.Item it) {
         int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
         if (pw <= 0 || ph <= 0) return;
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
-        if (!it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH) {
+        boolean tmChanged = !it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH;
+        if (tmChanged && it.fol && it.on && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty()) {
+            tmFollowUpdate(it);                                                         // 따라가기: 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다
+        } else if (tmChanged) {
             tmValue = it.value; tmPathStr = it.path; tmW = pw; tmH = ph;
             tmPins = TileMapCore.parsePins(it.value);
             tmPath = TileMapCore.parsePath(it.path);
@@ -1949,6 +2006,16 @@ public class ScreenView extends View {
                 tmView.fit(tmPins, Math.round(36f * dpr), 1.0 + kk, 17.0 + kk);
                 if (tmPins.size() == 1) tmView.zoom = 17.0 + kk;
                 else tmView.zoom = Math.max(1.0 + kk, Math.floor(tmView.zoom - kk + 1e-6) + kk);
+            }
+            tmFol = it.fol && it.on;
+            if (tmFol) {                                                                // 따라가기 시작: 내 위치 점이 가운데 · 걷는 길이 보이는 17 배율
+                int me0 = tmMe(tmPins);
+                if (me0 >= 0) {
+                    double kk2 = Math.log(dpr) / Math.log(2.0);
+                    tmView.cla = tmPins.get(me0).la; tmView.clo = tmPins.get(me0).lo; tmView.zoom = 17.0 + kk2; tmView.clamp();
+                    tmFolFromLa = tmFolToLa = tmFolLastLa = tmPins.get(me0).la; tmFolFromLo = tmFolToLo = tmFolLastLo = tmPins.get(me0).lo;
+                    tmFolPauseUntil = 0L; tmFolUpdT = SystemClock.uptimeMillis();
+                }
             }
         }
         if (tmView == null || tmPins.isEmpty()) return;
@@ -2021,6 +2088,10 @@ public class ScreenView extends View {
     /** 지도(MapLibre)가 움직였다 — 핀 계산이 같은 가운데 · 배율을 쓰게 맞춘다. */
     void vecCamera(double la, double lo, double zPx) {
         if (tmView == null) return;
+        if (tmFol && SystemClock.uptimeMillis() >= tmFolPauseUntil && tmFolLastLa != 0.0) {          // 내가 건 카메라와 많이 다르면 손으로 옮긴 것
+            double ddx = Math.abs(TileMapCore.xOf(lo, zPx) - TileMapCore.xOf(tmFolLastLo, zPx)), ddy = Math.abs(TileMapCore.yOf(la, zPx) - TileMapCore.yOf(tmFolLastLa, zPx));
+            if (ddx > 60.0 || ddy > 60.0) tmFolPauseUntil = SystemClock.uptimeMillis() + TM_FOL_PAUSE_MS;
+        }
         tmView.cla = la; tmView.clo = lo; tmView.zoom = zPx;
     }
     /** 덮개 위 한 점이 핀 · 확대 단추 위인가(그러면 덮개가 받고, 아니면 지도가 받는다). */
@@ -3987,6 +4058,7 @@ public class ScreenView extends View {
     @Override protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         if (tiles != null) { tiles.unwatch(tileTick); tiles = null; tmValue = ""; }
+        removeCallbacks(tmFolRun); tmFolRunning = false; tmFol = false;                  // 따라가기 반복을 멈춘다(다시 붙으면 새로 맞춘다)
         ui.removeCallbacks(sceneRetryRun); sceneRetries = 0;
         if (scene != null) { scene.destroy(); scene = null; sceneJson = ""; sceneFailed = false; }      // 스프라이트 비트맵을 돌려준다(다시 붙으면 새로 읽는다)
         endEdit();

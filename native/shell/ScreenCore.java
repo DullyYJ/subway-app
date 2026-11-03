@@ -196,6 +196,7 @@ public final class ScreenCore {
         public String dot = "";                            // inbar: 왼쪽 동그라미 색(출발/도착 점)
         public String ak = "", aoS = "", aoF = "", aoT = "", abg = "card"; public int ams; public float[] aez; public long asq;   // row: 버튼 줄 전환 연출(엔진이 정한 종류·시간·곡선·시각, 옛 칸 모양, 가리개 색)
         public String lp = "";                              // tmap: 3초 꾹 누르면 보낼 행동 이름(call v) — 누른 자리의 위도,경도가 t 로 간다(엔진이 정하고 앱은 보내기만)
+        public boolean fol;                                 // tmap: 따라가기(s393) — 엔진이 fol:1 을 주면 내 위치 점이 부드럽게 움직이고 지도가 그 점을 따라간다
         public String path = ""; public float fpad = 0f, fzmax = 0f, hv = 0f, hmin = 0f, hmax = 0f;   // tmap: 높이 = 창 높이의 hv% 를 hmin~hmax 로(웹 height:24vh;min 137;max 231) · 걷는 길(위도,경도;…) · 맞춤 여백 · 최대 배율(0 이면 기본)
         public boolean watch;                              // inbar: 글자가 바뀔 때마다 앱이 웹에 알린다(자동완성)
         public boolean multi;                              // field: 여러 줄 입력칸(글쓰기 내용) — 줄바꿈을 받고 글자를 줄바꿔 그린다
@@ -378,8 +379,8 @@ public final class ScreenCore {
     }
 
     /** 타일 지도 핀 하나를 글로 — TileMapCore.encodePin 과 같은 모양(la,lo,k,n,name; 쉼표·막대 제거). ScreenCore 는 다른 파일 없이 혼자 컴파일되어야 해서 여기에 따로 둔다. */
-    private static String tmapPin(double la, double lo, String k, String n, String name, String v, String g) {
-        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) || "a".equals(k) || "b".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24) + "," + tmapClean(v, 40) + "," + tmapClean(g, 40);
+    private static String tmapPin(double la, double lo, String k, String n, String name, String v, String g, int h) {
+        return la + "," + lo + "," + ("m".equals(k) || "f".equals(k) || "a".equals(k) || "b".equals(k) ? k : "s") + "," + tmapClean(n, 4) + "," + tmapClean(name, 24) + "," + tmapClean(v, 40) + "," + tmapClean(g, 40) + (h >= 0 ? "," + h : "");
     }
     private static String tmapClean(String s, int max) {
         StringBuilder b = new StringBuilder();
@@ -848,6 +849,7 @@ public final class ScreenCore {
             n.hint = optStr(m, "hint", "", 60);
             n.lp = optStr(m, "lp", "", 40); if (n.lp.length() > 0 && !ident(n.lp)) throw new ParseError("tmap: lp 가 올바르지 않다");
             n.hv = optNum(m, "hv", 0f, 0f, 60f); n.hmin = optNum(m, "hmin", 0f, 0f, 420f); n.hmax = optNum(m, "hmax", 0f, 0f, 600f);
+            n.fol = optNum(m, "fol", 0f, 0f, 1f) > 0f;                                                        // 따라가기(s393): 엔진이 정한다
             n.fpad = optNum(m, "fp", 0f, 0f, 120f); n.fzmax = optNum(m, "fz", 0f, 0f, 19f);                    // 맞춤: 여백(dp) · 최대 배율(0 이면 기본)
             if (m.get("line") != null) {                                                                        // 걷는 길(엔진이 정한 점들): [[위도,경도],…] 최대 400개
                 StringBuilder lb = new StringBuilder(); int lc = 0;
@@ -874,7 +876,7 @@ public final class ScreenCore {
                 if (pvv.length() > 0 && !ident(pvv)) throw new ParseError("tmap: 핀 v 가 올바르지 않다");
                 if (pg.length() > 0 && !ident(pg)) throw new ParseError("tmap: 핀 g 가 올바르지 않다");
                 if (pc > 0) pv.append('|');
-                pv.append(tmapPin(dla, dlo, optStr(pm, "k", "s", 2), optStr(pm, "n", "", 8), optStr(pm, "l", "", 40), pvv, pg));
+                pv.append(tmapPin(dla, dlo, optStr(pm, "k", "s", 2), optStr(pm, "n", "", 8), optStr(pm, "l", "", 40), pvv, pg, Math.round(optNum(pm, "h", -1f, -1f, 359f))));      // h: 가는 방향(도 · 북쪽 0 · 시계 방향) — 엔진이 계산, 없으면 -1
                 pc++;
             }
             if (pc == 0) throw new ParseError("tmap: 핀이 없다");
@@ -1250,6 +1252,7 @@ public final class ScreenCore {
         public boolean fold, open; public int onIdx; public float collH, openH;       // pickl 접기(s307): 접을 수 있나 · 펼쳐 있나 · 고른 줄 번호 · 접힌 높이 · 펼친 높이
         public float x, y, w, h;
         public String lp = "";
+        public boolean fol;                         // tmap: 따라가기(s393)
         public String path = ""; public float fpad, fzmax;    // tmap: 걷는 길 · 맞춤 여백 · 최대 배율
         public String[] lines = new String[0];      // 글 줄 / 카드 이름 줄
         public float size, lineH, textX, textY;     // 글 크기 · 줄 높이 · 첫 줄 위쪽 시작점(영역 좌표)
@@ -2099,7 +2102,7 @@ public final class ScreenCore {
         if ("tmap".equals(n.t)) {                                                    // 타일 지도 자리(그림은 ScreenView 가 그린다 · 누르면 act)
             float th = n.h;
             if (n.hv > 0f && winH > 0f) { th = winH * n.hv / 100f; if (n.hmin > 0f) th = Math.max(th, n.hmin); if (n.hmax > 0f) th = Math.min(th, n.hmax); }          // 웹 vh 높이: 창 높이에 맞춰 늘고 준다
-            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = th; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.lp = n.lp; it.fpad = n.fpad; it.fzmax = n.fzmax;
+            Item it = new Item(); it.kind = K_TMAP; it.x = ox; it.y = y; it.w = innerW; it.h = th; it.radius = n.r; it.value = n.value; it.act = n.act; it.on = n.on; it.ti = n.ci; it.top = n.top; it.label = n.hint; it.path = n.path; it.lp = n.lp; it.fpad = n.fpad; it.fzmax = n.fzmax; it.fol = n.fol;
             out.add(it);
             return y + th + n.padB;
         }
