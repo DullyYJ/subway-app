@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab", K_GD = "kid.gd";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
@@ -55,6 +55,8 @@ public final class KidsHub {
 
     /** 연결 전에 '길동무 키즈 연결'을 처음 누를 때 서버(등록 + 화면 요청 두 번의 통신)를 기다리지 않고 바로 띄우는 기본 화면 — 서버 linkSheet(연결된 자녀 없음 · 내 이름 비어 있음)와 같은 모양이고, 서버 답이 오면 그것으로 바뀐다. */
     private static final String LINK_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidlink\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":15,\"color\":\"text\",\"pad\":[16,14,16,2],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀 폰의 길동무 키즈 설정에서 QR 이나 시크릿 키를 만들어 주세요(10분 동안 쓸 수 있어요).\",\"size\":11,\"color\":\"sub\",\"pad\":[16,0,16,6]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"내 이름 (자녀에게 보여요)\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"kpn\",\"hint\":\"예: 엄마 · 아빠\",\"value\":\"\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"이름 저장\",\"act\":{\"a\":\"call\",\"v\":\"kl.pname\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"새 자녀 연결\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"klc\",\"hint\":\"시크릿 키 입력 (XXXXX-XXXXX)\",\"maxlen\":12,\"h\":42,\"watch\":true},{\"t\":\"field\",\"key\":\"kln\",\"hint\":\"자녀 이름 (선택)\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"QR 찍기\",\"act\":{\"a\":\"call\",\"v\":\"kl.scan\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"},{\"t\":\"button\",\"s\":\"키로 연결\",\"act\":{\"a\":\"call\",\"v\":\"kl.join\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,14],\"kids\":[{\"t\":\"button\",\"s\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"kl.close\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"1afbxw9\"}";
+    /** s415: 처음(법정대리인 확인 전) 키즈 화면을 열면 서버 답을 기다리지 않고 바로 띄우는 '보호자 확인' 팝업 — 서버 gdScreen('자녀')와 같은 모양(시험이 같은지 확인한다). 서버 답이 오면 그것으로 바뀐다. */
+    private static final String GD_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidgd\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"보호자 확인\",\"size\":16,\"color\":\"text\",\"pad\":[16,24,16,6],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀의 위치를 보기 전에 아래를 확인해 주세요.\",\"size\":12.5,\"color\":\"sub\",\"pad\":[16,0,16,8]},{\"t\":\"panel\",\"pad\":[12,4,12,0],\"ip\":[14,10,14,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"• 저는 이 자녀의 법정대리인(친권자 · 후견인)이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀는 만 9세 이상이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀에게 위치를 확인한다는 것을 알리고, 자녀도 동의했어요 (자녀 앱에서 동의해야 위치가 와요)\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀의 안전을 지키는 데에만 쓰고, 다른 사람의 위치를 몰래 확인하는 데 쓰지 않아요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 사실과 다르면 이용이 제한될 수 있고 법적 책임은 제게 있어요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]}]},{\"t\":\"text\",\"s\":\"이 확인을 한 시각이 기록돼요. 자세한 내용은 개인정보 처리방침과 위치기반서비스 이용약관에 있어요.\",\"size\":11,\"color\":\"sub\",\"pad\":[16,10,16,6]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,16],\"kids\":[{\"t\":\"button\",\"s\":\"모두 확인했어요\",\"act\":{\"a\":\"call\",\"v\":\"kg.ok\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"9ezf5i\"}";
     private final Activity act;
     private final ShellCore.Store store;
     private final float dpr;
@@ -96,6 +98,10 @@ public final class KidsHub {
                 JSONObject sj = o.optBoolean("ok", false) ? o.optJSONObject("screen") : null;
                 if (sj == null) return;
                 String js = fixQ(sj.toString());
+                if (js.contains("\"screen\":\"kidgd\"")) { store.put(K_GD, "0"); hubPre = null; hubPreJs = ""; return; }          // s415: 보호자 확인 전 — 확인 팝업이 따로 뜬다(허브 화면으로 두지 않는다)
+                store.put(K_GD, "1");
+                final JSONObject pp0 = o.optJSONObject("pop");
+                main.post(new Runnable() { @Override public void run() { syncCallPop(pp0); } });                                          // 앱을 켜 두고 있었는데 푸시를 놓쳤어도 열린 호출은 팝업으로
                 if (js.equals(hubPreJs)) return;
                 hubPre = ScreenCore.load(js); hubPreJs = js;
                 if (js.length() < 150000) store.put(K_HUB, js);
@@ -319,6 +325,9 @@ public final class KidsHub {
         main.post(new Runnable() { @Override public void run() {              // 첫 그림이 끝난 뒤에 나머지(저장, 탭 막대, 저장본 읽기, 미리 받기, 긴 대기)를 한다
             if (!open) return;
             store.put(K_MODE, "1"); fireTabs();
+            if (!"1".equals(store.get(K_GD, "0")) && sheetD == null) {                       // s415: 처음 — 보호자 확인 팝업을 통신 없이 바로(서버가 이미 확인된 걸로 답하면 저절로 닫힌다)
+                try { showSheet("gd", ScreenCore.load(GD_SEED), GD_SEED); } catch (Throwable ignored) { }
+            }
             showSaved();
             if (paused) fetchHub(); else startLoop("hub");
             main.postDelayed(new Runnable() { @Override public void run() { if (open) warm(); } }, 1500L);
@@ -388,6 +397,7 @@ public final class KidsHub {
                 ScreenCore.settingsExtra = extraJson();
                 if (!nl) hideFamily();
                 if (nl) KidsPush.start(act, store);                              // 연결된 부모만: 푸시 토큰을 엔진에 맡긴다
+                if (nl && "1".equals(store.get(K_REG, "0"))) { lastPre = 0L; preload(); }                  // s415: 연결하자마자 키즈 화면을 미리 받아 둔다(처음 열 때 기다리지 않게)
                 if (!changed) return;
                 main.post(new Runnable() { @Override public void run() {
                     if (!linked && open) close(true);
@@ -429,14 +439,23 @@ public final class KidsHub {
             if (s == null) return true;
             final String js = fixQ(s.toString());
             final ScreenCore.Screen sc = ScreenCore.load(js);
-            main.post(new Runnable() { @Override public void run() { putScreen(view, sc, js, my); } });
+            final boolean isHub = "hub".equals(view);
+            final JSONObject pp = isHub ? o.optJSONObject("pop") : null;
+            main.post(new Runnable() { @Override public void run() { putScreen(view, sc, js, my); if (isHub && !"kidgd".equals(sc.id)) syncCallPop(pp); } });
         } catch (Throwable ignored) { }
         return true;
     }
 
     private void putScreen(String view, ScreenCore.Screen sc, String js, int my) {
         if (my != epoch && !"hub".equals(view)) return;
+        if ("hub".equals(view) && "kidgd".equals(sc.id)) {                                  // s415: 보호자 확인 — 허브 자리가 아니라 가운데 팝업으로
+            store.put(K_GD, "0"); hubPre = null; hubPreJs = "";
+            if (open && !paused) showSheet("gd", sc, js);
+            return;
+        }
         if ("hub".equals(view)) {
+            store.put(K_GD, "1");
+            if (sheetD != null && "gd".equals(sheetKind)) closeSheet(true);                    // 이미 확인된 사람(다시 설치)이면 미리 띄운 확인 팝업을 닫는다
             hubPre = sc; hubPreJs = js;
             if (!open || js.equals(lastHubJson)) return;
             lastHubJson = js;
@@ -580,7 +599,7 @@ public final class KidsHub {
     private void send(final String v, final String id, final String t, final Map<String, String> f, final ScreenView src) {
         final String sk = sheetKind;
         final String ckey = "kq.open".equals(v) && "p".equals(t) ? "kq.open:p" : v;                 // 미션 팝업은 쪽(자녀 · 부모님)마다 따로 기억한다
-        if (v != null && sheetD == null && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
+        if (v != null && sheetD == null && !"kx.open".equals(v) && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
             ScreenCore.Screen ms = memScr.get(ckey); String mj = memJs.get(ckey);
             if (ms == null && "kl.open".equals(v) && !linked && store.get(K_SC + ckey, "").length() == 0) {          // 처음 · 연결 전: 기본 화면을 바로(통신 없이)
                 try { ms = ScreenCore.load(LINK_SEED); mj = LINK_SEED; } catch (Throwable ignored) { }
@@ -597,7 +616,7 @@ public final class KidsHub {
         }
         io.execute(new Runnable() { @Override public void run() {
             try {
-                final boolean opener = v != null && v.matches("k[a-z]{1,2}\\.open");
+                final boolean opener = v != null && !"kx.open".equals(v) && v.matches("k[a-z]{1,2}\\.open");
                 if (opener && sheetD == null) {                                   // 마지막으로 본 팝업을 먼저 바로 띄우고, 서버 답이 오면 새 것으로 바꾼다(기다리는 느낌을 없앤다)
                     String cj = store.get(K_SC + ckey, "");
                     if (cj.length() > 0) {
@@ -624,6 +643,7 @@ public final class KidsHub {
                 if (sc != null && "kidquest".equals(sc.id) && js.length() < 150000) { String qk = "p".equals(sc.swK) ? "kq.open:p" : "kq.open"; store.put(K_SC + qk, js); memScr.put(qk, sc); memJs.put(qk, js); }          // 미션 팝업은 어느 쪽 답이든 그 쪽 기억을 새로 고친다
                 final String notice = o.optString("notice", ""), clear = o.optString("clear", ""), kind = o.optString("sheet", "");
                 final boolean close = o.optBoolean("close", false), hub = o.optInt("hub", 0) == 1;
+                final JSONObject popR = o.optJSONObject("pop");
                 if (o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
                 if (v != null && v.startsWith("kl.") && !"kl.open".equals(v) && !"kl.close".equals(v) && !"kl.scan".equals(v)) refreshLink(true);
                 main.post(new Runnable() { @Override public void run() {
@@ -638,6 +658,7 @@ public final class KidsHub {
                     if ("kqx".equals(clear)) qpt = 1;
                     if (close && (v == null || !v.endsWith(".cancel"))) { closeSheet(true); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
                     if (hub && open) fetchHub();
+                    if (popR != null && "kx.open".equals(v)) showCallPop(popR, true);                  // 허브의 호출 줄을 눌렀다 — 그 호출의 팝업
                 } });
             } catch (Throwable e) { note("처리하지 못했어요"); }
         } });
@@ -645,6 +666,8 @@ public final class KidsHub {
 
     private static String kindOf(String id) {
         if ("kidchat".equals(id)) return "chat";
+        if ("kidgd".equals(id)) return "gd";
+        if ("kidcall".equals(id)) return "call";
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
         if ("kidcheer".equals(id)) return "cheer";
@@ -680,6 +703,81 @@ public final class KidsHub {
     // ───────── 팝업(장소 등록 · 가족 대화 · 미션 · 응원문구 · 연결 관리) ─────────
     private View sheetBox;
     private boolean sheetBottom;
+
+    // ───────── s415: 자녀의 호출(긴급 · 데리러 와줘 · 안전 도착)은 가운데 팝업 — 키즈 탭 밖에서도 ─────────
+    private volatile JSONObject lastPop;      // 가장 최근에 받은 호출 팝업 값(엔진이 준 것: 제목 · 글 · 단추 · 저절로 뜰지)
+    private String shownPk = "";              // 이미 띄운 팝업(같은 호출 · 같은 상태는 다시 띄우지 않는다)
+
+    /** 허브 답에 실려 온 호출 팝업 값을 맞춘다: 새 것이면(엔진이 au=1) 띄우고, 열려 있던 호출 팝업이 이제 필요 없어졌으면 닫는다. */
+    private void syncCallPop(JSONObject pp) {
+        lastPop = pp;
+        if (pp == null) { if (sheetD != null && "call".equals(sheetKind)) closeSheet(true); return; }
+        if (!showCallPop(pp, false) && sheetD != null && "call".equals(sheetKind) && !pp.optString("pk").equals(shownPk)) closeSheet(true);
+    }
+
+    /** 엔진이 정해 준 값(제목 pt · 글 ps · 단추 bt/ka/ci · 저절로 뜰지 au)으로 가운데 팝업을 띄운다. manual = 사람이 눌러 연 것(저절로 뜨는 조건을 보지 않는다). 띄웠으면 true. */
+    private boolean showCallPop(JSONObject d, boolean manual) {
+        if (d == null || act.isFinishing() || act.isDestroyed()) return false;
+        String pk = d.optString("pk", "");
+        if (!manual) {
+            if (d.optInt("au", 0) != 1 || paused || pk.equals(shownPk)) return false;
+            if (sheetD != null && "place".equals(sheetKind) && !"sos".equals(d.optString("k"))) return false;          // 장소를 적는 중에는 긴급이 아니면 끼어들지 않는다
+        }
+        try {
+            String js = callPopJson(d);
+            shownPk = pk;
+            showSheet("call", ScreenCore.load(js), js);
+            return true;
+        } catch (Throwable e) { return false; }
+    }
+
+    /** 팝업 화면 모양(그리기만 — 글 · 단추 이름 · 누르면 무엇을 보낼지는 엔진이 준 값 그대로). */
+    private static String callPopJson(JSONObject d) throws org.json.JSONException {
+        JSONObject o = new JSONObject();
+        o.put("ok", true); o.put("v", 1); o.put("screen", "kidcall"); o.put("cover", "tab"); o.put("head", new JSONArray());
+        JSONArray b = new JSONArray();
+        b.put(new JSONObject().put("t", "text").put("s", d.optString("pt")).put("size", 17).put("bold", true).put("color", "orange").put("align", "center").put("pad", new JSONArray("[16,22,16,6]")));
+        b.put(new JSONObject().put("t", "text").put("s", d.optString("ps")).put("size", 12.5).put("color", "sub").put("align", "center").put("pad", new JSONArray("[16,0,16,14]")));
+        String ka = d.optString("ka", ""), ci = d.optString("ci", "");
+        JSONArray kids = new JSONArray();
+        JSONObject act1 = new JSONObject().put("a", "call").put("v", ka.length() > 0 ? ka : "kl.close");
+        if (ka.length() > 0 && ci.length() > 0) act1.put("t", ci);
+        kids.put(new JSONObject().put("t", "button").put("s", d.optString("bt", "확인")).put("act", act1).put("h", 46).put("size", 14).put("bold", true).put("r", 10).put("fill", "gold").put("tc", "#121214").put("line", "gold"));
+        if (ka.length() > 0) kids.put(new JSONObject().put("t", "button").put("s", "닫기").put("act", new JSONObject().put("a", "call").put("v", "kl.close")).put("h", 46).put("size", 13).put("bold", true).put("r", 10).put("fill", "card2").put("tc", "text").put("line", "border"));
+        b.put(new JSONObject().put("t", "row").put("gap", 8).put("pad", new JSONArray("[12,6,12,16]")).put("kids", kids));
+        o.put("body", b);
+        o.put("dlg", new JSONObject().put("w", 460).put("maxh", 0.9).put("dim", 0.5).put("top", 0.5).put("r", 18).put("mx", 14).put("fit", false));
+        o.put("rev", d.optString("pk"));
+        return o.toString();
+    }
+
+    /** 푸시(FCM)가 왔다 — 앱이 앞에 있으면(어느 탭이든) 호출은 가운데 팝업으로, 자녀가 취소했으면 떠 있는 팝업을 닫는다. 팝업을 띄웠으면 true. */
+    public boolean onCallPush(final Map<String, String> d) {
+        if (d == null || !alive) return false;
+        final String k = d.get("k");
+        if ("callx".equals(k)) { main.post(new Runnable() { @Override public void run() { lastPop = null; if (sheetD != null && "call".equals(sheetKind)) closeSheet(true); } }); return false; }
+        if (!"sos".equals(k) && !"pick".equals(k) && !"arr".equals(k)) return false;
+        if (paused || d.get("pk") == null) return false;
+        final JSONObject o = popFromMap(d);
+        main.post(new Runnable() { @Override public void run() { if (!"arr".equals(k)) lastPop = o; showCallPop(o, false); } });
+        return true;
+    }
+
+    static JSONObject popFromMap(Map<String, String> d) {
+        JSONObject o = new JSONObject();
+        try {
+            String[] ks = {"pk", "ci", "pt", "ps", "bt", "ka", "k"};
+            for (String x : ks) o.put(x, d.get(x) == null ? "" : d.get(x));
+            int au = 1; try { au = Integer.parseInt(d.get("au")); } catch (Exception ignored) { }
+            o.put("au", au);
+        } catch (Throwable ignored) { }
+        return o;
+    }
+
+    /** 알림을 눌러 앱이 열렸다 — 알림에 실린 팝업 값으로 호출 팝업을 바로 띄운다. */
+    public void popFromIntent(String json) {
+        try { final JSONObject o = new JSONObject(json); main.post(new Runnable() { @Override public void run() { if (!"arr".equals(o.optString("k"))) lastPop = o; showCallPop(o, true); } }); } catch (Throwable ignored) { }
+    }
 
     private void showSheet(final String kind, ScreenCore.Screen sc, String js) {
         if (act.isFinishing() || act.isDestroyed()) return;
@@ -768,6 +866,7 @@ public final class KidsHub {
                 if (sheetD != d) return;
                 boolean quiet = sheetQuiet;
                 sheetD = null; sheetV = null; sheetKind = ""; sheetJson = ""; sheetBox = null; sheetBottom = false;
+                if ("gd".equals(kd) && !quiet && !"1".equals(store.get(K_GD, "0")) && open) { setMode(false); close(true); return; }          // s415: 확인 없이 닫으면 키즈 화면에 들어가지 않는다
                 if ("place".equals(kd) && !quiet) send("kpl.cancel", "", "", null, null);      // 밖을 눌러 닫으면 쓰던 장소 초안은 버린다
                 if (open && !paused && !quiet) startLoop("hub");
             }
@@ -824,6 +923,11 @@ public final class KidsHub {
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
             buzz(act, 14L);                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
+            if ("kg.ok".equals(a.v)) { store.put(K_GD, "1"); closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // s415: 보호자 확인 — 누르자마자 팝업을 닫고 서버에는 뒤에서 보낸다
+            if ("kx.ack".equals(a.v) || "kx.done".equals(a.v)) {                           // s415: 지금 가요 · 확인했어요 · 만났어요 — 서버 답을 기다리지 않고 바로 팝업을 없앤다(서버가 자녀에게 알림을 보낸다)
+                lastPop = null; closeSheet(false); send(a.v, a.id, a.t, null, null); return;
+            }
+            if ("kx.open".equals(a.v)) { JSONObject lp = lastPop; if (lp != null && showCallPop(lp, true)) return; }          // 이미 받아 둔 팝업 값이 있으면 통신 없이 바로
             if ("kpg.cancel".equals(a.v) && sheetD != null) { closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // 장소 찾기 취소도 서버 답을 기다리지 않고 바로 닫는다(초안 버리기는 뒤에서)
             if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다

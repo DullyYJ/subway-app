@@ -362,7 +362,7 @@ public class ShellActivity extends Activity {
     }
     /** 키즈 푸시 알림을 눌러 열었나(연결된 부모만 뜻이 있다). 한 번 쓰면 지운다. */
     private boolean kidsPushLaunch(Intent it) {
-        try { if (it != null && it.hasExtra("kids_open")) { it.removeExtra("kids_open"); return kids != null && kids.linked(); } } catch (Throwable ignored) { }
+        try { if (it != null && it.hasExtra("kids_open")) { it.removeExtra("kids_open"); String kp = it.getStringExtra("kids_pop"); it.removeExtra("kids_pop"); if (kp != null && kids != null && kids.linked()) kids.popFromIntent(kp); return kids != null && kids.linked(); } } catch (Throwable ignored) { }
         return false;
     }
     @Override protected void onStart() { super.onStart(); if (vec != null) vec.onStart(); }

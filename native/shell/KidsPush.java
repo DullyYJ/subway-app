@@ -60,13 +60,16 @@ public final class KidsPush extends FirebaseMessagingService {
             Map<String, String> d = m.getData();
             if (d == null || d.isEmpty()) return;
             KidsHub h = hub;
-            boolean urgent = "sos".equals(d.get("k"));                          // s399: 자녀의 긴급 호출은 화면을 보고 있어도 항상 크게 알린다
-            if (!urgent && h != null && h.viewing()) return;                               // s385: 키즈 화면(대화 칸·대화방)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림이 온다(카톡처럼). 키즈 화면은 긴 대기로 이미 실시간이다
-            show(getApplicationContext(), d.get("title"), d.get("body"), d.get("tag"), d.get("k"));
+            String k = d.get("k");
+            boolean urgent = "sos".equals(k);                                  // s399: 자녀의 긴급 호출은 화면을 보고 있어도 항상 크게 알린다
+            boolean popped = h != null && h.onCallPush(d);                    // s415: 긴급 · 데리러 와줘 · 안전 도착은 앱이 앞에 있으면(어느 탭이든) 가운데 팝업으로 — 자녀가 취소하면 팝업도 닫힌다
+            if (popped && !urgent) return;                                     // 팝업으로 보여 줬으니 알림은 생략(긴급만 알람 소리를 위해 알림도 낸다)
+            if (!urgent && h != null && h.viewing()) return;                  // s385: 키즈 화면(대화 칸·대화방)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림이 온다(카톡처럼)
+            show(getApplicationContext(), d.get("title"), d.get("body"), d.get("tag"), d.get("k"), d);
         } catch (Throwable ignored) { }
     }
 
-    static void show(Context c, String title, String body, String tag, String kind) {
+    static void show(Context c, String title, String body, String tag, String kind, Map<String, String> d) {
         if (body == null || body.length() == 0) return;
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
@@ -83,6 +86,7 @@ public final class KidsPush extends FirebaseMessagingService {
             nm.createNotificationChannel(ch);
         }
         Intent it = new Intent(c, ShellActivity.class).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP).putExtra("kids_open", kind == null ? "1" : kind);
+        if (d != null && d.get("pk") != null && ("sos".equals(kind) || "pick".equals(kind) || "arr".equals(kind))) it.putExtra("kids_pop", KidsHub.popFromMap(d).toString());          // s415: 알림을 누르면 호출 팝업이 바로 뜬다
         PendingIntent pi = PendingIntent.getActivity(c, 7701, it, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(c, chId) : new Notification.Builder(c);
         if (urgent) b.setCategory(Notification.CATEGORY_ALARM);

@@ -3896,3 +3896,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 앱(그림만): `SceneCore.fallStep` star 갈래(느긋하게 낙하·웃는 칸 15) · `starLight()`(a.sl 1 감쌈 / 2 흩어짐 / 3 다시 모임 / 4 여운, a.slU 진행 — 무작위 없이 황금각으로 별 위치 고정) · `SceneArt.sparkle`(오목한 4갈래 ✨ + 금빛 그라데이션 + 흰 심지 + 번짐)·`halo` · 입자 `gold` · `SceneActs L_star`(3.9초: 닿자마자 몸이 빛으로 풀림 → 흩어짐 0.75초 → 모임 0.9초 → 몸이 되살아나며 살짝 넘치게 커졌다 자리잡음 → 웃는 칸 15·7·0·1·8 돌려가며 "히히~" + 콩콩 + 여운 ✨).
 - 몸 그림은 기존 3D 렌더 시트(`ppopu_act` 웃는 칸) 그대로 — 별빛은 기기 해상도 그대로 그리는 벡터(그라데이션 입체감). 새로 렌더한 3D 시트는 없음(Blender 없음).
 - 시험: scene_engine 20 · scene_native 9(뽀푸 별빛 순서·몸 사라졌다 돌아옴·상태 풀림) · JVM 필름스트립으로 눈으로 확인. **기기 미확인.**
+
+## s405 (2026-11-03) — 키즈탭 첫 진입 즉시 · 보호자 확인/자녀 호출 가운데 팝업 · 누르면 바로 닫힘 (앱 쪽, 서버는 gildongmu-kids s415)
+- `KidsHub`: `GD_SEED`(처음 보호자 확인 팝업 시드) · `K_GD`(확인했다고 기억) · 연결 직후 `preload()` · `putScreen`/`take`/`preload` 가 `kidgd`(→ 가운데 팝업 kind `gd`)와 `pop`(→ `syncCallPop`/`showCallPop`/`callPopJson` — 그리기만) 처리 · `onCallPush`(FCM, 앱이 앞에 있으면 어느 탭이든 팝업) · `popFromIntent`(알림 탭) · `kg.ok`/`kx.ack`/`kx.done` 은 누르자마자 팝업을 닫고 서버엔 뒤에서 · `kx.open` 은 받아 둔 값으로 통신 없이.
+- `KidsPush.onMessageReceived`: 호출 푸시는 팝업이 떴으면 알림 생략(긴급 제외) · 알림 탭 extra `kids_pop` → `ShellActivity.kidsPushLaunch` 가 `popFromIntent`.
+- **안드로이드 계층은 이 PC 에 android.jar 가 없어 CI 컴파일로만 확인. 기기 미확인.**
