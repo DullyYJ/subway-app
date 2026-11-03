@@ -825,7 +825,7 @@ public final class KidsHub {
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;
             if ("kl.scan".equals(a.v)) { scan(me()); return; }
             if ("kq.tab".equals(a.v) || "kq.open".equals(a.v)) qt = "p".equals(a.t) ? "p" : "c";
-            if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 스타포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
+            if ("kq.pt".equals(a.v)) { pickPt(a.t); return; }                          // 길동무포인트는 고르기만 한다(통신 없음) — 저장은 아래 '확인'을 눌러야
             if ("kq.send".equals(a.v)) { send(a.v, a.id, String.valueOf(qpt), me().fields(), me()); return; }
             if ("kh.say".equals(a.v) && me() == hubV) {                              // s370(YJ: 보내면 대화창에 바로 들어가야 한다): 서버 답을 기다리지 않고 내 말풍선을 먼저 그리고 입력칸을 비운다
                 Map<String, String> ff = me().fields();
@@ -971,7 +971,7 @@ public final class KidsHub {
         return s;
     }
 
-    // ───────── 미션 스타포인트 고르기(통신 없이 바로 표시) ─────────
+    // ───────── 미션 길동무포인트 고르기(통신 없이 바로 표시) ─────────
     private int qpt = 1;
     private void pickPt(String t) {
         try { qpt = Math.max(1, Math.min(5, Integer.parseInt(t))); } catch (Throwable e) { return; }
@@ -983,7 +983,7 @@ public final class KidsHub {
             sv.setScreen(ScreenCore.load(nj), false);
         } catch (Throwable ignored) { }
     }
-    /** 미션 화면의 스타포인트 단추 가운데 고른 것만 금색으로 칠한다. */
+    /** 미션 화면의 길동무포인트 단추 가운데 고른 것만 금색으로 칠한다. */
     private String fixQ(String js) {
         if (js == null || js.indexOf("kq.pt") < 0) return js;
         try {
