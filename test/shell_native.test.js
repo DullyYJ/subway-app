@@ -1165,6 +1165,14 @@ function findAndroidJar() {
     assert.ok(/hubV\.setSwipeHost\(new ScreenView\.SwipeHost\(\)/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /sv\.slideNext\(dir\);\s*new Host\(sv\)\.onAction\(a\);/.test(kh), '확인 화면 밀기: 엔진이 준 swL/swR 행동을 Host 로 보낸다');
     assert.ok(/canSwipe\(\) \{ ScreenCore\.Screen cs = hubV\.currentScreen\(\); return cs != null && \(cs\.swL != null \|\| cs\.swR != null\); \}/.test(kh), 'sw 가 없으면(자녀 한 명) 밀기를 쓰지 않는다');
   });
+  await t('s409: 장소 등록 팝업 — 주소 찾기는 곧바로 "찾는 중", 결과 고르기는 앱에서 바로(저장만 뒤에서), 등록은 바로 닫고 뒤에서', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/\("kpg\.find"\.equals\(a\.v\) \|\| "kpg\.pick"\.equals\(a\.v\) \|\| "kpg\.add"\.equals\(a\.v\)\) && sheetD != null && regFast\(a\)\) return;/.test(kh), '세 눌림이 서버 답을 기다리지 않는 길(regFast)로 먼저 간다');
+    assert.ok(/regBusy\(true\);\s*send\(a\.v, a\.id, a\.t, ff, null\);/.test(kh) && /now - regAt < 2500L\) return true;/.test(kh), '찾는 중 글을 바로 보이고 연타는 한 번만');
+    assert.ok(/send\("kpg\.sv", a\.id, a\.t, ff, null\);/.test(kh) && /regRewrite\("pick"/.test(kh), '고른 곳은 지도 · 이름을 앱에서 고치고 저장만 뒤에서 보낸다');
+    assert.ok(/sheetQuiet = true;\s*closeSheet\(true\);\s*send\(a\.v, a\.id, t, ff, null\);/.test(kh) && /%\.6f,%\.6f/.test(kh), '등록은 바로 닫고 지도 좌표와 함께 뒤에서 보낸다');
+    assert.ok(/boolean lateOpen = "kpg\.open"\.equals\(v\) && sheetD != null/.test(kh) && /finally \{ if \(!applied\[0\] && "kpg\.find"\.equals\(v\)\)/.test(kh), '늦은 열기 답이 쓰던 글을 덮지 않고, 실패하면 찾는 중 글을 되돌린다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();

@@ -619,6 +619,7 @@ public final class KidsHub {
             ScreenCore.Screen ms = memScr.get(k2); String mj = memJs.get(k2);
             if (ms != null && mj != null) { try { String mj2 = fixQ(mj); if (!mj2.equals(mj)) { ms = ScreenCore.load(mj2); mj = mj2; } showSheet("quest", ms, mj); } catch (Throwable ignored) { } }
         }
+        final boolean[] applied = new boolean[1];
         io.execute(new Runnable() { @Override public void run() {
             try {
                 final boolean opener = v != null && !"kx.open".equals(v) && v.matches("k[a-z]{1,2}\\.open");
@@ -652,8 +653,10 @@ public final class KidsHub {
                 if (o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
                 if (v != null && v.startsWith("kl.") && !"kl.open".equals(v) && !"kl.close".equals(v) && !"kl.scan".equals(v)) refreshLink(true);
                 main.post(new Runnable() { @Override public void run() {
+                    applied[0] = true;
                     if (notice.length() > 0 && sheetD == null) note(notice);          // 팝업 안의 안내는 엔진이 팝업 화면 안에 넣어 준다
-                    if (sc != null) {
+                    boolean lateOpen = "kpg.open".equals(v) && sheetD != null && "ev".equals(sheetKind) && regTyped();          // s419: 미리 띄운 등록 팝업에 벌써 글을 쓰고 있으면 늦게 온 열기 답으로 덮어쓰지 않는다
+                    if (sc != null && !lateOpen) {
                         if ("kidfam".equals(sc.id)) { putFam(js, famEp); }
                         else if ("kids".equals(sc.id)) { if (open && !js.equals(lastHubJson)) { lastHubJson = js; hubV.setScreen(sc, true); } }
                         else showSheet(kind.length() > 0 ? kind : kindOf(sc.id), sc, js);
@@ -661,11 +664,12 @@ public final class KidsHub {
                     ScreenView cv = src != null && (src == famV || src == hubV) ? src : sheetV;   // 가족 대화 칸 · 확인 화면 아래 입력줄은 자기 칸의 글을 비운다
                     if (clear.length() > 0 && cv != null && !"kh.say".equals(v)) cv.setField(clear, "");          // kh.say 는 누른 즉시 비웠다(그 사이 새로 쓴 글을 지우지 않는다)
                     if ("kqx".equals(clear)) qpt = 1;
-                    if (close && (v == null || !v.endsWith(".cancel"))) { closeSheet(true); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
+                    if (close && (v == null || !v.endsWith(".cancel"))) { boolean shown = sheetD != null; closeSheet(true); if (shown && notice.length() > 0) note(notice); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
                     if (hub && open) fetchHub();
                     if (popR != null && "kx.open".equals(v)) showCallPop(popR, true);                  // 허브의 호출 줄을 눌렀다 — 그 호출의 팝업
                 } });
             } catch (Throwable e) { note("처리하지 못했어요"); }
+            finally { if (!applied[0] && "kpg.find".equals(v)) main.post(new Runnable() { @Override public void run() { regBusy(false); } }); }          // 못 찾고 끝났으면 '찾는 중' 글을 되돌린다
         } });
     }
 
@@ -934,6 +938,7 @@ public final class KidsHub {
             }
             if ("kx.open".equals(a.v)) { JSONObject lp = lastPop; if (lp != null && showCallPop(lp, true)) return; }          // 이미 받아 둔 팝업 값이 있으면 통신 없이 바로
             if ("kpg.cancel".equals(a.v) && sheetD != null) { closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // 장소 찾기 취소도 서버 답을 기다리지 않고 바로 닫는다(초안 버리기는 뒤에서)
+            if (("kpg.find".equals(a.v) || "kpg.pick".equals(a.v) || "kpg.add".equals(a.v)) && sheetD != null && regFast(a)) return;          // s419: 장소 등록 — 누르는 즉시 화면이 반응한다(찾는 중 표시 · 고른 곳으로 지도 이동 · 바로 닫고 뒤에서 등록)
             if ("kpl.cancel".equals(a.v) && sheetD != null && "place".equals(sheetKind)) { closeSheet(false); return; }          // s374: 취소는 서버 답을 기다리지 않고 바로 닫는다(닫히면서 초안 버리기를 뒤에서 보낸다)
             if (("kpl.t".equals(a.v) || "kpl.d".equals(a.v)) && placeLocal(a)) return;                                       // s374: 시각 · 요일 바꾸기는 통신 없이 그 자리에서 바로 고친다
             if ("kpl.save".equals(a.v) && me() == sheetV && placeSave(a)) return;
@@ -1003,6 +1008,107 @@ public final class KidsHub {
             } });
         } });
         return true;
+    }
+
+    // ───────── 장소 등록(주소 찾기) 팝업: 눌렀을 때 서버를 기다리지 않고 화면이 먼저 반응한다 ─────────
+    private long regAt;
+    /** 등록 팝업 화면 마디를 돌며 일을 한다. mode: busy=주소 찾기 단추 글 바꾸기 · pick=지도 · 위치 글 옮기기 · xy=지금 지도 좌표 읽기. 이름 · 주소 칸 값은 늘 지금 입력한 것으로 유지한다. */
+    private void regWalk(JSONArray arr, String mode, String label, double[] xy, String kpa, String kpn, String nm) {
+        for (int i = 0; arr != null && i < arr.length(); i++) {
+            JSONObject n = arr.optJSONObject(i);
+            if (n == null) continue;
+            String t = n.optString("t");
+            try {
+                if ("button".equals(t) && "busy".equals(mode)) {
+                    JSONObject ac = n.optJSONObject("act");
+                    if (ac != null && "kpg.find".equals(ac.optString("v"))) n.put("s", label);
+                } else if ("tmap".equals(t)) {
+                    JSONArray pts = n.optJSONArray("pts");
+                    JSONObject p0 = pts == null ? null : pts.optJSONObject(0);
+                    if (p0 != null) {
+                        if ("pick".equals(mode)) { p0.put("la", xy[0]); p0.put("lo", xy[1]); p0.put("l", nm.length() > 0 ? nm : "\uc5ec\uae30"); }
+                        else if ("xy".equals(mode)) { xy[0] = p0.optDouble("la", Double.NaN); xy[1] = p0.optDouble("lo", Double.NaN); }
+                    }
+                } else if ("text".equals(t) && "pick".equals(mode) && n.optString("s").startsWith("\uc704\uce58 ")) {
+                    String old = n.optString("s"); int dot = old.indexOf(" \u00b7 ");
+                    n.put("s", String.format(java.util.Locale.US, "\uc704\uce58 %.4f, %.4f", xy[0], xy[1]) + (dot > 0 ? old.substring(dot) : ""));
+                } else if ("field".equals(t)) {
+                    String k = n.optString("key");
+                    if ("kpa".equals(k) && kpa != null) n.put("value", kpa);
+                    if ("kpn".equals(k) && kpn != null) n.put("value", kpn);
+                }
+            } catch (Exception ignored) { }
+            JSONArray ks = n.optJSONArray("kids");
+            if (ks != null) regWalk(ks, mode, label, xy, kpa, kpn, nm);
+        }
+    }
+
+    /** 등록 팝업이 떠 있고, 사용자가 주소나 이름을 벌써 썼는가(늦게 온 열기 답으로 덮어쓰지 않으려고). */
+    private boolean regTyped() {
+        ScreenView sv = sheetV;
+        if (sv == null || sheetJson.indexOf("\"kpg.find\"") < 0) return false;
+        Map<String, String> f = sv.fields();
+        String a = f.get("kpa"), b = f.get("kpn");
+        return (a != null && a.trim().length() > 0) || (b != null && b.trim().length() > 0);
+    }
+
+    private boolean regRewrite(String mode, String label, double[] xy, String nm) {
+        try {
+            ScreenView sv = sheetV;
+            if (sv == null || sheetD == null || sheetJson.length() == 0 || sheetJson.indexOf("\"kpg.find\"") < 0) return false;
+            Map<String, String> f = sv.fields();
+            String kpa = f.get("kpa"), kpn = f.get("kpn");
+            if ("pick".equals(mode) && (kpn == null || kpn.trim().length() == 0)) kpn = nm;          // 이름을 아직 안 적었으면 고른 곳 이름을 넣어 준다
+            JSONObject o = new JSONObject(sheetJson);
+            regWalk(o.optJSONArray("body"), mode, label, xy, kpa, kpn, kpn == null ? "" : kpn.trim());
+            String js = o.toString();
+            sheetJson = js;
+            sv.setScreen(ScreenCore.load(js), true);
+            return true;
+        } catch (Throwable e) { return false; }
+    }
+
+    private void regBusy(boolean on) { regRewrite("busy", on ? "\ucc3e\ub294 \uc911\u2026" : "\uc8fc\uc18c \ucc3e\uae30", new double[2], ""); }
+
+    private boolean regFast(ScreenCore.Act a) {
+        try {
+            ScreenView sv = sheetV;
+            if (sv == null || sheetD == null || sheetJson.indexOf("\"kpg.find\"") < 0) return false;          // 등록 팝업이 아니면 그대로 서버로
+            if ("kpg.find".equals(a.v)) {
+                long now = SystemClock.uptimeMillis();
+                if (now - regAt < 2500L) return true;                                                      // 찾는 중에 또 눌러도 한 번만
+                regAt = now;
+                Map<String, String> ff = new java.util.HashMap<String, String>(sv.fields());
+                regBusy(true);
+                send(a.v, a.id, a.t, ff, null);
+                return true;
+            }
+            if ("kpg.pick".equals(a.v)) {
+                String[] p = a.t == null ? new String[0] : a.t.split("\\|", 3);
+                if (p.length < 3) return false;                                                            // 옛 모양이면 서버가 처리
+                double la = Double.parseDouble(p[0]), lo = Double.parseDouble(p[1]);
+                if (!(Math.abs(la) <= 85) || !(Math.abs(lo) <= 180)) return false;
+                Map<String, String> ff = new java.util.HashMap<String, String>(sv.fields());
+                if (!regRewrite("pick", "", new double[]{la, lo}, p[2])) return false;
+                String cur = ff.get("kpn");
+                if (cur == null || cur.trim().length() == 0) ff.put("kpn", p[2]);
+                send("kpg.sv", a.id, a.t, ff, null);                                                       // 저장만 뒤에서(화면은 이미 고쳤다)
+                return true;
+            }
+            if ("kpg.add".equals(a.v)) {
+                Map<String, String> ff = new java.util.HashMap<String, String>(sv.fields());
+                String nm = ff.get("kpn") == null ? "" : ff.get("kpn").replaceAll("\\s+", " ").trim();
+                if (nm.length() == 0) return false;                                                        // 이름이 없으면 서버가 안내 글을 넣어 준다
+                double[] xy = new double[]{Double.NaN, Double.NaN};
+                regWalk(new JSONObject(sheetJson).optJSONArray("body"), "xy", "", xy, null, null, "");
+                String t = (Double.isNaN(xy[0]) || Double.isNaN(xy[1])) ? a.t : String.format(java.util.Locale.US, "%.6f,%.6f", xy[0], xy[1]);
+                sheetQuiet = true;
+                closeSheet(true);
+                send(a.v, a.id, t, ff, null);                                                              // 뒤에서 등록 · 끝나면 안내가 뜬다
+                return true;
+            }
+        } catch (Throwable e) { }
+        return false;
     }
 
     // ───────── 장소 등록 팝업: 시각 · 요일은 이 안에서 바로 고치고, 저장할 때 한 번만 서버에 보낸다 ─────────
