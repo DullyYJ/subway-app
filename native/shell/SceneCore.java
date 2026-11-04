@@ -31,6 +31,12 @@ public final class SceneCore {
     }
 
     // ═══ 상수·표 ═══
+    /** 자녀가 꾸민 옷 입히기(부모 앱이 붙인다). 기본은 null — 자녀와 연동되지 않았거나 입은 것이 없으면 장면은 원래대로 그린다. */
+    public interface WearHook {
+        void draw(SceneCv c, Actor a, int kind, int idx, double dx, double dy, double sc);
+        SceneCv.Img nh(String id, boolean act);
+    }
+    public static volatile WearHook WEAR_HOOK;
     static final double TH = 44;                                       // 캐릭터 키(px, 가장 가까운 줄 기준)
     static final double LONGPRESS = .38;                               // 꾹 누름(초)
     static final double SLOP_DP = 10;                                  // 이만큼 움직이면 길게 누르기 취소(= 화면 스크롤)
@@ -842,6 +848,8 @@ public final class SceneCore {
         int idx = a.intro ? a.ii : (int) Math.floorMod((long) Math.floor(a.fr), 16L);
         if (ash != null) { sheet = ash; idx = Math.max(0, Math.min(15, a.cell)); }
         else if (psh != null) { sheet = psh; idx = Math.max(0, Math.min(7, a.pose)); }
+        final WearHook wh = a.intro ? null : WEAR_HOOK;                                              // 자녀가 꾸민 옷(연동된 부모만) — 두덩이 새 모자를 쓰면 안전모 없는 시트로
+        if (wh != null && psh == null) { SceneCv.Img nh = wh.nh(a.id, ash != null); if (nh != null) sheet = nh; }
         double lift = (D.lift + a.alt) * zz * (a.kind.equals("eagle") ? 1 : s / a.k);
         double shA = (L.night ? .22 : .34) * (a.kind.equals("eagle") ? .7 : 1) * (L.wk.equals("rain") || L.wk.equals("overcast") ? .7 : 1);
         boolean sunk = !Double.isNaN(a.cut) && a.y > TH * zz * .9;
@@ -858,6 +866,7 @@ public final class SceneCore {
         if (a.ang != 0) { double px = a.pvx, py = a.pvy; c.translate(px, py); c.rotate(a.ang); c.translate(-px, -py); }
         if (a.heart > 0 || a.fade < 1) c.globalAlpha(clamp((a.heart > 0 ? 1 - a.heart * 1.05 : 1) * a.fade, 0, 1));    // 몸이 하트로 바뀌는 동안 · 별빛으로 흩어졌다 모이는 동안 원래 그림은 옅어진다
         if (a.fade > .004) c.drawImage(sheet, sx, sy, 256, 256, dx, dy, D.cell * s, D.cell * s);
+        if (wh != null && a.fade > .004) wh.draw(c, a, ash != null ? 2 : psh != null ? 1 : 0, idx, dx, dy, D.cell * s / 256);
         if (a.heart > 0) {                                                                         // s354 둘숑: 하트 모양 몸(풍선처럼 부푼 몸이 땅에 닿는 순간)
             double hs = TH * zz * .3, hk = ease(a.heart); c.globalAlpha(clamp(hk, 0, 1));
             double hy = -TH * zz * .5, hr = hs * (.6 + .4 * hk);

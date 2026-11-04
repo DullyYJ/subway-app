@@ -50,7 +50,7 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab", K_GD = "kid.gd";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab", K_GD = "kid.gd", K_WEAR = "kid.wear";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
@@ -138,6 +138,8 @@ public final class KidsHub {
         cid = st.get(K_CID, "");
         String nodes = st.get(K_NODES, "");
         linked = nodes.length() > 2;
+        FriendWear.I.init(a);                                                 // 자녀가 꾸민 친구들 모습을 홈 장면에 — 폰에 남겨 둔 모습으로 켜자마자 바로(통신을 기다리지 않는다)
+        FriendWear.I.apply(linked ? st.get(K_WEAR, "") : "");
         ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 키즈 화면 · 대화 열기 팝업에서)
         ScreenCore.settingsExtra = extraJson();
         SceneCore.quietAuto = mode();                                         // 키즈 모드에서는 홈 장면의 친구들 활동 진동을 울리지 않는다
@@ -374,6 +376,22 @@ public final class KidsHub {
         send("kl.start", "", on ? "1" : "0", null, null);
     }
 
+    // ───────── 자녀가 꾸민 모습(홈 장면) ─────────
+    /** 엔진이 준 저장 글("고른친구,탭;모자,옷,소지품×8")을 폰에 남기고 장면에 바로 입힌다. 모양이 틀리면 무시. 어느 스레드에서든 부른다. */
+    private void gotWear(String w) {
+        if (w == null) return;
+        if (w.length() > 0 && !FriendWear.valid(w)) return;
+        store.put(K_WEAR, w);
+        FriendWear.I.apply(w);
+    }
+
+    /** 조용한 푸시(k:wear)로 자녀가 방금 바꾼 모습이 왔다 — 보고 있는 자녀의 것만 입힌다. 알림 카드는 없다. */
+    public void onWearPush(String pcid, String w) {
+        if (!linked || w == null) return;
+        if (pcid != null && pcid.length() > 0 && cid.length() > 0 && !pcid.equals(cid)) return;
+        gotWear(w);
+    }
+
     // ───────── 연결 상태 새로 받기(앱을 켤 때 · 연결·해제 뒤) ─────────
     public void refreshLink(boolean force) {
         long now = SystemClock.elapsedRealtime();
@@ -381,7 +399,7 @@ public final class KidsHub {
         if (!force && now - lastRefresh < 20000L) return;
         lastRefresh = now;
         io.execute(new Runnable() { @Override public void run() {
-            String r = call("GET", "/p/setrow?kn=1", null, 10000);
+            String r = call("GET", "/p/setrow?kn=1" + (cid.length() > 0 ? "&cid=" + enc(cid) : ""), null, 10000);
             if (r == null) return;
             try {
                 JSONObject o = new JSONObject(r);
@@ -398,6 +416,7 @@ public final class KidsHub {
                 store.put(K_TABX, tjs);
                 linked = nl;
                 if (!nl) store.put(K_MODE, "0");                                  // 연결이 끊기면 키즈 모드도 끝
+                gotWear(nl ? o.optString("w", "") : "");                            // 자녀가 꾸민 모습 — 연결이 없으면 원래 친구들로
                 if (tabDiff || !nl) fireTabs();
                 ScreenCore.settingsExtra = extraJson();
                 if (!nl) hideFamily();

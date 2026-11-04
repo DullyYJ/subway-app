@@ -61,6 +61,12 @@ public final class KidsPush extends FirebaseMessagingService {
             if (d == null || d.isEmpty()) return;
             KidsHub h = hub;
             String k = d.get("k");
+            if ("wear".equals(k)) {                                            // s412: 자녀가 꾸민 모습 — 알림 없이 조용히. 앱이 떠 있으면 장면에 바로, 아니면 폰에 남겨 다음에 켤 때 바로 보이게
+                String ww = d.get("w"), wc = d.get("cid");
+                if (h != null) h.onWearPush(wc, ww);
+                else if (ww != null && FriendWear.valid(ww)) { ShellCore.Store st = CommuteAlarm.store(getApplicationContext()); String mine = st.get("kid.cid", ""); if (mine.length() == 0 || wc == null || wc.equals(mine)) st.put("kid.wear", ww); }
+                return;
+            }
             boolean urgent = "sos".equals(k);                                  // s399: 자녀의 긴급 호출은 화면을 보고 있어도 항상 크게 알린다
             boolean popped = h != null && h.onCallPush(d);                    // s415: 긴급 · 데리러 와줘 · 안전 도착은 앱이 앞에 있으면(어느 탭이든) 가운데 팝업으로 — 자녀가 취소하면 팝업도 닫힌다
             if (popped && !urgent) { cue(getApplicationContext()); return; }   // 팝업으로 보여 줬으니 알림은 생략(긴급만 알람 소리를 위해 알림도 낸다) — 대신 진동 + 알림음은 낸다
