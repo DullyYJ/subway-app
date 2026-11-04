@@ -1215,6 +1215,11 @@ function findAndroidJar() {
     assert.strictEqual((kh.match(/nap\(backoffMs\(fails\)\)/g) || []).length, 2, '재시도 간격 루프는 그대로 둘');
     assert.ok(/com\.squareup\.okhttp3:okhttp:4\.12\.0/.test(gr), 'okhttp 의존성');
   });
+  await t('s430: 처리방침 · 이용약관 보기 — 서버가 준 https 주소만 연다(보호자 확인 팝업)', async () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/"open"\.equals\(a\.a\)/.test(kh) && /ShellCore\.linkOk\(a\.url\)/.test(kh) && /ACTION_VIEW/.test(kh), '열기 동작은 linkOk(https) 를 통과한 주소만');
+    assert.ok(kh.includes('/legal/privacy') && kh.includes('/legal/terms'), '시드 팝업에 처리방침 · 약관 링크가 있다');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();

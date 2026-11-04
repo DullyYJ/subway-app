@@ -3949,3 +3949,6 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 
 ## s415 (2026-11-04) — 초인종 기다리는 시간은 서버가 준 wa 를 따른다
 - `KidsHub`: 허브 화면 20초 · 그 밖 45초를 앱이 정하던 것을 서버 응답의 `wa` 로 바꿨다(없으면 45초). `Door.await` 는 5초~2분으로 묶는다. 서버 `WATCH_MS` 가 바뀌어도 앱을 고칠 필요가 없다. 시험 shell_native 125. **기기 미확인.**
+
+## s416 (2026-11-04) — 보호자 확인 팝업에 처리방침·이용약관 보기
+- 서버 `gdScreen` 에 두 버튼(`a:'open'`, 키즈 서버 `/legal/privacy` · `/legal/terms`)이 생겨 시드(`GD_SEED`)를 다시 뽑아 넣었다(`gdseed` 시험이 두 글이 같은지 본다). `KidsHub.Host.onAction` 이 `open` 동작을 `ShellCore.linkOk`(http/https) 를 통과한 주소만 `ACTION_VIEW` 로 연다. 시험 shell_native 126. **기기 미확인.**
