@@ -218,7 +218,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(/알약/.test(tw) && /무지개/.test(tw) && !/주황 막대/.test(tw), '개발자(웹 기준): 알약·무지개 설명 그대로'); }
   // 약관 · 오류 로그 · 위치 안내
   { const pol = ['polp', 'poll', 'polo'].map(p => texts(PG(p, {})).join('\n'));
-    ok(/개인정보처리방침/.test(pol[0]) && /1\. 수집하는 항목/.test(pol[0]) && /7\. 문의\nphg0643@gmail\.com/.test(pol[0]) && /시행일 · 최종 개정일: 2026-10-03/.test(pol[0]), '약관: 개인정보처리방침 본문');
+    ok(/개인정보처리방침/.test(pol[0]) && /1\. 수집하는 항목/.test(pol[0]) && /7\. 문의\n개인정보 보호책임자: 원윤재\(운영자\) · phg0643@gmail\.com/.test(pol[0]) && /8\. 길동무 키즈 연동/.test(pol[0]) && /Google Gemini로 전달/.test(pol[0]) && /시행일 · 최종 개정일: 2026-10-03/.test(pol[0]), '약관: 개인정보처리방침 본문');
     ok(/제1조 \(목적\)/.test(pol[1]) && /제7조 \(문의\)/.test(pol[1]) && /서버에 저장하거나 제3자에게 제공하지 않습니다/.test(pol[1]), '약관: 위치기반서비스 이용약관 본문');
     ok(/쿠팡 파트너스 활동/.test(pol[2]) && /공공누리 제1유형/.test(pol[2]) && /추정치/.test(pol[2]), '약관: 데이터 출처 및 고지(제휴 고지 · 출처 표시)');
     ok(!pol.some(x => /<\/?[a-z]+>|&gt;|&amp;/.test(x)), '약관: 태그 찌꺼기 없음');
