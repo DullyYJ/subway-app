@@ -9,6 +9,18 @@ compatibility_date = "2024-01-01"
 [triggers]
 crons = ["0 * * * *", "20 4 * * *"]
 
+# 로그: 요청의 10% 만 남긴다(2026-11-04 대시보드에서 켬 — 비용 0원 유지용).
+#   여기 적어 두지 않으면 다음 배포가 대시보드 설정을 덮어쓸 수 있다.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.1
+invocation_logs = true
+persist = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "subway-db"
