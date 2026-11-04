@@ -986,6 +986,27 @@ public final class KidsHub {
         if (open && !paused && !quiet) startLoop("hub");
     }
 
+    // ───────── 구독(s431) — 서버가 구독 화면을 보낼 때만, 단추를 눌렀을 때에야 만든다 ─────────
+    private BillingGate bill;
+    private BillingGate billing() {
+        if (bill == null) bill = new BillingGate(act, new BillingGate.Out() {
+            @Override public void onMsg(String m) { note(m); }
+            @Override public void onToken(final String tk) {
+                io.execute(new Runnable() { @Override public void run() {
+                    boolean okSub = false;
+                    try {
+                        JSONObject b = new JSONObject(); b.put("tk", tk);
+                        String r = httpPost("/p/sub", b.toString(), store.get(K_ID, ""), store.get(K_SEC, ""));
+                        okSub = r != null && new JSONObject(r).optInt("sub", 0) == 1;
+                    } catch (Throwable e) { okSub = false; }
+                    final boolean fin = okSub;
+                    main.post(new Runnable() { @Override public void run() { if (fin) { note("구독이 시작됐어요"); fetchHub(); } else note("구독을 확인하지 못했어요. 잠시 뒤 '구매 복원'을 눌러 주세요"); } });
+                } });
+            }
+        });
+        return bill;
+    }
+
     // ───────── 화면 안의 눌림(키즈 화면 · 팝업 공통) ─────────
     private class Host implements ScreenView.Listener {
         private final ScreenView self;
@@ -997,7 +1018,9 @@ public final class KidsHub {
                 return;
             }
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
-            buzz(act, 14L);                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
+            buzz(act, 14L);
+            if ("sub.buy".equals(a.v)) { billing().buy(a.id, a.t); return; }               // s431: 구독 — 결제 창만 띄운다(샀는지는 서버가 구글에 물어 정한다)
+            if ("sub.restore".equals(a.v)) { billing().restore(); return; }                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
             if ("kg.ok".equals(a.v)) { store.put(K_GD, "1"); closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // s415: 보호자 확인 — 누르자마자 팝업을 닫고 서버에는 뒤에서 보낸다
             if ("kx.ack".equals(a.v) || "kx.done".equals(a.v)) {                           // s415: 지금 가요 · 확인했어요 · 만났어요 — 서버 답을 기다리지 않고 바로 팝업을 없앤다(서버가 자녀에게 알림을 보낸다)

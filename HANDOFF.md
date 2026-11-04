@@ -3950,5 +3950,11 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 ## s415 (2026-11-04) — 초인종 기다리는 시간은 서버가 준 wa 를 따른다
 - `KidsHub`: 허브 화면 20초 · 그 밖 45초를 앱이 정하던 것을 서버 응답의 `wa` 로 바꿨다(없으면 45초). `Door.await` 는 5초~2분으로 묶는다. 서버 `WATCH_MS` 가 바뀌어도 앱을 고칠 필요가 없다. 시험 shell_native 125. **기기 미확인.**
 
+## s417 (2026-11-04) — 구독 결제 문(BillingGate, 서버가 켜기 전까지 쓰이지 않음)
+- 서버(gildongmu-kids s431)가 구독이 필요한 부모에게 `kidpay` 화면을 보낼 때만 쓰인다. 서버 `BILLING_MODE` 기본 꺼짐 → 그 화면이 오지 않으므로 이 앱에서는 결제 코드가 실행되지 않는다(개발·시험에 결제 불필요).
+- `BillingGate.java`(Play Billing 8.3.0): 단추 `sub.buy`(id=상품 · t=요금제) · `sub.restore` 를 `KidsHub.Host.onAction` 이 가로채 **처음 누를 때에야** 결제에 연결한다(앱 시작 속도 그대로). 14일 무료 체험이 있는 혜택을 먼저 고른다. 결제가 끝나면(PURCHASED) 구매 토큰을 `POST /p/sub` 로 서버에 보내고, 서버가 구글에 직접 확인해 `sub:1` 을 줄 때만 '구독이 시작됐어요' + 허브를 다시 받는다. acknowledge 도 서버가 한다.
+- 시험용 스텁 `test/java/billing-stubs`(CI 컴파일용 — 진짜 라이브러리가 아님). 의존성 `com.android.billingclient:billing:8.3.0`(2026-08-31부터 8 이상 필수; 9 는 targetSdk 35 요구라 보류). 시험 shell_native 127.
+- **진짜 라이브러리 컴파일은 CI(gradle)에서만 확인. 결제 동작은 Play Console 에 앱·구독 상품을 올린 뒤 라이선스 테스터로 확인해야 한다. 기기 미확인.**
+
 ## s416 (2026-11-04) — 보호자 확인 팝업에 처리방침·이용약관 보기
 - 서버 `gdScreen` 에 두 버튼(`a:'open'`, 키즈 서버 `/legal/privacy` · `/legal/terms`)이 생겨 시드(`GD_SEED`)를 다시 뽑아 넣었다(`gdseed` 시험이 두 글이 같은지 본다). `KidsHub.Host.onAction` 이 `open` 동작을 `ShellCore.linkOk`(http/https) 를 통과한 주소만 `ACTION_VIEW` 로 연다. 시험 shell_native 126. **기기 미확인.**

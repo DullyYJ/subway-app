@@ -58,4 +58,6 @@ dependencies {
     implementation 'com.google.firebase:firebase-messaging'
     // s426: 길동무 키즈 서버 초인종(WebSocket) — 서버가 켜 둔 가족에게만 쓴다. 지도 엔진(MapLibre)도 이미 OkHttp 를 쓴다.
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    // s431: 구독 결제(Play Billing 8 — 2026-08-31부터 8 이상 필수). 서버가 구독 화면을 보낼 때만 쓰이고, 꺼 두면(BILLING_MODE off) 연결도 하지 않는다.
+    implementation 'com.android.billingclient:billing:8.3.0'
 }
