@@ -528,15 +528,17 @@ public final class KidsHub {
                 if (r == null) { fails++; nap(backoffMs(fails)); continue; }
                 fails = 0;
                 boolean same = false;
+                long wa = 45000L;
                 try {
                     JSONObject o = new JSONObject(r);
                     if (!o.optBoolean("ok", false)) { nap(1500L); continue; }
                     since = o.optLong("rev", since);
                     wsHint = o.optInt("ws", 0) == 1;
+                    wa = o.optLong("wa", 45000L);
                     same = bell && o.optInt("same", 0) == 1;
                 } catch (Throwable e) { nap(1500L); continue; }
                 if (same) {                                                    // 바뀐 게 없다 — 울릴 때까지. 허브 화면은 20초마다 한 번 '보는 중' 표시를 갱신해야 해서 그때 깨어난다(그 외 45초)
-                    if (wsHint && door.isUp()) { try { door.await(seen, o.optLong("wa", 45000L)); } catch (InterruptedException ie) { return; } }
+                    if (wsHint && door.isUp()) { try { door.await(seen, wa); } catch (InterruptedException ie) { return; } }
                     continue;
                 }
                 if (!take(view, r, my, true)) return;
