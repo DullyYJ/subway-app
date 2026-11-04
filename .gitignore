@@ -18,3 +18,6 @@ shell-android/.gradle/
 shell-android/build/
 shell-android/app/build/
 shell-android/app/src/main/assets/fonts/
+
+# 결제 라이브러리 시험용 스텁(경로에 android/ 가 있어 다시 포함한다)
+!test/java/billing-stubs/com/android/
