@@ -3946,3 +3946,6 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `Door`(자녀 앱과 같은 클래스: OkHttp WebSocket · 울림 횟수 · 5번 연속 실패면 10분 쉼) + `KidsHub`: 허브/대화/미션 루프(`startLoop`)와 가족대화(`startFam`)가 힌트가 있고 연결돼 있으면 `nw=1`(붙들지 않는 요청)로 부르고, 바뀐 게 없으면(`same:1`) 울릴 때까지 쉰다 — **허브 화면은 20초**(서버가 '보는 중' 표시를 40초 안에 받아야 자녀 위치 보고가 촘촘해진다), 그 외 45초. `pause()` 에서 연결을 닫고 `stopLoop()` 은 기다리던 것을 깨운다. 재시도 흩뿌림은 `SystemClock.elapsedRealtime()`(무작위 금지).
 - `shell-android/app/build.gradle` 에 okhttp 4.12.0(지도 엔진 MapLibre 가 이미 OkHttp 를 쓴다 · proguard 는 이미 `-dontwarn okhttp3.**`).
 - 시험 shell_native 125(새 s426: 힌트 없으면 요청 동일 · nw 조건 · 닫기 · 20초). **기기 미확인 · 자바는 CI 에서만 컴파일(스텁 OkHttp 로 Door 만 JVM 에서 컴파일 · 동작 13건 확인).** 켜는 방법 · 되돌리기는 키즈 HANDOFF s427.
+
+## s415 (2026-11-04) — 초인종 기다리는 시간은 서버가 준 wa 를 따른다
+- `KidsHub`: 허브 화면 20초 · 그 밖 45초를 앱이 정하던 것을 서버 응답의 `wa` 로 바꿨다(없으면 45초). `Door.await` 는 5초~2분으로 묶는다. 서버 `WATCH_MS` 가 바뀌어도 앱을 고칠 필요가 없다. 시험 shell_native 125. **기기 미확인.**

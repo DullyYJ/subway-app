@@ -1211,7 +1211,7 @@ function findAndroidJar() {
     assert.ok(/wsHint = o\.optInt\("ws", 0\) == 1;/.test(kh), '서버 응답의 ws:1 로만 켜지고 응답에서 사라지면 꺼진다');
     assert.ok(/BASE \+ "\/p\/ws\?cid=" \+ enc\(cid\)/.test(kh) && /SystemClock\.elapsedRealtime\(\) % 3000L/.test(kh), '연결 주소 · 시계로 흩뿌림');
     assert.ok(/public void pause\(\) \{[^}]*door\.close\(\);/.test(kh) && /private void stopLoop\(\) \{\s*epoch\+\+;\s*door\.wake\(\);/.test(kh), '뒤로 가면 닫고 화면이 바뀌면 기다리던 것을 깨운다');
-    assert.ok(/"hub"\.equals\(view\) \? 20000L : 45000L/.test(kh), '허브 화면은 20초마다 확인(보는 중 표시 40초 안에 갱신)');
+    assert.ok(!/"hub"\.equals\(view\) \? 20000L/.test(kh) && (kh.match(/door\.await\(seen, o\.optLong\("wa", 45000L\)\)/g) || []).length === 2, '기다리는 시간은 서버가 알려 준 wa 를 따른다(앱이 숫자를 정하지 않는다 · 허브 화면은 서버가 20초로 준다)');
     assert.strictEqual((kh.match(/nap\(backoffMs\(fails\)\)/g) || []).length, 2, '재시도 간격 루프는 그대로 둘');
     assert.ok(/com\.squareup\.okhttp3:okhttp:4\.12\.0/.test(gr), 'okhttp 의존성');
   });

@@ -536,7 +536,7 @@ public final class KidsHub {
                     same = bell && o.optInt("same", 0) == 1;
                 } catch (Throwable e) { nap(1500L); continue; }
                 if (same) {                                                    // 바뀐 게 없다 — 울릴 때까지. 허브 화면은 20초마다 한 번 '보는 중' 표시를 갱신해야 해서 그때 깨어난다(그 외 45초)
-                    if (wsHint && door.isUp()) { try { door.await(seen, "hub".equals(view) ? 20000L : 45000L); } catch (InterruptedException ie) { return; } }
+                    if (wsHint && door.isUp()) { try { door.await(seen, o.optLong("wa", 45000L)); } catch (InterruptedException ie) { return; } }
                     continue;
                 }
                 if (!take(view, r, my, true)) return;
@@ -582,7 +582,7 @@ public final class KidsHub {
                     since = o.optLong("rev", since);
                     if (!first) wsHint = o.optInt("ws", 0) == 1;
                     if (bell && o.optInt("same", 0) == 1) {
-                        if (wsHint && door.isUp()) { try { door.await(seen, 45000L); } catch (InterruptedException ie) { return; } }
+                        if (wsHint && door.isUp()) { try { door.await(seen, o.optLong("wa", 45000L)); } catch (InterruptedException ie) { return; } }
                         continue;
                     }
                     if (o.optBoolean("gone", false) || (o.has("linked") && o.optInt("linked", 1) == 0)) { refreshLink(true); return; }
