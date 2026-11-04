@@ -2145,6 +2145,7 @@ public class ShellActivity extends Activity {
         switch (r) {
             case ChatCore.R_NEED_ID: toast("설정에서 커뮤니티 아이디를 등록하면 글과 제보를 남길 수 있어요"); break;
             case ChatCore.R_SEND: {
+                if (!ugcOk()) { ugcAsk(null); break; }
                 final String line = "all".equals(chat.pendingLine) ? chat.postLine : chat.pendingLine, text = chat.pendingText;
                 final String json = ChatCore.sendBody(me, text, line);
                 final String fk = "all".equals(chat.pendingLine) ? "chat.all" : "chat.room";
@@ -2278,7 +2279,9 @@ public class ShellActivity extends Activity {
         final String id = board.pendingId;
         switch (r) {
             case BoardCore.R_RENDER: reloadBoard(); break;
-            case BoardCore.R_WRITE: openWrite(); break;
+            case BoardCore.R_WRITE:
+                if (!ugcOk()) { ugcAsk(new Runnable() { @Override public void run() { openWrite(); } }); break; }      // 처음 쓰기 전에 커뮤니티 규칙 동의(Play 사용자 생성 콘텐츠 정책)
+                openWrite(); break;
             case BoardCore.R_REPORT:
                 postBg(BoardCore.reportBody(id), "/report"); toast("신고가 접수됐어요. 이 글은 더 이상 보이지 않아요"); reloadBoard(); break;
             case BoardCore.R_DELETE:
@@ -2286,6 +2289,7 @@ public class ShellActivity extends Activity {
             case BoardCore.R_COMMENT: {
                 String nick = ShellCore.commId(store);
                 if (nick.length() == 0) { toast("설정에서 커뮤니티 아이디를 먼저 정해 주세요"); break; }
+                if (!ugcOk()) { ugcAsk(null); break; }
                 final String text = board.pendingText, fnick = nick, ckey = board.commentKey(id);
                 final ScreenView csrc = src;
                 new Thread(new Runnable() {
@@ -2304,6 +2308,21 @@ public class ShellActivity extends Activity {
             }
             default: break;
         }
+    }
+    /** 커뮤니티 규칙 동의(Play 사용자 생성 콘텐츠 정책: 글을 올리기 전에 약관·규칙에 동의). 한 번 동의하면 기기에 기억한다. */
+    private static final String K_UGC = "ugc_ok";
+    private boolean ugcOk() { return "1".equals(store.get(K_UGC, "")); }
+    private void ugcAsk(final Runnable then) {
+        try {
+            new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("커뮤니티 이용 규칙")
+                .setMessage("게시판·실시간 대화·노선 방에 올리는 글은 다른 이용자에게 닉네임과 함께 공개돼요.\n\n다음 글은 올릴 수 없고, 신고가 모이면 자동으로 숨겨지거나 운영자가 지워요.\n· 욕설·비방·혐오·차별\n· 성적이거나 폭력적인 내용, 아동·청소년을 해치는 내용\n· 이름·연락처·주소·위치 같은 개인정보 노출, 광고·도배·사칭\n\n불쾌한 글은 '신고'(글쓴이도 이 기기에서 차단돼요)나 '차단'으로 바로 가릴 수 있어요.\n\n일부 답글은 AI가 만든 것이고, 입력한 말은 AI 답글을 만들려고 Google Gemini로 전달돼요. 개인정보는 입력하지 마세요.\n\n동의하지 않으면 글을 쓸 수 없어요.")
+                .setPositiveButton("동의하고 계속", new android.content.DialogInterface.OnClickListener() {
+                    @Override public void onClick(android.content.DialogInterface d, int w) {
+                        store.put(K_UGC, "1");
+                        if (then != null) then.run(); else toast("동의했어요. 한 번 더 눌러 주세요");
+                    } })
+                .setNegativeButton("취소", null).show();
+        } catch (Throwable ignored) { }
     }
     /** 결과를 기다리지 않는 서버 쓰기(신고·삭제·댓글). 실패해도 화면은 이미 바뀌어 있다. */
     private void postBg(final String json, final String path) {

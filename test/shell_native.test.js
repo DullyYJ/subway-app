@@ -23,6 +23,13 @@ function findAndroidJar() {
 }
 (async () => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'shjvm-'));
+  await t('커뮤니티 규칙 동의(Play UGC): 글쓰기 · 댓글 · 대화 보내기 전에 한 번 동의를 받고 기기에 기억한다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/case BoardCore\.R_WRITE:\s*if \(!ugcOk\(\)\)[^]*?openWrite\(\); break;/.test(a), '게시판 글쓰기');
+    assert.ok(/case BoardCore\.R_COMMENT: \{[^]*?if \(!ugcOk\(\)\) \{ ugcAsk\(null\); break; \}/.test(a), '댓글');
+    assert.ok(/case ChatCore\.R_SEND: \{\s*if \(!ugcOk\(\)\) \{ ugcAsk\(null\); break; \}/.test(a), '대화 보내기');
+    assert.ok(/store\.put\(K_UGC, "1"\)/.test(a) && /커뮤니티 이용 규칙/.test(a) && /Google Gemini로 전달/.test(a), '동의를 기억하고 AI 전달을 알린다');
+  });
   await t('실시간소통 빈 화면 없애기(s247): 못 받은 방으로 넘길 땐 회색 뼈대 대신 엔진이 만든 로딩 화면(칩 줄 유지) · 모든 방 로딩 화면은 한 번에 받는다 · 가까운 방부터 미리 받는다', async () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/ShellCore\.S_CHAT\.equals\(screen\)\) \{[^]*?chatLoad\.get\(chat\.sel\(\)\)[^]*?skelViews\.add\(v\); return;/.test(a.slice(a.indexOf('private void showSkeleton('), a.indexOf('private void showSkeleton(') + 1800)), '뼈대 자리에 방별 로딩 화면');
