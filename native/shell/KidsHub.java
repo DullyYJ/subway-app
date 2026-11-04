@@ -256,7 +256,7 @@ public final class KidsHub {
     }
 
     public void resume() { paused = false; KidsPush.hub = this; if (!open) preload(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
-    public void pause() { paused = true; stopLoop(); famEp++; }
+    public void pause() { paused = true; stopLoop(); famEp++; door.close(); }
     /** s385: 키즈 화면(허브 아래 대화 칸 · 대화방 · 커뮤니티 가족대화)을 지금 실제로 보고 있나 — 알림은 이때만 숨긴다(다른 탭을 보고 있으면 카톡처럼 알림이 온다). */
     public boolean viewing() { return open && !paused; }
     public void destroy() { alive = false; stopLoop(); closeSheet(true); }
@@ -495,8 +495,20 @@ public final class KidsHub {
     // ───────── 실시간: 보고 있는 화면에 긴 대기를 건다 ─────────
     private String loopView() { return sheetD != null && sheetD.isShowing() && ("chat".equals(sheetKind) || "quest".equals(sheetKind)) ? sheetKind : "hub"; }
 
+    // s426: 서버 초인종(WebSocket). 서버가 켜 두고 이 가족이 대상일 때만(응답에 ws:1) 연결하고, 평소 요청은 붙들지 않는다(nw=1). 아니면 예전 긴 대기 그대로.
+    private volatile boolean wsHint = false;
+    private final Door door = new Door();
+
+    /** 서버가 허락했고 아직 연결이 없으면 건다(흩뿌림은 시계로 — 여러 기기가 한꺼번에 다시 걸지 않게). */
+    private void wsPrep() {
+        if (!wsHint || door.isUp()) return;
+        String id = store.get(K_ID, ""), sec = store.get(K_SEC, "");
+        if (id.length() > 0 && cid.length() > 0) door.ensure(BASE + "/p/ws?cid=" + enc(cid), id, sec, SystemClock.elapsedRealtime() % 3000L);
+    }
+
     private void stopLoop() {
         epoch++;
+        door.wake();
         HttpURLConnection c = waitConn;
         if (c != null) { final HttpURLConnection cc = c; io.execute(new Runnable() { @Override public void run() { try { cc.disconnect(); } catch (Throwable ignored) { } } }); }
     }
@@ -507,16 +519,26 @@ public final class KidsHub {
         io.execute(new Runnable() { @Override public void run() {
             long since = -1L; int fails = 0;
             while (alive && my == epoch) {
-                String path = "/p/wait?v=" + view + "&cid=" + enc(cid) + "&since=" + since + ("quest".equals(view) ? "&qt=" + qt : "");
-                String r = call("GET", path, null, 22000, true);
+                wsPrep();
+                boolean bell = wsHint && door.isUp();                         // 초인종이 이어져 있으면 붙들지 않는다(nw=1)
+                long seen = door.seq();
+                String path = "/p/wait?v=" + view + "&cid=" + enc(cid) + "&since=" + since + ("quest".equals(view) ? "&qt=" + qt : "") + (bell ? "&nw=1" : "");
+                String r = call("GET", path, null, bell ? 10000 : 22000, true);
                 if (!alive || my != epoch) return;
                 if (r == null) { fails++; nap(backoffMs(fails)); continue; }
                 fails = 0;
+                boolean same = false;
                 try {
                     JSONObject o = new JSONObject(r);
                     if (!o.optBoolean("ok", false)) { nap(1500L); continue; }
                     since = o.optLong("rev", since);
+                    wsHint = o.optInt("ws", 0) == 1;
+                    same = bell && o.optInt("same", 0) == 1;
                 } catch (Throwable e) { nap(1500L); continue; }
+                if (same) {                                                    // 바뀐 게 없다 — 울릴 때까지. 허브 화면은 20초마다 한 번 '보는 중' 표시를 갱신해야 해서 그때 깨어난다(그 외 45초)
+                    if (wsHint && door.isUp()) { try { door.await(seen, "hub".equals(view) ? 20000L : 45000L); } catch (InterruptedException ie) { return; } }
+                    continue;
+                }
                 if (!take(view, r, my, true)) return;
             }
         } });
@@ -546,8 +568,11 @@ public final class KidsHub {
             long since = -1L; int fails = 0;
             boolean first = true;
             while (alive && my == famEp && linked) {
+                wsPrep();
+                boolean bell = !first && wsHint && door.isUp();
+                long seen = door.seq();
                 String r = first ? call("GET", "/p/screen?v=fam&cid=" + enc(cid), null, 10000)
-                                 : call("GET", "/p/wait?v=fam&cid=" + enc(cid) + "&since=" + since, null, 22000);
+                                 : call("GET", "/p/wait?v=fam&cid=" + enc(cid) + "&since=" + since + (bell ? "&nw=1" : ""), null, bell ? 10000 : 22000);
                 if (!alive || my != famEp) return;
                 if (r == null) { fails++; nap(backoffMs(fails)); continue; }
                 fails = 0;
@@ -555,6 +580,11 @@ public final class KidsHub {
                     JSONObject o = new JSONObject(r);
                     if (!o.optBoolean("ok", false)) { nap(1500L); continue; }
                     since = o.optLong("rev", since);
+                    if (!first) wsHint = o.optInt("ws", 0) == 1;
+                    if (bell && o.optInt("same", 0) == 1) {
+                        if (wsHint && door.isUp()) { try { door.await(seen, 45000L); } catch (InterruptedException ie) { return; } }
+                        continue;
+                    }
                     if (o.optBoolean("gone", false) || (o.has("linked") && o.optInt("linked", 1) == 0)) { refreshLink(true); return; }
                     if (o.has("cid") && o.optString("cid", "").length() > 0 && !o.optString("cid").equals(cid)) { cid = o.optString("cid"); store.put(K_CID, cid); }
                     JSONObject s = o.optJSONObject("screen");

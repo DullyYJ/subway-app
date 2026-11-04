@@ -1202,6 +1202,19 @@ function findAndroidJar() {
     assert.ok(/if \(fails <= 2\) return 500L \* Math\.max\(1, fails\);/.test(kh) && /Math\.min\(500L << Math\.min\(fails - 1, 6\), 12000L\)/.test(kh) && /SystemClock\.elapsedRealtime\(\) % \(base \/ 3 \+ 1\)/.test(kh), '지수 대기 + 흩기');
     assert.strictEqual((kh.match(/nap\(backoffMs\(fails\)\)/g) || []).length, 2, '두 긴 대기 루프 모두');
   });
+  await t('s426: 서버 초인종(WebSocket) — 서버가 허락(ws:1)할 때만 연결 · 평소 요청은 붙들지 않음(nw=1) · 허락이 없으면 예전 긴 대기 그대로 · 앱이 뒤로 가면 닫는다', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), dr = fs.readFileSync(N('Door.java'), 'utf8');
+    const gr = fs.readFileSync(path.join(__dirname, '..', 'shell-android', 'app', 'build.gradle'), 'utf8');
+    assert.ok(/^package com\.dullyyj\.subway;/m.test(dr) && !/java\.util\.Random|android\./.test(dr.replace(/\/\*[\s\S]*?\*\//g, '')), 'Door: 패키지 · 안드로이드/무작위 안 씀(흩뿌림은 호출하는 쪽이 넘긴다)');
+    assert.ok(/private volatile boolean wsHint = false;/.test(kh), '기본은 허락 없음');
+    assert.ok(/"\/p\/wait\?v=" \+ view \+ "&cid=" \+ enc\(cid\) \+ "&since=" \+ since/.test(kh) && /\(bell \? "&nw=1" : ""\)/.test(kh), '허브 루프: 허락이 없으면 요청이 예전과 똑같고 nw=1 은 초인종이 이어졌을 때만');
+    assert.ok(/wsHint = o\.optInt\("ws", 0\) == 1;/.test(kh), '서버 응답의 ws:1 로만 켜지고 응답에서 사라지면 꺼진다');
+    assert.ok(/BASE \+ "\/p\/ws\?cid=" \+ enc\(cid\)/.test(kh) && /SystemClock\.elapsedRealtime\(\) % 3000L/.test(kh), '연결 주소 · 시계로 흩뿌림');
+    assert.ok(/public void pause\(\) \{[^}]*door\.close\(\);/.test(kh) && /private void stopLoop\(\) \{\s*epoch\+\+;\s*door\.wake\(\);/.test(kh), '뒤로 가면 닫고 화면이 바뀌면 기다리던 것을 깨운다');
+    assert.ok(/"hub"\.equals\(view\) \? 20000L : 45000L/.test(kh), '허브 화면은 20초마다 확인(보는 중 표시 40초 안에 갱신)');
+    assert.strictEqual((kh.match(/nap\(backoffMs\(fails\)\)/g) || []).length, 2, '재시도 간격 루프는 그대로 둘');
+    assert.ok(/com\.squareup\.okhttp3:okhttp:4\.12\.0/.test(gr), 'okhttp 의존성');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
