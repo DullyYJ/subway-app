@@ -510,7 +510,7 @@ public final class KidsHub {
                 String path = "/p/wait?v=" + view + "&cid=" + enc(cid) + "&since=" + since + ("quest".equals(view) ? "&qt=" + qt : "");
                 String r = call("GET", path, null, 22000, true);
                 if (!alive || my != epoch) return;
-                if (r == null) { fails++; nap(Math.min(500L * fails, 4000L)); continue; }
+                if (r == null) { fails++; nap(backoffMs(fails)); continue; }
                 fails = 0;
                 try {
                     JSONObject o = new JSONObject(r);
@@ -549,7 +549,7 @@ public final class KidsHub {
                 String r = first ? call("GET", "/p/screen?v=fam&cid=" + enc(cid), null, 10000)
                                  : call("GET", "/p/wait?v=fam&cid=" + enc(cid) + "&since=" + since, null, 22000);
                 if (!alive || my != famEp) return;
-                if (r == null) { fails++; nap(Math.min(500L * fails, 4000L)); continue; }
+                if (r == null) { fails++; nap(backoffMs(fails)); continue; }
                 fails = 0;
                 try {
                     JSONObject o = new JSONObject(r);
@@ -617,6 +617,12 @@ public final class KidsHub {
         } });
     }
 
+    /** 통신이 끊긴 뒤 다시 시도하기까지 기다리는 시간. 처음 두 번은 예전 그대로(0.5초 · 1초), 길게 끊기면 점점 늘려(최대 12초) 서버가 살아났을 때 한꺼번에 몰리지 않게 기기마다 조금씩 흩는다. */
+    private static long backoffMs(int fails) {
+        if (fails <= 2) return 500L * Math.max(1, fails);
+        long base = Math.min(500L << Math.min(fails - 1, 6), 12000L);
+        return base - (SystemClock.elapsedRealtime() % (base / 3 + 1));
+    }
     private static void nap(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignored) { } }
 
     // ───────── 눌림 보내기(엔진이 새 화면을 돌려준다) ─────────

@@ -1197,6 +1197,11 @@ function findAndroidJar() {
     assert.ok(!/getAssets\(\)\.open/.test(fw.slice(fw.indexOf('@Override public void draw'))), '그리는 길에서는 파일을 열지 않는다(읽기는 뒤 스레드)');
     assert.ok(fs.readdirSync(path.join(__dirname, '..', 'shell-android', 'app', 'src', 'main', 'assets', 'wear')).length >= 190, '입을 것 그림 시트가 앱에 들어 있다');
   });
+  await t('s424: 통신이 끊겼을 때 재시도 — 처음 두 번은 예전 그대로, 길게 끊기면 늘리고 기기마다 흩는다(서버가 살아날 때 한꺼번에 몰리지 않게)', () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/if \(fails <= 2\) return 500L \* Math\.max\(1, fails\);/.test(kh) && /Math\.min\(500L << Math\.min\(fails - 1, 6\), 12000L\)/.test(kh) && /SystemClock\.elapsedRealtime\(\) % \(base \/ 3 \+ 1\)/.test(kh), '지수 대기 + 흩기');
+    assert.strictEqual((kh.match(/nap\(backoffMs\(fails\)\)/g) || []).length, 2, '두 긴 대기 루프 모두');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
