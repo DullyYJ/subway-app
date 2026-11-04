@@ -35,6 +35,15 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     assert.ok(+/ALL OK \((\d+)\)/.exec(r.stdout)[1] >= 30, 's336 녹화본이 너무 적다');
     console.log('        s336: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
   });
+  await t('s432 앞 역 승차: 폰 안 엔진(자바)이 서버 JS 와 같이 승차역을 옮기고 같은 상태를 낸다', async () => {
+    const SK = require(path.join(__dirname, 'helpers', 'skip_ahead_scenario.js')), { rideStandby } = require(path.join(ROOT, 'engine', 'ride-standby.js')), lines = [];
+    const run = SK.run(rideStandby, { rec: (req, o) => lines.push(JSON.stringify({ fn: 'standby', in: JSON.parse(JSON.stringify(req)), out: JSON.parse(JSON.stringify(o)) })) });
+    assert.ok(run.st.eta.skipBd && run.st.eta.skipBd.to === 5, '서버 JS 가 먼저 승차역을 옮겨야 한다');
+    const f = path.join(out, 'ride_corpus_s432.jsonl'); fs.writeFileSync(f, lines.join('\n') + '\n');
+    const r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', f], { env: ENV, encoding: 'utf8' });
+    assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1500) + (r.stderr || '').slice(-300));
+    assert.ok(+/ALL OK \((\d+)\)/.exec(r.stdout)[1] >= 60, '걸음이 너무 적다');
+  });
   await t('계산 코어는 안드로이드·네트워크·시계를 쓰지 않는다(순수 자바)', async () => {
     for (const c of RIDE) {
       const src = fs.readFileSync(N(c + '.java'), 'utf8').replace(/System\.currentTimeMillis\(\)/g, '0');   // 서버 JS 의 'nowMs 없으면 Date.now()' 대비 줄만 허용(승차 엔진은 늘 nowMs 를 준다)

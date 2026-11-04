@@ -121,6 +121,9 @@ function rsLegsOf(eta) {
     if (cur && cur.mode === mode && cur.line === ln) cur.ai = i;
     else { cur = { k: out.length, bi: i, ai: i, mode: mode, line: ln, name: n.name || '' }; out.push(cur); }
   }
+  // s432: 계획한 승차역 대신 같은 노선의 앞 역에서 타기로 옮겼으면(eta.skipBd = {from, to}) 그 구간의 승차 노드를 to 로 — 이후 모든 판단(환승 대기 · 탑승 버튼 · 시각표 질문)이 그 역을 기준으로 한다
+  var sk = eta && eta.skipBd;
+  if (sk) for (i = 0; i < out.length; i++) if (out[i].mode === 'sub' && out[i].bi === sk.from && sk.to > out[i].bi && sk.to < out[i].ai && nodes[sk.to]) { out[i].bi = sk.to; out[i].name = nodes[sk.to].name || ''; break; }
   return out;
 }
 function rsMaxPass(eta) { var ps = (eta && eta.passes) || [], m = -1, i; for (i = 0; i < ps.length; i++) if (ps[i] && ps[i].idx > m) m = ps[i].idx; return m; }
@@ -414,6 +417,60 @@ function rsXGo(st, tr, now, bi, depMs) {
   }
   if (depMs != null && isFinite(depMs) && now - depMs >= RS_XGO_GRACE_MS) return { ms: depMs, why: '계획 출발 ' + Math.round((now - depMs) / 60000) + '분 뒤까지 증거가 없어 시각표대로' };
   return null;
+}
+// ★ s432 (YJ: 다른 버스를 타고 계획한 승차역(지식정보단지)이 아닌 앞 역(테크노파크)에 먼저 내려 기다리는데 탑승 버튼도 시각 갱신도 없었다) — 아직 안 탄 지하철 구간의 승차역이 아니라
+//   같은 노선의 앞 역(승차역 뒤 · 내릴 역 앞)에서 45초 넘게 걷는 속도 이하로 머물면 '그 역에서 탄다'로 승차역을 옮긴다(eta.skipBd). 그러면 아래 환승 대기(rsXwait)가 그 역을 기준으로 탑승 버튼 · 시각표 · 도착 시각을 이어간다.
+//   (예전엔 위치 재동기가 그 역을 '지나갔다'고 적어 탑승 전인데 탄 것으로 처리됐다.) 계획한 승차역 근처에 있었거나(정상 환승) 이미 탔으면 건드리지 않는다.
+var RS_SKIP_WIN_MS = 60000, RS_SKIP_SPAN_MS = 40000, RS_SKIP_FRESH_MS = 30000, RS_SKIP_MPS = 2.0, RS_SKIP_NEAR_M = 150;
+function rsSkipAhead(st, tr, now, notes) {
+  var eta = st.eta;
+  if (!eta || st.wait || st.dt || eta.skipBd || !tr.length) return;
+  var legs = rsLegsOf(eta), pm = rsMaxPass(eta), done = st.rsDone || {}, L = null, i, j, q;
+  for (i = 1; i < legs.length; i++) { if (pm >= legs[i].bi || done[legs[i].bi]) continue; L = legs[i]; break; }
+  if (!L || L.mode !== 'sub' || L.ai - L.bi < 2) return;
+  if (st.xGo && st.xGo.i === L.bi && st.xGo.ts > 0) return;
+  var last = tr[tr.length - 1];
+  if (now - last[0] > RS_SKIP_FRESH_MS || (last[3] != null && +last[3] > 60)) return;
+  if (rsAtBoard(st, tr, L.bi) || rsAlightGps(st, tr, L.bi)) return;
+  var win = [];
+  for (i = tr.length - 1; i >= 0; i--) { if (last[0] - tr[i][0] > RS_SKIP_WIN_MS) break; win.unshift(tr[i]); }
+  if (win.length < 3 || last[0] - win[0][0] < RS_SKIP_SPAN_MS) return;
+  if (rsHav(win[0][1], win[0][2], last[1], last[2]) / ((last[0] - win[0][0]) / 1000) > RS_SKIP_MPS) return;
+  var best = -1, bestD = 1e9, s, d, ok;
+  for (j = L.bi + 1; j < L.ai; j++) {
+    s = rsStopOf(st, j); if (!s || !isFinite(s.lat) || !isFinite(s.lng)) continue;
+    ok = true;
+    for (i = 0; i < win.length; i++) { q = win[i]; if (rsHav(q[1], q[2], s.lat, s.lng) - (q[3] != null && isFinite(q[3]) ? Math.min(+q[3], 100) * 0.5 : 0) > RS_SKIP_NEAR_M) { ok = false; break; } }
+    if (!ok) continue;
+    d = rsHav(last[1], last[2], s.lat, s.lng);
+    if (d < bestD) { bestD = d; best = j; }
+  }
+  if (best < 0) return;
+  var nb = eta.nodes[L.bi], nj = eta.nodes[best];
+  // 건너뛴 노드(마지막 통과 다음 ~ 승차역 앞)는 마지막 통과 시각 ~ 지금 사이로 나눠 통과로 적고, 계획 시각(planMin)도 새 승차역 기준으로 옮긴다 — 역까지 이동(rsDtRebase)과 같은 방식.
+  // (안 옮기면 계획 시각이 '처음 안내한 시각보다 이르게 나오지 않음' 규칙에 눌려 실제로 더 빨리 오는 열차를 못 보여 준다)
+  var ps = eta.passes || (eta.passes = []), m = pm < 0 ? 0 : pm, lastMs = now, cnt = best - 1 - m, k, np, h, ms2 = {};
+  for (k = 0; k < ps.length; k++) if (ps[k] && ps[k].idx === m && ps[k].ms != null) lastMs = Math.min(ps[k].ms, now);
+  for (j = m + 1; j <= best - 1; j++) {
+    ms2[j] = Math.round(lastMs + (now - lastMs) * (j - m) / (cnt > 0 ? cnt : 1));
+    if (j !== best - 1 && eta.nodes[j] && eta.nodes[j].isWalk) continue;
+    np = { idx: j, ms: ms2[j], src: 'gps' }; h = -1;
+    for (k = 0; k < ps.length; k++) if (ps[k] && ps[k].idx === j) { h = k; break; }
+    if (h >= 0) ps[h] = np; else ps.push(np);
+  }
+  var tz = eta.tzOffsetMin != null && isFinite(+eta.tzOffsetMin) ? +eta.tzOffsetMin : 540, nbp = eta.nodes[best], ref = nbp && nbp.planMin != null && isFinite(+nbp.planMin) ? +nbp.planMin : NaN, dep = now + RS_DT_FALLBACK_MS, nd, delta;
+  if (isFinite(ref)) {
+    delta = rsDtPlanMin(dep, tz, ref) - ref;
+    for (j = 0; j < eta.nodes.length; j++) {
+      nd = eta.nodes[j]; if (!nd || nd.planMin == null) continue;
+      if (j >= best) nd.planMin = +nd.planMin + delta; else if (ms2[j] != null) nd.planMin = rsDtPlanMin(ms2[j], tz, ref);
+    }
+  }
+  if (st.notYet) for (j = 1; j < best; j++) delete st.notYet[j];
+  var fd = st.fired || (st.fired = {}), tgs = st.cfg && st.cfg.targets, r2;
+  if (tgs) for (k = 0; k < tgs.length; k++) if (tgs[k] && tgs[k].nodeIdx < best) for (r2 = 0; r2 <= 2; r2++) fd[tgs[k].nodeIdx + '_' + r2] = 1;
+  eta.skipBd = { from: L.bi, to: best, at: now };
+  notes.push('승차역 이동 ' + L.bi + '→' + best + '번(' + (nb && nb.name || '') + ' 대신 ' + (nj && nj.name || '') + '에서 기다림 ' + Math.round(bestD) + 'm)');
 }
 function rsXwait(st, tr, now, notes) {
   var eta = st.eta;
@@ -1810,6 +1867,7 @@ function rideStandby(req) {
   rsBlApply(st, req, now, notes);                 // 1.45) 받아 온 실시간 다음 차(s196)
   rsRtApply(st, req, now, notes);                 // 1.46) s231 받아 온 '내 열차' 실시간 도착
   rsWait(st, tr, now, O, notes);                  // 1.5) 승차 대기 · 승차 감지
+  rsSkipAhead(st, tr, now, notes);                // 1.54) s432: 계획한 승차역 대신 앞 역에서 기다리면 승차역을 옮긴다
   rsXwait(st, tr, now, notes);                    // 1.55) 환승 구간 승차 대기
   var askBl = rsBlAsk(st, tr, now) || rsBlAskX(st, now);               // 1.56) 승차 대기 중 실시간 다음 차를 물을 때인가(s196)
   rsActs(st, req, now, notes);                    // 1.6) 앱이 알려 준 추천 줄 · 닫기 · 오버레이 탑승 손짓

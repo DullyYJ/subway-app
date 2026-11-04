@@ -91,6 +91,9 @@ final class RideStandbyJ {
             if (cur != null && cur.mode.equals(mode) && cur.line.equals(ln)) cur.ai = i;
             else { cur = new Leg(); cur.k = out.size(); cur.bi = i; cur.ai = i; cur.mode = mode; cur.line = ln; cur.name = or(g(n, "name"), ""); out.add(cur); }
         }
+        // s432: 계획한 승차역 대신 같은 노선의 앞 역에서 타기로 옮겼으면(eta.skipBd = {from, to}) 그 구간의 승차 노드를 to 로
+        Object sk = eta == null ? null : eta.get("skipBd");
+        if (sk != null) for (Leg L : out) if ("sub".equals(L.mode) && L.bi == (int) gn(sk, "from") && gn(sk, "to") > L.bi && gn(sk, "to") < L.ai && at(nodes, (int) gn(sk, "to")) != null) { L.bi = (int) gn(sk, "to"); L.name = or(g(at(nodes, L.bi), "name"), ""); break; }
         return out;
     }
     static double maxPass(Map<String, Object> eta) {
@@ -316,6 +319,66 @@ final class RideStandbyJ {
         }
         if (!Double.isNaN(depMs) && !Double.isInfinite(depMs) && now - depMs >= RS_XGO_GRACE_MS) return new Object[] { depMs, "계획 출발 " + Math.round((now - depMs) / 60000) + "분 뒤까지 증거가 없어 시각표대로" };
         return null;
+    }
+    // ★ s432 — engine/ride-standby.js rsSkipAhead 와 같은 로직: 계획한 승차역 대신 앞 역(승차역 뒤 · 내릴 역 앞)에서 45초 넘게 걷는 속도 이하로 머물면 그 역을 승차역으로 옮긴다.
+    static final double RS_SKIP_WIN_MS = 60000, RS_SKIP_SPAN_MS = 40000, RS_SKIP_FRESH_MS = 30000, RS_SKIP_MPS = 2.0, RS_SKIP_NEAR_M = 150;
+    static void skipAhead(Map<String, Object> st, List<Object> tr, double now, List<Object> notes) {
+        Map<String, Object> eta = mm(st.get("eta"));
+        if (eta == null || st.get("wait") != null || st.get("dt") != null || eta.get("skipBd") != null || tr.isEmpty()) return;
+        List<Object> nodes = l(eta.get("nodes")); if (nodes == null) return;
+        List<Leg> legs = legsOf(eta); double pm = maxPass(eta); Leg L = null; int i, j, k;
+        for (i = 1; i < legs.size(); i++) { if (pm >= legs.get(i).bi || doneAt(st, legs.get(i).bi)) continue; L = legs.get(i); break; }
+        if (L == null || !"sub".equals(L.mode) || L.ai - L.bi < 2) return;
+        Map<String, Object> xg = mm(st.get("xGo"));
+        if (xg != null && num(xg.get("i")) == L.bi && has(xg.get("ts")) && num(xg.get("ts")) > 0) return;
+        Object last = tr.get(tr.size() - 1);
+        if (now - num(at(last, 0)) > RS_SKIP_FRESH_MS || (at(last, 3) != null && fin(at(last, 3)) && num(at(last, 3)) > 60)) return;
+        if (atBoard(st, tr, L.bi) || alightGps(st, tr, L.bi)) return;
+        List<Object> win = new ArrayList<Object>();
+        for (i = tr.size() - 1; i >= 0; i--) { if (num(at(last, 0)) - num(at(tr.get(i), 0)) > RS_SKIP_WIN_MS) break; win.add(0, tr.get(i)); }
+        if (win.size() < 3 || num(at(last, 0)) - num(at(win.get(0), 0)) < RS_SKIP_SPAN_MS) return;
+        Object w0 = win.get(0);
+        if (rsHav(num(at(w0, 1)), num(at(w0, 2)), num(at(last, 1)), num(at(last, 2))) / ((num(at(last, 0)) - num(at(w0, 0))) / 1000) > RS_SKIP_MPS) return;
+        int best = -1; double bestD = 1e9;
+        for (j = L.bi + 1; j < L.ai; j++) {
+            Map<String, Object> s = stopOf(st, j); if (s == null || !fin(s.get("lat")) || !fin(s.get("lng"))) continue;
+            boolean ok = true;
+            for (i = 0; i < win.size(); i++) {
+                Object q = win.get(i); double acc = at(q, 3) != null && fin(at(q, 3)) ? Math.min(num(at(q, 3)), 100) * 0.5 : 0;
+                if (rsHav(num(at(q, 1)), num(at(q, 2)), num(s.get("lat")), num(s.get("lng"))) - acc > RS_SKIP_NEAR_M) { ok = false; break; }
+            }
+            if (!ok) continue;
+            double d = rsHav(num(at(last, 1)), num(at(last, 2)), num(s.get("lat")), num(s.get("lng")));
+            if (d < bestD) { bestD = d; best = j; }
+        }
+        if (best < 0) return;
+        Object nb = at(nodes, L.bi), nj = at(nodes, best);
+        List<Object> ps = l(eta.get("passes")); if (ps == null) { ps = new ArrayList<Object>(); eta.put("passes", ps); }
+        int m = pm < 0 ? 0 : (int) pm, cnt = best - 1 - m; double lastMs = now; double[] ms2 = new double[best + 1]; java.util.Arrays.fill(ms2, Double.NaN);
+        for (k = 0; k < ps.size(); k++) { Object pk = ps.get(k); if (pk != null && gn(pk, "idx") == m && has(g(pk, "ms"))) lastMs = Math.min(gn(pk, "ms"), now); }
+        for (j = m + 1; j <= best - 1; j++) {
+            ms2[j] = round(lastMs + (now - lastMs) * (j - m) / (cnt > 0 ? cnt : 1));
+            if (j != best - 1 && at(nodes, j) != null && truthy(g(at(nodes, j), "isWalk"))) continue;
+            int h = -1; for (k = 0; k < ps.size(); k++) if (ps.get(k) != null && gn(ps.get(k), "idx") == j) { h = k; break; }
+            Map<String, Object> np = obj("idx", j, "ms", ms2[j], "src", "gps");
+            if (h >= 0) ps.set(h, np); else ps.add(np);
+        }
+        Object tzo = eta.get("tzOffsetMin"); double tz = tzo != null && fin(tzo) ? num(tzo) : 540;
+        double ref = nj != null && has(g(nj, "planMin")) ? gn(nj, "planMin") : Double.NaN;
+        if (!Double.isNaN(ref)) {
+            double delta = dtPlanMin(now + RS_DT_FALLBACK_MS, tz, ref) - ref;
+            for (j = 0; j < nodes.size(); j++) {
+                Map<String, Object> nd = mm(nodes.get(j)); if (nd == null || !has(nd.get("planMin"))) continue;
+                if (j >= best) nd.put("planMin", num(nd.get("planMin")) + delta);
+                else if (j < ms2.length && !Double.isNaN(ms2[j])) nd.put("planMin", dtPlanMin(ms2[j], tz, ref));
+            }
+        }
+        Map<String, Object> ny = mm(st.get("notYet")); if (ny != null) for (j = 1; j < best; j++) ny.remove(ik(j));
+        Map<String, Object> fd = mm(st.get("fired")); if (fd == null) { fd = obj(); st.put("fired", fd); }
+        Map<String, Object> cfg = mm(st.get("cfg")); List<Object> tgs = cfg == null ? null : l(cfg.get("targets"));
+        if (tgs != null) for (k = 0; k < tgs.size(); k++) if (tgs.get(k) != null && gn(tgs.get(k), "nodeIdx") < best) for (int r2 = 0; r2 <= 2; r2++) fd.put(ns(gn(tgs.get(k), "nodeIdx")) + "_" + r2, 1.0);
+        eta.put("skipBd", obj("from", L.bi, "to", best, "at", now));
+        notes.add("승차역 이동 " + L.bi + "→" + best + "번(" + (nb != null ? or(g(nb, "name"), "") : "") + " 대신 " + (nj != null ? or(g(nj, "name"), "") : "") + "에서 기다림 " + ns(round(bestD)) + "m)");
     }
     static void xwait(Map<String, Object> st, List<Object> tr, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta"));
@@ -1739,6 +1802,7 @@ final class RideStandbyJ {
         blApply(st, req, now, notes);
         rtApply(st, req, now, notes);
         wait(st, tr, now, notes);
+        skipAhead(st, tr, now, notes);
         xwait(st, tr, now, notes);
         Map<String, Object> askBl = blAsk(st, tr, now);
         if (askBl == null) askBl = blAskX(st, now);

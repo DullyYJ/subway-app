@@ -3958,3 +3958,10 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 
 ## s416 (2026-11-04) — 보호자 확인 팝업에 처리방침·이용약관 보기
 - 서버 `gdScreen` 에 두 버튼(`a:'open'`, 키즈 서버 `/legal/privacy` · `/legal/terms`)이 생겨 시드(`GD_SEED`)를 다시 뽑아 넣었다(`gdseed` 시험이 두 글이 같은지 본다). `KidsHub.Host.onAction` 이 `open` 동작을 `ShellCore.linkOk`(http/https) 를 통과한 주소만 `ACTION_VIEW` 로 연다. 시험 shell_native 126. **기기 미확인.**
+
+## s432 (2026-11-04) 계획한 승차역 대신 앞 역에서 기다리는 경우 (YJ: 다른 버스로 지식정보단지가 아닌 테크노파크에 먼저 와서 대기 — 탑승 버튼도 시각 갱신도 없었다)
+- **원인**: 아직 안 탄 지하철 구간의 승차역은 경로에 적힌 한 역(지식정보단지)뿐이라, 같은 노선 앞 역(테크노파크)에 서 있으면 ① 위치 재동기가 그 역을 '지나감'으로 적어 탑승 전인데 탄 것으로 처리 ② 환승 대기(rsXwait)는 계획 승차역만 보므로 탑승 버튼 · 시각표 · 도착 시각이 안 나왔다.
+- **조치**: `engine/ride-standby.js` `rsSkipAhead` — 안 탄 지하철 구간의 승차역 뒤 · 내릴 역 앞 역에서 45초↑ 걷는 속도 이하로 머물면(60초 창 3점↑, 모든 점 150m 안, 순속도 2m/s 이하) `eta.skipBd={from,to,at}` 로 승차역을 옮긴다. `rsLegsOf` 가 그 구간 승차 노드를 to 로 바꾸므로 이후(환승 대기 · 탑승 버튼 · board-live 질문)가 그 역 기준. 건너뛴 노드는 통과로 적고(마지막 통과~지금 보간) `planMin` 을 역까지 이동(dtRebase)과 같게 옮겨 '환승 유지'·이상치 규칙에 안 눌리게 했다. 계획 승차역 근처에 있었거나 이미 탔거나 스친 정도(<45초)면 안 건드린다. 메모 `승차역 이동 a→b번(…)`(RideService.zeroDiag 가 오류 기록에 남김).
+- **자바**: `RideStandbyJ.legsOf`(skipBd) · `skipAhead`(xwait 앞). 시험: `test/ride_standby.test.js` s432 3건 · `test/ride_local.test.js` s432(자바 = 서버 JS 66걸음 strict 동일) · 시나리오 `test/helpers/skip_ahead_scenario.js`.
+- **배포**: `engine/route-v2-worker.ascii.js`(`route-v2-2026-11-04s432`) 를 Cloudflare 에 붙여 넣고 새 APK. 기기 미확인.
+- **알려진 한계**: 같은 방향 가정(반대 방향 승강장은 구별 못 함) · 승차역과 내릴 역 사이 역만.

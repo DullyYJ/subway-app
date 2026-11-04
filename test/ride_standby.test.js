@@ -1536,3 +1536,27 @@ t('s337 마커 되돌아감: 구간 끝 가까이(98% 넘는 자리)에서 시�
   assert.ok(r.pos.from + r.pos.ratio >= prevP - 0.0006, '자리 유지 ' + (r.pos.from + r.pos.ratio) + ' vs ' + prevP);
   assert.ok(r.pos.t1 > now, '도착은 아직 앞');
 });
+
+// ── s432 앞 역 승차(YJ: 다른 버스로 지식정보단지가 아닌 테크노파크에 먼저 와서 기다리는데 탑승 버튼도 시각 갱신도 없었다) ──
+{
+  const SK = require(path.join(__dirname, 'helpers', 'skip_ahead_scenario.js')), hhmm = ms => new Date(ms + 9 * 3600000).toISOString().slice(11, 16);
+  t('s432 앞 역 승차: 계획한 승차역 대신 같은 노선 앞 역에서 기다리면 승차역을 옮기고 탑승 버튼 · 시각을 그 역 기준으로 낸다', () => {
+    const r = SK.run(rideStandby);
+    assert.ok(r.st.eta.skipBd && r.st.eta.skipBd.from === 4 && r.st.eta.skipBd.to === 5, JSON.stringify(r.st.eta.skipBd));
+    assert.ok(r.notes.some(n => /승차역 이동 4→5번/.test(n)), r.notes.join('|'));
+    assert.ok(r.st.xw && r.st.xw.i === 5 && r.st.xw.mode === 'sub' && r.st.xw.name === '테크노파크', JSON.stringify(r.st.xw));
+    assert.ok(r.out.row && r.out.row.slot === 'transfer' && r.out.row.can === true, '탑승 버튼 ' + JSON.stringify(r.out.row));
+    assert.ok(r.st.eta.passes.some(p => p.idx === 4) && !r.st.eta.passes.some(p => p.idx === 5), '지식정보단지는 지난 것으로, 테크노파크는 아직 통과 아님');
+    assert.strictEqual(hhmm(r.st.etaMs[5]), '17:41', '다음 열차 시각이 계획(17:55)이 아니라 지금 기준으로 갱신된다 ' + hhmm(r.st.etaMs[5]));
+    assert.ok(r.out.overlay.rs.st === 'board' && /테크노파크/.test(r.out.overlay.rs.nm), JSON.stringify(r.out.overlay.rs));
+  });
+  t('s432 앞 역 승차: 계획한 승차역(지식정보단지) 자리에 서 있으면 승차역을 옮기지 않는다(정상 환승)', () => {
+    const r = SK.run(rideStandby, { who: 4 });
+    assert.ok(!r.st.eta.skipBd, JSON.stringify(r.st.eta.skipBd));
+    assert.ok(!r.notes.some(n => /승차역 이동/.test(n)) && !r.st.eta.passes.some(p => p.idx === 5), '원래 승차역 기준 그대로 ' + r.notes.join('|'));
+  });
+  t('s432 앞 역 승차: 스친 정도(20초)로는 승차역을 옮기지 않는다', () => {
+    const r = SK.run(rideStandby, { from: SK.at(17, 36, 0), to: SK.at(17, 36, 20) });
+    assert.ok(!r.st.eta.skipBd, JSON.stringify(r.st.eta.skipBd));
+  });
+}
