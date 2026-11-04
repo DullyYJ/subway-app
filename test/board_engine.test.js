@@ -64,7 +64,11 @@ ok(S.ok && S.v === 1 && S.screen === 'board' && S.cover === 'tab' && /^b3:/.test
 {
   const kidsOf = (o, id) => post(o).find(p => p.id === id).kids, brow = (o, id) => kidsOf(o, id).find(k => k.t === 'btnrow').items;
   const a = brow(S, 'pa');
-  ok(a.map(i => i.label).join() === '좋아요 3,ㅋㅋ 1,ㅠㅠ 0,신고' && a[0].act.v === 'bd.lk.0' && a[1].act.v === 'bd.lo.0' && a[2].act.v === 'bd.sd.0' && a[3].right && a[3].act.v === 'bd.rp.0', '이용자 글: 반응 3개 + 오른쪽 신고');
+  ok(a.map(i => i.label).join() === '좋아요 3,ㅋㅋ 1,ㅠㅠ 0,신고,차단' && a[0].act.v === 'bd.lk.0' && a[1].act.v === 'bd.lo.0' && a[2].act.v === 'bd.sd.0' && a[3].right && a[3].act.v === 'bd.rp.0' && a[4].right && a[4].act.v === 'bd.bk.0', '이용자 글: 반응 3개 + 오른쪽 신고');
+  const armedB = brow(E.boardScreen({ cap: 6, now: NOW }, { arm: { k: 'bk', id: 'a' } }, ROWS), 'pa');
+  ok(armedB[4].label === '차단 확인' && armedB[3].label === '신고', '차단: 한 번 누르면 "차단 확인"(두 번 눌러 확정)');
+  const noB = E.boardScreen({ cap: 6, now: NOW }, {}, ROWS), withB = E.boardScreen({ cap: 6, now: NOW }, { bk: 3 }, ROWS);
+  ok(!noB.body.some(n => n.act && n.act.v === 'bd.ub.all') && withB.body.some(n => n.act && n.act.v === 'bd.ub.all' && /3명/.test(n.s)), '차단한 이용자가 있을 때만 "모두 해제" 단추가 나온다');
   const my = E.boardScreen({ cap: 6, now: NOW }, {}, [row('m', { 11: 1 | 2 })]);
   const m = brow(my, 'pm');
   ok(m[3].label === '삭제' && m[3].act.v === 'bd.dl.0', '내 글: 삭제 단추(신고 없음)');

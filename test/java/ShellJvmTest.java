@@ -674,6 +674,16 @@ public class ShellJvmTest {
             String rq9 = c2.requestFor("1호선", false, 18, "pastel", -540, "나", 1000L);
             ok(rq9.contains("\"sel\":\"1호선\"") && rq9.contains("\"st\":\"ready\"") && rq9.contains("영희") && c2.act("ch.x.0", new java.util.HashMap<String, String>(), "나") == ChatCore.R_NONE, "고스트 요청: 방을 직접 정하고 눌림 번호표는 안 건드린다");
             ok(c2.requestFor("2호선", false, 18, "pastel", -540, "나", 1000L).contains("\"st\":\"fail\""), "받은 적 없는 방은 실패로 표시");
+            {   // 차단(2026-11-04): 노선 방 글을 신고하면 글쓴이도 차단 → 그 사람의 노선 방·전체 방 줄이 빠진다 · 익명은 차단하지 않는다
+                ShellCore.MemStore cs = new ShellCore.MemStore();
+                ChatCore cbk = new ChatCore(cs);
+                cbk.addRoom("1호선", "{\"ok\":true,\"msgs\":[{\"id\":\"m1\",\"ts\":50,\"nick\":\"영희\",\"text\":\"영희 글\"},{\"id\":\"m2\",\"ts\":60,\"nick\":\"민수\",\"text\":\"민수 글\"},{\"id\":\"m3\",\"ts\":70,\"nick\":\"익명\",\"text\":\"익명 글\"}]}");
+                cbk.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"영희\",\"text\":\"전체 영희\",\"ts\":100,\"line\":\"\"},{\"id\":2,\"nick\":\"민수\",\"text\":\"전체 민수\",\"ts\":101,\"line\":\"\"}]}", "나");
+                ok(cbk.blockAuthorOf("m1") && !cbk.blockAuthorOf("m3") && !cbk.blockAuthorOf("없는글"), "신고한 글의 글쓴이를 차단(익명 · 없는 글은 하지 않는다)");
+                String cq = cbk.requestFor("1호선", true, 18, "pastel", -540, "나", 1000L);
+                ok(!cq.contains("영희") && cq.contains("민수 글") && cq.contains("전체 민수") && cq.contains("익명 글"), "차단한 이의 노선 방·전체 방 줄은 빠지고 다른 사람 줄은 남는다");
+                ok(cs.get(BoardCore.K_BLK, "").equals("[\"영희\"]") && new BoardCore(cs).isBlocked("영희"), "게시판과 같은 차단 목록을 쓴다");
+            }
             {   // s289 방 상태는 '이 방' 기준 — 다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않는다(영상: 글이 있던 방이 "아직 글이 없어요")
                 ChatCore lv = new ChatCore(new ShellCore.MemStore());
                 ok(lv.addTalks("{\"ok\":true,\"talks\":[{\"id\":1,\"nick\":\"철수\",\"text\":\"안녕\",\"ts\":100,\"line\":\"\"}]}", "나") && lv.loaded, "전체 방을 받았다(loaded = true)");
@@ -765,7 +775,7 @@ public class ShellJvmTest {
         ok(!bc.setPosts("zzz") && !bc.setPosts("{\"posts\":3}") && bc.loading, "엉터리 글 목록은 받지 않는다");
         ok(bc.setPosts("{\"posts\":[{\"id\":11,\"cat\":\"혼잡\",\"title\":\"사람 많아요\",\"body\":\"본문\",\"nick\":\"철수\",\"ts\":1700000000000,\"views\":0,\"likes\":2,\"lols\":1,\"sads\":0,\"cmts\":3,\"user\":1},{\"id\":12,\"title\":\"\"},{\"id\":13,\"title\":\"두 번째\"}]}") && !bc.loading && bc.posts.size() == 2, "서버 글 받기(제목 없는 글 제외)");
         String bq = bc.request(18, 1000L);
-        ok(bq.startsWith("{\"cap\":18,\"f\":{\"n\":30,\"st\":\"ready\",\"arm\":null,\"rx\":{},\"rep\":[]},\"p\":[[\"11\",\"혼잡\",\"사람 많아요\",\"본문\",\"철수\",1700000000000,0,2,1,0,3,10,\"\",[]]"), "게시판 요청: " + bq);
+        ok(bq.startsWith("{\"cap\":18,\"f\":{\"n\":30,\"st\":\"ready\",\"arm\":null,\"rx\":{},\"rep\":[],\"bk\":0},\"p\":[[\"11\",\"혼잡\",\"사람 많아요\",\"본문\",\"철수\",1700000000000,0,2,1,0,3,10,\"\",[]]"), "게시판 요청: " + bq);
         ok(bq.contains("[\"13\",\"잡담\",\"두 번째\",\"\",\"익명\""), "분류·글쓴이 기본값");
         bc.onScreen("{\"info\":{\"ids\":[\"p11\",\"p13\"],\"idx\":[0,1]}}");
         ok("p11".equals(bc.pidById.get("11")) && "c.11".equals(bc.commentKey("11")) && "11".equals(bc.idOfPid("p11")), "화면 번호 ↔ 글번호");
@@ -786,6 +796,17 @@ public class ShellJvmTest {
             ok(b2.act("bd.lk.0", "13", "", null, 5L) == BoardCore.R_RENDER && b2.act("bd.rp.0", "13", "", null, 100L) == BoardCore.R_RENDER && b2.act("bd.rp.0", "13", "", null, 200L) == BoardCore.R_REPORT && "13".equals(b2.pendingId), "눌린 글의 고유 id 로 가리킨다(목록이 바뀌어도 엉뚱한 글이 안 눌린다)");
             java.util.Map<String, String> f2 = new java.util.HashMap<String, String>(); f2.put("c.99", "답글");
             ok(b2.act("bd.cm.0", "13", "c.99", f2, 300L) == BoardCore.R_COMMENT && "답글".equals(b2.pendingText) && "13".equals(b2.pendingId), "댓글 입력칸 열쇠도 행동이 알려 준다");
+        }
+        {   // 차단: 글쓴이를 두 번 눌러 차단 → 그 사람의 글·댓글이 엔진에 실리지 않는다 · 모두 해제
+            BoardCore b3 = new BoardCore(new ShellCore.MemStore());
+            b3.setPosts("{\"posts\":[{\"id\":21,\"title\":\"가\",\"nick\":\"철수\",\"user\":1},{\"id\":22,\"title\":\"나\",\"nick\":\"영희\",\"user\":1}]}");
+            b3.setComments("22", "{\"comments\":[{\"id\":1,\"nick\":\"철수\",\"body\":\"철수 댓글\",\"ts\":5},{\"id\":2,\"nick\":\"민수\",\"body\":\"민수 댓글\",\"ts\":6}]}");
+            b3.request(18, 0L);
+            ok(b3.act("bd.bk.0", null, 100L) == BoardCore.R_RENDER && b3.blockedCount() == 0 && b3.request(18, 200L).contains("\"arm\":{\"k\":\"bk\",\"id\":\"21\"}"), "차단 첫 눌림은 확인 대기");
+            ok(b3.act("bd.bk.0", null, 300L) == BoardCore.R_RENDER && b3.blockedCount() == 1, "두 번째 눌림은 차단 확정");
+            String bq3 = b3.request(18, 400L);
+            ok(!bq3.contains("\"철수\"") && bq3.contains("\"영희\"") && bq3.contains("민수 댓글") && !bq3.contains("철수 댓글") && bq3.contains("\"bk\":1"), "차단한 이의 글·댓글은 빠지고 다른 사람 것은 남는다");
+            ok(b3.act("bd.ub.all", null, 500L) == BoardCore.R_RENDER && b3.blockedCount() == 0 && b3.request(18, 600L).contains("\"철수\""), "모두 해제하면 다시 보인다");
         }
         bc.addLocalComment("11", "나", "좋은 글", 600L);
         ok(bc.request(18, 700L).contains("[\"loc600\",\"나\",\"좋은 글\",600,[]]"), "방금 쓴 댓글이 줄에 실린다");

@@ -15829,13 +15829,13 @@ async function handleScreenNews(request) {
 // \uc785\ub825  boardScreen({ cap, now }, facts, rows)
 //        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(6 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4)
 //        facts = { n: \ubcf4\uc77c \uae00 \uc218(\uae30\ubcf8 30, \ub354 \ubcf4\uae30 \ub54c\ub9c8\ub2e4 +30) \u00b7 st: 'ready'|'loading' \u00b7 arm: { k:'dl'|'rp', id }(\ub450 \ubc88 \ub20c\ub7ec \ud655\uc815 \ub300\uae30 \uc911\uc778 \ub2e8\ucd94) \u00b7
-//                  rx: { \uae00\ubc88\ud638: { like:1, lol:1, sad:1 } }(\uc774 \uae30\uae30\uc5d0\uc11c \ub204\ub978 \ubc18\uc751 \ud45c\uc2dc) \u00b7 rep: [\uc2e0\uace0\ud55c \uae00\ubc88\ud638\u2026] }
+//                  rx: { \uae00\ubc88\ud638: { like:1, lol:1, sad:1 } }(\uc774 \uae30\uae30\uc5d0\uc11c \ub204\ub978 \ubc18\uc751 \ud45c\uc2dc) \u00b7 rep: [\uc2e0\uace0\ud55c \uae00\ubc88\ud638\u2026] \u00b7 bk: \ucc28\ub2e8\ud55c \uc774\uc6a9\uc790 \uc218(\uc571\uc774 \ucc28\ub2e8\ud55c \uc774\uc758 \uae00\u00b7\ub313\uae00\uc740 \ubbf8\ub9ac \ube7c\uace0 \ubcf4\ub0b8\ub2e4) }
 //        rows  = [\uae00\u2026]   \uae00 = [\ubc88\ud638, \ubd84\ub958, \uc81c\ubaa9, \ubcf8\ubb38, \uae00\uc4f4\uc774, \uc2dc\uac01(ms), \uc870\ud68c, \uc88b\uc544\uc694, \u314b\u314b, \u3160\u3160, \uc11c\ubc84 \ub313\uae00 \uc218, \ud45c\uc2dc\ube44\ud2b8, \ub9c1\ud06c, \ub313\uae00\ub4e4]
 //                \ud45c\uc2dc\ube44\ud2b8: 1 \ub0b4 \uae00 \u00b7 2 \uc774\uc6a9\uc790 \uae00(\uc2e0\uace0 \ub300\uc0c1) \u00b7 4 \uc804\uc1a1 \ub300\uae30 \u00b7 8 \uc11c\ubc84 \uae00 \u00b7 16 \ub274\uc2a4 \uae00
 //                \ub313\uae00 = [\ubc88\ud638, \uae00\uc4f4\uc774, \uae00, \uc2dc\uac01, [[\uae00\uc4f4\uc774, \uae00, \uc2dc\uac01]\u2026 \ub2f5\uae00]]
 // \ucd9c\ub825  { ok, v:1, screen:'board', rev, cover:'tab', head:[bar], body:[post\u2026|button|text|spacer], info:{ n, all, ids:[post id\u2026], idx:[\uc6d0\ub798 \ubc88\ud638\u2026] } }
 //        post{ id:'p<\ubc88\ud638>', title, cat, catc, nick, meta, kids:[text, btnrow, divider, cmt\u2026, inbar] }
-//        \ud589\ub3d9 \uc774\ub984(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58): bd.lk.<i> \uc88b\uc544\uc694 \u00b7 bd.lo.<i> \u314b\u314b \u00b7 bd.sd.<i> \u3160\u3160 \u00b7 bd.dl.<i> \uc0ad\uc81c \u00b7 bd.rp.<i> \uc2e0\uace0 \u00b7 bd.cm.<i> \ub313\uae00 \ub4f1\ub85d \u00b7 bd.more \ub354 \ubcf4\uae30 \u00b7 bd.write \uae00\uc4f0\uae30
+//        \ud589\ub3d9 \uc774\ub984(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58): bd.lk.<i> \uc88b\uc544\uc694 \u00b7 bd.lo.<i> \u314b\u314b \u00b7 bd.sd.<i> \u3160\u3160 \u00b7 bd.dl.<i> \uc0ad\uc81c \u00b7 bd.rp.<i> \uc2e0\uace0 \u00b7 bd.bk.<i> \uae00\uc4f4\uc774 \ucc28\ub2e8 \u00b7 bd.ub.all \ucc28\ub2e8 \ubaa8\ub450 \ud574\uc81c \u00b7 bd.cm.<i> \ub313\uae00 \ub4f1\ub85d \u00b7 bd.more \ub354 \ubcf4\uae30 \u00b7 bd.write \uae00\uc4f0\uae30
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var BOARD_SCREEN_V = 3;
@@ -15881,8 +15881,8 @@ function brdFacts(f) {
   var rx = {}, rep = {}, arm = null, i;
   if (f.rx && typeof f.rx === 'object') for (var k in f.rx) { if (Object.prototype.hasOwnProperty.call(f.rx, k) && f.rx[k] && typeof f.rx[k] === 'object') rx[String(k).slice(0, 60)] = f.rx[k]; }
   if (Array.isArray(f.rep)) for (i = 0; i < f.rep.length && i < 400; i++) rep[brdStr(f.rep[i], 60)] = 1;
-  if (f.arm && typeof f.arm === 'object' && (f.arm.k === 'dl' || f.arm.k === 'rp')) arm = { k: f.arm.k, id: brdStr(f.arm.id, 60) };
-  return { n: brdInt(f.n || BRD_SHOW0, BRD_SHOW0, BRD_SHOW_MAX), st: f.st === 'loading' ? 'loading' : 'ready', arm: arm, rx: rx, rep: rep };
+  if (f.arm && typeof f.arm === 'object' && (f.arm.k === 'dl' || f.arm.k === 'rp' || f.arm.k === 'bk')) arm = { k: f.arm.k, id: brdStr(f.arm.id, 60) };
+  return { n: brdInt(f.n || BRD_SHOW0, BRD_SHOW0, BRD_SHOW_MAX), st: f.st === 'loading' ? 'loading' : 'ready', arm: arm, rx: rx, rep: rep, bk: brdInt(f.bk, 0, 999) };
 }
 function brdCmts(arr) {
   var out = [];
@@ -15953,6 +15953,8 @@ function brdPostNode(p, pid, f, now) {
   } else if (p.user) {
     var armR = f.arm && f.arm.k === 'rp' && f.arm.id === p.id;
     items.push({ label: armR ? '\uc2e0\uace0 \ud655\uc778' : '\uc2e0\uace0', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i, id: p.id } });
+    var armB = f.arm && f.arm.k === 'bk' && f.arm.id === p.id;          // 2026-11-04: Play UGC \uc815\ucc45(\uc2e0\uace0 + \ucc28\ub2e8) \u2014 \uae00\uc4f4\uc774\ub97c \uc774 \uae30\uae30\uc5d0\uc11c \ucc28\ub2e8\ud558\uba74 \uadf8 \uc0ac\ub78c\uc758 \uae00\u00b7\ub313\uae00\uc774 \ubcf4\uc774\uc9c0 \uc54a\ub294\ub2e4
+    items.push({ label: armB ? '\ucc28\ub2e8 \ud655\uc778' : '\ucc28\ub2e8', right: true, tc: armB ? BRD_RED : 'sub', line: armB ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.bk.' + p.i, id: p.id } });
   }
   kids.push({ t: 'btnrow', pad: [0, 0, 0, 12], gap: 8, h: 30, items: items });
   if (p.cmts.length) {
@@ -15995,6 +15997,7 @@ function boardScreen(inp, factsIn, rowsIn) {
     body.push({ t: 'spacer', h: 12 });
     shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [14, 4, 14, 0], s: '\ub354 \ubcf4\uae30 \u00b7 \ub0a8\uc740 \uae00 ' + (all.length - shown.length) + '\uac1c', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
+    if (f.bk > 0) body.push({ t: 'button', pad: [14, 8, 14, 0], s: '\ucc28\ub2e8\ud55c \uc774\uc6a9\uc790 ' + f.bk + '\uba85 \u00b7 \ubaa8\ub450 \ud574\uc81c', size: 12, h: 40, act: { a: 'call', v: 'bd.ub.all' } });
     body.push({ t: 'spacer', h: 72 });                                    // \uc6f9 .comm-scroll \uc544\ub798 \uc5ec\ubc31 72
   }
   var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, fab: { s: '\u270f\ufe0f \uc81c\ubcf4 \uae00\uc4f0\uae30', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', act: { a: 'call', v: 'bd.write' } }, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };
@@ -21197,7 +21200,8 @@ function dlgReport() {
     dlg: { w: 320, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card',
     head: [
       { t: 'text', pad: [22, 24, 22, 8], s: '\uc774 \uae00\uc744 \uc2e0\uace0\ud560\uae4c\uc694?', size: 17, bold: true, lh: 1.4, color: 'text' },
-      { t: 'text', pad: [22, 0, 22, 20], s: '\uc2e0\uace0\uac00 \uc5ec\ub7ec \uba85 \ubaa8\uc774\uba74 \uc790\ub3d9\uc73c\ub85c \uc228\uaca8\uc838\uc694.', size: 14, lh: 1.6, color: 'sub' },
+      { t: 'text', pad: [22, 0, 22, 8], s: '\uc2e0\uace0\uac00 \uc5ec\ub7ec \uba85 \ubaa8\uc774\uba74 \uc790\ub3d9\uc73c\ub85c \uc228\uaca8\uc838\uc694.', size: 14, lh: 1.6, color: 'sub' },
+      { t: 'text', pad: [22, 0, 22, 20], s: '\ub178\uc120 \ubc29 \uae00\uc744 \uc2e0\uace0\ud558\uba74 \uae00\uc4f4\uc774\ub3c4 \uc774 \uae30\uae30\uc5d0\uc11c \ucc28\ub2e8\ub3fc\uc694. \uac8c\uc2dc\ud310 \ub9e8 \uc544\ub798 "\ucc28\ub2e8\ud55c \uc774\uc6a9\uc790 \u00b7 \ubaa8\ub450 \ud574\uc81c"\uc5d0\uc11c \ud480 \uc218 \uc788\uc5b4\uc694.', size: 13, lh: 1.6, color: 'sub' },
       { t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
         { label: '\ucde8\uc18c', fill: 'card2', line: 'border', tc: 'sub', act: no },
         { label: '\uc2e0\uace0', fill: '#ff3b30', line: '#ff3b30', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }

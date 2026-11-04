@@ -10,13 +10,13 @@
 // 입력  boardScreen({ cap, now }, facts, rows)
 //        cap   = 앱이 그릴 수 있는 화면 규격 수준(6 이상이어야 만든다)
 //        facts = { n: 보일 글 수(기본 30, 더 보기 때마다 +30) · st: 'ready'|'loading' · arm: { k:'dl'|'rp', id }(두 번 눌러 확정 대기 중인 단추) ·
-//                  rx: { 글번호: { like:1, lol:1, sad:1 } }(이 기기에서 누른 반응 표시) · rep: [신고한 글번호…] }
+//                  rx: { 글번호: { like:1, lol:1, sad:1 } }(이 기기에서 누른 반응 표시) · rep: [신고한 글번호…] · bk: 차단한 이용자 수(앱이 차단한 이의 글·댓글은 미리 빼고 보낸다) }
 //        rows  = [글…]   글 = [번호, 분류, 제목, 본문, 글쓴이, 시각(ms), 조회, 좋아요, ㅋㅋ, ㅠㅠ, 서버 댓글 수, 표시비트, 링크, 댓글들]
 //                표시비트: 1 내 글 · 2 이용자 글(신고 대상) · 4 전송 대기 · 8 서버 글 · 16 뉴스 글
 //                댓글 = [번호, 글쓴이, 글, 시각, [[글쓴이, 글, 시각]… 답글]]
 // 출력  { ok, v:1, screen:'board', rev, cover:'tab', head:[bar], body:[post…|button|text|spacer], info:{ n, all, ids:[post id…], idx:[원래 번호…] } }
 //        post{ id:'p<번호>', title, cat, catc, nick, meta, kids:[text, btnrow, divider, cmt…, inbar] }
-//        행동 이름(번호 = 앱이 보낸 배열의 원래 위치): bd.lk.<i> 좋아요 · bd.lo.<i> ㅋㅋ · bd.sd.<i> ㅠㅠ · bd.dl.<i> 삭제 · bd.rp.<i> 신고 · bd.cm.<i> 댓글 등록 · bd.more 더 보기 · bd.write 글쓰기
+//        행동 이름(번호 = 앱이 보낸 배열의 원래 위치): bd.lk.<i> 좋아요 · bd.lo.<i> ㅋㅋ · bd.sd.<i> ㅠㅠ · bd.dl.<i> 삭제 · bd.rp.<i> 신고 · bd.bk.<i> 글쓴이 차단 · bd.ub.all 차단 모두 해제 · bd.cm.<i> 댓글 등록 · bd.more 더 보기 · bd.write 글쓰기
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var BOARD_SCREEN_V = 3;
@@ -62,8 +62,8 @@ function brdFacts(f) {
   var rx = {}, rep = {}, arm = null, i;
   if (f.rx && typeof f.rx === 'object') for (var k in f.rx) { if (Object.prototype.hasOwnProperty.call(f.rx, k) && f.rx[k] && typeof f.rx[k] === 'object') rx[String(k).slice(0, 60)] = f.rx[k]; }
   if (Array.isArray(f.rep)) for (i = 0; i < f.rep.length && i < 400; i++) rep[brdStr(f.rep[i], 60)] = 1;
-  if (f.arm && typeof f.arm === 'object' && (f.arm.k === 'dl' || f.arm.k === 'rp')) arm = { k: f.arm.k, id: brdStr(f.arm.id, 60) };
-  return { n: brdInt(f.n || BRD_SHOW0, BRD_SHOW0, BRD_SHOW_MAX), st: f.st === 'loading' ? 'loading' : 'ready', arm: arm, rx: rx, rep: rep };
+  if (f.arm && typeof f.arm === 'object' && (f.arm.k === 'dl' || f.arm.k === 'rp' || f.arm.k === 'bk')) arm = { k: f.arm.k, id: brdStr(f.arm.id, 60) };
+  return { n: brdInt(f.n || BRD_SHOW0, BRD_SHOW0, BRD_SHOW_MAX), st: f.st === 'loading' ? 'loading' : 'ready', arm: arm, rx: rx, rep: rep, bk: brdInt(f.bk, 0, 999) };
 }
 function brdCmts(arr) {
   var out = [];
@@ -134,6 +134,8 @@ function brdPostNode(p, pid, f, now) {
   } else if (p.user) {
     var armR = f.arm && f.arm.k === 'rp' && f.arm.id === p.id;
     items.push({ label: armR ? '신고 확인' : '신고', right: true, tc: armR ? BRD_RED : 'sub', line: armR ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.rp.' + p.i, id: p.id } });
+    var armB = f.arm && f.arm.k === 'bk' && f.arm.id === p.id;          // 2026-11-04: Play UGC 정책(신고 + 차단) — 글쓴이를 이 기기에서 차단하면 그 사람의 글·댓글이 보이지 않는다
+    items.push({ label: armB ? '차단 확인' : '차단', right: true, tc: armB ? BRD_RED : 'sub', line: armB ? BRD_RED : 'border2', act: { a: 'call', v: 'bd.bk.' + p.i, id: p.id } });
   }
   kids.push({ t: 'btnrow', pad: [0, 0, 0, 12], gap: 8, h: 30, items: items });
   if (p.cmts.length) {
@@ -176,6 +178,7 @@ function boardScreen(inp, factsIn, rowsIn) {
     body.push({ t: 'spacer', h: 12 });
     shown.forEach(function (p) { var pid = brdPid(p, used); ids.push(pid); idx.push(p.i); sid.push(p.id); body.push(brdPostNode(p, pid, f, now)); });
     if (all.length > shown.length) body.push({ t: 'button', pad: [14, 4, 14, 0], s: '더 보기 · 남은 글 ' + (all.length - shown.length) + '개', size: 12, h: 40, act: { a: 'call', v: 'bd.more' } });
+    if (f.bk > 0) body.push({ t: 'button', pad: [14, 8, 14, 0], s: '차단한 이용자 ' + f.bk + '명 · 모두 해제', size: 12, h: 40, act: { a: 'call', v: 'bd.ub.all' } });
     body.push({ t: 'spacer', h: 72 });                                    // 웹 .comm-scroll 아래 여백 72
   }
   var out = { ok: true, v: 1, screen: 'board', cover: 'tab', head: head, body: body, fab: { s: '✏️ 제보 글쓰기', icon: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z', act: { a: 'call', v: 'bd.write' } }, info: { n: shown.length, all: all.length, ids: ids, idx: idx, sid: sid } };

@@ -11,7 +11,7 @@ import java.util.Map;
  * 이 기기가 쥔 사실(보일 개수·두 번 누르기 대기·누른 반응·신고한 글·내 글·받아 온 댓글)을 보관하며, 눌림의 뜻만 정한다. 통신·시계는 ShellActivity 가 한다.
  */
 public final class BoardCore {
-    public static final String K_RX = "bd_rx", K_REP = "bd_rep", K_MY = "bd_my", K_OWNER = "bd_owner";
+    public static final String K_RX = "bd_rx", K_REP = "bd_rep", K_MY = "bd_my", K_OWNER = "bd_owner", K_BLK = "bd_blk";
     public static final int SHOW_STEP = 30, MAX_POSTS = 400;
     public static final long ARM_MS = 3500L;
     public static final int R_NONE = 0, R_RENDER = 1, R_WRITE = 2, R_REPORT = 3, R_DELETE = 4, R_COMMENT = 5, R_NEED_ID = 6, R_OPEN = 7;
@@ -137,16 +137,17 @@ public final class BoardCore {
             for (Map<String, Object> p : posts) if (id.equals(idStr(p.get("id")))) dup = true;
             if (dup) continue;
             out.add(row(id, s(m.get("cat"), 12), s(m.get("title"), 300), s(m.get("body"), 3000), s(m.get("nick"), 40), d(m.get("ts")), 0, 0, 0, 0, 0,
-                1 | (Boolean.TRUE.equals(m.get("pending")) ? 4 : 0) | (srv ? 8 : 0), "", cmts.get(id)));
+                1 | (Boolean.TRUE.equals(m.get("pending")) ? 4 : 0) | (srv ? 8 : 0), "", visibleCmts(cmts.get(id))));
         }
         List<Object> mineIds = new ArrayList<Object>();
         for (Object x : arr(K_MY)) if (x instanceof Map) mineIds.add(idStr(((Map<String, Object>) x).get("id")));
         for (Map<String, Object> p : posts) {
             String id = idStr(p.get("id"));
             boolean mine = mineIds.contains(id);
+            if (!mine && isBlocked(s(p.get("nick"), 40))) continue;                // 차단한 이용자의 글은 보내지 않는다
             out.add(row(id, s(p.get("cat"), 12).length() > 0 ? s(p.get("cat"), 12) : "잡담", s(p.get("title"), 300), s(p.get("body"), 3000), s(p.get("nick"), 40).length() > 0 ? s(p.get("nick"), 40) : "익명",
                 d(p.get("ts")), (int) d(p.get("views")), (int) d(p.get("likes")), (int) d(p.get("lols")), (int) d(p.get("sads")), (int) d(p.get("cmts")),
-                8 | (mine ? 1 : 0) | (d(p.get("user")) != 0 || Boolean.TRUE.equals(p.get("user")) ? 2 : 0), s(p.get("link"), 400), cmts.get(id)));
+                8 | (mine ? 1 : 0) | (d(p.get("user")) != 0 || Boolean.TRUE.equals(p.get("user")) ? 2 : 0), s(p.get("link"), 400), visibleCmts(cmts.get(id))));
         }
         return out;
     }
@@ -162,7 +163,7 @@ public final class BoardCore {
         if (armK.length() > 0 && now - armAt > ARM_MS) { armK = ""; armId = ""; }
         StringBuilder b = new StringBuilder("{\"cap\":").append(cap).append(",\"f\":{\"n\":").append(n).append(",\"st\":").append(ShellCore.q(loading ? "loading" : "ready"));
         b.append(",\"arm\":").append(armK.length() > 0 ? "{\"k\":" + ShellCore.q(armK) + ",\"id\":" + ShellCore.q(armId) + "}" : "null");
-        b.append(",\"rx\":").append(st.get(K_RX, "{}")).append(",\"rep\":").append(st.get(K_REP, "[]")).append("},\"p\":");
+        b.append(",\"rx\":").append(st.get(K_RX, "{}")).append(",\"rep\":").append(st.get(K_REP, "[]")).append(",\"bk\":").append(arr(K_BLK).size()).append("},\"p\":");
         List<Object> rs = rows();
         idByIdx = new ArrayList<String>();
         for (Object r : rs) idByIdx.add(idStr(((List<?>) r).get(0)));
@@ -197,6 +198,45 @@ public final class BoardCore {
     public String commentKey(String postId) { String pid = pidById.get(postId); return pid == null || pid.length() < 2 ? "" : "c." + pid.substring(1); }
     public boolean isServerPost(String id) { for (Map<String, Object> p : posts) if (id.equals(idStr(p.get("id")))) return true; return isServerMine(id); }
 
+    // ── 차단(2026-11-04, Play UGC 정책: 신고 + 차단) — 글쓴이(닉네임)를 이 기기에서만 차단한다. 서버는 건드리지 않는다. ──
+    public static final int MAX_BLOCKED = 200;
+    public boolean isBlocked(String nick) {
+        if (nick == null || nick.length() == 0 || "익명".equals(nick)) return false;               // 닉네임이 없는 글은 한꺼번에 가려지지 않게 차단 대상에서 뺀다
+        return arr(K_BLK).contains(nick);
+    }
+    /** 차단한 사람의 댓글(과 그 답글)을 뺀 복사본. 원본(cmts)은 그대로 둔다. */
+    @SuppressWarnings("unchecked")
+    private List<Object> visibleCmts(List<Object> src) {
+        if (src == null || arr(K_BLK).isEmpty()) return src;
+        List<Object> out = new ArrayList<Object>();
+        for (Object x : src) {
+            if (!(x instanceof List)) { out.add(x); continue; }
+            List<Object> c = (List<Object>) x;
+            if (c.size() > 1 && isBlocked(s(c.get(1), 40))) continue;
+            List<Object> copy = new ArrayList<Object>(c);
+            if (c.size() > 4 && c.get(4) instanceof List) {
+                List<Object> rs = new ArrayList<Object>();
+                for (Object r : (List<Object>) c.get(4)) if (!(r instanceof List && ((List<Object>) r).size() > 0 && isBlocked(s(((List<Object>) r).get(0), 40)))) rs.add(r);
+                copy.set(4, rs);
+            }
+            out.add(copy);
+        }
+        return out;
+    }
+    private String nickOfPost(String id) {
+        for (Map<String, Object> p : posts) if (id.equals(idStr(p.get("id")))) return s(p.get("nick"), 40);
+        return "";
+    }
+    private void addBlocked(String nick) {
+        List<Object> b = arr(K_BLK);
+        if (nick.length() == 0 || b.contains(nick)) return;
+        b.add(nick);
+        while (b.size() > MAX_BLOCKED) b.remove(0);
+        st.put(K_BLK, HomeSearchCore.toJson(b));
+    }
+    public int blockedCount() { return arr(K_BLK).size(); }
+    public void clearBlocked() { st.put(K_BLK, "[]"); }
+
     // ── 눌림 ──
     public String pendingId = "", pendingText = "";               // R_REPORT/R_DELETE/R_COMMENT 의 대상
     private String idAt(String num) {
@@ -226,6 +266,7 @@ public final class BoardCore {
         if (v == null || !v.startsWith("bd.")) return R_NONE;
         if ("bd.more".equals(v)) { n = Math.min(300, n + SHOW_STEP); return R_RENDER; }
         if ("bd.write".equals(v)) return R_WRITE;
+        if ("bd.ub.all".equals(v)) { clearBlocked(); return R_RENDER; }
         String[] p = v.split("\\.");
         if (p.length != 3) return R_NONE;
         String id = actId != null && actId.length() > 0 ? actId : idAt(p[2]);
@@ -234,6 +275,14 @@ public final class BoardCore {
         if ("lk".equals(kind)) { toggleRx(id, "like"); return R_RENDER; }
         if ("lo".equals(kind)) { toggleRx(id, "lol"); return R_RENDER; }
         if ("sd".equals(kind)) { toggleRx(id, "sad"); return R_RENDER; }
+        if ("bk".equals(kind)) {                                                  // 글쓴이 차단: 두 번 눌러 확정(신고와 같은 방식)
+            if (armK.equals(kind) && armId.equals(id) && now - armAt <= ARM_MS) {
+                armK = ""; armId = "";
+                addBlocked(nickOfPost(id));
+                return R_RENDER;
+            }
+            armK = kind; armId = id; armAt = now; return R_RENDER;
+        }
         if ("dl".equals(kind) || "rp".equals(kind)) {
             if (armK.equals(kind) && armId.equals(id) && now - armAt <= ARM_MS) {          // 두 번째 눌림 = 확정
                 armK = ""; armId = ""; pendingId = id;

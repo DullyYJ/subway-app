@@ -161,11 +161,21 @@ public final class ChatCore {
         boolean have = "all".equals(sel) ? !talk.isEmpty() : room.containsKey(sel);          // 이 방의 글을 받아 둔 적이 있나 — 준비됨은 '이 방' 기준이다(다른 방을 받은 것이 이 방을 '글 없음'으로 만들지 않게 · s289)
         b.append(",\"st\":").append(ShellCore.q(have ? "ready" : live ? (failed ? "fail" : "loading") : "fail"));
         b.append(",\"tzo\":").append(tzoMin).append(",\"me\":").append(ShellCore.q(me)).append(",\"hid\":").append(st.get(K_HID, "[]")).append(pendJson(sel)).append("},\"d\":{");
-        List<Object> g = withG ? new ArrayList<Object>(talk.values()) : new ArrayList<Object>();
+        List<String> blocked = blockedNicks();
+        List<Object> g = new ArrayList<Object>();
+        if (withG) for (Object x : talk.values()) {                                          // 차단한 이용자의 줄은 엔진에 보내지 않는다(내 줄은 늘 남긴다)
+            if (!blocked.isEmpty() && x instanceof List && ((List<?>) x).size() > 3 && !(((List<?>) x).get(3) instanceof Number && ((Number) ((List<?>) x).get(3)).intValue() == 1)
+                && blocked.contains(BoardCore.s(((List<?>) x).get(0), 40))) continue;
+            g.add(x);
+        }
         b.append("\"g\":").append(HomeSearchCore.toJson(g));
         List<String> rids = new ArrayList<String>();
         List<Object> r = new ArrayList<Object>();
-        if (!"all".equals(sel) && room.containsKey(sel)) for (Map.Entry<String, List<Object>> e : room.get(sel).entrySet()) { r.add(e.getValue()); rids.add(e.getKey()); }
+        if (!"all".equals(sel) && room.containsKey(sel)) for (Map.Entry<String, List<Object>> e : room.get(sel).entrySet()) {
+            List<Object> line = e.getValue();
+            if (!blocked.isEmpty() && line.size() > 2 && blocked.contains(BoardCore.s(line.get(2), 40))) continue;
+            r.add(line); rids.add(e.getKey());
+        }
         if (live) ridsR = rids;
         b.append(",\"r\":").append(HomeSearchCore.toJson(r));
         Object off = null; boolean offOk = false;
@@ -286,6 +296,26 @@ public final class ChatCore {
     public static String noticesUrl() { return ShellCore.BASE + "/line-notices"; }
     public static String sendBody(String nick, String text, String line) { return "{\"nick\":" + ShellCore.q(nick) + ",\"text\":" + ShellCore.q(text) + ",\"line\":" + ShellCore.q(line) + "}"; }
     public static String reportBody(String id) { return "{\"id\":" + ShellCore.q(id) + "}"; }
+
+    // ── 차단(2026-11-04) — 게시판과 같은 목록(bd_blk). 노선 방 글을 신고하면 글쓴이도 함께 차단한다. ──
+    @SuppressWarnings("unchecked")
+    private List<String> blockedNicks() {
+        List<String> out = new ArrayList<String>();
+        try { Object o = ScreenCore.parse(st.get(BoardCore.K_BLK, "[]")); if (o instanceof List) for (Object x : (List<Object>) o) if (x instanceof String && ((String) x).length() > 0) out.add((String) x); } catch (Exception e) { /* 비움 */ }
+        return out;
+    }
+    /** 신고한 노선 방 글의 글쓴이를 차단 목록에 올린다. 글쓴이를 못 찾거나 '익명'이면 아무것도 하지 않는다. 반환: 차단했나. */
+    public boolean blockAuthorOf(String id) {
+        String nick = "";
+        for (Map<String, List<Object>> m : room.values()) { List<Object> line = m.get(id); if (line != null && line.size() > 2) { nick = BoardCore.s(line.get(2), 40); break; } }
+        if (nick.length() == 0 || "익명".equals(nick)) return false;
+        List<String> b = blockedNicks();
+        if (b.contains(nick)) return true;
+        b.add(nick);
+        while (b.size() > BoardCore.MAX_BLOCKED) b.remove(0);
+        st.put(BoardCore.K_BLK, HomeSearchCore.toJson(new ArrayList<Object>(b)));
+        return true;
+    }
 
     // ── 숨긴 글 / 탄 기록 ──
     @SuppressWarnings("unchecked")

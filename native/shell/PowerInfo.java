@@ -75,11 +75,9 @@ final class PowerInfo {
         openAppInfo(c);
     }
 
-    /** 배터리 최적화 제외 요청 → 안 되면 배터리 최적화 목록 → 앱 정보. */
+    /** 배터리 최적화 목록 화면 → 안 되면 앱 정보. (시스템 요청 창과 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 권한은 쓰지 않는다 — 허용은 사용자가 목록에서 직접 고른다.) */
     static void requestIgnore(Context c) {
         if (Build.VERSION.SDK_INT >= 23) {
-            try { Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + c.getPackageName())); i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); c.startActivity(i); return; }
-            catch (Throwable t) { /* 다음 */ }
             try { Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS); i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); c.startActivity(i); return; }
             catch (Throwable t) { /* 다음 */ }
         }

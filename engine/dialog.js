@@ -47,7 +47,8 @@ function dlgReport() {
     dlg: { w: 320, maxh: 0.85, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card',
     head: [
       { t: 'text', pad: [22, 24, 22, 8], s: '이 글을 신고할까요?', size: 17, bold: true, lh: 1.4, color: 'text' },
-      { t: 'text', pad: [22, 0, 22, 20], s: '신고가 여러 명 모이면 자동으로 숨겨져요.', size: 14, lh: 1.6, color: 'sub' },
+      { t: 'text', pad: [22, 0, 22, 8], s: '신고가 여러 명 모이면 자동으로 숨겨져요.', size: 14, lh: 1.6, color: 'sub' },
+      { t: 'text', pad: [22, 0, 22, 20], s: '노선 방 글을 신고하면 글쓴이도 이 기기에서 차단돼요. 게시판 맨 아래 "차단한 이용자 · 모두 해제"에서 풀 수 있어요.', size: 13, lh: 1.6, color: 'sub' },
       { t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
         { label: '취소', fill: 'card2', line: 'border', tc: 'sub', act: no },
         { label: '신고', fill: '#ff3b30', line: '#ff3b30', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }

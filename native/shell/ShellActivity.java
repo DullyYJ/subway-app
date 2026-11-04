@@ -2174,13 +2174,13 @@ public class ShellActivity extends Activity {
             case ChatCore.R_REPORT: {
                 final String id = chat.pendingId;
                 final Runnable doReport = new Runnable() { @Override public void run() {
-                    chat.hide(id); toast("신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
+                    chat.hide(id); boolean blk = chat.blockAuthorOf(id); toast(blk ? "신고했어요. 이 글과 글쓴이의 글은 더 이상 보이지 않아요" : "신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
                     final String json = ChatCore.reportBody(id);
                     new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
                 } };
                 if (dlgKind("report", doReport, null)) break;                               // 엔진 카드(취소 / 신고)
                 try {
-                    new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("이 글을 신고할까요?").setMessage("신고가 여러 명 모이면 자동으로 숨겨져요.")
+                    new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert).setTitle("이 글을 신고할까요?").setMessage("신고하면 이 글을 숨기고 글쓴이를 차단해요. 신고가 여러 명 모이면 자동으로 숨겨져요.")
                         .setNegativeButton("취소", null).setPositiveButton("신고", new android.content.DialogInterface.OnClickListener() {
                             @Override public void onClick(android.content.DialogInterface di, int w) { doReport.run(); }
                         }).show();
