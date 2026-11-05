@@ -439,7 +439,7 @@ public class ShellActivity extends Activity {
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
     @Override protected void onDestroy() { if (kids != null) kids.destroy(); if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
-    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) { kids.resume(); if (kids.mode()) kidsTabsEnsure(); } RideService.setAppFront(true); RideService.rsListener = rsApply; ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
+    @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) { kids.resume(); if (kids.mode()) kidsTabsEnsure(); } RideService.setAppFront(true); RideService.rsListener = rsApply; gxPing(); ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; if (kids != null) kids.pause(); super.onPause(); }
 
     @Override public void onBackPressed() {
@@ -5010,6 +5010,31 @@ public class ShellActivity extends Activity {
     private final RideCore ride = new RideCore();
     private long rideGraceUntil = 0L;
     /** 경로 확정: 엔진이 대기 모드 state 를 만들면 포그라운드 서비스가 이어받는다. */
+    // ── 이용 지표(2026-11-05, 개인정보 없음) ──
+    //   서버(board-writer /gx)에는 '숫자 한 번 더하기'만 보낸다: 아이디·기기 정보·위치·광고 아이디 없음. 오늘/이번 달/설치 뒤 처음인지는 이 폰이 적어 두고 스스로 정한다.
+    //   탑승 안내를 시작할 때만 출발·도착 '역 이름'을 함께 보낸다(…역 꼴만 서버가 받고, 집 주소 같은 글은 버린다).
+    private void gxPing() {
+        if ("1".equals(store.get(ShellCore.K_RIDELOG_OFF, "0"))) return;          // 설정 '익명 이용 통계'를 끈 사람은 아무것도 보내지 않는다
+        final java.util.ArrayList<String> ev = new java.util.ArrayList<String>();
+        try {
+            java.util.Calendar c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Seoul"));
+            String day = c.get(java.util.Calendar.YEAR) * 10000 + (c.get(java.util.Calendar.MONTH) + 1) * 100 + c.get(java.util.Calendar.DAY_OF_MONTH) + "";
+            String mon = day.substring(0, 6);
+            if (store.get("gx_new", "").length() == 0) { store.put("gx_new", "1"); ev.add("new"); }
+            if (!day.equals(store.get("gx_day", ""))) { store.put("gx_day", day); ev.add("dau"); }
+            if (!mon.equals(store.get("gx_mon", ""))) { store.put("gx_mon", mon); ev.add("mau"); }
+        } catch (Throwable t) { return; }
+        if (ev.isEmpty()) return;
+        new Thread(new Runnable() { @Override public void run() {
+            for (String e : ev) { try { NetPost.post(ShellCore.BOARD_BASE + "/gx", "{\"e\":" + ShellCore.q(e) + "}", 6000); } catch (Throwable t) { /* 지표 실패는 앱에 영향 없다 */ } }
+        } }, "shell-gx").start();
+    }
+    private void gxRide(final String o, final String d) {
+        if ("1".equals(store.get(ShellCore.K_RIDELOG_OFF, "0"))) return;
+        new Thread(new Runnable() { @Override public void run() {
+            try { NetPost.post(ShellCore.BOARD_BASE + "/gx", "{\"e\":\"ride\",\"o\":" + ShellCore.q(o == null ? "" : o) + ",\"d\":" + ShellCore.q(d == null ? "" : d) + "}", 6000); } catch (Throwable t) { /* 무시 */ }
+        } }, "shell-gx").start();
+    }
     private void startRide() {
         if (!home.hasRoute() || home.riding()) return;
         RideService.buzz(this);                                                  // [경로 확정] 진동(s228)
@@ -5027,6 +5052,7 @@ public class ShellActivity extends Activity {
         final boolean pfl = "1".equals(store.get(ShellCore.K_PFL, "0"));
         final String body = RideCore.startBody(ShellCore.CAP, facts, off, pfl);
         final int rid = home.routeId;
+        final String gxO = home.sendName(HomeCore.START), gxD = home.sendName(HomeCore.DEST);          // 이용 지표용(역 이름만 서버가 받는다)
         toast("탑승 안내를 준비하고 있어요");
         new Thread(new Runnable() {
             @Override public void run() {
@@ -5041,6 +5067,7 @@ public class ShellActivity extends Activity {
                 try { tp.join(5000); } catch (InterruptedException e) { /* 무시 */ }
                 final String txt = r.body == null ? "" : r.body, pick = pk[0] == null ? "" : pk[0];
                 final boolean startOk = r.status == 200 && txt.length() > 0;
+                if (startOk) gxRide(gxO, gxD);
                 main.post(new Runnable() { @Override public void run() {
                     if (rid != home.routeId || !home.hasRoute()) return;                  // 그 사이 다른 경로를 찾았다
                     if (startOk && pick.length() > 0) { busPickAsk(pick, facts, off, pfl, txt, rid); return; }

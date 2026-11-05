@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-05s443";
+var ENGINE_VERSION = "route-v2-2026-11-05s444";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14291,7 +14291,7 @@ function settingsScreen(inp, factsIn) {
     // 4) \uc548\ub0b4 \uc815\ud655\ub3c4
     body.push(settingsPanelN([
       settingsTitleN('\uc548\ub0b4 \uc815\ud655\ub3c4 \ud5a5\uc0c1', 2),
-      { t: 'toggle', key: 'rl', title: '\ub3c4\ucc29 \uc624\ucc28 \uc775\uba85 \uae30\ub85d', sub: '\ubaa9\uc801\uc9c0\uc5d0 \ub3c4\ucc29\ud558\uba74 \uc608\uc0c1 \uc2dc\uac04\uacfc \uc2e4\uc81c \uc2dc\uac04\uc758 \ucc28\uc774\ub9cc \uc775\uba85\uc73c\ub85c \ubcf4\ub0b4\uc694. \uc5ed \uc774\ub984\u00b7\uc704\uce58\u00b7\uae30\uae30 \uc815\ubcf4\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
+      { t: 'toggle', key: 'rl', title: '\uc775\uba85 \uc774\uc6a9 \ud1b5\uacc4', sub: '\uc571\uc744 \uc5f0 \ud69f\uc218, \uc608\uc0c1\uacfc \uc2e4\uc81c \ub3c4\ucc29 \uc2dc\uac04\uc758 \ucc28\uc774, \ud0d1\uc2b9 \uc548\ub0b4\ub97c \uc2dc\uc791\ud55c \ucd9c\ubc1c\u00b7\ub3c4\ucc29 \uc5ed \uc774\ub984\uc744 \uc22b\uc790\ub85c\ub9cc \ub354\ud574 \ubcf4\ub0b4\uc694. \ub204\uac00 \ubcf4\ub0c8\ub294\uc9c0\u00b7\uc704\uce58\u00b7\uae30\uae30 \uc815\ubcf4\ub294 \ubcf4\ub0b4\uc9c0 \uc54a\uc544\uc694.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
     ]));
   }
 

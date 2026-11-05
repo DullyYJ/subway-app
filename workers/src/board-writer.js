@@ -2400,6 +2400,37 @@ var worker_default = {
       }
     }
     if (url.pathname === "/ridelog" && req.method === "POST") return rideHandle(req, env, cors);
+    // ★ 2026-11-05 이용 지표(개인정보 없음) — 운영 보드용. 하루·항목별 '횟수'만 센다.
+    //   · 아이디·기기 정보·IP·위치는 받지도 남기지도 않는다. '오늘 처음인가·이번 달 처음인가'는 폰이 스스로 정하고, 서버는 숫자만 더한다.
+    //   · 역 이름은 '…역' 꼴만 받는다(집 주소·장소 이름은 버린다). 역·경로 표는 90일만 둔다. 보드는 5회 미만 줄을 보여 주지 않는다.
+    //   · e: dau(오늘 처음 연 앱) · mau(이번 달 처음) · new(설치 뒤 첫 실행) · ride(탑승 안내 시작, 선택으로 o·d 역 이름)
+    if (url.pathname === "/gx" && req.method === "POST") {
+      let b = {};
+      try { b = await req.json(); } catch (e) {}
+      const e = String(b.e || "");
+      if (["dau", "mau", "new", "ride"].indexOf(e) < 0) return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      const stn = function (v) { const t = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[가-힣0-9A-Za-z·()\- ]{1,19}역$/.test(t) ? t : ""; };
+      try {
+        const d = Math.floor((Date.now() + 9 * 36e5) / 864e5);
+        await env.DB.batch([
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx (d INTEGER NOT NULL, k TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, k))"),
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx_stn (d INTEGER NOT NULL, k TEXT NOT NULL, s TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, k, s))"),
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx_od (d INTEGER NOT NULL, o TEXT NOT NULL, t TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, o, t))")
+        ]);
+        const st = [env.DB.prepare("INSERT INTO gx (d,k,n) VALUES (?1,?2,1) ON CONFLICT(d,k) DO UPDATE SET n=n+1").bind(d, e)];
+        if (e === "ride") {
+          const o = stn(b.o), t = stn(b.d);
+          if (o) st.push(env.DB.prepare("INSERT INTO gx_stn (d,k,s,n) VALUES (?1,'o',?2,1) ON CONFLICT(d,k,s) DO UPDATE SET n=n+1").bind(d, o));
+          if (t) st.push(env.DB.prepare("INSERT INTO gx_stn (d,k,s,n) VALUES (?1,'d',?2,1) ON CONFLICT(d,k,s) DO UPDATE SET n=n+1").bind(d, t));
+          if (o && t && o !== t) st.push(env.DB.prepare("INSERT INTO gx_od (d,o,t,n) VALUES (?1,?2,?3,1) ON CONFLICT(d,o,t) DO UPDATE SET n=n+1").bind(d, o, t));
+        }
+        if (Math.random() < 0.02) { st.push(env.DB.prepare("DELETE FROM gx_stn WHERE d<?1").bind(d - 90)); st.push(env.DB.prepare("DELETE FROM gx_od WHERE d<?1").bind(d - 90)); }
+        await env.DB.batch(st);
+        return new Response(JSON.stringify({ ok: true }), { headers: cors });
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false }), { status: 500, headers: cors });
+      }
+    }
     if (url.pathname === "/lreport" && req.method === "POST") {
       let body = {};
       try { body = await req.json(); } catch (e) {}

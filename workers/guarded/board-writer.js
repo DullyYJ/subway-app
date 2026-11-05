@@ -2400,6 +2400,37 @@ var worker_default = {
       }
     }
     if (url.pathname === "/ridelog" && req.method === "POST") return rideHandle(req, env, cors);
+    // \u2605 2026-11-05 \uc774\uc6a9 \uc9c0\ud45c(\uac1c\uc778\uc815\ubcf4 \uc5c6\uc74c) \u2014 \uc6b4\uc601 \ubcf4\ub4dc\uc6a9. \ud558\ub8e8\u00b7\ud56d\ubaa9\ubcc4 '\ud69f\uc218'\ub9cc \uc13c\ub2e4.
+    //   \u00b7 \uc544\uc774\ub514\u00b7\uae30\uae30 \uc815\ubcf4\u00b7IP\u00b7\uc704\uce58\ub294 \ubc1b\uc9c0\ub3c4 \ub0a8\uae30\uc9c0\ub3c4 \uc54a\ub294\ub2e4. '\uc624\ub298 \ucc98\uc74c\uc778\uac00\u00b7\uc774\ubc88 \ub2ec \ucc98\uc74c\uc778\uac00'\ub294 \ud3f0\uc774 \uc2a4\uc2a4\ub85c \uc815\ud558\uace0, \uc11c\ubc84\ub294 \uc22b\uc790\ub9cc \ub354\ud55c\ub2e4.
+    //   \u00b7 \uc5ed \uc774\ub984\uc740 '\u2026\uc5ed' \uaf34\ub9cc \ubc1b\ub294\ub2e4(\uc9d1 \uc8fc\uc18c\u00b7\uc7a5\uc18c \uc774\ub984\uc740 \ubc84\ub9b0\ub2e4). \uc5ed\u00b7\uacbd\ub85c \ud45c\ub294 90\uc77c\ub9cc \ub454\ub2e4. \ubcf4\ub4dc\ub294 5\ud68c \ubbf8\ub9cc \uc904\uc744 \ubcf4\uc5ec \uc8fc\uc9c0 \uc54a\ub294\ub2e4.
+    //   \u00b7 e: dau(\uc624\ub298 \ucc98\uc74c \uc5f0 \uc571) \u00b7 mau(\uc774\ubc88 \ub2ec \ucc98\uc74c) \u00b7 new(\uc124\uce58 \ub4a4 \uccab \uc2e4\ud589) \u00b7 ride(\ud0d1\uc2b9 \uc548\ub0b4 \uc2dc\uc791, \uc120\ud0dd\uc73c\ub85c o\u00b7d \uc5ed \uc774\ub984)
+    if (url.pathname === "/gx" && req.method === "POST") {
+      let b = {};
+      try { b = await req.json(); } catch (e) {}
+      const e = String(b.e || "");
+      if (["dau", "mau", "new", "ride"].indexOf(e) < 0) return new Response(JSON.stringify({ ok: false }), { status: 400, headers: cors });
+      const stn = function (v) { const t = String(v == null ? "" : v).replace(/\s+/g, " ").trim(); return /^[\uac00-\ud7a30-9A-Za-z\u00b7()\- ]{1,19}\uc5ed$/.test(t) ? t : ""; };
+      try {
+        const d = Math.floor((Date.now() + 9 * 36e5) / 864e5);
+        await env.DB.batch([
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx (d INTEGER NOT NULL, k TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, k))"),
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx_stn (d INTEGER NOT NULL, k TEXT NOT NULL, s TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, k, s))"),
+          env.DB.prepare("CREATE TABLE IF NOT EXISTS gx_od (d INTEGER NOT NULL, o TEXT NOT NULL, t TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (d, o, t))")
+        ]);
+        const st = [env.DB.prepare("INSERT INTO gx (d,k,n) VALUES (?1,?2,1) ON CONFLICT(d,k) DO UPDATE SET n=n+1").bind(d, e)];
+        if (e === "ride") {
+          const o = stn(b.o), t = stn(b.d);
+          if (o) st.push(env.DB.prepare("INSERT INTO gx_stn (d,k,s,n) VALUES (?1,'o',?2,1) ON CONFLICT(d,k,s) DO UPDATE SET n=n+1").bind(d, o));
+          if (t) st.push(env.DB.prepare("INSERT INTO gx_stn (d,k,s,n) VALUES (?1,'d',?2,1) ON CONFLICT(d,k,s) DO UPDATE SET n=n+1").bind(d, t));
+          if (o && t && o !== t) st.push(env.DB.prepare("INSERT INTO gx_od (d,o,t,n) VALUES (?1,?2,?3,1) ON CONFLICT(d,o,t) DO UPDATE SET n=n+1").bind(d, o, t));
+        }
+        if (Math.random() < 0.02) { st.push(env.DB.prepare("DELETE FROM gx_stn WHERE d<?1").bind(d - 90)); st.push(env.DB.prepare("DELETE FROM gx_od WHERE d<?1").bind(d - 90)); }
+        await env.DB.batch(st);
+        return new Response(JSON.stringify({ ok: true }), { headers: cors });
+      } catch (err) {
+        return new Response(JSON.stringify({ ok: false }), { status: 500, headers: cors });
+      }
+    }
     if (url.pathname === "/lreport" && req.method === "POST") {
       let body = {};
       try { body = await req.json(); } catch (e) {}

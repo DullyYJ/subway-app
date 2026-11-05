@@ -118,7 +118,7 @@ function settingsScreen(inp, factsIn) {
     // 4) 안내 정확도
     body.push(settingsPanelN([
       settingsTitleN('안내 정확도 향상', 2),
-      { t: 'toggle', key: 'rl', title: '도착 오차 익명 기록', sub: '목적지에 도착하면 예상 시간과 실제 시간의 차이만 익명으로 보내요. 역 이름·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
+      { t: 'toggle', key: 'rl', title: '익명 이용 통계', sub: '앱을 연 횟수, 예상과 실제 도착 시간의 차이, 탑승 안내를 시작한 출발·도착 역 이름을 숫자로만 더해 보내요. 누가 보냈는지·위치·기기 정보는 보내지 않아요.', on: f.rl, vp: 6, size: 13.5, ssize: 11, onc: '#30d158' }
     ]));
   }
 
