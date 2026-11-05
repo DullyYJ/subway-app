@@ -1,0 +1,60 @@
+name: iOS build (simulator)
+
+# 맥이 없어도 iOS 코드를 시험한다: 클라우드 맥에서 XcodeGen → 빌드 → 단위 시험 → 시뮬레이터 실행 화면 캡처.
+# 결과(로그 · 스크린샷)는 Actions 의 Artifacts 에서 받는다. 서명 없이 시뮬레이터용으로만 빌드한다(실기기 · TestFlight 는 Apple 개발자 계정이 필요하다).
+on:
+  push:
+    branches: [ ios-shell ]
+    paths: [ 'ios/**', '.github/workflows/ios.yml' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: ios/Gildongmu
+    steps:
+      - uses: actions/checkout@v4
+      - name: XcodeGen 설치 · 프로젝트 생성
+        run: |
+          brew install xcodegen
+          xcodegen
+      - name: 시뮬레이터 고르기
+        run: |
+          xcodebuild -version
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          print(c[-1]['udid'] if c else '')")
+          echo "UDID=$UDID" >> $GITHUB_ENV
+          echo "시뮬레이터: $UDID"
+      - name: 빌드 + 단위 시험
+        run: |
+          set -o pipefail
+          xcodebuild test -project Gildongmu.xcodeproj -scheme Gildongmu \
+            -destination "id=$UDID" -derivedDataPath build \
+            -resultBundlePath build/result.xcresult CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log | tail -60
+      - name: 실행 화면 캡처
+        if: always()
+        run: |
+          APP=$(find build/Build/Products -name 'Gildongmu.app' -maxdepth 3 | head -1)
+          echo "앱: $APP"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.dullyyj.subway.ios
+          sleep 15
+          xcrun simctl io "$UDID" screenshot screenshot-1.png
+          xcrun simctl ui "$UDID" appearance dark
+          sleep 4
+          xcrun simctl io "$UDID" screenshot screenshot-2-dark.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-result
+          path: |
+            ios/Gildongmu/build.log
+            ios/Gildongmu/screenshot-*.png
+            ios/Gildongmu/build/result.xcresult
