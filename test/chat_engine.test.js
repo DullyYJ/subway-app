@@ -95,6 +95,10 @@ ok(E.chatScreen({ cap: 5, now: NOW }, base, {}).ok === false && E.chatScreen({},
 }
   ok(m[1].time === '11:55' && m[2].time === '11:56', '시각: 기기 시간대(tzo=-540 → KST) ' + m[1].time);
   ok(m.every(x => x.act === undefined), '전체 방 글에는 신고 없음');
+  { // 2026-11-05: 앱이 글 id 를 실어 주면(5번째) 전체 방 남의 글에도 신고 단추 — Play UGC 정책. 내 글·id 없는 줄은 없음, 신고해 숨긴 글은 빠진다
+    const gs = chat({ sel: 'all', hid: ['L9'] }, { g: [['남1', '안녕', NOW - 3 * MIN, 0, '2호선', 'L7'], ['나', '내 글', NOW - 2 * MIN, 1, '2호선', 'L8'], ['남2', '숨길 글', NOW - 1 * MIN, 0, '2호선', 'L9'], ['남3', 'id 없음', NOW, 0, '2호선']] }).body.filter(x => x.t === 'msg');
+    ok(gs.length === 3 && gs[0].go === '신고' && gs[0].act.v === 'ch.x.g' && gs[0].act.id === 'L7' && gs[1].mine === true && gs[1].act === undefined && gs[2].act === undefined, '전체 방: 글 id 가 있는 남의 글에만 신고 단추 · 내 글 없음 · 신고해 숨긴 글(L9)은 빠진다');
+  }
   ok(s.body[0].t === 'spacer' && s.body[s.body.length - 1].t === 'spacer', '위아래 여백');
   const rs = chat({ sel: '2호선' }, { r: Rm }), rm = rs.body.filter(n => n.t === 'msg');
   ok(rm.length === 3 && rs.info.n === 3 && rm.map(x => x.s).join() === '사람 많아요,지금 지연이에요,저도요', '노선 방: 숨긴 글·빈 글 제외 · 시간순');

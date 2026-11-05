@@ -143,7 +143,7 @@ function swTableOk(S, chips, m) {
   const ps = places(S.body), cur = ps.filter(p => !p.pub), pub = ps.filter(p => p.pub);
   ok(cur.length === 6 && pub.length === 2, '위 6곳(이름 없는 둘 제외) · 아래 2곳(중복 1곳 제외): ' + cur.length + '/' + pub.length);
   ok(cur.map(p => p.rank).join() === '1,2,3,4,5,6', '순위는 1부터 차례로');
-  ok(cur[0].stars === '★★★★★' && cur[3].stars === '★★★★' && cur[5].stars === '★★★★', '별점: 앞 3 → 5개, 6 미만 → 4개');
+  ok(ps.every(p => !p.stars), '별점은 싣지 않는다(목록 순서로 지어낸 별 금지) — 순위 번호만');
   ok(cur[5].name === '태그 식당', '이름의 태그는 걷는다');
   ok(cur[0].sub === '국밥 · 12 1층' && cur[0].dist === '120m' && cur[0].go === (cur[0].act.id ? '길찾기 · 지도 →' : '위치 정보 없음'), '업종 끝말 · 주소 끝 두 마디(웹과 같다) · 거리 · 길찾기 글(좌표가 없으면 위치 정보 없음)');
   ok(E.foodDist(1200) === '1.2km' && E.foodDist('999') === '999m' && E.foodDist(null) === '0m' && E.foodDist(1000) === '1.0km', '거리 글');

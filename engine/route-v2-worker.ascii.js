@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-05s442";
+var ENGINE_VERSION = "route-v2-2026-11-05s443";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14029,7 +14029,7 @@ function shopScreenOf(inp, pick, cat) {
   var cards = [];
   items.forEach(function (it) {
     if (!shopOk(it.u)) return;                       // \ub9c1\ud06c\uac00 \uc5c6\uac70\ub098 \uc774\uc0c1\ud55c \uc0c1\ud488\uc740 \uc2e3\uc9c0 \uc54a\ub294\ub2e4
-    var c = { t: 'card', name: String(it.n || '').slice(0, 80), tag: '\ucd5c\uc800\uac00 \u203a', fb: SHOP_CAT_EMOJI[it._cat] || '\ud83d\udecd\ufe0f', act: { a: 'open', url: it.u } };
+    var c = { t: 'card', name: String(it.n || '').slice(0, 80), tag: '\ucfe0\ud321 \ubcf4\uae30 \u203a', fb: SHOP_CAT_EMOJI[it._cat] || '\ud83d\udecd\ufe0f', act: { a: 'open', url: it.u } };
     if (shopOk(it.i)) c.img = it.i;
     cards.push(c);
   });
@@ -14952,9 +14952,6 @@ function foodDist(m) {
   m = parseInt(m, 10) || 0;
   return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm';
 }
-function foodStars(idx) {                          // \uc21c\uc704\ub85c \ubcc4\uc810 \ucd94\uc815(\uc778\uae30\uc21c \uc815\ub82c\uc774\ub77c)
-  return idx < 3 ? '\u2605\u2605\u2605\u2605\u2605' : idx < 6 ? '\u2605\u2605\u2605\u2605' : idx < 10 ? '\u2605\u2605\u2605' : '\u2605\u2605';
-}
 function foodStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' ? String(v).slice(0, n) : ''); }
 function foodNameOf(v) { return foodStr(v, 120).replace(/<[^>]*>/g, '').trim(); }
 function foodKey(name) { return String(name || '').replace(/\s/g, ''); }
@@ -15079,7 +15076,7 @@ function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: sid ? '\uae38\ucc3e\uae30 \u00b7 \uc9c0\ub3c4 \u2192' : '\uc704\uce58 \uc815\ubcf4 \uc5c6\uc74c', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
   if (sid) n.act.id = sid;
   if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
-  if (pub) { n.pub = true; n.badge = '\uacf5\uacf5\ub370\uc774\ud130'; } else n.stars = foodStars(Number(rank) - 1);
+  if (pub) { n.pub = true; n.badge = '\uacf5\uacf5\ub370\uc774\ud130'; }          // \ubcc4\uc810\uc740 \uc2e3\uc9c0 \uc54a\ub294\ub2e4(2026-11-05) \u2014 \uc608\uc804\uc5d4 \ubaa9\ub85d \uc21c\uc11c\ub85c \ubcc4 \uac1c\uc218\ub97c \uc9c0\uc5b4\ub0c8\ub2e4. \uc2e4\uc81c \ud3c9\uc810 \uc790\ub8cc\uac00 \uc5c6\ub2e4
   return n;
 }
 
@@ -15112,7 +15109,7 @@ function foodScreenOf(f, all, allP) {
     else body.push(foodMsgN('\ud574\ub2f9 \uce74\ud14c\uace0\ub9ac \uc74c\uc2dd\uc810\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.'));
   } else {
     // s355(YJ: "\ud604\uc704\uce58 \uae30\uc900 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uac83\ubd80\ud130 \ucc28\ub840\ub300\ub85c"): \uc11c\ubc84 \uac00\uac8c\uc640 \uacf5\uacf5\ub370\uc774\ud130\ub97c \ud55c \uc904\ub85c \ud569\uccd0 \uac70\ub9ac\uc21c(\uac00\uae4c\uc6b4 \uac83 \uba3c\uc800 \u00b7 \uac70\ub9ac\ub97c \ubaa8\ub974\uba74 \ub9e8 \ub4a4 \u00b7 \uac19\uc73c\uba74 \uc11c\ubc84 \uac00\uac8c \uba3c\uc800)\uc73c\ub85c \ubcf4\uc778\ub2e4.
-    //   \uc11c\ubc84 \uac00\uac8c\ub294 \uc21c\uc704 \ubc88\ud638 \u00b7 \ubcc4\uc810, \uacf5\uacf5\ub370\uc774\ud130\ub294 '\uacf5\uacf5\ub370\uc774\ud130' \ub531\uc9c0(\ubc88\ud638 \uc5c6\uc74c) \u2014 \ub458\uc774 \uc11e\uc5ec\ub3c4 \uc5b4\ub290 \ucabd\uc778\uc9c0 \uc54c \uc218 \uc788\ub2e4.
+    //   \uc11c\ubc84 \uac00\uac8c\ub294 \uc21c\uc704 \ubc88\ud638(\ubaa9\ub85d \uc21c\uc11c\uc77c \ubfd0 \ud3c9\uc810\uc774 \uc544\ub2d8), \uacf5\uacf5\ub370\uc774\ud130\ub294 '\uacf5\uacf5\ub370\uc774\ud130' \ub531\uc9c0(\ubc88\ud638 \uc5c6\uc74c) \u2014 \ub458\uc774 \uc11e\uc5ec\ub3c4 \uc5b4\ub290 \ucabd\uc778\uc9c0 \uc54c \uc218 \uc788\ub2e4.
     var mix = [], k, n = 0;
     cur.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: false, o: j }); });
     pub.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: true, o: FOOD_MAX_SHOW + j }); });
@@ -16046,7 +16043,7 @@ async function handleScreenBoard(request) {
 //        cap   = \uc571\uc774 \uadf8\ub9b4 \uc218 \uc788\ub294 \ud654\uba74 \uaddc\uaca9 \uc218\uc900(6 \uc774\uc0c1\uc774\uc5b4\uc57c \ub9cc\ub4e0\ub2e4)
 //        facts = { sel: 'all'|\ub178\uc120\uc774\ub984 \u00b7 mine: [\ub0b4\uac00 \ud0c4 \ub178\uc120\u2026](\ub9ce\uc774 \ud0c4 \uc21c, \uc9c0\uae08 \uacbd\ub85c \ub178\uc120 \uba3c\uc800) \u00b7 lc: { \ub178\uc120: '#rrggbb' }(\uce69 \uc0c9) \u00b7 st: 'ready'|'loading'|'fail' \u00b7
 //                  tzo: \uc774 \uae30\uae30\uc758 \uc2dc\uac04\ub300(\ubd84, Date.getTimezoneOffset) \u00b7 me: \ub0b4 \uc544\uc774\ub514 \u00b7 hid: [\ub0b4\uac00 \uc2e0\uace0\ud574 \uc228\uae34 \uae00\ubc88\ud638\u2026] }
-//        data  = { g: [[\uae00\uc4f4\uc774, \uae00, \uc2dc\uac01(ms), \ub0b4\uac83(0|1), \ub178\uc120]\u2026](\uc804\uccb4 \ubc29) \u00b7 r: [[\ubc88\ud638, \uc2dc\uac01, \uae00\uc4f4\uc774, \uae00, \uc885\ub958('delay'|'crowd'|'')]\u2026](\ub178\uc120 \ubc29) \u00b7
+//        data  = { g: [[\uae00\uc4f4\uc774, \uae00, \uc2dc\uac01(ms), \ub0b4\uac83(0|1), \ub178\uc120, \uae00 id(\uc120\ud0dd \u2014 \uc788\uc73c\uba74 \uc2e0\uace0 \ubc84\ud2bc)]\u2026](\uc804\uccb4 \ubc29) \u00b7 r: [[\ubc88\ud638, \uc2dc\uac01, \uae00\uc4f4\uc774, \uae00, \uc885\ub958('delay'|'crowd'|'')]\u2026](\ub178\uc120 \ubc29) \u00b7
 //                  off: \uc774 \ub178\uc120\uc758 \uacf5\uc2dd \uacf5\uc9c0 { text, title, ts, estimated, suspect } | null \u00b7 offOk: \uacf5\uc9c0 \uc870\ud68c\uac00 \ub410\ub098(0|1) \u00b7 offAt: \uc870\ud68c \uc2dc\uac01 \u00b7 al: { reporters, stations:[{stn,n}] } | null }
 // \ucd9c\ub825  { ok, v:1, screen:'chat', rev, cover:'tab', anchor:'bottom', head:[chips, text?, box?, box?], body:[msg\u2026|text], foot:[inbar], info:{ sel, n } }
 //        \ud589\ub3d9 \uc774\ub984: ch.send \ubcf4\ub0b4\uae30 \u00b7 ch.x.<\ubc88\ud638> \ub178\uc120 \ubc29 \uae00 \uc2e0\uace0(\ubc88\ud638 = \uc571\uc774 \ubcf4\ub0b8 r \ubc30\uc5f4\uc758 \uc6d0\ub798 \uc704\uce58 \u00b7 act.id = \uadf8 \uae00\uc758 \uace0\uc720 id \u2014 \uc0c8 \uc571\uc740 id \ub97c \uba3c\uc800 \uc4f4\ub2e4) \u00b7 \uce69\uc740 {a:'cat', v:\ub178\uc120|'all'}
@@ -16210,10 +16207,11 @@ function chtAlert(al) {
 function chtMsgG(a, f) {
   if (!Array.isArray(a)) return null;
   var text = chtStr(a[1], 400).trim();
-  if (!text) return null;
+  var gid = chtStr(a[5], 40);                                                   // 2026-11-05: \uc804\uccb4 \ubc29 \uc904\uc5d0\ub3c4 \uae00 \uace0\uc720 id(\uc571\uc774 index 5 \ub85c \uc2e4\uc5b4 \uc90c) \u2014 \uc2e0\uace0(Play UGC \uc815\ucc45)\uc5d0 \uc4f4\ub2e4
+  if (!text || (gid && f.hid[gid])) return null;
   var line = chtStr(a[4], 20), ts = Number(a[2]) || 0, mine = a[3] === 1 || a[3] === true;
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else n.nick = chtLineNick(line, chtStr(a[0], 40) || '\uc775\uba85');           // \uc804\uccb4 \ubc29: \uc544\uc774\ub514 \uc55e\uc758 (\ud638\uc120) \ud45c\uae30\ub294 \uc5c6\uc574\ub2e4(YJ 10-29) \u2014 \uc544\uc774\ub514\uac00 \ud638\uc120\ub9c8\ub2e4 \ub2ec\ub77c \uad6c\ubd84\ub41c\ub2e4
+  if (mine) n.mine = true; else { n.nick = chtLineNick(line, chtStr(a[0], 40) || '\uc775\uba85'); if (gid) { n.go = '\uc2e0\uace0'; n.act = { a: 'call', v: 'ch.x.g', id: gid }; } }           // \uc804\uccb4 \ubc29: \uc544\uc774\ub514 \uc55e\uc758 (\ud638\uc120) \ud45c\uae30\ub294 \uc5c6\uc574\ub2e4(YJ 10-29) \u2014 \uc544\uc774\ub514\uac00 \ud638\uc120\ub9c8\ub2e4 \ub2ec\ub77c \uad6c\ubd84\ub41c\ub2e4
   return { ts: ts, node: n };
 }
 function chtMsgR(a, i, f) {

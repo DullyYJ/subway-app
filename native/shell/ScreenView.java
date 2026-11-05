@@ -3076,7 +3076,7 @@ public class ScreenView extends View {
                 tp.setTextAlign(Paint.Align.LEFT);
             }
         }
-        // 이름 줄 + 최저가
+        // 이름 줄 + 쿠팡 보기
         setText(it.size, true, pal[R_TEXT]);
         for (int k = 0; k < it.lines.length; k++) cv.drawText(it.lines[k], it.textX, base(it.textY + k * it.lineH, it.lineH, k), tp);
         if (it.tag.length() > 0) { setText(it.size, true, pal[R_GOLD]); cv.drawText(it.tag, it.tagX, base(it.textY, it.lineH, 0), tp); }

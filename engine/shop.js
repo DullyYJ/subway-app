@@ -258,7 +258,7 @@ function shopScreenOf(inp, pick, cat) {
   var cards = [];
   items.forEach(function (it) {
     if (!shopOk(it.u)) return;                       // 링크가 없거나 이상한 상품은 싣지 않는다
-    var c = { t: 'card', name: String(it.n || '').slice(0, 80), tag: '최저가 ›', fb: SHOP_CAT_EMOJI[it._cat] || '🛍️', act: { a: 'open', url: it.u } };
+    var c = { t: 'card', name: String(it.n || '').slice(0, 80), tag: '쿠팡 보기 ›', fb: SHOP_CAT_EMOJI[it._cat] || '🛍️', act: { a: 'open', url: it.u } };
     if (shopOk(it.i)) c.img = it.i;
     cards.push(c);
   });

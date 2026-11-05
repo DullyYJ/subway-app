@@ -61,7 +61,7 @@ public final class ChatCore {
                 String nick = BoardCore.s(m.get("nick"), 40);
                 List<Object> row = new ArrayList<Object>();
                 row.add(nick); row.add(BoardCore.s(m.get("text"), 400)); row.add(Double.valueOf(ts));
-                row.add(Double.valueOf(me.length() > 0 && me.equals(nick) ? 1 : 0)); row.add(BoardCore.s(m.get("line"), 20));
+                row.add(Double.valueOf(me.length() > 0 && me.equals(nick) ? 1 : 0)); row.add(BoardCore.s(m.get("line"), 20)); row.add(id);      // 5번째: 글 고유 id — 전체 방에서도 신고할 수 있게
                 talk.put(id, row);
             }
             while (talk.size() > 300) talk.remove(talk.keySet().iterator().next());
@@ -295,7 +295,9 @@ public final class ChatCore {
     public String roomUrl(String line) { return ShellCore.BOARD_BASE + "/lroom?line=" + ShellCore.enc(line) + "&since=" + (sinceR.containsKey(line) ? sinceR.get(line) : 0); }
     public static String noticesUrl() { return ShellCore.BASE + "/line-notices"; }
     public static String sendBody(String nick, String text, String line) { return "{\"nick\":" + ShellCore.q(nick) + ",\"text\":" + ShellCore.q(text) + ",\"line\":" + ShellCore.q(line) + "}"; }
-    public static String reportBody(String id) { return "{\"id\":" + ShellCore.q(id) + "}"; }
+    /** 전체 방 글 id 는 노선 방 글이면 'L123' — 서버(/lreport)는 숫자만 받는다. 숫자가 아닌 옛 글은 서버에 올리지 않는다(이 기기에서 숨김·차단만). */
+    public static String reportBody(String id) { String n = id != null && id.startsWith("L") ? id.substring(1) : id; return "{\"id\":" + ShellCore.q(n) + "}"; }
+    public static boolean reportable(String id) { String n = id != null && id.startsWith("L") ? id.substring(1) : id; return n != null && n.length() > 0 && n.matches("[0-9]{1,18}"); }
 
     // ── 차단(2026-11-04) — 게시판과 같은 목록(bd_blk). 노선 방 글을 신고하면 글쓴이도 함께 차단한다. ──
     @SuppressWarnings("unchecked")
@@ -308,6 +310,7 @@ public final class ChatCore {
     public boolean blockAuthorOf(String id) {
         String nick = "";
         for (Map<String, List<Object>> m : room.values()) { List<Object> line = m.get(id); if (line != null && line.size() > 2) { nick = BoardCore.s(line.get(2), 40); break; } }
+        if (nick.length() == 0) { List<Object> row = talk.get(id); if (row != null && row.size() > 0) nick = BoardCore.s(row.get(0), 40); }          // 전체 방 글
         if (nick.length() == 0 || "익명".equals(nick)) return false;
         List<String> b = blockedNicks();
         if (b.contains(nick)) return true;

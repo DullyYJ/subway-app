@@ -2177,7 +2177,7 @@ public class ShellActivity extends Activity {
                 final Runnable doReport = new Runnable() { @Override public void run() {
                     chat.hide(id); boolean blk = chat.blockAuthorOf(id); toast(blk ? "신고했어요. 이 글과 글쓴이의 글은 더 이상 보이지 않아요" : "신고했어요. 이 글은 더 이상 보이지 않아요"); reloadChat();
                     final String json = ChatCore.reportBody(id);
-                    new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
+                    if (ChatCore.reportable(id)) new Thread(new Runnable() { @Override public void run() { NetPost.post(ShellCore.BOARD_BASE + "/lreport", json, 9000); } }, "shell-lrep").start();
                 } };
                 if (dlgKind("report", doReport, null)) break;                               // 엔진 카드(취소 / 신고)
                 try {

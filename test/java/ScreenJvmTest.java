@@ -17,7 +17,7 @@ public class ScreenJvmTest {
         }
     };
 
-    static String card(String name, String url) { return "{\"t\":\"card\",\"name\":\"" + name + "\",\"tag\":\"최저가 ›\",\"fb\":\"X\",\"img\":\"https://img/a.jpg\",\"act\":{\"a\":\"open\",\"url\":\"" + url + "\"}}"; }
+    static String card(String name, String url) { return "{\"t\":\"card\",\"name\":\"" + name + "\",\"tag\":\"쿠팡 보기 ›\",\"fb\":\"X\",\"img\":\"https://img/a.jpg\",\"act\":{\"a\":\"open\",\"url\":\"" + url + "\"}}"; }
     static String screen(int n) {
         StringBuilder g = new StringBuilder();
         for (int i = 0; i < n; i++) { if (i > 0) g.append(','); g.append(card("상품" + i, "https://link.coupang.com/a/" + i)); }
@@ -147,8 +147,8 @@ public class ScreenJvmTest {
         ok(near(c2.y, c0.y + c0.h + 8f), "다음 줄은 높이 + 간격 8 아래");
         ok(near(c0.h, c1.h), "한 줄 카드는 높이가 같다");
         ok(near(c0.ih, 78f) && near(c0.iw, cw - 18f), "그림 칸 78 높이");
-        ok(c0.lines.length == 1 && c0.tag.equals("최저가 ›"), "카드 이름 한 줄 + 최저가");
-        ok(near(c0.tagX, c0.x + c0.w - 1f - 8f - c0.tagW), "최저가는 오른쪽 안쪽에 붙는다");
+        ok(c0.lines.length == 1 && c0.tag.equals("쿠팡 보기 ›"), "카드 이름 한 줄 + 쿠팡 보기");
+        ok(near(c0.tagX, c0.x + c0.w - 1f - 8f - c0.tagW), "쿠팡 보기는 오른쪽 안쪽에 붙는다");
         // 6장 = 3줄
         ScreenCore.Item last = null; for (ScreenCore.Item it : L.body) if (it.kind == ScreenCore.K_CARD) last = it;
         ok(near(last.y, 4f + 2f * (c0.h + 8f)), "6장은 3줄");

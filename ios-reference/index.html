@@ -1776,7 +1776,7 @@ header h1 em{color:var(--gold);font-style:normal;}
 .prod{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px;display:flex;flex-direction:column;}
 .prod-img{width:100%;height:78px;border-radius:8px;background:var(--prod-img-bg,#252528);display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:5px;overflow:hidden;}
 .prod-img img{width:100%;height:100%;object-fit:contain;background:#fff;border-radius:8px;}
-/* ★ 상품명 + 최저가를 한 줄에 — 카테고리 배지 제거로 카드 높이 축소 */
+/* ★ 상품명 + '쿠팡 보기'를 한 줄에 — 카테고리 배지 제거로 카드 높이 축소 */
 .prod-row{display:flex;align-items:flex-start;gap:6px;}
 .prod-row .prod-name{flex:1;min-width:0;margin-bottom:0;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
@@ -3311,7 +3311,7 @@ function _foodMakeCard(p, i, isPublic){
   card.className='food-card';
   var badge=isPublic
     ? '<span class="food-dist" style="background:rgba(120,120,128,.16);color:var(--sub);">공공데이터</span>'
-    : '<span class="food-stars">'+_foodStars(i)+'</span>';
+    : '';                                          // 별점은 싣지 않는다(2026-11-05) — 실제 평점 자료가 없다
   var rank=isPublic ? '🍽️' : (i+1);
   card.innerHTML=
     '<div class="food-card-inner">'+
@@ -3410,14 +3410,6 @@ function loadFoodTab(force) {
 window.loadFoodTab = loadFoodTab;
 
 
-// 별점 텍스트 생성 (카카오는 별점 없음 → 인기도 기반 표시)
-function _foodStars(idx) {
-  // 인기순 정렬이므로 순위로 별점 추정
-  if(idx < 3)  return '⭐⭐⭐⭐⭐';
-  if(idx < 6)  return '⭐⭐⭐⭐';
-  if(idx < 10) return '⭐⭐⭐';
-  return '⭐⭐';
-}
 
 // 거리 포맷
 function _foodDist(m) {
@@ -39299,12 +39291,12 @@ function _renderShopGrid(pick){
     var _imgHtml = it.i
       ? '<img src="'+it.i+'" loading="lazy" alt="'+it.n+'" data-e="'+emo+'" onerror="this.outerHTML=this.dataset.e">'
       : emo;
-    // 카테고리 배지 제거 + 상품명 오른쪽에 '최저가 ›' → 카드 높이 축소
+    // 카테고리 배지 제거 + 상품명 오른쪽에 '쿠팡 보기 ›' → 카드 높이 축소
     return '<div class="prod" data-url="'+it.u+'" onclick="openExternalApp(this.dataset.url)" style="cursor:pointer;position:relative;">'
       +'<div class="prod-img">'+_imgHtml+'</div>'
       +'<div class="prod-row">'
       +  '<span class="prod-name">'+it.n+'</span>'
-      +  '<span class="prod-buy">\uCD5C\uC800\uAC00 \u203A</span>'
+      +  '<span class="prod-buy">\uCFE0\uD321 \uBCF4\uAE30 \u203A</span>'
       +'</div>'
       +'</div>';
   }).join('');

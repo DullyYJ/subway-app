@@ -41,9 +41,6 @@ function foodDist(m) {
   m = parseInt(m, 10) || 0;
   return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : m + 'm';
 }
-function foodStars(idx) {                          // 순위로 별점 추정(인기순 정렬이라)
-  return idx < 3 ? '★★★★★' : idx < 6 ? '★★★★' : idx < 10 ? '★★★' : '★★';
-}
 function foodStr(v, n) { return typeof v === 'string' ? v.slice(0, n) : (typeof v === 'number' ? String(v).slice(0, n) : ''); }
 function foodNameOf(v) { return foodStr(v, 120).replace(/<[^>]*>/g, '').trim(); }
 function foodKey(name) { return String(name || '').replace(/\s/g, ''); }
@@ -168,7 +165,7 @@ function foodPlaceN(p, rank, pub, idxPrefix, go) {
   var n = { t: 'place', pad: [12, 0, 12, 10], rank: rank, name: p.n, sub: foodCatSimple(p.c) + addr, dist: foodDist(p.d), go: sid ? '길찾기 · 지도 →' : '위치 정보 없음', act: { a: 'call', v: 'fm.' + idxPrefix + '.' + p.i } };
   if (sid) n.act.id = sid;
   if (go && p.la != null && p.lo != null) go[idxPrefix + '.' + p.i] = [p.n, p.c, p.a, p.la, p.lo];
-  if (pub) { n.pub = true; n.badge = '공공데이터'; } else n.stars = foodStars(Number(rank) - 1);
+  if (pub) { n.pub = true; n.badge = '공공데이터'; }          // 별점은 싣지 않는다(2026-11-05) — 예전엔 목록 순서로 별 개수를 지어냈다. 실제 평점 자료가 없다
   return n;
 }
 
@@ -201,7 +198,7 @@ function foodScreenOf(f, all, allP) {
     else body.push(foodMsgN('해당 카테고리 음식점이 없습니다.'));
   } else {
     // s355(YJ: "현위치 기준 가장 가까운 것부터 차례대로"): 서버 가게와 공공데이터를 한 줄로 합쳐 거리순(가까운 것 먼저 · 거리를 모르면 맨 뒤 · 같으면 서버 가게 먼저)으로 보인다.
-    //   서버 가게는 순위 번호 · 별점, 공공데이터는 '공공데이터' 딱지(번호 없음) — 둘이 섞여도 어느 쪽인지 알 수 있다.
+    //   서버 가게는 순위 번호(목록 순서일 뿐 평점이 아님), 공공데이터는 '공공데이터' 딱지(번호 없음) — 둘이 섞여도 어느 쪽인지 알 수 있다.
     var mix = [], k, n = 0;
     cur.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: false, o: j }); });
     pub.slice(0, FOOD_MAX_SHOW).forEach(function (p, j) { mix.push({ p: p, pub: true, o: FOOD_MAX_SHOW + j }); });
@@ -418,4 +415,4 @@ function foodPanel(f) {
   return out;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { foodKakaoPick: foodKakaoPick, foodKakaoLinks: foodKakaoLinks, foodKakaoQuery: foodKakaoQuery, foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodStars: foodStars, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, foodPanel: foodPanel, foodDecode6: foodDecode6, FOOD_CHIPS: FOOD_CHIPS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { foodKakaoPick: foodKakaoPick, foodKakaoLinks: foodKakaoLinks, foodKakaoQuery: foodKakaoQuery, foodScreen: foodScreen, foodScreens: foodScreens, foodFacts: foodFacts, foodKind: foodKind, foodCatSimple: foodCatSimple, foodDist: foodDist, foodList: foodList, foodResolve: foodResolve, foodHav: foodHav, foodRowsServer: foodRowsServer, foodRowsPublic: foodRowsPublic, foodNavUrls: foodNavUrls, foodPanel: foodPanel, foodDecode6: foodDecode6, FOOD_CHIPS: FOOD_CHIPS };

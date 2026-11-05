@@ -1285,7 +1285,7 @@ public final class ScreenCore {
         public ScreenCore.Item[] subs; public String ak = ""; public int ams; public float[] aez; public long sq; public float gap;   // K_ROWANIM: 조각 네 개(A·B·C·O)와 전환 연출 값
         public boolean mq; public float mqW, mqVis;  // 흐르는 글(넘칠 때만 mq): 글 전체 폭 · 보이는 폭
         public float unW;                           // 말풍선: 안 읽음 '1' 이 차지하는 폭(시각 앞)
-        public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 최저가 글자 자리
+        public float labelW, badgeW, tagX, tagW;    // 칩: 라벨·뱃지 폭 · 카드: 오른쪽 태그(쿠팡 보기) 글자 자리
         public float ix, iy, iw, ih;                // 카드 그림 자리
         public String go = "", dist = "", stars = "", rank = "";           // 장소 카드: 길찾기 글 · 거리 · 별점 · 순위
         public boolean pub, swp;

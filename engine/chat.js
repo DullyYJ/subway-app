@@ -11,7 +11,7 @@
 //        cap   = 앱이 그릴 수 있는 화면 규격 수준(6 이상이어야 만든다)
 //        facts = { sel: 'all'|노선이름 · mine: [내가 탄 노선…](많이 탄 순, 지금 경로 노선 먼저) · lc: { 노선: '#rrggbb' }(칩 색) · st: 'ready'|'loading'|'fail' ·
 //                  tzo: 이 기기의 시간대(분, Date.getTimezoneOffset) · me: 내 아이디 · hid: [내가 신고해 숨긴 글번호…] }
-//        data  = { g: [[글쓴이, 글, 시각(ms), 내것(0|1), 노선]…](전체 방) · r: [[번호, 시각, 글쓴이, 글, 종류('delay'|'crowd'|'')]…](노선 방) ·
+//        data  = { g: [[글쓴이, 글, 시각(ms), 내것(0|1), 노선, 글 id(선택 — 있으면 신고 버튼)]…](전체 방) · r: [[번호, 시각, 글쓴이, 글, 종류('delay'|'crowd'|'')]…](노선 방) ·
 //                  off: 이 노선의 공식 공지 { text, title, ts, estimated, suspect } | null · offOk: 공지 조회가 됐나(0|1) · offAt: 조회 시각 · al: { reporters, stations:[{stn,n}] } | null }
 // 출력  { ok, v:1, screen:'chat', rev, cover:'tab', anchor:'bottom', head:[chips, text?, box?, box?], body:[msg…|text], foot:[inbar], info:{ sel, n } }
 //        행동 이름: ch.send 보내기 · ch.x.<번호> 노선 방 글 신고(번호 = 앱이 보낸 r 배열의 원래 위치 · act.id = 그 글의 고유 id — 새 앱은 id 를 먼저 쓴다) · 칩은 {a:'cat', v:노선|'all'}
@@ -175,10 +175,11 @@ function chtAlert(al) {
 function chtMsgG(a, f) {
   if (!Array.isArray(a)) return null;
   var text = chtStr(a[1], 400).trim();
-  if (!text) return null;
+  var gid = chtStr(a[5], 40);                                                   // 2026-11-05: 전체 방 줄에도 글 고유 id(앱이 index 5 로 실어 줌) — 신고(Play UGC 정책)에 쓴다
+  if (!text || (gid && f.hid[gid])) return null;
   var line = chtStr(a[4], 20), ts = Number(a[2]) || 0, mine = a[3] === 1 || a[3] === true;
   var n = { t: 'msg', pad: [12, 0, 12, 10], s: text, time: chtTime(ts, f.tzo) };
-  if (mine) n.mine = true; else n.nick = chtLineNick(line, chtStr(a[0], 40) || '익명');           // 전체 방: 아이디 앞의 (호선) 표기는 없앴다(YJ 10-29) — 아이디가 호선마다 달라 구분된다
+  if (mine) n.mine = true; else { n.nick = chtLineNick(line, chtStr(a[0], 40) || '익명'); if (gid) { n.go = '신고'; n.act = { a: 'call', v: 'ch.x.g', id: gid }; } }           // 전체 방: 아이디 앞의 (호선) 표기는 없앴다(YJ 10-29) — 아이디가 호선마다 달라 구분된다
   return { ts: ts, node: n };
 }
 function chtMsgR(a, i, f) {
