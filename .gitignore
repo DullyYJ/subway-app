@@ -1,6 +1,7 @@
 node_modules/
 android/
-ios/
+# ios/ 는 예전 캐패시터 생성물이었지만 지금은 직접 만드는 iOS 앱 폴더(s446) — 생성물만 무시한다
+!/ios/
 .DS_Store
 dist/
 

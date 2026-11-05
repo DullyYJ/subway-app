@@ -1,0 +1,37 @@
+# XcodeGen 설정 — `brew install xcodegen` 후 이 폴더에서 `xcodegen` 을 실행하면 Gildongmu.xcodeproj 가 만들어진다(프로젝트 파일은 저장소에 넣지 않는다).
+name: Gildongmu
+options:
+  bundleIdPrefix: com.dullyyj
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""          # Xcode > Signing & Capabilities 에서 본인 팀을 고른다
+targets:
+  Gildongmu:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: 길동무
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocationWhenInUseUsageDescription: 내 주변 정류장·지하철역과 경로 안내에 현재 위치를 사용해요.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dullyyj.subway.ios
+        TARGETED_DEVICE_FAMILY: "1"
+  GildongmuTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: Gildongmu
