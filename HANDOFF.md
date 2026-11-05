@@ -3985,3 +3985,8 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **키즈**: 서버에 이미 있는 `mx`(하루·항목별 횟수: reg·pair·act_c·act_p·tot_*·sub)를 그대로 읽는다. 변경 없음. 키즈는 월간 방문(MAU)을 따로 세지 않는다.
 - **보드**: Cloudflare 커넥터로 위 표들을 열 때마다 읽는다(`kind: call`, 집계 SQL 만). 개인 행(위치·경로·기기 id)은 읽는 질의가 없다.
 - 워커 번들 `route-v2-2026-11-05s444`(재배포 필요; 설정 문구 변경분). 시험: settings_engine 295 · chat_engine 124 · food 210 · shop 369 · board 96 · shell_native 130.
+
+## s445 (2026-11-06): 키즈 연동 구독 잠금 (부모 앱)
+- `KidsHub.java`: 서버(키즈 워커)가 구독을 켰는데(bg) 이 폰이 구독자(sb)가 아니면 설정의 '길동무 키즈 연결' 줄을 `LOCK_ROW`(눌리지 않는 안내 + [구독하기])로 바꾼다. [구독하기]=`sub.open` → 서버가 구독 팝업을 보내고 `sub.buy`/`sub.restore` 는 기존 BillingGate 그대로. 구독이 확인되면 `refreshLink(true)` 로 줄이 풀린다.
+- 아직 키즈 서버에 등록하지 않은 폰은 공개 `GET /bill`(10분 간격)만 묻는다 — 기기 정보를 보내지 않는다.
+- 구독이 꺼져 있으면(BILLING_MODE 기본 off) 아무것도 달라지지 않는다. 시험 `test/shell_native.test.js` s445. **기기 미확인 · APK 새 빌드 필요.** 서버 변경은 gildongmu-kids HANDOFF s445.

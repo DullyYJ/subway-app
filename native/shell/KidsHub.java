@@ -50,11 +50,14 @@ import java.util.regex.Pattern;
  */
 public final class KidsHub {
     static final String BASE = "https://gildongmu-kids.phg0643.workers.dev";
-    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab", K_GD = "kid.gd", K_WEAR = "kid.wear";
+    private static final String K_ID = "kid.id", K_SEC = "kid.sec", K_REG = "kid.reg", K_NODES = "kid.nodes", K_START = "kid.start", K_HUB = "kid.hub", K_CID = "kid.cid", K_FAM = "kid.fam", K_SC = "kid.sc.", K_MODE = "kid.mode", K_TABX = "kid.tab", K_GD = "kid.gd", K_WEAR = "kid.wear", K_BG = "kid.bg", K_SB = "kid.sb";
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
     private static final String UNLINKED_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,6,16,6],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"navrow\",\"title\":\"길동무 키즈 연결\",\"sub\":\"자녀 폰의 QR이나 시크릿 키로 연결해요\",\"act\":{\"a\":\"call\",\"v\":\"kl.open\"},\"size\":14,\"top\":true}]}]";
+    /** s445: 연동 자체가 구독 — 구독이 켜져 있는데 구독자가 아니면 '연결' 줄 대신 눌리지 않는 안내 + [구독하기]. 눌리는 것은 구독 화면(sub.open)뿐이다. */
+    private static final String LOCK_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,10,16,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":14,\"color\":\"sub\",\"bold\":true,\"pad\":[0,0,0,2]},{\"t\":\"text\",\"s\":\"길동무를 구독하면 자녀와 연결할 수 있어요 · 처음 14일 무료\",\"size\":11,\"color\":\"sub\",\"pad\":[0,0,0,8]},{\"t\":\"row\",\"gap\":8,\"pad\":[0,0,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"구독하기\",\"act\":{\"a\":\"call\",\"v\":\"sub.open\"},\"h\":38,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]}]";
+    private long lastBill = 0L;
 
     /** 연결 전에 '길동무 키즈 연결'을 처음 누를 때 서버(등록 + 화면 요청 두 번의 통신)를 기다리지 않고 바로 띄우는 기본 화면 — 서버 linkSheet(연결된 자녀 없음 · 내 이름 비어 있음)와 같은 모양이고, 서버 답이 오면 그것으로 바뀐다. */
     private static final String LINK_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidlink\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":15,\"color\":\"text\",\"pad\":[16,14,16,2],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀 폰의 길동무 키즈 설정에서 QR 이나 시크릿 키를 만들어 주세요(10분 동안 쓸 수 있어요).\",\"size\":11,\"color\":\"sub\",\"pad\":[16,0,16,6]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"내 이름 (자녀에게 보여요)\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"kpn\",\"hint\":\"예: 엄마 · 아빠\",\"value\":\"\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"이름 저장\",\"act\":{\"a\":\"call\",\"v\":\"kl.pname\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"새 자녀 연결\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"klc\",\"hint\":\"시크릿 키 입력 (XXXXX-XXXXX)\",\"maxlen\":12,\"h\":42,\"watch\":true},{\"t\":\"field\",\"key\":\"kln\",\"hint\":\"자녀 이름 (선택)\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"QR 찍기\",\"act\":{\"a\":\"call\",\"v\":\"kl.scan\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"},{\"t\":\"button\",\"s\":\"키로 연결\",\"act\":{\"a\":\"call\",\"v\":\"kl.join\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,14],\"kids\":[{\"t\":\"button\",\"s\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"kl.close\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"1afbxw9\"}";
@@ -237,7 +240,11 @@ public final class KidsHub {
     /** 앱을 켤 때 키즈 화면으로 시작할지 — 연결되어 있고 설정이 켜졌을 때만. */
     public boolean wantStart() { return linked && ("1".equals(store.get(K_START, "0")) || "1".equals(store.get(K_MODE, "0"))); }
 
+    /** 구독이 켜져 있고(서버가 알려 준 값) 이 부모가 구독자가 아니면 참 — 연결 줄이 잠긴다. 구독이 꺼져 있으면(기본) 늘 거짓. */
+    private boolean locked() { return "1".equals(store.get(K_BG, "0")) && !"1".equals(store.get(K_SB, "0")); }
+
     private String extraJson() {
+        if (locked()) return LOCK_ROW;
         if (!linked) return UNLINKED_ROW;
         String n = store.get(K_NODES, "");
         return n.length() > 2 ? n : UNLINKED_ROW;
@@ -393,10 +400,30 @@ public final class KidsHub {
         gotWear(w);
     }
 
+    // ───────── 구독이 켜져 있는지(공개 · 기기 정보 없음) — 아직 서버에 등록하지 않은 기기용 ─────────
+    private void checkBill(boolean force) {
+        long now = SystemClock.elapsedRealtime();
+        if (!force && lastBill != 0L && now - lastBill < 600000L) return;
+        lastBill = now;
+        io.execute(new Runnable() { @Override public void run() {
+            String r = rawCall("GET", "/bill", null, "", "", 8000, false);
+            if (r == null) return;
+            try {
+                JSONObject o = new JSONObject(r);
+                if (!o.optBoolean("ok", false)) return;
+                String bg = o.optInt("g", 0) == 1 ? "1" : "0";
+                if (bg.equals(store.get(K_BG, "0")) && "0".equals(store.get(K_SB, "0"))) return;
+                store.put(K_BG, bg); store.put(K_SB, "0");                       // 등록 전 기기는 구독자일 수 없다
+                ScreenCore.settingsExtra = extraJson();
+                main.post(new Runnable() { @Override public void run() { if (settingsChanged != null) settingsChanged.run(); } });
+            } catch (Throwable ignored) { }
+        } });
+    }
+
     // ───────── 연결 상태 새로 받기(앱을 켤 때 · 연결·해제 뒤) ─────────
     public void refreshLink(boolean force) {
         long now = SystemClock.elapsedRealtime();
-        if (store.get(K_ID, "").length() == 0) return;                          // 한 번도 연결을 시도한 적 없으면 통신하지 않는다
+        if (store.get(K_ID, "").length() == 0) { checkBill(force); return; }          // 한 번도 연결을 시도한 적 없으면 기기 정보는 보내지 않는다 — 구독이 켜져 있는지(공개 /bill)만 묻는다
         if (!force && now - lastRefresh < 20000L) return;
         lastRefresh = now;
         io.execute(new Runnable() { @Override public void run() {
@@ -408,7 +435,11 @@ public final class KidsHub {
                 JSONArray nodes = o.optJSONArray("nodes");
                 boolean nl = nodes != null && nodes.length() > 0;
                 String nj = nl ? nodes.toString() : "";
-                boolean changed = nl != linked || !nj.equals(store.get(K_NODES, "")) || o.optInt("start", 0) != ("1".equals(store.get(K_START, "0")) ? 1 : 0);
+                final String bg = o.optInt("bg", 0) == 1 ? "1" : "0", sb = o.optInt("sb", 0) == 1 ? "1" : "0";
+                boolean lockDiff = !bg.equals(store.get(K_BG, "0")) || !sb.equals(store.get(K_SB, "0"));
+                store.put(K_BG, bg); store.put(K_SB, sb);
+                if (lockDiff) { memScr.remove("kl.open"); memJs.remove("kl.open"); store.put(K_SC + "kl.open", ""); }          // 잠금이 바뀌면 미리 받아 둔 연결 팝업은 버린다(구독 화면이 남지 않게)
+                boolean changed = lockDiff || nl != linked || !nj.equals(store.get(K_NODES, "")) || o.optInt("start", 0) != ("1".equals(store.get(K_START, "0")) ? 1 : 0);
                 store.put(K_NODES, nj);
                 store.put(K_START, o.optInt("start", 0) == 1 ? "1" : "0");
                 JSONObject tj = o.optJSONObject("tab");
@@ -625,7 +656,7 @@ public final class KidsHub {
     /** 이미 한 번 연결을 시도한(등록된) 기기만, 5분에 한 번 뒤 스레드에서 팝업 화면을 미리 받는다. 처음 쓰는 사람의 서버 등록은 첫 누름 때 한다(설정만 열어 본 사람까지 등록하지 않는다). */
     public void warm() {
         long now = SystemClock.elapsedRealtime();
-        if (!alive || !"1".equals(store.get(K_REG, "0")) || now - lastWarm < 300000L) return;
+        if (!alive || !"1".equals(store.get(K_REG, "0")) || now - lastWarm < 300000L || locked()) return;
         lastWarm = now;
         final String[] vs = linked ? new String[] { "kl.open", "kq.open", "kq.open:p", "kc.open" } : new String[] { "kl.open" };          // kq.open:p = 미션 팝업의 부모님 미션 쪽
         io.execute(new Runnable() { @Override public void run() {
@@ -703,7 +734,7 @@ public final class KidsHub {
                 final JSONObject s = o.optJSONObject("screen");
                 final String js = s == null ? "" : fixQ(s.toString());
                 final ScreenCore.Screen sc = js.length() == 0 ? null : ScreenCore.load(js);
-                if (opener && js.length() > 0 && js.length() < 150000 && sc != null) { store.put(K_SC + ckey, js); memScr.put(ckey, sc); memJs.put(ckey, js); }
+                if (opener && js.length() > 0 && js.length() < 150000 && sc != null && !"kidpay".equals(sc.id)) { store.put(K_SC + ckey, js); memScr.put(ckey, sc); memJs.put(ckey, js); }
                 if (sc != null && "kidquest".equals(sc.id) && js.length() < 150000) { String qk = "p".equals(sc.swK) ? "kq.open:p" : "kq.open"; store.put(K_SC + qk, js); memScr.put(qk, sc); memJs.put(qk, js); }          // 미션 팝업은 어느 쪽 답이든 그 쪽 기억을 새로 고친다
                 final String notice = o.optString("notice", ""), clear = o.optString("clear", ""), kind = o.optString("sheet", "");
                 final boolean close = o.optBoolean("close", false), hub = o.optInt("hub", 0) == 1;
@@ -1003,7 +1034,7 @@ public final class KidsHub {
                         okSub = r != null && new JSONObject(r).optInt("sub", 0) == 1;
                     } catch (Throwable e) { okSub = false; }
                     final boolean fin = okSub;
-                    main.post(new Runnable() { @Override public void run() { if (fin) { note("구독이 시작됐어요"); fetchHub(); } else note("구독을 확인하지 못했어요. 잠시 뒤 '구매 복원'을 눌러 주세요"); } });
+                    main.post(new Runnable() { @Override public void run() { if (fin) { note("구독이 시작됐어요"); closeSheet(false); fetchHub(); refreshLink(true); } else note("구독을 확인하지 못했어요. 잠시 뒤 '구매 복원'을 눌러 주세요"); } });
                 } });
             }
         });

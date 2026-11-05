@@ -1239,6 +1239,18 @@ function findAndroidJar() {
     assert.ok(/"open"\.equals\(a\.a\)/.test(kh) && /ShellCore\.linkOk\(a\.url\)/.test(kh) && /ACTION_VIEW/.test(kh), '열기 동작은 linkOk(https) 를 통과한 주소만');
     assert.ok(kh.includes('/legal/privacy') && kh.includes('/legal/terms'), '시드 팝업에 처리방침 · 약관 링크가 있다');
   });
+  await t('s445: 연동 자체가 구독 — 구독이 켜져 있고 구독자가 아니면 키즈 연결 줄이 눌리지 않고 [구독하기]만 눌린다', async () => {
+    const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    const lock = (kh.match(/LOCK_ROW = "(.*)";/) || [])[1] || '';
+    const row = JSON.parse(lock.replace(/\\"/g, '"'));
+    const acts = JSON.stringify(row).match(/"v":"[a-z.]+"/g) || [];
+    assert.deepStrictEqual(acts, ['"v":"sub.open"'], '잠긴 줄에서 눌리는 것은 sub.open 하나뿐(kl.open 이 없다)');
+    assert.ok(/private boolean locked\(\) \{ return "1"\.equals\(store\.get\(K_BG, "0"\)\) && !"1"\.equals\(store\.get\(K_SB, "0"\)\); \}/.test(kh), '잠금 = 서버가 구독이 켜졌다고(bg) 하고 구독자가 아닐 때(sb)만 — 기본(꺼짐)은 잠기지 않는다');
+    assert.ok(/if \(locked\(\)\) return LOCK_ROW;/.test(kh), '설정에 끼우는 줄은 잠겼으면 LOCK_ROW');
+    assert.ok(/rawCall\("GET", "\/bill", null, "", "", 8000, false\)/.test(kh), '등록 전 기기는 공개 /bill 만 묻는다(기기 정보를 보내지 않는다)');
+    assert.ok(/"bg", 0\) == 1/.test(kh) && /"sb", 0\) == 1/.test(kh), '등록된 기기는 /p/setrow 의 bg · sb 로 안다');
+    assert.ok(/!"kidpay"\.equals\(sc\.id\)/.test(kh), '구독 화면은 연결 팝업 기억에 남기지 않는다');
+  });
   await t('s431: 구독 결제 — 앱은 결제 창과 영수증 전달만(서버가 구글에 확인) · 단추를 눌렀을 때에야 연결 · 라이브러리 8 이상', async () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), bg = fs.readFileSync(N('BillingGate.java'), 'utf8');
     const gr = fs.readFileSync(path.join(__dirname, '..', 'shell-android', 'app', 'build.gradle'), 'utf8');
