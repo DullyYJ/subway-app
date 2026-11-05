@@ -894,8 +894,13 @@ function findAndroidJar() {
   });
   await t('s384: 키즈 가족대화방은 카톡처럼 전체 화면 — 창을 화면에 꽉 채워(키보드가 올라오면 창이 줄어 입력줄이 키보드 바로 위에 남는다) · 돌아가기 줄 · 안쪽 여백은 상태줄/키보드만큼', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8');
-    assert.ok(/float hh = bottom \? sh : Math\.min\(dp, sh \* dg\.maxh\)/.test(k) && /if \(bottom\) w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(k) && !/sh \* 0\.72f/.test(k), '대화방 창이 화면 전체(옛 72% 높이는 키보드에 입력줄이 가렸다)');
+    assert.ok(/float hh = bottom \? sh : fixedH \? fixH : Math\.min\(dp, sh \* dg\.maxh\)/.test(k) && /if \(bottom\) w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(k) && !/sh \* 0\.72f/.test(k), '대화방 창이 화면 전체(옛 72% 높이는 키보드에 입력줄이 가렸다)');
     assert.ok(/SOFT_INPUT_ADJUST_RESIZE/.test(k) && /if \(!bottom\) \{ w\.addFlags\(WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(k) && /Type\.systemBars\(\) \| android\.view\.WindowInsets\.Type\.ime\(\)/.test(k) && /closeSheet\(false\); \} \}\);\s*col\.addView\(back/.test(k), '키보드에 맞춰 줄어듦 · 흐림 없음 · 키보드/상태줄 여백 · 돌아가기');
+  });
+  await t('s440: 미션 창은 미션이 몇 개든 같은 크기(화면 높이의 66%) — 창 높이는 내용을 따라가지 않고, 제목·알약은 고정 · 목록은 안에서 위아래로 민다', () => {
+    const k = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/QUEST_H = 0\.66f/.test(k) && /final boolean fixedH = "quest"\.equals\(kind\)/.test(k) && /final float fixH = sh \* QUEST_H/.test(k), '미션 창만 고정 높이');
+    assert.ok(/fixedH \? fixH : 100f/.test(k), '처음 창 높이도 고정 높이로(뜨면서 크기가 바뀌지 않게)');
   });
   await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 키즈 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');

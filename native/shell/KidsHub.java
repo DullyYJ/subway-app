@@ -112,6 +112,7 @@ public final class KidsHub {
         } });
     }
     // 떠 있는 팝업(장소 · 대화 · 미션 · 응원문구 · 연결)
+    private static final float QUEST_H = 0.66f;                           // 미션 창 높이(화면 높이 비율) — 미션이 하나여도 같은 크기
     private Dialog sheetD;
     private ScreenView sheetV;
     private String sheetKind = "", sheetJson = "";
@@ -863,6 +864,8 @@ public final class KidsHub {
         final DisplayMetrics dm = act.getResources().getDisplayMetrics();
         final float sw = dm.widthPixels / dpr, sh = dm.heightPixels / dpr;
         final float maxW = bottom ? sw : Math.max(120f, Math.min(Math.max(dg.w, 460f), sw - 28f));      // 폭은 내용과 상관없이 늘 같게(화면 폭 - 양쪽 14dp, 최대 460dp)
+        final boolean fixedH = "quest".equals(kind);                          // 미션 창: 미션이 몇 개든 창 크기는 늘 같게(제목·알약은 위에 고정, 아래 목록만 위아래로 민다)
+        final float fixH = sh * QUEST_H;
         final Dialog d = new Dialog(act, android.R.style.Theme_Material_Light_Dialog_NoActionBar) {
             @Override public void cancel() { if (bottom) closeSheet(false); else super.cancel(); }
         };
@@ -874,7 +877,7 @@ public final class KidsHub {
                 main.post(new Runnable() { @Override public void run() {
                     try {
                         if (sheetV != v || dp <= 0f) return;
-                        float hh = bottom ? sh : Math.min(dp, sh * dg.maxh);
+                        float hh = bottom ? sh : fixedH ? fixH : Math.min(dp, sh * dg.maxh);
                         WindowManager.LayoutParams lp = w.getAttributes();
                         int nw = bottom ? ViewGroup.LayoutParams.MATCH_PARENT : Math.round(maxW * dpr), nh = bottom ? ViewGroup.LayoutParams.MATCH_PARENT : Math.round(hh * dpr);
                         if (shown[0] && lp.width == nw && lp.height == nh) { revealSheet(box, shown, bottom, hh); return; }          // s372: 같은 크기면 창을 다시 손대지 않는다(글을 치는 중 새 화면이 와도 키보드가 닫히지 않게)
@@ -924,7 +927,7 @@ public final class KidsHub {
         } else box.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         d.setContentView(box);
         d.setCancelable(true); d.setCanceledOnTouchOutside(true);
-        if (bottom) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); else w.setLayout(Math.round(maxW * dpr), Math.round(100f * dpr));
+        if (bottom) w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT); else w.setLayout(Math.round(maxW * dpr), Math.round((fixedH ? fixH : 100f) * dpr));
         w.setGravity(bottom ? Gravity.BOTTOM : Gravity.CENTER);
         w.setBackgroundDrawable(new ColorDrawable(0x00000000));
         w.setWindowAnimations(0);
