@@ -3990,3 +3990,7 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - `KidsHub.java`: 서버(키즈 워커)가 구독을 켰는데(bg) 이 폰이 구독자(sb)가 아니면 설정의 '길동무 키즈 연결' 줄을 `LOCK_ROW`(눌리지 않는 안내 + [구독하기])로 바꾼다. [구독하기]=`sub.open` → 서버가 구독 팝업을 보내고 `sub.buy`/`sub.restore` 는 기존 BillingGate 그대로. 구독이 확인되면 `refreshLink(true)` 로 줄이 풀린다.
 - 아직 키즈 서버에 등록하지 않은 폰은 공개 `GET /bill`(10분 간격)만 묻는다 — 기기 정보를 보내지 않는다.
 - 구독이 꺼져 있으면(BILLING_MODE 기본 off) 아무것도 달라지지 않는다. 시험 `test/shell_native.test.js` s445. **기기 미확인 · APK 새 빌드 필요.** 서버 변경은 gildongmu-kids HANDOFF s445.
+
+## s446 (2026-11-06): iOS 시작 — `ios/` 폴더(브랜치 `ios-shell`)
+- YJ: "iOS 도 똑같이 만들어줘 · 폴더는 안드로이드와 구분 · iOS 테스트하면서 동시 진행". 안드로이드 코드는 건드리지 않고 `ios/` 에만 둔다. 설명 · 맥에서 여는 법 · 단계 계획은 `ios/README.md`.
+- 1단계: XcodeGen 프로젝트(`ios/Gildongmu/project.yml`) · SwiftUI 서버 화면 렌더러 · 응원 문구/탭 막대 · 화면 탐색기. **리눅스에서 컴파일하지 못했다(Swift 도구 없음)** — 맥에서 처음 빌드할 때의 오류를 받아 고친다.
