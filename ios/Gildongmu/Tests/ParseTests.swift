@@ -25,4 +25,13 @@ final class ParseTests: XCTestCase {
         XCTAssertFalse(SVGPath.path("M1.5.5l-.5 1").isEmpty)
     }
     func testActionSet() { let a = Action.set("k", true); XCTAssertEqual(a.a, "set"); XCTAssertEqual(a.on, true) }
+
+    /// 안드로이드 wrap 과 같은 규칙: 띄어쓰기에서 끊고, 칸이 넉넉하면 한 줄.
+    func testWrapLikeAndroid() {
+        XCTAssertEqual(Typo.wrap("가나다 라마바", maxW: 1000, size: 12, bold: false).count, 1)
+        XCTAssertGreaterThanOrEqual(Typo.wrap("가나다 라마바 사아자 차카타 파하", maxW: 60, size: 12, bold: false).count, 2)
+        XCTAssertEqual(Typo.wrap("", maxW: 100, size: 12, bold: false).count, 0)
+        XCTAssertEqual(Typo.wrap("가\n나", maxW: 100, size: 12, bold: false), ["가", "나"])
+        XCTAssertEqual(Typo.wrap("가나다 라마바 사아자 차카타", maxW: 40, size: 12, bold: false, maxLines: 2).count, 2)
+    }
 }

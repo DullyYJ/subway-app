@@ -14,7 +14,7 @@ struct RootView: View {
             ZStack(alignment: .bottom) {
                 TabContent(tab: host.tab, pal: pal)
                 if let t = host.toast {
-                    Text(t).font(.footnote).foregroundColor(.white).padding(10).background(Color.black.opacity(0.8)).cornerRadius(10).padding(.bottom, 12)
+                    Text(t).font(Typo.font(12)).foregroundColor(.white).padding(10).background(Color.black.opacity(0.8)).cornerRadius(10).padding(.bottom, 12)
                 }
             }
             // 아래 탭 막대(서버 /screen/tabs)

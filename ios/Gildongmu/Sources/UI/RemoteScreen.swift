@@ -19,7 +19,7 @@ struct ScreenBody: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(screen.head) { NodeView(node: $0, pal: pal) }
+                ForEach(screen.head) { NodeView(node: $0, pal: pal).environment(\.inHead, true) }
                 ForEach(screen.body) { NodeView(node: $0, pal: pal) }
             }.padding(.bottom, 24)
         }
@@ -42,7 +42,7 @@ struct RemoteScreen: View {
             else { (pal.color("bg") ?? Color(.systemBackground)).ignoresSafeArea() }
             if loader.loading && loader.screen == nil { ProgressView() }
             if let e = loader.error {
-                VStack { Spacer(); Text(e).font(.footnote).foregroundColor(.white).padding(10).background(Color.red.opacity(0.85)).cornerRadius(8).padding() }
+                VStack { Spacer(); Text(e).font(Typo.font(12)).foregroundColor(.white).padding(10).background(Color.red.opacity(0.85)).cornerRadius(8).padding() }
             }
         }
         .task(id: key) { await loader.load(path: path, method: method, body: payload) }

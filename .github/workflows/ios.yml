@@ -20,6 +20,11 @@ jobs:
         working-directory: ios/Gildongmu
     steps:
       - uses: actions/checkout@v4
+      - name: 글꼴 만들기 (안드로이드와 같은 Noto Sans KR)
+        working-directory: ${{ github.workspace }}
+        run: |
+          pip3 install --quiet --break-system-packages fonttools || pip3 install --quiet fonttools
+          python3 ios/scripts/make_fonts.py
       - name: XcodeGen 설치 · 프로젝트 생성
         run: |
           brew install xcodegen

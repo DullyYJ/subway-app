@@ -17,11 +17,14 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: Resources/Fonts
+        optional: true
     info:
       path: Resources/Info.plist
       properties:
         CFBundleDisplayName: 길동무
         UILaunchScreen: {}
+        UIAppFonts: [NotoSansKR-Regular.ttf, NotoSansKR-Bold.ttf]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         NSLocationWhenInUseUsageDescription: 내 주변 정류장·지하철역과 경로 안내에 현재 위치를 사용해요.
         ITSAppUsesNonExemptEncryption: false

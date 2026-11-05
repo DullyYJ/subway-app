@@ -8,7 +8,7 @@ struct DevExplorer: View {
     @State private var method = "GET"
     @State private var bodyText = "{\"cap\":\(Servers.cap)}"
     @State private var go = 0
-    @State private var show = true
+    @State private var show = false
     init(pal: Palette, title: String, start: String) { self.pal = pal; self.title = title; _path = State(initialValue: start) }
 
     private let presets: [(String, String, String, String)] = [
