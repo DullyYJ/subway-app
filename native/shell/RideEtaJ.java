@@ -31,13 +31,13 @@ final class RideEtaJ {
         driftPerStop = 0.12, driftBiasPerStop = 0.07,
         priorDelayMin = 0.5, priorNarrowW = 0.5, priorNarrowSd = 3, priorWideSd = 8, softMin = 0.2, quantile = 0.1,
         snapBackMin = 2, snapLateMaxMin = 1.5, snapCandMaxMin = 6, snapEps = 0.5, snapOldW = 0.4, staleShiftMin = 40,
-        stopDwellSec = 18, markerDwellSec = 18, arriveEarlySec = 5, posSegCount = 80,
+        stopDwellSec = 18, markerDwellSec = 18, arriveEarlySec = 2, posSegCount = 80,
         overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
         boardMaxWaitMin = 30, planSecMin = 20, planSecMax = 30, holdAfterStops = 1, holdGraceSec = 60;
     static final boolean burstRamp = true, arriveEarlyAfterZero = true;
     /** s379 (engine nrtEarlySec): 실시간 위치가 없는 지하철 노선(예: 인천1호선)의 '가장 뒤 통과 증거보다 뒤' 역 도착을 이만큼(초) 당겨 보인다. */
-    static final double nrtEarlySec = 10;
+    static final double nrtEarlySec = 7;
     private static final java.util.Set<String> RT_LINES = new java.util.HashSet<String>(java.util.Arrays.asList("1호선", "2호선", "3호선", "4호선", "5호선", "6호선", "7호선", "8호선", "9호선", "경의중앙선", "수인분당선", "공항철도", "경춘선", "신분당선", "서해선", "경강선", "신림선", "우이신설선"));
     /** s379: 서울 실시간 도착정보가 있는 노선인가(engine RE_RT_LINES · ride-standby RS_SUBWAY_ID 와 같은 표) */
     static boolean rtLine(String ln) { return RT_LINES.contains(ln) || RT_LINES.contains(ln.replaceAll("호선$", "") + "호선"); }

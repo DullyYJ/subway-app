@@ -782,6 +782,8 @@ final class RideStandbyJ {
                 if (dl0 != null && key.equals(dl0.get("key")) && dl0.get("to") != null && (int) num(dl0.get("to")) == dwf && fin(dl0.get("arr"))) { tt = Math.max(tt, num(dl0.get("arr"))); st.remove("dly"); }          // s323
                 boolean gone = fin(prevP) && prevP > dwf + (dwG ? 0.12 : 0.002);
                 dw = obj("key", key, "i", (double) dwf, "s", gone ? 0.0 : (dwG ? now : Math.min(now, tt)), "g", dwG ? 1.0 : 0.0); st.put("dw", dw);
+                if (gone) notes.add("정차 못 봄 " + dwf + "번 — 처음 본 걸음에 마커가 이미 " + ns(round((prevP - dwf) * 100)) + "% 떠난 뒤(" + (dwG ? "GPS 확정" : "시각표") + ")");          // s442: 동작은 그대로, 못 보인 까닭만 기록
+                else if (!dwG && now - tt > DWELL_MS) notes.add("정차 못 봄 " + dwf + "번 — 시각표 도착이 " + ns(round((now - tt) / 1000)) + "초 전인데 이제 처음 봄");
             } else if (dwG && num(dw.get("g")) == 0) dw.put("g", 1.0);
             // s322 — engine/ride-standby.js 와 같은 '문 열림(역 근처 GPS) 동안 서 있기': 마지막으로 들어온 시각을 dw.h 에 붙잡고 끊긴 뒤 10초가 지나면 출발
             Map<String, Object> dwStop = stopOf(st, dwf); List<Object> dwTr = trailOf(st);

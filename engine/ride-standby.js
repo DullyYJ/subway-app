@@ -986,6 +986,9 @@ function rsMonoPos(st, r, now, notes) {
       var dwTt = r.etaMs && r.etaMs[dwf] != null && isFinite(+r.etaMs[dwf]) ? +r.etaMs[dwf] : now, dwGone = prevP != null && prevP > dwf + (dwG ? 0.12 : 0.002);      // GPS 확정이 시각표보다 조금(구간의 12% 안) 늦으면 그 역으로 되돌려 서게 한다 — 그보다 멀리 갔으면 서지 않는다(되돌아감 방지)
       if (st.dly && st.dly.key === key && st.dly.to === dwf && isFinite(+st.dly.arr)) { dwTt = Math.max(dwTt, +st.dly.arr); delete st.dly; }          // s323: 늦게 출발해 늦게 닿았으면 정차는 마커가 닿은 때부터
       dw = st.dw = { key: key, i: dwf, s: dwGone ? 0 : (dwG ? now : Math.min(now, dwTt)), g: dwG ? 1 : 0 };
+      // s442 (YJ: 가끔 역에 도착하자마자 다음으로 이동한다 — 원인 추적): 정차를 못 보이는 경우를 기록해 둔다(동작은 그대로). 처음 본 걸음에 이미 떠난 뒤이거나, 시각표 도착이 정차 시간(18초)보다 더 전이면 서 있을 시간이 남지 않는다.
+      if (dwGone) notes.push('정차 못 봄 ' + dwf + '번 — 처음 본 걸음에 마커가 이미 ' + Math.round((prevP - dwf) * 100) + '% 떠난 뒤(' + (dwG ? 'GPS 확정' : '시각표') + ')');
+      else if (!dwG && now - dwTt > RS_DWELL_MS) notes.push('정차 못 봄 ' + dwf + '번 — 시각표 도착이 ' + Math.round((now - dwTt) / 1000) + '초 전인데 이제 처음 봄');
     } else if (dwG && !dw.g) dw.g = 1;
     // ★ s322 (YJ: "GPS 가 잡혔다는 건 문이 열려서다 — 잡히는 동안은 계속 추적하다가 끊기면 열차가 출발했다고 판단"): 역 근처(RS_DOOR_M) 좋은 위치(정확도 RS_DOOR_ACC_M 이하)가 정차 시작 뒤에 들어오는 동안은 문이 열린 것으로 보고 마커를 세워 둔다.
     //   마지막으로 들어온 시각을 dw.h 에 붙잡고, 끊긴 뒤 RS_DOOR_LOST_MS 가 지나면 출발로 본다(dw.h 는 그대로라 그 시각이 정차 끝으로 굳어 마커가 튀지 않는다). 기존 15초 정차는 바닥(최소) — GPS 가 없으면 예전 그대로. 길게 서 있어도 RS_DOOR_MAX_MS 에서 끝낸다.

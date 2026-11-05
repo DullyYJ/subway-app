@@ -203,7 +203,7 @@ public class RideService extends Service {
     private final java.util.HashSet<String> zeroSeen = new java.util.HashSet<>();
     private void zeroDiag(String resp) {
         try {
-            if (resp == null || zeroSeen.size() >= 60 || (resp.indexOf("\"zero\"") < 0 && resp.indexOf("영점") < 0 && resp.indexOf("승차역 이동") < 0 && resp.indexOf("마커 되돌아감") < 0 && resp.indexOf("연착") < 0 && resp.indexOf("재동기") < 0 && resp.indexOf("통과") < 0 && resp.indexOf("\"reco\"") < 0)) return;
+            if (resp == null || zeroSeen.size() >= 60 || (resp.indexOf("\"zero\"") < 0 && resp.indexOf("영점") < 0 && resp.indexOf("승차역 이동") < 0 && resp.indexOf("마커 되돌아감") < 0 && resp.indexOf("정차 못 봄") < 0 && resp.indexOf("연착") < 0 && resp.indexOf("재동기") < 0 && resp.indexOf("통과") < 0 && resp.indexOf("\"reco\"") < 0)) return;
             org.json.JSONObject o = new org.json.JSONObject(resp);
             org.json.JSONObject rcj = o.optJSONObject("reco");
             if (rcj != null) {                                                   // s258: 도착 전 추천이 왜 안 떴는지 — 판정 이유(off·noeta·window·dup·recent·ok)와 남은 시간이 바뀔 때만 한 줄
@@ -222,7 +222,7 @@ public class RideService extends Service {
             for (int i = 0; ns != null && i < ns.length(); i++) {
                 String n = ns.optString(i, "");
                 if (n.indexOf("영점") >= 0 || n.indexOf("승차역 이동") >= 0 || n.indexOf("마커 되돌아감") >= 0 || n.indexOf("도착 확정") >= 0 || n.indexOf("GPS 탐색") >= 0
-                    || n.indexOf("연착") >= 0 || n.indexOf("재동기") >= 0 || n.indexOf("아직 안 닿") >= 0 || n.indexOf("통과") >= 0 || n.indexOf("지연") >= 0) {   // s258: 시간표가 갑자기 밀린 원인(연착 보정·통과 증거·재동기)도 남긴다
+                    || n.indexOf("연착") >= 0 || n.indexOf("재동기") >= 0 || n.indexOf("아직 안 닿") >= 0 || n.indexOf("통과") >= 0 || n.indexOf("지연") >= 0 || n.indexOf("정차 못 봄") >= 0) {   // s442 정차 못 봄 · s258: 시간표가 갑자기 밀린 원인(연착 보정·통과 증거·재동기)도 남긴다
                     String msg = "RIDE_NOTE " + n;
                     if (zeroSeen.add("N" + n.replaceAll("[0-9]+", "#"))) ErrLog.record(this, new IllegalStateException(msg + " @" + new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.KOREA).format(new java.util.Date())), false);
                 }

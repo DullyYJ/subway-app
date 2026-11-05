@@ -178,9 +178,9 @@ t('s379: 실시간 없는 노선은 문 열림 GPS 가 길게 잡혀도 정차�
   const fin = rideStandby({ nowMs: at(12, 56, 0), fixes: [], state: JSON.parse(JSON.stringify(st)) });
   assert.ok(fin.state.etaMs, 'etaMs'); 
 });
-t('s380: 실시간 없는 노선의 뒤 역 도착은 10초 당겨 보이고(s379 의 20초에서 10초 미룸) · 실시간 노선은 그대로', () => {
+t('s442: 실시간 없는 노선의 뒤 역 도착은 7초 당겨 보이고(s380 의 10초에서 3초 미룸) · 실시간 노선은 그대로', () => {
   const a = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState(NRT) }), b = rideStandby({ nowMs: at(12, 52, 30), fixes: [], state: mkState('1호선') });
-  for (let i = 2; i <= 5; i++) assert.strictEqual(b.state.etaMs[i] - a.state.etaMs[i], 10000, i + '번 역 10초 차이 ' + (b.state.etaMs[i] - a.state.etaMs[i]));
+  for (let i = 2; i <= 5; i++) assert.strictEqual(b.state.etaMs[i] - a.state.etaMs[i], 7000, i + '번 역 7초 차이 ' + (b.state.etaMs[i] - a.state.etaMs[i]));
   assert.strictEqual(a.state.etaMs[1], b.state.etaMs[1], '승차(영점) 역은 그대로');
 });
 t('s379: 지난 역의 시각은 이후 걸음에서 바뀌지 않는다(확정역 잠금)', () => {
@@ -190,5 +190,17 @@ t('s379: 지난 역의 시각은 이후 걸음에서 바뀌지 않는다(확정�
     for (let i = 1; i <= 5; i++) { const v = r.state.etaMs[i]; if (v != null && v <= ms) { if (seen[i] == null) seen[i] = v; assert.strictEqual(v, seen[i], i + '번 역 시각이 바뀜 ' + ms); } }
   }
   assert.ok(Object.keys(seen).length >= 3, '여러 역을 지났다');
+});
+// ★ s442 (YJ: 가끔 역에 도착하자마자 다음으로 이동한다 — 원인 추적): 정차를 못 보이는 경우는 동작은 그대로 두고 notes 에 '정차 못 봄' 으로 남긴다(폰 오류 로그 RIDE_NOTE 로 올라온다)
+t('s442: 시각표 도착이 18초보다 더 전인데 이제 처음 본 역은 notes 에 \'정차 못 봄\' 이 남고 · 제때 본 역은 남지 않는다', () => {
+  const lateNotes = [], okNotes = [];
+  let st = mkState();
+  for (let ms = at(12, 52, 5); ms <= at(12, 53, 30); ms += 5000) { const r = rideStandby({ nowMs: ms, fixes: [], state: JSON.parse(JSON.stringify(st)) }); st = r.state; (r.notes || []).forEach(n => okNotes.push(n)); }
+  assert.ok(!okNotes.some(n => /정차 못 봄/.test(n)), '5초 걸음으로 제때 본 역은 기록 없음 ' + okNotes.join('|'));
+  const st0 = mkState(); st0.eta.passes = [{ idx: 1, ms: at(12, 52, 0), src: 'gps' }];
+  const a = rideStandby({ nowMs: at(12, 53, 50), fixes: [], state: JSON.parse(JSON.stringify(st0)) });            // 12:54:00 도착 예정인 S2 직전까지 정상
+  const b = rideStandby({ nowMs: at(12, 54, 40), fixes: [], state: JSON.parse(JSON.stringify(a.state)) });        // 걸음이 40초 끊겼다가 돌아온다(도착 후 40초)
+  (b.notes || []).forEach(n => lateNotes.push(n));
+  assert.ok(lateNotes.some(n => /정차 못 봄 2번/.test(n)), '늦게 처음 본 역은 기록 ' + lateNotes.join('|') + ' from=' + b.pos.from);
 });
 console.log('ride_dwell: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

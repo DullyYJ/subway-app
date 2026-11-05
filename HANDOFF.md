@@ -3965,3 +3965,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **자바**: `RideStandbyJ.legsOf`(skipBd) · `skipAhead`(xwait 앞). 시험: `test/ride_standby.test.js` s432 3건 · `test/ride_local.test.js` s432(자바 = 서버 JS 66걸음 strict 동일) · 시나리오 `test/helpers/skip_ahead_scenario.js`.
 - **배포**: `engine/route-v2-worker.ascii.js`(`route-v2-2026-11-04s432`) 를 Cloudflare 에 붙여 넣고 새 APK. 기기 미확인.
 - **알려진 한계**: 같은 방향 가정(반대 방향 승강장은 구별 못 함) · 승차역과 내릴 역 사이 역만.
+
+## s442 (2026-11-05) — 도착 판정 3초 늦춤 · 역 도착하자마자 이동 원인 추적용 기록 (YJ)
+- 요청: "도착시간을 3초 더 늦게"(대기시간은 18초 유지) · "가끔 역에 도착하자마자 다음으로 이동하는 경우 원인 추적 및 개선".
+- 도착 3초 늦춤: `ride-eta arriveEarlySec` 5→2(영점 뒤 중간역), `nrtEarlySec` 10→7(실시간 없는 노선). 정차 `stopDwellSec/markerDwellSec/RS_DWELL_MS` 는 **18초 그대로**. 자바 쌍둥이 `RideEtaJ` 같이.
+- 원인 추적: 시뮬레이션(걸음 간격·GPS 끊김/오차/지연/일찍 도착·두 노선 유형, 960 역 시도)에서는 정차를 못 보인 경우를 재현하지 못했다(클라이언트가 받은 pos.segs 기준). 코드상 정차가 생략되는 경로는 ① 처음 본 걸음에 마커가 이미 떠난 뒤(`dwGone`, 되돌아감 방지) ② 시각표 도착이 18초보다 더 전인데 이제 처음 봄(`dw.s` 가 과거). 그래서 동작은 바꾸지 않고, 이 두 경우를 notes 에 `정차 못 봄 N번 — …` 으로 남기고 폰이 오류 로그(RIDE_NOTE)에 올리게 했다. **다음에 또 보이면 설정 → 오류 로그에서 `정차 못 봄` 줄과 시각(@HH:mm:ss)을 알려 주세요.** 그 줄의 까닭(걸음 끊김 / 영점 늦음 / 시각표 수정)으로 고칠 곳을 정한다.
+- 워커 번들 `route-v2-2026-11-05s442`(**재배포 필요**, 엔진 변경은 폰 안 엔진(자바)에도 들어가 새 APK 필요). 시험: ride_eta 102 · ride_dwell 14 · ride_standby 120 · ride_local 897 · shell_native 130.
