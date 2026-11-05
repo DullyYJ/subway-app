@@ -5185,7 +5185,7 @@ public class ShellActivity extends Activity {
         if (!home.riding()) return;
         if (RideService.running) lostN = 0;
         if (!RideService.running && (System.currentTimeMillis() < rideGraceUntil || reviveRide())) return;       // 서비스가 막 켜지는 중 · 시스템이 서비스를 내렸으면(저장본이 살아 있는 동안) 다시 켜고 기다린다 — 확정이 풀린 것처럼 지우지 않는다
-        if (!RideService.running && !("arrive".equals(RideService.endReason) || "user".equals(RideService.endReason)) && resumeLostRide()) return;       // 사용자가 끝내지도 도착하지도 않았는데 서비스가 없다 — 확정을 풀지 않고 다시 켠다
+        if (!RideService.running && !("arrive".equals(RideService.endReason) || "user".equals(RideService.endReason) || "timeout".equals(RideService.endReason)) && resumeLostRide()) return;       // 사용자가 끝내지도 도착하지도 않았는데 서비스가 없다 — 확정을 풀지 않고 다시 켠다
         if (RideService.running && RideService.liveRide.length() < 3) return;                                   // 서비스는 돌지만 첫 값이 아직 안 올라왔다 — 비어 있다고 확정을 지우지 않는다(끝났으면 running 이 먼저 꺼진다)
         if (home.setRide(RideService.liveRide, RideService.liveLv)) { chatRouteSync(); reloadHome(); }
         rerouteAsk();

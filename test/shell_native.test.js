@@ -902,6 +902,13 @@ function findAndroidJar() {
     assert.ok(/QUEST_H = 0\.66f/.test(k) && /final boolean fixedH = "quest"\.equals\(kind\)/.test(k) && /final float fixH = sh \* QUEST_H/.test(k), '미션 창만 고정 높이');
     assert.ok(/fixedH \? fixH : 100f/.test(k), '처음 창 높이도 고정 높이로(뜨면서 크기가 바뀌지 않게)');
   });
+  await t('s441: 탑승 안내는 경로 마지막 도착 예정 + 10분이 지나면 스스로 끝난다(GPS 를 계속 쓰지 않게) — 되살리지도 않고, 앱이 끝난 안내를 다시 켜지도 않는다', () => {
+    const rc = fs.readFileSync(N('RideCore.java'), 'utf8'), rs = fs.readFileSync(N('RideService.java'), 'utf8'), sa = fs.readFileSync(N('ShellActivity.java'), 'utf8');
+    assert.ok(/END_GRACE_MS = 10 \* 60 \* 1000L/.test(rc) && /public long deadlineMs\(\)/.test(rc) && /Boolean\.TRUE\.equals\(q\.get\("fin"\)\)/.test(rc), '마지막 정류장(fin) 도착 예정 + 10분');
+    assert.ok(/long dl = r\.deadlineMs\(\); if \(dl > 0L && nowMs > dl\) return null;/.test(rc), '시간이 지난 저장본은 되살리지 않는다');
+    assert.ok(/core\.deadlineMs\(\)[^]*?finishRide\("timeout"\)/.test(rs) && /"user"\.equals\(reason\) \|\| "timeout"\.equals\(reason\)/.test(rs), '매 걸음 시각을 보고 넘으면 정상 종료(저장본 삭제)');
+    assert.ok(/"timeout"\.equals\(RideService\.endReason\)/.test(sa), '앱은 시간이 다 돼 끝난 안내를 뜻밖의 끝으로 보고 다시 켜지 않는다');
+  });
   await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 키즈 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/m\.put\("mine", true\); m\.put\("un", true\);/.test(k), '방금 보낸 글(낙관적 표시)도 안 읽음으로');

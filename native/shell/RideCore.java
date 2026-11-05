@@ -16,6 +16,7 @@ import java.util.Map;
  */
 public final class RideCore {
     public static final long MAX_AGE_MS = 30 * 60 * 1000L;       // 이보다 오래 갱신 안 된 저장 상태는 쓰지 않는다
+    public static final long END_GRACE_MS = 10 * 60 * 1000L;       // 경로가 끝나야 할 시각(마지막 정류장 도착 예정)에서 이만큼이 지나면 안내를 스스로 끝낸다(안 끝난 안내가 GPS 를 계속 쓰지 않게)
     public static final int MAX_FIX = 60, SEND_FIX = 12;
     public static final long STEP_MIN_MS = 2000L, STEP_MAX_MS = 8000L, STEP_DEFAULT_MS = 5000L;     // 엔진이 알려 주는 간격의 안전 범위
 
@@ -52,6 +53,31 @@ public final class RideCore {
     public int ovAlert;
     /** 내 위치 공유 재료(엔진 overlay.share) — 없으면 null. */
     public ShareCore.Share ovShare;
+    /**
+     * 이 안내를 끝내야 하는 시각(ms): 경로 마지막 정류장의 도착 예정 시각(엔진 state.stops 의 fin) + 10분. 마지막 정류장 시각이 없으면 가장 늦은 정류장 시각. 알 수 없으면 0(제한 없음).
+     * 엔진이 실시간으로 도착 시각을 미루면 이 시각도 함께 밀린다(매 걸음 새 state 로 다시 읽는다).
+     */
+    @SuppressWarnings("unchecked")
+    public long deadlineMs() {
+        try {
+            if (stateJson.length() < 3) return 0L;
+            Object o = ScreenCore.parseSaved(stateJson);
+            if (!(o instanceof Map) || !(((Map<String, Object>) o).get("stops") instanceof List)) return 0L;
+            long fin = 0L, last = 0L;
+            for (Object x : (List<Object>) ((Map<String, Object>) o).get("stops")) {
+                if (!(x instanceof Map)) continue;
+                Map<String, Object> q = (Map<String, Object>) x;
+                if (!(q.get("arrMs") instanceof Number)) continue;
+                long ms = ((Number) q.get("arrMs")).longValue();
+                if (ms <= 0L) continue;
+                if (Boolean.TRUE.equals(q.get("fin"))) fin = Math.max(fin, ms);
+                last = Math.max(last, ms);
+            }
+            long base = fin > 0L ? fin : last;
+            return base > 0L ? base + END_GRACE_MS : 0L;
+        } catch (Throwable e) { return 0L; }
+    }
+
     /** 엔진 overlay 전체(칸 줄 · 색 · 경고 · 도착 줄) — 서비스가 창에 그린다. 없으면 null. */
     public OvCore.Ov ov;
     /** 도착 3분 뒤 종료(done)라면 true — 앱 화면까지 끝낸다. */
@@ -528,6 +554,7 @@ public final class RideCore {
             RideCore r = new RideCore();
             r.stateJson = (String) st; r.text = str(m.get("text")); if (str(m.get("title")).length() > 0) r.title = str(m.get("title"));
             r.savedAt = ((Number) at).longValue();
+            { long dl = r.deadlineMs(); if (dl > 0L && nowMs > dl) return null; }          // 경로 시간 + 10분이 지난 저장본은 되살리지 않는다
             if (m.get("cur") instanceof Number) r.cur = ((Number) m.get("cur")).intValue();
             r.posJson = str(m.get("pos")).length() > 0 ? str(m.get("pos")) : "null"; r.arrJson = str(m.get("arr")).length() > 0 ? str(m.get("arr")) : "null";
             return r;

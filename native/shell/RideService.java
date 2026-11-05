@@ -259,6 +259,8 @@ public class RideService extends Service {
                         updateOngoing();
                         updateOverlay();
                         if (s.done) { stepping = false; boolean q = core.quit; finishRide(q ? "arrive" : "engine-done"); if (q) ShellActivity.quitAll(); return; }
+                        long dl = core.deadlineMs();                                     // 경로 마지막 도착 예정 + 10분이 지났다 — 끝나지 않은 안내가 GPS 를 계속 쓰지 않게 스스로 끝낸다
+                        if (dl > 0L && System.currentTimeMillis() > dl) { stepping = false; finishRide("timeout"); return; }
                         delay = core.nextMs;
                     }
                 }
@@ -304,7 +306,7 @@ public class RideService extends Service {
     }
 
     private void finishRide(String reason) {
-        final boolean legit = "arrive".equals(reason) || "user".equals(reason), arrived = "arrive".equals(reason);
+        final boolean legit = "arrive".equals(reason) || "user".equals(reason) || "timeout".equals(reason), arrived = "arrive".equals(reason);
         stopped = true; running = false; endReason = reason;
         if (ov != null) ov.hide();
         if (legit) clearSaved(this);                                                          // 사용자가 끝냈거나 도착했다 — 저장본을 지운다. 뜻밖의 끝은 남겨 두어 앱이 다시 켠다
