@@ -274,6 +274,11 @@ public class ShellActivity extends Activity {
         rs.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
         root.addView(rs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(root);
+        // 안드로이드 15+(targetSdk 35+)는 앱이 화면 끝까지 그려져 상태 표시줄 색이 무시된다 — 상태 표시줄 자리를 늘 검정으로 채운다(흰 아이콘이 밝은 바탕에 묻히지 않게).
+        sbStripV = new View(this);
+        sbStripV.setBackgroundColor(0xFF000000);
+        ((FrameLayout) findViewById(android.R.id.content)).addView(sbStripV, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, android.view.Gravity.TOP));
+        registerBack();
         kids = new KidsHub(this, store, dpr, (FrameLayout) findViewById(android.R.id.content), new View[] { hdr, head, holder }, new Runnable() { @Override public void run() { kidsSettingsChanged(); } });          // 키즈 감시 화면이 홈 위로 덮어 올라올 자리(연결 전에는 보이지 않고 아무것도 하지 않는다)
 
         // 설정 값이 필요한 준비는 칸을 만든 뒤에(그때쯤 설정 파일 읽기가 끝나 있어 기다림이 없다)
@@ -288,8 +293,19 @@ public class ShellActivity extends Activity {
         // 상태 표시줄·내비게이션 막대 자리만큼 비운다
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override public WindowInsets onApplyWindowInsets(View v, WindowInsets in) {
-                v.setPadding(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(), in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
-                if (kids != null) kids.insets(in.getSystemWindowInsetLeft(), in.getSystemWindowInsetTop(), in.getSystemWindowInsetRight(), in.getSystemWindowInsetBottom());
+                int il, it, ir, ib;
+                if (Build.VERSION.SDK_INT >= 30) {                                      // 막대 + 노치 자리를 함께 비운다(15+ 는 노치 밑까지 그려진다)
+                    android.graphics.Insets si = in.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                    il = si.left; it = si.top; ir = si.right; ib = si.bottom;
+                } else {
+                    il = in.getSystemWindowInsetLeft(); it = in.getSystemWindowInsetTop(); ir = in.getSystemWindowInsetRight(); ib = in.getSystemWindowInsetBottom();
+                }
+                v.setPadding(il, it, ir, ib);
+                if (sbStripV != null) {
+                    ViewGroup.LayoutParams slp = sbStripV.getLayoutParams();
+                    if (slp != null && slp.height != it) { slp.height = it; sbStripV.setLayoutParams(slp); }
+                }
+                if (kids != null) kids.insets(il, it, ir, ib);
                 return in;
             }
         });
@@ -438,20 +454,45 @@ public class ShellActivity extends Activity {
             store.put(ShellCore.K_SAMW, pi.sam && pi.w ? "1" : "0");
         } catch (Throwable t) { /* 못 읽으면 이전 값 */ }
     }
-    @Override protected void onDestroy() { if (kids != null) kids.destroy(); if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { unregisterBack(); if (kids != null) kids.destroy(); if (live == this) live = null; main.removeCallbacks(chatBg); chatBgOn = false; rloadHide(); if (locf != null) locf.cancelAll(); if (vec != null) vec.onDestroy(); super.onDestroy(); }
     @Override protected void onResume() { super.onResume(); resumed = true; foodWatchStart(); if (kids != null) { kids.resume(); if (kids.mode()) kidsTabsEnsure(); } RideService.setAppFront(true); RideService.rsListener = rsApply; gxPing(); ovlAuto(); if (home.riding() || store.get(ShellCore.K_RIDESNAP, "").length() > 2) reviveRide(); rsApply.run(); main.postDelayed(new Runnable() { @Override public void run() { rerouteAsk(); } }, 1500L); if (vec != null) vec.onResume(); trackStart(); resumeLocate(); refreshPower(); if (System.currentTimeMillis() - hdrAt > 300000L) loadHdr(); if (prefetchAt > 0L && System.currentTimeMillis() - prefetchAt > 600000L) prefetchTabs(); busResume(); brResume(); if (ShellCore.S_SETPG.equals(sheetName) && sheet != null && sheet.isShowing()) loadSetPage(); if (ShellCore.S_CHAT.equals(slots.length > 0 ? slots[slots.length - 1] : "")) startChatPoll(); chatBgStart(); setupResume(); }
     @Override protected void onPause() { resumed = false; chatLive.cancel(); chatLiveTok = null; trackStop(); if (vec != null) vec.onPause(); main.removeCallbacks(brTick); brTicking = false; if (RideService.rsListener == rsApply) RideService.rsListener = null; if (kids != null) kids.pause(); super.onPause(); }
 
+    private View sbStripV;
+    private Object backCb;
+
     @Override public void onBackPressed() {
-        if (kids != null && kids.onBack()) return;                                       // 키즈 팝업 · 화면이 떠 있으면 그것부터 닫는다
-        if (OpenHost.back()) return;                                                    // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
+        if (!handleBack()) super.onBackPressed();                                        // 못 받았으면 바로 닫는다
+    }
+
+    /** 뒤로가기를 우리가 처리했으면 true. 안드로이드 16(targetSdk 36)에서는 onBackPressed 가 불리지 않아 아래 콜백으로도 같은 길을 탄다. */
+    private boolean handleBack() {
+        if (kids != null && kids.onBack()) return true;                                  // 키즈 팝업 · 화면이 떠 있으면 그것부터 닫는다
+        if (OpenHost.back()) return true;                                               // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
         String t = ShellCore.currentTab(store);
         boolean kidsTop = kids != null && kids.isOpen();                                 // 키즈 화면이 맨 위: 홈에서처럼 바로 종료 확인
         if (!kidsTop && !ShellCore.DEFAULT_TAB.equals(t)) {
             store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);
             showTab(ShellCore.DEFAULT_TAB);
             if (kids != null && kids.mode()) kids.open(true);                             // 키즈 모드에서는 홈 자리가 키즈 화면
-        } else if (!dlgKind("exit", new Runnable() { @Override public void run() { finish(); } }, null)) super.onBackPressed();      // 웹처럼 한 번 더 확인(엔진 카드) — 못 받았으면 바로 닫는다
+            return true;
+        }
+        return dlgKind("exit", new Runnable() { @Override public void run() { finish(); } }, null);      // 웹처럼 한 번 더 확인(엔진 카드)
+    }
+
+    private void registerBack() {
+        if (Build.VERSION.SDK_INT < 33 || backCb != null) return;
+        final android.window.OnBackInvokedCallback cb = new android.window.OnBackInvokedCallback() {
+            @Override public void onBackInvoked() { if (!handleBack()) finish(); }
+        };
+        backCb = cb;
+        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, cb);
+    }
+
+    private void unregisterBack() {
+        if (Build.VERSION.SDK_INT < 33 || backCb == null) return;
+        try { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCb); } catch (Throwable ignored) { }
+        backCb = null;
     }
 
     // ───────────── 색 ─────────────
@@ -469,7 +510,7 @@ public class ShellActivity extends Activity {
         root.setBackgroundColor(pal[ScreenView.R_BG]);
         getWindow().getDecorView().setBackgroundColor(pal[ScreenView.R_BG]);
         try {                                                                      // 상태 표시줄은 늘 검정 + 흰 아이콘
-            getWindow().setStatusBarColor(0xFF000000);
+            if (Build.VERSION.SDK_INT < 35) getWindow().setStatusBarColor(0xFF000000);
             View dv = getWindow().getDecorView();
             dv.setSystemUiVisibility(dv.getSystemUiVisibility() & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         } catch (Throwable ignored) { }
