@@ -287,7 +287,8 @@ function findAndroidJar() {
     const v = fs.readFileSync(N('ShellActivity.java'), 'utf8');
     assert.ok(/private boolean dlgOpen\(/.test(v) && /private boolean dlgKind\(/.test(v) && /private void dlgAct\(/.test(v) && /private void dlgPopSh\(/.test(v), '카드 호스트');
     assert.ok(/dlgFetch\("exit"\)/.test(v) && /dlgFetch\("report"\)/.test(v) && /dlgFetch\("perm"\)/.test(v), '고정 카드는 켜자마자 미리 받아 둔다');
-    assert.ok(/!dlgKind\("exit", new Runnable\(\) \{ @Override public void run\(\) \{ finish\(\); \} \}, null\)\) super\.onBackPressed\(\)/.test(v), '홈에서 뒤로 가기: 종료 확인 카드(못 받았으면 바로 닫기)');
+    assert.ok(/return dlgKind\("exit", new Runnable\(\) \{ @Override public void run\(\) \{ finish\(\); \} \}, null\);/.test(v) && /if \(!handleBack\(\)\) super\.onBackPressed\(\)/.test(v), '홈에서 뒤로 가기: 종료 확인 카드(못 받았으면 바로 닫기)');
+    assert.ok(/OnBackInvokedCallback/.test(v) && /registerOnBackInvokedCallback\(/.test(v) && /if \(!handleBack\(\)\) finish\(\);/.test(v), '안드로이드 16(targetSdk 36): onBackPressed 가 불리지 않아도 같은 뒤로가기 길을 탄다(콜백 등록)');
     assert.ok(/dlgKind\("report", doReport, null\)/.test(v) && /dlgKind\("perm", openSet, null\)/.test(v) && /dlgPopSh\("경로를 먼저 탐색해 주세요"/.test(v), '신고 · 권한 · 공유 안내가 엔진 카드를 쓴다');
     assert.ok(/"dl\.ok"\.equals\(v\)/.test(v) && /setOnCancelListener/.test(v) && /dg\.tap != null \|\| autoMs > 0L/.test(v) && /dg\.fit && v\.fitWidthDp\(\)/.test(v), '단추 · 바깥/뒤로 취소 · 카드가 정한 바깥 누름 · 글에 맞춘 너비');
   });
