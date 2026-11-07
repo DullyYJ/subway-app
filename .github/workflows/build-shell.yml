@@ -88,6 +88,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANDROID_VERSION_CODE: ${{ github.run_number }}
+      GDM_KEYSTORE_B64: ${{ secrets.GDM_KEYSTORE_B64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -102,7 +103,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.5'
+          gradle-version: '8.14.3'
 
       - name: Bundle Noto Sans KR for native screens
         run: |
@@ -150,6 +151,51 @@ jobs:
           fi
           ls -la shell-android/app/build/outputs/apk/*/*.apk
           echo "APK 크기:" $(du -h shell-android/app/build/outputs/apk/*/*.apk | cut -f1)
+
+      # 구글 플레이에 올리는 파일은 APK 가 아니라 업로드 키로 서명한 AAB 다. 비밀값(GDM_KEYSTORE_B64 등)이 있으면 업로드 키로, 없으면 디버그 키로(시험용) 만든다.
+      - name: Decode upload keystore
+        if: ${{ env.GDM_KEYSTORE_B64 != '' }}
+        run: |
+          echo "$GDM_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "GDM_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Build release bundle (AAB)
+        env:
+          GDM_STORE_PASSWORD: ${{ secrets.GDM_STORE_PASSWORD }}
+          GDM_KEY_ALIAS: ${{ secrets.GDM_KEY_ALIAS }}
+          GDM_KEY_PASSWORD: ${{ secrets.GDM_KEY_PASSWORD }}
+        run: gradle -p shell-android bundleRelease --no-daemon
+
+      - name: Check bundle (signing, target SDK, 16 KB page size)
+        run: |
+          AAB=shell-android/app/build/outputs/bundle/release/app-release.aab
+          ls -la "$AAB"
+          keytool -printcert -jarfile "$AAB" | tee /tmp/cert.txt
+          if grep -qi "Android Debug" /tmp/cert.txt; then
+            echo "::warning::AAB 가 디버그 키로 서명됨 — 플레이에 올릴 수 없다. 업로드 키 비밀값(GDM_KEYSTORE_B64 등)을 넣고 다시 돌릴 것"
+            echo "AAB_SIGNED=debug" >> "$GITHUB_ENV"
+          else
+            echo "AAB_SIGNED=upload" >> "$GITHUB_ENV"
+          fi
+          APK=$(ls shell-android/app/build/outputs/apk/*/*.apk | head -1)
+          AAPT2=$(ls $ANDROID_HOME/build-tools/*/aapt2 | tail -1)
+          "$AAPT2" dump badging "$APK" | grep -E "^package|sdkVersion|targetSdkVersion|native-code" | tee /tmp/badging.txt
+          grep -q "targetSdkVersion:'36'" /tmp/badging.txt || { echo "::error::targetSdkVersion 이 36 이 아님"; exit 1; }
+          # 16 KB 페이지: 플레이는 API 35+ 를 겨냥한 앱의 64비트 네이티브 라이브러리가 16 KB 로 정렬돼 있기를 요구한다(LOAD 구간 정렬 0x4000 이상)
+          rm -rf /tmp/libs && mkdir /tmp/libs && unzip -q -o "$APK" 'lib/*' -d /tmp/libs || true
+          BAD=0
+          for so in $(find /tmp/libs -name '*.so' | sort); do
+            AL=$(readelf -lW "$so" | awk '/LOAD/ {print $NF}' | sort -u | tr '\n' ' ')
+            echo "$so  LOAD 정렬: $AL"
+            for a in $AL; do [ $((a)) -lt 16384 ] && BAD=1; done
+          done
+          if [ $BAD -eq 1 ]; then echo "::warning::16 KB 정렬이 안 된 네이티브 라이브러리가 있다 — 라이브러리 버전을 올려야 한다(위 목록 참고)"; fi
+
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: gildongmu-release-aab-${{ env.AAB_SIGNED }}
+          path: shell-android/app/build/outputs/bundle/release/app-release.aab
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
