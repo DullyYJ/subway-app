@@ -6,6 +6,9 @@ on:
     branches: [ native-shell ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -205,3 +208,14 @@ jobs:
             shell-android/app/build/outputs/apk/release/*.apk
             shell-android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      # 시험용(디버그 서명) APK 를 'latest' 사전 배포 릴리스로 올린다 — 에뮬레이터·시험 폰에서 바로 내려받아 깔 수 있다. 플레이에는 위의 AAB 를 올린다.
+      - name: Publish test APK to the latest release
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls shell-android/app/build/outputs/apk/debug/*.apk shell-android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          cp "$APK" gildongmu.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest gildongmu.apk --prerelease --title "Gildongmu build $GITHUB_RUN_NUMBER" --notes "Test APK built by GitHub Actions."
