@@ -422,7 +422,7 @@ function findAndroidJar() {
   await t('앱 크기(s138): 64비트 한 가지 · 한국어·영어만 · 릴리스에서 라이브러리 코드 줄이기 · 실패하면 디버그로 대신', () => {
     const g = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'build.gradle'), 'utf8');
     assert.ok(/abiFilters 'arm64-v8a' \}/.test(g) && !/armeabi/.test(g), '지도 엔진 네이티브 라이브러리는 64비트만');
-    assert.ok(/resConfigs 'ko', 'en'/.test(g) && /minifyEnabled true/.test(g) && /proguard-rules\.pro/.test(g) && /signingConfig signingConfigs\.debug/.test(g), '글 두 가지 · R8 · 설치용 서명');
+    assert.ok(/resConfigs 'ko', 'en'/.test(g) && /minifyEnabled true/.test(g) && /proguard-rules\.pro/.test(g) && /signingConfigs\.debug/.test(g) && /GDM_KEYSTORE/.test(g), '글 두 가지 · R8 · 서명(업로드 키가 없으면 설치용 디버그 키)');
     const pr = fs.readFileSync(path.join(ROOT, 'shell-android', 'app', 'proguard-rules.pro'), 'utf8');
     assert.ok(/-keep class com\.dullyyj\.subway\.\*\* \{ \*; \}/.test(pr), '우리 코드는 그대로(이름으로 찾는 위젯 글자·서비스 보호)');
     const y = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'build-shell.yml'), 'utf8');
