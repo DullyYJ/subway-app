@@ -37,8 +37,8 @@ android {
             if (ks) {
                 storeFile file(ks)
                 storePassword System.getenv('GDM_STORE_PASSWORD')
-                keyAlias System.getenv('GDM_KEY_ALIAS')
-                keyPassword System.getenv('GDM_KEY_PASSWORD')
+                keyAlias System.getenv('GDM_KEY_ALIAS') ?: 'upload'
+                keyPassword System.getenv('GDM_KEY_PASSWORD') ?: System.getenv('GDM_STORE_PASSWORD')
             }
         }
     }
