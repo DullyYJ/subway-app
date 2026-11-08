@@ -31,15 +31,19 @@ final class TileMapArt {
     static void draw(Canvas cv, TileLoader tl, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus, boolean label, long nowMs, double[] path) {
         P.setStyle(Paint.Style.FILL); P.setColor(C_BG);
         cv.drawRect(0, 0, vw.w, vw.h, P);
-        for (int[] t : vw.tiles()) {
-            Bitmap b = tl.peek(t[0], t[1], t[2]);
-            if (b == null) continue;
-            R.set(t[3], t[4], t[3] + t[5], t[4] + t[5]);
-            cv.drawBitmap(b, null, R, P);
+        VecSnap vs = VecSnap.get(tl.context());
+        boolean vec = vs.draw(cv, vw, dpr);                                      // 정류장 지도와 같은 벡터 지도 바탕(받는 동안은 빈 바탕)
+        if (!vec && vs.useRaster()) {                                            // 벡터 바탕을 못 받는 동안만 예전 OSM 타일 그림으로 대신한다
+            for (int[] t : vw.tiles()) {
+                Bitmap b = tl.peek(t[0], t[1], t[2]);
+                if (b == null) continue;
+                R.set(t[3], t[4], t[3] + t[5], t[4] + t[5]);
+                cv.drawBitmap(b, null, R, P);
+            }
         }
         if (path != null && path.length >= 4) drawPath(cv, vw, path, dpr);
         drawPins(cv, vw, pins, dpr, focus, label, nowMs);
-        drawAttribution(cv, vw.w, vw.h, dpr, TileLoader.lastErr.length() > 0 ? "© OpenStreetMap · " + TileLoader.lastErr : "© OpenStreetMap");
+        drawAttribution(cv, vw.w, vw.h, dpr, vec ? "\u00A9 OpenFreeMap \u00A9 OpenStreetMap" : "\u00A9 OpenStreetMap");
     }
 
     static final int C_ROUTE = 0xFFF07830, C_FROM = 0xFF2B7CFF, C_TO = 0xFFE8482E;      // 웹 경로 #f07830 · 출발 #2b7cff · 도착 #e8482e

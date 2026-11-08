@@ -43,13 +43,18 @@ final class TileLoader {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final java.util.ArrayList<Runnable> watchers = new java.util.ArrayList<Runnable>();
 
+    private final Context appCtx;
+    Context context() { return appCtx; }
     private TileLoader(Context c) {
+        appCtx = c;
         dir = new File(c.getCacheDir(), "tiles");
         if (!dir.isDirectory()) dir.mkdirs();
     }
 
     void watch(Runnable r) { synchronized (watchers) { if (!watchers.contains(r)) watchers.add(r); } }
     void unwatch(Runnable r) { synchronized (watchers) { watchers.remove(r); } }
+    /** 벡터 바탕(VecSnap)이 받았거나 못 받았다 — 지켜보는 쪽이 다시 그리게 한다. */
+    void ping() { notifyWatchers(); }
     private void notifyWatchers() {
         final Runnable[] rs;
         synchronized (watchers) { rs = watchers.toArray(new Runnable[0]); }
