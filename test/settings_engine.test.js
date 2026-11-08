@@ -47,12 +47,12 @@ const sels = nodes.filter(n => n.t === 'select');
 ok(sels.length === 2 && sels[0].on === true && sels[1].on === false && sels[0].act.v === 'dark' && sels[1].act.v === 'pastel', '테마 고르기: 다크가 선택됨');
 const navs = nodes.filter(n => n.t === 'navrow');
 const webIds = [btns.filter(n => n.act.a === 'web').map(n => n.act.v)[0]].concat(navs.filter(n => n.act.a === 'web').map(n => n.act.v)).join(), callIds = navs.filter(n => n.act.a === 'call').map(n => n.act.v).join();
-ok(webIds === 'sam,cm,gw,arr,ovl,dev', '웹 카드로 이어지는 행: ' + webIds);
-ok(callIds === 'pol.privacy,pol.location,pol.opensource,errlog', '앱 함수 호출 행: ' + callIds);
-ok(navs.find(n => n.act.v === 'errlog').sub === '3' && navs.find(n => n.act.v === 'cm').sub === '켜짐' && navs.find(n => n.act.v === 'ovl').sub === '꺼짐', '오른쪽 글: 오류 3 · 켜짐 · 꺼짐');
+ok(webIds === 'sam,cm,gw,arr,ovl', '웹 카드로 이어지는 행: ' + webIds);
+ok(callIds === 'pol.privacy,pol.location,pol.opensource', '앱 함수 호출 행(오류 로그 줄은 일반 사용자에게 숨긴다): ' + callIds);
+ok(!navs.some(n => n.act.v === 'errlog') && navs.find(n => n.act.v === 'cm').sub === '켜짐' && navs.find(n => n.act.v === 'ovl').sub === '꺼짐', '오른쪽 글: 켜짐 · 꺼짐 · 오류 로그 줄 없음');
 {
   const titles = s.body.filter(n => n.t === 'panel' && n.kids[0] && n.kids[0].t === 'text').map(n => n.kids[0].s);
-  ok(titles.join() === '알림 설정,갤럭시 백그라운드 유지,안내 정확도 향상,출퇴근 브리핑 알림,캐릭터 시계 위젯,하차 5분 전 추천,다른 앱 위에 표시,개발자 도구,테마 설정,약관 및 정책', '카드 순서가 웹 설정 탭과 같다(아이디 · 알림 · 갤럭시 · 정확도 · 출퇴근 · 위젯 · 하차 추천 · 오버레이 · 개발자 · 테마 · 약관): ' + titles.join());
+  ok(titles.join() === '알림 설정,갤럭시 백그라운드 유지,안내 정확도 향상,출퇴근 브리핑 알림,캐릭터 시계 위젯,하차 5분 전 추천,다른 앱 위에 표시,테마 설정,약관 및 정책', '카드 순서가 웹 설정 탭과 같다(아이디 · 알림 · 갤럭시 · 정확도 · 출퇴근 · 위젯 · 하차 추천 · 오버레이 · 개발자 · 테마 · 약관): ' + titles.join());
   ok(!s.body.some(n => n.t === 'panel' && n.kids[0] && n.kids[0].s === '기능 설정'), '한 칸짜리 \'기능 설정\' 묶음은 없다');
 }
 const EMOJI = /[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
@@ -141,9 +141,9 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   ok(PG('cm', {}, 3).ok === false && PG('cm', {}, 7).ok === false, '하위 화면은 cap 8 미만이면 만들지 않는다');
   ok(PG('nope').ok === false && E.settingsScreen({ cap: 8, p: '' }, {}).screen === 'settings', '모르는 화면은 거절 · p 가 없으면 설정 첫 화면');
   const s8 = E.settingsScreen({ cap: 8 }, full), navs8 = flat(s8.body).filter(n => (n.t === 'navrow' || n.t === 'button') && n.act && n.act.v && /^pg\./.test(n.act.v));
-  ok(navs8.map(n => n.act.v).join() === 'pg.sam,pg.cm,pg.gw,pg.arr,pg.ovl,pg.dev', 'cap 8: 웹 카드 행이 하위 화면(pg.*)으로 이어진다 ' + navs8.map(n => n.act.v).join());
+  ok(navs8.map(n => n.act.v).join() === 'pg.sam,pg.cm,pg.gw,pg.arr,pg.ovl', 'cap 8(개발자 도구 줄은 숨긴다): 웹 카드 행이 하위 화면(pg.*)으로 이어진다 ' + navs8.map(n => n.act.v).join());
   ok(!flat(s8.body).some(n => n.act && n.act.a === 'web'), 'cap 8 에는 웹 카드 시트 행동이 남지 않는다');
-  ok(flat(E.settingsScreen({ cap: 3 }, full).body).filter(n => n.act && n.act.a === 'web').length === 6, 'cap 3 은 예전 그대로(web 6개)');
+  ok(flat(E.settingsScreen({ cap: 3 }, full).body).filter(n => n.act && n.act.a === 'web').length === 5, 'cap 3 은 예전 그대로(web 5개 · 개발자 도구 줄은 숨긴다)');
   // 모든 하위 화면: 맨 위 '‹ 설정' 단추 · 이모지 없음 · 같은 입력 같은 출력 · 정보
   const names = Object.keys(E.SETTINGS_PAGES);
   names.forEach(p => {
@@ -170,7 +170,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
     ok(first.t === 'row' && first.kids[0].s === '커뮤니티 아이디' && first.kids[1].s === '아이디는 기기에만 저장됩니다' && first.kids[1].color === 'sub' && first.kids[1].size < 12, '아이디 제목 옆에 작은 회색 글');
     ok(!texts(NEW).some(x => /이 기기에만 저장되며/.test(x)), '아이디 아래 안내 글은 없다');
     const ttl = NEW.body.filter(n => n.t === 'panel').map(n => n.kids[0].t === 'row' ? n.kids[0].kids[0].s : n.kids[0].s);
-    ok(ttl.join() === '커뮤니티 아이디,출퇴근 브리핑 알림,테마 설정,알림 · 편의 기능,개발자 도구,약관 및 정책', '카드 순서: ' + ttl.join());
+    ok(ttl.join() === '커뮤니티 아이디,출퇴근 브리핑 알림,테마 설정,알림 · 편의 기능,약관 및 정책', '카드 순서: ' + ttl.join());
   }
   // s406: 알림 설정 · 편의 기능 팝업 + 첫 화면 메뉴
   {
@@ -264,7 +264,7 @@ ok(odd.ok && all(odd).find(n => n.t === 'field').value.length === 12, '이상한
   {
     const navV = sc => flat(sc.body).filter(n => (n.t === 'navrow' || n.t === 'button') && n.act && /^pg\./.test(n.act.v)).map(n => n.act.v);
     const all8 = E.settingsScreen({ cap: 8 }, { sam: 1 }), some8 = E.settingsScreen({ cap: 8 }, { sam: 1, pgs: ['sam', 'ovl', 'arr'] });
-    ok(['pg.cm', 'pg.gw', 'pg.arr', 'pg.ovl', 'pg.dev', 'pg.sam'].every(v => navV(all8).includes(v)), 'pgs 가 없으면 하위 화면 줄이 모두 보인다');
+    ok(['pg.cm', 'pg.gw', 'pg.arr', 'pg.ovl', 'pg.sam'].every(v => navV(all8).includes(v)) && !navV(all8).includes('pg.dev'), 'pgs 가 없으면 하위 화면 줄이 모두 보인다(개발자 도구 줄만 숨김)');
     ok(navV(some8).sort().join() === 'pg.arr,pg.ovl,pg.sam', 'pgs 에 든 화면 줄만 보인다: ' + navV(some8).join());
     ok(flat(some8.body).some(n => n.t === 'text' && n.s === '하차 7분 전 추천') && !flat(some8.body).some(n => n.t === 'text' && n.s === '하차 5분 전 추천'), 'pgs 가 있으면 하차 추천 카드 제목이 7분');
   }
