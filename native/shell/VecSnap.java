@@ -26,7 +26,7 @@ import java.util.Map;
  * 벡터 지도를 못 받으면(오프라인 · 서버 문제) 잠시 동안 예전 OSM 타일 그림으로 대신한다(TileMapArt).
  * 배율: MapLibre 는 512dp 타일이라 화면 픽셀 배율 = MapLibre 배율 + 1 + log2(밀도). 그림은 dp 크기 × 밀도 배(=화면 픽셀)로 받는다.
  */
-final class VecSnap {
+final class VecSnap implements TileLoader.VecBack {
     private static final long DEBOUNCE_MS = 220L, WAIT_MS = 15000L, FAIL_HOLD_MS = 20000L;
     private static final int MAX_KEEP = 3;
     private static VecSnap inst;
@@ -55,10 +55,10 @@ final class VecSnap {
     private VecSnap(Context app) { this.app = app; }
 
     /** 벡터 바탕을 못 받는 중이면 true — 이때만 OSM 타일 그림으로 대신한다. */
-    boolean useRaster() { return failedAt >= 0L && SystemClock.uptimeMillis() - failedAt < FAIL_HOLD_MS; }
+    @Override public boolean useRaster() { return failedAt >= 0L && SystemClock.uptimeMillis() - failedAt < FAIL_HOLD_MS; }
 
     /** (0,0)~(vw.w, vw.h) 에 벡터 바탕을 그린다. 받아 둔 그림이 있으면 true. 그리는 도중 불러도 되고(받기는 다음 틈에), 주 스레드에서 부른다. */
-    boolean draw(Canvas cv, TileMapCore.View vw, float dpr) {
+    @Override public boolean draw(Canvas cv, TileMapCore.View vw, float dpr) {
         String key = vw.w + "x" + vw.h;
         request(key, vw, dpr);
         Snap s = snaps.get(key);

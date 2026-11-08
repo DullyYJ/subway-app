@@ -3,6 +3,7 @@ package com.dullyyj.subway;   // ★ MainActivity.java 첫 줄과 같아야 한�
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.LruCache;
@@ -43,6 +44,14 @@ final class TileLoader {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final java.util.ArrayList<Runnable> watchers = new java.util.ArrayList<Runnable>();
 
+    /** 움직이지 않는 지도의 벡터 바탕(VecSnap) — 지도 라이브러리를 이 파일이 알지 못하게 이 틈새로만 만난다. */
+    interface VecBack {
+        boolean draw(Canvas cv, TileMapCore.View vw, float dpr);      // (0,0)~(vw.w,vw.h) 에 바탕을 그린다 · 받아 둔 그림이 있으면 true
+        boolean useRaster();                                          // 벡터 바탕을 못 받는 중 — 예전 OSM 타일로 대신
+    }
+    private volatile VecBack vecBack;
+    void setVecBack(VecBack v) { vecBack = v; }
+    VecBack vecBack() { return vecBack; }
     private final Context appCtx;
     Context context() { return appCtx; }
     private TileLoader(Context c) {

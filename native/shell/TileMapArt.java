@@ -31,9 +31,9 @@ final class TileMapArt {
     static void draw(Canvas cv, TileLoader tl, TileMapCore.View vw, List<TileMapCore.Pin> pins, float dpr, int focus, boolean label, long nowMs, double[] path) {
         P.setStyle(Paint.Style.FILL); P.setColor(C_BG);
         cv.drawRect(0, 0, vw.w, vw.h, P);
-        VecSnap vs = VecSnap.get(tl.context());
-        boolean vec = vs.draw(cv, vw, dpr);                                      // 정류장 지도와 같은 벡터 지도 바탕(받는 동안은 빈 바탕)
-        if (!vec && vs.useRaster()) {                                            // 벡터 바탕을 못 받는 동안만 예전 OSM 타일 그림으로 대신한다
+        TileLoader.VecBack vs = tl.vecBack();
+        boolean vec = vs != null && vs.draw(cv, vw, dpr);                                      // 정류장 지도와 같은 벡터 지도 바탕(받는 동안은 빈 바탕)
+        if (!vec && (vs == null || vs.useRaster())) {                                            // 벡터 바탕을 못 받는 동안만 예전 OSM 타일 그림으로 대신한다
             for (int[] t : vw.tiles()) {
                 Bitmap b = tl.peek(t[0], t[1], t[2]);
                 if (b == null) continue;

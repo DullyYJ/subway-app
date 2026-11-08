@@ -248,6 +248,7 @@ public class ShellActivity extends Activity {
         holder.addView(body, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         vec = new VecMap(this, holder, body, dpr);       // 정류장 지도: 웹과 같은 벡터 지도(MapLibre · OpenFreeMap Liberty) — 못 받으면 아래 타일 그림이 그대로
         body.setVecHost(vec);
+        TileLoader.get(this).setVecBack(VecSnap.get(this));         // 움직이지 않는 지도(맛집 · 장소 등록 · 큰 지도)도 같은 벡터 지도 바탕
         root.addView(holder, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         rsF = new RsSheetView(this, false);              // 떠 있는 대기 알약 · 되돌리기 캡슐: 하단 탭 바로 위(웹 .rs-pill · .rs-undo)
         rsF.setHost(new RsSheetView.Act() { @Override public void act(String a) { RideService.rsAct(a); } });
