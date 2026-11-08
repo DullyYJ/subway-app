@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-05s444";
+var ENGINE_VERSION = "route-v2-2026-11-08s448";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -25717,6 +25717,42 @@ async function guardEnter(request, env, opt) {
 }
 // ===== GUARD ENGINE END =====
 
+// ===== LEGAL ENGINE BEGIN =====
+'use strict';
+// \uacf5\uac1c \ubc29\uce68 \ud398\uc774\uc9c0 \u2014 GET /legal/privacy (?doc=privacy | terms | open). \uc571 \uc548 '\uc57d\uad00 \ubc0f \uc815\ucc45'(SETTINGS_POL, engine/settings.js)\uc758 \uae00\uc744 \uadf8\ub300\ub85c \uc6f9 \ubb38\uc11c\ub85c \ubcf4\uc5ec \uc900\ub2e4.
+//   \uad6c\uae00 \ud50c\ub808\uc774 '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68 \uc8fc\uc18c' \uce78\uacfc \uc704\uce58 \uad8c\ud55c \uc120\uc5b8\uc5d0 \ub123\ub294 \uc8fc\uc18c\ub2e4. \uae00\uc740 \ud55c \uacf3(SETTINGS_POL)\uc5d0\ub9cc \uc788\uace0 \uc5ec\uae30\uc11c\ub294 \uadf8\ub9ac\uc9c0\ub9cc \ud55c\ub2e4.
+var LEGAL_DOCS = { privacy: 'polp', terms: 'poll', open: 'polo' };
+function legalEsc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function legalHtml(doc, pol, updated) {
+  var key = LEGAL_DOCS[doc] ? doc : 'privacy';
+  var d = pol[LEGAL_DOCS[key]];
+  var body = d.paras.map(function (q) {
+    var h = q.parts.map(function (p) { var t = legalEsc(p[0]).replace(/\n/g, '<br>'); return p[1] ? '<b>' + t + '</b>' : t; }).join('');
+    return '<p' + (q.small ? ' class="s"' : '') + '>' + h + '</p>';
+  }).join('\n');
+  var nav = [['privacy', '\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68'], ['terms', '\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00'], ['open', '\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0']].map(function (x) {
+    return x[0] === key ? '<b>' + x[1] + '</b>' : '<a href="?doc=' + x[0] + '">' + x[1] + '</a>';
+  }).join(' \u00b7 ');
+  return '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>' + legalEsc(d.title) + ' \u00b7 \uae38\ub3d9\ubb34</title>' +
+    '<style>:root{color-scheme:light dark}body{margin:0;font:15px/1.8 -apple-system,"Noto Sans KR",sans-serif;background:#fff;color:#1b1b1f}' +
+    '@media(prefers-color-scheme:dark){body{background:#121214;color:#e6e6ea}a{color:#8ab4ff}}' +
+    'main{max-width:720px;margin:0 auto;padding:20px 16px 48px}h1{font-size:22px;margin:8px 0 4px}.m{color:#777;font-size:13px;margin:0 0 18px}' +
+    'p{margin:0 0 16px}p.s{font-size:13px;color:#777}nav{font-size:13px;margin:0 0 18px}</style></head><body><main>' +
+    '<h1>' + legalEsc(d.title) + '</h1>' +
+    '<p class="m">\uae38\ub3d9\ubb34 (com.dullyyj.subway) \u00b7 \uc6b4\uc601\uc790 \uc6d0\uc724\uc7ac \u00b7 \uc2dc\ud589\uc77c \u00b7 \ucd5c\uc885 \uac1c\uc815\uc77c ' + legalEsc(updated) + '</p>' +
+    '<nav>' + nav + '</nav>' + body + '</main></body></html>';
+}
+// \uacf5\uac1c \ubc29\uce68 \ud398\uc774\uc9c0 Worker \uc5f0\uacb0\ubd80 \u2014 GET /legal/privacy (engine/legal.js \uc758 legalHtml). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/legal/privacy") return handleLegal(request);` \ub97c \ub123\ub294\ub2e4.
+//   ?doc=privacy(\uae30\ubcf8) | terms | open. \uae00\uc740 SETTINGS_POL(engine/settings.js) \ud558\ub098\ub97c \uadf8\ub300\ub85c \uc4f4\ub2e4. \uc544\ubb34\uac83\ub3c4 \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4.
+function handleLegal(request) {
+  var u = new URL(request.url);
+  var H = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=600", "X-Content-Type-Options": "nosniff" };
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response("method not allowed", { status: 405, headers: H });
+  return new Response(legalHtml(u.searchParams.get("doc") || "privacy", SETTINGS_POL, SETTINGS_POL_UPDATED), { status: 200, headers: H });
+}
+// ===== LEGAL ENGINE END =====
+
 async function handleFetch(request, env, ctx) {
   if (typeof MAPSV_CTX !== "undefined") MAPSV_CTX = ctx || null;
   try { await holEnsure(env); } catch (e) {}
@@ -25769,6 +25805,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/commute-brief") return handleCommuteBrief(request, env, ctx);
   if (url.pathname === "/screen/hdr") return handleScreenHdr(request);
   if (url.pathname === "/screen/batch") return handleScreenBatch(request);
+  if (url.pathname === "/legal/privacy") return handleLegal(request);
   if (url.pathname === "/stops-near") {
     const lat = parseFloat(url.searchParams.get("lat"));
     const lng = parseFloat(url.searchParams.get("lng"));
