@@ -167,6 +167,8 @@ public final class KidsHub {
             @Override public boolean canSwipe() { ScreenCore.Screen cs = hubV.currentScreen(); return cs != null && (cs.swL != null || cs.swR != null); }
         });
         layer.addView(hubV, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        hubVec = new VecMap(a, layer, hubV, dpr);                             // 자녀 위치 지도도 정류장 지도와 같은 벡터 지도(MapLibre · OpenFreeMap) — 못 받으면 아래 타일 그림이 대신 보인다
+        hubV.setVecHost(hubVec);
         noteV = new ScreenView(a);                                           // 짧은 안내 한 줄(아래 토스트 대신 위에 잠깐 뜨는 알약) — 글은 엔진이 준 것
         noteV.setDpr(dpr);
         noteV.setPalette(ShellCore.palette(ShellCore.theme(st)));
@@ -263,11 +265,14 @@ public final class KidsHub {
         if (sheetV != null) sheetV.setPalette(pal);
     }
 
-    public void resume() { paused = false; KidsPush.hub = this; if (!open) preload(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
-    public void pause() { paused = true; stopLoop(); famEp++; door.close(); }
+    private VecMap hubVec; private boolean hubVecOn;
+    private void vecOn() { if (hubVec != null && !hubVecOn) { hubVecOn = true; hubVec.onStart(); hubVec.onResume(); } }
+    private void vecOff() { if (hubVec != null && hubVecOn) { hubVecOn = false; hubVec.onPause(); hubVec.onStop(); } }
+    public void resume() { paused = false; KidsPush.hub = this; if (!open) preload(); vecOn(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
+    public void pause() { paused = true; stopLoop(); famEp++; door.close(); vecOff(); }
     /** s385: 키즈 화면(허브 아래 대화 칸 · 대화방 · 커뮤니티 가족대화)을 지금 실제로 보고 있나 — 알림은 이때만 숨긴다(다른 탭을 보고 있으면 카톡처럼 알림이 온다). */
     public boolean viewing() { return open && !paused; }
-    public void destroy() { alive = false; stopLoop(); closeSheet(true); }
+    public void destroy() { alive = false; if (hubVec != null) hubVec.onDestroy(); stopLoop(); closeSheet(true); }
 
     // ───────── 홈 버튼 3초 꾹 ─────────
     /** 하단 탭 막대의 터치를 먼저 본다. 3초 꾹을 눌렀으면 true(그 뒤 손가락 움직임은 탭으로 치지 않는다). 연결 전에는 항상 false. */

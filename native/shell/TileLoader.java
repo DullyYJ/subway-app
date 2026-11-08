@@ -26,6 +26,8 @@ import java.util.concurrent.Executors;
 final class TileLoader {
     private static final long DISK_MAX_AGE = 7L * 24L * 3600000L, RETRY_AFTER = 8000L; private static final int MAX_TRIES = 4;
     private static TileLoader inst;
+    /** 마지막 타일 받기 실패 이유(성공하면 빈 글) — 지도 아래 저작권 글 옆에 작게 보여 원인을 바로 알 수 있게 한다. */
+    static volatile String lastErr = "";
 
     static synchronized TileLoader get(Context c) {
         if (inst == null) inst = new TileLoader(c.getApplicationContext());
@@ -104,14 +106,16 @@ final class TileLoader {
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
             c.setConnectTimeout(5000); c.setReadTimeout(8000);
-            c.setRequestProperty("User-Agent", "Gildongmu/1.0 (Android; subway app)");
-            if (c.getResponseCode() != 200) return null;
+            c.setRequestProperty("User-Agent", "Gildongmu/1.0 (Android; +https://gildongmu-kids.phg0643.workers.dev)");
+            int rc = c.getResponseCode();
+            if (rc != 200) { lastErr = "HTTP " + rc; return null; }
             InputStream is = c.getInputStream();
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             byte[] buf = new byte[8192]; int n, total = 0;
             while ((n = is.read(buf)) > 0) { total += n; if (total > 200000) return null; bo.write(buf, 0, n); }
             is.close();
+            lastErr = "";
             return bo.toByteArray();
-        } catch (Throwable t) { return null; } finally { if (c != null) c.disconnect(); }
+        } catch (Throwable t) { lastErr = t.getClass().getSimpleName(); return null; } finally { if (c != null) c.disconnect(); }
     }
 }

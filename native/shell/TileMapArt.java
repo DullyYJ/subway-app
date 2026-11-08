@@ -39,7 +39,7 @@ final class TileMapArt {
         }
         if (path != null && path.length >= 4) drawPath(cv, vw, path, dpr);
         drawPins(cv, vw, pins, dpr, focus, label, nowMs);
-        drawAttribution(cv, vw.w, vw.h, dpr, "© OpenStreetMap");
+        drawAttribution(cv, vw.w, vw.h, dpr, TileLoader.lastErr.length() > 0 ? "© OpenStreetMap · " + TileLoader.lastErr : "© OpenStreetMap");
     }
 
     static final int C_ROUTE = 0xFFF07830, C_FROM = 0xFF2B7CFF, C_TO = 0xFFE8482E;      // 웹 경로 #f07830 · 출발 #2b7cff · 도착 #e8482e
