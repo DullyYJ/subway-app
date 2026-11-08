@@ -116,6 +116,6 @@ final class TileLoader {
             is.close();
             lastErr = "";
             return bo.toByteArray();
-        } catch (Throwable t) { lastErr = t.getClass().getSimpleName(); return null; } finally { if (c != null) c.disconnect(); }
+        } catch (Throwable t) { Throwable r = t; for (int i = 0; i < 6 && r.getCause() != null && r.getCause() != r; i++) r = r.getCause(); String m = String.valueOf(r.getMessage()); lastErr = t.getClass().getSimpleName() + (r != t ? "/" + r.getClass().getSimpleName() : "") + ": " + (m.length() > 56 ? m.substring(0, 56) : m); return null; } finally { if (c != null) c.disconnect(); }
     }
 }
