@@ -31,7 +31,8 @@ const SETS = [
   { name: 'RULES', src: 'engine/rules.js', glue: 'engine/rules-worker.js', path: '/rules', fn: 'handleRules', anchor: '  if (url.pathname === "/ride/start") return handleRideStart(request);\n' },
   { name: 'CBRIEF', src: 'engine/commute-brief.js', glue: 'engine/commute-brief-worker.js', path: '/commute-brief', fn: 'handleCommuteBrief', anchor: '  if (url.pathname === "/rules") return handleRules(request);\n' },
   { name: 'HDR', src: 'engine/hdr.js', glue: 'engine/hdr-worker.js', path: '/screen/hdr', fn: 'handleScreenHdr', anchor: '  if (url.pathname === "/commute-brief") return handleCommuteBrief(request);\n' },
-  { name: 'SCACHE', src: 'engine/screen-cache.js', glue: 'engine/screen-cache-worker.js', path: '/screen/batch', fn: 'handleScreenBatch', anchor: '  if (url.pathname === "/screen/hdr") return handleScreenHdr(request);\n' }
+  { name: 'SCACHE', src: 'engine/screen-cache.js', glue: 'engine/screen-cache-worker.js', path: '/screen/batch', fn: 'handleScreenBatch', anchor: '  if (url.pathname === "/screen/hdr") return handleScreenHdr(request);\n' },
+  { name: 'LEGAL', src: 'engine/legal.js', glue: 'engine/legal-worker.js', path: '/legal/privacy', fn: 'handleLegal', anchor: '  if (url.pathname === "/screen/batch") return handleScreenBatch(request);\n' }
 ];
 let all = '';
 for (const S of SETS) {
