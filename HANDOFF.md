@@ -3998,3 +3998,7 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - engine/settings.js `SETTINGS_SHOW_DIAG = false` (SETTINGS_SCREEN_V 2). 일반 사용자 설정에서 '개발자 도구' 카드와 '약관 및 정책'의 '오류 로그' 줄이 안 보인다.
 - 진단이 필요하면 true 로 바꾸고 `node tools/engine/embed-shop.js` 후 엔진 재배포. 하위 화면(dev · erl)과 앱의 기록 수집은 그대로.
 - 엔진 파일 수동 배포 필요(route-v2-worker.ascii.js). 앱(APK) 변경 없음.
+
+## 2026-11-08 공개 방침 페이지 (플레이 콘솔 '개인정보처리방침 주소')
+- 엔진에 GET `/legal/privacy` 추가(engine/legal.js + legal-worker.js, embed-shop.js 의 LEGAL 묶음, ENGINE_VERSION s448). `?doc=terms`(위치기반서비스 이용약관) · `?doc=open`(데이터 출처 및 고지). 글은 SETTINGS_POL 하나를 그대로 쓴다(앱 안 글과 항상 같음).
+- 주소: https://gentle-lab-7e47subway-api.phg0643.workers.dev/legal/privacy (엔진 배포 뒤 열림). 콘솔 개인정보처리방침 · 데이터 보안 · 위치 선언에 넣는다.
