@@ -36,6 +36,7 @@ jobs:
           - prefetch_access_live.test.js
           - neighbor_live.test.js
           - rules_engine.test.js
+          - legal_engine.test.js
           - scene_native.test.js
           - result_engine.test.js
           - news_engine.test.js
