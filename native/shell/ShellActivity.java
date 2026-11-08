@@ -43,7 +43,7 @@ public class ShellActivity extends Activity {
     private RsSheetView rs, rsF;                      // rs = 하단 탭 아래에 올라오는 탑승 시트, rsF = 탭 위에 뜨는 대기 알약 · 되돌리기 캡슐
     private final Runnable rsApply = new Runnable() { @Override public void run() { rerouteAsk(); legAsk(); if (rs == null) return; OvCore.Ov o = RideService.running ? RideService.liveOv : null; rs.setOv(o); rsF.setOv(o); } };       // 오버레이는 앱을 내렸을 때만 뜨므로(RideService.appFront) 앱 안에서는 탑승 시트가 항상 그 줄을 그린다
     private ScreenView hdr, head, body, tabs;
-    private KidsHub kids;                                  // 길동무 키즈 연동(부모 쪽): 연결된 부모에게만 켜진다 — 연결 전에는 아무것도 하지 않는다
+    private KidsHub kids;                                  // 길동무 패밀리 연동(부모 쪽): 연결된 부모에게만 켜진다 — 연결 전에는 아무것도 하지 않는다
     private float dpr = 1f;
     private String[] slots = new String[0];            // 지금 탭의 화면 칸들(위 → 아래)
     private final int[] seq = new int[2];              // 칸마다 가장 새 요청 번호(늦게 온 옛 답은 버린다)
@@ -77,8 +77,8 @@ public class ShellActivity extends Activity {
         String pk0 = json.indexOf("\"settings\"") >= 0 ? json + "\u0001" + ScreenCore.settingsExtra.hashCode() : json;
         if (ScreenCore.famChip > 0 && json.indexOf("\"cchips\"") >= 0) pk0 = pk0 + "\u0002" + ScreenCore.famChip;          // 커뮤니티 칩 줄은 '가족대화' 칩이 붙고 눌린 상태에 따라 다른 화면이다
         String pj = json;
-        if (kids != null && json.indexOf("tab.home") >= 0) { String tk = kids.tabKey(); if (tk.length() > 0) { pk0 = pk0 + "\u0003" + tk; pj = kids.patchTabs(json); } }          // 키즈 모드: 아래 탭의 가운데 칸은 엔진이 준 '키즈' 모양으로, 켜진 칸은 키즈 화면이 떠 있는지로
-        final String pk = pk0;      // 설정 화면은 맨 위에 끼우는 키즈 줄이 바뀌면 다른 화면이다
+        if (kids != null && json.indexOf("tab.home") >= 0) { String tk = kids.tabKey(); if (tk.length() > 0) { pk0 = pk0 + "\u0003" + tk; pj = kids.patchTabs(json); } }          // 가족 모드: 아래 탭의 가운데 칸은 엔진이 준 '가족' 모양으로, 켜진 칸은 가족 화면이 떠 있는지로
+        final String pk = pk0;      // 설정 화면은 맨 위에 끼우는 가족 줄이 바뀌면 다른 화면이다
         synchronized (parsedScr) { ScreenCore.Screen c = parsedScr.get(pk); if (c != null) return c; }
         ScreenCore.Screen sc = ScreenCore.load(pj);
         synchronized (parsedScr) { if (parsedScr.put(pk, sc) == null) parsedChars += json.length(); parsedTrim(); }
@@ -259,7 +259,7 @@ public class ShellActivity extends Activity {
         tabs.setOnTouchListener(new View.OnTouchListener() {         // 하단 탭 막대를 위로 쓸면 탑승 시트를 연다(웹 _rsInitSwipe) — 탭 누름은 그대로 두려고 이벤트를 먹지 않는다
             private float tx, ty;
             @Override public boolean onTouch(View v, android.view.MotionEvent e) {
-                if (kids != null && kids.tabsTouch(e, v)) return true;                    // 홈 버튼 3초 꾹(키즈와 연결된 부모만) — 아닐 때는 아무 일 없다
+                if (kids != null && kids.tabsTouch(e, v)) return true;                    // 홈 버튼 3초 꾹(가족와 연결된 부모만) — 아닐 때는 아무 일 없다
                 int a = e.getActionMasked();
                 if (a == android.view.MotionEvent.ACTION_DOWN) { tx = e.getX() / dpr; ty = e.getY() / dpr; }
                 else if (a == android.view.MotionEvent.ACTION_UP && RideService.running) {
@@ -280,7 +280,7 @@ public class ShellActivity extends Activity {
         sbStripV.setBackgroundColor(0xFF000000);
         ((FrameLayout) findViewById(android.R.id.content)).addView(sbStripV, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, android.view.Gravity.TOP));
         registerBack();
-        kids = new KidsHub(this, store, dpr, (FrameLayout) findViewById(android.R.id.content), new View[] { hdr, head, holder }, new Runnable() { @Override public void run() { kidsSettingsChanged(); } });          // 키즈 감시 화면이 홈 위로 덮어 올라올 자리(연결 전에는 보이지 않고 아무것도 하지 않는다)
+        kids = new KidsHub(this, store, dpr, (FrameLayout) findViewById(android.R.id.content), new View[] { hdr, head, holder }, new Runnable() { @Override public void run() { kidsSettingsChanged(); } });          // 가족 화면이 홈 위로 덮어 올라올 자리(연결 전에는 보이지 않고 아무것도 하지 않는다)
 
         // 설정 값이 필요한 준비는 칸을 만든 뒤에(그때쯤 설정 파일 읽기가 끝나 있어 기다림이 없다)
         if (CmCore.on(store)) CommuteAlarm.rescheduleAsync(this);                 // 출퇴근 브리핑: 앞으로 4주 창을 다시 민다
@@ -313,11 +313,11 @@ public class ShellActivity extends Activity {
         applyTheme();
         restoreRideCard();
         showTab(ShellCore.currentTab(store));
-        KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 키즈 엔진에 맡긴다(없으면 아무 일도 안 한다)
+        KidsPush.start(this, store);                                  // 연결을 시도한 적 있는 기기만: 푸시 토큰을 가족 엔진에 맡긴다(없으면 아무 일도 안 한다)
         kids.tabsChanged = new Runnable() { @Override public void run() { kidsTabsRedraw(); } };
         kidsDeepLink(getIntent());
         final boolean kidsStart = kids.mode() || (b == null && (kids.wantStart() || kidsPushLaunch(getIntent())));
-        if (kidsStart) main.post(new Runnable() { @Override public void run() { if (kids != null) { kids.open(false); kidsTabsEnsure(); } } });          // 설정에서 '키즈 화면으로 시작'을 켠 부모는 앱을 열자마자 키즈 화면
+        if (kidsStart) main.post(new Runnable() { @Override public void run() { if (kids != null) { kids.open(false); kidsTabsEnsure(); } } });          // 설정에서 '가족 화면으로 시작'을 켠 부모는 앱을 열자마자 가족 화면
         loadHdr();
         main.postDelayed(hdrTick, 600000L);
         WidgetCore.captureLaunch(getIntent()); CommuteAlarm.captureBrief(getIntent());
@@ -334,7 +334,7 @@ public class ShellActivity extends Activity {
         } }, 1500L);
         captureLastLoc();
         ioExec.execute(new Runnable() { @Override public void run() { main.post(new Runnable() { @Override public void run() { prefetchTabs(); } }); } });     // 켜는 즉시(0초) 모든 탭 화면을 병렬로 미리 받는다 — 캐시 파일 목록 훑기가 끝난 뒤(주 스레드가 파일을 확인하지 않게)
-        if (b == null && !kidsStart) showOpening();          // s373(YJ: 키즈 화면으로 켜면 하단 탭 자리가 계속 초록으로 나온다): 오프닝(초록 바닥)은 키즈 화면 아래에 깔려 탭 막대 자리만 비쳤다 — 키즈 화면으로 시작할 땐 오프닝을 건너뛴다                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
+        if (b == null && !kidsStart) showOpening();          // s373(YJ: 가족 화면으로 켜면 하단 탭 자리가 계속 초록으로 나온다): 오프닝(초록 바닥)은 가족 화면 아래에 깔려 탭 막대 자리만 비쳤다 — 가족 화면으로 시작할 땐 오프닝을 건너뛴다                                                 // 처음 켤 때만(화면 회전 같은 다시 만들기는 건너뜀): 길동무 친구들의 인사 2초 — 위 준비물은 뒤에서 이미 돌고 있다
     }
 
     // ── 오프닝(s299): 켜자마자 길동무 친구들이 2초쯤 인사한다. 대본은 엔진이 만든 assets/open.json — 시계의 시(時)에 맞는 칸을 고르고, 나올 친구 셋은 켤 때마다 무작위로 고른다 ──
@@ -351,7 +351,7 @@ public class ShellActivity extends Activity {
             return OpenCore.helloFor(helloScript, OpenCore.slotFor(helloScript, cal.get(java.util.Calendar.HOUR_OF_DAY) + cal.get(java.util.Calendar.MINUTE) / 60.0));
         } catch (Throwable ignored) { return null; }
     }
-    private void showOpening() { OpenHost.show(this); }                          // 길동무 키즈와 똑같은 오프닝 한 갈래(OpenHost)
+    private void showOpening() { OpenHost.show(this); }                          // 길동무 패밀리와 똑같은 오프닝 한 갈래(OpenHost)
 
     /** 앱을 켜면 출발지를 내 위치로 자동으로 잡는다(이미 경로를 보고 있거나 출발지를 골랐으면 건드리지 않는다). 권한 안내는 처음 한 번만 묻는다. */
     private void autoGps() {
@@ -367,17 +367,17 @@ public class ShellActivity extends Activity {
         setIntent(it);
         WidgetCore.captureLaunch(it); CommuteAlarm.captureBrief(it);
         widgetLaunch(); briefLaunch();
-        if (kidsPushLaunch(it) && kids != null && !kids.isOpen()) kids.open(true);        // 키즈 알림을 눌러 들어왔다 — 키즈 화면으로
+        if (kidsPushLaunch(it) && kids != null && !kids.isOpen()) kids.open(true);        // 가족 알림을 눌러 들어왔다 — 가족 화면으로
         kidsDeepLink(it);
     }
-    /** 자녀 폰 QR 을 카메라로 찍어 열린 링크(gildongmu-kids://pair?k=…)면 곧바로 연결한다. */
+    /** 가족구성원 폰 QR 을 카메라로 찍어 열린 링크(gildongmu-kids://pair?k=…)면 곧바로 연결한다. */
     private void kidsDeepLink(Intent it) {
         try {
             android.net.Uri u = it == null ? null : it.getData();
             if (u != null && "gildongmu-kids".equals(u.getScheme()) && kids != null) { it.setData(null); kids.joinFromUri(u); }
         } catch (Throwable ignored) { }
     }
-    /** 키즈 푸시 알림을 눌러 열었나(연결된 부모만 뜻이 있다). 한 번 쓰면 지운다. */
+    /** 가족 푸시 알림을 눌러 열었나(연결된 부모만 뜻이 있다). 한 번 쓰면 지운다. */
     private boolean kidsPushLaunch(Intent it) {
         try { if (it != null && it.hasExtra("kids_open")) { it.removeExtra("kids_open"); String kp = it.getStringExtra("kids_pop"); it.removeExtra("kids_pop"); if (kp != null && kids != null && kids.linked()) kids.popFromIntent(kp); return kids != null && kids.linked(); } } catch (Throwable ignored) { }
         return false;
@@ -468,14 +468,14 @@ public class ShellActivity extends Activity {
 
     /** 뒤로가기를 우리가 처리했으면 true. 안드로이드 16(targetSdk 36)에서는 onBackPressed 가 불리지 않아 아래 콜백으로도 같은 길을 탄다. */
     private boolean handleBack() {
-        if (kids != null && kids.onBack()) return true;                                  // 키즈 팝업 · 화면이 떠 있으면 그것부터 닫는다
+        if (kids != null && kids.onBack()) return true;                                  // 가족 팝업 · 화면이 떠 있으면 그것부터 닫는다
         if (OpenHost.back()) return true;                                               // 오프닝 중에 뒤로 가기: 오프닝만 닫는다
         String t = ShellCore.currentTab(store);
-        boolean kidsTop = kids != null && kids.isOpen();                                 // 키즈 화면이 맨 위: 홈에서처럼 바로 종료 확인
+        boolean kidsTop = kids != null && kids.isOpen();                                 // 가족 화면이 맨 위: 홈에서처럼 바로 종료 확인
         if (!kidsTop && !ShellCore.DEFAULT_TAB.equals(t)) {
             store.put(ShellCore.K_TAB, ShellCore.DEFAULT_TAB);
             showTab(ShellCore.DEFAULT_TAB);
-            if (kids != null && kids.mode()) kids.open(true);                             // 키즈 모드에서는 홈 자리가 키즈 화면
+            if (kids != null && kids.mode()) kids.open(true);                             // 가족 모드에서는 홈 자리가 가족 화면
             return true;
         }
         return dlgKind("exit", new Runnable() { @Override public void run() { finish(); } }, null);      // 웹처럼 한 번 더 확인(엔진 카드)
@@ -582,7 +582,7 @@ public class ShellActivity extends Activity {
      *  단 채팅(아래 입력줄이 화면 밑에 붙은 화면)은 입력줄이 키보드 위에 붙어야 하므로 예전처럼 줄인다. */
     private void applyIme() {
         try {
-            boolean chat = ("community".equals(ShellCore.currentTab(store)) && "chat".equals(ShellCore.mode(store))) || (kids != null && kids.isOpen());          // 키즈 화면의 아래 대화 칸도 키보드 위에 붙는다
+            boolean chat = ("community".equals(ShellCore.currentTab(store)) && "chat".equals(ShellCore.mode(store))) || (kids != null && kids.isOpen());          // 가족 화면의 아래 대화 칸도 키보드 위에 붙는다
             getWindow().setSoftInputMode(chat ? android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE : android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
         } catch (Throwable ignored) { }
     }
@@ -908,7 +908,7 @@ public class ShellActivity extends Activity {
         final ScreenView v = viewOfSlot(i);
         boolean keepX = keep0;
         if (ShellCore.S_PENDING.equals(screen)) { viewKey.remove(v); present(v, ShellCore.pendingScreen(ShellCore.currentTab(store)), false); return; }
-        if (ShellCore.S_FAM.equals(screen)) { viewKey.remove(v); shownJson.remove(v); shownKey.remove(v); if (kids != null) kids.showFamily(v); return; }          // 가족대화: 키즈 엔진이 실시간으로 그려 준다
+        if (ShellCore.S_FAM.equals(screen)) { viewKey.remove(v); shownJson.remove(v); shownKey.remove(v); if (kids != null) kids.showFamily(v); return; }          // 가족대화: 가족 엔진이 실시간으로 그려 준다
         if (ShellCore.S_FOOD.equals(screen)) foodSyncSig();                // 맛집 캐시 열쇠에 도착지(없으면 지금 동네)를 넣는다 — 미리 받아 둔 그 장소의 화면이 바로 뜬다
         final String ck = ShellCore.cacheKey(screen, store);
         viewKey.put(v, ck);
@@ -1609,7 +1609,7 @@ public class ShellActivity extends Activity {
         int[] rh = ShellCore.retryHint(json);
         if (rh != null && v != sheetView && viewKey.get(v) != null) { showDelayed(v, json, keep, rh); return; }
         if (json == null || json.length() == 0) {
-            if (v == tabs) { if (v.itemCount() == 0) main.postDelayed(new Runnable() { @Override public void run() { tabsAt.clear(); loadTabs(ShellCore.currentTab(store)); } }, 2500L); return; }        // s369: 아래 탭 막대는 못 받아도 안내 화면을 얹지 않고 조용히 다시 받는다(키즈 모드로 켠 뒤 빈 띠가 되던 일)
+            if (v == tabs) { if (v.itemCount() == 0) main.postDelayed(new Runnable() { @Override public void run() { tabsAt.clear(); loadTabs(ShellCore.currentTab(store)); } }, 2500L); return; }        // s369: 아래 탭 막대는 못 받아도 안내 화면을 얹지 않고 조용히 다시 받는다(가족 모드로 켠 뒤 빈 띠가 되던 일)
             String ck = viewKey.get(v);
             if (ck != null && v != sheetView && (v.itemCount() == 0 || skelViews.contains(v))) {          // 빈 칸이면 안내와 [다시 시도] — 뒤에서 몇 번 더 받아 본다
                 try { String dg = netDiag.get(ck); v.setScreen(ScreenCore.load(ShellCore.errorScreen(dg)), false); shownJson.remove(v); shownKey.remove(v); skelViews.remove(v); fadeIn(v); scheduleRetry(v, ShellCore.DEFAULT_RETRY); return; } catch (Throwable ignored) { }
@@ -1757,8 +1757,8 @@ public class ShellActivity extends Activity {
 
         void handle(ScreenCore.Act a, boolean on) {
             if (which == 3) return;
-            if (which != 2 && kids != null && ShellCore.S_FAM.equals(screenName()) && which == 1) { kids.familyAct(a); return; }          // 가족대화 안의 보내기 · 응원은 키즈 엔진이 맡는다
-            if (which != 2 && kids != null && ShellCore.S_SETTINGS.equals(screenName()) && kids.settingsAct(a, on)) return;          // 설정 안의 키즈 줄(연결 · 응원문구 · 시작 화면)은 키즈 엔진이 맡는다
+            if (which != 2 && kids != null && ShellCore.S_FAM.equals(screenName()) && which == 1) { kids.familyAct(a); return; }          // 가족대화 안의 보내기 · 응원은 가족 엔진이 맡는다
+            if (which != 2 && kids != null && ShellCore.S_SETTINGS.equals(screenName()) && kids.settingsAct(a, on)) return;          // 설정 안의 가족 줄(연결 · 응원문구 · 시작 화면)은 가족 엔진이 맡는다
             if (which != 2) swc.note(a);                          // 칩을 눌러 고른 칸도 적어 둔다 — 그 칸 화면이 오기 전에 밀어도 거기서부터 넘어간다
             if (which == 2 && !deb.gate("tab:" + a.a + ":" + a.v, Debounce.TAP_MS)) return;          // 같은 탭 버튼 연타는 한 번으로
             if ("call".equals(a.a) && ShellCore.RETRY_ACT.equals(a.v)) { if (deb.gate("retry", 600L)) showTab(ShellCore.currentTab(store)); return; }
@@ -1795,7 +1795,7 @@ public class ShellActivity extends Activity {
         }
     }
 
-    /** 키즈 모드 · 키즈 화면 열림 · 엔진이 준 탭 모양이 바뀌었다 — 아래 탭 막대를 다시 읽어 그린다(글 · 아이콘은 엔진 것). */
+    /** 가족 모드 · 가족 화면 열림 · 엔진이 준 탭 모양이 바뀌었다 — 아래 탭 막대를 다시 읽어 그린다(글 · 아이콘은 엔진 것). */
     private void kidsTabsRedraw() {
         try {
             String cur = ShellCore.currentTab(store), ck = "tabs|" + cur;
@@ -1807,7 +1807,7 @@ public class ShellActivity extends Activity {
             if (tabs.itemCount() == 0) kidsTabsEnsure();
         } catch (Throwable ignored) { }
     }
-    /** s369(YJ: 키즈 모드로 두고 껐다 켜면 아래 탭이 빈 띠로 나온다): 켠 직후 · 다시 앞으로 올 때 키즈 모드인데 탭 막대가 비어 있으면(받기 전 · 읽기 실패 · 늦은 답 버림) 곧 · 몇 초 뒤에 한 번씩 다시 받아 채운다. 이미 그려져 있으면 아무 일도 안 한다. */
+    /** s369(YJ: 가족 모드로 두고 껐다 켜면 아래 탭이 빈 띠로 나온다): 켠 직후 · 다시 앞으로 올 때 가족 모드인데 탭 막대가 비어 있으면(받기 전 · 읽기 실패 · 늦은 답 버림) 곧 · 몇 초 뒤에 한 번씩 다시 받아 채운다. 이미 그려져 있으면 아무 일도 안 한다. */
     private void kidsTabsEnsure() {
         kidsTabsWatchStart();
         for (final long d : new long[] { 600L, 2500L, 7000L }) main.postDelayed(new Runnable() { @Override public void run() {
@@ -1821,7 +1821,7 @@ public class ShellActivity extends Activity {
             } catch (Throwable ignored) { }
         } }, d);
     }
-    /** s370(YJ: 자녀 탭에서 계속 하단 탭이 사라진다): 키즈 모드가 켜져 있고 앞에 있는 동안 2.5초마다 아래 탭 막대를 살핀다.
+    /** s370(YJ: 가족구성원 탭에서 계속 하단 탭이 사라진다): 가족 모드가 켜져 있고 앞에 있는 동안 2.5초마다 아래 탭 막대를 살핀다.
      *  안 보이거나 · 높이가 0이거나 · 투명하거나 · 칸이 하나도 없으면 상태를 오류 기록(TABS_BLANK)에 남기고 보이게 고쳐 다시 읽어 채운다. 멀쩡하면 아무 일도 안 한다. */
     private boolean tabsWatchOn;
     private int tabsFixN;
@@ -1855,7 +1855,7 @@ public class ShellActivity extends Activity {
         if (c == null || !showCached(tabs, c)) loadTabs(cur);
         tabs.requestLayout(); tabs.invalidate();
     }
-    /** 키즈 연결이 바뀌었다(연결 · 해제 · 시작 화면 스위치) — 설정 화면이 떠 있으면 맨 위 키즈 줄을 새로 끼워 다시 그린다. */
+    /** 가족 연결이 바뀌었다(연결 · 해제 · 시작 화면 스위치) — 설정 화면이 떠 있으면 맨 위 가족 줄을 새로 끼워 다시 그린다. */
     private void kidsSettingsChanged() {
         try {
             if (slots.length > 0 && ShellCore.S_SETTINGS.equals(slots[slots.length - 1])) { shownJson.remove(body); shownKey.remove(body); loadSlot(slots.length - 1, true); }
@@ -4489,7 +4489,7 @@ public class ShellActivity extends Activity {
     }
     @Override protected void onActivityResult(int rq, int rs, Intent data) {
         super.onActivityResult(rq, rs, data);
-        try { if (kids != null && kids.onPick(rq, rs, data)) return; } catch (Throwable ignored) { }          // 길동무 키즈 마커 사진 고르기
+        try { if (kids != null && kids.onPick(rq, rs, data)) return; } catch (Throwable ignored) { }          // 길동무 패밀리 마커 사진 고르기
     }
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         if (code == REQ_SETUP_NOTIF) { setupSoon(); return; }                    // 알림 창이 닫혔다(허용이든 거부든) — 다음 승인으로

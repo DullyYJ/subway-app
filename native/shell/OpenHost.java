@@ -1,4 +1,4 @@
-package com.dullyyj.subway;   // ★ 오프닝(켤 때 친구들 인사 2초)을 길동무 · 길동무 키즈가 똑같이 쓰는 한 곳 — 대본(assets/open.json) · 시간대 · 날씨 · 친구 뽑기 · 그리기가 모두 이 한 갈래다
+package com.dullyyj.subway;   // ★ 오프닝(켤 때 친구들 인사 2초)을 길동무 · 길동무 패밀리가 똑같이 쓰는 한 곳 — 대본(assets/open.json) · 시간대 · 날씨 · 친구 뽑기 · 그리기가 모두 이 한 갈래다
 
 import android.app.Activity;
 import android.content.Context;
@@ -13,7 +13,7 @@ import java.util.Calendar;
 
 /**
  * 오프닝 띄우기. 계산(시간대 고르기 · 날씨 입히기 · 친구 셋 뽑기 · 움직임)은 엔진(OpenCore · 대본)이 하고 앱은 OpenView 로 그리기만 한다.
- * 길동무(ShellActivity)와 길동무 키즈(MainActivity)가 둘 다 {@link #show(Activity)} 한 줄로 부른다 — 그래서 둘의 오프닝은 늘 같다.
+ * 길동무(ShellActivity)와 길동무 패밀리(MainActivity)가 둘 다 {@link #show(Activity)} 한 줄로 부른다 — 그래서 둘의 오프닝은 늘 같다.
  */
 public final class OpenHost {
     private OpenHost() {}

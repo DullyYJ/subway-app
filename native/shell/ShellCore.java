@@ -366,7 +366,7 @@ public final class ShellCore {
     /** 커뮤니티 머리(칩 줄)를 방식 m 으로 그려 달라는 본문과 그 캐시 열쇠(다른 방식을 눌러도 바로 뜨게 미리 받는 데 쓴다). */
     public static String cchipsBody(String m) { return "{\"cap\":" + CAP + ",\"f\":{\"mode\":" + q("fam".equals(m) ? "chat" : isMode(m) ? m : MODE_DEFAULT) + "}}"; }
     public static String cchipsKey(String m) { return S_CCHIPS + "|" + ("fam".equals(m) ? "fam" : isMode(m) ? m : MODE_DEFAULT); }
-    /** 길동무 키즈와 연결돼 있으면 참 — 커뮤니티 맨 앞에 '가족대화'가 붙는다(연결 상태는 키즈 엔진이 알려 준 것). */
+    /** 길동무 패밀리와 연결돼 있으면 참 — 커뮤니티 맨 앞에 '가족대화'가 붙는다(연결 상태는 가족 엔진이 알려 준 것). */
     public static volatile boolean famOn = false;
     public static final String S_FAM = "fam";
     public static String mode(Store st) { String m = st.get(K_MODE, MODE_DEFAULT); if ("fam".equals(m)) return famOn ? "fam" : MODE_DEFAULT; return isMode(m) ? m : MODE_DEFAULT; }

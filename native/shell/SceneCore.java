@@ -31,7 +31,7 @@ public final class SceneCore {
     }
 
     // ═══ 상수·표 ═══
-    /** 자녀가 꾸민 옷 입히기(부모 앱이 붙인다). 기본은 null — 자녀와 연동되지 않았거나 입은 것이 없으면 장면은 원래대로 그린다. */
+    /** 가족구성원이 꾸민 옷 입히기(부모 앱이 붙인다). 기본은 null — 가족구성원과 연동되지 않았거나 입은 것이 없으면 장면은 원래대로 그린다. */
     public interface WearHook {
         void draw(SceneCv c, Actor a, int kind, int idx, double dx, double dy, double sc);
         SceneCv.Img nh(String id, boolean act);
@@ -156,7 +156,7 @@ public final class SceneCore {
     void stk(Actor a, String k, double sec) { Stk s = new Stk(); s.k = k; s.t0 = t; s.dur = sec; a.stk = s; }
     boolean every(AS A, String key, double gap) { Double v = A.ev.get(key); if (v == null || t - v >= gap) { A.ev.put(key, t); return true; } return false; }
     boolean once(AS A, String key) { if (A.on.containsKey(key)) return false; A.on.put(key, true); return true; }
-    /** 키즈 앱 등: true 이면 친구들이 스스로 놀 때(SceneActs 의 S.haptic)의 진동을 모두 끈다 — 손으로 잡고 놓는 진동(tHaptic)은 그대로. */
+    /** 패밀리 앱 등: true 이면 친구들이 스스로 놀 때(SceneActs 의 S.haptic)의 진동을 모두 끈다 — 손으로 잡고 놓는 진동(tHaptic)은 그대로. */
     public static volatile boolean quietAuto = false;
     void haptic(String n) { if (quietAuto) return; tHaptic(n); }
     void tHaptic(String n) { try { host.haptic(n); } catch (RuntimeException e) { /* 진동 실패는 그림에 영향 없다 */ } }
@@ -848,7 +848,7 @@ public final class SceneCore {
         int idx = a.intro ? a.ii : (int) Math.floorMod((long) Math.floor(a.fr), 16L);
         if (ash != null) { sheet = ash; idx = Math.max(0, Math.min(15, a.cell)); }
         else if (psh != null) { sheet = psh; idx = Math.max(0, Math.min(7, a.pose)); }
-        final WearHook wh = a.intro ? null : WEAR_HOOK;                                              // 자녀가 꾸민 옷(연동된 부모만) — 두덩이 새 모자를 쓰면 안전모 없는 시트로
+        final WearHook wh = a.intro ? null : WEAR_HOOK;                                              // 가족구성원이 꾸민 옷(연동된 부모만) — 두덩이 새 모자를 쓰면 안전모 없는 시트로
         if (wh != null && psh == null) { SceneCv.Img nh = wh.nh(a.id, ash != null); if (nh != null) sheet = nh; }
         double lift = (D.lift + a.alt) * zz * (a.kind.equals("eagle") ? 1 : s / a.k);
         double shA = (L.night ? .22 : .34) * (a.kind.equals("eagle") ? .7 : 1) * (L.wk.equals("rain") || L.wk.equals("overcast") ? .7 : 1);

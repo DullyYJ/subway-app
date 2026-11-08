@@ -42,10 +42,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 길동무 키즈 연동(부모 쪽) — 2026-11. 자녀와 연결된 부모에게만 켜지는 '키즈 감시 화면'과 설정 줄.
- *  · 무엇을 보일지 · 어떻게 말할지 · 도착했는지는 모두 키즈 서버 엔진이 정한다. 이 클래스는 엔진이 준 화면을 ScreenView 에 꽂고, 눌림을 그대로 엔진에 보내기만 한다.
- *  · 연결 전에는 아무것도 하지 않는다: 통신 0 · 화면 0 · 홈 버튼을 3초 눌러도 변화 없음. (설정 맨 위의 '길동무 키즈 연결' 한 줄만 있다)
- *  · 실시간: 키즈 화면이 떠 있는 동안에만 엔진에 긴 대기(/p/wait)를 걸어 둔다 — 자녀가 무언가 하면 엔진이 곧바로 새 화면을 내려 준다. 화면을 닫으면 통신도 멈춘다.
+ * 길동무 패밀리 연동(부모 쪽) — 2026-11. 가족구성원과 연결된 부모에게만 켜지는 '가족 화면'과 설정 줄.
+ *  · 무엇을 보일지 · 어떻게 말할지 · 도착했는지는 모두 가족 서버 엔진이 정한다. 이 클래스는 엔진이 준 화면을 ScreenView 에 꽂고, 눌림을 그대로 엔진에 보내기만 한다.
+ *  · 연결 전에는 아무것도 하지 않는다: 통신 0 · 화면 0 · 홈 버튼을 3초 눌러도 변화 없음. (설정 맨 위의 '길동무 패밀리 연결' 한 줄만 있다)
+ *  · 실시간: 가족 화면이 떠 있는 동안에만 엔진에 긴 대기(/p/wait)를 걸어 둔다 — 가족구성원이 무언가 하면 엔진이 곧바로 새 화면을 내려 준다. 화면을 닫으면 통신도 멈춘다.
  *  · 받은 화면은 뒤 스레드에서 읽고 검증까지 마쳐 두므로 주 스레드는 꽂기만 한다. 마지막 화면은 저장해 두었다가 다시 열 때 바로 보여 주고 뒤에서 새로 받는다(SWR).
  */
 public final class KidsHub {
@@ -54,19 +54,19 @@ public final class KidsHub {
     private static final long HOLD_MS = 3000L;
     private static final Pattern CODE = Pattern.compile("[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}");
     /** 연결 전에 설정 맨 위에 보이는 한 줄(연결하면 엔진이 준 줄들로 바뀐다). */
-    private static final String UNLINKED_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,6,16,6],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"navrow\",\"title\":\"길동무 키즈 연결\",\"sub\":\"자녀 폰의 QR이나 시크릿 키로 연결해요\",\"act\":{\"a\":\"call\",\"v\":\"kl.open\"},\"size\":14,\"top\":true}]}]";
+    private static final String UNLINKED_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,6,16,6],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"navrow\",\"title\":\"길동무 패밀리 연결\",\"sub\":\"가족구성원 폰의 QR이나 시크릿 키로 연결해요\",\"act\":{\"a\":\"call\",\"v\":\"kl.open\"},\"size\":14,\"top\":true}]}]";
     /** s445: 연동 자체가 구독 — 구독이 켜져 있는데 구독자가 아니면 '연결' 줄 대신 눌리지 않는 안내 + [구독하기]. 눌리는 것은 구독 화면(sub.open)뿐이다. */
-    private static final String LOCK_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,10,16,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":14,\"color\":\"sub\",\"bold\":true,\"pad\":[0,0,0,2]},{\"t\":\"text\",\"s\":\"길동무를 구독하면 자녀와 연결할 수 있어요 · 처음 14일 무료\",\"size\":11,\"color\":\"sub\",\"pad\":[0,0,0,8]},{\"t\":\"row\",\"gap\":8,\"pad\":[0,0,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"구독하기\",\"act\":{\"a\":\"call\",\"v\":\"sub.open\"},\"h\":38,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]}]";
+    private static final String LOCK_ROW = "[{\"t\":\"panel\",\"pad\":[16,12,16,0],\"ip\":[16,10,16,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"길동무 패밀리 연결\",\"size\":14,\"color\":\"sub\",\"bold\":true,\"pad\":[0,0,0,2]},{\"t\":\"text\",\"s\":\"길동무를 구독하면 가족구성원과 연결할 수 있어요 · 처음 14일 무료\",\"size\":11,\"color\":\"sub\",\"pad\":[0,0,0,8]},{\"t\":\"row\",\"gap\":8,\"pad\":[0,0,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"구독하기\",\"act\":{\"a\":\"call\",\"v\":\"sub.open\"},\"h\":38,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]}]";
     private long lastBill = 0L;
 
-    /** 연결 전에 '길동무 키즈 연결'을 처음 누를 때 서버(등록 + 화면 요청 두 번의 통신)를 기다리지 않고 바로 띄우는 기본 화면 — 서버 linkSheet(연결된 자녀 없음 · 내 이름 비어 있음)와 같은 모양이고, 서버 답이 오면 그것으로 바뀐다. */
-    private static final String LINK_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidlink\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"길동무 키즈 연결\",\"size\":15,\"color\":\"text\",\"pad\":[16,14,16,2],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀 폰의 길동무 키즈 설정에서 QR 이나 시크릿 키를 만들어 주세요(10분 동안 쓸 수 있어요).\",\"size\":11,\"color\":\"sub\",\"pad\":[16,0,16,6]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"내 이름 (자녀에게 보여요)\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"kpn\",\"hint\":\"예: 엄마 · 아빠\",\"value\":\"\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"이름 저장\",\"act\":{\"a\":\"call\",\"v\":\"kl.pname\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"새 자녀 연결\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"klc\",\"hint\":\"시크릿 키 입력 (XXXXX-XXXXX)\",\"maxlen\":12,\"h\":42,\"watch\":true},{\"t\":\"field\",\"key\":\"kln\",\"hint\":\"자녀 이름 (선택)\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"QR 찍기\",\"act\":{\"a\":\"call\",\"v\":\"kl.scan\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"},{\"t\":\"button\",\"s\":\"키로 연결\",\"act\":{\"a\":\"call\",\"v\":\"kl.join\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,14],\"kids\":[{\"t\":\"button\",\"s\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"kl.close\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"1afbxw9\"}";
-    /** s415: 처음(법정대리인 확인 전) 키즈 화면을 열면 서버 답을 기다리지 않고 바로 띄우는 '보호자 확인' 팝업 — 서버 gdScreen('자녀')와 같은 모양(시험이 같은지 확인한다). 서버 답이 오면 그것으로 바뀐다. */
-    private static final String GD_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidgd\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"보호자 확인\",\"size\":16,\"color\":\"text\",\"pad\":[16,24,16,6],\"bold\":true},{\"t\":\"text\",\"s\":\"자녀의 위치를 보기 전에 아래를 확인해 주세요.\",\"size\":12.5,\"color\":\"sub\",\"pad\":[16,0,16,8]},{\"t\":\"panel\",\"pad\":[12,4,12,0],\"ip\":[14,10,14,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"• 저는 이 자녀의 법정대리인(친권자 · 후견인)이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀는 만 9세 이상이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀에게 위치를 확인한다는 것을 알리고, 자녀도 동의했어요 (자녀 앱에서 동의해야 위치가 와요)\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 자녀의 안전을 지키는 데에만 쓰고, 다른 사람의 위치를 몰래 확인하는 데 쓰지 않아요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 사실과 다르면 이용이 제한될 수 있고 법적 책임은 제게 있어요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]}]},{\"t\":\"text\",\"s\":\"이 확인을 한 시각이 기록돼요. 자세한 내용은 개인정보 처리방침과 위치기반서비스 이용약관에 있어요.\",\"size\":11,\"color\":\"sub\",\"pad\":[16,10,16,6]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,0,12,0],\"kids\":[{\"t\":\"button\",\"s\":\"처리방침 보기\",\"act\":{\"a\":\"open\",\"url\":\"https://gildongmu-kids.phg0643.workers.dev/legal/privacy\"},\"h\":34,\"size\":12,\"bold\":false,\"r\":10},{\"t\":\"button\",\"s\":\"이용약관 보기\",\"act\":{\"a\":\"open\",\"url\":\"https://gildongmu-kids.phg0643.workers.dev/legal/terms\"},\"h\":34,\"size\":12,\"bold\":false,\"r\":10}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,16],\"kids\":[{\"t\":\"button\",\"s\":\"모두 확인했어요\",\"act\":{\"a\":\"call\",\"v\":\"kg.ok\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"4g7k46\"}";
+    /** 연결 전에 '길동무 패밀리 연결'을 처음 누를 때 서버(등록 + 화면 요청 두 번의 통신)를 기다리지 않고 바로 띄우는 기본 화면 — 서버 linkSheet(연결된 가족구성원 없음 · 내 이름 비어 있음)와 같은 모양이고, 서버 답이 오면 그것으로 바뀐다. */
+    private static final String LINK_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidlink\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"길동무 패밀리 연결\",\"size\":15,\"color\":\"text\",\"pad\":[16,14,16,2],\"bold\":true},{\"t\":\"text\",\"s\":\"가족구성원 폰의 길동무 패밀리 설정에서 QR 이나 시크릿 키를 만들어 주세요(10분 동안 쓸 수 있어요).\",\"size\":11,\"color\":\"sub\",\"pad\":[16,0,16,6]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"내 이름 (가족구성원에게 보여요)\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"kpn\",\"hint\":\"예: 엄마 · 아빠\",\"value\":\"\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"이름 저장\",\"act\":{\"a\":\"call\",\"v\":\"kl.pname\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"panel\",\"pad\":[12,8,12,0],\"ip\":[14,12,14,12],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"새 가족구성원 연결\",\"size\":12,\"color\":\"sub\",\"pad\":[0,0,0,6],\"bold\":true},{\"t\":\"field\",\"key\":\"klc\",\"hint\":\"시크릿 키 입력 (XXXXX-XXXXX)\",\"maxlen\":12,\"h\":42,\"watch\":true},{\"t\":\"field\",\"key\":\"kln\",\"hint\":\"가족구성원 이름 (선택)\",\"maxlen\":8,\"h\":42},{\"t\":\"row\",\"gap\":8,\"pad\":[0,8,0,0],\"kids\":[{\"t\":\"button\",\"s\":\"QR 찍기\",\"act\":{\"a\":\"call\",\"v\":\"kl.scan\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"},{\"t\":\"button\",\"s\":\"키로 연결\",\"act\":{\"a\":\"call\",\"v\":\"kl.join\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,14],\"kids\":[{\"t\":\"button\",\"s\":\"닫기\",\"act\":{\"a\":\"call\",\"v\":\"kl.close\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"card2\",\"tc\":\"text\",\"line\":\"border\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"1afbxw9\"}";
+    /** s415: 처음(법정대리인 확인 전) 가족 화면을 열면 서버 답을 기다리지 않고 바로 띄우는 '보호자 확인' 팝업 — 서버 gdScreen('가족구성원')와 같은 모양(시험이 같은지 확인한다). 서버 답이 오면 그것으로 바뀐다. */
+    private static final String GD_SEED = "{\"ok\":true,\"v\":1,\"screen\":\"kidgd\",\"cover\":\"tab\",\"head\":[],\"body\":[{\"t\":\"text\",\"s\":\"보호자 확인\",\"size\":16,\"color\":\"text\",\"pad\":[16,24,16,6],\"bold\":true},{\"t\":\"text\",\"s\":\"가족구성원의 위치를 보기 전에 아래를 확인해 주세요.\",\"size\":12.5,\"color\":\"sub\",\"pad\":[16,0,16,8]},{\"t\":\"panel\",\"pad\":[12,4,12,0],\"ip\":[14,10,14,10],\"fill\":\"card\",\"line\":\"border\",\"r\":14,\"kids\":[{\"t\":\"text\",\"s\":\"• 저는 이 가족구성원의 법정대리인(친권자 · 후견인)이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 가족구성원은 만 9세 이상이에요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 가족구성원에게 위치를 확인한다는 것을 알리고, 가족구성원도 동의했어요 (가족구성원 앱에서 동의해야 위치가 와요)\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 가족구성원의 안전을 지키는 데에만 쓰고, 다른 사람의 위치를 몰래 확인하는 데 쓰지 않아요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]},{\"t\":\"text\",\"s\":\"• 사실과 다르면 이용이 제한될 수 있고 법적 책임은 제게 있어요\",\"size\":13,\"color\":\"text\",\"pad\":[0,4,0,4]}]},{\"t\":\"text\",\"s\":\"이 확인을 한 시각이 기록돼요. 자세한 내용은 개인정보 처리방침과 위치기반서비스 이용약관에 있어요.\",\"size\":11,\"color\":\"sub\",\"pad\":[16,10,16,6]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,0,12,0],\"kids\":[{\"t\":\"button\",\"s\":\"처리방침 보기\",\"act\":{\"a\":\"open\",\"url\":\"https://gildongmu-kids.phg0643.workers.dev/legal/privacy\"},\"h\":34,\"size\":12,\"bold\":false,\"r\":10},{\"t\":\"button\",\"s\":\"이용약관 보기\",\"act\":{\"a\":\"open\",\"url\":\"https://gildongmu-kids.phg0643.workers.dev/legal/terms\"},\"h\":34,\"size\":12,\"bold\":false,\"r\":10}]},{\"t\":\"row\",\"gap\":8,\"pad\":[12,12,12,16],\"kids\":[{\"t\":\"button\",\"s\":\"모두 확인했어요\",\"act\":{\"a\":\"call\",\"v\":\"kg.ok\"},\"h\":40,\"size\":13,\"bold\":true,\"r\":10,\"fill\":\"gold\",\"tc\":\"#121214\",\"line\":\"gold\"}]}],\"dlg\":{\"w\":460,\"maxh\":0.9,\"dim\":0.5,\"top\":0.5,\"r\":18,\"mx\":14,\"fit\":false},\"rev\":\"wb4hk4\"}";
     private final Activity act;
     private final ShellCore.Store store;
     private final float dpr;
-    private final Handler main = new Handler(Looper.getMainLooper()) {      // 키즈 화면의 어떤 후속 처리도 앱을 끝내지 않는다: 오류는 오류 로그에만 적는다
+    private final Handler main = new Handler(Looper.getMainLooper()) {      // 가족 화면의 어떤 후속 처리도 앱을 끝내지 않는다: 오류는 오류 로그에만 적는다
         @Override public void dispatchMessage(android.os.Message m) {
             try { super.dispatchMessage(m); } catch (Throwable e) { try { ErrLog.record(KidsHub.this.act, e, false); } catch (Throwable ignored) { } }
         }
@@ -87,8 +87,8 @@ public final class KidsHub {
     private boolean open, paused;
     private long lastRefresh = 0L;
     private String lastHubJson = "";
-    private volatile ScreenCore.Screen hubPre; private volatile String hubPreJs = ""; private long lastPre;          // s375: 키즈 화면은 미리 받아 해석까지 마쳐 둔다 — 홈에서 키즈로 넘어올 때 빈 화면이 없게
-    /** 키즈 화면이 아닐 때(홈 등) 뒤 스레드에서 키즈 화면을 미리 받아 둔다(저장본 → 서버 최신). 45초에 한 번만. */
+    private volatile ScreenCore.Screen hubPre; private volatile String hubPreJs = ""; private long lastPre;          // s375: 가족 화면은 미리 받아 해석까지 마쳐 둔다 — 홈에서 가족로 넘어올 때 빈 화면이 없게
+    /** 가족 화면이 아닐 때(홈 등) 뒤 스레드에서 가족 화면을 미리 받아 둔다(저장본 → 서버 최신). 45초에 한 번만. */
     public void preload() {
         if (!linked) return;
         long now = SystemClock.elapsedRealtime();
@@ -138,16 +138,16 @@ public final class KidsHub {
 
     public KidsHub(Activity a, ShellCore.Store st, float dpr, FrameLayout wrap, View[] slide, Runnable settingsChanged) {
         this.act = a; this.store = st; this.dpr = dpr; this.slide = slide; this.settingsChanged = settingsChanged;
-        MarkerPhoto.init(a.getApplicationContext());                          // 자녀 마커 사진(이 폰에만 저장) 불러오기
+        MarkerPhoto.init(a.getApplicationContext());                          // 가족구성원 마커 사진(이 폰에만 저장) 불러오기
         cid = st.get(K_CID, "");
         String nodes = st.get(K_NODES, "");
         linked = nodes.length() > 2;
-        FriendWear.I.init(a);                                                 // 자녀가 꾸민 친구들 모습을 홈 장면에 — 폰에 남겨 둔 모습으로 켜자마자 바로(통신을 기다리지 않는다)
+        FriendWear.I.init(a);                                                 // 가족구성원이 꾸민 친구들 모습을 홈 장면에 — 폰에 남겨 둔 모습으로 켜자마자 바로(통신을 기다리지 않는다)
         FriendWear.I.apply(linked ? st.get(K_WEAR, "") : "");
-        ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 키즈 화면 · 대화 열기 팝업에서)
+        ShellCore.famOn = false;                                              // 커뮤니티의 가족대화 칩은 없앴다(대화는 가족 화면 · 대화 열기 팝업에서)
         ScreenCore.settingsExtra = extraJson();
-        SceneCore.quietAuto = mode();                                         // 키즈 모드에서는 홈 장면의 친구들 활동 진동을 울리지 않는다
-        main.postDelayed(new Runnable() { @Override public void run() { if (!open) preload(); } }, 2500L);          // s375: 앱을 켜면 키즈 화면을 미리 받아 둔다
+        SceneCore.quietAuto = mode();                                         // 가족 모드에서는 홈 장면의 친구들 활동 진동을 울리지 않는다
+        main.postDelayed(new Runnable() { @Override public void run() { if (!open) preload(); } }, 2500L);          // s375: 앱을 켜면 가족 화면을 미리 받아 둔다
         layer = new FrameLayout(a);
         layer.setClickable(true);
         layer.setVisibility(View.GONE);
@@ -155,7 +155,7 @@ public final class KidsHub {
         hubV.setDpr(dpr);
         hubV.setPalette(ShellCore.palette(ShellCore.theme(st)));
         hubV.setListener(new Host(null));
-        hubV.setSwipeHost(new ScreenView.SwipeHost() {                        // s382: 자녀가 여럿이면 확인 화면을 좌우로 밀어 다음·이전 자녀로 — 어느 자녀로 갈지(kc.<자녀>)는 엔진이 화면의 sw 에 줬고, 앱은 그 행동을 그대로 보낸다(새 화면은 그 자녀의 지도·뭐하니·퀘스트·대화)
+        hubV.setSwipeHost(new ScreenView.SwipeHost() {                        // s382: 가족구성원이 여럿이면 확인 화면을 좌우로 밀어 다음·이전 가족구성원으로 — 어느 가족구성원으로 갈지(kc.<가족구성원>)는 엔진이 화면의 sw 에 줬고, 앱은 그 행동을 그대로 보낸다(새 화면은 그 가족구성원의 지도·뭐하니·퀘스트·대화)
             @Override public boolean onSwipe(ScreenView sv, int dir) {
                 ScreenCore.Screen cs = sv.currentScreen();
                 ScreenCore.Act a = cs == null ? null : (dir == -1 ? cs.swL : cs.swR);
@@ -167,7 +167,7 @@ public final class KidsHub {
             @Override public boolean canSwipe() { ScreenCore.Screen cs = hubV.currentScreen(); return cs != null && (cs.swL != null || cs.swR != null); }
         });
         layer.addView(hubV, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        hubVec = new VecMap(a, layer, hubV, dpr);                             // 자녀 위치 지도도 정류장 지도와 같은 벡터 지도(MapLibre · OpenFreeMap) — 못 받으면 아래 타일 그림이 대신 보인다
+        hubVec = new VecMap(a, layer, hubV, dpr);                             // 가족구성원 위치 지도도 정류장 지도와 같은 벡터 지도(MapLibre · OpenFreeMap) — 못 받으면 아래 타일 그림이 대신 보인다
         hubV.setVecHost(hubVec);
         noteV = new ScreenView(a);                                           // 짧은 안내 한 줄(아래 토스트 대신 위에 잠깐 뜨는 알약) — 글은 엔진이 준 것
         noteV.setDpr(dpr);
@@ -199,13 +199,13 @@ public final class KidsHub {
     // ───────── 상태 ─────────
     public boolean linked() { return linked; }
     public boolean isOpen() { return open; }
-    /** 키즈 모드(아래 탭의 가운데 칸이 '키즈'): 연결되어 있고 켜 둔 상태. 다른 탭을 눌러도 · 앱을 껐다 켜도 이어진다. */
+    /** 가족 모드(아래 탭의 가운데 칸이 '가족'): 연결되어 있고 켜 둔 상태. 다른 탭을 눌러도 · 앱을 껐다 켜도 이어진다. */
     public boolean mode() { return linked && "1".equals(store.get(K_MODE, "0")); }
     /** 탭 막대가 바뀌어야 할 때 불린다(모드 · 열림 · 엔진이 준 탭 모양이 바뀜). 주 스레드에서 부른다. */
     public Runnable tabsChanged;
     private void fireTabs() { SceneCore.quietAuto = mode(); final Runnable r = tabsChanged; if (r != null) main.post(r); }
     private void setMode(boolean on) { if (on == "1".equals(store.get(K_MODE, "0"))) { SceneCore.quietAuto = mode(); return; } store.put(K_MODE, on ? "1" : "0"); fireTabs(); }
-    /** 탭 막대 화면에 키즈 모드를 입힌다: 홈 칸의 글자 · 아이콘은 엔진이 준 것(/p/setrow 의 tab), 켜진 칸은 키즈 화면이 떠 있는지로. 이 모드가 아니면 그대로. */
+    /** 탭 막대 화면에 가족 모드를 입힌다: 홈 칸의 글자 · 아이콘은 엔진이 준 것(/p/setrow 의 tab), 켜진 칸은 가족 화면이 떠 있는지로. 이 모드가 아니면 그대로. */
     public String patchTabs(String json) {
         if (!mode() || json == null || json.indexOf("tab.home") < 0) return json;
         try {
@@ -227,7 +227,7 @@ public final class KidsHub {
                         JSONObject ac = it.optJSONObject("act");
                         boolean home = ac != null && "tab.home".equals(ac.optString("v"));
                         if (home) {
-                            it.put("label", tab != null && tab.optString("label").length() > 0 ? tab.optString("label") : "키즈");
+                            it.put("label", tab != null && tab.optString("label").length() > 0 ? tab.optString("label") : "가족");
                             if (tab != null && tab.optString("icon").length() > 0) it.put("icon", tab.optString("icon"));
                             it.put("on", open);
                         } else if (open) it.put("on", false);
@@ -239,7 +239,7 @@ public final class KidsHub {
     }
     /** 탭 막대 캐시 글을 다시 읽게 하는 열쇠(모드 · 열림이 다르면 다른 화면). */
     public String tabKey() { return mode() ? (open ? "K1" : "K0") + store.get(K_TABX, "").hashCode() : ""; }
-    /** 앱을 켤 때 키즈 화면으로 시작할지 — 연결되어 있고 설정이 켜졌을 때만. */
+    /** 앱을 켤 때 가족 화면으로 시작할지 — 연결되어 있고 설정이 켜졌을 때만. */
     public boolean wantStart() { return linked && ("1".equals(store.get(K_START, "0")) || "1".equals(store.get(K_MODE, "0"))); }
 
     /** 구독이 켜져 있고(서버가 알려 준 값) 이 부모가 구독자가 아니면 참 — 연결 줄이 잠긴다. 구독이 꺼져 있으면(기본) 늘 거짓. */
@@ -270,7 +270,7 @@ public final class KidsHub {
     private void vecOff() { if (hubVec != null && hubVecOn) { hubVecOn = false; hubVec.onPause(); hubVec.onStop(); } }
     public void resume() { paused = false; KidsPush.hub = this; if (!open) preload(); vecOn(); if (open) { startLoop(loopView()); } if (famV != null) startFam(++famEp); refreshLink(false); }
     public void pause() { paused = true; stopLoop(); famEp++; door.close(); vecOff(); }
-    /** s385: 키즈 화면(허브 아래 대화 칸 · 대화방 · 커뮤니티 가족대화)을 지금 실제로 보고 있나 — 알림은 이때만 숨긴다(다른 탭을 보고 있으면 카톡처럼 알림이 온다). */
+    /** s385: 가족 화면(허브 아래 대화 칸 · 대화방 · 커뮤니티 가족대화)을 지금 실제로 보고 있나 — 알림은 이때만 숨긴다(다른 탭을 보고 있으면 카톡처럼 알림이 온다). */
     public boolean viewing() { return open && !paused; }
     public void destroy() { alive = false; if (hubVec != null) hubVec.onDestroy(); stopLoop(); closeSheet(true); }
 
@@ -299,8 +299,8 @@ public final class KidsHub {
             if (!was && a == MotionEvent.ACTION_UP && linked) {
                 float w = tabs.getWidth(), x = e.getX();
                 boolean center = w > 0f && x >= w * 2f / 5f && x < w * 3f / 5f;
-                if (center) { if (mode() && !open) open(true); }                  // 키즈 모드에서 '키즈' 칸을 짧게 누르면 키즈 화면으로 돌아온다
-                else if (open) closeNow();                                         // 다른 탭을 짧게 누르면 키즈 화면은 내려가지만 키즈 모드(가운데 칸)는 남는다
+                if (center) { if (mode() && !open) open(true); }                  // 가족 모드에서 '가족' 칸을 짧게 누르면 가족 화면으로 돌아온다
+                else if (open) closeNow();                                         // 다른 탭을 짧게 누르면 가족 화면은 내려가지만 가족 모드(가운데 칸)는 남는다
             }
             return was;
         }
@@ -309,16 +309,16 @@ public final class KidsHub {
 
     public boolean onBack() {
         if (sheetD != null && sheetD.isShowing()) { closeSheet(false); return true; }
-        return false;                                                          // 키즈 화면에서 뒤로 가기는 홈에서처럼 '종료할까요' 로 이어진다(앱을 켜면 다시 키즈 화면)
+        return false;                                                          // 가족 화면에서 뒤로 가기는 홈에서처럼 '종료할까요' 로 이어진다(앱을 켜면 다시 가족 화면)
     }
 
-    /** 가운데 칸 3초 꾹: 키즈 모드를 켜고 끈다(끄면 홈으로 돌아온다). */
+    /** 가운데 칸 3초 꾹: 가족 모드를 켜고 끈다(끄면 홈으로 돌아온다). */
     public void toggle() {
         if (!linked) return;                                                   // 연결 안 된 사람은 아무 변화 없음
         if (mode()) { setMode(false); if (open) close(true); else fireTabs(); } else open(true);
     }
 
-    // ───────── 키즈 화면 열고 닫기(오른쪽에서 왼쪽으로 · 돌아갈 땐 왼쪽에서 오른쪽으로 넘어간다) ─────────
+    // ───────── 가족 화면 열고 닫기(오른쪽에서 왼쪽으로 · 돌아갈 땐 왼쪽에서 오른쪽으로 넘어간다) ─────────
     public void open(boolean anim) {
         if (!linked || open) return;
         open = true;
@@ -375,7 +375,7 @@ public final class KidsHub {
     }
 
     // ───────── 설정 줄 ─────────
-    /** 설정 화면에서 눌린 것 가운데 키즈 것(kl.* · kh.* · 시작 화면 스위치)을 가져간다. */
+    /** 설정 화면에서 눌린 것 가운데 가족 것(kl.* · kh.* · 시작 화면 스위치)을 가져간다. */
     public boolean settingsAct(ScreenCore.Act a, boolean on) {
         if (a == null) return false;
         if ("set".equals(a.a) && "kidsHome".equals(a.key)) { setStart(on); return true; }
@@ -385,11 +385,11 @@ public final class KidsHub {
 
     private void setStart(final boolean on) {
         store.put(K_START, on ? "1" : "0");
-        memScr.remove("kn.open"); memJs.remove("kn.open"); store.put(K_SC + "kn.open", "");          // 길동무 키즈 팝업을 다시 열 때 옛 스위치 모양이 먼저 보이지 않게
+        memScr.remove("kn.open"); memJs.remove("kn.open"); store.put(K_SC + "kn.open", "");          // 길동무 패밀리 팝업을 다시 열 때 옛 스위치 모양이 먼저 보이지 않게
         send("kl.start", "", on ? "1" : "0", null, null);
     }
 
-    // ───────── 자녀가 꾸민 모습(홈 장면) ─────────
+    // ───────── 가족구성원이 꾸민 모습(홈 장면) ─────────
     /** 엔진이 준 저장 글("고른친구,탭;모자,옷,소지품×8")을 폰에 남기고 장면에 바로 입힌다. 모양이 틀리면 무시. 어느 스레드에서든 부른다. */
     private void gotWear(String w) {
         if (w == null) return;
@@ -398,7 +398,7 @@ public final class KidsHub {
         FriendWear.I.apply(w);
     }
 
-    /** 조용한 푸시(k:wear)로 자녀가 방금 바꾼 모습이 왔다 — 보고 있는 자녀의 것만 입힌다. 알림 카드는 없다. */
+    /** 조용한 푸시(k:wear)로 가족구성원이 방금 바꾼 모습이 왔다 — 보고 있는 가족구성원의 것만 입힌다. 알림 카드는 없다. */
     public void onWearPush(String pcid, String w) {
         if (!linked || w == null) return;
         if (pcid != null && pcid.length() > 0 && cid.length() > 0 && !pcid.equals(cid)) return;
@@ -452,13 +452,13 @@ public final class KidsHub {
                 boolean tabDiff = !tjs.equals(store.get(K_TABX, ""));
                 store.put(K_TABX, tjs);
                 linked = nl;
-                if (!nl) store.put(K_MODE, "0");                                  // 연결이 끊기면 키즈 모드도 끝
-                gotWear(nl ? o.optString("w", "") : "");                            // 자녀가 꾸민 모습 — 연결이 없으면 원래 친구들로
+                if (!nl) store.put(K_MODE, "0");                                  // 연결이 끊기면 가족 모드도 끝
+                gotWear(nl ? o.optString("w", "") : "");                            // 가족구성원이 꾸민 모습 — 연결이 없으면 원래 친구들로
                 if (tabDiff || !nl) fireTabs();
                 ScreenCore.settingsExtra = extraJson();
                 if (!nl) hideFamily();
                 if (nl) KidsPush.start(act, store);                              // 연결된 부모만: 푸시 토큰을 엔진에 맡긴다
-                if (nl && "1".equals(store.get(K_REG, "0"))) { lastPre = 0L; preload(); }                  // s415: 연결하자마자 키즈 화면을 미리 받아 둔다(처음 열 때 기다리지 않게)
+                if (nl && "1".equals(store.get(K_REG, "0"))) { lastPre = 0L; preload(); }                  // s415: 연결하자마자 가족 화면을 미리 받아 둔다(처음 열 때 기다리지 않게)
                 if (!changed) return;
                 main.post(new Runnable() { @Override public void run() {
                     if (!linked && open) close(true);
@@ -697,7 +697,7 @@ public final class KidsHub {
     // ───────── 눌림 보내기(엔진이 새 화면을 돌려준다) ─────────
     private void send(final String v, final String id, final String t, final Map<String, String> f, final ScreenView src) {
         final String sk = sheetKind;
-        final String ckey = "kq.open".equals(v) && "p".equals(t) ? "kq.open:p" : v;                 // 미션 팝업은 쪽(자녀 · 부모님)마다 따로 기억한다
+        final String ckey = "kq.open".equals(v) && "p".equals(t) ? "kq.open:p" : v;                 // 미션 팝업은 쪽(가족구성원 · 부모님)마다 따로 기억한다
         if (v != null && sheetD == null && !"kx.open".equals(v) && v.matches("k[a-z]{1,2}\\.open")) {                    // 미리 받아 둔 팝업이 있으면 통신을 기다리지 않고 바로 띄운다(서버 답이 오면 새 것으로 바꾼다)
             ScreenCore.Screen ms = memScr.get(ckey); String mj = memJs.get(ckey);
             if (ms == null && "kl.open".equals(v) && !linked && store.get(K_SC + ckey, "").length() == 0) {          // 처음 · 연결 전: 기본 화면을 바로(통신 없이)
@@ -770,7 +770,7 @@ public final class KidsHub {
         } });
     }
 
-    /** 지난 경로 · 실시간 전환을 누른 즉시: 서버 답이 오기 전까지 키즈 화면 위에 짧은 안내를 보인다(note 는 3초 뒤 저절로 사라지고, 답이 오면 바로 걷는다). */
+    /** 지난 경로 · 실시간 전환을 누른 즉시: 서버 답이 오기 전까지 가족 화면 위에 짧은 안내를 보인다(note 는 3초 뒤 저절로 사라지고, 답이 오면 바로 걷는다). */
     private void routeWait(String m) { if (open) note(m); }
 
     private static String kindOf(String id) {
@@ -779,13 +779,13 @@ public final class KidsHub {
         if ("kidcall".equals(id)) return "call";
         if ("kidquest".equals(id)) return "quest";
         if ("kidplace".equals(id)) return "place";
-        if ("kidcheer".equals(id) || "kidmenu".equals(id) || "kidmk".equals(id)) return "cheer";          // 길동무 키즈 팝업 · 응원문구 · 마커 변경은 서로 오가도 같은 창에서 글만 바뀐다
+        if ("kidcheer".equals(id) || "kidmenu".equals(id) || "kidmk".equals(id)) return "cheer";          // 길동무 패밀리 팝업 · 응원문구 · 마커 변경은 서로 오가도 같은 창에서 글만 바뀐다
         if ("kidev".equals(id) || "kidreg".equals(id) || "kidrt".equals(id) || "kidpls".equals(id)) return "ev";          // 서버가 sheet:"ev" 로 답하는 화면들 — 종류가 다르면 미리 띄운 팝업을 닫았다 다시 열어 화면이 두 번 열렸다
         return "link";
     }
 
     private final Runnable noteHide = new Runnable() { @Override public void run() { noteV.setVisibility(View.GONE); } };
-    /** 키즈 화면 위에 짧은 안내를 3초 띄운다(팝업이 떠 있으면 팝업 화면이 직접 보여 주므로 띄우지 않는다). */
+    /** 가족 화면 위에 짧은 안내를 3초 띄운다(팝업이 떠 있으면 팝업 화면이 직접 보여 주므로 띄우지 않는다). */
     private void note(final String m) {
         if (!alive || m == null || m.length() == 0) return;
         io.execute(new Runnable() { @Override public void run() {
@@ -813,7 +813,7 @@ public final class KidsHub {
     private View sheetBox;
     private boolean sheetBottom;
 
-    // ───────── s415: 자녀의 호출(긴급 · 데리러 와줘 · 안전 도착)은 가운데 팝업 — 키즈 탭 밖에서도 ─────────
+    // ───────── s415: 가족구성원의 호출(긴급 · 데리러 와줘 · 안전 도착)은 가운데 팝업 — 가족 탭 밖에서도 ─────────
     private volatile JSONObject lastPop;      // 가장 최근에 받은 호출 팝업 값(엔진이 준 것: 제목 · 글 · 단추 · 저절로 뜰지)
     private String shownPk = "";              // 이미 띄운 팝업(같은 호출 · 같은 상태는 다시 띄우지 않는다)
 
@@ -860,7 +860,7 @@ public final class KidsHub {
         return o.toString();
     }
 
-    /** 푸시(FCM)가 왔다 — 앱이 앞에 있으면(어느 탭이든) 호출은 가운데 팝업으로, 자녀가 취소했으면 떠 있는 팝업을 닫는다. 팝업을 띄웠으면 true. */
+    /** 푸시(FCM)가 왔다 — 앱이 앞에 있으면(어느 탭이든) 호출은 가운데 팝업으로, 가족구성원이 취소했으면 떠 있는 팝업을 닫는다. 팝업을 띄웠으면 true. */
     public boolean onCallPush(final Map<String, String> d) {
         if (d == null || !alive) return false;
         final String k = d.get("k");
@@ -925,7 +925,7 @@ public final class KidsHub {
                 } });
             }
         });
-        if ("quest".equals(kind)) v.setSwipeHost(new ScreenView.SwipeHost() {                  // 미션 팝업: 좌우로 밀면 자녀 미션 ↔ 부모님 미션(엔진이 화면의 sw 에 어느 쪽으로 가는지 줬다)
+        if ("quest".equals(kind)) v.setSwipeHost(new ScreenView.SwipeHost() {                  // 미션 팝업: 좌우로 밀면 가족구성원 미션 ↔ 부모님 미션(엔진이 화면의 sw 에 어느 쪽으로 가는지 줬다)
             @Override public boolean onSwipe(ScreenView sv, int dir) {
                 ScreenCore.Screen cs = sv.currentScreen();
                 ScreenCore.Act a = cs == null ? null : (dir == -1 ? cs.swL : cs.swR);
@@ -977,7 +977,7 @@ public final class KidsHub {
                 if (sheetD != d) return;
                 boolean quiet = sheetQuiet;
                 sheetD = null; sheetV = null; sheetKind = ""; sheetJson = ""; sheetBox = null; sheetBottom = false;
-                if ("gd".equals(kd) && !quiet && !"1".equals(store.get(K_GD, "0")) && open) { setMode(false); close(true); return; }          // s415: 확인 없이 닫으면 키즈 화면에 들어가지 않는다
+                if ("gd".equals(kd) && !quiet && !"1".equals(store.get(K_GD, "0")) && open) { setMode(false); close(true); return; }          // s415: 확인 없이 닫으면 가족 화면에 들어가지 않는다
                 if ("place".equals(kd) && !quiet) send("kpl.cancel", "", "", null, null);      // 밖을 눌러 닫으면 쓰던 장소 초안은 버린다
                 if (open && !paused && !quiet) startLoop("hub");
             }
@@ -1046,7 +1046,7 @@ public final class KidsHub {
         return bill;
     }
 
-    // ───────── 화면 안의 눌림(키즈 화면 · 팝업 공통) ─────────
+    // ───────── 화면 안의 눌림(가족 화면 · 팝업 공통) ─────────
     private class Host implements ScreenView.Listener {
         private final ScreenView self;
         Host(ScreenView self) { this.self = self; }
@@ -1059,10 +1059,10 @@ public final class KidsHub {
             if (a == null || !"call".equals(a.a) || a.v == null || a.v.length() == 0) return;
             buzz(act, 14L);
             if ("sub.buy".equals(a.v)) { billing().buy(a.id, a.t); return; }               // s431: 구독 — 결제 창만 띄운다(샀는지는 서버가 구글에 물어 정한다)
-            if ("sub.restore".equals(a.v)) { billing().restore(); return; }                                                            // s374(YJ): 키즈 탭에서 버튼을 누를 때마다 짧은 진동
+            if ("sub.restore".equals(a.v)) { billing().restore(); return; }                                                            // s374(YJ): 가족 탭에서 버튼을 누를 때마다 짧은 진동
             if ("kl.close".equals(a.v)) { closeSheet(false); return; }
             if ("kg.ok".equals(a.v)) { store.put(K_GD, "1"); closeSheet(false); send(a.v, a.id, a.t, null, null); return; }          // s415: 보호자 확인 — 누르자마자 팝업을 닫고 서버에는 뒤에서 보낸다
-            if ("kx.ack".equals(a.v) || "kx.done".equals(a.v)) {                           // s415: 지금 가요 · 확인했어요 · 만났어요 — 서버 답을 기다리지 않고 바로 팝업을 없앤다(서버가 자녀에게 알림을 보낸다)
+            if ("kx.ack".equals(a.v) || "kx.done".equals(a.v)) {                           // s415: 지금 가요 · 확인했어요 · 만났어요 — 서버 답을 기다리지 않고 바로 팝업을 없앤다(서버가 가족구성원에게 알림을 보낸다)
                 lastPop = null; closeSheet(false); send(a.v, a.id, a.t, null, null); return;
             }
             if ("kx.open".equals(a.v)) { JSONObject lp = lastPop; if (lp != null && showCallPop(lp, true)) return; }          // 이미 받아 둔 팝업 값이 있으면 통신 없이 바로
@@ -1092,7 +1092,7 @@ public final class KidsHub {
             }
             send(a.v, a.id, a.t, me().fields(), me());
         }
-        @Override public void onSet(ScreenCore.Act a, boolean on) { if (a != null && "kidsHome".equals(a.key)) setStart(on); }          // 길동무 키즈 팝업의 '키즈 화면으로 시작' 알약
+        @Override public void onSet(ScreenCore.Act a, boolean on) { if (a != null && "kidsHome".equals(a.key)) setStart(on); }          // 길동무 패밀리 팝업의 '가족 화면으로 시작' 알약
         @Override public void onSearch(ScreenCore.Act a, String q) { }
         @Override public void onInputFocus(boolean on) { }
         @Override public void onFirstDraw() { }
@@ -1105,12 +1105,12 @@ public final class KidsHub {
         @Override public void onContentH(float dp) { }
     }
 
-    // ───────── 마커 변경: 사진 고르기 → 동그라미 자르기 → 지도 자녀 마커 ─────────
+    // ───────── 마커 변경: 사진 고르기 → 동그라미 자르기 → 지도 가족구성원 마커 ─────────
     private static final int RQ_PHOTO = 0x4B4D;
     private String markerPend = "";
     private void pickMarker(String cid) {
         String k = MarkerCropCore.key(cid.length() > 0 ? cid : this.cid);
-        if (k.length() == 0) { note("자녀를 찾지 못했어요"); return; }
+        if (k.length() == 0) { note("가족구성원을 찾지 못했어요"); return; }
         markerPend = k;
         try {
             Intent i = new Intent(Intent.ACTION_GET_CONTENT);
@@ -1311,7 +1311,7 @@ public final class KidsHub {
         } catch (Throwable e) { return false; }
     }
 
-    /** 지금 키즈 화면의 대화 칸 맨 아래(입력줄 바로 위)에 내 말풍선 하나를 먼저 끼워 그린다. 서버 화면이 오면(긴 대기 0.6초 안) 그것으로 바뀐다. */
+    /** 지금 가족 화면의 대화 칸 맨 아래(입력줄 바로 위)에 내 말풍선 하나를 먼저 끼워 그린다. 서버 화면이 오면(긴 대기 0.6초 안) 그것으로 바뀐다. */
     private void optimistic(String tx) {
         try {
             if (lastHubJson.length() == 0) return;
@@ -1407,7 +1407,7 @@ public final class KidsHub {
                             try {
                                 String raw = bc == null ? "" : bc.getRawValue();
                                 String code = codeOf(raw);
-                                if (code.length() == 0) { note("길동무 키즈의 QR이 아니에요"); return; }
+                                if (code.length() == 0) { note("길동무 패밀리의 QR이 아니에요"); return; }
                                 send("kl.join", "", code, from.fields(), from);
                             } catch (Throwable e) { note("QR을 읽지 못했어요. 시크릿 키를 직접 넣어 주세요"); }
                         }
@@ -1432,11 +1432,11 @@ public final class KidsHub {
         return m.find() ? m.group() : "";
     }
 
-    /** 자녀 폰 QR 을 기본 카메라로 찍어 '길동무로 열기'를 누르면 들어오는 길(gildongmu-kids://pair?k=…). 바로 연결해 준다. */
+    /** 가족구성원 폰 QR 을 기본 카메라로 찍어 '길동무로 열기'를 누르면 들어오는 길(gildongmu-kids://pair?k=…). 바로 연결해 준다. */
     public void joinFromUri(android.net.Uri u) {
         try {
             String code = codeOf(u == null ? "" : u.toString());
-            if (code.length() == 0) { note("길동무 키즈의 QR이 아니에요"); return; }
+            if (code.length() == 0) { note("길동무 패밀리의 QR이 아니에요"); return; }
             send("kl.join", "", code, new java.util.HashMap<String, String>(), null);
         } catch (Throwable e) { note("연결하지 못했어요"); }
     }

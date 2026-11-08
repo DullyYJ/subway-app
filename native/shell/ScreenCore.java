@@ -1062,7 +1062,7 @@ public final class ScreenCore {
         } catch (RuntimeException ignored) { }
     }
 
-    /** s370(YJ: 서버를 새로 올리지 않아도 대화 칸이 처음부터 빈 자리를 채워야 한다): 키즈 확인 화면의 아래 고정 대화 칸(입력줄 key khc)인데 늘어나는 빈칸(spacer ffill)이 없고 말풍선에 fd 도 없는 옛 서버 화면이면, 같은 모양으로 채워 넣는다
+    /** s370(YJ: 서버를 새로 올리지 않아도 대화 칸이 처음부터 빈 자리를 채워야 한다): 가족 확인 화면의 아래 고정 대화 칸(입력줄 key khc)인데 늘어나는 빈칸(spacer ffill)이 없고 말풍선에 fd 도 없는 옛 서버 화면이면, 같은 모양으로 채워 넣는다
      *  — 제목줄 바로 아래에 빈칸을 끼우고 말풍선에 오래된 순서 번호(fd)를 매긴다. 서버가 이미 준 화면은 건드리지 않는다. */
     @SuppressWarnings("unchecked")
     private static void legacyChat(Object footObj) {
@@ -1098,9 +1098,9 @@ public final class ScreenCore {
     }
 
     /** 읽고 검증한다. 틀리면 ParseError. */
-    /** 설정 화면 맨 위에 끼울 노드 목록(JSON 배열 글). 길동무 키즈 연동 상태가 바뀔 때 앱이 바꿔 둔다. 빈 글이면 끼우지 않는다. */
+    /** 설정 화면 맨 위에 끼울 노드 목록(JSON 배열 글). 길동무 패밀리 연동 상태가 바뀔 때 앱이 바꿔 둔다. 빈 글이면 끼우지 않는다. */
     public static volatile String settingsExtra = "";
-    /** 길동무 키즈: 커뮤니티 맨 위 칩 줄 맨 앞에 '가족대화' 칩을 끼울지(0 안 끼움 · 1 끼움 · 2 끼우고 고른 상태). 연결된 부모만 켜진다. */
+    /** 길동무 패밀리: 커뮤니티 맨 위 칩 줄 맨 앞에 '가족대화' 칩을 끼울지(0 안 끼움 · 1 끼움 · 2 끼우고 고른 상태). 연결된 부모만 켜진다. */
     public static volatile int famChip = 0;
     @SuppressWarnings("unchecked")
     private static void injectFam(Map<String, Object> m) {
@@ -1144,8 +1144,8 @@ public final class ScreenCore {
         sc.anchor = optStr(m, "anchor", "", 8); if (!"".equals(sc.anchor) && !"bottom".equals(sc.anchor)) throw new ParseError("anchor: 모르는 값 " + sc.anchor);
         for (Object o : asArr(m.get("head"), "head")) { Node n = node(o, sc); if (n != null) sc.head.add(n); }
         for (Object o : asArr(m.get("body"), "body")) { Node n = node(o, sc); if (n != null) sc.body.add(n); }
-        if ("settings".equals(sc.id) && settingsExtra.length() > 0) {                 // 길동무 키즈: 설정 맨 위에 끼울 노드들(키즈 서버 엔진이 준 것 — 연결된 부모에게만 · 연결 전엔 '연결하기' 한 줄). 없으면 아무것도 끼우지 않는다
-            try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0, atDev = -1; for (int bi = 0; bi < sc.body.size(); bi++) { Node bn = sc.body.get(bi); if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "개발자 도구".equals(bn.kids.get(0).s) && atDev < 0) atDev = bi; if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "약관 및 정책".equals(bn.kids.get(0).s)) { at = bi; break; } } if (atDev >= 0) at = atDev;          // 키즈 줄은 '개발자 도구' 카드 바로 위에(그게 없으면 '약관 및 정책' 위, 둘 다 없으면 맨 위)
+        if ("settings".equals(sc.id) && settingsExtra.length() > 0) {                 // 길동무 패밀리: 설정 맨 위에 끼울 노드들(가족 서버 엔진이 준 것 — 연결된 부모에게만 · 연결 전엔 '연결하기' 한 줄). 없으면 아무것도 끼우지 않는다
+            try { Object eo = parse(settingsExtra); if (eo instanceof List) { int at = 0, atDev = -1; for (int bi = 0; bi < sc.body.size(); bi++) { Node bn = sc.body.get(bi); if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "개발자 도구".equals(bn.kids.get(0).s) && atDev < 0) atDev = bi; if ("panel".equals(bn.t) && !bn.kids.isEmpty() && "약관 및 정책".equals(bn.kids.get(0).s)) { at = bi; break; } } if (atDev >= 0) at = atDev;          // 가족 줄은 '개발자 도구' 카드 바로 위에(그게 없으면 '약관 및 정책' 위, 둘 다 없으면 맨 위)
                 for (Object o : (List<Object>) eo) { Node n = node(o, sc); if (n != null) sc.body.add(at++, n); } } } catch (ParseError ignored) { }
         }
         if (m.get("foot") != null) { legacyChat(m.get("foot")); for (Object o : asArr(m.get("foot"), "foot")) { Node n = node(o, sc); if (n != null) sc.foot.add(n); } }

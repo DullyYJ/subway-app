@@ -591,7 +591,7 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const fv = b.info.stops[0];
   ok(fv.id === 'SEOUL:11111' && fv.src === 'topis' && fv.ars === '11111' && !('dist' in fv), 'info.stops: 도착정보를 다시 물을 수 있는 최소 값');
   ok(b.info.favp && b.info.favp.max === 12 && b.info.favp.al === 10 && b.info.favp.add === '즐겨찾기 추가' && b.info.favp.rm === '즐겨찾기 해제' && /최대 12/.test(b.info.favp.full), 's207: 버스 즐겨찾기 규칙(곳 수 · 별명 글자 수 · 안내 글)을 엔진이 알린다');
-  {   // s389 (키즈 노선도 탭): 즐겨찾기 넣고 빼기 · 별명 · 갱신 박자를 엔진이 정한다 — 앱은 누른 것(act)만 보내고 돌려받은 목록을 저장한다
+  {   // s389 (가족 노선도 탭): 즐겨찾기 넣고 빼기 · 별명 · 갱신 박자를 엔진이 정한다 — 앱은 누른 것(act)만 보내고 돌려받은 목록을 저장한다
     ok(b.info.poll && b.info.poll.tick === 10000 && b.info.poll.stale === 20000 && b.info.poll.retry === 8000, 's389: 갱신 박자(확인 10초 · 20초 지나면 새로 · 실패 땐 8초 앞당김)를 엔진이 알린다');
     ok(!('edit' in b.info), 's389: act 가 없으면 edit 도 없다');
     let e1 = near({ fav: [], act: { k: 'fv', stop: fv } });

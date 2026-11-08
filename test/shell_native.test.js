@@ -893,7 +893,7 @@ function findAndroidJar() {
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
     assert.ok(/fresh \? null : await cache\.match/.test(w) && /fresh \? '' : await mapSvKvGet/.test(w) && /b && b\.nf/.test(w), '서버: nf 면 데이터센터 캐시·KV 를 건너뛴다');
   });
-  await t('s384: 키즈 가족대화방은 카톡처럼 전체 화면 — 창을 화면에 꽉 채워(키보드가 올라오면 창이 줄어 입력줄이 키보드 바로 위에 남는다) · 돌아가기 줄 · 안쪽 여백은 상태줄/키보드만큼', () => {
+  await t('s384: 가족 가족대화방은 카톡처럼 전체 화면 — 창을 화면에 꽉 채워(키보드가 올라오면 창이 줄어 입력줄이 키보드 바로 위에 남는다) · 돌아가기 줄 · 안쪽 여백은 상태줄/키보드만큼', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8');
     assert.ok(/float hh = bottom \? sh : fixedH \? fixH : Math\.min\(dp, sh \* dg\.maxh\)/.test(k) && /if \(bottom\) w\.setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)/.test(k) && !/sh \* 0\.72f/.test(k), '대화방 창이 화면 전체(옛 72% 높이는 키보드에 입력줄이 가렸다)');
     assert.ok(/SOFT_INPUT_ADJUST_RESIZE/.test(k) && /if \(!bottom\) \{ w\.addFlags\(WindowManager\.LayoutParams\.FLAG_DIM_BEHIND\)/.test(k) && /Type\.systemBars\(\) \| android\.view\.WindowInsets\.Type\.ime\(\)/.test(k) && /closeSheet\(false\); \} \}\);\s*col\.addView\(back/.test(k), '키보드에 맞춰 줄어듦 · 흐림 없음 · 키보드/상태줄 여백 · 돌아가기');
@@ -910,10 +910,10 @@ function findAndroidJar() {
     assert.ok(/core\.deadlineMs\(\)[^]*?finishRide\("timeout"\)/.test(rs) && /"user"\.equals\(reason\) \|\| "timeout"\.equals\(reason\)/.test(rs), '매 걸음 시각을 보고 넘으면 정상 종료(저장본 삭제)');
     assert.ok(/"timeout"\.equals\(RideService\.endReason\)/.test(sa), '앱은 시간이 다 돼 끝난 안내를 뜻밖의 끝으로 보고 다시 켜지 않는다');
   });
-  await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 키즈 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
+  await t('s385: 가족대화 읽음 표시(안 읽은 글 옆 1) · 알림은 가족 화면(대화)을 보고 있을 때만 숨긴다 — 앱이 앞에 있어도 다른 탭이면 알림', () => {
     const k = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/m\.put\("mine", true\); m\.put\("un", true\);/.test(k), '방금 보낸 글(낙관적 표시)도 안 읽음으로');
-    assert.ok(/static volatile KidsHub hub;/.test(kp) && /h != null && h\.viewing\(\)\) \{ cue\(getApplicationContext\(\)\); return; \}/.test(kp) && !/KidsPush\.fg/.test(k) && /public boolean viewing\(\) \{ return open && !paused; \}/.test(k), '알림 숨김: 키즈 화면을 볼 때만(앱이 앞이어도 다른 탭이면 알림)');
+    assert.ok(/static volatile KidsHub hub;/.test(kp) && /h != null && h\.viewing\(\)\) \{ cue\(getApplicationContext\(\)\); return; \}/.test(kp) && !/KidsPush\.fg/.test(k) && /public boolean viewing\(\) \{ return open && !paused; \}/.test(k), '알림 숨김: 가족 화면을 볼 때만(앱이 앞이어도 다른 탭이면 알림)');
     assert.ok(/n\.un = optBool\(m, "un", false\)/.test(sc) && /it\.unW = n\.un/.test(sc) && /it\.unW > 0f\) \{ setText\(ScreenCore\.MSG_TIME, true, pal\[R_GOLD\]\); cv\.drawText\("1"/.test(sv), '말풍선 un → 시각 앞 노란 1');
   });
   await t('s281: 역 입력 즉시 후보 · 저장 단추 없이 자동 저장 · 시각은 팝업(칸을 바로 켬) · 알림을 누르면 앱 안 브리핑 창 → 출근/퇴근하기 = 자동 경로탐색', async () => {
@@ -1126,13 +1126,13 @@ function findAndroidJar() {
       assert.ok((aa.match(/home\.clearRoute\(\); chatRouteSync\(\);/g) || []).length === 3 && /home\.endJourney\(\); chatRouteSync\(\);/.test(aa) && /home\.onResult\(rsf\); chatRouteSync\(\);/.test(aa) && /if \(home\.setRide\(RideService\.liveRide, RideService\.liveLv\)\) \{ chatRouteSync\(\); reloadHome\(\); \}/.test(aa) && /chatRouteSync\(false\);\n        final Latest\.Token my = chatLatest\.begin\(\);/.test(aa), 's318: 경로 종료 · 새로 찾기 · 결과 · 탑승 위치 바뀜 · 소통방 열 때마다 맞춘다');
     }
   });
-  await t('s369: 키즈 모드로 켜면 하단 탭이 비지 않는다(켠 직후 · 앞으로 올 때 비었으면 다시 받는다) · 미션 팝업은 좌우로 밀어 자녀 ↔ 부모님 미션 · 대화 칸은 남는 세로만큼 위로 자란다', () => {
+  await t('s369: 가족 모드로 켜면 하단 탭이 비지 않는다(켠 직후 · 앞으로 올 때 비었으면 다시 받는다) · 미션 팝업은 좌우로 밀어 가족구성원 ↔ 부모님 미션 · 대화 칸은 남는 세로만큼 위로 자란다', () => {
     const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/private void kidsTabsEnsure\(\)/.test(sa) && /kids\.open\(false\); kidsTabsEnsure\(\);/.test(sa) && /if \(kids\.mode\(\)\) kidsTabsEnsure\(\);/.test(sa) && /if \(v == tabs\) \{ if \(v\.itemCount\(\) == 0\)/.test(sa), '켠 직후 · 다시 앞으로 올 때 · 못 받았을 때 모두 탭 막대를 채운다');
     assert.ok(/"quest"\.equals\(kind\)\) v\.setSwipeHost\(/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /"kq\.open"\.equals\(a\.v\)\) qt = /.test(kh), '미션 팝업 좌우 밀기는 엔진이 준 sw 대로');
     assert.ok(/footGrow\(sc, L, width, m, openKey, viewH\)/.test(sc) && /n\.hide && n\.fd > 0/.test(sc) && /sc\.footFill = n/.test(sc), '아래 고정 줄 대화 칸 늘리기(남는 세로 → 오래된 글 → 빈칸)');
   });
-  await t('s370: 키즈 대화 칸은 처음부터 남는 자리를 채우고 안쪽만 밀린다 · 보내면 바로 말풍선 · 열고 닫기 빠르게 · 하단 탭 감시', () => {
+  await t('s370: 가족 대화 칸은 처음부터 남는 자리를 채우고 안쪽만 밀린다 · 보내면 바로 말풍선 · 열고 닫기 빠르게 · 하단 탭 감시', () => {
     const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/public boolean vsOn; public float vsTop, vsBot, vsContent;/.test(sc) && /ThreadLocal<float\[\]> VS/.test(sc) && /L2\.vsOn = true/.test(sc), '대화 칸 안쪽 밀림 계산(코어)');
     assert.ok(/mode = 12/.test(sv) && /flingV/.test(sv) && /cv\.clipRect\(0f, lay\.vsTop, w, lay\.vsBot\)/.test(sv) && /vsHit = inFoot && lay\.vsOn/.test(sv), '대화 칸에서 시작한 위아래 밀기는 그 칸만 민다(화면 전체가 아니다) · 틀 밖은 잘린다');
@@ -1140,30 +1140,30 @@ function findAndroidJar() {
     assert.ok(/setDuration\(200L\)/.test(kh) && /setDuration\(140L\)/.test(kh) && !/for \(final View v : slide\) if \(v != null\) v\.animate/.test(kh) && /main\.postDelayed\(new Runnable\(\) \{ @Override public void run\(\) \{ if \(open\) warm\(\); \} \}, 1500L\)/.test(kh), '열고 닫기 연출 단축 · 아래 화면은 따로 밀지 않는다 · 미리 받기는 첫 그림 뒤로');
     assert.ok(/TABS_BLANK/.test(sa) && /private void kidsTabsWatchStart\(\)/.test(sa) && /tabs\.itemCount\(\) == 0 \|\| tabs\.getTranslationY\(\) != 0f/.test(sa), '하단 탭 감시: 비면 상태를 오류 기록에 남기고 다시 채운다');
   });
-  await t('s372: 키즈 탭 막대 마지막 화면 즉시 · 박스 전체 누르면 대화 팝업 · 입력칸 키보드 유지', () => {
+  await t('s372: 가족 탭 막대 마지막 화면 즉시 · 박스 전체 누르면 대화 팝업 · 입력칸 키보드 유지', () => {
     const sa = fs.readFileSync(N('ShellActivity.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sc = fs.readFileSync(N('ScreenCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/private String tabsLast\(String tab\)/.test(sa) && /store\.put\("tabs\.last\|"/.test(sa) && (sa.match(/tabsLast\(/g) || []).length >= 4, '마지막으로 받은 탭 막대를 설정 파일에서 바로 읽어 먼저 보인다');
     assert.ok(/pn\.act = n\.act;/.test(sc) && /n\.act = act\(m\.get\("act"\), false\);/.test(sc) && /private static void legacyNav/.test(sc), '박스 전체 행동(panel act) + 옛 서버 지난 대화 보기 줄 정리');
     assert.ok(/for \(int i = lay\.foot\.length - 1; i >= 0; i--\)/.test(sv), '아래 고정 줄은 위에 그려진 것(입력·단추)이 먼저 눌린다');
     assert.ok(/if \(mode == 0 && flingY\.isFinished\(\)\) \{/.test(sv) && !/downT > 2500L\) \{\s*\/\/ s372/.test(sv) && /editBeganAt < 3000L\) \{ postDelayed\(syncRun, 200L\)/.test(sv), '키보드가 올라 팝업이 줄어도 편집을 끝내지 않는다');
     assert.ok(/shown\[0\] && lp\.width == nw && lp\.height == nh/.test(kh), '같은 크기면 팝업 창을 다시 손대지 않는다');
-    assert.ok(/final boolean kidsStart = kids\.mode\(\)/.test(sa) && /if \(b == null && !kidsStart\) showOpening\(\);/.test(sa), 's373: 키즈 화면으로 켜면 오프닝(초록 바닥)을 건너뛴다 — 키즈 화면 아래 깔려 하단 탭 자리만 초록으로 비치던 일');
+    assert.ok(/final boolean kidsStart = kids\.mode\(\)/.test(sa) && /if \(b == null && !kidsStart\) showOpening\(\);/.test(sa), 's373: 가족 화면으로 켜면 오프닝(초록 바닥)을 건너뛴다 — 가족 화면 아래 깔려 하단 탭 자리만 초록으로 비치던 일');
   });
-  await t('s374: 키즈 탭 버튼 진동 · 장소 등록 팝업 즉시 반응(시각/요일 로컬 · 취소/저장 즉시 닫기) · 열림 단축', () => {
+  await t('s374: 가족 탭 버튼 진동 · 장소 등록 팝업 즉시 반응(시각/요일 로컬 · 취소/저장 즉시 닫기) · 열림 단축', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), hp = fs.readFileSync(N('SceneHaptics.java'), 'utf8');
-    assert.ok(/buzz\(act, 14L\);/.test(kh) && /p\("tap"/.test(hp), '키즈 탭의 모든 버튼 눌림에 짧은 진동');
+    assert.ok(/buzz\(act, 14L\);/.test(kh) && /p\("tap"/.test(hp), '가족 탭의 모든 버튼 눌림에 짧은 진동');
     assert.ok(/placeLocal\(a\)/.test(kh) && /private boolean placeLocal\(ScreenCore\.Act a\)/.test(kh) && /"kpl\.cancel"\.equals\(a\.v\) && sheetD != null/.test(kh), '시각 · 요일 바꾸기와 취소는 서버를 기다리지 않는다');
     assert.ok(/private boolean placeSave\(ScreenCore\.Act a\)/.test(kh) && /ff\.put\("kpm"/.test(kh) && /ff\.put\("kpd"/.test(kh) && /closeSheet\(true\);\s*send\(a\.v, a\.id, a\.t, ff, null\)/.test(kh), '저장은 바로 닫고 뒤에서 한 번에 보낸다(시각 · 요일 값을 함께)');
     assert.ok(/revealSheet\(box, shown, bottom, 0f\); \} \}, 220L\)/.test(kh) && /setDuration\(110L\)/.test(kh) && /setDuration\(240L\)/.test(kh), '팝업 열림이 빨라졌다');
   });
-  await t('s375: 키즈 화면 미리 받기 + 오른쪽에서 왼쪽 슬라이드 · 지도 두 번 탭 자녀 위치 · 깜박이는 점 여럿', () => {
+  await t('s375: 가족 화면 미리 받기 + 오른쪽에서 왼쪽 슬라이드 · 지도 두 번 탭 가족구성원 위치 · 깜박이는 점 여럿', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
-    assert.ok(/public void preload\(\)/.test(kh) && /hubPre = ScreenCore\.load\(js\)/.test(kh) && /if \(!open\) preload\(\); \} \}, 2500L\)/.test(kh) && /public void resume\(\) \{ paused = false; KidsPush\.hub = this; if \(!open\) preload\(\);/.test(kh), '키즈 화면을 홈에서 미리 받아 해석까지 해 둔다');
+    assert.ok(/public void preload\(\)/.test(kh) && /hubPre = ScreenCore\.load\(js\)/.test(kh) && /if \(!open\) preload\(\); \} \}, 2500L\)/.test(kh) && /public void resume\(\) \{ paused = false; KidsPush\.hub = this; if \(!open\) preload\(\);/.test(kh), '가족 화면을 홈에서 미리 받아 해석까지 해 둔다');
     assert.ok(/hubV\.setScreen\(pre, !first\)/.test(kh) && /addOnPreDrawListener/.test(kh) && /translationX\(0f\)\.setDuration\(200L\)/.test(kh), '열 때 미리 받은 화면을 먼저 꽂고 첫 프레임에 오른쪽에서 왼쪽으로 민다');
-    assert.ok(/private void tmHome\(\)/.test(sv) && /nt - tmTapT < 380L/.test(sv) && /tmLp\.length\(\) > 0 && tmTapT > 0L/.test(sv) && /!tmOnBtn\(lx, ly\)/.test(sv), '장소 등록 지도를 두 번 탭하면 자녀 위치로');
+    assert.ok(/private void tmHome\(\)/.test(sv) && /nt - tmTapT < 380L/.test(sv) && /tmLp\.length\(\) > 0 && tmTapT > 0L/.test(sv) && /!tmOnBtn\(lx, ly\)/.test(sv), '장소 등록 지도를 두 번 탭하면 가족구성원 위치로');
     assert.ok(/liveN > 1\) postInvalidateDelayed\(33L\)/.test(sv) && /liveShCache/.test(sv), '깜박이는 점이 여러 줄에 있어도 모두 깜박인다');
   });
-  await t('s376: 쓰지 않는 입력칸은 포커스를 못 받는다(키즈는 커뮤니티를 다녀오면 키보드가 저절로 오르던 일)', () => {
+  await t('s376: 쓰지 않는 입력칸은 포커스를 못 받는다(가족는 커뮤니티를 다녀오면 키보드가 저절로 오르던 일)', () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
     assert.ok(/private static void focusOk\(EditText e, boolean ok\)/.test(sv) && /e\.setFocusable\(ok\); e\.setFocusableInTouchMode\(ok\)/.test(sv), '입력칸 포커스 켜고 끄기');
     assert.ok(/focusOk\(e, false\);\s*e\.addTextChangedListener/.test(sv) && /EditText e = new EditText\(getContext\(\)\);\s*focusOk\(e, false\);/.test(sv), '만들 때는 포커스를 받지 않는다(편집 칸 · 검색 칸)');
@@ -1176,14 +1176,14 @@ function findAndroidJar() {
     assert.ok(/if \(it\.plog\) \{\s*\/\/ 활동 기록/.test(sv) && /if \(bottom\) pickOff\.put\(it\.key, it\.pickMax\)/.test(sv) && /if \(it\.plog\) \{ setText\(r\.size, r\.on/.test(sv), '처음엔 맨 아래에서 시작 · 새 줄이 오면 맨 아래를 보던 중일 때만 따라 내려간다 · 카드 모양 없이 글만 그린다');
     assert.ok(/if \(it\.plog\) \{ blurInput\(\); if \(listener != null\) listener\.onAction\(r\.act\); return; \}/.test(sv), '활동 기록을 누르면 전체 기록 창(켜진 줄 표시는 안 바뀐다)');
   });
-  await t('s378: 키즈 홈 아래 칸은 글 수와 상관없이 고정 — 대화 칸은 엔진이 준 최대 높이(ffmax)까지만 자라고 넘치면 안에서만 민다', () => {
+  await t('s378: 가족 홈 아래 칸은 글 수와 상관없이 고정 — 대화 칸은 엔진이 준 최대 높이(ffmax)까지만 자라고 넘치면 안에서만 민다', () => {
     const sc = fs.readFileSync(N('ScreenCore.java'), 'utf8');
     assert.ok(/if \(ff\.ffmax > 0f\) avail = Math\.min\(avail, ff\.ffmax\);/.test(sc) && /float vh = Math\.max\(msgsH > 0f \? minVh : 0f, avail\);/.test(sc), '대화 칸 높이는 ffmax 를 넘지 않는다(모자라는 화면에서는 남는 만큼)');
   });
-  await t('s382: 키즈 확인 화면 — 자녀가 여럿이면 좌우로 밀어 다음·이전 자녀로(행동은 엔진의 sw, 앱은 그대로 보낸다)', () => {
+  await t('s382: 가족 확인 화면 — 가족구성원이 여럿이면 좌우로 밀어 다음·이전 가족구성원으로(행동은 엔진의 sw, 앱은 그대로 보낸다)', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
     assert.ok(/hubV\.setSwipeHost\(new ScreenView\.SwipeHost\(\)/.test(kh) && /dir == -1 \? cs\.swL : cs\.swR/.test(kh) && /sv\.slideNext\(dir\);\s*new Host\(sv\)\.onAction\(a\);/.test(kh), '확인 화면 밀기: 엔진이 준 swL/swR 행동을 Host 로 보낸다');
-    assert.ok(/canSwipe\(\) \{ ScreenCore\.Screen cs = hubV\.currentScreen\(\); return cs != null && \(cs\.swL != null \|\| cs\.swR != null\); \}/.test(kh), 'sw 가 없으면(자녀 한 명) 밀기를 쓰지 않는다');
+    assert.ok(/canSwipe\(\) \{ ScreenCore\.Screen cs = hubV\.currentScreen\(\); return cs != null && \(cs\.swL != null \|\| cs\.swR != null\); \}/.test(kh), 'sw 가 없으면(가족구성원 한 명) 밀기를 쓰지 않는다');
   });
   await t('s409: 장소 등록 팝업 — 주소 찾기는 곧바로 "찾는 중", 결과 고르기는 앱에서 바로(저장만 뒤에서), 등록은 바로 닫고 뒤에서', () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
@@ -1205,13 +1205,13 @@ function findAndroidJar() {
     assert.ok(/"kr\.live"\.equals\(a\.v\)\) routeWait\(/.test(kh) && /private void routeWait\(String m\) \{ if \(open\) note\(m\); \}/.test(kh), '실시간으로 돌아가기도 즉시 안내');
     assert.ok(/final boolean wasShown = sheetD != null;\s*if \(close && sc != null && "kids"\.equals\(sc\.id\)[^)]*\)[^)]*\)\) closeSheet\(true\);/.test(kh) && /if \(wasShown && notice\.length\(\) > 0\) note\(notice\);/.test(kh), '허브 화면을 그리기 전에 팝업부터 걷는다');
   });
-  await t('s412: 자녀가 꾸민 친구들 모습이 부모 홈 장면에 입혀진다 — 장면 훅(기본 null) · 폰에 남긴 모습으로 켜자마자 · 조용한 푸시로 즉시 · 연결이 끊기면 원래대로', () => {
+  await t('s412: 가족구성원이 꾸민 친구들 모습이 부모 홈 장면에 입혀진다 — 장면 훅(기본 null) · 폰에 남긴 모습으로 켜자마자 · 조용한 푸시로 즉시 · 연결이 끊기면 원래대로', () => {
     const sc = fs.readFileSync(N('SceneCore.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8'), kp = fs.readFileSync(N('KidsPush.java'), 'utf8'), fw = fs.readFileSync(N('FriendWear.java'), 'utf8');
-    assert.ok(/public static volatile WearHook WEAR_HOOK;/.test(sc) && /c\.drawImage\(sheet, sx, sy, 256, 256, dx, dy, D\.cell \* s, D\.cell \* s\);/.test(sc) && /wh\.draw\(c, a, ash != null \? 2 : psh != null \? 1 : 0, idx, dx, dy, D\.cell \* s \/ 256\)/.test(sc), '장면: 훅은 기본 null, 몸을 그린 바로 뒤에 입힌다(키즈 앱이 붙이는 자리 문장은 그대로)');
-    assert.ok(!/FriendWear|FriendArt|KidsHub/.test(sc), 'SceneCore 는 부모 전용 클래스를 모른다(키즈 앱이 이 파일을 그대로 가져다 쓴다)');
+    assert.ok(/public static volatile WearHook WEAR_HOOK;/.test(sc) && /c\.drawImage\(sheet, sx, sy, 256, 256, dx, dy, D\.cell \* s, D\.cell \* s\);/.test(sc) && /wh\.draw\(c, a, ash != null \? 2 : psh != null \? 1 : 0, idx, dx, dy, D\.cell \* s \/ 256\)/.test(sc), '장면: 훅은 기본 null, 몸을 그린 바로 뒤에 입힌다(패밀리 앱이 붙이는 자리 문장은 그대로)');
+    assert.ok(!/FriendWear|FriendArt|KidsHub/.test(sc), 'SceneCore 는 부모 전용 클래스를 모른다(패밀리 앱이 이 파일을 그대로 가져다 쓴다)');
     assert.ok(/K_WEAR = "kid\.wear"/.test(kh) && /FriendWear\.I\.apply\(linked \? st\.get\(K_WEAR, ""\) : ""\)/.test(kh), '켜자마자: 폰에 남긴 모습으로');
     assert.ok(/"\/p\/setrow\?kn=1" \+ \(cid\.length\(\) > 0 \? "&cid=" \+ enc\(cid\) : ""\)/.test(kh) && /gotWear\(nl \? o\.optString\("w", ""\) : ""\)/.test(kh), '켤 때마다 받는 통신 한 번에 모습도 / 연결이 없으면 빈 글');
-    assert.ok(/public void onWearPush\(String pcid, String w\)/.test(kh) && /!pcid\.equals\(cid\)\) return;/.test(kh), '푸시: 보고 있는 자녀의 것만');
+    assert.ok(/public void onWearPush\(String pcid, String w\)/.test(kh) && /!pcid\.equals\(cid\)\) return;/.test(kh), '푸시: 보고 있는 가족구성원의 것만');
     assert.ok(/if \("wear"\.equals\(k\)\) \{/.test(kp) && /h\.onWearPush\(wc, ww\)/.test(kp) && /st\.put\("kid\.wear", ww\)/.test(kp) && kp.indexOf('"wear".equals(k)') < kp.indexOf('h.onCallPush(d)'), '푸시: 알림 카드 없이 조용히, 다른 알림 처리보다 먼저');
     assert.ok(/SceneCore\.WEAR_HOOK = this;/.test(fw) && /if \(!anyLook \|\| a == null \|\| a\.intro \|\| a\.heart > 0 \|\| a\.id == null\) return;/.test(fw), '입은 게 없으면 바로 지나간다');
     assert.ok(!/getAssets\(\)\.open/.test(fw.slice(fw.indexOf('@Override public void draw'))), '그리는 길에서는 파일을 열지 않는다(읽기는 뒤 스레드)');
@@ -1240,7 +1240,7 @@ function findAndroidJar() {
     assert.ok(/"open"\.equals\(a\.a\)/.test(kh) && /ShellCore\.linkOk\(a\.url\)/.test(kh) && /ACTION_VIEW/.test(kh), '열기 동작은 linkOk(https) 를 통과한 주소만');
     assert.ok(kh.includes('/legal/privacy') && kh.includes('/legal/terms'), '시드 팝업에 처리방침 · 약관 링크가 있다');
   });
-  await t('s445: 연동 자체가 구독 — 구독이 켜져 있고 구독자가 아니면 키즈 연결 줄이 눌리지 않고 [구독하기]만 눌린다', async () => {
+  await t('s445: 연동 자체가 구독 — 구독이 켜져 있고 구독자가 아니면 가족 연결 줄이 눌리지 않고 [구독하기]만 눌린다', async () => {
     const kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
     const lock = (kh.match(/LOCK_ROW = "(.*)";/) || [])[1] || '';
     const row = JSON.parse(lock.replace(/\\"/g, '"'));
@@ -1275,7 +1275,7 @@ function findAndroidJar() {
     assert.ok(/boolean useRaster\(\)/.test(vs) && /FAIL_HOLD_MS/.test(vs), '벡터를 못 받으면 잠시 OSM 타일로 대신');
     assert.ok(/TileLoader\.VecBack vs = tl\.vecBack\(\);/.test(art) && /boolean vec = vs != null && vs\.draw\(cv, vw, dpr\);/.test(art) && /if \(!vec && \(vs == null \|\| vs\.useRaster\(\)\)\)/.test(art) && /implements TileLoader\.VecBack/.test(vs) && !/maplibre/.test(tl + art), 'TileMapArt: 벡터 바탕 먼저 · 못 받는 동안만 타일');
     assert.ok(/void ping\(\)/.test(tl) && /interface VecBack/.test(tl) && /setVecBack\(VecSnap\.get\(this\)\)/.test(fs.readFileSync(N('ShellActivity.java'), 'utf8')), 'TileLoader: 받았다고 알리는 길 · 지도 라이브러리를 모르는 틈새(VecBack) · 켤 때 연결');
-    assert.ok(/hubV\.setVecHost\(hubVec\)/.test(kh) && /preload\(\); vecOn\(\);/.test(kh) && /door\.close\(\); vecOff\(\); \}/.test(kh), '키즈 허브 지도도 벡터(켜고 끄는 수명 연결)');
+    assert.ok(/hubV\.setVecHost\(hubVec\)/.test(kh) && /preload\(\); vecOn\(\);/.test(kh) && /door\.close\(\); vecOff\(\); \}/.test(kh), '가족 허브 지도도 벡터(켜고 끄는 수명 연결)');
   });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);

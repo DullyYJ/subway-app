@@ -13,7 +13,7 @@ import java.io.InputStream;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 자녀 마커 사진 보관(이 폰 안에만): files/markers/<열쇠>.png — 동그랗게 잘린 작은 그림 하나. 지도는 그릴 때마다 get() 으로 꺼내 쓴다(메모리에 올려 둔 것만 — 그릴 때 파일을 읽지 않는다).
+ * 가족구성원 마커 사진 보관(이 폰 안에만): files/markers/<열쇠>.png — 동그랗게 잘린 작은 그림 하나. 지도는 그릴 때마다 get() 으로 꺼내 쓴다(메모리에 올려 둔 것만 — 그릴 때 파일을 읽지 않는다).
  * 사진을 고르는 곳 · 자르는 곳은 KidsHub / MarkerCropDialog.
  */
 final class MarkerPhoto {

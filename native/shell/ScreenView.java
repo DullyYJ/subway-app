@@ -1924,14 +1924,14 @@ public class ScreenView extends View {
     private String tmHint = "";
     private static final long TM_ANIM_MS = 260L;
     // ── 따라가기(s393): 엔진이 fol:1 을 주면 내 위치 점(핀 'm')이 새 자리로 부드럽게 미끄러지고 지도가 그 점을 따라간다. 손으로 지도를 움직이면 10초 동안은 따라가지 않는다. 지도는 북쪽이 위로 고정.
-    private boolean tmFol;                                  // 지금 '살아 있는 지도'인가(자녀 점만 옮기고 시점은 지킨다 — 따라가기든 아니든)
+    private boolean tmFol;                                  // 지금 '살아 있는 지도'인가(가족구성원 점만 옮기고 시점은 지킨다 — 따라가기든 아니든)
     private boolean tmFolCam;                               // 그중 카메라가 점을 따라가는 중인가(엔진이 fol:1 을 줄 때)
     private long tmFolPauseUntil, tmFolT0, tmFolUpdT; private int tmFolDur = 1200;
     private double tmFolFromLa, tmFolFromLo, tmFolToLa, tmFolToLo, tmFolLastLa, tmFolLastLo;
     private boolean tmFolRunning;
     private static final long TM_FOL_PAUSE_MS = 10000L;
     private int tmMe(List<TileMapCore.Pin> ps) { for (int i = 0; i < ps.size(); i++) if ("m".equals(ps.get(i).k)) return i; return -1; }
-    /** 따라가기 지도의 값이 바뀌었다(자녀가 움직였다) — 줌과 손으로 옮긴 자리는 그대로 두고, 내 위치 점만 지금 보이는 자리에서 새 자리로 보낸다. */
+    /** 따라가기 지도의 값이 바뀌었다(가족구성원이 움직였다) — 줌과 손으로 옮긴 자리는 그대로 두고, 내 위치 점만 지금 보이는 자리에서 새 자리로 보낸다. */
     private void tmFollowUpdate(ScreenCore.Item it) {
         List<TileMapCore.Pin> np = TileMapCore.parsePins(it.value);
         tmValue = it.value; tmPathStr = it.path; tmPath = TileMapCore.parsePath(it.path);
@@ -1955,7 +1955,7 @@ public class ScreenView extends View {
         tmPins = np;
         tmFolKick();
     }
-    /** 장소 핀(자녀 점 'm' 이 아닌 것)이 그대로인가 — 그대로면 자녀가 움직인 것뿐이라 시점을 다시 맞추지 않는다. */
+    /** 장소 핀(가족구성원 점 'm' 이 아닌 것)이 그대로인가 — 그대로면 가족구성원이 움직인 것뿐이라 시점을 다시 맞추지 않는다. */
     private boolean tmPlacesSame(List<TileMapCore.Pin> a, List<TileMapCore.Pin> b) {
         if (tmMe(a) < 0 || tmMe(b) < 0 || a.size() != b.size()) return false;
         List<TileMapCore.Pin> x = new ArrayList<TileMapCore.Pin>(), y = new ArrayList<TileMapCore.Pin>();
@@ -2004,7 +2004,7 @@ public class ScreenView extends View {
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
         boolean tmChanged = !it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH;
         if (tmChanged && it.on && it.lp.length() > 0 && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty() && tmPlacesSame(tmPins, TileMapCore.parsePins(it.value))) {
-            tmFollowUpdate(it);                                                         // 자녀가 움직였을 뿐(장소는 그대로): 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다 — 따라가기가 켜지고 꺼질 때 지도가 튀지 않는다
+            tmFollowUpdate(it);                                                         // 가족구성원이 움직였을 뿐(장소는 그대로): 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다 — 따라가기가 켜지고 꺼질 때 지도가 튀지 않는다
         } else if (tmChanged) {
             tmValue = it.value; tmPathStr = it.path; tmW = pw; tmH = ph;
             tmPins = TileMapCore.parsePins(it.value);
@@ -2028,7 +2028,7 @@ public class ScreenView extends View {
                 else tmView.zoom = Math.max(1.0 + kk, Math.floor(tmView.zoom - kk + 1e-6) + kk);
             }
             tmFolCam = it.fol && it.on;
-            tmFol = it.on && it.lp.length() > 0 && tmMe(tmPins) >= 0;                      // 자녀 점이 있는 살아 있는 지도 — 이다음부터는 점만 옮긴다
+            tmFol = it.on && it.lp.length() > 0 && tmMe(tmPins) >= 0;                      // 가족구성원 점이 있는 살아 있는 지도 — 이다음부터는 점만 옮긴다
             if (tmFol) { int me1 = tmMe(tmPins); tmFolFromLa = tmFolToLa = tmFolLastLa = tmPins.get(me1).la; tmFolFromLo = tmFolToLo = tmFolLastLo = tmPins.get(me1).lo; tmFolUpdT = SystemClock.uptimeMillis(); }
             if (tmFolCam) {                                                             // 따라가기 시작: 내 위치 점이 가운데 · 걷는 길이 보이는 17 배율
                 int me0 = tmMe(tmPins);
@@ -2190,7 +2190,7 @@ public class ScreenView extends View {
                 ui.removeCallbacks(tmLpRun);
                 if (!tmMoved && !tmLpFired && SystemClock.uptimeMillis() - tmDT < 600L) {
                     long nt = SystemClock.uptimeMillis(); float lx = x - tmL * dpr, ly = y - tmT * dpr;
-                    if (tmLp.length() > 0 && tmTapT > 0L && nt - tmTapT < 380L && Math.hypot(x - tmTapX, y - tmTapY) < 44f * dpr && !tmOnBtn(lx, ly)) { tmTapT = 0L; tmHome(); }          // s375(YJ): 지도를 두 번 탭하면 자녀 위치로 돌아온다
+                    if (tmLp.length() > 0 && tmTapT > 0L && nt - tmTapT < 380L && Math.hypot(x - tmTapX, y - tmTapY) < 44f * dpr && !tmOnBtn(lx, ly)) { tmTapT = 0L; tmHome(); }          // s375(YJ): 지도를 두 번 탭하면 가족구성원 위치로 돌아온다
                     else { tmTapT = nt; tmTapX = x; tmTapY = y; tmTap(lx, ly); }
                 }
                 finishTouch(); invalidate();
@@ -2217,7 +2217,7 @@ public class ScreenView extends View {
         float bsz = 30f * dpr, bm = 10f * dpr, bx = tmWd * dpr - bm - bsz, by = tmHt * dpr - bm - 2f * bsz;
         return lx >= bx && lx < bx + bsz && ly >= by && ly < by + 2f * bsz;
     }
-    /** 자녀(내 핀 m) 위치로 지도를 되돌린다 — 핀이 없으면 첫 핀. */
+    /** 가족구성원(내 핀 m) 위치로 지도를 되돌린다 — 핀이 없으면 첫 핀. */
     private void tmHome() {
         if (tmView == null || tmPins.isEmpty()) return;
         int at = 0;
@@ -3976,7 +3976,7 @@ public class ScreenView extends View {
         for (ScreenCore.Item it : lay.head) if (it.kind == ScreenCore.K_SEARCH) return it;
         return null;
     }
-    /** s376(YJ: 키즈는 커뮤니티만 다녀오면 키보드가 계속 올라온다): 쓰지 않는 입력칸이 포커스를 받으면(창에 포커스 받을 칸이 없을 때 안드로이드가 첫 입력칸에 포커스를 준다) 키즈 화면이 키보드 자동 표시 모드(adjustResize)일 때 키보드가 저절로 뜬다 — 편집 중일 때만 포커스를 받게 한다. */
+    /** s376(YJ: 가족는 커뮤니티만 다녀오면 키보드가 계속 올라온다): 쓰지 않는 입력칸이 포커스를 받으면(창에 포커스 받을 칸이 없을 때 안드로이드가 첫 입력칸에 포커스를 준다) 가족 화면이 키보드 자동 표시 모드(adjustResize)일 때 키보드가 저절로 뜬다 — 편집 중일 때만 포커스를 받게 한다. */
     private static void focusOk(EditText e, boolean ok) {
         if (e == null) return;
         e.setFocusable(ok); e.setFocusableInTouchMode(ok);

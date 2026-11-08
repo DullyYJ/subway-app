@@ -669,7 +669,7 @@ function mapBusAliases(b) {
   if (b && b.al && typeof b.al === 'object' && !Array.isArray(b.al)) Object.keys(b.al).slice(0, 60).forEach(function (k) { var v = mapStr(b.al[k], MAP_ALIAS_MAX).trim(); if (v) out[mapStr(k, 40)] = v; });
   return out;
 }
-// ── 즐겨찾기·별명 편집과 갱신 주기(s389, 키즈 노선도 탭): 넣을지 뺄지 · 몇 곳까지 · 별명 다듬기 · 안내 글 · 몇 초마다 새로 받을지는 엔진이 정한다.
+// ── 즐겨찾기·별명 편집과 갱신 주기(s389, 가족 노선도 탭): 넣을지 뺄지 · 몇 곳까지 · 별명 다듬기 · 안내 글 · 몇 초마다 새로 받을지는 엔진이 정한다.
 //   앱은 요청(f.bus.act)에 '누른 것'만 실어 보내고, 돌려받은 info.edit(새 목록·별명·안내 글)을 저장·표시하며, info.poll 박자대로 다시 받을 뿐이다.
 //   act = { k:'fv', stop:{nm,id,src,la,lo,…} }(별 누름: 있으면 빼고 없으면 넣는다) | { k:'al', id, t }(별명 저장: 빈 글이면 지운다)
 var MAP_POLL = { tick: 10000, stale: 20000, retry: 8000 };           // 확인 박자(ms) · 이만큼 지나면 새로 받는다 · 못 받았을 때 다시 받기까지 앞당기는 만큼

@@ -156,7 +156,7 @@ function settingsScreen(inp, factsIn) {
     { t: 'select', title: '하늘 파스텔', sub: '맑고 시원한 하늘색 테마', on: !dk, act: { a: 'sel', v: 'pastel' }, fill: 'card', line: 'border', onl: '#1d9bf0', chk: '#1d9bf0', ckf: '#ffffff',
       prev: ['#f0f4f8', '#ffffff', '#dce8f0', '#1d9bf0', '#dce8f0'] }
   ]);
-  if (menu) { body.push(themeP, menuPanel); if (devP) body.push(devP); }          // s407 순서: 커뮤니티 아이디 → 출퇴근 브리핑 → 테마 → 알림 · 편의 기능 → (앱이 끼우는 길동무 키즈) → 개발자 도구 → 약관
+  if (menu) { body.push(themeP, menuPanel); if (devP) body.push(devP); }          // s407 순서: 커뮤니티 아이디 → 출퇴근 브리핑 → 테마 → 알림 · 편의 기능 → (앱이 끼우는 길동무 패밀리) → 개발자 도구 → 약관
   else body.push(themeP);
 
   // 8) 약관
@@ -578,7 +578,7 @@ var SETTINGS_POL = {
     { small: 0, parts: [["5. 이용자의 권리",1],["\n기기 설정에서 위치 권한을 언제든지 철회할 수 있습니다. 권한을 끄면 실시간 안내 기능은 제한되지만 나머지 기능은 그대로 이용할 수 있습니다. 작성한 글·댓글은 직접 삭제할 수 있습니다.",0]] },
     { small: 0, parts: [["6. 아동의 개인정보",1],["\n만 14세 미만 아동을 대상으로 하지 않으며, 해당 정보를 고의로 수집하지 않습니다.",0]] },
     { small: 0, parts: [["7. 문의",1],["\n개인정보 보호책임자: 원윤재(운영자) · phg0643@gmail.com",0]] },
-    { small: 0, parts: [["8. 길동무 키즈 연동",1],["\n'길동무 키즈' 탭은 자녀 기기의 길동무 키즈 앱과 연결했을 때만 쓰입니다. 연결하면 자녀의 위치 등이 길동무 키즈 서버에서 처리되며(위 '서버에 저장하지 않습니다'는 보호자 본인의 위치 설명입니다), 수집 항목·보관·삭제·법정대리인 동의는 길동무 키즈의 처리방침(gildongmu-kids.phg0643.workers.dev/legal/privacy)과 삭제 안내(/legal/delete)를 따릅니다.",0]] }
+    { small: 0, parts: [["8. 길동무 패밀리 연동",1],["\n'가족' 탭은 가족구성원 기기의 길동무 패밀리 앱과 연결했을 때만 쓰입니다. 연결하면 가족구성원의 위치 등이 길동무 패밀리 서버에서 처리되며(위 '서버에 저장하지 않습니다'는 보호자 본인의 위치 설명입니다), 수집 항목·보관·삭제·법정대리인 동의는 길동무 패밀리의 처리방침(gildongmu-kids.phg0643.workers.dev/legal/privacy)과 삭제 안내(/legal/delete)를 따릅니다.",0]] }
   ] },
   poll: { title: "위치기반서비스 이용약관", paras: [
     { small: 0, parts: [["제1조 (목적)",1],["\n본 약관은 이용자가 본 앱의 위치기반서비스를 이용함에 있어 권리·의무 및 책임사항을 규정합니다.",0]] },

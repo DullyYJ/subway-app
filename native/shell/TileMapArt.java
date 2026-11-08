@@ -120,7 +120,7 @@ final class TileMapArt {
                 double[] s = vw.toScreen(p.la, p.lo);
                 if (s[0] < -40 || s[1] < -40 || s[0] > vw.w + 40 || s[1] > vw.h + 40) continue;
                 if (isMe) {
-                    Bitmap ph = p.g.startsWith("kid.") ? MarkerPhoto.get(p.g.substring(4)) : null;          // 자녀 마커: 부모님이 사진으로 바꿔 둔 게 있으면 사진(동그란 그림)
+                    Bitmap ph = p.g.startsWith("kid.") ? MarkerPhoto.get(p.g.substring(4)) : null;          // 가족구성원 마커: 부모님이 사진으로 바꿔 둔 게 있으면 사진(동그란 그림)
                     if (ph != null) drawMePhoto(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h, ph); else drawMe(cv, (float) s[0], (float) s[1], dpr, nowMs, p.h);
                 }
                 else if ("a".equals(p.k) || "b".equals(p.k)) drawEnd(cv, (float) s[0], (float) s[1], dpr, p.n.length() > 0 ? p.n : ("a".equals(p.k) ? "출발" : "도착"), "a".equals(p.k) ? C_FROM : C_TO);
