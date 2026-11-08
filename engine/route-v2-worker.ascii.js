@@ -14191,6 +14191,8 @@ async function handleScreenShop(request) {
 // \ub9e8 \uc544\ub798 module.exports \ub294 \uc2dc\ud5d8(Node)\uc6a9\uc774\uace0 Worker \uc5d0\uc11c\ub294 \ud568\uc218 \uc120\uc5b8\ub9cc \uc4f0\uc778\ub2e4.
 'use strict';
 var SETTINGS_SCREEN_V = 2;
+// \uc77c\ubc18 \uc0ac\uc6a9\uc790\uc5d0\uac8c\ub294 \uac1c\ubc1c\uc790 \ub3c4\uad6c \u00b7 \uc624\ub958 \ub85c\uadf8 \uc904\uc744 \ubcf4\uc774\uc9c0 \uc54a\ub294\ub2e4(YJ 2026-11-08). \uc9c4\ub2e8\uc774 \ud544\uc694\ud560 \ub54c\ub9cc true \ub85c \ubc14\uafd4 \ub2e4\uc2dc \ubc30\ud3ec\ud55c\ub2e4. \ud558\uc704 \ud654\uba74(dev \u00b7 erl)\uacfc \uc571\uc774 \ubaa8\uc73c\ub294 \uae30\ub85d\uc740 \uadf8\ub300\ub85c \ub454\ub2e4.
+var SETTINGS_SHOW_DIAG = false;
 var SETTINGS_PAGE_CAP = 8;
 // \uc9c0\ud558\ucca0 \uc5ed \ud45c(HOME_STNS)\ub294 Worker \uc5d0\uc11c\ub294 \uc55e/\ub4a4\uc5d0 \ubd99\uc740 engine/home-stations.js \uac00 \ucc44\uc6b0\ub294 \uacf5\uc6a9 \uc804\uc5ed\uc774\uace0(\uc5ec\uae30\uc11c \ub2e4\uc2dc \uc120\uc5b8\ud558\uc9c0 \uc54a\ub294\ub2e4), Node(\uc2dc\ud5d8)\uc5d0\uc11c\ub294 \ud30c\uc77c\uc744 \ubd88\ub7ec\uc628\ub2e4. \uc694\uccad \ub54c \uc77d\ub294\ub2e4(Worker \uc5d0\uc11c \uc774 \ube14\ub85d\uc774 \uba3c\uc800 \ud3c9\uac00\ub418\ubbc0\ub85c).
 function settingsStns() {
@@ -14313,7 +14315,7 @@ function settingsScreen(inp, factsIn) {
   if (pgHas('ovl') && !menu) body.push(settingsPanelN([settingsTitleN('\ub2e4\ub978 \uc571 \uc704\uc5d0 \ud45c\uc2dc', 4),
     settingsDescN('\ub2e4\ub978 \uc571\uc744 \uc4f0\ub294 \ub3d9\uc548 \ud604\uc7ac\uc5ed \u00b7 \ub0a8\uc740\uc2dc\uac04\uc744 \ud654\uba74 \uc704\ucabd\uc5d0 \uc791\uc740 \ub9c9\ub300\ub85c \ub744\uc6cc\uc694. \uc548\ub0b4 \uc815\ubcf4\ub9cc \ubcf4\uc5ec\uc8fc\uace0 \uad11\uace0\ub294 \ub123\uc9c0 \uc54a\uc544\uc694.', 6),
     settingsNavN('\ud45c\uc2dc \uc124\uc815', onTxt(f.ovl), pgAct('ovl'), true)]));
-  var devP = pgHas('dev') ? settingsPanelN([settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4),
+  var devP = (SETTINGS_SHOW_DIAG && pgHas('dev')) ? settingsPanelN([settingsTitleN('\uac1c\ubc1c\uc790 \ub3c4\uad6c', 4),
     settingsDescN('\uc624\ubc84\ub808\uc774 \uc2dc\ub098\ub9ac\uc624 \uc2dc\ud5d8 \uac19\uc740 \uc9c4\ub2e8 \ub3c4\uad6c\uc608\uc694.', 6),
     settingsNavN('\ub3c4\uad6c \uc5f4\uae30', '', pgAct('dev'), true)]) : null;
   if (!menu && devP) body.push(devP);
@@ -14335,9 +14337,8 @@ function settingsScreen(inp, factsIn) {
     settingsTitleN('\uc57d\uad00 \ubc0f \uc815\ucc45', 4),
     settingsNavN('\uac1c\uc778\uc815\ubcf4\ucc98\ub9ac\ubc29\uce68', '', { a: 'call', v: 'pol.privacy' }, true),
     settingsNavN('\uc704\uce58\uae30\ubc18\uc11c\ube44\uc2a4 \uc774\uc6a9\uc57d\uad00', '', { a: 'call', v: 'pol.location' }, true),
-    settingsNavN('\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', '', { a: 'call', v: 'pol.opensource' }, true),
-    settingsNavN('\uc624\ub958 \ub85c\uadf8', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)
-  ]));
+    settingsNavN('\ub370\uc774\ud130 \ucd9c\ucc98 \ubc0f \uace0\uc9c0', '', { a: 'call', v: 'pol.opensource' }, true)
+  ].concat(SETTINGS_SHOW_DIAG ? [settingsNavN('\uc624\ub958 \ub85c\uadf8', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)] : [])));
   body.push({ t: 'spacer', h: 28 });
 
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };

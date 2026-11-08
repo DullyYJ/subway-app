@@ -18,6 +18,8 @@
 // 맨 아래 module.exports 는 시험(Node)용이고 Worker 에서는 함수 선언만 쓰인다.
 'use strict';
 var SETTINGS_SCREEN_V = 2;
+// 일반 사용자에게는 개발자 도구 · 오류 로그 줄을 보이지 않는다(YJ 2026-11-08). 진단이 필요할 때만 true 로 바꿔 다시 배포한다. 하위 화면(dev · erl)과 앱이 모으는 기록은 그대로 둔다.
+var SETTINGS_SHOW_DIAG = false;
 var SETTINGS_PAGE_CAP = 8;
 // 지하철 역 표(HOME_STNS)는 Worker 에서는 앞/뒤에 붙은 engine/home-stations.js 가 채우는 공용 전역이고(여기서 다시 선언하지 않는다), Node(시험)에서는 파일을 불러온다. 요청 때 읽는다(Worker 에서 이 블록이 먼저 평가되므로).
 function settingsStns() {
@@ -140,7 +142,7 @@ function settingsScreen(inp, factsIn) {
   if (pgHas('ovl') && !menu) body.push(settingsPanelN([settingsTitleN('다른 앱 위에 표시', 4),
     settingsDescN('다른 앱을 쓰는 동안 현재역 · 남은시간을 화면 위쪽에 작은 막대로 띄워요. 안내 정보만 보여주고 광고는 넣지 않아요.', 6),
     settingsNavN('표시 설정', onTxt(f.ovl), pgAct('ovl'), true)]));
-  var devP = pgHas('dev') ? settingsPanelN([settingsTitleN('개발자 도구', 4),
+  var devP = (SETTINGS_SHOW_DIAG && pgHas('dev')) ? settingsPanelN([settingsTitleN('개발자 도구', 4),
     settingsDescN('오버레이 시나리오 시험 같은 진단 도구예요.', 6),
     settingsNavN('도구 열기', '', pgAct('dev'), true)]) : null;
   if (!menu && devP) body.push(devP);
@@ -162,9 +164,8 @@ function settingsScreen(inp, factsIn) {
     settingsTitleN('약관 및 정책', 4),
     settingsNavN('개인정보처리방침', '', { a: 'call', v: 'pol.privacy' }, true),
     settingsNavN('위치기반서비스 이용약관', '', { a: 'call', v: 'pol.location' }, true),
-    settingsNavN('데이터 출처 및 고지', '', { a: 'call', v: 'pol.opensource' }, true),
-    settingsNavN('오류 로그', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)
-  ]));
+    settingsNavN('데이터 출처 및 고지', '', { a: 'call', v: 'pol.opensource' }, true)
+  ].concat(SETTINGS_SHOW_DIAG ? [settingsNavN('오류 로그', f.errn > 0 ? String(f.errn) : '', { a: 'call', v: 'errlog' }, true)] : [])));
   body.push({ t: 'spacer', h: 28 });
 
   var out = { ok: true, v: 1, screen: 'settings', cover: 'tab', head: [{ t: 'divider', pad: [0, 0, 0, 0], c: 'border' }], body: body };
