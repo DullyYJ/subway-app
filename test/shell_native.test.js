@@ -1266,6 +1266,17 @@ function findAndroidJar() {
     assert.ok(m && +m[1] >= 8, 'Play Billing 8 이상(2026-08-31부터 필수)');
     assert.ok(!/launchBillingFlow[\s\S]*Random/.test(bg), '무작위 없음');
   });
+  await t('s447: 움직이지 않는 지도(맛집 · 장소 등록 · 큰 지도)도 정류장 지도와 같은 벡터 지도 — 앱은 엔진이 정한 가운데 · 배율의 바탕 그림만 깐다', async () => {
+    const vs = fs.readFileSync(N('VecSnap.java'), 'utf8'), art = fs.readFileSync(N('TileMapArt.java'), 'utf8'), tl = fs.readFileSync(N('TileLoader.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
+    assert.ok(/^package com\.dullyyj\.subway;/m.test(vs) && /MapSnapshotter/.test(vs) && /VecMap\.STYLE/.test(vs), 'VecSnap: 같은 스타일(OpenFreeMap Liberty)을 한 장 그림으로 받는다');
+    assert.ok(/TileMapCore\.View vw/.test(vs) && /r\.la = vw\.cla/.test(vs) && /vw\.zoom/.test(vs), '가운데 · 배율은 ScreenView 가 정한 View 를 그대로 쓴다(새 계산 없음)');
+    assert.ok(/withPixelRatio\(r\.dpr\)/.test(vs) && /1\.0 \+ Math\.log\(Math\.max\(0\.5f, r\.dpr\)\) \/ Math\.log\(2\.0\)/.test(vs), '배율: 화면 픽셀 배율 = MapLibre 배율 + 1 + log2(밀도) · 밀도 배로 받는다');
+    assert.ok(/DEBOUNCE_MS/.test(vs) && /1\.96 > 5\.0e6 \? 1\.0 : 1\.4/.test(vs), '손을 떼고 잠시 뒤 새 그림 · 가장자리 여백(큰 화면은 없이)');
+    assert.ok(/boolean useRaster\(\)/.test(vs) && /FAIL_HOLD_MS/.test(vs), '벡터를 못 받으면 잠시 OSM 타일로 대신');
+    assert.ok(/VecSnap vs = VecSnap\.get\(tl\.context\(\)\);/.test(art) && /boolean vec = vs\.draw\(cv, vw, dpr\);/.test(art) && /if \(!vec && vs\.useRaster\(\)\)/.test(art), 'TileMapArt: 벡터 바탕 먼저 · 못 받는 동안만 타일');
+    assert.ok(/void ping\(\)/.test(tl) && /Context context\(\)/.test(tl), 'TileLoader: 받았다고 알리는 길');
+    assert.ok(/hubV\.setVecHost\(hubVec\)/.test(kh) && /preload\(\); vecOn\(\);/.test(kh) && /door\.close\(\); vecOff\(\); \}/.test(kh), '키즈 허브 지도도 벡터(켜고 끄는 수명 연결)');
+  });
   console.log(`\n${pass} 통과 / ${fail} 실패 / ${skipped} 건너뜀`);
   process.exit(fail ? 1 : 0);
 })();
