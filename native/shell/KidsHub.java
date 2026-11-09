@@ -763,7 +763,11 @@ public final class KidsHub {
                     if ("kqx".equals(clear)) qpt = 1;
                     if (close && (v == null || !v.endsWith(".cancel"))) { closeSheet(true); if (wasShown && notice.length() > 0) note(notice); }          // 취소는 이미 닫았다 — 그 사이 새로 연 팝업을 닫지 않게
                     if (hub && open) fetchHub();
-                    if (popR != null && "kx.open".equals(v)) showCallPop(popR, true);                  // 허브의 호출 줄을 눌렀다 — 그 호출의 팝업
+                    if (popR != null && v != null && (v.equals("kx.open") || v.startsWith("kx.o."))) {                  // 허브의 호출 줄 · 지도의 호출 마커를 눌렀다 — 그 호출의 팝업(좌표가 있으면 지도와 함께)
+                        boolean upg = refreshPk.length() > 0; refreshPk = "";
+                        if (!"arr".equals(popR.optString("k"))) lastPop = popR;
+                        if (!upg || (sheetD != null && "call".equals(sheetKind))) showCallPop(popR, true);         // 푸시 팝업의 좌표 새로고침인데 그 사이 닫았으면 다시 열지 않는다
+                    }
                 } });
             } catch (Throwable e) { note("처리하지 못했어요"); }
             finally { if (!applied[0] && "kpg.find".equals(v)) main.post(new Runnable() { @Override public void run() { regBusy(false); } }); }          // 못 찾고 끝났으면 '찾는 중' 글을 되돌린다
@@ -816,12 +820,15 @@ public final class KidsHub {
     // ───────── s415: 가족구성원의 호출(긴급 · 데리러 와줘 · 안전 도착)은 가운데 팝업 — 가족 탭 밖에서도 ─────────
     private volatile JSONObject lastPop;      // 가장 최근에 받은 호출 팝업 값(엔진이 준 것: 제목 · 글 · 단추 · 저절로 뜰지)
     private String shownPk = "";              // 이미 띄운 팝업(같은 호출 · 같은 상태는 다시 띄우지 않는다)
+    private boolean shownMap;                 // 지금 뜬(또는 마지막으로 띄운) 호출 팝업에 지도가 있는가 — 푸시로 먼저 뜬 팝업(좌표 없음)에 좌표가 오면 그 자리에서 지도를 붙인다
+    private String refreshPk = "";            // 푸시로 뜬 팝업의 좌표를 물어 보내 둔 호출(답이 왔을 때 그 사이 닫았으면 다시 열지 않는다)
 
     /** 허브 답에 실려 온 호출 팝업 값을 맞춘다: 새 것이면(엔진이 au=1) 띄우고, 열려 있던 호출 팝업이 이제 필요 없어졌으면 닫는다. */
     private void syncCallPop(JSONObject pp) {
         lastPop = pp;
         if (pp == null) { if (sheetD != null && "call".equals(sheetKind)) closeSheet(true); return; }
         if (!showCallPop(pp, false) && sheetD != null && "call".equals(sheetKind) && !pp.optString("pk").equals(shownPk)) closeSheet(true);
+        else if (pp.has("la") && !shownMap && sheetD != null && "call".equals(sheetKind) && pp.optString("pk").equals(shownPk)) showCallPop(pp, true);          // 열려 있는 같은 호출 팝업에 지도를 붙인다
     }
 
     /** 엔진이 정해 준 값(제목 pt · 글 ps · 단추 bt/ka/ci · 저절로 뜰지 au)으로 가운데 팝업을 띄운다. manual = 사람이 눌러 연 것(저절로 뜨는 조건을 보지 않는다). 띄웠으면 true. */
@@ -834,7 +841,7 @@ public final class KidsHub {
         }
         try {
             String js = callPopJson(d);
-            shownPk = pk;
+            shownPk = pk; shownMap = d.has("la") && d.has("lo");
             showSheet("call", ScreenCore.load(js), js);
             return true;
         } catch (Throwable e) { return false; }
@@ -847,6 +854,10 @@ public final class KidsHub {
         JSONArray b = new JSONArray();
         b.put(new JSONObject().put("t", "text").put("s", d.optString("pt")).put("size", 17).put("bold", true).put("color", "orange").put("align", "center").put("pad", new JSONArray("[16,22,16,6]")));
         b.put(new JSONObject().put("t", "text").put("s", d.optString("ps")).put("size", 12.5).put("color", "sub").put("align", "center").put("pad", new JSONArray("[16,0,16,14]")));
+        if (d.has("la") && d.has("lo")) {                                  // 엔진이 좌표를 줬으면(법정대리인 확인을 마친 부모의 허브 응답) 호출 위치를 지도로 — 핀 이름 · 좌표는 엔진 값 그대로, 앱은 그리기만
+            JSONArray pts = new JSONArray().put(new JSONObject().put("la", d.optDouble("la")).put("lo", d.optDouble("lo")).put("k", "s").put("n", "!").put("l", d.optString("mp", "")));
+            b.put(new JSONObject().put("t", "tmap").put("h", 190).put("r", 14).put("pad", new JSONArray("[12,0,12,12]")).put("pts", pts).put("foc", 0).put("fz", 17));
+        }
         String ka = d.optString("ka", ""), ci = d.optString("ci", "");
         JSONArray kids = new JSONArray();
         JSONObject act1 = new JSONObject().put("a", "call").put("v", ka.length() > 0 ? ka : "kl.close");
@@ -868,7 +879,15 @@ public final class KidsHub {
         if (!"sos".equals(k) && !"pick".equals(k) && !"arr".equals(k)) return false;
         if (paused || d.get("pk") == null) return false;
         final JSONObject o = popFromMap(d);
-        main.post(new Runnable() { @Override public void run() { if (!"arr".equals(k)) lastPop = o; showCallPop(o, false); } });
+        main.post(new Runnable() { @Override public void run() {
+            if (!"arr".equals(k)) lastPop = o;
+            boolean shown = showCallPop(o, false);
+            final String ci0 = o.optString("ci", ""), pk0 = o.optString("pk", "");
+            if (shown && !"arr".equals(k) && ci0.length() > 0) {              // 푸시에는 좌표가 없다(개인정보) — 팝업이 뜬 뒤 서버에 같은 호출을 물어 좌표가 오면 그 자리에서 지도를 붙인다
+                refreshPk = pk0;
+                main.postDelayed(new Runnable() { @Override public void run() { if (sheetD != null && "call".equals(sheetKind) && pk0.equals(shownPk)) send("kx.o." + ci0, "", "", null, null); else refreshPk = ""; } }, 500L);
+            }
+        } });
         return true;
     }
 

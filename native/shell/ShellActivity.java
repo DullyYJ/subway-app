@@ -4143,6 +4143,7 @@ public class ShellActivity extends Activity {
         }
         final String hBody = hKey.equals(hcKey) ? "" : hc.request(ShellCore.CAP, ShellCore.theme(store), homeEnv(), home.resultFacts(homeEnv(), ShellCore.theme(store)), chat.recentTalksJson(8));
         warmTabs();                                                                  // 경로가 있는 다른 탭의 결과 화면 · 홈 카드를 요청 하나씩으로 미리 받아 둔다(밀어서 탭을 바꿀 때 즉시)
+        rideWarm();                                                                  // 경로 확정을 누르기 전에 탑승 시작 응답을 뒤에서 미리 받아 둔다(누르면 서버를 기다리지 않고 바로 넘어간다)
         new Thread(new Runnable() {
             @Override public void run() {
                 // 경로 결과 · 홈 카드는 홈 화면 응답을 기다리지 않고 함께 받는다(셋이 차례로 걸리던 시간을 가장 느린 하나로)
@@ -5077,6 +5078,61 @@ public class ShellActivity extends Activity {
             try { NetPost.post(ShellCore.BOARD_BASE + "/gx", "{\"e\":\"ride\",\"o\":" + ShellCore.q(o == null ? "" : o) + ",\"d\":" + ShellCore.q(d == null ? "" : d) + "}", 6000); } catch (Throwable t) { /* 무시 */ }
         } }, "shell-gx").start();
     }
+    // ── 경로 확정 미리 받기: 결과가 뜬 뒤 뒤에서 /ride/start(+첫 구간이 버스면 /ride/buspick)를 한 번 받아 둔다. 경로 확정을 누르면 그 답으로 바로 넘어간다. 계산은 모두 엔진 답 그대로 — 앱은 받아 둔 글을 들고 있다 꺼내 쓸 뿐이다. ──
+    private static final long RW_START_FRESH_MS = 45000L, RW_PICK_FRESH_MS = 15000L, RW_DEBOUNCE_MS = 600L;
+    private final Object rwLock = new Object();
+    private String rwWant = "", rwFly = "", rwKey = "", rwStart = "", rwPick = "";
+    private long rwStartAt, rwPickAt;
+    private String rwTriesKey = ""; private int rwTries;
+    private String rwKeyOf(int rid, String tab, List<String> off, boolean pfl, String theme) { return rid + "|" + tab + "|" + off + "|" + pfl + "|" + theme; }
+    private void rideWarm() {
+        if (!home.hasRoute() || home.riding() || RideService.running || !resumed) return;
+        final List<String> off = RideCore.offKinds(store);
+        final boolean pfl = "1".equals(store.get(ShellCore.K_PFL, "0"));
+        final String th = ShellCore.theme(store);
+        final int rid = home.routeId;
+        final String key = rwKeyOf(rid, home.resTab, off, pfl, th);
+        long now = System.currentTimeMillis();
+        synchronized (rwLock) {
+            rwWant = key;
+            if (!key.equals(rwTriesKey)) { rwTriesKey = key; rwTries = 0; }
+            if (key.equals(rwFly) || (key.equals(rwKey) && now - rwStartAt < RW_START_FRESH_MS - 10000L)) return;          // 받는 중이거나, 받아 둔 것이 아직 한참 싱싱하면 다시 받지 않는다
+            if (rwTries >= 2) return;                                                                                     // 한 경로 · 탭에서 미리 받기는 두 번까지(오래 켜 둬도 서버를 계속 두드리지 않는다) — 낡았으면 누를 때 예전처럼 묻는다
+            rwTries++; rwFly = key;
+        }
+        final String body = RideCore.startBody(ShellCore.CAP, home.resultFacts(homeEnv(), th), off, pfl);
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    try { Thread.sleep(RW_DEBOUNCE_MS); } catch (InterruptedException ie) { return; }
+                    synchronized (rwLock) { if (!key.equals(rwWant)) return; }          // 그 사이 탭 · 경로가 바뀌었다 — 새 것을 받는다
+                    NetPost.Res r = NetPost.post(ShellCore.BASE + "/ride/start", body, 12000);
+                    String txt = r.body == null ? "" : r.body;
+                    if (r.status != 200 || txt.length() == 0) return;
+                    long t1 = System.currentTimeMillis();
+                    String pick = ""; long t2 = t1;
+                    if (txt.indexOf("\"bl\":{") >= 0) {                                   // 첫 구간이 버스 — 탈 버스 고르기 답도 함께(없으면 고를 것이 없다)
+                        NetPost.Res b = NetPost.post(ShellCore.BASE + "/ride/buspick", body, 6000);
+                        if (b.status == 200 && b.body != null && b.body.length() > 2) pick = b.body;
+                        t2 = System.currentTimeMillis();
+                    }
+                    synchronized (rwLock) { if (key.equals(rwWant)) { rwKey = key; rwStart = txt; rwPick = pick; rwStartAt = t1; rwPickAt = t2; } }
+                } catch (Throwable ignored) {
+                } finally { synchronized (rwLock) { if (key.equals(rwFly)) rwFly = ""; } }
+            }
+        }, "shell-ride-warm").start();
+    }
+    /** 미리 받아 둔 탑승 시작 답을 꺼낸다(한 번만). 같은 경로 · 같은 탭이고 싱싱할 때만 { 시작 답, 버스 고르기 답 또는 "" } — 아니면 null(예전처럼 서버에 묻는다). */
+    private String[] rwTake(String key) {
+        synchronized (rwLock) {
+            long now = System.currentTimeMillis();
+            if (!key.equals(rwKey) || rwStart.length() == 0 || now - rwStartAt > RW_START_FRESH_MS) return null;
+            if (rwPick.length() > 0 && now - rwPickAt > RW_PICK_FRESH_MS) return null;          // 버스 도착 정보가 낡았다 — 다시 묻는다
+            String[] o = { rwStart, rwPick };
+            rwKey = ""; rwStart = ""; rwPick = "";
+            return o;
+        }
+    }
     private void startRide() {
         if (!home.hasRoute() || home.riding()) return;
         RideService.buzz(this);                                                  // [경로 확정] 진동(s228)
@@ -5095,6 +5151,14 @@ public class ShellActivity extends Activity {
         final String body = RideCore.startBody(ShellCore.CAP, facts, off, pfl);
         final int rid = home.routeId;
         final String gxO = home.sendName(HomeCore.START), gxD = home.sendName(HomeCore.DEST);          // 이용 지표용(역 이름만 서버가 받는다)
+        {   // 미리 받아 둔 응답이 있으면(같은 경로 · 같은 탭 · 45초 안) 서버를 기다리지 않고 바로 — 첫 구간이 버스가 아니거나, 버스 고르기 답도 15초 안에 받아 둔 것일 때만(버스 도착 시각은 낡은 값을 쓰지 않는다)
+            final String[] hit = rwTake(rwKeyOf(rid, home.resTab, off, pfl, ShellCore.theme(store)));
+            if (hit != null) {
+                gxRide(gxO, gxD);
+                if (hit[1].length() > 0) busPickAsk(hit[1], facts, off, pfl, hit[0], rid); else rideCommit(hit[0], rid);
+                return;
+            }
+        }
         toast("탑승 안내를 준비하고 있어요");
         new Thread(new Runnable() {
             @Override public void run() {
