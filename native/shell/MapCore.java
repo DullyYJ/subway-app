@@ -81,11 +81,12 @@ public final class MapCore {
     public int svb = 300;
     /** true 면 이 상태기가 실제 화면의 것이다(미리 받기용 유령 상태기는 false) — 위치 칸을 기기 저장소(ShellCore.K_BUSCELL)에 적어 화면 캐시 열쇠가 따라가게 한다. */
     public boolean primary;
-    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; stopsFresh = false; if (primary) st.put(ShellCore.K_BUSCELL, stopsKey()); loadStopsCache(); }
+    public void setBusLoc(double la, double lo) { busLL = new double[] { la, lo }; busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = false; stopsFresh = false; if (primary) st.put(ShellCore.K_BUSCELL, cellKey()); loadStopsCache(); }
     /** s383: 새로고침으로 위치를 잡은 직후 true — 정류장 목록을 보관본(기기 · 서버 캐시) 없이 공공 API 에서 새로 받는다(원하는 정류장이 안 나온다는 제보). */
     public boolean stopsFresh;
     /** 새로고침(아래로 당기기 · 🔄 · 📍): 새로 확인한 위치로 바꾸고 정류장 목록도 보관본 없이 다시 조회한다(s383 — 보관본·서버 캐시를 건너뛴다). 처음 켤 때·탭 전환은 보관본을 써 빠르게 뜬다. */
     public void setBusLocFresh(double la, double lo) {
+        busPin = null;                                                                        // 내 위치로 돌아간다(지도를 꾹 눌러 고른 곳은 버린다)
         long now = System.currentTimeMillis();
         String cell = cellOf(la, lo);
         if (cell.equals(freshCell) && now - freshAt < FRESH_GAP_MS) { setBusLoc(la, lo); return; }          // 공공 API 보호: 같은 칸을 1분 안에 또 새로고침하면 방금 새로 받아 둔 보관본을 쓴다
@@ -93,6 +94,24 @@ public final class MapCore {
         setBusLoc(la, lo); busRes.clear(); stopsSaved = false; stopsT = 0; stopsFresh = true;
     }
     private static final long FRESH_GAP_MS = 60000L;
+    /** s451: 지도를 2초 꾹 눌러 고른 곳(위도, 경도) — 있으면 엔진이 그 주변 100m 정류장을 찾는다. 앱을 끄면 사라지고, 내 위치(새로고침 · 📍)를 누르면 버린다. 이 동안은 정류장 목록 · 뼈대를 기기에 두지 않는다. */
+    public double[] busPin;
+    /** 꾹 누르기 행동(mp.lp.<위도>_<경도>)의 좌표를 받아 고른 곳으로 둔다. 좌표가 이상하면 false. */
+    public boolean holdAt(String t) {
+        try {
+            int u = t == null ? -1 : t.indexOf('_');
+            if (u < 1) return false;
+            double la = Double.parseDouble(t.substring(0, u)), lo = Double.parseDouble(t.substring(u + 1));
+            if (!(Math.abs(la) <= 85.0) || !(Math.abs(lo) <= 180.0)) return false;
+            busPin = new double[] { la, lo };
+            busRes.clear(); busNeed.clear(); busSel = -1; stopsSaved = true; stopsT = 0; stopsFresh = true;           // 보관본 없이 새로 · 저장도 하지 않는다
+            if (primary) st.put(ShellCore.K_BUSCELL, cellKey());
+            toast = "고른 곳 주변 100m 정류장을 찾는 중...";
+            return true;
+        } catch (NumberFormatException e) { return false; }
+    }
+    /** 화면 캐시 열쇠에 쓰는 칸 — 고른 곳이 있으면 그곳(내 위치 칸의 화면과 섞이지 않게 bsp_ 로 따로). */
+    private String cellKey() { return busPin != null ? "bsp_" + Math.round(busPin[0] * 1000.0) + "_" + Math.round(busPin[1] * 1000.0) : stopsKey(); }
     private static String freshCell = ""; private static long freshAt;
     /** 즐겨찾기 새로고침도 현재 위치를 다시 확인해야 한다 — mp.rf 가 켜 두고, 껍데기가 한 번 읽는다. */
     private boolean refLoc;
@@ -110,11 +129,12 @@ public final class MapCore {
     }
     public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
+    private static final int STOPS_V = 2;                                                          // s451: 정류장 목록 보관본 버전 — 옛 보관본(역 출구 정류장이 빠진 채 72시간 남던 것)은 버린다
     private static final long STOPS_TTL_MS = 72L * 3600L * 1000L;
     private boolean stopsSaved;
     /** 지금 위치가 속한 정류장 칸(약 110m) 이름 — 정류장 뼈대를 그 칸 것만 쓰게 하는 열쇠(위치를 모르면 빈 글). */
     public String stopsCell() { return stopsKey(); }
-    private String stopsKey() { return busLL == null ? "" : cellOf(busLL[0], busLL[1]); }
+    private String stopsKey() { return busLL == null || busPin != null ? "" : cellOf(busLL[0], busLL[1]); }          // 고른 곳(busPin)이 있는 동안은 내 위치 칸의 보관본 · 뼈대를 쓰지도 쓰지도 않는다
     private long stopsT;                                                                        // 이웃 칸에서 빌려 온 보관본의 원래 저장 시각(0 = 빌린 게 아니다) — 되저장해도 신선해지지 않게 한다
     private static final long STOPS_NEAR_TTL_MS = 72L * 3600L * 1000L;                       // 이웃 칸 보관본은 더 길게(정류장 목록은 며칠 안 바뀐다) — 첫 화면을 비우지 않는 것이 목적
     @SuppressWarnings("unchecked")
@@ -125,6 +145,7 @@ public final class MapCore {
             Object o = ScreenCore.parse(raw);
             if (!(o instanceof Map)) return null;
             Map<String, Object> m = (Map<String, Object>) o;
+            if (!(m.get("v") instanceof Double) || ((Double) m.get("v")).intValue() != STOPS_V) return null;          // 버전이 다르면(옛 보관본) 쓰지 않는다
             if (!(m.get("t") instanceof Double) || System.currentTimeMillis() - ((Double) m.get("t")).longValue() > ttl || !(m.get("r") instanceof Map)) return null;
             return m;
         } catch (Exception e) { return null; }
@@ -161,7 +182,7 @@ public final class MapCore {
         if (!VW_NEAR.equals(busView()) || stopJson.isEmpty()) return false;
         String k = stopsKey();
         if (k.length() == 0 || stopsSaved) return false;
-        StringBuilder b = new StringBuilder("{\"t\":").append(stopsT > 0 ? stopsT : System.currentTimeMillis()).append(",\"r\":{");
+        StringBuilder b = new StringBuilder("{\"v\":").append(STOPS_V).append(",\"t\":").append(stopsT > 0 ? stopsT : System.currentTimeMillis()).append(",\"r\":{");
         boolean first = true; int total = 0;
         for (String key : new String[] { "tp", "gg", "tn", "d1" }) {
             String v = busRes.get(key);
@@ -378,6 +399,7 @@ public final class MapCore {
         if ("bus".equals(mode())) {
             StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(stopsFresh && !skel ? ",\"nf\":1" : "").append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
+            if (busPin != null) b.append(",\"pin\":[").append(busPin[0]).append(',').append(busPin[1]).append(']');          // s451: 꾹 눌러 고른 곳 — 엔진이 그 주변 100m 로 찾는다
             b.append(",\"res\":{");
             boolean first = true;
             for (Map.Entry<String, String> e : busRes.entrySet()) { if (skel && e.getKey().matches(ARR_KEY)) continue; if (!first) b.append(','); first = false; b.append(ShellCore.q(e.getKey())).append(':').append(ShellCore.q(e.getValue())); }
@@ -549,6 +571,7 @@ public final class MapCore {
     public int act(String v, Map<String, String> fields) {
         if (v == null) return R_NONE;
         if ("mp.find".equals(v)) { String q = fields == null ? null : fields.get("mq"); return q == null || q.replaceAll("\\s+", "").length() < 2 ? R_NONE : R_FIND; }
+        if (v.startsWith("mp.lp.")) return "bus".equals(mode()) && VW_NEAR.equals(busView()) && holdAt(v.substring(6)) ? R_BUS_SEL : R_NONE;          // 지도 2초 꾹 → 그 주변 100m 정류장(좌표는 앱이 붙이고 무엇을 할지는 엔진이 정한다)
         if ("mp.loc".equals(v)) return "bus".equals(mode()) ? R_BUS_LOC : R_LOC;
         if ("mp.vw.near".equals(v) || "mp.vw.fav".equals(v)) { String nv = v.substring(6); if (nv.equals(busView())) return R_NONE; st.put(K_BUSVW, nv); busSel = -1; return R_BUS_VIEW; }
         if ("mp.rt".equals(v)) {                                                                    // 카드의 '다시 시도 ›'(웹 .kbus-retry): 도착정보·경유노선·좌표 보정만 비우고(정류장 목록은 둔다) 다시 받는다

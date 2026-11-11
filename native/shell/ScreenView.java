@@ -648,7 +648,7 @@ public class ScreenView extends View {
                 if (!parentMayIntercept && getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);          // 끌어 닫는 시트 안이면 부모가 위아래 끌기를 가로챌 수 있게 둔다
                 flingY.forceFinished(true); flingX.forceFinished(true); flingV.forceFinished(true); vsFl = false; ssOn = false;
                 if (roMode && roDown(x, y)) { downX = lastX = x; downY = lastY = y; return true; }
-                if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); tmLpFired = false; ui.removeCallbacks(tmLpRun); ScreenCore.Item lm = liveMapAt(x, y); if (lm != null && lm.lp != null && lm.lp.length() > 0) { tmLp = lm.lp; ui.postDelayed(tmLpRun, TM_LP_MS); } return true; }
+                if (liveMapAt(x, y) != null && tmView != null) { mode = 5; pressed = null; tmDX = tmLX = x; tmDY = tmLY = y; tmDT = SystemClock.uptimeMillis(); tmMoved = false; tmScaling = false; tmSg.onTouchEvent(e); tmLpFired = false; ui.removeCallbacks(tmLpRun); ScreenCore.Item lm = liveMapAt(x, y); tmLp = lm != null && lm.lp != null ? lm.lp : ""; tmHold = lm != null && lm.hold != null ? lm.hold : ""; if (tmLp.length() > 0) ui.postDelayed(tmLpRun, TM_LP_MS); else if (tmHold.length() > 0) ui.postDelayed(tmLpRun, lm.hms > 0 ? lm.hms : 2000L); return true; }
                 downX = lastX = x; downY = lastY = y; downT = SystemClock.uptimeMillis();
                 inHead = y < lay.headH * dpr;
                 inChips = inHead && lay.chipsTop >= 0f && y >= lay.chipsTop * dpr && y < lay.chipsBot * dpr;
@@ -2002,6 +2002,7 @@ public class ScreenView extends View {
         int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
         if (pw <= 0 || ph <= 0) return;
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
+        if (it.on) { tmHoldCur = it.hold == null ? "" : it.hold; tmHoldMsCur = it.hms > 0 ? it.hms : 2000; }          // s451: 꾹 누르기(hold) — 벡터 지도가 손가락을 직접 받을 때 쓴다
         boolean tmChanged = !it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH;
         if (tmChanged && it.on && it.lp.length() > 0 && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty() && tmPlacesSame(tmPins, TileMapCore.parsePins(it.value))) {
             tmFollowUpdate(it);                                                         // 가족구성원이 움직였을 뿐(장소는 그대로): 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다 — 따라가기가 켜지고 꺼질 때 지도가 튀지 않는다
@@ -2155,16 +2156,31 @@ public class ScreenView extends View {
     }
     /** 지도를 3초 꾹 누르면(움직이지 않고 한 손가락) 짧게 진동하고, 누른 자리의 좌표를 엔진이 정한 행동 이름(lp)과 함께 보낸다 — 무엇을 할지는 엔진이 정한다. */
     private static final long TM_LP_MS = 3000L;
-    private String tmLp = ""; private boolean tmLpFired;
+    private String tmLp = "", tmHold = ""; private boolean tmLpFired;
     private final Runnable tmLpRun = new Runnable() { @Override public void run() {
-        if (mode != 5 || tmMoved || tmScaling || tmView == null || tmLp.length() == 0 || listener == null) return;
+        if (mode != 5 || tmMoved || tmScaling || tmView == null || (tmLp.length() == 0 && tmHold.length() == 0) || listener == null) return;
         double[] ll = tmView.toLatLng(tmLX - tmL * dpr, tmLY - tmT * dpr);
         tmLpFired = true;
-        try { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) { }
-        try { android.os.Vibrator vb = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE); if (vb != null) { if (android.os.Build.VERSION.SDK_INT >= 26) vb.vibrate(android.os.VibrationEffect.createOneShot(40L, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); else vb.vibrate(40L); } } catch (Throwable ignored) { }
+        if (tmLp.length() == 0) { sendHold(ll[0], ll[1]); return; }                        // hold(꾹 누르기 · s451): 진동 + 좌표를 행동에 붙여 보낸다
+        buzz();
         ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = tmLp; a.t = String.format(java.util.Locale.US, "%.6f,%.6f", ll[0], ll[1]);
         listener.onAction(a);
     } };
+    private void buzz() {
+        try { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) { }
+        try { android.os.Vibrator vb = (android.os.Vibrator) getContext().getSystemService(Context.VIBRATOR_SERVICE); if (vb != null) { if (android.os.Build.VERSION.SDK_INT >= 26) vb.vibrate(android.os.VibrationEffect.createOneShot(40L, android.os.VibrationEffect.DEFAULT_AMPLITUDE)); else vb.vibrate(40L); } } catch (Throwable ignored) { }
+    }
+    /** 엔진이 정한 꾹 누르기 행동(hold)에 누른 자리 좌표를 붙여 보낸다: v = "<행동>.<위도>_<경도>" (행동 이름 규칙 안의 글자만 쓴다). */
+    private void sendHold(double la, double lo) {
+        if (tmHold.length() == 0 || listener == null || !(Math.abs(la) <= 85.0) || !(Math.abs(lo) <= 180.0)) return;
+        buzz();
+        ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = tmHold + "." + String.format(java.util.Locale.US, "%.6f_%.6f", la, lo);
+        listener.onAction(a);
+    }
+    /** 벡터 지도(MapLibre)가 손가락을 직접 받을 때: 지금 지도가 꾹 누르기(hold)를 원하나 · 몇 ms. 0 이면 원하지 않는다. */
+    private String tmHoldCur = ""; private int tmHoldMsCur;
+    int vecHoldMs() { return tmView != null && tmHoldCur.length() > 0 ? tmHoldMsCur : 0; }
+    void vecHold(double la, double lo) { tmHold = tmHoldCur; sendHold(la, lo); }
     private boolean tmMoved, tmScaling; private float tmDX, tmDY, tmLX, tmLY; private long tmDT;
     private final android.view.ScaleGestureDetector tmSg = new android.view.ScaleGestureDetector(getContext(), new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
         @Override public boolean onScale(android.view.ScaleGestureDetector d) {

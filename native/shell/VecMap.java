@@ -56,10 +56,42 @@ final class VecMap implements ScreenView.VecHost {
 
     /** 지도 위 손가락은 준비된 뒤에만 받는다(준비 전엔 아래 ScreenView 의 타일 지도가 받는다). */
     private final class Box extends FrameLayout {
+        private float hx, hy; private boolean holdArmed;                              // s451: 꾹 누르기 — 한 손가락이 안 움직이고 엔진이 정한 시간(보통 2초)을 채우면 그 자리 좌표를 보낸다(지도 끌기 · 확대는 그대로 지도가 받는다)
+        private final Runnable holdRun = new Runnable() { @Override public void run() {
+            if (!holdArmed || map == null || destroyed) return;
+            holdArmed = false;
+            try {
+                LatLng ll = map.getProjection().fromScreenLocation(new android.graphics.PointF(hx, hy));
+                sv.vecHold(ll.getLatitude(), ll.getLongitude());
+            } catch (Throwable ignored) { }
+        } };
         Box(android.content.Context c) { super(c); }
+        private void disarm() { holdArmed = false; h.removeCallbacks(holdRun); }
         @Override public boolean dispatchTouchEvent(MotionEvent e) {
             if (!ready) return false;
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) getParent().requestDisallowInterceptTouchEvent(true);
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN: {
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    disarm();
+                    int ms = sv.vecHoldMs();
+                    if (ms > 0) { hx = e.getX(); hy = e.getY(); holdArmed = true; h.postDelayed(holdRun, ms); }
+                    break;
+                }
+                case MotionEvent.ACTION_MOVE: {
+                    if (holdArmed) {
+                        float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                        if (e.getPointerCount() > 1 || Math.abs(e.getX() - hx) > slop || Math.abs(e.getY() - hy) > slop) disarm();
+                    }
+                    break;
+                }
+                case MotionEvent.ACTION_POINTER_DOWN:
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    disarm();
+                    break;
+                default:
+                    break;
+            }
             return super.dispatchTouchEvent(e);
         }
     }
