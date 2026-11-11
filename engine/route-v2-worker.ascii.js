@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-08s448";
+var ENGINE_VERSION = "route-v2-2026-11-11s451";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -1366,7 +1366,8 @@ function accessNodes(G, busCoord, lat, lng, allowBus, stat, nearFirst) {
           return true;
         });
         let added = 0;
-        for (const x of o) {
+        if (stat) stat.nearBoardCut = nearB;
+        for (const x of (G && G.__noFar ? [] : o)) {
           if (x[0].charCodeAt(0) !== 66 || x[2] <= nearB || x[2] > BOARD_EXPAND_M) continue;
           if (_listActive && !x[3]) continue;
           if (k2.indexOf(x) >= 0) continue;
@@ -1423,7 +1424,7 @@ __name(accessNodes, "accessNodes");
 __name2(accessNodes, "accessNodes");
 function accessNodesCached(G, busCoord, lat, lng, allowBus, stat, nearFirst) {
   if (!G.__accCache) G.__accCache = /* @__PURE__ */ new Map();
-  const key = lat + "," + lng + "," + (allowBus ? allowBus.length : 0) + (nearFirst ? "n" : "");
+  const key = lat + "," + lng + "," + (allowBus ? allowBus.length : 0) + (nearFirst ? "n" : "") + (G.__noFar ? "f" : "");
   const hit = G.__accCache.get(key);
   if (hit) return hit;
   const res = accessNodes(G, busCoord, lat, lng, allowBus, stat, nearFirst);
@@ -1472,7 +1473,7 @@ function djHeapEnsure(n) {
   if (DJ_HCAP) { p.set(DJ_HP); v.set(DJ_HV); }
   DJ_HP = p; DJ_HV = v; DJ_HCAP = c;
 }
-function dijkstra(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
+function dijkstraBase(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
   const r0 = dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt);
   const hasBusWarn = (r) => !!(r && r.svcWarn && r.svcWarn.some((w) => w && w.type === "bus" && w.rk));
   if (!hasBusWarn(r0)) return r0;
@@ -2028,6 +2029,39 @@ function dijkstraRaw(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
     // \uc2b9\ucc28 \uc2dc\uac01\uc5d0 \ub04a\uae34 \uad6c\uac04
     legs: clean
   };
+}
+__name(dijkstraBase, "dijkstraBase");
+__name2(dijkstraBase, "dijkstraBase");
+// s449 (YJ 2026-11-10: "\ud604\uc704\uce58\uc5d0\uc11c \uc544\ub77c\uc5ed\uc744 \uac00\ub294\ub370 \uacc4\uc18d \uac00\uae4c\uc774 \uc788\ub294 \uc815\ub958\uc7a5 \ubb34\uc2dc\ud558\uace0 \ub2e4\ub978 \uc815\ub958\uc7a5 \uac78\uc5b4\uac00\uac8c \ud574. 1\uc21c\uc704\ub294 \uac00\uae4c\uc774 \uc788\ub294 \uc815\ub958\uc7a5"):
+//   accessNodes \uac00 '\uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uc5d0 \uc5c6\ub294 \ub178\uc120\uc774 \uc788\ub294 \uba3c \uc815\ub958\uc7a5'(\ub3c4\ubcf4 12\ubd84 \uc548)\uc744 \ud6c4\ubcf4\ub85c \ub113\ud788\ub294\ub370, \uadf8\ucabd\uc774 \uc870\uae08\uc774\ub77c\ub3c4 \ube60\ub974\uba74 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uc744 \uc81c\uce58\uace0 \uba40\ub9ac \uac78\uc5b4\uac00\uac8c \ud588\ub2e4.
+//   \uacb0\uacfc\uac00 \uba3c \ud655\uc7a5 \uc815\ub958\uc7a5\uc5d0\uc11c \ud0c0\ub294 \ubc84\uc2a4\uba74 \ud655\uc7a5 \uc5c6\uc774(\uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\ub9cc) \ud55c \ubc88 \ub354 \ucc3e\uc544, \ucd1d \uc18c\uc694\uac00 NEAR_PRIO_MIN \ubd84 \uc774\ub0b4\ub85c\ub9cc \ub290\ub9ac\uba74 \uac00\uae4c\uc6b4 \ucabd\uc744 \uc4f4\ub2e4.
+//   \uba40\ub9ac \uac78\uc5b4\uac00\ub294 \uac83\uc740 NEAR_PRIO_MIN \ubd84 \ub118\uac8c \uc2dc\uac04\uc774 \uc544\ub07c\uc9c8 \ub54c\ub9cc. 0 \uc774\ud558\uba74 \uc774 \uaddc\uce59 \ub054.
+var NEAR_PRIO_MIN = 7;
+function dijkstra(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt) {
+  if (!G.candStat) G.candStat = {};
+  const r = dijkstraBase(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt);
+  if (!(NEAR_PRIO_MIN > 0) || !r || G.__noFar || !r.legs) return r;
+  const cs = G.candStat;
+  if (!(cs.farBusExpanded > 0) || !(cs.nearBoardCut > 0)) return r;
+  const first = r.legs.find((L) => L.mode === "bus" || L.mode === "subway");
+  if (!first || first.mode !== "bus") return r;
+  if ((r.accessWalkMin || 0) * 60 * WALK_MPS <= cs.nearBoardCut + 60) return r;
+  const bd0 = G.__djLastBd;
+  let alt = null;
+  G.__noFar = true;
+  try {
+    alt = dijkstraBase(G, busCoord, busNm, sLat, sLng, eLat, eLng, mode, opt);
+  } catch (e) {
+    alt = null;
+  } finally {
+    G.__noFar = false;
+  }
+  if (alt && typeof alt.totalMin === "number" && alt.totalMin <= r.totalMin + NEAR_PRIO_MIN) {
+    alt.nearPrio = true;
+    return alt;
+  }
+  G.__djLastBd = bd0;
+  return r;
 }
 __name(dijkstra, "dijkstra");
 __name2(dijkstra, "dijkstra");
@@ -22748,6 +22782,7 @@ var MAP_TAGO_BASE = 'https://apis.data.go.kr/1613000/';
 var MAP_SEOUL_BOX = [37.41, 37.72, 126.76, 127.19];
 var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
 var MAP_STOP_DUP_M = 3;
+var MAP_PIN_R = 100, MAP_EXIT_CAP = 12, MAP_EXIT_SAME_M = 40, MAP_HOLD_MS = 2000;                        // s451 \uc9c0\ub3c4\uc5d0\uc11c \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3: \uadf8 \uc8fc\ubcc0 100m \u00b7 \uc5ed \ucd9c\uad6c\ub294 \uba87 \uacf3\uc774\ub4e0 \uba3c\uc800(\ucd5c\ub300 12) \u00b7 \uac19\uc740 \ucd9c\uad6c\uac00 \ub2e4\ub978 \ucd9c\ucc98\uc5d0 \uc870\uae08 \ub2e4\ub978 \uc88c\ud45c\ub85c \uc788\uc5b4\ub3c4(40m \uc548 \uac19\uc740 \uc774\ub984) \ud558\ub098 \u00b7 2\ucd08 \uafb9
 var MAP_NEAR_R = 300, MAP_NEAR_CAP = 8;                           // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c 300m \uc774\ub0b4\ub9cc(\uac00\uae4c\uc6b4 \uc21c \ucd5c\ub300 8\uacf3 \u2014 s284: \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294 \uacf3\uc774 \uc801\uc744\uc218\ub85d \ube68\ub9ac \u00b7 \ub35c \ube44\uac8c) \u2014 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4(\uc5c6\uc73c\uba74 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694')
 var MAP_Q = 1000, MAP_QR = 450;                                    // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
 function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
@@ -22872,25 +22907,49 @@ function mapDedupStops(stops) {
   });
   return out;
 }
-function mapStopOrder(stops) {                       // \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c \ubc18\uacbd 300m \uc774\ub0b4\ub9cc(\uc5ed \ucd9c\uad6c\ub3c4 300m \u2014 \uc608\uc678 \uc5c6\uc74c \u00b7 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4) \u00b7 \uc5ed \ucd9c\uad6c \uba3c\uc800 \u00b7 \uac00\uae4c\uc6b4 \uc21c \u00b7 \ucd5c\ub300 8\uacf3
+function mapStopOrder(stops, r) {                    // \uc911\uc2ec\uc5d0\uc11c \ubc18\uacbd r(\uae30\ubcf8 300m \u00b7 \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3\uc740 100m) \uc774\ub0b4\ub9cc \u00b7 \uc5ed \ucd9c\uad6c\ub294 \uba87 \uacf3\uc774\ub4e0 \uba3c\uc800(\uac00\uae4c\uc6b4 \uc21c \u00b7 \ucd5c\ub300 12) \u00b7 \uadf8 \ub4a4 \ub098\uba38\uc9c0 \uac00\uae4c\uc6b4 \uc21c \u00b7 \uc804\uccb4 \ucd5c\ub300 8\uacf3(\ucd9c\uad6c\uac00 8\uacf3 \ub118\uc73c\uba74 \ucd9c\uad6c\ub9cc)
   var byD = function (a, b) { return a.dist - b.dist; }, ex = [], rest = [];
+  r = r > 0 ? r : MAP_NEAR_R;
   stops.forEach(function (s) {
-    if (!isFinite(s.dist) || s.dist > MAP_NEAR_R) return;
+    if (!isFinite(s.dist) || s.dist > r) return;
     if (mapStopExit(s)) ex.push(s); else rest.push(s);
   });
   ex.sort(byD); rest.sort(byD);
-  return ex.concat(rest).slice(0, MAP_NEAR_CAP);
+  ex = ex.slice(0, MAP_EXIT_CAP);
+  return ex.concat(rest).slice(0, Math.max(MAP_NEAR_CAP, ex.length));
+}
+function mapExitMore(s, all) {                      // s451: \uc5ed \ucd9c\uad6c \uc815\ub958\uc7a5\uc740 \uc5b4\ub290 \ucd9c\ucc98\uc5d0 \uc788\ub4e0(TOPIS \u00b7 GBIS \u00b7 TAGO \u00b7 \uc6b0\ub9ac \ud45c) \ud55c \uacf3\ub3c4 \ube60\uc9c0\uc9c0 \uc54a\uac8c \u2014 \uba3c\uc800 \uace0\ub978 \ubaa9\ub85d s \uc5d0 \uc5c6\ub294 \ucd9c\uad6c\ub9cc \ub354\ud55c\ub2e4(\uac19\uc740 \uc5f4\uc1e0 \u00b7 \ub610\ub294 40m \uc548 \uac19\uc740 \uc774\ub984\uc774\uba74 \uac19\uc740 \ucd9c\uad6c)
+  var out = s.slice();
+  all.forEach(function (c) {
+    if (!mapStopExit(c)) return;
+    for (var i = 0; i < out.length; i++) {
+      var o = out[i];
+      if (o.id === c.id) return;
+      if (mapStopExit(o) && mapNmKey(o.nm) === mapNmKey(c.nm) && mapHav(o.la, o.lo, c.la, c.lo) <= MAP_EXIT_SAME_M) return;
+    }
+    out.push(c);
+  });
+  return out;
+}
+function mapBusCenter(b) {                          // s451: \uc815\ub958\uc7a5\uc744 \ucc3e\ub294 \uc911\uc2ec \u2014 \uc9c0\ub3c4\ub97c 2\ucd08 \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3(b.pin)\uc774 \uc788\uc73c\uba74 \uadf8\uacf3, \uc5c6\uc73c\uba74 \ub0b4 \uc704\uce58
+  var p = b && Array.isArray(b.pin) ? b.pin : null;
+  if (p && p.length >= 2) {
+    var a = Number(p[0]), o = Number(p[1]);
+    if (isFinite(a) && isFinite(o) && Math.abs(a) <= 90 && Math.abs(o) <= 180 && (a !== 0 || o !== 0)) return { la: a, lo: o, pin: true, r: MAP_PIN_R };
+  }
+  return { la: Number(b && b.lat), lo: Number(b && b.lng), pin: false, r: MAP_NEAR_R };
 }
 function mapBusStops(f) {
-  var b = f.bus, res = b.res || {}, la = Number(b.lat), lo = Number(b.lng);
-  var s = res.tp ? mapSeoulStops(res.tp, la, lo) : [];                                   // \uc11c\uc6b8: TOPIS \uba3c\uc800
+  var b = f.bus, res = b.res || {}, c = mapBusCenter(b), la = c.la, lo = c.lo;
+  var tp = res.tp ? mapSeoulStops(res.tp, la, lo) : [], gg = res.gg ? mapGbisStops(res.gg, la, lo) : [], tn = res.tn ? mapTagoStops(res.tn, la, lo) : [], d1 = res.d1 ? mapD1Stops(res.d1, la, lo) : [];
+  var s = tp;                                                                            // \uc11c\uc6b8: TOPIS \uba3c\uc800
   if (!s.length) {
-    var gg = res.gg ? mapGbisStops(res.gg, la, lo) : [], tn = res.tn ? mapTagoStops(res.tn, la, lo) : [];
     s = mapGGPreferred(la, lo) ? (gg.length ? gg : tn) : (tn.length ? tn : gg);          // \uacbd\uae30(\uc778\ucc9c \uc0c1\uc790 \ubc16)\ub294 GBIS \uba3c\uc800, \uc778\ucc9c \uc0c1\uc790 \uc548\uc740 TAGO \uba3c\uc800
-    if (s === tn && tn.length && res.d1) s = tn.concat(mapD1Stops(res.d1, la, lo));      // s383: TAGO \uac00 \ube60\ub728\ub9b0 \uc815\ub958\uc7a5\uc740 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub85c \ucc44\uc6b4\ub2e4 \u2014 \uac19\uc740 TAGO \uc5f4\uc1e0\ub77c \uac19\uc740 \uc815\ub958\uc7a5\uc740 \ud558\ub098\ub85c \ud569\uccd0\uc9c4\ub2e4(\uc6d0\ud558\ub294 \uc815\ub958\uc7a5\uc774 \uc548 \ub098\uc628\ub2e4\ub294 \uc81c\ubcf4)
+    if (s === tn && tn.length && d1.length) s = tn.concat(d1);                           // s383: TAGO \uac00 \ube60\ub728\ub9b0 \uc815\ub958\uc7a5\uc740 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub85c \ucc44\uc6b4\ub2e4 \u2014 \uac19\uc740 TAGO \uc5f4\uc1e0\ub77c \uac19\uc740 \uc815\ub958\uc7a5\uc740 \ud558\ub098\ub85c \ud569\uccd0\uc9c4\ub2e4(\uc6d0\ud558\ub294 \uc815\ub958\uc7a5\uc774 \uc548 \ub098\uc628\ub2e4\ub294 \uc81c\ubcf4)
   }
-  if (!s.length && res.d1) s = mapD1Stops(res.d1, la, lo);
-  return mapStopOrder(mapDedupStops(s));
+  if (!s.length && d1.length) s = d1;
+  s = mapExitMore(mapDedupStops(s), tp.concat(gg, tn, d1));                              // s451(YJ: \uc5ed \uadfc\ucc98\uc5d0\uc11c \uac00\uae4c\uc6b4 \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \uc548 \ub098\uc628\ub2e4): \uc5ed \ucd9c\uad6c\ub294 \ubc1b\uc740 \ubaa8\ub4e0 \ucd9c\ucc98\uc5d0\uc11c \ubaa8\uc544 \ud55c \uacf3\ub3c4 \ube60\uc9c0\uc9c0 \uc54a\uac8c
+  return mapStopOrder(s, c.r);
 }
 function mapBusNeedStops(la, lo) {
   var need = [], ql = mapQ(la), qo = mapQ(lo);                     // \uc870\ud68c\ub294 0.001\u00b0 \uce78\uc758 \uac00\uc6b4\ub370 \uc88c\ud45c\ub85c(\uac19\uc740 \uce78\uc774\uba74 \uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \ubc14\ub85c \ub9de\ub294\ub2e4)
@@ -22900,10 +22959,10 @@ function mapBusNeedStops(la, lo) {
   need.push({ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + ql + '&lng=' + qo + '&radius=' + MAP_QR });          // s177: \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c(D1)\ub3c4 \ub3d9\uc2dc\uc5d0 \u2014 TAGO \uc640 \uac19\uc740 \uc815\ub958\uc7a5\uc744 0.3\ucd08\uc5d0 \uc900\ub2e4(TAGO \ub294 \ub290\ub9b4 \ub54c 5~10\ucd08)
   return need;
 }
-function mapStopsOf(k, text, la, lo) {                          // \ud55c \ucd9c\ucc98 \ubcf8\ubb38 \u2192 300m \uc548 \uc815\ub958\uc7a5 \uc218
+function mapStopsOf(k, text, la, lo, r) {                       // \ud55c \ucd9c\ucc98 \ubcf8\ubb38 \u2192 \ubc18\uacbd r(300m \u00b7 \uace0\ub978 \uacf3\uc740 100m) \uc548 \uc815\ub958\uc7a5 \uc218
   if (!text) return 0;
   var s = k === 'tp' ? mapSeoulStops(text, la, lo) : k === 'gg' ? mapGbisStops(text, la, lo) : k === 'tn' ? mapTagoStops(text, la, lo) : k === 'd1' ? mapD1Stops(text, la, lo) : [];
-  return mapStopOrder(mapDedupStops(s)).length;
+  return mapStopOrder(mapDedupStops(s), r).length;
 }
 /**
  * s177: \uc815\ub958\uc7a5 \ubaa9\ub85d\uc744 \uadf8\ub9ac\uae30\uc5d0 \ucda9\ubd84\ud788 \ubc1b\uc558\ub098 \u2014 \ucd9c\ucc98\ub97c \uc6b0\uc120\uc21c\uc704 \uc21c\uc11c\ub85c \ubcf4\uc544, \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc92c\uc73c\uba74 \ub4a4 \ucd9c\ucc98\ub97c \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
@@ -22911,7 +22970,7 @@ function mapStopsOf(k, text, la, lo) {                          // \ud55c \ucd9c
  * \uc11c\ubc84\uac00 \uc774 \ud568\uc218\ub85c '\ucda9\ubd84\ud558\uba74 \ub098\uba38\uc9c0\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0' \ub3c4\ucc29\uc815\ubcf4 \ub2e8\uacc4\ub85c \ub118\uc5b4\uac04\ub2e4(\ub290\ub9b0 TAGO \ud55c \uacf3 \ub54c\ubb38\uc5d0 5~10\ucd08 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uac8c). \ubaa8\ub450 \ube44\uba74 true(\ube48 \ud654\uba74).
  */
 function mapBusReady(f) {
-  var b = f && f.bus, res = (b && b.res && typeof b.res === 'object') ? b.res : {}, la = Number(b && b.lat), lo = Number(b && b.lng);
+  var b = f && f.bus, res = (b && b.res && typeof b.res === 'object') ? b.res : {}, c = mapBusCenter(b), la = c.la, lo = c.lo;
   if (!isFinite(la) || !isFinite(lo)) return true;
   var steps = [], tago = ['tn', 'd1'];
   if (mapInSeoul(la, lo)) steps.push(['tp']);
@@ -22922,7 +22981,7 @@ function mapBusReady(f) {
     for (var j = 0; j < steps[i].length; j++) {
       var k = steps[i][j], v = res[k];
       if (v === undefined) { if (k !== 'd1') unfinished = true; continue; }                       // D1 \uc740 \ub364(\uc5c6\uc5b4\ub3c4 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4) \u2014 \uae30\ub2e4\ub9ac\ub294 \uac83\uc740 tn
-      if (mapStopsOf(k, v, la, lo) > 0) return true;
+      if (mapStopsOf(k, v, la, lo, c.r) > 0) return true;
     }
     if (unfinished) return false;
   }
@@ -23166,19 +23225,24 @@ function mapBusOrd(b) {
   for (i = 0; i < o.length && out.length < 60; i++) if (typeof o[i] === 'string' && o[i].length > 0 && o[i].length <= 64) out.push(o[i]);
   return out;
 }
-function mapApplyNearOrder(stops, ord) {
+function mapApplyNearOrder(stops, ord) {                                          // s451: \uc5ed \ucd9c\uad6c \uc815\ub958\uc7a5\uc740 \uc800\uc7a5\ub41c \uc21c\uc11c\uc640 \uc0c1\uad00\uc5c6\uc774 \ub298 \ub9e8 \uc55e \u2014 \uc800\uc7a5 \uc548 \ub41c(\uc0c8\ub85c \ubcf4\uc774\ub294) \ucd9c\uad6c\uac00 \uac00\uae4c\uc6b4 \uc21c\uc73c\ub85c \uba3c\uc800, \uadf8 \ub4a4 \uc800\uc7a5\ud574 \ub454 \ucd9c\uad6c\uac00 \uc800\uc7a5\ud55c \uc21c\uc11c\ub300\ub85c \u00b7 \uadf8 \uc544\ub798 \ub098\uba38\uc9c0\ub294 \uc608\uc804 \uadf8\ub300\ub85c(\uc800\uc7a5\ub41c \uac83 \uba3c\uc800 \u00b7 \uc0c8 \uc815\ub958\uc7a5\uc740 \ub4a4\uc5d0 \uac70\ub9ac\uc21c)
   if (!ord.length) return stops;
   var pos = {}, i, hit = false;
   for (i = 0; i < ord.length; i++) if (pos[ord[i]] === undefined) pos[ord[i]] = i;
   for (i = 0; i < stops.length; i++) if (pos[stops[i].id] !== undefined) hit = true;
   if (!hit) return stops;                                                         // \uc800\uc7a5\ub41c \uc5f4\uc1e0\uac00 \ud558\ub098\ub3c4 \uc548 \ub9de\uc73c\uba74(\ub2e4\ub978 \ub3d9\ub124) \uc6d0\ub798 \uc21c\uc11c
-  return stops.map(function (s, k) { return { s: s, k: k }; }).sort(function (a, b) {
-    var ia = pos[a.s.id], ib = pos[b.s.id];
-    if (ia === undefined && ib === undefined) return a.k - b.k;                       // \ub458 \ub2e4 \ubaa8\ub974\uba74 \uc5d4\uc9c4\uc774 \uc815\ud55c \uc6d0\ub798 \uc21c\uc11c(\uac00\uae4c\uc6b4 \uc21c \u00b7 \uc5ed \ucd9c\uad6c \uba3c\uc800)
-    if (ia === undefined) return 1;
-    if (ib === undefined) return -1;
-    return ia - ib;
-  }).map(function (x) { return x.s; });
+  var sortSaved = function (list, newFirst) {
+    return list.map(function (s, k) { return { s: s, k: k }; }).sort(function (a, b) {
+      var ia = pos[a.s.id], ib = pos[b.s.id];
+      if (ia === undefined && ib === undefined) return a.k - b.k;                       // \ub458 \ub2e4 \ubaa8\ub974\uba74 \uc5d4\uc9c4\uc774 \uc815\ud55c \uc6d0\ub798 \uc21c\uc11c(\uac00\uae4c\uc6b4 \uc21c)
+      if (ia === undefined) return newFirst ? -1 : 1;
+      if (ib === undefined) return newFirst ? 1 : -1;
+      return ia - ib;
+    }).map(function (x) { return x.s; });
+  };
+  var ex = [], rest = [];
+  stops.forEach(function (s) { if (mapStopExit(s)) ex.push(s); else rest.push(s); });
+  return sortSaved(ex, true).concat(sortSaved(rest, false));
 }
 // \u2500\u2500 s199: TAGO \uc904\uc758 "\u2192 \u25cb\u25cb\ubc29\ud5a5"(\uc6f9 _fetchBusNextStop): TAGO \ub3c4\ucc29\uc815\ubcf4\ub294 \ubc29\uba74\uc744 \uc548 \uc918\uc11c, \uadf8 \ub178\uc120\uc758 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5 \ub2e4\uc74c \uc815\ub958\uc7a5 \uc774\ub984\uc744 \uc4f4\ub2e4(\ubaa9\ub85d\uc5d0 \uc5c6\uc73c\uba74 \uc885\uc810).
 //   \ub178\uc120 \ubaa9\ub85d\uc740 \ud06c\ub2e4 \u2192 \uae30\uae30\uc5d0 \uc624\ub798 \ub450\uc9c0 \uc54a\ub294\ub2e4: \uc774 \ud568\uc218\uac00 \uc774\ub984\ub9cc \ubf51\uc544 info.nx({'\uc815\ub958\uc7a5id|\ub178\uc120id': \uc774\ub984})\ub85c \ub3cc\ub824\uc8fc\uba74 \uae30\uae30\uac00 \uc800\uc7a5\ud588\ub2e4\uac00 \ub2e4\uc74c \uc694\uccad\uc5d0 b.nx \ub85c \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4.
@@ -23379,8 +23443,9 @@ function mapBusCard(s, o) {
   else c.rows = o.rows;
   return c;
 }
-function mapBusTmap(pts, foc) {                                    // \uace0\uc815 \uc9c0\ub3c4: \ub04c\uae30\u00b7\ub450 \uc190\uac00\ub77d \ud655\ub300\u00b7\u00b1 \ub2e8\ucd94\u00b7\ud540 \ub204\ub984\uc740 \uc571, \ud540\u00b7\uc120\ud0dd\uc740 \uc5d4\uc9c4
-  return { t: 'tmap', h: 213, hv: 24, hmin: 137, hmax: 231, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hint: '\uc22b\uc790\ub97c \ub204\ub974\uba74 \uc544\ub798 \uc815\ub958\uc7a5\uc73c\ub85c \uc774\ub3d9\ud574\uc694' };
+function mapBusTmap(pts, foc, pin) {                              // \uace0\uc815 \uc9c0\ub3c4: \ub04c\uae30\u00b7\ub450 \uc190\uac00\ub77d \ud655\ub300\u00b7\u00b1 \ub2e8\ucd94\u00b7\ud540 \ub204\ub984\uc740 \uc571, \ud540\u00b7\uc120\ud0dd\uc740 \uc5d4\uc9c4 \u00b7 s451: 2\ucd08 \uafb9 \ub204\ub974\uba74(hold) \uadf8 \uc790\ub9ac \uc88c\ud45c\ub97c 'mp.lp.<\uc704\ub3c4>,<\uacbd\ub3c4>' \ub85c \ubcf4\ub0b8\ub2e4(\uadf8 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4)
+  return { t: 'tmap', h: 213, hv: 24, hmin: 137, hmax: 231, r: 0, pad: [0, 0, 0, 0], pts: pts, live: 1, foc: foc, bl: 1, hold: 'mp.lp', hms: MAP_HOLD_MS,
+           hint: pin ? '\uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \u00b7 \ub2e4\ub978 \uacf3\uc740 2\ucd08 \uafb9 \ub204\ub974\uc138\uc694' : '\uc22b\uc790\ub97c \ub204\ub974\uba74 \uc774\ub3d9 \u00b7 \uc9c0\ub3c4\ub97c 2\ucd08 \uafb9 \ub204\ub974\uba74 \uadf8 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5' };
 }
 function mapBusBody(f, info) {
   info.poll = MAP_POLL;
@@ -23408,16 +23473,18 @@ function mapBusBody(f, info) {
     fb.push({ t: 'spacer', h: 16 });
     return { head: head, body: fb };
   }
-  if (!b || !isFinite(Number(b.lat)) || !isFinite(Number(b.lng))) {
+  var cen = mapBusCenter(b);
+  if (!b || !isFinite(cen.la) || !isFinite(cen.lo)) {
     info.bus = { st: 'noloc', vw: 'near' };
     return { head: head, body: [{ t: 'text', s: '\ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4', size: 16, bold: true, color: 'gold', align: 'center', pad: [28, 24, 6, 24] },
             { t: 'text', s: '\uc704 \u2018\ub0b4 \uc704\uce58\u2019 \ub97c \ub204\ub974\uba74\n\uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uacfc \ubc84\uc2a4 \ub3c4\ucc29 \uc2dc\uac04\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694.', size: 13, color: 'sub', lh: 1.8, align: 'center', pad: [4, 30, 10, 30] },
             { t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ucc3e\uae30', size: 14, h: 46, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [8, 60, 8, 60], act: { a: 'call', v: 'mp.loc' } }] };
   }
-  var la = Number(b.lat), lo = Number(b.lng), res = (b.res && typeof b.res === 'object') ? b.res : {};
+  var la = cen.la, lo = cen.lo, pin = cen.pin, res = (b.res && typeof b.res === 'object') ? b.res : {};
   var need0 = mapBusNeedStops(la, lo);
-  var mine = { la: la, lo: lo, k: 'm', n: '', l: '\ub0b4 \uc704\uce58' };
-  var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1)]), body: [note(txt)] }; };
+  var mine = { la: la, lo: lo, k: 'm', n: '', l: pin ? '\uace0\ub978 \uacf3' : '\ub0b4 \uc704\uce58' };
+  var wait = function (txt) { return { head: head.concat([mapBusTmap([mine], -1, pin)]), body: [note(txt)] }; };
+  var back = { t: 'button', s: '\ub0b4 \uc704\uce58\ub85c \ub3cc\uc544\uac00\uae30', size: 13, h: 40, r: 12, bold: true, fill: 'gold', line: 'none', tc: '#121214', pad: [4, 60, 14, 60], act: { a: 'call', v: 'mp.loc' } };
   if (!mapBusReady(f)) {                                                                // \ucd9c\ucc98 \uc6b0\uc120\uc21c\uc704\uc5d0\uc11c \uc55e \ucd9c\ucc98\uac00 \uc544\uc9c1 \uc548 \uc654\ub2e4 \u2014 \uc544\uc9c1 \ubabb \ubc1b\uc740 \uc8fc\uc18c\ub9cc \ubc1b\ub294\ub2e4(\ubc1b\uc740 \uac83\uc740 \ub2e4\uc2dc \ubc1b\uc9c0 \uc54a\ub294\ub2e4)
     var miss0 = need0.filter(function (n) { return res[n.k] === undefined; });
     if (miss0.length) { info.bus = { st: 'need', vw: 'near', need: miss0 }; return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...'); }
@@ -23427,7 +23494,11 @@ function mapBusBody(f, info) {
     info.bus = { st: 'need', vw: 'near', need: [{ k: 'd1', url: MAP_D1_BASE + '/bus-stops?lat=' + mapQ(la) + '&lng=' + mapQ(lo) + '&radius=' + MAP_QR }] };
     return wait('\uc8fc\ubcc0 \uc815\ub958\uc7a5 \ucc3e\ub294 \uc911...');
   }
-  if (!stops.length) { info.bus = { st: 'empty', vw: 'near' }; return wait('\uc8fc\ubcc0\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.'); }
+  if (!stops.length) {
+    info.bus = { st: 'empty', vw: 'near' };
+    if (pin) { var w0 = wait('\uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5c6\uc5b4\uc694.\n\uc9c0\ub3c4\uc758 \ub2e4\ub978 \uacf3\uc744 2\ucd08 \uafb9 \ub20c\ub7ec \ubcf4\uc138\uc694.'); w0.body.push(back); return w0; }
+    return wait('\uc8fc\ubcc0\uc5d0 \uc815\ub958\uc7a5\uc744 \ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694.');
+  }
   // \uc815\ub958\uc7a5 \uc9c0\ub3c4: \uc815\ub958\uc7a5\ub9c8\ub2e4 \ubc88\ud638 \ud540(\uc88c\ud45c\uac00 \uc788\ub294 \uac83\ub9cc) + \ub0b4 \uc704\uce58. \ud540\uc744 \ub204\ub974\uba74 \uadf8 \uce74\ub4dc(g)\ub85c, \uce74\ub4dc\ub97c \ub204\ub974\uba74 \uadf8 \ud540(pi)\uc73c\ub85c \uac04\ub2e4.
   var pts = [], pidx = [], favSet = {};
   mapBusFavs(b).forEach(function (s) { favSet[s.id] = 1; });
@@ -23438,7 +23509,7 @@ function mapBusBody(f, info) {
   pts.push(mine);
   info.stops = stops.map(mapStopKeep); info.favp = MAP_FAVP;
   var foc = (sel >= 0 && sel < stops.length) ? pidx[sel] : -1;
-  head.push(mapBusTmap(pts, foc));
+  head.push(mapBusTmap(pts, foc, pin));
   // \uc815\ub958\uc7a5\ub9c8\ub2e4 \ub530\ub85c \ubcf8\ub2e4: \uc544\uc9c1 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \ub450\uace0, \ubabb \ubc1b\uc740 \uac83\ub9cc \ub2e4\uc2dc \ubc1b\uc73c\ub77c\uace0 \ud55c\ub2e4(\ubc1b\uc740 \uac83\uae4c\uc9c0 \ub2e4\uc2dc \ubc1b\uc9c0 \uc54a\ub294\ub2e4)
   var miss = [], nkp = { m: 'a', x: 'g', t: 't' }, pool = res.tn ? mapTagoStops(res.tn, la, lo) : [];                   // \uc774\uc6c3 \uc815\ub958\uc7a5 \ud6c4\ubcf4 = TAGO \uc8fc\ubcc0 \ubaa9\ub85d \uc804\uccb4(300m \ubc16\ub3c4)
   var nx0 = mapNxIn(b), sr = stops.map(function (s, i) { return mapBusStopRows(s, i, res, nkp, pool, nx0); }), extra = [];
@@ -23450,6 +23521,10 @@ function mapBusBody(f, info) {
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   var body = [];
+  if (pin) {                                                                                   // s451: \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3 \u2014 \ubb34\uc5c7\uc744 \ubcf4\uace0 \uc788\ub294\uc9c0 \uc54c\ub9ac\uace0 \ub0b4 \uc704\uce58\ub85c \ub3cc\uc544\uc624\ub294 \ub2e8\ucd94
+    body.push({ t: 'text', s: '\ud83d\udccd \uc9c0\ub3c4\uc5d0\uc11c \uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, bold: true, color: 'gold', align: 'center', pad: [10, 12, 0, 12] });
+    body.push(back);
+  }
   stops.forEach(function (s, i) {
     body.push(mapBusCard(s, { mode: 'near', i: i, n: i + 1, alias: al[s.id], fav: !!favSet[s.id], pi: pidx[i], on: i === sel, lm: nxr.lm[i], fail: !!b.fl, rows: sr[i].rows === null ? null : mapBusRows(sr[i].rows, info, i) }));
   });
@@ -23487,7 +23562,7 @@ function mapBrFacts(b) {
   var me = (Array.isArray(b.me) && b.me.length >= 2 && isFinite(Number(b.me[0])) && isFinite(Number(b.me[1]))) ? [Number(b.me[0]), Number(b.me[1])] : null;
   var pk = (b.pk && typeof b.pk === 'object' && mapStr(b.pk.n, 40)) ? { n: mapStr(b.pk.n, 40), i: mapStr(b.pk.i, 40) } : null;
   return { rid: mapStr(b.rid, 40), no: mapStr(b.no, 16), tp: mapStr(b.tp, 16), src: b.src === 'gbis' || b.src === 'topis' ? b.src : '', o: o, cc: mapStr(b.cc, 4) || mapBrCity(o),
-           me: me, stn: stn, via: b.via === 'gg' || b.via === 'tago' ? b.via : '', res: res, sel: isFinite(Number(b.sel)) ? Math.floor(Number(b.sel)) : -1, pk: pk };
+           me: me, stn: stn, via: b.via === 'gg' || b.via === 'tago' ? b.via : '', res: res, sel: isFinite(Number(b.sel)) ? Math.floor(Number(b.sel)) : -1, pk: pk, np: b.np ? 1 : 0 };   // np: \ucd9c\ubc1c\u00b7\ub3c4\ucc29\uc744 \uace0\ub974\uc9c0 \uc54a\ub294 \ud654\uba74(\uae38\ub3d9\ubb34 \ud328\ubc00\ub9ac) \u2014 \uc904\uc744 \ub20c\ub7ec\ub3c4 \uc544\ubb34 \uc77c \uc5c6\uace0 '\uc120\ud0dd \u203a' \uae00\ub3c4 \uc5c6\ub2e4
 }
 function mapBrStnTago(text) {
   var out = mapJsonItems(text).map(function (it) {
@@ -23616,14 +23691,14 @@ function mapBusRouteSheet(f0) {
   var brt = { t: 'brt', a: anchorIsStop && myDirEnd ? anchorNm : first, b: anchorIsStop && myDirEnd ? myDirEnd : last, fin: anchorIsStop && myDirEnd ? 1 : 0, chips: chips };
   if (anchorIsStop && myDirEnd && myDirTxt) { brt.tag = myDirTxt; brt.tk = myCls; }
   head.push(brt);
-  var body = [], sel = b.sel, pk = b.pk;
+  var body = [], sel = b.np ? -1 : b.sel, pk = b.np ? null : b.pk;
   groups.forEach(function (g, gi) {
     if (gi > 0) body.push({ t: 'brturn', s: '\ud68c\ucc28 \u21bb' });
     var endNm = g.items[g.items.length - 1].r[2] || '';
     body.push({ t: 'brsec', k: g.cls, s: endNm, tag: g.cls === 'up' ? '\uc0c1\ud589' : g.cls === 'down' ? '\ud558\ud589' : '\uc6b4\ud589' });
     g.items.forEach(function (o, k) {
       var r = o.r, ord = r[0], here = busAt[ord], isMine = myOrd !== null && ord === myOrd;
-      var row = { t: 'brs', k: g.cls, i: o.idx, nm: r[2] || '', id: r[3] || r[1] || '', act: { a: 'call', v: 'br.p.' + o.idx } };
+      var row = { t: 'brs', k: g.cls, i: o.idx, nm: r[2] || '', id: r[3] || r[1] || '', act: { a: 'call', v: 'br.p.' + o.idx } };   // \uc571 \uac80\uc99d\uae30\ub294 \uc815\ub958\uc7a5 \uc904\uc5d0 act \uac00 \uaf2d \uc788\uc5b4\uc57c \ud55c\ub2e4 \u2014 np \uc5ec\ub3c4 \ub450\uace0(\uc571\uc774 \ubb34\uc2dc), \uc120\ud0dd \uae00\u00b7\ud45c\uc2dc\u00b7\uc544\ub798 \ubc14\ub9cc \ube80\ub2e4
       if (k === 0) row.fl = 'f';
       if (k === g.items.length - 1) row.fl = (row.fl || '') + 'l';
       if (k < g.items.length - 1 && k % 2 === 0) row.ar = 1;
@@ -23632,9 +23707,9 @@ function mapBusRouteSheet(f0) {
       else if (isMine) row.mk = 'me';
       if (isMine) { row.mine = 1; notes.push({ s: anchorLabel + ' \uc2b9\ucc28' + (myEta ? ' \u00b7 ' + myEta : ''), k: 'me' }); }
       if (notes.length) row.notes = notes;
-      var isStart = !!(pk && ((pk.i && pk.i === (r[1] || '')) || (!pk.i && pk.n === (r[2] || ''))));
-      if (isStart) row.ps = 's'; else if (!pk && sel === o.idx) row.ps = 'p';
-      row.lab = isStart ? '\ucd9c\ubc1c\uc9c0' : (pk ? '\ub3c4\ucc29\uc9c0 \u203a' : '\uc120\ud0dd \u203a');
+      var isStart = !b.np && !!(pk && ((pk.i && pk.i === (r[1] || '')) || (!pk.i && pk.n === (r[2] || ''))));
+      if (isStart) row.ps = 's'; else if (!b.np && !pk && sel === o.idx) row.ps = 'p';
+      if (!b.np) row.lab = isStart ? '\ucd9c\ubc1c\uc9c0' : (pk ? '\ub3c4\ucc29\uc9c0 \u203a' : '\uc120\ud0dd \u203a');
       body.push(row);
     });
   });
@@ -23700,7 +23775,7 @@ async function mapSvOne0(env, k, url, fresh) {                    // \u2192 \ubc
   if (cacheable) {
     try {
       if (typeof caches !== 'undefined' && caches.default) {
-        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?k=' + k + '&u=' + encodeURIComponent(url));
+        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?v=2&k=' + k + '&u=' + encodeURIComponent(url));          // s451: v=2 \u2014 \uc5ed \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \ube60\uc9c4 \ucc44 \ubcf4\uad00\ub41c \uc61b \uc815\ub958\uc7a5 \ubaa9\ub85d(\ub370\uc774\ud130\uc13c\ud130 12\uc2dc\uac04 \u00b7 KV 14\uc77c)\uc744 \ubc84\ub9ac\uace0 \uc0c8\ub85c \ubc1b\ub294\ub2e4
         var hit = fresh ? null : await cache.match(ck);                                          // s383: \uc0c8\ub85c\uace0\uce68(fresh)\uc740 \ubcf4\uad00\ubcf8\uc744 \uac74\ub108\ub6f0\uace0 \uacf5\uacf5 API \uc5d0\uc11c \uc0c8\ub85c \u2014 \ubc1b\uc740 \ub4a4 \ubcf4\uad00\ubcf8\uc740 \uc0c8\uac83\uc73c\ub85c \ub36e\ub294\ub2e4
         if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
       }
@@ -23762,7 +23837,7 @@ function mapSvHash(s) {                                     // 32\ube44\ud2b8 \u
   }
   return ('00000000' + h1.toString(16)).slice(-8) + ('00000000' + h2.toString(16)).slice(-8);
 }
-function mapSvKvKey(k, url) { return 'bs:' + mapSvHash(String(k) + '|' + String(url)); }
+function mapSvKvKey(k, url) { return 'bs2:' + mapSvHash(String(k) + '|' + String(url)); }                // s451: bs \u2192 bs2 (\uc61b \ubcf4\uad00\ubcf8\uc744 \uc4f0\uc9c0 \uc54a\ub294\ub2e4)
 async function mapSvKvGet(env, k, url) {                    // \u2192 \ubcf8\ubb38 \uae00 \ub610\ub294 ''
   try {
     if (!env || !env.ROWS_KV || typeof env.ROWS_KV.get !== 'function') return '';
@@ -23837,7 +23912,7 @@ async function mapSvResolve(env, cap, body, out) {
     var slot = new Array(need.length);
     var done = new Array(need.length);
     var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
-    var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && isFinite(Number(b.lat)) && isFinite(Number(b.lng)) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
+    var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
     if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
     else if (stopWave) {                                    // s177: \uc815\ub958\uc7a5 \ubaa9\ub85d \u2014 \uc6b0\uc120\uc21c\uc704 \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc8fc\uba74 \ub098\uba38\uc9c0(\ub290\ub9b0 TAGO)\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub118\uc5b4\uac04\ub2e4. \ubabb \uae30\ub2e4\ub9b0 \ucd9c\ucc98\ub294 \ube48 \uac12\uc73c\ub85c \ub454\ub2e4.
       for (;;) {
@@ -23845,7 +23920,7 @@ async function mapSvResolve(env, cap, body, out) {
         Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
         need.forEach(function (n, i) { if (done[i]) tmp[String(n.k)] = slot[i] || ''; else pend.push(ps[i]); });
         var rdy = false;
-        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, res: tmp } }); } catch (eR) { rdy = false; }
+        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }); } catch (eR) { rdy = false; }
         if (rdy || !pend.length) break;
         await Promise.race(pend);
       }
