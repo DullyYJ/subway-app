@@ -126,14 +126,14 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     await post(c.H, e1, base(true));
     await Promise.all(pend);
     const keys = [...kv.keys()];
-    ok(keys.some(k => /^bs:[0-9a-f]{16}$/.test(k)) && keys.includes('bsreg') && kv.ttl && kv.ttl.expirationTtl === 14 * 86400, '처음 받은 정류장 목록은 KV 에 14일 + 기억 목록(bsreg)에 기록 ' + keys.join());
+    ok(keys.some(k => /^bs2:[0-9a-f]{16}$/.test(k)) && keys.includes('bsreg') && kv.ttl && kv.ttl.expirationTtl === 14 * 86400, '처음 받은 정류장 목록은 KV 에 14일 + 기억 목록(bsreg)에 기록 ' + keys.join());
     const reg = JSON.parse(kv.get('bsreg'));
     ok(reg.length >= 1 && reg.every(e => /^(tp|gg|tn|d1)$/.test(e.k) && typeof e.u === 'string' && e.at > 0), '목록 항목은 {k,u,at}');
     const c2 = load(); c2.MAPSV_CTX = ctxw;
     await post(c2.H, { BUSAPI: binding(log2), ROWS_KV: mkKv() }, base(true));
     ok(log1.some(u => /getStationByPos/.test(u)) && !log2.some(u => /getStationByPos/.test(u)) && log2.filter(u => /getStationByUid/.test(u)).length === 3, '새 데이터센터(캐시 없음)도 KV 에서 정류장 목록을 바로 쓴다 · 도착정보만 새로 받는다');
     // 엉뚱한 주소 값(해시 겹침)이면 쓰지 않는다
-    const k0 = keys.find(k => /^bs:/.test(k)), v0 = JSON.parse(kv.get(k0)); v0.u = 'https://other'; kv.set(k0, JSON.stringify(v0));
+    const k0 = keys.find(k => /^bs2:/.test(k)), v0 = JSON.parse(kv.get(k0)); v0.u = 'https://other'; kv.set(k0, JSON.stringify(v0));
     const log3 = [], c3 = load(); c3.MAPSV_CTX = ctxw;
     await post(c3.H, { BUSAPI: binding(log3), ROWS_KV: mkKv() }, base(true));
     ok(log3.some(u => /getStationByPos/.test(u)), '저장된 주소가 다르면(해시 겹침) 쓰지 않고 새로 받는다');
@@ -293,6 +293,18 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     c = load({ ntEnsure: async () => { throw new Error('boom'); }, HOME_STNS: HS });
     r = await post(c.H, {}, ttBody({ sv: 1 }));
     ok(r.status === 200 && r.j.info.need, '시각표 엔진이 예외를 던져도 화면은 나간다');
+  }
+  // ⓪-4 s451: 지도를 2초 꾹 눌러 고른 곳(f.bus.pin)은 서버가 받을 때도 그곳을 기준으로 100 m — 내 위치가 멀어도(또는 없어도) 정류장이 나온다
+  {
+    const log = [], c = load();
+    const pb = (extra) => ({ cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ res: {}, sv: 1, pin: [37.5018, 127.0] }, extra) } });
+    let r = await post(c.H, { BUSAPI: binding(log) }, pb({ lat: 37.45, lng: 127.2 }));
+    let cards = r.j.body.filter(n => n.t === 'bcard');
+    ok(r.status === 200 && cards.length >= 1 && cards.length <= 3 && r.j.info.bus.st === 'ok', '꾹 누른 곳 주변(내 위치는 멀다): 정류장이 나온다 ' + cards.length);
+    ok(log.some(u => /getStationByPos/.test(u) && /37\.50/.test(decodeURIComponent(u))), '정류장 목록은 꾹 누른 곳 좌표로 묻는다');
+    r = await post(c.H, { BUSAPI: binding([]) }, pb({}));
+    cards = r.j.body.filter(n => n.t === 'bcard');
+    ok(r.status === 200 && cards.length >= 1, '내 위치가 없어도 꾹 누른 곳만으로 서버가 채운다 ' + cards.length);
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);

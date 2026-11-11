@@ -696,7 +696,7 @@ function findAndroidJar() {
     assert.ok(/preconnectBus\(\); locKick\(\);/.test(a) && /private void locKick\(\)[\s\S]{0,200}locateNow\(8000L, 1000L, 60000L, 120000L/.test(a), '버스 탭에 들어올 때 위치를 한 번 더 확인(0.1초 → 1초)');
     assert.ok(/K_BUSCELL = \"bus_cell\"/.test(sc.replace(/\\"/g, '"')) || /K_BUSCELL = "bus_cell"/.test(sc), '위치 칸 저장 열쇠');
     assert.ok(/busViewSuffix\(String screen, String mode, Store st, String cell\)/.test(sc) && /\"\|\" \+ MapCore\.VW_NEAR \+ \"\|\" \+ \(cell == null/.test(sc.replace(/\\"/g, '"')) || /"\|" \+ MapCore\.VW_NEAR \+ "\|" \+ \(cell == null/.test(sc), '버스 주변 화면 열쇠에 위치 칸');
-    assert.ok(/public boolean primary;/.test(mc) && /if \(primary\) st\.put\(ShellCore\.K_BUSCELL, stopsKey\(\)\)/.test(mc) && /map = new MapCore\(store\); map\.primary = true;/.test(a), '실제 화면 상태기만 위치 칸을 적는다');
+    assert.ok(/public boolean primary;/.test(mc) && /if \(primary\) st\.put\(ShellCore\.K_BUSCELL, cellKey\(\)\)/.test(mc) && /map = new MapCore\(store\); map\.primary = true;/.test(a), '실제 화면 상태기만 위치 칸을 적는다');
     assert.ok(/mapKey\(ShellCore\.S_MAPB, "bus", store, MapCore\.cellOf\(ll\[0\], ll\[1\]\)\)/.test(a) && (a.match(/MapCore\.cellOf\(ll\[0\], ll\[1\]\)/g) || []).length >= 3, '미리 받기는 그 위치 칸의 열쇠로');
     assert.ok(/private void rekeyMapBody\(\)/.test(a) && /rekeyMapBody\(\);\s*present\(body, txt, true\)/.test(a), '응답이 오는 사이 칸이 바뀌어도 그 동네 화면으로 저장');
     assert.ok(/private void trimBusKeys\(String key\)[\s\S]{0,160}busKeys\.size\(\) > 6/.test(a), '위치 칸 캐시는 최근 6곳만');

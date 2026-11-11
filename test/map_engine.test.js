@@ -542,7 +542,8 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   const many = []; for (let i = 0; i < 9; i++) many.push({ nm: '아라역' + (i + 1) + '번 출구', la: 37.5 + i * 1e-3, lo: 127, dist: 100 + i * 10, src: 'tago' });
   for (let i = 0; i < 6; i++) many.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' });
   const ord = E.mapStopOrder(many);
-  ok(ord.length === 8 && ord.every(x => /출구/.test(x.nm)) && ord[0].nm === '아라역1번 출구', 's284: 300m 안 15곳 중 8곳만 — 출구가 먼저, 가까운 순');
+  ok(ord.length === 9 && ord.every(x => /출구/.test(x.nm)) && ord[0].nm === '아라역1번 출구', 's451: 역 출구는 8곳이 넘어도 모두(최대 12) · 먼저 · 가까운 순 — 그러면 일반 정류장은 뒤로 밀려 안 나온다');
+  { const m2 = []; for (let i = 0; i < 20; i++) m2.push({ nm: '서울역' + (i + 1) + '번출구', la: 37.5, lo: 127, dist: 10 + i, src: 'tago' }); ok(E.mapStopOrder(m2).length === 12, 's451: 출구는 최대 12곳'); }
   { const few = []; for (let i = 0; i < 5; i++) few.push({ nm: '일반' + i, la: 37.4 + i * 1e-2, lo: 127, dist: 50 + i, src: 'tago' }); few.push({ nm: '아라역1번 출구', la: 37.5, lo: 127, dist: 120, src: 'tago' }); const o2 = E.mapStopOrder(few); ok(o2.length === 6 && /출구/.test(o2[0].nm), 's284: 8곳보다 적으면 있는 만큼'); }
   {
     const mkS = (n, d, nm) => ({ nm: nm || ('정류장' + n), id: 'T' + n, la: 37.5 + n * 1e-5, lo: 127, dist: d, src: 'tago' });
@@ -574,16 +575,19 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   let b = near({ sel: 1 });
   const cs = b.body.filter(n => n.t === 'bcard');
   ok(cs[1].on === true && cs[0].on === false && b.head[1].foc === cs[1].pi, '고른 정류장(sel): 그 카드가 켜지고 지도도 그 핀을 고른다');
-  {   // 주변 정류장 사용자 순서(웹 busNearOrder): 앱이 끌어서 정한 열쇠 목록을 엔진이 적용한다
-    const ids = cs.map(c => c.k), rev = ids.slice().reverse(), only = ids[2];
+  {   // 주변 정류장 사용자 순서(웹 busNearOrder): 앱이 끌어서 정한 열쇠 목록을 엔진이 적용한다 — 역 출구가 없는 동네로 시험(출구는 s451 부터 늘 맨 앞)
+    const NX = SEOUL_POS.replace(/아라역5번출구/g, '아라사거리').replace('아라역1번출구', '아라시장');
+    const nearN = (extra, res) => near(extra, Object.assign({ tp: NX }, res || {}));
+    const csN = nearN({ sel: 1 }).body.filter(n => n.t === 'bcard');
+    const ids = csN.map(c => c.k), rev = ids.slice().reverse(), only = ids[1];
     const kk = x => x.body.filter(n => n.t === 'bcard');
-    ok(ids.length >= 3 && kk(near({ ord: rev })).map(c => c.k).join() === rev.join(), '사용자 순서(ord): 저장된 순서대로 그린다');
-    ok(kk(near({ ord: [only] }))[0].k === only && kk(near({ ord: [only] })).slice(1).map(c => c.k).join() === ids.filter(k => k !== only).join(), '저장된 것은 앞으로 · 저장 안 된 정류장은 뒤에 거리순');
-    ok(kk(near({ ord: ['없는열쇠', 5, null, ''] })).map(c => c.k).join() === ids.join() && kk(near({ ord: 'x' })).map(c => c.k).join() === ids.join(), '엉뚱한 ord 는 무시(기본 거리순)');
-    const bo = kk(near({ ord: rev }));
-    ok(bo[0].rol === '끌어서 순서 변경' && bo[0].rod === '완료' && bo.slice(1).every(c => !c.rol && !c.rod) && kk(near({})).slice(1).every(c => !c.rol), '순서 바꾸기 줄 글은 첫 주변 카드에만 실린다');
-    const ro = near({ ord: rev }, { a0: SEOUL_ARR });
-    ok(ro.info.stops.map(x => x.sid || x.id || '').join() === near({}).info.stops.slice().reverse().map(x => x.sid || x.id || '').join() && ro.head[1].pts.filter(p => p.k === 's').map(p => p.g).join() === rev.join(), '정류장 목록(info.stops)·지도 핀도 같은 순서');
+    ok(ids.length >= 2 && kk(nearN({ ord: rev })).map(c => c.k).join() === rev.join(), '사용자 순서(ord): 저장된 순서대로 그린다');
+    ok(kk(nearN({ ord: [only] }))[0].k === only && kk(nearN({ ord: [only] })).slice(1).map(c => c.k).join() === ids.filter(k => k !== only).join(), '저장된 것은 앞으로 · 저장 안 된 정류장은 뒤에 거리순');
+    ok(kk(nearN({ ord: ['없는열쇠', 5, null, ''] })).map(c => c.k).join() === ids.join() && kk(nearN({ ord: 'x' })).map(c => c.k).join() === ids.join(), '엉뚱한 ord 는 무시(기본 거리순)');
+    const bo = kk(nearN({ ord: rev }));
+    ok(bo[0].rol === '끌어서 순서 변경' && bo[0].rod === '완료' && bo.slice(1).every(c => !c.rol && !c.rod) && kk(nearN({})).slice(1).every(c => !c.rol), '순서 바꾸기 줄 글은 첫 주변 카드에만 실린다');
+    const ro = nearN({ ord: rev }, { a0: SEOUL_ARR });
+    ok(ro.info.stops.map(x => x.sid || x.id || '').join() === nearN({}).info.stops.slice().reverse().map(x => x.sid || x.id || '').join() && ro.head[1].pts.filter(p => p.k === 's').map(p => p.g).join() === rev.join(), '정류장 목록(info.stops)·지도 핀도 같은 순서');
     ok(call({ part: 'b', mode: 'bus', th: 'dark', bus: { vw: 'fav', fav: [], ord: rev } }).body.every(n => n.t !== 'bcard' || !n.rol), '즐겨찾기 보기에는 순서 바꾸기 줄이 없다');
   }
   ok(near({ sel: 99 }).head[1].foc === -1 && near({ sel: -1 }).body.every(n => n.t !== 'bcard' || n.on === false), '범위 밖 선택은 무시');
@@ -693,6 +697,53 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     ok(out.every(l => l.startsWith('OK ')), '모든 화면이 앱 검증기를 통과 ' + out.filter(l => !l.startsWith('OK ')).slice(0, 3).join(' | '));
     ok(out.every(l => Number(l.split(' ')[2]) === 0), '건너뛴 노드 없음');
   } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { } }
+}
+
+// ⑦-b 노선 상세 np:1(길동무 패밀리) — 줄 선택 단추·글·아래 바가 없고, np 가 없으면(길동무) 그대로 있다
+{
+  const M = require(R('engine/map.js'));
+  const stn = [[1, 'A1', '가', '1', 37.5, 127.0, 0], [2, 'A2', '나', '2', 37.51, 127.0, 0], [3, 'A3', '다', '3', 37.52, 127.0, 1]];
+  const mk = np => M.mapBusRouteSheet({ br: { rid: 'R1', no: '5', tp: 'x', stn: stn, via: 'tago', cc: '25', res: { tp: '{}' }, sel: 1, np: np, o: { id: 'A2', nm: '나', la: 37.51, lo: 127.0, city: '' } } });
+  const rows = r => r.body.filter(x => x.t === 'brs');
+  const a0 = mk(0), a1 = mk(1);
+  ok(rows(a0).length === 3 && rows(a0).every(x => x.act && x.lab) && a0.foot.length === 1, '노선 상세: np 없으면 줄 선택·아래 바가 있다');
+  ok(rows(a1).length === 3 && rows(a1).every(x => x.act && !x.lab && !x.ps) && a1.foot.length === 0, '노선 상세: np:1 이면 선택 글·표시·아래 바가 없다(act 는 앱 검증기 때문에 둔다)');
+}
+
+// ⑦-c s451 — 역 근처: 출구 정류장은 늘 먼저 · 모든 출처에서 모아 한 곳도 안 빠진다 · 저장된 순서가 출구를 가리지 않는다 · 지도 2초 꾹 → 그 주변 100m
+{
+  const mkTn = (a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ nodenm: x[0], nodeid: x[1], gpslati: x[2], gpslong: x[3], citycode: 23 })) } } } });
+  const mkD1 = (a) => JSON.stringify({ ok: true, stops: a.map(x => ({ node_nm: x[0], node_id: x[1], lat: x[2], lng: x[3], city_code: '23' })) });
+  const X = (n, id, la, lo) => ['아라역' + n + '번출구', id, la, lo];
+  const TN = mkTn([X(3, 'ICB368001610', 37.59236, 126.71465), X(1, 'ICB368001609', 37.59325, 126.71343), X(6, 'ICB368000454', 37.59187, 126.71229), ['금강펜테리움더시글로', 'ICB368001459', 37.592, 126.70929]]);          // TAGO 가 4·5번 출구를 빠뜨린 모습
+  const D1 = mkD1([X(5, 'ICB168001434', 37.59115, 126.71342), X(4, 'ICB168001435', 37.59117, 126.71369), X(3, 'ICB168001610', 37.59251, 126.71467), X(1, 'ICB168001609', 37.593, 126.71341)]);
+  const me = { lat: 37.5917, lng: 126.7134 };
+  const nm = r => r.body.filter(n => n.t === 'bcard').map(c => c.nm);
+  const L = (extra, res) => call({ part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({}, me, extra || {}, { res: Object.assign({ tn: TN, d1: D1 }, res || {}) }) });
+  const base = nm(L());
+  ok(base.slice(0, 2).sort().join() === '아라역4번출구,아라역5번출구' && base.slice(0, 5).every(x => /출구/.test(x)) && base.length === 5, 's451: TAGO 가 빠뜨린 출구도 우리 표(D1)에서 모아 — 가까운 출구가 맨 앞 ' + base.join());
+  { const nd = nm(L({}, { d1: undefined })); ok(nd.length === 3 && nd[0] === '아라역6번출구' && !nd.includes('아라역5번출구'), '우리 표를 못 받았으면 있는 것만(빈 화면이 되지 않는다) ' + nd.join()); }
+  const idsOf = r => r.body.filter(n => n.t === 'bcard').map(c => c.k);
+  const ids0 = idsOf(L());
+  const oldSaved = [ids0[ids0.length - 1], ids0[2]];                                              // 사용자가 예전에 끌어서 저장해 둔 순서(4·5번 출구는 그때 목록에 없었다)
+  const ordR = nm(L({ ord: oldSaved }));
+  ok(ordR.slice(0, 2).sort().join() === '아라역4번출구,아라역5번출구' && ordR.slice(0, 5).every(x => /출구/.test(x)), 's451: 저장된 순서가 있어도 새로 보이는 가까운 출구가 맨 앞 ' + ordR.join());
+  ok(nm(L({ ord: ['x'.repeat(10)] })).join() === base.join(), '맞는 열쇠가 없는 저장 순서는 무시');
+  { const mixSaved = L({ ord: [idsOf(L())[3], idsOf(L())[4]] }); ok(nm(mixSaved).join() === base.slice(0, 3).concat([base[3], base[4]]).join(), '저장된 출구끼리는 저장한 순서(새 출구가 앞) ' + nm(mixSaved).join()); }
+  // 지도 2초 꾹 → 그 주변 100m
+  const P = L({ pin: [37.59158, 126.71382] });
+  ok(P.head.some(n => n.t === 'tmap' && n.hold === 'mp.lp' && n.hms === 2000), '정류장 지도에 hold:mp.lp · 2000ms(2초 꾹)');
+  ok(L().head.some(n => n.t === 'tmap' && n.hold === 'mp.lp' && n.hms === 2000 && /꾹/.test(n.hint)), '고르기 전에도 지도에 hold · 힌트 글');
+  const pn = nm(P);
+  ok(pn.length >= 1 && pn.every(x => /출구/.test(x)) && pn.includes('아라역5번출구') && pn.includes('아라역4번출구') && !pn.includes('아라역1번출구'), 's451: 고른 곳 주변 100m 정류장만(1번출구는 100m 밖) ' + pn.join());
+  const tm = P.head.find(n => n.t === 'tmap');
+  ok(tm.pts[tm.pts.length - 1].k === 'm' && tm.pts[tm.pts.length - 1].l === '고른 곳' && Math.abs(tm.pts[tm.pts.length - 1].la - 37.59158) < 1e-6 && /고른 곳/.test(tm.hint), '고른 곳이 중심 핀');
+  ok(P.body[0].t === 'text' && /고른 곳 주변 100m/.test(P.body[0].s) && P.body[1].t === 'button' && P.body[1].act.v === 'mp.loc', '맨 위에 안내 글 + 내 위치로 돌아가기 단추');
+  const far = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127.0, pin: [37.59158, 126.71382], res: {} } });
+  ok(far.info.bus.st === 'need' && far.info.bus.need.some(n => /gpsLati=37\.592&gpsLong=126\.714/.test(n.url)) && far.info.bus.need.some(n => /\/bus-stops\?lat=37\.592&lng=126\.714&radius=450/.test(n.url)), '정류장 조회는 고른 곳 기준(내 위치가 멀어도)');
+  const none = call({ part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127.0, pin: [37.6, 126.6], res: { tn: TN, d1: D1, gg: '' } } });
+  ok(none.info.bus.st === 'empty' && none.body.some(n => n.t === 'button' && n.act.v === 'mp.loc') && /100m/.test(none.body[0].s), '100m 안에 없으면 알림 + 내 위치로 돌아가기');
+  ok(nm(L({ pin: [0, 0] })).join() === base.join() && nm(L({ pin: ['a', 'b'] })).join() === base.join() && nm(L({ pin: [95, 10] })).join() === base.join(), '엉뚱한 pin 은 무시(내 위치 기준)');
 }
 
 // ⑧ 워커
