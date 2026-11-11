@@ -4005,3 +4005,26 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 ## 2026-11-08 공개 방침 페이지 (플레이 콘솔 '개인정보처리방침 주소')
 - 엔진에 GET `/legal/privacy` 추가(engine/legal.js + legal-worker.js, embed-shop.js 의 LEGAL 묶음, ENGINE_VERSION s448). `?doc=terms`(위치기반서비스 이용약관) · `?doc=open`(데이터 출처 및 고지). 글은 SETTINGS_POL 하나를 그대로 쓴다(앱 안 글과 항상 같음).
 - 주소: https://gentle-lab-7e47subway-api.phg0643.workers.dev/legal/privacy (엔진 배포 뒤 열림). 콘솔 개인정보처리방침 · 데이터 보안 · 위치 선언에 넣는다.
+
+## 2026-11-09 경로 확정 → 다음 화면이 느림 (YJ 녹화 18:43)
+- 원인: [경로 확정]을 누르면 그때서야 `/ride/start`(+`/ride/buspick`, 같은 큰 본문을 두 번 업로드)를 보내 둘 다 기다린 뒤 화면을 넘겼다(녹화에서 약 2초, 첫 구간이 버스면 `/ride/start` 를 한 번 더 불러 더 길다).
+- 수정(앱만, 엔진 변경 없음): `ShellActivity.rideWarm()` — 결과가 뜨면 0.6초 뒤 뒤에서 `/ride/start` 를 한 번 받아 두고(첫 구간이 버스면 `state.cfg.bl` 이 있어 `/ride/buspick` 도), [경로 확정]은 `rwTake()` 로 꺼내 `rideCommit` 으로 바로 넘어간다(서버 대기 0). 열쇠 = 경로 id · 탭 · 꺼 둔 알림 · 새 판단기 · 테마. 시작 답 45초 · 버스 고르기 답 15초 안일 때만 쓰고(버스 도착 시각은 낡은 값을 쓰지 않는다), 아니면 예전 경로. 한 경로·탭에서 미리 받기는 두 번까지.
+- 아직 그대로: [경로 탐색] 뒤 '복합경로 탐색 중' 로딩(엔진 탐색 시간).
+
+## 2026-11-10 엔진 s449 — 가까운 정류장 우선 (YJ: "가까이 있는 정류장 무시하고 다른 정류장 걸어가게 해. 1순위는 가까운 정류장")
+- **원인**: `accessNodes` 가 '가까운 정류장에 없는 노선이 있는 먼 정류장(도보 12분 안)'을 후보로 넓히는데(`BOARD_EXPAND_M`), 그쪽이 1분이라도 빠르면 가까운 정류장을 제치고 걸어가게 했다.
+- **수정**: `dijkstra` 를 `dijkstraBase` 로 감싸고, 결과가 '넓힌 먼 정류장에서 타는 버스'면 넓히지 않고(`G.__noFar`) 한 번 더 찾아 총 소요가 `NEAR_PRIO_MIN`(7분) 이내로만 느리면 가까운 쪽을 쓴다(`nearPrio:true`). 7분 넘게 아끼는 먼 정류장은 그대로. 상수 0 이하면 꺼짐.
+- 시험: `node test/near_priority.test.mjs`(옛 엔진은 실패), 무작위 세계 300건 비교에서 16건만 달라졌고 전부 걷기가 줄고 7분 이내. `access_near_bus` 등 기존 시험 통과. ENGINE_VERSION `route-v2-2026-11-10s449`.
+
+## 2026-11-11 엔진 s450 — 노선 상세 np:1 (길동무 패밀리가 노선 상세 시트를 연다)
+- `engine/map.js` `mapBrFacts` 에 `np`(출발·도착을 고르지 않는 화면) 추가. `np:1` 이면 `mapBusRouteSheet` 가 정류장 줄의 `act`(br.p.N)·`lab`(선택 ›)·`ps` 를 빼고 아래 바(foot)도 비운다. `np` 가 없으면(길동무) 예전과 똑같다. ENGINE_VERSION `route-v2-2026-11-11s450`. 시험: `test/map_engine.test.js` 246 통과(np 두 줄 추가).
+- 패밀리 앱(gildongmu-kids `MapPane.BrSheet`)은 np 를 모르는 옛 엔진(s449)이어도 `noPick()` 으로 같은 모양을 만든다 — 엔진 배포는 필수는 아니지만 하면 군더더기가 없다.
+
+## 2026-11-11 엔진 s451 — 역 근처는 출구 먼저 + 지도 2초 꾹 누르면 100 m 정류장 (YJ: 아라역5번출구가 계속 안 나옴)
+- **원인(데이터는 있다)**: 아라역은 D1 · TAGO 모두 1·3·4·5·6·7·8번출구가 있다. 앱을 껐다 켜도 안 나온 것은 저장 층 때문 — 기기 목록 캐시(`bsc_*` 72시간 · 이웃 칸 빌려오기), 서버 캐시(12시간 · KV 14일), 껍데기 캐시, 직접 정한 순서(`b.ord`)가 옛 목록을 그대로 돌려줬다.
+- **엔진(map.js)**: `mapStopOrder` — 역 근처면 `…역N번출구`가 항상 맨 앞(가까운 순 · 번호순), 저장한 순서(`b.ord`)보다 우선. `mapExitMore` — TAGO · D1 · TOPIS · GBIS 가 서로 빠뜨린 출구를 합집합으로 채운다. 출구는 최대 12곳까지.
+- **캐시 무효화**: 기기 `MapCore.STOPS_V=2`(옛 목록 캐시는 `"v":2` 가 없으면 버린다), 서버 엣지 키 `s?v=2&k=` · KV `bs2:`.
+- **꾹 누르기**: 지도(타일/벡터)에서 2초(`hms`, 500~5000ms) 누르면 진동 후 `mp.lp.<lat>_<lng>` 행동 → 요청 `f.bus.pin:[lat,lng]` → 엔진 `mapBusCenter` 가 그 점을 기준으로 100 m(`MAP_PIN_R`) 정류장을 보여 준다. 배너 + [내 위치로 돌아가기] 단추. 핀이 있는 동안은 정류장 목록 캐시(`stopsKey()` 빈 값)를 읽지도 쓰지도 않는다. 새로고침 · 내 위치 단추 · 새 위치는 핀을 푼다.
+- **ScreenCore/ScreenView/VecMap**: 노드 `hold`(행동 이름) · `hms`(ms). 기존 `lp`(3초, 가족 따라가기)와 따로 둔다. 서버(`mapSvResolve`)도 `pin` 으로 준비 여부를 판단한다(내 위치 없이도 됨).
+- 길동무 패밀리(`MapPane`): `busPin` — 같은 `mp.lp.` 행동을 받아 `pin` 으로 다시 묻는다. 새로고침/내 위치는 핀을 푼다. 가족 앱은 타일 모드(VecMap 없음)라 ScreenView 의 타일 꾹 누르기를 쓴다.
+- ENGINE_VERSION `route-v2-2026-11-11s451`. 시험: map_engine 260 · map_server_fetch 58 · shell_native 132 · guard_workers 33 · worker_undef 9 · near_priority 통과. **엔진 배포 필수**(출구 우선 · 합집합 · 핀).
