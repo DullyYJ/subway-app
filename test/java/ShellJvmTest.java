@@ -946,6 +946,14 @@ public class ShellJvmTest {
             bm.addBusRes("a0", empty); bm.addBusRes("a1", fresh);
             ok(good.equals(bm.busRes.get("a0")) && fresh.equals(bm.busRes.get("a1")), "도착정보: 빈 응답은 보던 줄을 지키고 새 값은 바꾼다");
             ok(MapCore.hasArr(good) && !MapCore.hasArr(empty) && !MapCore.hasArr(null), "도착정보 판별");
+            {   // s454: 가장 빨리 오던 차가 30초 안이면(지나갔을 수 있다) 빈 응답에 보던 값을 붙들지 않는다 — 멀리 있던 차는 그대로 둔다
+                String soon = "{\"response\":{\"body\":{\"items\":{\"item\":[{\"routeno\":\"991\",\"arrtime\":20,\"arrprevstationcnt\":1}]}}}}";
+                ok(MapCore.minArrSec(good) == 589 && MapCore.minArrSec(soon) == 20 && MapCore.minArrSec(empty) == -1 && MapCore.minArrSec(null) == -1, "s454: 본문에서 가장 빠른 남은 초");
+                ok(MapCore.keepOldOk(good, 5000L) && !MapCore.keepOldOk(soon, 1000L) && MapCore.keepOldOk(empty, 1000L), "s454: 30초 안 차는 붙들지 않고 · 멀리 있거나 읽을 수 없으면 예전처럼 붙든다");
+                MapCore bz454 = new MapCore(new ShellCore.MemStore());
+                bz454.addBusRes("a0", soon); bz454.dropArrivals(); bz454.addBusRes("a0", empty);
+                ok(empty.equals(bz454.busRes.get("a0")), "s454: 곧 오던 차가 빈 응답으로 바뀌면 옛 숫자를 두지 않는다");
+            }
             MapCore bn = new MapCore(new ShellCore.MemStore());
             bn.addBusRes("a0", empty); bn.dropArrivals(); bn.addBusRes("a0", empty);
             ok(empty.equals(bn.busRes.get("a0")), "처음부터 비어 있던 정류장은 그대로 비어 있다");
