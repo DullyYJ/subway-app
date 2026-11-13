@@ -57,10 +57,11 @@ t('alertAt 은 단계가 새로 켜지거나 바뀔 때만 갱신된다(오버�
   assert.strictEqual(ats.length, 3, '환승 1 → 최종 2 → 최종 1: ' + ats.length);
   assert.ok(ats[0] < ats[1] && ats[1] < ats[2]);
 });
-t('환승 탑승 시트가 떠 있는 동안 현위치 칸은 환승 걷기 칸에서 대기하고(xfer) 움직임 표시는 꺼진다', () => {
+t('환승 탑승 시트(board, 2분 전~)가 뜨면 현위치 칸은 승차역 칸에 서고, 알약(wait)일 땐 환승 걷기 칸에서 대기하며(xfer) 움직임 표시는 꺼진다 (s452)', () => {
   const xr = rows.filter(r => r.o.xfer);
   assert.ok(xr.length >= 1, '환승 대기 칸 ' + xr.length);
-  xr.forEach(r => { assert.strictEqual(r.o.cur, 3, '환승 걷기 칸(셋째 역 뒤)'); assert.strictEqual(r.o.moving, false); assert.strictEqual(r.o.pill, ''); assert.ok(r.o.rs.st === 'board' || r.o.rs.st === 'wait'); });
+  xr.forEach(r => { assert.strictEqual(r.o.cur, r.o.rs.st === 'board' ? 4 : 3, r.o.rs.st === 'board' ? '시트가 뜨면 승차역 칸(T0)' : '알약일 땐 환승 걷기 칸(셋째 역 뒤)'); assert.strictEqual(r.o.moving, false); assert.strictEqual(r.o.pill, ''); assert.ok(r.o.rs.st === 'board' || r.o.rs.st === 'wait'); });
+  assert.ok(xr.some(r => r.o.rs.st === 'board'), '시트가 뜬 구간이 있다');
   assert.ok(rows.filter(r => !r.o.xfer && r.o.rs.st !== 'board').every(r => r.o.cur !== 3), '시트가 없으면 걷기 칸에 서지 않는다');
 });
 t('환승 승차를 누르면 래치가 풀리고 새 구간에서 다시 계산한다(둘째 구간 목적지 2정거장 전 = 2)', () => {
