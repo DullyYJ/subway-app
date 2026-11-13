@@ -28,11 +28,11 @@ function ttlSecFor(u) {
   const h = String(u.hostname || "").toLowerCase().replace(/\.$/, "");
   const p = u.pathname || "";
   if (h === "ws.bus.go.kr") {
-    if (/getStationByUid/i.test(p)) return 20;   // Seoul stop arrivals
+    if (/getStationByUid/i.test(p)) return 15;   // Seoul stop arrivals (s454: 20 -> 15; Seoul API quota is 10k/day, so only a small cut)
     if (/getStationByPos/i.test(p)) return 60;   // Seoul nearby stops
     return 0;
   }
-  if (h === "apis.data.go.kr" && /ArvlInfo|busarrivalservice/i.test(p)) return 15; // TAGO / Gyeonggi arrivals
+  if (h === "apis.data.go.kr" && /ArvlInfo|busarrivalservice/i.test(p)) return 10; // TAGO / Gyeonggi arrivals (s454: 15 -> 10; stale "1 min left" after the bus had passed)
   return 0;
 }
 // cache only normal responses (never freeze errors / auth failures)
