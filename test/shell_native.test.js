@@ -1266,6 +1266,14 @@ function findAndroidJar() {
     assert.ok(m && +m[1] >= 8, 'Play Billing 8 이상(2026-08-31부터 필수)');
     assert.ok(!/launchBillingFlow[\s\S]*Random/.test(bg), '무작위 없음');
   });
+  await t('s453: 가족 지도(벡터) — 3초 꾹 누르기(lp)로 장소 등록 · 두 번 탭은 마커 위치로(지도 두 번 탭 확대는 끔) · 이동경로 흔적 줄', async () => {
+    const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), vm = fs.readFileSync(N('VecMap.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');
+    assert.ok(/tmLpCur = it\.lp == null/.test(sv) && /tmLpCur\.length\(\) > 0 \? \(int\) TM_LP_MS/.test(sv), '벡터 지도도 lp 를 읽어 3초 꾹 누르기를 켠다');
+    assert.ok(/void vecHold\(double la, double lo\) \{\s*if \(tmLpCur\.length\(\) > 0\)[\s\S]*?a\.v = tmLpCur; a\.t = String\.format/.test(sv), '꾹 누르면 타일 지도와 같은 행동(lp + "위도,경도")');
+    assert.ok(/boolean vecDoubleTapOn\(\)/.test(sv) && /void vecHome\(\) \{ tmHome\(\); \}/.test(sv) && /tmFolPauseUntil = SystemClock\.uptimeMillis\(\) \+ 1500L/.test(sv), '두 번 탭 → 가족구성원 위치(따라가기 끼어듦 방지)');
+    assert.ok(/setDoubleTapGesturesEnabled\(false\)/.test(vm) && /sv\.vecDoubleTapOn\(\)/.test(vm) && /sv\.vecHome\(\)/.test(vm) && /now - tapT < 380L/.test(vm), '지도 두 번 탭 확대를 끄고 Box 가 두 번 탭을 받는다');
+    assert.ok(/static void drawTrail\(/.test(ta) && /if \(tmPath\.length >= 4\) TileMapArt\.drawTrail\(cv, tmView, tmPath, dpr\);\s*\/\/[^\n]*\n\s*TileMapArt\.drawPins/.test(sv), '흔적 줄은 벡터 지도 덮개에서 핀 아래에 그린다');
+  });
   await t('s447: 움직이지 않는 지도(맛집 · 장소 등록 · 큰 지도)도 정류장 지도와 같은 벡터 지도 — 앱은 엔진이 정한 가운데 · 배율의 바탕 그림만 깐다', async () => {
     const vs = fs.readFileSync(N('VecSnap.java'), 'utf8'), art = fs.readFileSync(N('TileMapArt.java'), 'utf8'), tl = fs.readFileSync(N('TileLoader.java'), 'utf8'), kh = fs.readFileSync(N('KidsHub.java'), 'utf8');
     assert.ok(/^package com\.dullyyj\.subway;/m.test(vs) && /MapSnapshotter/.test(vs) && /VecMap\.STYLE/.test(vs), 'VecSnap: 같은 스타일(OpenFreeMap Liberty)을 한 장 그림으로 받는다');
