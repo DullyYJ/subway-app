@@ -1204,7 +1204,7 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done, sho
   //   줄 문구(line1)는 원래 현위치 기준 그대로 두고, 칸 표시·움직임만 바뀐다.
   var xf = false, cur0 = cur;
   if (!arrived && !st.wait && st.xw && rs && (rs.st === 'board' || rs.st === 'wait')) {
-    var xj = rsXferCell(map, cur, st.xw.i);
+    var xj = rsXferCell(map, cur, st.xw.i, rs.st === 'board');      // s452 (YJ: 환승역에 도착했다고 판단되면 2분 전부터 마커가 내가 표시한 승차역에 있어야): 시트('board', 2분 전~)가 뜨면 승차역 칸으로, 알약('wait')일 땐 환승 걷기 칸에서 기다린다
     if (xj > cur) { cur = xj; xf = true; }
   }
   if (xf) moving = false;
@@ -1265,10 +1265,11 @@ function rsPillTxt(rs, line1, line2, pill, cells, cur) {
   return arr ? c + ' · ' + arr + ' 도착' : c;
 }
 // 환승 칸: 다음 구간 탑승 노드(bi) 앞의 환승 걷기 칸(노드가 아닌 칸) — 없으면 탑승 노드 바로 앞 칸. 현위치 칸(cur) 뒤가 아니면 -1.
-function rsXferCell(map, cur, bi) {
+function rsXferCell(map, cur, bi, atBoard) {
   var bj = -1, j;
   for (j = 0; j < map.length; j++) if (map[j] === bi) { bj = j; break; }
   if (bj <= cur) return -1;
+  if (atBoard) return bj;      // s452: 승차 시트가 뜬 동안은 승차역 칸 자체
   for (j = bj - 1; j > cur; j--) if (!(map[j] != null && map[j] >= 0)) return j;
   return (bj - 1 > cur) ? bj - 1 : -1;
 }
