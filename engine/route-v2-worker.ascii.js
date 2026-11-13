@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-11s451";
+var ENGINE_VERSION = "route-v2-2026-11-13s452";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11271,7 +11271,7 @@ function rsOverlay(st, r, curIdx, curPos, now, dest, destName, moving, done, sho
   //   \uc904 \ubb38\uad6c(line1)\ub294 \uc6d0\ub798 \ud604\uc704\uce58 \uae30\uc900 \uadf8\ub300\ub85c \ub450\uace0, \uce78 \ud45c\uc2dc\u00b7\uc6c0\uc9c1\uc784\ub9cc \ubc14\ub010\ub2e4.
   var xf = false, cur0 = cur;
   if (!arrived && !st.wait && st.xw && rs && (rs.st === 'board' || rs.st === 'wait')) {
-    var xj = rsXferCell(map, cur, st.xw.i);
+    var xj = rsXferCell(map, cur, st.xw.i, rs.st === 'board');      // s452 (YJ: \ud658\uc2b9\uc5ed\uc5d0 \ub3c4\ucc29\ud588\ub2e4\uace0 \ud310\ub2e8\ub418\uba74 2\ubd84 \uc804\ubd80\ud130 \ub9c8\ucee4\uac00 \ub0b4\uac00 \ud45c\uc2dc\ud55c \uc2b9\ucc28\uc5ed\uc5d0 \uc788\uc5b4\uc57c): \uc2dc\ud2b8('board', 2\ubd84 \uc804~)\uac00 \ub728\uba74 \uc2b9\ucc28\uc5ed \uce78\uc73c\ub85c, \uc54c\uc57d('wait')\uc77c \ub550 \ud658\uc2b9 \uac77\uae30 \uce78\uc5d0\uc11c \uae30\ub2e4\ub9b0\ub2e4
     if (xj > cur) { cur = xj; xf = true; }
   }
   if (xf) moving = false;
@@ -11332,10 +11332,11 @@ function rsPillTxt(rs, line1, line2, pill, cells, cur) {
   return arr ? c + ' \u00b7 ' + arr + ' \ub3c4\ucc29' : c;
 }
 // \ud658\uc2b9 \uce78: \ub2e4\uc74c \uad6c\uac04 \ud0d1\uc2b9 \ub178\ub4dc(bi) \uc55e\uc758 \ud658\uc2b9 \uac77\uae30 \uce78(\ub178\ub4dc\uac00 \uc544\ub2cc \uce78) \u2014 \uc5c6\uc73c\uba74 \ud0d1\uc2b9 \ub178\ub4dc \ubc14\ub85c \uc55e \uce78. \ud604\uc704\uce58 \uce78(cur) \ub4a4\uac00 \uc544\ub2c8\uba74 -1.
-function rsXferCell(map, cur, bi) {
+function rsXferCell(map, cur, bi, atBoard) {
   var bj = -1, j;
   for (j = 0; j < map.length; j++) if (map[j] === bi) { bj = j; break; }
   if (bj <= cur) return -1;
+  if (atBoard) return bj;      // s452: \uc2b9\ucc28 \uc2dc\ud2b8\uac00 \ub72c \ub3d9\uc548\uc740 \uc2b9\ucc28\uc5ed \uce78 \uc790\uccb4
   for (j = bj - 1; j > cur; j--) if (!(map[j] != null && map[j] >= 0)) return j;
   return (bj - 1 > cur) ? bj - 1 : -1;
 }
