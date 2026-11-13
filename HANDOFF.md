@@ -4028,3 +4028,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **ScreenCore/ScreenView/VecMap**: 노드 `hold`(행동 이름) · `hms`(ms). 기존 `lp`(3초, 가족 따라가기)와 따로 둔다. 서버(`mapSvResolve`)도 `pin` 으로 준비 여부를 판단한다(내 위치 없이도 됨).
 - 길동무 패밀리(`MapPane`): `busPin` — 같은 `mp.lp.` 행동을 받아 `pin` 으로 다시 묻는다. 새로고침/내 위치는 핀을 푼다. 가족 앱은 타일 모드(VecMap 없음)라 ScreenView 의 타일 꾹 누르기를 쓴다.
 - ENGINE_VERSION `route-v2-2026-11-11s451`. 시험: map_engine 260 · map_server_fetch 58 · shell_native 132 · guard_workers 33 · worker_undef 9 · near_priority 통과. **엔진 배포 필수**(출구 우선 · 합집합 · 핀).
+
+## 2026-11-13 s452 — 환승 승차 시트가 뜨면 마커는 승차역 칸에 (YJ: "환승역에 도착했다고 판단되면 2분 전부터는 마커가 내가 표시한 역 부분에 있어야 할 것 같아")
+- **원인**: 오버레이 엔진(`rsOverlay`, s198 규칙)은 환승 시트·알약이 떠 있는 동안 현위치 칸을 '환승 걷기 칸(없으면 승차역 바로 앞 칸)'에 세웠다. 버스 정류장에서 내린 뒤 걷기 칸이 따로 없고 승차역 칸이 바로 다음이면(`bj - 1 == cur`) 옮길 칸이 없어 마커가 내린 정류장(예: 테크노파크 17:43)에 그대로 남았다.
+- **수정**: `rsXferCell(map, cur, bi, atBoard)` — 시트 단계(`rs.st === 'board'`, 출발 2분 전~ · 늦음 · 손잡이로 연 때)이면 승차역 칸(`map` 에서 `xw.i` 인 칸) 자체로 간다. 알약 단계(`wait`, 2분보다 이르다)는 예전처럼 환승 걷기 칸에서 기다린다. JS `engine/ride-standby.js` + Java `RideStandbyJ.xferCell(…, atBoard)` + Worker 붙여넣기 파일 동기화(`ENGINE_VERSION route-v2-2026-11-13s452`).
+- 앱 안 결과 카드 타임라인(`lv.wait` → 주황 대기 마커)은 원래 승차역 칸이라 손대지 않았다.
+- 시험: `ride_overlay_level`(환승 칸 시험을 board=승차역 칸 · wait=걷기 칸으로 고침) 8 · `ride_standby` 120 · `ride_local`(Java = JS) 4 · 환승 오버레이 179걸음 Java=JS 대조 통과. **Google Play 에는 올리지 않았다**(YJ 테스트가 끝난 뒤 최종본으로). Worker 는 배포하지 않았다(폰 안 엔진은 Java 라 앱만으로 반영된다).
