@@ -4034,3 +4034,11 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - **수정**: `rsXferCell(map, cur, bi, atBoard)` — 시트 단계(`rs.st === 'board'`, 출발 2분 전~ · 늦음 · 손잡이로 연 때)이면 승차역 칸(`map` 에서 `xw.i` 인 칸) 자체로 간다. 알약 단계(`wait`, 2분보다 이르다)는 예전처럼 환승 걷기 칸에서 기다린다. JS `engine/ride-standby.js` + Java `RideStandbyJ.xferCell(…, atBoard)` + Worker 붙여넣기 파일 동기화(`ENGINE_VERSION route-v2-2026-11-13s452`).
 - 앱 안 결과 카드 타임라인(`lv.wait` → 주황 대기 마커)은 원래 승차역 칸이라 손대지 않았다.
 - 시험: `ride_overlay_level`(환승 칸 시험을 board=승차역 칸 · wait=걷기 칸으로 고침) 8 · `ride_standby` 120 · `ride_local`(Java = JS) 4 · 환승 오버레이 179걸음 Java=JS 대조 통과. **Google Play 에는 올리지 않았다**(YJ 테스트가 끝난 뒤 최종본으로). Worker 는 배포하지 않았다(폰 안 엔진은 Java 라 앱만으로 반영된다).
+
+## 2026-11-13 s453 — 가족 지도: 3초 꾹 누르기 · 두 번 탭 · 이동경로 줄 (+ 키즈 엔진 10분·50m 정지)
+- 증상(YJ): 키즈(가족) 탭 지도에서 두 번 탭하면 마커로 이동 · 3초 꾹 누르면 장소 등록이 안 됨 · 이동경로 흔적이 안 보임.
+- 원인: s451 에서 지도가 MapLibre(벡터)로 바뀌며 손가락을 `VecMap.Box` 가 직접 받는데, ① 꾹 누르기는 `hold` 만 읽고 가족 지도가 쓰는 `lp`(`kpl.new`)는 안 읽음 ② 두 번 탭은 타일 지도(`tmTouch`)에만 있고 MapLibre 는 두 번 탭을 확대로 씀 ③ `vecDraw` 가 핀만 그리고 `tmPath`(엔진 `line` 흔적)를 안 그림.
+- 앱: `ScreenView.tmLpCur`(drawTmap 이 `it.lp` 기록) → `vecHoldMs()` 3000 · `vecHold()` 가 `kpl.new`+"위도,경도" 호출(진동). `vecDoubleTapOn()/vecHome()`, `VecMap` 에서 두 번 탭 감지(380ms · 44dp · 짧고 안 움직인 탭) + `setDoubleTapGesturesEnabled(false)`. `TileMapArt.drawTrail`(흰 테두리 + 주황 실선)을 `vecDraw` 에서 핀 아래에 그림. `tmHome` 은 1.5초간 따라가기 판정을 막아 이동이 끊기지 않게.
+- 엔진(gildongmu-kids `engine/kids-worker.js`, SCHEMA_V `s453-1`): 정지 판정 30분·100m → **10분·50m**(`RT_DWELL_MS`/`RT_DWELL_M`). 10분 넘게 50m 안이면 길을 닫아 저장(`routes`)하고 허브 흔적 줄은 비운다(출발하면 출발 자리부터 새로 그림). 낯선 곳 알림(`strangeStop`)은 예전 30분 기준 그대로(`od`/`odd`).
+- 시험: kids route_keep 47 · scale · 나머지 전부 통과 / 여기 shell_native 에 s453 항목.
+- 배포: 앱 새 빌드(구글 플레이 업로드는 YJ 테스트 끝난 뒤) + 키즈 워커 `engine/kids-worker.ascii.js` 붙여 넣기.
