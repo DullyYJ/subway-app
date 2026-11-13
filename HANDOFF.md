@@ -4042,3 +4042,9 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 엔진(gildongmu-kids `engine/kids-worker.js`, SCHEMA_V `s453-1`): 정지 판정 30분·100m → **10분·50m**(`RT_DWELL_MS`/`RT_DWELL_M`). 10분 넘게 50m 안이면 길을 닫아 저장(`routes`)하고 허브 흔적 줄은 비운다(출발하면 출발 자리부터 새로 그림). 낯선 곳 알림(`strangeStop`)은 예전 30분 기준 그대로(`od`/`odd`).
 - 시험: kids route_keep 47 · scale · 나머지 전부 통과 / 여기 shell_native 에 s453 항목.
 - 배포: 앱 새 빌드(구글 플레이 업로드는 YJ 테스트 끝난 뒤) + 키즈 워커 `engine/kids-worker.ascii.js` 붙여 넣기.
+
+## 2026-11-13 s454 - 버스 탭: 지나간 버스가 1분으로 남는 문제 / 정류장 · 노선 정류장이 늦게 뜨는 문제
+- 원인: (1) 도착정보를 위치가 바뀔 때나 10분마다만 받아(s176) 오래된 숫자가 기기에서 그대로 줄어들었다. (2) 서버 캐시(서울 20초, TAGO 15초)와 기기의 빈 응답 45초 유지가 겹쳐 지나간 차가 더 오래 남았다. (3) 노선 정류장 목록(brFetchOne)은 빈 응답 한 번에 두 번만 시도하고 곧바로 API 응답 없음 실패 화면을 그렸다. (4) 정류장 요청이 통째로 실패하면 재시도 없이 빈 화면.
+- 앱: ShellActivity 10초 박자 busArrTick, busArrCheck: 화면의 가장 빠른 도착 남은 초(ScreenView.minArrRemainSec)가 2분 안이면 20초, 5분 안이면 60초, 그 밖 3분마다 busRefresh (탑승 중, 받는 중, 화면 밖은 안 함). MapCore.keepOldOk: 빈 응답이 올 때 보던 값에서 가장 빠른 차가 30초 안이면 붙들지 않는다 (minArrSec 로 arrtime 읽음, 못 읽으면 예전처럼 45초). brFetchOne 목록 4번 시도 (0.5, 1, 1.5초 간격), 노선 미리 받기 4개를 6개로, 기기 보관 8개를 12개로. 정류장 요청이 통째로 실패하고 정류장이 하나도 없으면 1.5, 3, 4.5초 뒤 처음부터 다시 (mapBodyApply).
+- 서버 workers/src/bus.js (+ workers/guarded/bus.js 재생성): 캐시 TTL 서울 도착 20초를 15초로, TAGO/경기 15초를 10초로 (서울 API 는 하루 1만 건이라 조금만 줄임). 반영은 gildongmu-bus 워커 재배포(붙여넣기) 필요. 앱만으로도 20초 재조회는 동작.
+- 시험: shell_native s454 항목, ShellJvmTest (minArrSec, keepOldOk, 곧 오던 차 빈 응답), 전체 134 통과.
