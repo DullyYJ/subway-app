@@ -82,6 +82,20 @@ final class TileMapArt {
             acc += seg[i];
         }
     }
+    /** s453(YJ: 이동경로의 흔적을 줄로): 벡터 지도 위에 깔리는 실선 — 흰 테두리 위에 주황 줄(점선 · 화살표 없음). 점이 2개 미만이면 그리지 않는다. */
+    static void drawTrail(Canvas cv, TileMapCore.View vw, double[] path, float dpr) {
+        if (path == null || path.length < 4) return;
+        int n = path.length / 2;
+        PT.rewind();
+        for (int i = 0; i < n; i++) {
+            double[] sc = vw.toScreen(path[i * 2], path[i * 2 + 1]);
+            if (i == 0) PT.moveTo((float) sc[0], (float) sc[1]); else PT.lineTo((float) sc[0], (float) sc[1]);
+        }
+        P.setStyle(Paint.Style.STROKE); P.setStrokeCap(Paint.Cap.ROUND); P.setStrokeJoin(Paint.Join.ROUND); P.setPathEffect(null);
+        P.setColor(C_WHITE); P.setAlpha(200); P.setStrokeWidth(7f * dpr); cv.drawPath(PT, P);
+        P.setColor(C_ROUTE); P.setAlpha(235); P.setStrokeWidth(4f * dpr); cv.drawPath(PT, P);
+        P.setStrokeCap(Paint.Cap.BUTT); P.setStrokeJoin(Paint.Join.MITER); P.setAlpha(255); P.setStyle(Paint.Style.FILL);
+    }
     private static void drawArrow(Canvas cv, float x, float y, float deg, float dpr) {          // 웹 SVG 11x13 화살표(주황 채움 · 흰 테두리 1)
         cv.save(); cv.translate(x, y); cv.rotate(deg); cv.scale(dpr, dpr);
         PT.rewind(); PT.moveTo(0f, -6.5f); PT.lineTo(5.5f, 6.5f); PT.lineTo(0f, 3.1f); PT.lineTo(-5.5f, 6.5f); PT.close();

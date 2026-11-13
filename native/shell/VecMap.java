@@ -56,6 +56,7 @@ final class VecMap implements ScreenView.VecHost {
 
     /** 지도 위 손가락은 준비된 뒤에만 받는다(준비 전엔 아래 ScreenView 의 타일 지도가 받는다). */
     private final class Box extends FrameLayout {
+        private float dx0, dy0, tapX, tapY; private long dt0, tapT;                  // s453: 두 번 탭 — 짧고 안 움직인 탭 둘이 380ms · 44dp 안이면 마커 위치로(지도 자체 두 번 탭 확대는 꺼 둔다)
         private float hx, hy; private boolean holdArmed;                              // s451: 꾹 누르기 — 한 손가락이 안 움직이고 엔진이 정한 시간(보통 2초)을 채우면 그 자리 좌표를 보낸다(지도 끌기 · 확대는 그대로 지도가 받는다)
         private final Runnable holdRun = new Runnable() { @Override public void run() {
             if (!holdArmed || map == null || destroyed) return;
@@ -73,6 +74,7 @@ final class VecMap implements ScreenView.VecHost {
                 case MotionEvent.ACTION_DOWN: {
                     getParent().requestDisallowInterceptTouchEvent(true);
                     disarm();
+                    dx0 = e.getX(); dy0 = e.getY(); dt0 = android.os.SystemClock.uptimeMillis();
                     int ms = sv.vecHoldMs();
                     if (ms > 0) { hx = e.getX(); hy = e.getY(); holdArmed = true; h.postDelayed(holdRun, ms); }
                     break;
@@ -84,9 +86,24 @@ final class VecMap implements ScreenView.VecHost {
                     }
                     break;
                 }
+                case MotionEvent.ACTION_UP: {
+                    disarm();
+                    if (sv.vecDoubleTapOn()) {
+                        long now = android.os.SystemClock.uptimeMillis();
+                        float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                        boolean tap = now - dt0 < 300L && Math.abs(e.getX() - dx0) <= slop && Math.abs(e.getY() - dy0) <= slop;
+                        if (!tap) tapT = 0L;
+                        else if (tapT > 0L && now - tapT < 380L && Math.hypot(e.getX() - tapX, e.getY() - tapY) < 44f * dpr) { tapT = 0L; sv.vecHome(); }
+                        else { tapT = now; tapX = e.getX(); tapY = e.getY(); }
+                    }
+                    break;
+                }
                 case MotionEvent.ACTION_POINTER_DOWN:
-                case MotionEvent.ACTION_UP:
+                    tapT = 0L;
+                    disarm();
+                    break;
                 case MotionEvent.ACTION_CANCEL:
+                    tapT = 0L;
                     disarm();
                     break;
                 default:
@@ -181,6 +198,7 @@ final class VecMap implements ScreenView.VecHost {
                     map = m;
                     try {
                         m.getUiSettings().setRotateGesturesEnabled(false);
+                        m.getUiSettings().setDoubleTapGesturesEnabled(false);                    // s453: 두 번 탭은 마커 위치로 돌아오기(Box 가 받는다)
                         m.getUiSettings().setTiltGesturesEnabled(false);
                         m.getUiSettings().setCompassEnabled(false);
                         m.getUiSettings().setLogoEnabled(false);

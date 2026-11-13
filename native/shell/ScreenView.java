@@ -2002,7 +2002,7 @@ public class ScreenView extends View {
         int pw = Math.round(it.w * dpr), ph = Math.round(it.h * dpr);
         if (pw <= 0 || ph <= 0) return;
         if (tiles == null) { tiles = TileLoader.get(getContext()); tiles.watch(tileTick); }
-        if (it.on) { tmHoldCur = it.hold == null ? "" : it.hold; tmHoldMsCur = it.hms > 0 ? it.hms : 2000; }          // s451: 꾹 누르기(hold) — 벡터 지도가 손가락을 직접 받을 때 쓴다
+        if (it.on) { tmHoldCur = it.hold == null ? "" : it.hold; tmHoldMsCur = it.hms > 0 ? it.hms : 2000; tmLpCur = it.lp == null ? "" : it.lp; }          // s453: 3초 꾹 누르기(lp)도 벡터 지도가 받는다          // s451: 꾹 누르기(hold) — 벡터 지도가 손가락을 직접 받을 때 쓴다
         boolean tmChanged = !it.value.equals(tmValue) || !it.path.equals(tmPathStr) || pw != tmW || ph != tmH;
         if (tmChanged && it.on && it.lp.length() > 0 && tmFol && tmView != null && pw == tmW && ph == tmH && !tmPins.isEmpty() && tmPlacesSame(tmPins, TileMapCore.parsePins(it.value))) {
             tmFollowUpdate(it);                                                         // 가족구성원이 움직였을 뿐(장소는 그대로): 줌 · 손으로 옮긴 자리를 지키며 점만 보낸다 — 따라가기가 켜지고 꺼질 때 지도가 튀지 않는다
@@ -2135,6 +2135,7 @@ public class ScreenView extends View {
     boolean vecAnim() { for (TileMapCore.Pin pn : tmPins) if ("m".equals(pn.k)) return true; return false; }
     void vecDraw(Canvas cv) {
         if (tmView == null || tmPins.isEmpty()) return;
+        if (tmPath.length >= 4) TileMapArt.drawTrail(cv, tmView, tmPath, dpr);                // s453: 이동경로 흔적 줄 — 벡터 지도에서도 그린다(핀 아래)
         TileMapArt.drawPins(cv, tmView, tmPins, dpr, tmFocus, tmLabel, SystemClock.uptimeMillis());
         drawTmapChrome(cv, tmHint);
         TileMapArt.drawAttribution(cv, tmW, tmH, dpr, "\u00A9 OpenFreeMap \u00A9 OpenStreetMap");
@@ -2178,9 +2179,21 @@ public class ScreenView extends View {
         listener.onAction(a);
     }
     /** 벡터 지도(MapLibre)가 손가락을 직접 받을 때: 지금 지도가 꾹 누르기(hold)를 원하나 · 몇 ms. 0 이면 원하지 않는다. */
-    private String tmHoldCur = ""; private int tmHoldMsCur;
-    int vecHoldMs() { return tmView != null && tmHoldCur.length() > 0 ? tmHoldMsCur : 0; }
-    void vecHold(double la, double lo) { tmHold = tmHoldCur; sendHold(la, lo); }
+    private String tmHoldCur = "", tmLpCur = ""; private int tmHoldMsCur;
+    int vecHoldMs() { return tmView == null ? 0 : tmLpCur.length() > 0 ? (int) TM_LP_MS : tmHoldCur.length() > 0 ? tmHoldMsCur : 0; }
+    void vecHold(double la, double lo) {
+        if (tmLpCur.length() > 0) {                                                       // s453: lp(3초 꾹 누르기 — 장소 등록): 타일 지도와 같이 진동 + "위도,경도" 를 행동에 붙여 보낸다
+            if (listener == null || !(Math.abs(la) <= 85.0) || !(Math.abs(lo) <= 180.0)) return;
+            buzz();
+            ScreenCore.Act a = new ScreenCore.Act(); a.a = "call"; a.v = tmLpCur; a.t = String.format(java.util.Locale.US, "%.6f,%.6f", la, lo);
+            listener.onAction(a);
+            return;
+        }
+        tmHold = tmHoldCur; sendHold(la, lo);
+    }
+    /** s453(YJ: 지도 두 번 탭하면 마커 위치로): 벡터 지도가 두 번 탭을 받는 곳(lp 가 있는 가족 지도)인가. */
+    boolean vecDoubleTapOn() { return tmView != null && tmLpCur.length() > 0; }
+    void vecHome() { tmHome(); }
     private boolean tmMoved, tmScaling; private float tmDX, tmDY, tmLX, tmLY; private long tmDT;
     private final android.view.ScaleGestureDetector tmSg = new android.view.ScaleGestureDetector(getContext(), new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
         @Override public boolean onScale(android.view.ScaleGestureDetector d) {
@@ -2240,6 +2253,7 @@ public class ScreenView extends View {
         for (int i = 0; i < tmPins.size(); i++) if ("m".equals(tmPins.get(i).k)) { at = i; break; }
         TileMapCore.Pin pn = tmPins.get(at);
         tmFocus = at; tmFocApplied = at; tmLabel = false;
+        tmFolPauseUntil = SystemClock.uptimeMillis() + 1500L;                      // s453: 옮기는 동안 따라가기 · 손으로 옮김 판정이 끼어들지 않게(끝나면 점 위라 따라가기가 이어진다)
         tmGoTo(pn.la, pn.lo, Math.max(tmView.zoom, 15.0));
         try { performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); } catch (Throwable ignored) { }
         invalidate();
