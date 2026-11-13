@@ -1049,11 +1049,12 @@ final class RideStandbyJ {
         return arr.length() > 0 ? c + " · " + arr + " 도착" : c;
     }
     private static String jsTrim(String s) { int a = 0, b = s.length(); while (a < b && Character.isWhitespace(s.charAt(a))) a++; while (b > a && Character.isWhitespace(s.charAt(b - 1))) b--; return s.substring(a, b); }
-    /** 환승 칸: 다음 구간 탑승 노드(bi) 앞의 환승 걷기 칸(노드가 아닌 칸) — 없으면 탑승 노드 바로 앞 칸. 현위치 칸(cur) 뒤가 아니면 -1. (JS rsXferCell) */
-    static int xferCell(List<Object> map, int cur, int bi) {
+    /** 환승 칸: 다음 구간 탑승 노드(bi) 앞의 환승 걷기 칸(노드가 아닌 칸) — 없으면 탑승 노드 바로 앞 칸. 현위치 칸(cur) 뒤가 아니면 -1. (JS rsXferCell). atBoard(시트 board 단계)면 승차역 칸 자체 */
+    static int xferCell(List<Object> map, int cur, int bi, boolean atBoard) {
         int bj = -1, j;
         for (j = 0; j < map.size(); j++) { Object mo = map.get(j); if (mo != null && num(mo) == bi) { bj = j; break; } }
         if (bj <= cur) return -1;
+        if (atBoard) return bj;      // s452: 승차 시트가 뜬 동안은 승차역 칸 자체
         for (j = bj - 1; j > cur; j--) { Object mo = map.get(j); if (!(mo != null && num(mo) >= 0)) return j; }
         return (bj - 1 > cur) ? bj - 1 : -1;
     }
@@ -1119,7 +1120,7 @@ final class RideStandbyJ {
         Map<String, Object> rs = arrived ? obj("st", "board", "end", Boolean.TRUE, "bt", "안내 종료", "k", "목적지에 도착했어요", "ch", "도착", "nm", destName == null ? "" : destName, "bar", -1, "cbg", "", "cfg", "#0a84ff") : rsState(st, r, now);
         boolean xf = false; int cur0 = cur;
         if (!arrived && st.get("wait") == null && truthy(st.get("xw")) && rs != null && ("board".equals(rs.get("st")) || "wait".equals(rs.get("st")))) {
-            int xj = xferCell(map, cur, (int) num(mm(st.get("xw")).get("i")));
+            int xj = xferCell(map, cur, (int) num(mm(st.get("xw")).get("i")), "board".equals(rs.get("st")));      // s452: 승차 시트(2분 전~)가 뜨면 승차역 칸
             if (xj > cur) { cur = xj; xf = true; }
         }
         if (xf) moving = false;
