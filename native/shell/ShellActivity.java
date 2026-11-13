@@ -3030,6 +3030,11 @@ public class ShellActivity extends Activity {
         rekeyMapBody();
         if (deferNeed && txt.length() == 0) return;
         if (txt.length() == 0 && busRefreshing) { busFail(); return; }                    // 8초 갱신이 실패 — 화면은 그대로 두고(1초 카운트다운 계속) 다음 박자에 다시
+        if (txt.length() == 0 && !busRefreshing && "bus".equals(map.mode()) && map.stopCount() == 0 && busShowing() && busRetryN < 3) {      // s454 (YJ: 정류장이 안 나오는 때가 있다): 정류장 목록을 못 받아 빈 화면이 되기 전에 1.5 · 3 · 4.5초 뒤 처음부터 다시 받는다(세 번까지)
+            busRetryN++; final long w2 = 1500L * busRetryN;
+            main.postDelayed(new Runnable() { @Override public void run() { if (my == seqMapB && busShowing() && !busRefreshing) loadMapBodyRound(v, keep, 0); } }, w2);
+            return;
+        }
         if (txt.length() > 0) map.onScreen(txt);
         if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
         final boolean shownNow = round >= MapCore.BUS_ROUNDS || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다)
@@ -3055,7 +3060,7 @@ public class ShellActivity extends Activity {
         if (sig.equals(brPfSig) && now - brPfAt < 600000L) return;
         brPfSig = sig; brPfAt = now;
         final List<MapCore> jobs = new ArrayList<MapCore>();
-        for (int ri = 0, n = Math.min(4, src.routeCount(0)); ri < n; ri++) {
+        for (int ri = 0, n = Math.min(6, src.routeCount(0)); ri < n; ri++) {
             MapCore m = src.routeClone(0, ri);
             if (m != null && brCacheGet(m.brRid) == null) jobs.add(m);
         }
@@ -3358,7 +3363,24 @@ public class ShellActivity extends Activity {
         syncMapView();
         return true;
     }
-    private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, BUS_POLL_MS); } }
+    private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, BUS_POLL_MS); } startBusArrTick(); }
+    // s454 (YJ: 1분 남았다고 나오는데 버스는 이미 지나갔다): 도착정보를 위치가 바뀔 때·10분마다만 받아 오래된 숫자가 그대로 줄어들었다.
+    //   이제 가장 빨리 오는 차가 가까울수록 자주 다시 받는다(2분 안 20초 · 5분 안 60초 · 그 밖 3분). 서버 캐시(15~20초)가 공공 API 를 지켜 준다.
+    static final long BUS_ARR_NEAR_MS = 20000L, BUS_ARR_MID_MS = 60000L, BUS_ARR_FAR_MS = 180000L, BUS_ARR_BEAT_MS = 10000L;
+    static long busArrGap(float remSec) { return remSec <= 120f ? BUS_ARR_NEAR_MS : remSec <= 300f ? BUS_ARR_MID_MS : BUS_ARR_FAR_MS; }
+    private boolean busArrTicking;
+    private final Runnable busArrTick = new Runnable() { @Override public void run() {
+        busArrTicking = false;
+        if (!busShowing()) return;
+        busArrCheck(); startBusArrTick();
+    } };
+    private void startBusArrTick() { if (!busArrTicking) { busArrTicking = true; main.postDelayed(busArrTick, BUS_ARR_BEAT_MS); } }
+    private void busArrCheck() {
+        if (!busShowing() || home.riding() || busRefreshing) return;
+        float r = body.minArrRemainSec();
+        if (r == Float.MAX_VALUE) return;                                                  // 도착 숫자가 없으면 비어 있는 곳 재시도(busEmptyCheck)가 맡는다
+        if (System.currentTimeMillis() - busAt >= busArrGap(r)) busRefresh();
+    }
     private void reloadMap(boolean headToo) {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
@@ -3895,7 +3917,7 @@ public class ShellActivity extends Activity {
         String idx = store.get("brc_idx", "");
         java.util.List<String> ids = new ArrayList<String>(java.util.Arrays.asList(idx.length() == 0 ? new String[0] : idx.split(",")));
         ids.remove(rid); ids.add(rid);
-        while (ids.size() > 8) store.put("brc_" + ids.remove(0), "");                    // 최근 8개 노선만
+        while (ids.size() > 12) store.put("brc_" + ids.remove(0), "");                   // 최근 12개 노선만(s454: 미리 받기 6개 × 정류장 둘)
         store.put(key, val); store.put("brc_idx", android.text.TextUtils.join(",", ids));
     }
     private void openBusRoute() {
@@ -3977,13 +3999,13 @@ public class ShellActivity extends Activity {
             @Override public void run() {
                 String u = MapCore.busFetchUrl(url), body = "";
                 boolean pos = k.endsWith("p");
-                for (int a = 0; a < (pos ? 5 : 2) && u.length() > 0 && body.length() == 0; a++) {        // 웹처럼: 위치는 실패하면 0.8초 뒤 다시(최대 4번 더) · 목록은 빨리 실패했을 때만 한 번 더
-                    if (a > 0) { try { Thread.sleep(pos ? 800 : 300); } catch (InterruptedException e) { break; } }
+                for (int a = 0; a < (pos ? 5 : 4) && u.length() > 0 && body.length() == 0; a++) {        // 웹처럼: 위치는 실패하면 0.8초 뒤 다시(최대 4번 더) · s454 (YJ: 노선 정류장 'API 응답 없음' 이 뜬 뒤 한참 만에 나온다): 목록도 0.5 · 1 · 1.5초 뒤 세 번 더 — 빈 응답 하나로 실패 화면을 내지 않는다
+                    if (a > 0) { try { Thread.sleep(pos ? 800 : 500L * a); } catch (InterruptedException e) { break; } }
                     if (gen != brGen) return;                                                  // 화면을 벗어났다 — 더 받지 않는다
                     long t0 = System.currentTimeMillis();
-                    NetPost.Res r = MapCore.busGet(k, url, pos ? 6000 : 9000, 4000);
+                    NetPost.Res r = MapCore.busGet(k, url, pos ? 6000 : (a == 0 ? 9000 : 6000), 4000);
                     body = r.status == 200 && r.body != null ? r.body : "";
-                    if (body.length() == 0 && !pos && System.currentTimeMillis() - t0 > 3000L) break;      // 느리게 실패했으면 또 기다리지 않는다
+                    if (body.length() == 0 && !pos && System.currentTimeMillis() - t0 > 7000L) break;      // 아주 느리게 실패했으면 또 기다리지 않는다
                 }
                 final String got = body;
                 main.post(new Runnable() { @Override public void run() {

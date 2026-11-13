@@ -327,6 +327,19 @@ public final class MapCore {
     public static boolean hasArr(String b) {
         return b != null && b.length() > 20 && (b.contains("arrtime") || b.contains("arrTime") || b.contains("traTime") || b.contains("arrmsg") || b.contains("predictTime"));
     }
+    private static final java.util.regex.Pattern ARR_SEC = java.util.regex.Pattern.compile("\"(?:arrtime|arrTime|traTime\\d?)\"\\s*:\\s*\"?(\\d{1,5})");
+    /** 도착정보 본문에서 가장 빨리 오는 차의 남은 초(없거나 읽지 못하면 -1). */
+    public static int minArrSec(String b) {
+        if (b == null) return -1;
+        java.util.regex.Matcher m = ARR_SEC.matcher(b); int best = -1;
+        while (m.find()) { int v = Integer.parseInt(m.group(1)); if (best < 0 || v < best) best = v; }
+        return best;
+    }
+    /** s454 (YJ: 1분 남았다는데 버스는 이미 지나갔다): 새 응답이 비었을 때 보던 값을 두는 것은 잠깐의 빈 응답을 위한 것이다 — 그 값에서 가장 빨리 오던 차가 이미 30초 안(또는 지나감)이면 두지 않는다. */
+    static boolean keepOldOk(String old, long ageMs) {
+        int s = minArrSec(old);
+        return s < 0 || s - ageMs / 1000L > 30L;
+    }
     public void addBusRes(String k, String body) {
         if (k != null && body != null && body.length() > 0 && k.matches("tp|gg|tn|d1")) stopsT = 0;      // 서버가 새 정류장 목록을 줬다 — 빌려 온 시각은 버린다
         boolean arr = k != null && k.matches(ARR_KEY);
@@ -335,7 +348,7 @@ public final class MapCore {
             if (hasArr(body)) arrKeyAt.put(k, now);
             else {
                 Long at = arrKeyAt.get(k); String old = arrStash.get(k);
-                if (old != null && at != null && now - at < KEEP_OLD_MS && hasArr(old)) { busRes.put(k, old); return; }
+                if (old != null && at != null && now - at < KEEP_OLD_MS && hasArr(old) && keepOldOk(old, now - at)) { busRes.put(k, old); return; }
                 if (body == null || body.length() == 0) { busRes.remove(k); return; }      // 못 받은 정류장(빈 본문 = 통신 실패)은 '없음'이 아니라 아직 못 받은 것으로 둔다 — 엔진이 '불러오는 중'으로 그리고 곧 다시 받는다(받았는데 버스가 없으면 본문은 비어 있지 않다)
             }
             arrAt = now;

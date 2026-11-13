@@ -1594,6 +1594,20 @@ public class ScreenView extends View {
         double[] st = key == null ? null : cdState.get(key);
         return st == null ? sec0 : st[0] - (now - (long) st[1]) / 1000.0;
     }
+    /** 지금 화면에 올라온 도착정보 가운데 가장 빨리 오는 차의 남은 초(0 이하면 이미 '곧 도착' 이거나 지나간 차). 도착 숫자가 없으면 Float.MAX_VALUE — 앱이 다시 받는 박자를 정한다. */
+    public float minArrRemainSec() {
+        if (lay == null) return Float.MAX_VALUE;
+        long now = SystemClock.uptimeMillis(); float best = Float.MAX_VALUE;
+        for (ScreenCore.Item it : lay.body) {
+            if (it.kind != ScreenCore.K_BCARD || it.bs.length == 0) continue;
+            for (int k = 0; k < it.bs.length; k++) {
+                if (it.bs[k] <= 0f) continue;
+                float r = (float) cdRem(it.ck[k], it.bs[k], now);
+                if (r < best) best = r;
+            }
+        }
+        return best;
+    }
     private void markBcards() {
         if (lay == null) return;
         long now = SystemClock.uptimeMillis();
