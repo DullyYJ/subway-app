@@ -220,7 +220,7 @@ function findAndroidJar() {
     assert.ok(/poll && got\.length\(\) == 0\) \{ if \(brFlight\.isEmpty\(\)\) brBusy = false; return; \}/.test(br) && /txt\.length\(\) == 0\) \{\s*if \(my == brReq/.test(br), '갱신 실패는 버리고 보던 화면을 둔다');
     assert.ok(/for \(String\[\] nd : need\) if \(brFlight\.add\(nd\[0\]\)\) brFetchOne\(/.test(br) && /brFlight\.remove\(k\);[\s\S]*?brRound\(gen, poll\)/.test(br), '주소마다 따로 받아 오는 대로 바로 다시 그린다(목록이 위치를 기다리지 않는다)');
     assert.ok(/brPrefetch\(\)/.test(v) && /routeClone\(0, ri\)/.test(v) && /nd\[0\]\.endsWith\("s"\)/.test(v), '도착정보가 뜬 가까운 정류장의 앞 노선은 목록을 미리 받아 둔다(위치는 열 때 새로)');
-    assert.ok(/a < \(pos \? 5 : 2\)/.test(br) && /Thread\.sleep\(pos \? 800 : 300\)/.test(br), '위치는 실패하면 0.8초 뒤 다시(최대 4번 더)');
+    assert.ok(/a < \(pos \? 5 : 4\)/.test(br) && /Thread\.sleep\(pos \? 800 : 500L \* a\)/.test(br), '위치는 실패하면 0.8초 뒤 다시(최대 4번 더) · s454: 목록도 세 번 더');
     assert.ok(/home\.pickRestore\(map\.pkName\)/.test(br) && /home\.setBusStop\(HomeCore\.START/.test(br) && /home\.setBusStop\(HomeCore\.DEST/.test(br) && /goRoute\(\)/.test(br), '출발지/도착지 고르기 · 나가면 되돌림 · 도착지가 정해지면 경로');
     assert.ok(/dirtyOnly\(partialFrom\)/.test(sv) && /invalidate\(0, Math\.round/.test(sv) && /postInvalidateDelayed\(66L, Math\.round\(brxPing/.test(sv), '바뀐 줄 자리만 invalidate · 마커 맥박도 그 자리만');
     assert.ok(/K_BRX/.test(sc) && /it\.sig = /.test(sc), '줄 지문');
@@ -1265,6 +1265,18 @@ function findAndroidJar() {
     const m = gr.match(/com\.android\.billingclient:billing:(\d+)\./);
     assert.ok(m && +m[1] >= 8, 'Play Billing 8 이상(2026-08-31부터 필수)');
     assert.ok(!/launchBillingFlow[\s\S]*Random/.test(bg), '무작위 없음');
+  });
+  await t('s454: 버스 도착정보 — 가까운 차가 있으면 20초(2분 안)·60초(5분 안)·3분마다 다시 받고 · 지나갔을 빈 응답엔 보던 값을 붙들지 않고 · 정류장·노선 목록은 재시도를 늘렸다', () => {
+    const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8'), sv = fs.readFileSync(N('ScreenView.java'), 'utf8');
+    assert.ok(/BUS_ARR_NEAR_MS = 20000L, BUS_ARR_MID_MS = 60000L, BUS_ARR_FAR_MS = 180000L, BUS_ARR_BEAT_MS = 10000L/.test(a) && /remSec <= 120f \? BUS_ARR_NEAR_MS : remSec <= 300f \? BUS_ARR_MID_MS : BUS_ARR_FAR_MS/.test(a), '2분 안 20초 · 5분 안 60초 · 그 밖 3분');
+    const ac = a.slice(a.indexOf('private void busArrCheck()'), a.indexOf('private void reloadMap('));
+    assert.ok(/!busShowing\(\) \|\| home\.riding\(\) \|\| busRefreshing\) return;/.test(ac) && /body\.minArrRemainSec\(\)/.test(ac) && /busAt >= busArrGap\(r\)\) busRefresh\(\)/.test(ac), '보일 때만 · 탑승 중 · 받는 중엔 안 함 · 간격이 지나면 busRefresh');
+    assert.ok(/startBusArrTick\(\); \}\n/.test(a) && /public float minArrRemainSec\(\)/.test(sv), '10초 박자는 busTick 과 함께 시작 · 화면의 가장 빠른 남은 초는 ScreenView 가 안다');
+    assert.ok(/static boolean keepOldOk\(String old, long ageMs\)/.test(mc) && /hasArr\(old\) && keepOldOk\(old, now - at\)/.test(mc), '보던 값은 가장 빠른 차가 30초 안이면 두지 않는다');
+    assert.ok(/busRetryN < 3\) \{ \/\/|map\.stopCount\(\) == 0 && busShowing\(\) && busRetryN < 3/.test(a), '정류장 목록을 못 받으면 1.5 · 3 · 4.5초 뒤 처음부터');
+    assert.ok(/Math\.min\(6, src\.routeCount\(0\)\)/.test(a) && /ids\.size\(\) > 12/.test(a), '노선 목록 미리 받기 6개 · 기기에 12개');
+    const bj = fs.readFileSync(path.join(__dirname, '../workers/src/bus.js'), 'utf8');
+    assert.ok(/getStationByUid\/i\.test\(p\)\) return 15;/.test(bj) && /busarrivalservice\/i\.test\(p\)\) return 10;/.test(bj), '서버 캐시 서울 15초 · TAGO 10초');
   });
   await t('s453: 가족 지도(벡터) — 3초 꾹 누르기(lp)로 장소 등록 · 두 번 탭은 마커 위치로(지도 두 번 탭 확대는 끔) · 이동경로 흔적 줄', async () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), vm = fs.readFileSync(N('VecMap.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');
