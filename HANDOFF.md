@@ -4048,3 +4048,12 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 앱: ShellActivity 10초 박자 busArrTick, busArrCheck: 화면의 가장 빠른 도착 남은 초(ScreenView.minArrRemainSec)가 2분 안이면 20초, 5분 안이면 60초, 그 밖 3분마다 busRefresh (탑승 중, 받는 중, 화면 밖은 안 함). MapCore.keepOldOk: 빈 응답이 올 때 보던 값에서 가장 빠른 차가 30초 안이면 붙들지 않는다 (minArrSec 로 arrtime 읽음, 못 읽으면 예전처럼 45초). brFetchOne 목록 4번 시도 (0.5, 1, 1.5초 간격), 노선 미리 받기 4개를 6개로, 기기 보관 8개를 12개로. 정류장 요청이 통째로 실패하고 정류장이 하나도 없으면 1.5, 3, 4.5초 뒤 처음부터 다시 (mapBodyApply).
 - 서버 workers/src/bus.js (+ workers/guarded/bus.js 재생성): 캐시 TTL 서울 도착 20초를 15초로, TAGO/경기 15초를 10초로 (서울 API 는 하루 1만 건이라 조금만 줄임). 반영은 gildongmu-bus 워커 재배포(붙여넣기) 필요. 앱만으로도 20초 재조회는 동작.
 - 시험: shell_native s454 항목, ShellJvmTest (minArrSec, keepOldOk, 곧 오던 차 빈 응답), 전체 134 통과.
+
+## 2026-11-16 s455 - 버스 탭: 경로 확정 뒤 기다리는 동안 남은 시간만 줄고 '몇 번째 전'은 굳는 문제
+- 증상(YJ 실기기, 검단모아미래도엘리트에서 991 · 9903 대기): 남은 시간은 줄어 '곧 도착'인데 '3번째전'은 그대로. 같은 화면의 다른 노선도 전부 굳어 있었다(77 '2분 56초 · 12번째전'). 노선 상세는 '2정거장 전 · 약 3분'으로 맞았다. 화면 아래 '대기 991번' 알약 = 경로를 확정하고 승차 대기 중.
+- 원인: 버스 탭이 새로 받는 세 길(busArrCheck 20초/60초/3분 · busLocCheck 10분 · busLocFollow 위치 따라가기)이 모두 `home.riding()` 으로 막혀 있었다. `riding()` 은 경로를 확정한 순간부터 참이라, 정류장에서 기다리는 동안(엔진 state.wait · xw)에도 도착정보를 한 번도 다시 받지 않고 기기에서 숫자만 줄었다(s454 의 20초 갱신도 이 경우엔 돌지 않았다).
+- 앱(이것만 바뀜): `ShellCore.rideWaiting(lv)` — 탑승 서비스의 내 위치 글(lv)에 `"wait":{"i":…}` 칸(RideCore.waitJson 이 state.wait · xw 로 만든다)이 있으면 대기 중. `ShellActivity.rideAboard()` = `home.riding() && !rideWaiting(서비스가 돌면 RideService.liveLv, 아니면 home.lvJson)`. 버스 탭 네 곳(busLocFollow · busLocCheck 둘 · busArrCheck)을 `rideAboard()` 로 바꿨다 — 대기 중에는 평소처럼 받고, 타고 가는 중에만 멈춘다.
+- 규칙 확인: s149 '탑승 확정 뒤 서버 요청 0' 은 그대로다(타고 가는 중에는 버스 탭도 받지 않는다). 대기 중에는 탑승 엔진도 실시간 다음 차를 묻는다(/board-live) — 같은 기준.
+- 남은 것(YJ 결정 필요): 타고 가는 중에 버스 탭을 열면 여전히 숫자만 줄고 '몇 번째 전'은 굳는다(서버 요청 0 규칙 때문). 환승할 버스를 미리 보는 경우를 위해 버스 탭을 보는 동안만 풀지, 굳은 숫자임을 화면에 표시할지 정해야 한다.
+- 시험: shell_native s455 항목(+ s176 · s179 · s454 의 `home.riding()` 확인 줄을 `rideAboard()` 로), ShellJvmTest(rideWaiting — 승차 대기 · 환승 대기의 실제 lv 글, 대기 끝난 글, 빈 글). shell_native 135 통과, CI 묶음 45개 파일 전부 통과(로컬). 안드로이드 계층 컴파일은 CI.
+- 배포: 앱 새 빌드만(엔진 · 워커 변경 없음).

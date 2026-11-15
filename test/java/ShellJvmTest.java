@@ -946,6 +946,12 @@ public class ShellJvmTest {
             bm.addBusRes("a0", empty); bm.addBusRes("a1", fresh);
             ok(good.equals(bm.busRes.get("a0")) && fresh.equals(bm.busRes.get("a1")), "도착정보: 빈 응답은 보던 줄을 지키고 새 값은 바꾼다");
             ok(MapCore.hasArr(good) && !MapCore.hasArr(empty) && !MapCore.hasArr(null), "도착정보 판별");
+            {   // s455: 승차 대기 · 환승 대기(lv 의 wait 칸)에는 버스 탭 도착정보를 계속 새로 받는다 — 타고 가는 중(칸 없음)에만 멈춘다
+                ok(ShellCore.rideWaiting("{\"cur\":2,\"pos\":[2,0],\"arr\":[0,1,2],\"wait\":{\"i\":2,\"lat\":37.59,\"lng\":126.67}}") && ShellCore.rideWaiting("{\"cur\":4,\"pos\":[4,0],\"arr\":[],\"wait\":{\"i\":4}}"), "s455: wait 칸이 있으면 대기 중");
+                ok(!ShellCore.rideWaiting("{\"cur\":3,\"pos\":[3,0.4],\"arr\":[0,1,2,3]}") && !ShellCore.rideWaiting("") && !ShellCore.rideWaiting(null) && !ShellCore.rideWaiting("{\"cur\":3,\"dt\":{\"n\":\"wait\",\"d\":120}}"), "s455: 칸이 없으면(타고 가는 중 · 글 없음) 대기 아님");
+                RideCore rc455 = new RideCore();
+                ok(!ShellCore.rideWaiting(rc455.lvJson()), "s455: 처음 상태(대기 번호 없음)는 대기 아님");
+            }
             {   // s454: 가장 빨리 오던 차가 30초 안이면(지나갔을 수 있다) 빈 응답에 보던 값을 붙들지 않는다 — 멀리 있던 차는 그대로 둔다
                 String soon = "{\"response\":{\"body\":{\"items\":{\"item\":[{\"routeno\":\"991\",\"arrtime\":20,\"arrprevstationcnt\":1}]}}}}";
                 ok(MapCore.minArrSec(good) == 589 && MapCore.minArrSec(soon) == 20 && MapCore.minArrSec(empty) == -1 && MapCore.minArrSec(null) == -1, "s454: 본문에서 가장 빠른 남은 초");
@@ -1345,8 +1351,10 @@ public class ShellJvmTest {
                     wr.addFix(1000L, 37.5000, 127.0000, 10.0);
                     wr.onStep("{\"state\":{\"wait\":{\"i\":2,\"lat\":37.5009,\"lng\":127.0}},\"nextMs\":5000}");
                     ok(wr.lvJson().contains("\"wait\":{\"i\":2,\"lat\":37.5009,\"lng\":127.0,\"me\":[37.5,127.0]}"), "승차 대기 중이면 내 위치 JSON 에 대기 노드 · 탑승 지점 · 내 위치 좌표(거리는 엔진이 잰다, s271)");
+                    ok(ShellCore.rideWaiting(wr.lvJson()), "s455: 승차 대기 중의 실제 lv 글은 대기로 읽힌다(버스 탭 도착정보를 계속 받는다)");
                     wr.onStep("{\"state\":{},\"nextMs\":5000}");
                     ok(!wr.lvJson().contains("wait"), "대기가 끝나면 wait 가 빠진다");
+                    ok(!ShellCore.rideWaiting(wr.lvJson()), "s455: 타고 나면(대기 끝) 대기가 아니다 — 버스 탭 갱신을 멈춘다");
                     RideCore wn = new RideCore();
                     wn.onStep("{\"state\":{\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}},\"nextMs\":5000}");
                     ok(wn.lvJson().contains("\"wait\":{\"i\":3,\"lat\":37.5,\"lng\":127.0}") && !wn.lvJson().contains("\"me\""), "내 위치를 아직 모르면 me 없이 대기만");
@@ -1354,8 +1362,10 @@ public class ShellJvmTest {
                         RideCore xr = new RideCore();
                         xr.onStep("{\"state\":{\"xw\":{\"i\":4,\"k\":\"x\"}},\"nextMs\":5000}");
                         ok(xr.lvJson().contains("\"wait\":{\"i\":4}"), "환승 대기 중(state.xw)이면 마커를 탑승 노드(대기 쪽)에 세운다(s320)");
+                        ok(ShellCore.rideWaiting(xr.lvJson()), "s455: 환승 대기 중도 대기로 읽힌다");
                         xr.onStep("{\"state\":{},\"nextMs\":5000}");
                         ok(!xr.lvJson().contains("wait"), "환승 대기가 끝나면 wait 가 빠진다");
+                        ok(!ShellCore.rideWaiting(xr.lvJson()), "s455: 환승 대기가 끝나면 대기가 아니다");
                     }
                     {
                         String nodesJ = "[{\"name\":\"A\",\"isOrigin\":true},{\"name\":\"S1\",\"isSub\":true,\"lineName\":\"1\"},{\"name\":\"B1\",\"isBus\":true,\"lineName\":\"931\"},{\"name\":\"B2\",\"isBus\":true,\"lineName\":\"931\"},{\"name\":\"B3\",\"isBus\":true,\"lineName\":\"931\"}]";

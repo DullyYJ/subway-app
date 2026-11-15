@@ -37,6 +37,9 @@ public final class ShellCore {
     public static final String DEFAULT_TAB = "home";
     public static final String K_TAB = "tab";
 
+    /** s455: 승차 대기 · 환승 대기 중인가 — 탑승 서비스의 내 위치 글(lv, RideCore.lvJson)에 엔진 state.wait · xw 가 만든 "wait" 칸이 있다. 아직 타기 전이라 버스 탭 도착정보를 계속 새로 받는다
+     *  (탑승 뒤 서버 요청 0 은 타고 가는 동안의 규칙). 글이 없거나 칸이 없으면 false. */
+    public static boolean rideWaiting(String lv) { return lv != null && lv.indexOf("\"wait\":{\"i\":") >= 0; }
     public static boolean isTab(String id) { for (String t : TABS) if (t.equals(id)) return true; return false; }
     public static String currentTab(Store st) { String t = st.get(K_TAB, DEFAULT_TAB); return isTab(t) ? t : DEFAULT_TAB; }
 

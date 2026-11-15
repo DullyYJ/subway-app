@@ -2821,9 +2821,9 @@ public class ShellActivity extends Activity {
             reloadFood();
         }
     }
-    /** 버스 탭이 새 위치를 따라간다: 55m 안이면 그대로 · 버스 탭이 아니면 조용히 위치만 바꿔(다음에 열면 그 동네 화면이 바로) · 보는 중이면 165m 넘게는 곧바로 그 동네 화면(캐시 → 뼈대 → 새로 받기), 그 안쪽은 보던 화면을 두고 뒤에서 바꿔 끼운다. 탑승 중엔 하지 않는다. */
+    /** 버스 탭이 새 위치를 따라간다: 55m 안이면 그대로 · 버스 탭이 아니면 조용히 위치만 바꿔(다음에 열면 그 동네 화면이 바로) · 보는 중이면 165m 넘게는 곧바로 그 동네 화면(캐시 → 뼈대 → 새로 받기), 그 안쪽은 보던 화면을 두고 뒤에서 바꿔 끼운다. 타고 가는 중엔 하지 않는다(승차 대기 중에는 한다 — s455 rideAboard). */
     private void busLocFollow(double la, double lo) {
-        if (!"bus".equals(map.mode()) || home.riding()) return;
+        if (!"bus".equals(map.mode()) || rideAboard()) return;
         if (!farLL(map.busLL, la, lo, BUS_MOVE_DEG)) return;
         boolean onBus = resumed && "map".equals(ShellCore.currentTab(store)) && ShellCore.S_MAPB.equals(slots.length > 1 ? slots[1] : "");
         if (!onBus) { if (MapCore.VW_NEAR.equals(map.busView()) || map.busLL == null) map.setBusLoc(la, lo); return; }
@@ -3333,15 +3333,15 @@ public class ShellActivity extends Activity {
         if (busRefreshing && System.currentTimeMillis() - busRefAt < 20000L) { startBusTick(); return; }
         busLocCheck(); startBusTick();
     } };
-    /** 위치 재확인(탑승 중이 아니면 30초마다): 위치가 그대로면 아무것도 받지 않는다(숫자는 기기에서 줄어들기만 한다). 55m 넘게 바뀌었으면 새 자리의 정류장 · 도착정보를 조용히 받아 바꿔 끼운다.
+    /** 위치 재확인(타고 가는 중이 아니면 30초마다 — 승차 대기 중에는 한다, s455): 위치가 그대로면 아무것도 받지 않는다(숫자는 기기에서 줄어들기만 한다). 55m 넘게 바뀌었으면 새 자리의 정류장 · 도착정보를 조용히 받아 바꿔 끼운다.
      *  받은 지 10분이 넘은 도착정보만은 위치가 같아도 새로 받는다(그 이상은 쓸 수 없는 숫자). */
     private void busLocCheck() {
-        if (!busShowing() || home.riding()) return;
+        if (!busShowing() || rideAboard()) return;
         if (System.currentTimeMillis() - busAt > ShellCore.BUS_FRESH_MS) { busRefresh(); return; }
         if (!hasLocPerm()) return;
         locateNow(8000L, 1000L, 0L, 120000L, new LocCb() {                    // 기기가 방금 알던 위치(0.1초)로 먼저 따라가고 곧 새 위치(1초)로 바로잡는다
             @Override public void fix(Location l) {
-                if (!busShowing() || home.riding()) return;
+                if (!busShowing() || rideAboard()) return;
                 if (farFrom(map.busLL, l, BUS_MOVE_DEG)) busMove(l.getLatitude(), l.getLongitude());
             }
             @Override public void fail(boolean noperm) { }
@@ -3375,8 +3375,12 @@ public class ShellActivity extends Activity {
         busArrCheck(); startBusArrTick();
     } };
     private void startBusArrTick() { if (!busArrTicking) { busArrTicking = true; main.postDelayed(busArrTick, BUS_ARR_BEAT_MS); } }
+    /** s455 (YJ: 버스를 기다리는데 남은 시간은 줄어드는데 '몇 번째 전'은 그대로다): 경로를 확정하고 정류장에서 기다리는 동안(승차 대기 · 환승 대기)에도 home.riding() 이 참이라
+     *  도착정보를 한 번도 다시 받지 않았다(10분 갱신까지 막혀 숫자만 기기에서 줄었다). 버스 탭 갱신은 '타고 가는 중'(탑승 확정 뒤 — 서버 요청 0, s149)에만 멈춘다.
+     *  대기 중에는 탑승 엔진도 실시간 다음 차를 묻는다(/board-live) — 같은 기준이다. */
+    private boolean rideAboard() { return home.riding() && !ShellCore.rideWaiting(RideService.running ? RideService.liveLv : home.lvJson); }
     private void busArrCheck() {
-        if (!busShowing() || home.riding() || busRefreshing) return;
+        if (!busShowing() || rideAboard() || busRefreshing) return;
         float r = body.minArrRemainSec();
         if (r == Float.MAX_VALUE) return;                                                  // 도착 숫자가 없으면 비어 있는 곳 재시도(busEmptyCheck)가 맡는다
         if (System.currentTimeMillis() - busAt >= busArrGap(r)) busRefresh();
