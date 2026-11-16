@@ -24009,6 +24009,13 @@ function mapSvOne(env, k, url, fresh) {                            // \u2192 Pro
   return ent.p;
 }
 var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: \uc815\ub958\uc7a5 \ubaa9\ub85d \ub2e8\uacc4\uc5d0\uc11c \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4
+var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: \uc815\ub958\uc7a5 \ub2e8\uacc4\uc5d0\uc11c \ubabb \uae30\ub2e4\ub9b0 D1(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c)\uc744 \ub3c4\ucc29\uc815\ubcf4 \ub2e8\uacc4\uc5d0\uc11c \ub418\ubc1b\uc744 \ub54c \ub354 \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \ub2e4 \uc628 \ub4a4\ubd80\ud130 \u00b7 \uc608\uc0b0 \uc548\uc5d0\uc11c
+async function mapSvArrWait(ps, need, done, budget) {
+  var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
+  var tW = Date.now();
+  await Promise.race([Promise.all(ps.filter(function (p, i) { return i !== dIx; })), new Promise(function (r) { setTimeout(r, budget); })]);
+  if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
+}
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // \uae30\uae30\uac00 \uc815\ud55c \uae30\ub2e4\ub9bc(\ucc98\uc74c \uadf8\ub9ac\uae30\ub294 \uc9e7\uac8c \u2014 \uc815\ub958\uc7a5\ubd80\ud130 \uba3c\uc800 \ubcf4\uc774\uace0 \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\uc5b4\uc11c \ucc44\uc6b4\ub2e4)          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
@@ -24018,12 +24025,16 @@ async function mapSvResolve(env, cap, body, out) {
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
     if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;                       // s199: \ub178\uc120 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d(\ubc29\uba74 \uc774\ub984\uc6a9 \u00b7 \ud070 \ubcf8\ubb38)\uc740 \uae30\uae30\uac00 \ucc9c\ucc9c\ud788 \ubc1b\ub294\ub2e4 \u2014 \uc11c\ubc84\uac00 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4
-    var arrWave = need.every(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });
+    if (typeof mapBusWantD1 === 'function' && mapBusWantD1(f)) {                                            // s459: \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uc544\uc9c1 \ubabb \ubc1b\uc740 \ucc44 TAGO \ub9cc\uc73c\ub85c \uadf8\ub838\ub2e4 \u2014 \uc774\ubc88 \ubc14\ud034\uc5d0 D1 \ub3c4 \uac19\uc774 \ubc1b\uc544 \ub454\ub2e4(\ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc5d0 \ub07c\uc6cc\uc11c \u00b7 \ub2e4\uc74c \uadf8\ub9ac\uae30\uc5d0 \uc5ed \ucd9c\uad6c\uac00 \ucc44\uc6cc\uc9c4\ub2e4). \uc608\uc804\uc5d4 \ud55c \ubc88 \ub193\uce58\uba74 \uadf8 \uc694\uccad\uc5d0\uc11c\ub294 \ub05d\uae4c\uc9c0 \uc548 \ubc1b\uc558\ub2e4
+      var cD = mapBusCenter(b);
+      if (isFinite(cD.la) && isFinite(cD.lo) && !need.some(function (n) { return String(n.k || '') === 'd1'; })) need = need.concat(mapBusNeedStops(cD.la, cD.lo).filter(function (n) { return n.k === 'd1'; }));
+    }
+    var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc5d0 D1 \ub418\ubc1b\uae30\uac00 \ub07c\uc5b4 \uc788\uc5b4\ub3c4 \ud568\uaed8 \ubc1b\ub294\ub2e4(D1 \ub9cc \ub0a8\uc740 \uac83\uc740 \uc815\ub958\uc7a5 \ubc14\ud034)
     var slot = new Array(need.length);
     var done = new Array(need.length);
     var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
-    if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
+    if (arrWave) await mapSvArrWait(ps, need, done, budget);
     else if (stopWave) {                                    // s177: \uc815\ub958\uc7a5 \ubaa9\ub85d \u2014 \uc6b0\uc120\uc21c\uc704 \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc8fc\uba74 \ub098\uba38\uc9c0(\ub290\ub9b0 TAGO)\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub118\uc5b4\uac04\ub2e4. \ubabb \uae30\ub2e4\ub9b0 \ucd9c\ucc98\ub294 \ube48 \uac12\uc73c\ub85c \ub454\ub2e4.
       var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO \uac00 \uba3c\uc800 \uc640\ub3c4 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub294 \uc774 \uc2dc\uac04\uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\uc5ed \ucd9c\uad6c\uac00 \ube60\uc9c0\uc9c0 \uc54a\uac8c) \u2014 \ub118\uc73c\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \uce58\uace0 \uadf8\ub9b0\ub2e4
       for (;;) {
@@ -24047,7 +24058,7 @@ async function mapSvResolve(env, cap, body, out) {
         if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else if (/^[af]/.test(k)) failA++;       // \uc774\uc6c3\u00b7\ubc14\uafbc ID\u00b7\uacbd\uc720\ub178\uc120(g\u00b7h\u00b7t\u00b7u)\uc740 \ub364 \u2014 \ubabb \ubc1b\uc544\ub3c4 \uc2e4\ud328\ub85c \uc138\uc9c0 \uc54a\ub294\ub2e4
         return;
       }
-      if (t) any = true;
+      if (t) any = true; if (k === 'd1' && !t) return;                           // s459: D1 \uc744 \ubabb \ubc1b\uc558\uc73c\uba74(\ud55c\ub3c4 \ub118\uae40\u00b7\uc2e4\ud328) \ube48 \uac12\uc73c\ub85c \uad73\ud788\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\ub3c4 \ube48 \uac12\uc744 \uc548 \ubc1b\uc73c\ub2c8 \ub2e4\uc74c \uc694\uccad\uc5d0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4(\uc608\uc804\uc5d4 res.d1='' \uac00 \uadf8 \uc790\ub9ac\uc5d0 \ub0a8\uc544 \uadf8 \ub4a4\ub85c\ub294 \uc601\uc601 \uc548 \ubc1b\uc558\ub2e4)
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;
