@@ -1059,7 +1059,6 @@ function mapBusBody(f, info) {
   var nxr = mapNxPass(stops, sr.map(function (r) { return r.rows; }), res, nx0, pool, miss.length === 0, mapFxOf(sr));
   if (nxr.nx) info.nx = nxr.nx;
   miss = miss.concat(nxr.ask);
-  if (mapBusWantD1(f)) miss = miss.concat(need0.filter(function (n) { return n.k === 'd1'; }));            // s459: 우리 정류장 표(D1)를 아직 못 받은 채 TAGO 만으로 그렸다 — D1 을 다시 받아 오라고 한다(같은 응답의 도착정보 바퀴, 안 되면 다음 갱신에 역 출구가 채워진다). 예전엔 한 번 놓치면 그 자리에서는 끝까지 안 받았다. 기기가 직접 받아 실패한 것(res.d1 = '')은 되묻지 않는다(8바퀴 헛돌지 않게)
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   if (mapBusNoKeep(f)) info.bus.nc = 1;                                                            // s458: 이 정류장 목록은 보관하지 말 것(우리 정류장 표를 못 받았다) — 앱은 따르기만 한다
