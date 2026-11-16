@@ -75,7 +75,7 @@ t('ShellActivity: 처음 켤 때만 오프닝을 띄우고 · 실패해도 앱�
   assert.ok(/OpenHost\.show\(this\)/.test(a) && /public static void show\(Activity a\)/.test(h), '길동무와 길동무 패밀리가 같은 OpenHost.show 한 갈래를 쓴다');
   assert.ok(/getAssets\(\)\.open\("open\.json"\)/.test(h) && /OpenCore\.slotFor\(/.test(h) && /OpenCore\.cast\(sc, sl, ids\)/.test(h) && /OpenCore\.pickIds\(/.test(h) && /K_LAST/.test(h) && /addContentView\(v,/.test(h), '대본을 읽어 칸을 고르고 · 친구 셋은 켤 때마다 무작위(방금 조합 기억)');
   assert.ok(/catch \(Throwable ignored\) \{ cur = null; \}/.test(h), '실패해도 앱은 연다');
-  assert.ok(/if \(OpenHost\.back\(\)\) return;/.test(a) && /public static boolean back\(\)/.test(h), '뒤로 가기는 오프닝만 닫는다');
+  assert.ok(/if \(OpenHost\.back\(\)\) return true;/.test(a) && /public static boolean back\(\)/.test(h), '뒤로 가기는 오프닝만 닫는다');
   const v = fs.readFileSync(N('OpenView.java'), 'utf8'), c0 = fs.readFileSync(N('OpenCore.java'), 'utf8');
   assert.ok(/ACTION_UP\) finish\(\)/.test(v) && /OpenCore\.done\(sc, t\)/.test(v), '누르면 닫고 · 시간이 되면 닫는다');
   assert.ok(/Chars\.file\(k\)/.test(v), '뽀송 신발 시트');
