@@ -182,6 +182,10 @@ async function mapSvResolve(env, cap, body, out) {
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
     if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;                       // s199: 노선 경유 정류장 목록(방면 이름용 · 큰 본문)은 기기가 천천히 받는다 — 서버가 기다리지 않는다
+    if (typeof mapBusWantD1 === 'function' && mapBusWantD1(f)) {                                            // s459: 우리 정류장 표(D1)를 아직 못 받은 채 TAGO 만으로 그렸다 — 이번 바퀴에 D1 도 같이 받아 둔다(도착정보 바퀴에 끼워서 · 다음 그리기에 역 출구가 채워진다). 예전엔 한 번 놓치면 그 요청에서는 끝까지 안 받았다
+      var cD = mapBusCenter(b);
+      if (isFinite(cD.la) && isFinite(cD.lo) && !need.some(function (n) { return String(n.k || '') === 'd1'; })) need = need.concat(mapBusNeedStops(cD.la, cD.lo).filter(function (n) { return n.k === 'd1'; }));
+    }
     var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: 도착정보 바퀴에 D1 되받기가 끼어 있어도 함께 받는다(D1 만 남은 것은 정류장 바퀴)
     var slot = new Array(need.length);
     var done = new Array(need.length);
