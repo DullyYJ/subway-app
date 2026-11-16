@@ -839,7 +839,8 @@ t('승차 대기 실시간: 앞당김은 allowEarlier(역 근처·도착 순간�
   let r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'table', allowEarlier: false }) });
   assert.strictEqual(r.state.etaMs[1], base[1], '시각표 값으로는 멀리서 앞당기지 않는다');
   r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'table', allowEarlier: true }) });
-  assert.strictEqual(r.state.etaMs[1], early, '역 근처면 앞당김 허용');
+  assert.strictEqual(r.state.etaMs[1], base[1] - 120000, '역 근처면 앞당김 허용 — s456: 시각표 답(12:50:00)은 그 역의 예정 초 자리(:20~:30)로 옮겨 쓴다(2분 앞 열차 = 예정 − 2분 정확히)');
+  assert.strictEqual(r.state.eta.boardNext.tt, 1, 's456: 시각표 답 표시');
   r = blStep(blState(), T, 200, { bl: blAns({ ms: early, src: 'realtime', allowEarlier: false }) });
   assert.strictEqual(r.state.etaMs[1], early, '실시간 값은 권위가 있다(웹: src === realtime 이면 앞당김 허용)');
   r = blStep(blState(), T, 200, { bl: blAns({ ms: at(13, 40, 0), maxWait: 30 }) });

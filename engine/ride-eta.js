@@ -102,6 +102,12 @@ var RIDE_ETA_DEFAULTS = {
   // ★ 2026-11-02 s380 (YJ: "도착 확정이 너무 빨리 난다 · 도착시간 10초 미뤄줘"): 20 → 10초.
   // ★ 2026-11-05 s442 (YJ: "도착시간을 3초 더 늦게"): 10 → 7초.
   nrtEarlySec: 7,
+  // ★ 2026-11-16 s456 (YJ: "경로는 무조건 시간표 기반 — 아라 06:18 열차가 06:21 → 06:17 → 06:19 → 06:21 로 오락가락한다"): 지하철로 갈아탈 때 승강장까지 걷는 시간(초).
+  //   앞 구간(버스 등)이 늦어도 열차는 시각표대로 온다 — '앞 구간 하차 + 이만큼'이 처음 안내한 열차 출발 전이면 그 열차 그대로, 넘으면 그 역 시각표(node.tt = 출발 분 목록)의 다음 열차.
+  //   시각표를 모르면(node.tt 없음) 예전처럼 늦은 만큼 민다(환승역에 내리면 /board-live 가 시각표 다음 차로 맞춘다). 환승 대기가 묻는 기준(ride-standby RS_BLX_PLAT_MS 1분)과 같다.
+  xferPlatSec: 60,
+  // 같은 판단을 붙드는 폭(초): 버스 지연 추정이 수십 초씩 오르내려도 '그 열차 그대로 ↔ 다음 열차'가 걸음마다 뒤집히지 않게 — 직전 판단(input.prevXfer)을 이만큼 넘게 벗어나야 바꾼다.
+  xferHystSec: 45,
   // ★ 2026-10-14 (실기기 로그: 부평에서 마커가 멈췄다 — 구간표가 14구간뿐이라 응답이 끊긴 26분 뒤 끝났다): 남은 구간 전부를 준다(상한은 안전장치).
   // ★ 2026-10-28 s268 (YJ: "GPS 영점 실패 → 시간표대로 가다가 연속 3회 실패하면 실시간 API 로 내 차량 위치 맞추기" — s231 의 '역 앞 대기'는 없앴다):
   //   지하철 구간(pos 가 있을 때)에서 승차역 뒤 holdAfterStops 번째 정류장부터, 통과 증거(gps·move·pf)가 그 정류장 이후로 없고 예정 시각 + holdGraceSec 이 지났으면 '도착 확정 실패'다.
@@ -137,6 +143,20 @@ function _rePlanSec(nd, O) {
   return lo + ((h >>> 0) % (Math.floor(hi - lo) + 1));
 }
 
+// ★ s456: 시각표가 준 분(HH:MM:00)을 그 노드의 예정 초(:20~:30, _rePlanSec)와 같은 자리로 옮긴다 — 같은 열차면 예정 시각과 정확히 같다.
+//   (예전엔 :00 그대로 맞춘 뒤 '실시간 없는 노선 7초 당김'이 겹쳐 06:18 열차가 06:17:53 = 화면 '06:17' 로 보였다.) tt 가 참인 답(시각표)만 옮기고 실시간 답은 받은 시각 그대로.
+function _reTtMs(ms, nd, O, tt) { return tt ? +ms + _rePlanSec(nd, O) * 1000 : +ms; }
+// ★ s456: 그 역 시각표(nd.tt = 하루 안의 출발 분 목록)에서 내가 승강장에 닿은 뒤(reachMs) 처음 떠나는 열차의 시각(ms, 예정 초 자리 유지) | null(목록이 없거나 1시간 안에 없음)
+function _reTtNext(nd, reachMs, planMsK, O) {
+  var tt = nd && nd.tt, pm = nd ? +nd.planMin : NaN, best = null, j;
+  if (!Array.isArray(tt) || !isFinite(pm)) return null;
+  for (j = 0; j < tt.length; j++) {
+    var t = +tt[j]; if (!isFinite(t)) continue;
+    var ms = planMsK + _reFold(t - pm) * 60000;
+    if (ms >= reachMs && ms > planMsK && ms - planMsK <= 3600000 && (best == null || ms < best)) best = ms;
+  }
+  return best;
+}
 function _reFold(d) { return d - Math.round(d / 1440) * 1440; }          // 자정 접힘: 차이를 ±12시간 안으로
 function _reHHMM(ms, tzMin, rounding) {
   var m = (ms + tzMin * 60000) / 60000;
@@ -407,7 +427,7 @@ function _rideEtaCore(input) {
     // (1) 실제 다음 차 시각(예전 앱 _applyRealBoardTime/applyDelay): 앱이 버스 도착정보·실시간 지하철·시각표에서 가져온 '내가 탈 수 있는 다음 차의 출발 시각'.
     //     열차는 이 시각에 오므로 승차역부터 그 시각으로 맞춘다(허용 범위 안일 때만 — allowEarlier 면 앞당김도, 아니면 늦춤만).
     if (bOk && input.boardNext && isFinite(+input.boardNext.ms)) {
-      var bnx = input.boardNext, wN = (+bnx.ms - planMs[boardIdx]) / 60000, maxW = (bnx.maxWaitMin != null && isFinite(+bnx.maxWaitMin)) ? +bnx.maxWaitMin : O.boardMaxWaitMin;
+      var bnx = input.boardNext, wN = (_reTtMs(bnx.ms, nodes[boardIdx], O, bnx.tt === true || bnx.tt === 1) - planMs[boardIdx]) / 60000, maxW = (bnx.maxWaitMin != null && isFinite(+bnx.maxWaitMin)) ? +bnx.maxWaitMin : O.boardMaxWaitMin;
       var okN = bnx.allowEarlier ? (Math.abs(wN) >= 1 && wN <= maxW && wN >= -180) : (wN > 0.5 && wN <= maxW);
       if (okN) { shiftFrom(boardIdx, wN * 60000); notes.push('다음 차 시각 ' + Math.round(wN * 10) / 10 + '분 반영(' + (bnx.src || '?') + ')'); }
     }
@@ -433,7 +453,9 @@ function _rideEtaCore(input) {
         notes.push('승차 전 예정이 ' + Math.round(staleMin) + '분 지나 경로 전체를 지금에 맞춤');
       }
     }
+    var xfPre = _reXferTT(out, planMs, valid, isLegStart, nodes, boardIdx, 0, -1, input, O, notes);      // s456: 첫 차(버스)를 기다리는 동안에도 뒤 환승 지하철은 시각표대로
     var rPre = _reFinish(out, tz, O, -1, 0, notes, n, nowMs);
+    if (xfPre) rPre.xfer = xfPre;
     rPre.boardShiftMin = bOk ? Math.round(((rPre.etaMs[boardIdx] != null ? rPre.etaMs[boardIdx] : planMs[boardIdx]) - planMs[boardIdx]) / 600) / 100 : 0;      // 승차역 시각이 처음 예정보다 얼마나 밀렸나(분)
     return rPre;
   }
@@ -617,16 +639,17 @@ function _rideEtaCore(input) {
     interp++;
   }
   // (마) 실시간 도착정보: 앵커 뒤 가장 가까운 노드 하나를 그 시각으로 맞추고 뒤를 같은 폭만큼 민다(앞 구간·앞 역은 건드리지 않는다)
-  var liveIn = input.live || [], liveBest = null;
+  var liveIn = input.live || [], liveBest = null, liveHit = -1;
   for (ii = 0; ii < liveIn.length; ii++) {
     var LV = liveIn[ii];
     if (!LV || !isFinite(+LV.idx) || !isFinite(+LV.ms) || +LV.idx <= anchor.idx || +LV.idx >= n || out[+LV.idx] == null || liveUsed[+LV.idx]) continue;
     if (!liveBest || +LV.idx < +liveBest.idx) liveBest = LV;
   }
   if (liveBest) {
-    var dLv = (+liveBest.ms - out[+liveBest.idx]) / 1000;
+    var dLv = (_reTtMs(liveBest.ms, nodes[+liveBest.idx], O, liveBest.tt === true || liveBest.tt === 1) - out[+liveBest.idx]) / 1000;      // s456: 시각표 답(tt)은 예정 초 자리로
     if (Math.abs(dLv) >= O.liveMinSec && Math.abs(dLv) <= O.liveMaxSec) {
       for (k = +liveBest.idx; k < n; k++) if (out[k] != null) out[k] += dLv * 1000;
+      liveHit = +liveBest.idx;
       notes.push('실시간 도착정보 ' + (nodes[+liveBest.idx].name || liveBest.idx) + ': ' + (dLv > 0 ? '+' : '') + Math.round(dLv) + '초 반영');
     }
   }
@@ -667,37 +690,69 @@ function _rideEtaCore(input) {
   if (frozenTail) notes.push('앞 구간 마지막 통과 뒤 역 ' + frozenTail + '곳: 그 구간 자신의 지연 수준으로 고정');
   if (interp) notes.push('통과 기록 없는 역 ' + interp + '곳: 앞뒤 기록 사이를 예정 비율로 나눔');
 
+  var xfMain = _reXferTT(out, planMs, valid, isLegStart, nodes, boardIdx, anchor.idx + 1, liveHit, input, O, notes);      // s456: 버스 → 지하철 환승 승차역은 시각표대로
+
   _reNrtFreeze(out, nodes, passesIn, input.frozen, O, nowMs, notes);
-  return _reFinish(out, tz, O, anchor.idx, level, notes, n, nowMs);
+  var rMain = _reFinish(out, tz, O, anchor.idx, level, notes, n, nowMs, input.frozen);
+  if (xfMain) rMain.xfer = xfMain;
+  return rMain;
+}
+
+// ★ 2026-11-16 s456 (YJ: "경로는 무조건 시간표 기반 — 버스를 기다리거나 타고 있는 동안 아라 06:18 열차가 06:20 · 06:21 로 밀려 보인다"): 버스에서 지하철로 갈아타는 승차역(k0 부터 뒤)은 시각표대로다.
+//   앞 구간(버스)이 늦어도 열차는 시각표대로 온다 — 내가 승강장에 닿는 시각(버스 하차 + xferPlatSec)이 처음 안내한 열차 출발 전이면 그 열차 그대로(그 뒤 구간 전체가 예정 그대로),
+//   넘으면 그 역 시각표(node.tt)의 다음 열차만큼 민다. 시각표를 모르면 닿는 시각보다 이르지 않게만(예전처럼 늦은 만큼) — 환승역에 내리면 /board-live 가 시각표 다음 차를 알려 준다.
+//   서버가 준 다음 차((마) 실시간·시각표 답 — liveHit)가 그 역에 반영됐으면 그 값이 우선이다. (바) 연착 보정이 환승 대기 시간을 '최소 주행 시간'으로 보고 승차역만 올리던 것도 여기서 바로잡힌다.
+//   지하철끼리 갈아타는 구간은 다음 구간의 첫 칸이 환승역이 아닐 수 있어(같은 역 이름은 한 번만 그린다) 예전 그대로 둔다.
+//   돌려주는 값 { 역번호: 0(그 열차 그대로) | 1(다음 열차 · 모름) } 은 ride-standby 가 다음 걸음에 input.prevXfer 로 되돌려 준다(판단을 붙든다 — xferHystSec).
+function _reXferTT(out, planMs, valid, isLegStart, nodes, boardIdx, k0, liveHit, input, O, notes) {
+  var n = out.length, xKeep = 0, xNext = 0, k, j, xf = null, pxAll = (input.prevXfer && typeof input.prevXfer === 'object') ? input.prevXfer : null, hy = Math.max(0, +O.xferHystSec || 0) * 1000;
+  for (k = Math.max(0, k0); k < n; k++) {
+    if (!valid[k] || out[k] == null || !isLegStart[k] || k <= boardIdx || !nodes[k].isSub || nodes[k].isBus || liveHit === k) continue;
+    var pk = k - 1; while (pk >= 0 && (!valid[pk] || out[pk] == null)) pk--;
+    if (pk < 0 || !nodes[pk].isBus || nodes[pk].isSub) continue;
+    var px = pxAll ? +pxAll[k] : NaN;
+    var reach = out[pk] + O.xferPlatSec * 1000, keepX = reach <= planMs[k] + (px === 0 ? hy : (px === 1 ? -hy : 0)), want = keepX ? planMs[k] : _reTtNext(nodes[k], reach, planMs[k], O), known = want != null;
+    if (!known) want = Math.max(out[k], reach);
+    var sX = want - planMs[k], chgX = false;
+    for (j = k; j < n; j++) if (valid[j] && out[j] != null && Math.abs(out[j] - (planMs[j] + sX)) > 0.5) { out[j] = planMs[j] + sX; chgX = true; }
+    if (chgX) { if (keepX) xKeep++; else if (known) xNext++; }
+    (xf = xf || {})[k] = keepX ? 0 : 1;
+  }
+  if (xKeep) notes.push('환승 지하철: 앞 구간이 늦어도 처음 안내한 시각표 열차 그대로');
+  if (xNext) notes.push('환승 지하철: 처음 안내한 열차는 놓친다 → 시각표의 다음 열차로');
+  return xf;
 }
 
 // ★ 2026-11-02 s379: 실시간 위치가 있는 노선(서울 도착정보 subwayId 가 있는 노선) — ride-standby RS_SUBWAY_ID 와 같은 표. 이름이 '인천1호선'처럼 접두가 붙으면 해당 없다(= 실시간 없음).
 var RE_RT_LINES = { '1호선': 1, '2호선': 1, '3호선': 1, '4호선': 1, '5호선': 1, '6호선': 1, '7호선': 1, '8호선': 1, '9호선': 1, '경의중앙선': 1, '수인분당선': 1, '공항철도': 1, '경춘선': 1, '신분당선': 1, '서해선': 1, '경강선': 1, '신림선': 1, '우이신설선': 1 };
 function _reNrtNode(nd) { return !!(nd && nd.isSub && !nd.isBus && !nd.isWalk && nd.lineName && !RE_RT_LINES[nd.lineName] && !RE_RT_LINES[String(nd.lineName).replace(/호선$/, '') + '호선']); }
-// ① 지난(확정) 역 시각 잠금: 앱이 이미 지난 역의 시각(input.frozen = {idx: ms})을 보내 오면 GPS 영점(gps 통과)이 없는 한 그 값으로 고정한다 — 뒤 역을 다시 맞추다 지난 역 시각이 바뀌는 일이 없다.
+// ① 지난(확정) 역 시각 잠금: 앱이 이미 지난 역의 시각(input.frozen = {idx: ms})을 보내 오면 그 값으로 고정한다 — 뒤 역을 다시 맞추다 지난 역 시각이 바뀌는 일이 없다.
+//    ★ s456 (YJ: "이미 지나간 것이 확정된 역은 시간을 바꾸지 말고, 영점으로 밀리거나 당겨지면 아직 지나지 않은 역만"): GPS 통과가 있는 역도 잠근 값 그대로다(예전엔 GPS 통과가 있으면 잠금을 건너뛰어, 지난 정류장의 통과 시각이 다시 쓰이면 화면 시각이 따라 바뀌었다). 어느 역을 잠글지는 ride-standby rsFreeze 가 정한다(마커가 이미 떠난 역).
 // ② 실시간 없는 노선의 뒤 역 도착을 nrtEarlySec 당겨 보인다(가장 뒤 통과 증거보다 뒤 역만).
 function _reNrtFreeze(out, nodes, passes, frozen, O, nowMs, notes) {
-  var n = out.length, k, i, gps = {}, maxP = -1, nz = 0, ne = 0;
-  for (i = 0; i < (passes || []).length; i++) { var pp = passes[i], ix = +(pp && pp.idx); if (!isFinite(ix)) continue; if (ix > maxP) maxP = ix; if (pp.src === 'gps') gps[ix] = 1; }
+  var n = out.length, k, i, maxP = -1, nz = 0, ne = 0;
+  for (i = 0; i < (passes || []).length; i++) { var pp = passes[i], ix = +(pp && pp.idx); if (!isFinite(ix)) continue; if (ix > maxP) maxP = ix; }
   var early = Math.max(0, +O.nrtEarlySec || 0) * 1000;
   if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (out[k] != null && _reNrtNode(nodes[k])) { out[k] -= early; ne++; }
-  if (frozen) for (k = 0; k < n; k++) { var fm = frozen[k]; if (fm != null && isFinite(+fm) && out[k] != null && !gps[k] && Math.abs(out[k] - fm) > 0) { out[k] = +fm; nz++; } }
+  if (frozen) for (k = 0; k < n; k++) { var fm = frozen[k]; if (fm != null && isFinite(+fm) && out[k] != null && Math.abs(out[k] - fm) > 0) { out[k] = +fm; nz++; } }
   if (ne) notes.push('실시간 없는 노선 도착 ' + O.nrtEarlySec + '초 당김 ' + ne + '곳');
   if (nz) notes.push('지난 역 시각 잠금 ' + nz + '곳');
 }
 
 // 표시 마지막 안전망: 시각이 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다) + 도착 예정이 이미 지난 시각이 되지 않게 + 서식
-function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs) {
+function _reFinish(out, tz, O, anchorIdx, level, notes, n, nowMs, frozen) {
   var prev = null, mono = 0, arr = new Array(n), q, last = -1;
+  // s456: 잠근(이미 지난) 역의 시각은 아래 순서 보정으로도 바꾸지 않는다 — 다른 역을 그 값에 맞춘다.
+  var fzOn = function (x) { return !!frozen && frozen[x] != null && isFinite(+frozen[x]); };
   // 첫 통과 앞 도보 노드가 뒤 노드보다 늦을 수 있으므로 앞쪽은 뒤에서부터 상한을 먼저 적용
   var nextMin = null;
-  for (q = n - 1; q >= 0; q--) { if (out[q] == null) continue; if (nextMin != null && out[q] > nextMin && q < anchorIdx) out[q] = nextMin; if (nextMin == null || out[q] < nextMin) nextMin = out[q]; }
+  for (q = n - 1; q >= 0; q--) { if (out[q] == null) continue; if (nextMin != null && out[q] > nextMin && q < anchorIdx && !fzOn(q)) out[q] = nextMin; if (nextMin == null || out[q] < nextMin) nextMin = out[q]; }
   for (q = n - 1; q >= 0; q--) if (out[q] != null) { last = q; break; }
   if (anchorIdx >= 0 && last > anchorIdx && out[last] < nowMs) { out[last] = nowMs; notes.push('도착 예정이 이미 지난 시각이라 지금으로 맞춤'); }
   for (q = 0; q < n; q++) {
     if (out[q] == null) continue;
-    if (prev != null && out[q] < prev) { out[q] = prev; mono++; }
-    prev = out[q];
+    if (prev != null && out[q] < prev && !fzOn(q)) { out[q] = prev; mono++; }
+    if (prev == null || out[q] > prev) prev = out[q];
   }
   if (mono) notes.push('표시 순서 보정 ' + mono + '곳');
   for (q = 0; q < n; q++) arr[q] = out[q] == null ? null : _reHHMM(out[q], tz, O.rounding);

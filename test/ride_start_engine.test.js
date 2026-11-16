@@ -161,7 +161,7 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
 // ④ 워커 내장
 {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
-  ok(/\/\/ ===== RIDESTART ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/ride/start") return handleRideStart(request);') > 0, '워커에 내장됨');
+  ok(/\/\/ ===== RIDESTART ENGINE BEGIN =====/.test(w) && w.indexOf('if (url.pathname === "/ride/start") return handleRideStart(request, env);') > 0, '워커에 내장됨(s456: 시각표를 싣느라 env 도 받는다)');
   const i = w.indexOf('// ===== RIDESTART ENGINE BEGIN ====='), j = w.indexOf('// ===== RIDESTART ENGINE END =====');
   ok(i > 0 && j > i && !/[^\x00-\x7f]/.test(w.slice(i, j)), '내장 블록은 ASCII');
 }
@@ -318,6 +318,46 @@ function posAt(ms, stops) {                 // 열차·버스가 계획대로 �
     ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fm() }))).b).ask === false, 's319: 계획 번호 하나뿐이면 묻지 않는다(첫 구간 버스처럼 auto 로 따라가지도 않는다)');
     ok(JSON.parse((await ctx.__h(rq({ cap: 23, r: fm({ leg: 3 }) }))).b).ask === false && JSON.parse((await ctx.__h(rq({ cap: 23, r: fm({ leg: 'x' }) }))).b).ask === false, 's319: 없는 구간 번호는 묻지 않는다');
   } catch (e) { ok(false, 's319: 워커 시험 예외 ' + (e && e.stack || e)); }
+  try {   // s456 (YJ: "경로 설정시에는 무조건 시간표 기반"): 버스 → 지하철 환승 승차역에 그 역의 공식 시각표(node.tt)를 싣는다 — 버스가 늦어 열차를 놓치면 '예정 + 늦은 만큼'이 아니라 시각표의 다음 열차
+    const NTL = require('./helpers/nt_load')(), bundle = JSON.parse(fs.readFileSync(R('test/fixtures/tt_bundle.json'), 'utf8'));
+    const nt = NTL.ntCreate({ _REAL_TT: bundle.data._REAL_TT, _GIMPO_TT: bundle.data._GIMPO_TT, _INCHEON_TT: NTL.NT_INCHEON_TT, _BUILTIN_TT: bundle.data._BUILTIN_TT, LINE_SCHEDULE: bundle.data.LINE_SCHEDULE, _REAL_SEG: bundle.data._REAL_SEG, _TT_ORDER_HARD: bundle.data._TT_ORDER_HARD, STNORDER: NTL.NT_STNORDER });
+    const glue = fs.readFileSync(R('engine/ride-start-worker.js'), 'utf8');
+    let ntCalls = 0, ntMode = 'ok';
+    const G = new Function('rideStart', 'ENGINE_VERSION', 'ntEnsure', 'Response', glue + '\nreturn { rstAttachXferTT: rstAttachXferTT, rstXferSubIdx: rstXferSubIdx, handleRideStart: handleRideStart };')(
+      RS.rideStart, 'test', async () => { ntCalls++; if (ntMode === 'fail') throw new Error('x'); if (ntMode === 'slow') return new Promise(() => { }); return ntMode === 'none' ? null : nt; }, class { constructor(b, o) { this.b = b; this.status = (o && o.status) || 200; } });
+    const M6 = Date.parse('2026-11-16T06:00:00+09:00');      // 월요일 06:00 — 991 버스 06:01 → 아라역3번출구 06:11 → (걸어서) 아라 06:18 → 계양 06:22 → 귤현 06:24 → 박촌 06:27
+    const bus = { trafficType: 2, lane: [{ busNo: '991' }], sectionTime: 10, distance: 4000, startName: '이음1로', endName: '아라역3번출구', startSec: 60, endSec: 660,
+      passStopList: { stations: ['이음1로', '인천해든초등학교', '아라역3번출구'].map((n, i) => ({ stationName: n, y: 37.5935 + 0.0004 * i, x: 126.672 + 0.02 * i })) } };
+    const sub = { trafficType: 1, lane: [{ name: '인천1호선' }], sectionTime: 9, distance: 7000, startName: '아라', endName: '박촌', startSec: 1080, endSec: 1620, stopSec: [1080, 1320, 1440, 1620],
+      passStopList: { stations: [['아라', 37.594118, 126.71301], ['계양', 37.571769, 126.736319], ['귤현', 37.566362, 126.742498], ['박촌', 37.553525, 126.744946]].map(a => ({ stationName: a[0], y: a[1], x: a[2] })) } };
+    const fx = (ex) => Object.assign({ data: { result: { path: [{ info: { totalTime: 29, transferCount: 1, pathType: 3, tab: 'fast' }, subPath: [walk(1, 0, 60), bus, walk(7, 660, 1080), sub, walk(2, 1620, 1740)] }] } }, tab: 'fast', a: '집', b: '박촌역', bt: null, rb: M6, now: M6, tz: 540, th: 'dark' }, ex || {});
+    const rq = (obj) => ({ method: 'POST', text: () => Promise.resolve(JSON.stringify(obj)) });
+    const base = RS.rideStart({ cap: 18 }, fx());
+    const iA = base.ok ? base.state.eta.nodes.findIndex(n => n.name === '아라') : -1;
+    ok(base.ok && iA === 4 && base.state.eta.nodes[iA].isSub && base.state.eta.nodes[iA - 1].isBus && base.state.eta.nodes[iA].planMin === 6 * 60 + 18 && base.state.eta.nodes[iA].tt === undefined, 's456: 버스 → 아라(06:18) 경로 · rideStart 자신은 시각표를 모른다 ' + JSON.stringify(base.ok ? base.state.eta.nodes.map(n => [n.name, n.planMin]) : base));
+    ok(JSON.stringify(G.rstXferSubIdx(base.state)) === '[4]' && G.rstXferSubIdx(o.state).length === 0 && G.rstXferSubIdx(null).length === 0, 's456: 시각표를 실을 곳 = 버스 다음의 지하철 승차역만(지하철로 시작하는 경로 · 지하철 → 버스는 해당 없음)');
+    const res = await G.handleRideStart(rq({ cap: 18, r: fx() }), {}), js = JSON.parse(res.b);
+    ok(res.status === 200 && js.ok && js.ver === 'test' && ntCalls === 1 && JSON.stringify(js.state.eta.nodes[4].tt) === JSON.stringify([388, 398, 408, 418, 428, 433, 438]), 's456: /ride/start 가 아라역 평일 하행 시각표에서 06:18 뒤 1시간 안의 출발(06:28 … 07:18)을 node.tt 로 싣는다 ' + JSON.stringify(js.state && js.state.eta.nodes[4].tt));
+    ok(js.state.eta.nodes.every((n, i) => i === 4 || n.tt === undefined) && JSON.stringify(Object.assign({}, js.state.eta.nodes[4], { tt: undefined })) === JSON.stringify(base.state.eta.nodes[4]), 's456: 그 역 말고는 그대로(다른 값은 건드리지 않는다)');
+    {   // 그 state 로 달려 본다: 버스가 8분 늦으면(06:19 하차) 06:18 열차는 놓친다 → 06:28 열차(시각표) — '06:18 + 8분 = 06:26' 이 아니다
+      const E = require('../engine/ride-eta.js'), eta = JSON.parse(JSON.stringify(js.state.eta));
+      const run = (lateMin, nodes) => E.rideEta(Object.assign({}, eta, { nodes: nodes || eta.nodes, nowMs: M6 + (5 + lateMin) * 60000, passes: [{ idx: 1, ms: M6 + (1 + lateMin) * 60000 + 25000, src: 'gps' }, { idx: 2, ms: M6 + (5 + lateMin) * 60000, src: 'gps' }] }));
+      const a3 = run(3), a8 = run(8), a8n = run(8, base.state.eta.nodes);
+      ok(a3.arr[4] === '06:18' && a3.arr[5] === '06:22' && a3.arr[7] === '06:27', 's456: 버스가 3분 늦어도(06:14 하차) 06:18 열차 그대로 ' + a3.arr.join());
+      ok(a8.arr[4] === '06:28' && a8.arr[5] === '06:32' && a8.arr[7] === '06:37' && a8.xfer && a8.xfer[4] === 1, 's456: 버스가 8분 늦으면 시각표의 다음 열차(06:28) ' + a8.arr.join());
+      ok(a8n.arr[4] !== '06:18' && a8n.arr[4] < '06:28', 's456: 시각표를 못 실은 state 는 예전처럼 늦은 만큼(환승역에서 /board-live 로 맞춘다) ' + a8n.arr.join());
+    }
+    ntMode = 'none'; const r0 = JSON.parse((await G.handleRideStart(rq({ cap: 18, r: fx() }), {})).b);
+    ntMode = 'fail'; const r1 = JSON.parse((await G.handleRideStart(rq({ cap: 18, r: fx() }), {})).b);
+    ok(r0.ok && r0.state.eta.nodes[4].tt === undefined && r1.ok && r1.state.eta.nodes[4].tt === undefined, 's456: 시각표를 못 읽어도(없음 · 오류) 탑승 안내는 그대로 시작한다');
+    ntMode = 'ok'; const before = ntCalls; const r2 = JSON.parse((await G.handleRideStart(rq({ cap: 18, r: facts() }), {})).b);
+    ok(r2.ok && ntCalls === before, 's456: 버스 → 지하철 환승이 없는 경로는 시각표를 읽지 않는다');
+    const sun = JSON.parse((await G.handleRideStart(rq({ cap: 18, r: fx({ rb: M6 - 86400000, now: M6 - 86400000 }) }), {})).b);      // 일요일(휴일 시각표)
+    ok(sun.ok && Array.isArray(sun.state.eta.nodes[4].tt) && sun.state.eta.nodes[4].tt.every(t => t > 378 && t <= 438) && JSON.stringify(sun.state.eta.nodes[4].tt) !== JSON.stringify(js.state.eta.nodes[4].tt), 's456: 요일(평일/휴일)에 맞는 시각표 ' + JSON.stringify(sun.state.eta.nodes[4].tt));
+    const bad = { eta: { nodes: [{ name: 'a', isOrigin: true }, { name: 'b', isBus: true, planMin: 10 }, { name: 'c', isSub: true, lineName: 'X', planMin: 20 }, { name: 'd', isSub: true, lineName: 'X', planMin: 22 }] } };
+    ok(G.rstAttachXferTT(bad, { boardTimes: () => ({ dk: '하', times: [1470, 1450, 21, 25, 80, 81, 25, 'x', 20] }) }, M6) === 1 && JSON.stringify(bad.eta.nodes[2].tt) === '[21,25,30,80]', 's456: 예정 분(00:20) 뒤 60분 안만(같은 분 · 앞 차 · 61분 뒤는 뺀다) · 오름차순 · 겹침 제거 · 자정 접힘(1470 = 다음 날 00:30 → 30) ' + JSON.stringify(bad.eta.nodes[2].tt));
+    ok(G.rstAttachXferTT(JSON.parse(JSON.stringify(base.state)), { boardTimes: () => { throw new Error('x'); } }, M6) === 0 && G.rstAttachXferTT(JSON.parse(JSON.stringify(base.state)), null, M6) === 0 && G.rstAttachXferTT(JSON.parse(JSON.stringify(base.state)), { boardTimes: () => ({ dk: '하', times: null }) }, M6) === 0, 's456: 시각표가 없거나 오류면 싣지 않는다');
+  } catch (e) { ok(false, 's456: /ride/start 시각표 싣기 시험 예외 ' + (e && e.stack || e)); }
   console.log(pass + ' 통과 / ' + fail + ' 실패');
   if (fail) process.exit(1);
 })();

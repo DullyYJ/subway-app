@@ -952,6 +952,16 @@ public class ShellJvmTest {
                 RideCore rc455 = new RideCore();
                 ok(!ShellCore.rideWaiting(rc455.lvJson()), "s455: 처음 상태(대기 번호 없음)는 대기 아님");
             }
+            {   // s456: 홈 브리핑에 줄 도착 예정 시각 = 엔진이 계산해 둔 state.etaMs 의 마지막 유효 칸(분 단위) — 앱은 옮겨 담기만
+                Object em = ScreenCore.parse("[null,1763241682000,1763242082000.5,null]");
+                ok(RideCore.sceneEta(em) == 1763242080000L && RideCore.sceneEta(ScreenCore.parse("[null,null]")) == 0L && RideCore.sceneEta(ScreenCore.parse("[]")) == 0L && RideCore.sceneEta(null) == 0L && RideCore.sceneEta("x") == 0L, "s456: 마지막 유효 칸을 분으로 내림 · 없으면 0");
+                RideCore rc456 = new RideCore();
+                rc456.onStart("{\"ok\":true,\"text\":\"t\",\"state\":{\"v\":1,\"tripSig\":\"k\",\"eta\":{\"nodes\":[{\"name\":\"집\",\"isOrigin\":true},{\"name\":\"아라\",\"isSub\":true,\"lineName\":\"인천1호선\"},{\"name\":\"계양\",\"isSub\":true,\"lineName\":\"인천1호선\"}]},\"etaMs\":[null,1763241502000,1763241742000]}}");
+                String sj = rc456.sceneJson();
+                ok(sj.contains("\"eta\":1763241720000") && sj.contains("\"nodes\":[") && sj.contains("\"key\":\"k\""), "s456: 장면 재료에 도착 예정(eta)이 실린다 " + sj);
+                rc456.onStart("{\"ok\":true,\"text\":\"t\",\"state\":{\"v\":1,\"eta\":{\"nodes\":[{\"name\":\"집\",\"isOrigin\":true},{\"name\":\"아라\",\"isSub\":true}]}}}");
+                ok(!rc456.sceneJson().contains("\"eta\""), "s456: 엔진 값이 없으면 싣지 않는다(엔진이 예전처럼 정한다)");
+            }
             {   // s454: 가장 빨리 오던 차가 30초 안이면(지나갔을 수 있다) 빈 응답에 보던 값을 붙들지 않는다 — 멀리 있던 차는 그대로 둔다
                 String soon = "{\"response\":{\"body\":{\"items\":{\"item\":[{\"routeno\":\"991\",\"arrtime\":20,\"arrprevstationcnt\":1}]}}}}";
                 ok(MapCore.minArrSec(good) == 589 && MapCore.minArrSec(soon) == 20 && MapCore.minArrSec(empty) == -1 && MapCore.minArrSec(null) == -1, "s454: 본문에서 가장 빠른 남은 초");

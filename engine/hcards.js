@@ -222,6 +222,9 @@ function hcardsScreen(inp, f) {
     if (fuse) { af.cp = true; af.fz = true; } af.base = rt.base; af.mins = rt.mins; af.dist = rt.dist; af.segs = rt.segs; af.rem = rem;
     if (preview) af.hour = new Date(rt.base + tz * 60000).getUTCHours();
     af.arrMs = rem > 0 ? Math.floor((now + rem * 60000) / 60000) * 60000 : 0;
+    // ★ s456 (YJ: 탑승 안내는 07:01 도착인데 브리핑은 '지금 + 소요시간'(07:20경)이라 서로 달랐다): 탑승 안내 중이면 도착 시각은 탑승 엔진이 계산한 값(rd.eta — 시각표 기준)을 그대로 쓴다.
+    var rdEta = (rn && f.rd && typeof f.rd === 'object') ? hcNum(f.rd.eta, 0) : 0;
+    if (rdEta > now - 60000 && rdEta < now + 12 * 3600000) af.arrMs = Math.floor(rdEta / 60000) * 60000;
     var wxs = f.wx && typeof f.wx === 'object' ? f.wx : {};
     af.wF = hcWx(wxs.wF); af.wT = hcWx(wxs.wT);
     var sub1 = rt.segs.filter(function (s) { return s.type === 1 && s.nextTrain && typeof s.nextTrain === 'object'; })[0];

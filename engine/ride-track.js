@@ -375,7 +375,9 @@ function rtPassTime(s, tr, now, O) {
 function rtNotYet(s, prev, tr, now, O) {
   if (!prev || !isFinite(prev.lat) || !isFinite(prev.lng)) return null;
   var late = now - s.arrMs;
-  if (late < 0 || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;
+  // ★ s456 (YJ: "시간이 오락가락한다"): 이미 '아직 안 닿음'으로 보고 도착 시각을 '지금 + 30초'로 올려 둔 정류장(s.ny — ride-standby 가 표시)은 표시 시각이 미래여도(late < 0) 다시 판정한다.
+  //   예전엔 올린 시각 때문에 late < 0 이 되어 판정이 끊기고, 45초 뒤 증거가 만료되면 시각표로 되돌아갔다가(마커가 앞 역으로 튐) 다음 걸음에 다시 '아직 안 닿음' — 늦는 열차에서 도착 시각과 마커가 1분마다 오락가락했다.
+  if ((late < 0 && s.ny !== true) || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;
   var q = null;
   for (var i = tr.length - 1; i >= 0; i--) { if (tr[i].acc == null || tr[i].acc <= O.notYetAccM) { q = tr[i]; break; } }
   if (!q || now - q.ts > O.freshSec * 1000) return null;

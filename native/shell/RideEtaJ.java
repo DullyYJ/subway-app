@@ -42,14 +42,14 @@ final class RideEtaJ {
     /** s379: 서울 실시간 도착정보가 있는 노선인가(engine RE_RT_LINES · ride-standby RS_SUBWAY_ID 와 같은 표) */
     static boolean rtLine(String ln) { return RT_LINES.contains(ln) || RT_LINES.contains(ln.replaceAll("호선$", "") + "호선"); }
     static boolean nrtNode(Object nd) { return truthy(nd) && truthy(g(nd, "isSub")) && !truthy(g(nd, "isBus")) && !truthy(g(nd, "isWalk")) && truthy(g(nd, "lineName")) && !rtLine(str(g(nd, "lineName"))); }
-    /** s379 (engine _reNrtFreeze): ① 실시간 없는 노선의 뒤 역 도착 당김 ② 지난(확정) 역 시각 잠금(frozen = {역번호: ms}, GPS 영점이 있는 역은 제외) */
+    /** s379 (engine _reNrtFreeze): ① 실시간 없는 노선의 뒤 역 도착 당김 ② 지난(확정) 역 시각 잠금(frozen = {역번호: ms}) — s456: GPS 통과가 있는 역도 잠근 값 그대로(지난 역 시각은 바뀌지 않는다) */
     static void nrtFreeze(double[] out, List<Object> nodes, List<Object> passes, Map<String, Object> frozen, double nowMs, List<Object> notes) {
-        int n = out.length, k, i, maxP = -1, nz = 0, ne = 0; java.util.Set<Integer> gps = new java.util.HashSet<Integer>();
-        for (i = 0; i < passes.size(); i++) { Object pp = passes.get(i); double ix = gn(pp, "idx"); if (!fin(ix)) continue; if ((int) ix > maxP) maxP = (int) ix; if ("gps".equals(g(pp, "src"))) gps.add((int) ix); }
+        int n = out.length, k, i, maxP = -1, nz = 0, ne = 0;
+        for (i = 0; i < passes.size(); i++) { Object pp = passes.get(i); double ix = gn(pp, "idx"); if (!fin(ix)) continue; if ((int) ix > maxP) maxP = (int) ix; }
         double early = Math.max(0, nrtEarlySec) * 1000;
         if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (!Double.isNaN(out[k]) && k < nodes.size() && nrtNode(nodes.get(k))) { out[k] -= early; ne++; }
         if (frozen != null) for (k = 0; k < n; k++) {
-            Object fm = frozen.get(String.valueOf(k)); if (fm == null || !fin(fm) || Double.isNaN(out[k]) || gps.contains(k)) continue;
+            Object fm = frozen.get(String.valueOf(k)); if (fm == null || !fin(fm) || Double.isNaN(out[k])) continue;
             if (Math.abs(out[k] - num(fm)) > 0) { out[k] = num(fm); nz++; }
         }
         if (ne != 0) notes.add("실시간 없는 노선 도착 " + ns(nrtEarlySec) + "초 당김 " + ne + "곳");
@@ -66,6 +66,24 @@ final class RideEtaJ {
         return planSecMin + ((h & 0xFFFFFFFFL) % ((long) Math.floor(planSecMax - planSecMin) + 1));
     }
     static double fold(double d) { return d - round(d / 1440) * 1440; }
+    /** s456 지하철로 갈아탈 때 승강장까지 걷는 시간(초) — engine xferPlatSec */
+    static final double xferPlatSec = 60;
+    /** s456 같은 판단(그 열차 그대로 ↔ 다음 열차)을 붙드는 폭(초) — engine xferHystSec */
+    static final double xferHystSec = 45;
+    /** s456 (engine _reTtMs): 시각표가 준 분(HH:MM:00)을 그 노드의 예정 초(:20~:30) 자리로 옮긴다. tt 가 참인 답(시각표)만. */
+    static boolean ttFlag(Object v) { return Boolean.TRUE.equals(v) || (v instanceof Number && ((Number) v).doubleValue() == 1); }
+    static double ttMs(double ms, Object nd, boolean tt) { return tt ? ms + planSec(nd, g(nd, "planMin")) * 1000 : ms; }
+    /** s456 (engine _reTtNext): 그 역 시각표(nd.tt = 출발 분 목록)에서 내가 승강장에 닿은 뒤 처음 떠나는 열차 시각(ms) | NaN(없음) */
+    static double ttNext(Object nd, double reachMs, double planMsK) {
+        List<Object> tt = l(g(nd, "tt")); double pm = truthy(nd) ? gn(nd, "planMin") : Double.NaN, best = Double.NaN;
+        if (tt == null || !fin(pm)) return Double.NaN;
+        for (int j = 0; j < tt.size(); j++) {
+            double t = num(tt.get(j)); if (!fin(t)) continue;
+            double ms = planMsK + fold(t - pm) * 60000;
+            if (ms >= reachMs && ms > planMsK && ms - planMsK <= 3600000 && (Double.isNaN(best) || ms < best)) best = ms;
+        }
+        return best;
+    }
     static String hhmm(double ms, double tzMin, String rnd) {
         double m = (ms + tzMin * 60000) / 60000;
         m = "floor".equals(rnd) ? Math.floor(m + 1e-9) : round(m);
@@ -305,7 +323,7 @@ final class RideEtaJ {
             boolean bOk = boardIdx >= 0 && valid[boardIdx];
             Object bnx = input.get("boardNext");
             if (bOk && truthy(bnx) && fin(g(bnx, "ms"))) {
-                double wN = (gn(bnx, "ms") - planMs[boardIdx]) / 60000, maxW = (g(bnx, "maxWaitMin") != null && fin(g(bnx, "maxWaitMin"))) ? gn(bnx, "maxWaitMin") : boardMaxWaitMin;
+                double wN = (ttMs(gn(bnx, "ms"), nodes.get(boardIdx), ttFlag(g(bnx, "tt"))) - planMs[boardIdx]) / 60000, maxW = (g(bnx, "maxWaitMin") != null && fin(g(bnx, "maxWaitMin"))) ? gn(bnx, "maxWaitMin") : boardMaxWaitMin;
                 boolean okN = truthy(g(bnx, "allowEarlier")) ? (Math.abs(wN) >= 1 && wN <= maxW && wN >= -180) : (wN > 0.5 && wN <= maxW);
                 if (okN) { shiftFrom(out, boardIdx, wN * 60000); notes.add("다음 차 시각 " + ns(round(wN * 10) / 10) + "분 반영(" + (truthy(g(bnx, "src")) ? str(g(bnx, "src")) : "?") + ")"); }
             }
@@ -328,7 +346,9 @@ final class RideEtaJ {
                     notes.add("승차 전 예정이 " + ns(round(staleMin)) + "분 지나 경로 전체를 지금에 맞춤");
                 }
             }
+            Map<String, Object> xfPre = xferTT(out, planMs, valid, isLegStart, nodes, boardIdx, 0, -1, input, notes);      // s456: 첫 차(버스)를 기다리는 동안에도 뒤 환승 지하철은 시각표대로
             Map<String, Object> rPre = finish(out, tz, -1, 0, notes, n, nowMs);
+            if (xfPre != null) rPre.put("xfer", xfPre);
             double[] pe = etaArr(rPre);
             double bv = bOk ? (((boardIdx < pe.length && !Double.isNaN(pe[boardIdx]) ? pe[boardIdx] : planMs[boardIdx]) - planMs[boardIdx]) / 600) : 0;
             rPre.put("boardShiftMin", bOk ? d(round(bv) / 100) : (Object) Double.valueOf(0));
@@ -515,7 +535,7 @@ final class RideEtaJ {
             interp++;
         }
         // (마) 실시간 도착정보
-        Object liveBest = null;
+        Object liveBest = null; int liveHit = -1;
         for (ii = 0; ii < liveIn0.size(); ii++) {
             Object LV = liveIn0.get(ii);
             if (!truthy(LV) || !fin(g(LV, "idx")) || !fin(g(LV, "ms")) || gn(LV, "idx") <= anchor.idx || gn(LV, "idx") >= n || Double.isNaN(out[(int) gn(LV, "idx")]) || liveUsed.containsKey((int) gn(LV, "idx"))) continue;
@@ -523,9 +543,10 @@ final class RideEtaJ {
         }
         if (liveBest != null) {
             int lbi = (int) gn(liveBest, "idx");
-            double dLv = (gn(liveBest, "ms") - out[lbi]) / 1000;
+            double dLv = (ttMs(gn(liveBest, "ms"), nodes.get(lbi), ttFlag(g(liveBest, "tt"))) - out[lbi]) / 1000;      // s456: 시각표 답(tt)은 예정 초 자리로
             if (Math.abs(dLv) >= liveMinSec && Math.abs(dLv) <= liveMaxSec) {
                 for (int kx = lbi; kx < n; kx++) if (!Double.isNaN(out[kx])) out[kx] += dLv * 1000;
+                liveHit = lbi;
                 notes.add("실시간 도착정보 " + nameOr(nodes.get(lbi), lbi) + ": " + (dLv > 0 ? "+" : "") + ns(round(dLv)) + "초 반영");
             }
         }
@@ -561,27 +582,60 @@ final class RideEtaJ {
         if (frozenTail != 0) notes.add("앞 구간 마지막 통과 뒤 역 " + frozenTail + "곳: 그 구간 자신의 지연 수준으로 고정");
         if (interp != 0) notes.add("통과 기록 없는 역 " + interp + "곳: 앞뒤 기록 사이를 예정 비율로 나눔");
 
-        nrtFreeze(out, nodes, passesIn, m(input.get("frozen")), nowMs, notes);
-        return finish(out, tz, anchor.idx, level, notes, n, nowMs);
+        Map<String, Object> xfMain = xferTT(out, planMs, valid, isLegStart, nodes, boardIdx, anchor.idx + 1, liveHit, input, notes);      // s456: 버스 → 지하철 환승 승차역은 시각표대로
+
+        Map<String, Object> frozenIn = m(input.get("frozen"));
+        nrtFreeze(out, nodes, passesIn, frozenIn, nowMs, notes);
+        Map<String, Object> rMain = finish(out, tz, anchor.idx, level, notes, n, nowMs, frozenIn);
+        if (xfMain != null) rMain.put("xfer", xfMain);
+        return rMain;
+    }
+
+    /**
+     * s456 (engine _reXferTT): 버스에서 지하철로 갈아타는 승차역(k0 부터 뒤)은 시각표대로 — 앞 구간이 늦어도 처음 안내한 열차에 닿으면 그 열차 그대로, 못 닿으면 그 역 시각표(node.tt)의 다음 열차.
+     * 시각표를 모르면 닿는 시각보다 이르지 않게만. 돌려주는 값 { 역번호: 0(그대로) | 1(다음 열차 · 모름) } 은 다음 걸음에 input.prevXfer 로 돌아와 판단을 붙든다(xferHystSec).
+     */
+    static Map<String, Object> xferTT(double[] out, double[] planMs, boolean[] valid, boolean[] isLegStart, List<Object> nodes, int boardIdx, int k0, int liveHit, Map<String, Object> input, List<Object> notes) {
+        int n = out.length, xKeep = 0, xNext = 0; Map<String, Object> xf = null, pxAll = m(input.get("prevXfer")); double hy = Math.max(0, xferHystSec) * 1000;
+        for (int kx = Math.max(0, k0); kx < n; kx++) {
+            if (!valid[kx] || Double.isNaN(out[kx]) || !isLegStart[kx] || kx <= boardIdx || !truthy(g(nodes.get(kx), "isSub")) || truthy(g(nodes.get(kx), "isBus")) || liveHit == kx) continue;
+            int pk = kx - 1; while (pk >= 0 && (!valid[pk] || Double.isNaN(out[pk]))) pk--;
+            if (pk < 0 || !truthy(g(nodes.get(pk), "isBus")) || truthy(g(nodes.get(pk), "isSub"))) continue;
+            Object pv = pxAll == null ? null : pxAll.get(String.valueOf(kx)); double px = pv == null ? Double.NaN : num(pv);
+            double reach = out[pk] + xferPlatSec * 1000; boolean keepX = reach <= planMs[kx] + (px == 0 ? hy : (px == 1 ? -hy : 0));
+            double want = keepX ? planMs[kx] : ttNext(nodes.get(kx), reach, planMs[kx]); boolean known = !Double.isNaN(want);
+            if (!known) want = Math.max(out[kx], reach);
+            double sX = want - planMs[kx]; boolean chgX = false;
+            for (int j = kx; j < n; j++) if (valid[j] && !Double.isNaN(out[j]) && Math.abs(out[j] - (planMs[j] + sX)) > 0.5) { out[j] = planMs[j] + sX; chgX = true; }
+            if (chgX) { if (keepX) xKeep++; else if (known) xNext++; }
+            if (xf == null) xf = obj();
+            xf.put(String.valueOf(kx), Double.valueOf(keepX ? 0 : 1));
+        }
+        if (xKeep != 0) notes.add("환승 지하철: 앞 구간이 늦어도 처음 안내한 시각표 열차 그대로");
+        if (xNext != 0) notes.add("환승 지하철: 처음 안내한 열차는 놓친다 → 시각표의 다음 열차로");
+        return xf;
     }
 
     private static void shiftFrom(double[] out, int from, double ms) { for (int q = from; q < out.length; q++) if (!Double.isNaN(out[q])) out[q] += ms; }
 
     /** 표시 마지막 안전망. */
-    static Map<String, Object> finish(double[] out, double tz, int anchorIdx, double level, List<Object> notes, int n, double nowMs) {
+    static Map<String, Object> finish(double[] out, double tz, int anchorIdx, double level, List<Object> notes, int n, double nowMs) { return finish(out, tz, anchorIdx, level, notes, n, nowMs, null); }
+    /** s456: frozen(잠근 역 {역번호: ms})의 시각은 순서 보정으로도 바꾸지 않는다 — 다른 역을 그 값에 맞춘다. */
+    static boolean fzOn(Map<String, Object> frozen, int x) { if (frozen == null) return false; Object v = frozen.get(String.valueOf(x)); return v != null && fin(v); }
+    static Map<String, Object> finish(double[] out, double tz, int anchorIdx, double level, List<Object> notes, int n, double nowMs, Map<String, Object> frozen) {
         double prev = Double.NaN; int mono = 0, q, last = -1;
         double nextMin = Double.NaN;
         for (q = n - 1; q >= 0; q--) {
             if (Double.isNaN(out[q])) continue;
-            if (!Double.isNaN(nextMin) && out[q] > nextMin && q < anchorIdx) out[q] = nextMin;
+            if (!Double.isNaN(nextMin) && out[q] > nextMin && q < anchorIdx && !fzOn(frozen, q)) out[q] = nextMin;
             if (Double.isNaN(nextMin) || out[q] < nextMin) nextMin = out[q];
         }
         for (q = n - 1; q >= 0; q--) if (!Double.isNaN(out[q])) { last = q; break; }
         if (anchorIdx >= 0 && last > anchorIdx && out[last] < nowMs) { out[last] = nowMs; notes.add("도착 예정이 이미 지난 시각이라 지금으로 맞춤"); }
         for (q = 0; q < n; q++) {
             if (Double.isNaN(out[q])) continue;
-            if (!Double.isNaN(prev) && out[q] < prev) { out[q] = prev; mono++; }
-            prev = out[q];
+            if (!Double.isNaN(prev) && out[q] < prev && !fzOn(frozen, q)) { out[q] = prev; mono++; }
+            if (Double.isNaN(prev) || out[q] > prev) prev = out[q];
         }
         if (mono != 0) notes.add("표시 순서 보정 " + mono + "곳");
         List<Object> arr = new ArrayList<Object>(), eta = new ArrayList<Object>(), sched = new ArrayList<Object>();

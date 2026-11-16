@@ -40,7 +40,8 @@ function run(gpsOnPlatform, answerDelayMs) {
     else if (hadXw && !st.xw && !done0) flick++;
     if (out.ask && out.ask.kind === 'boardlive' && out.ask.body && out.ask.body.kind === 'sub' && st.xw && out.ask.body.i === st.xw.i && !ask) {
       ask = out.ask.body; askMs = ms; trainMs = planX + 300000;
-      bl = { ok: true, kind: 'sub', i: ask.i, ms: trainMs, src: 'table', at: ms, fromMs: ask.fromMs, allowEarlier: true, maxWait: 90 };
+      // s456: 서버의 시각표 답은 늘 분:00 이다(rsBlTable) — 엔진이 그 역의 예정 초(:20~:30) 자리로 옮겨 쓰므로 승차 시각은 '계획 + 5분' 정확히가 된다(예전엔 :00 그대로라 화면이 1분 일찍 보였다)
+      bl = { ok: true, kind: 'sub', i: ask.i, ms: Math.floor(trainMs / 60000) * 60000, src: 'table', at: ms, fromMs: ask.fromMs, allowEarlier: true, maxWait: 90 };
     }
     if (ask && !committed && !st.xw) { committed = { ms, pass: (st.eta.passes || []).filter(q => q.idx === ask.i)[0] }; break; }
   }

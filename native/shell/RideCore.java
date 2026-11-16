@@ -519,8 +519,21 @@ public final class RideCore {
             boolean boarded = m.get("wait") == null && !Boolean.FALSE.equals(eta.get("boarded"));
             Map<String, Object> res = new LinkedHashMap<String, Object>();
             res.put("here", Integer.valueOf(Math.max(0, cur))); res.put("boarded", Boolean.valueOf(boarded)); res.put("key", BoardCore.s(m.get("tripSig"), 40)); res.put("nodes", out);
+            // s456: 도착지 도착 예정 시각(엔진이 계산해 state.etaMs 에 둔 값의 마지막 칸, 분 단위) — 홈 브리핑이 '지금 + 소요시간' 대신 이 값을 그대로 쓴다. 앱은 옮겨 담기만 한다.
+            long etaEnd = sceneEta(m.get("etaMs"));
+            if (etaEnd > 0L) res.put("eta", Long.valueOf(etaEnd));
             return HomeSearchCore.toJson(res);
         } catch (ScreenCore.ParseError e) { return ""; }
+    }
+    /** state.etaMs 의 마지막 유효 칸(도착지 도착 예정, ms) → 분 단위로 내림. 없으면 0. (값을 만들지 않는다 — 엔진이 계산한 것을 옮길 뿐) */
+    public static long sceneEta(Object etaMs) {
+        if (!(etaMs instanceof List)) return 0L;
+        List<?> l = (List<?>) etaMs;
+        for (int i = l.size() - 1; i >= 0; i--) {
+            Object v = l.get(i);
+            if (v instanceof Number) { double d = ((Number) v).doubleValue(); if (!Double.isNaN(d) && !Double.isInfinite(d) && d > 0) return (long) Math.floor(d / 60000.0) * 60000L; }
+        }
+        return 0L;
     }
     /** 결과 카드의 내 위치 { cur, pos, arr } (엔진 r.lv). */
     public String lvJson() { return "{\"cur\":" + cur + ",\"pos\":" + posJson + ",\"arr\":" + arrJson + waitJson() + (dtJson.length() > 2 ? ",\"dt\":" + dtJson : "") + "}"; }

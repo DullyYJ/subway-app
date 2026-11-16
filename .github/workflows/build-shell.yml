@@ -54,6 +54,7 @@ jobs:
           - ride_standby.test.js
           - ride_track.test.js
           - ride_local.test.js
+          - ride_xfer_tt.test.js
           - map_server_fetch.test.js
           - route_follow.test.js
           - route_view.test.js

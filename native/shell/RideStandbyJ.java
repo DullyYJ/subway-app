@@ -672,19 +672,50 @@ final class RideStandbyJ {
         String n0 = nd.size() > 0 && mm(nd.get(0)) != null ? or(mm(nd.get(0)).get("name"), "") : "", n1 = nd.size() > 0 && mm(nd.get(nd.size() - 1)) != null ? or(mm(nd.get(nd.size() - 1)).get("name"), "") : "";
         return nd.size() + "|" + n0 + "|" + n1;
     }
-    /** s379 (engine rsFreeze): GPS 영점이 있는 역 이전의 지난 역 시각을 st.fz.m 에 붙잡는다(영점이 새로 잡히면 한 번 갱신) */
+    /** s379 · s456 (engine rsFreeze): 지난 역(마커가 닿은 역 = 번호 ≤ pos.from, 또는 뒤에 통과 증거가 있는 역)의 시각을 그 순간 값으로 st.fz.m 에 붙잡는다 — 한 번 잠그면 다시 바꾸지 않는다. g = 잠글 때 통과 증거가 있었다(확정). */
     static void freeze(Map<String, Object> st, Map<String, Object> r, double now, List<Object> passes, String key) {
         Map<String, Object> fz = mm(st.get("fz"));
         if (fz == null || !key.equals(fz.get("key"))) { fz = obj("key", key, "m", obj(), "g", obj()); st.put("fz", fz); }
         Map<String, Object> fm = mm(fz.get("m")), fg = mm(fz.get("g")); List<Object> em = l(r.get("etaMs"));
-        java.util.Set<Integer> gps = new java.util.HashSet<Integer>(); int maxEv = -1;
-        if (passes != null) for (Object po : passes) { Map<String, Object> pe = mm(po); if (pe == null) continue; double ie = num(pe.get("idx")); if (!fin(ie)) continue; if ("gps".equals(pe.get("src"))) { gps.add((int) ie); if ((int) ie > maxEv) maxEv = (int) ie; } }
-        if (em == null) return;
+        if (fg == null) { fg = obj(); fz.put("g", fg); }
+        java.util.Set<Integer> has = new java.util.HashSet<Integer>(); int maxAny = -1;
+        if (passes != null) for (Object po : passes) { Map<String, Object> pe = mm(po); if (pe == null) continue; double ie = num(pe.get("idx")); if (!fin(ie)) continue; has.add((int) ie); if ((int) ie > maxAny) maxAny = (int) ie; }
+        Map<String, Object> pos = mm(r.get("pos"));
+        double from = (pos != null && pos.get("from") != null && fin(pos.get("from"))) ? num(pos.get("from")) : -1;
+        if (em == null || fm == null) return;
         for (int i = 0; i < em.size(); i++) {
-            Object mo = em.get(i); if (mo == null || !fin(mo)) continue; double ms = num(mo); String ks = String.valueOf(i);
-            if (fm.get(ks) == null) { if (ms <= now && i <= maxEv) { fm.put(ks, ms); if (gps.contains(i)) fg.put(ks, 1.0); } }
-            else if (gps.contains(i) && fg.get(ks) == null) { fm.put(ks, ms); fg.put(ks, 1.0); }
+            Object mo = em.get(i); String ks = String.valueOf(i);
+            if (mo == null || !fin(mo) || fm.get(ks) != null) continue;
+            double ms = num(mo);
+            if (ms <= now && (i < maxAny || (from >= 0 && i <= from))) { fm.put(ks, ms); if (has.contains(i)) fg.put(ks, 1.0); }
         }
+    }
+    /** s456 (engine rsFzPrune): 시각표로만 닿아 잠근 역이 '아직 안 지난 역'으로 드러나면 푼다 — 가장 뒤 통과 증거(그 역 j)와 그 뒤 역만 본다. */
+    static final double FZ_TOL_MS = 60000;
+    static void fzPrune(Map<String, Object> st, List<Object> passes, Map<String, Object> notYet, double now, double keepMs) {
+        Map<String, Object> fz = mm(st.get("fz")); if (fz == null) return;
+        Map<String, Object> fm = mm(fz.get("m")); if (fm == null) return;
+        Map<String, Object> fg = mm(fz.get("g")); if (fg == null) { fg = obj(); fz.put("g", fg); }
+        int i; double jMax = -1, tMax = Double.NaN;
+        if (passes != null) for (Object po : passes) {
+            Map<String, Object> p = mm(po); if (p == null) continue;
+            double ix = num(p.get("idx")); if (!fin(ix) || !fin(p.get("ms"))) continue;
+            double pm = num(p.get("ms"));
+            if (ix > jMax || (ix == jMax && pm > tMax)) { jMax = ix; tMax = pm; }
+        }
+        String jk = ik(jMax);
+        if (jMax >= 0 && fm.get(jk) != null) {
+            if (!truthy(fg.get(jk)) && tMax > num(fm.get(jk)) + FZ_TOL_MS) fm.remove(jk);
+            else fg.put(jk, 1.0);
+        }
+        List<Double> ks = new ArrayList<Double>();
+        for (String k : new ArrayList<String>(fm.keySet())) { double kv = num(k); if (fin(kv) && kv > jMax) ks.add(kv); }
+        if (ks.isEmpty()) return;
+        java.util.Collections.sort(ks);
+        double cut = -1;
+        for (i = 0; i < ks.size(); i++) if (!Double.isNaN(tMax) && tMax > num(fm.get(ik(ks.get(i))))) { cut = ks.get(i); break; }
+        if (notYet != null) for (String nk : keys(notYet)) { double k2 = num(nk); if (fin(k2) && k2 > jMax && now - num(notYet.get(nk)) <= keepMs && (cut < 0 || k2 < cut)) cut = k2; }
+        if (cut >= 0) for (i = 0; i < ks.size(); i++) if (ks.get(i) >= cut) { fm.remove(ik(ks.get(i))); fg.remove(ik(ks.get(i))); }
     }
     static void monoPos(Map<String, Object> st, Map<String, Object> r, double now, List<Object> notes) {
         Map<String, Object> pos = mm(r.get("pos")); if (pos == null || pos.get("from") == null || !fin(pos.get("from"))) return;
@@ -1519,7 +1550,8 @@ final class RideStandbyJ {
         if (b.get("ms") == null || !fin(b.get("ms")) || num(b.get("ms")) < now - 5000 || num(b.get("ms")) > now + BLX_MAXAHEAD_MS) return;
         List<Object> lv = new ArrayList<Object>(), old = l(eta.get("live"));
         if (old != null) for (Object q : old) if (truthy(q) && gn(q, "idx") != num(x.get("i"))) lv.add(q);
-        lv.add(obj("idx", x.get("i"), "ms", (double) round(num(b.get("ms")))));
+        Map<String, Object> lvE = obj("idx", x.get("i"), "ms", (double) round(num(b.get("ms")))); if ("table".equals(b.get("src"))) lvE.put("tt", 1.0);      // s456: 시각표 답(분:00)은 ride-eta 가 그 역의 예정 초 자리로 옮겨 쓴다
+        lv.add(lvE);
         eta.put("live", lv); bx.put("ms", (double) round(num(b.get("ms")))); bx.put("src", truthy(b.get("src")) ? str(b.get("src")) : "");
         if ("realtime".equals(b.get("src")) && truthy(b.get("tn")) && str(b.get("tn")).length() > 0) bx.put("tn", str(b.get("tn"))); else bx.remove("tn");      // s334
         notes.add("환승 다음 차(" + (truthy(b.get("src")) ? str(b.get("src")) : "?") + ") " + ns(round((num(b.get("ms")) - now) / 1000)) + "초 뒤");
@@ -1534,6 +1566,7 @@ final class RideStandbyJ {
         if (b.get("ms") == null || !fin(b.get("ms"))) return;
         double mw = b.get("maxWait") != null && fin(b.get("maxWait")) ? num(b.get("maxWait")) : BL_MAXWAIT;
         eta.put("boardNext", obj("ms", num(b.get("ms")), "src", "realboard", "allowEarlier", truthy(b.get("allowEarlier")) || "realtime".equals(b.get("src")), "maxWaitMin", mw));
+        if ("table".equals(b.get("src"))) mm(eta.get("boardNext")).put("tt", 1.0);      // s456: 시각표 답(분:00) 표시
         if (b.get("fromMs") != null && fin(b.get("fromMs"))) eta.put("boardArriveMs", num(b.get("fromMs")));
         Map<String, Object> bl = mm(st.get("bl")); if (bl == null) { bl = obj(); st.put("bl", bl); }
         bl.put("src", truthy(b.get("src")) ? str(b.get("src")) : ""); bl.put("ms", num(b.get("ms"))); bl.put("okAt", now);
@@ -1827,7 +1860,11 @@ final class RideStandbyJ {
         List<Object> stSt = l(st.get("stops"));
         if (stSt != null && !stSt.isEmpty() && !tr.isEmpty() && !dtHold) {
             List<Object> stops = new ArrayList<Object>();
-            for (Object so : stSt) { Map<String, Object> o = copyM(so); if (o != null && st.get("etaMs") != null && at(st.get("etaMs"), (int) gn(so, "i")) != null) o.put("arrMs", at(st.get("etaMs"), (int) gn(so, "i"))); stops.add(o); }
+            for (Object so : stSt) {
+                Map<String, Object> o = copyM(so); if (o != null && st.get("etaMs") != null && at(st.get("etaMs"), (int) gn(so, "i")) != null) o.put("arrMs", at(st.get("etaMs"), (int) gn(so, "i")));
+                if (o != null) { Object nyv = notYet.get(ik(gn(so, "i"))); if (nyv != null && now - num(nyv) <= notYetKeepSec * 1000) o.put("ny", Boolean.TRUE); }      // s456: '아직 안 닿음'이 살아 있는 정류장 표시
+                stops.add(o);
+            }
             tk = RideTrackJ.rideTrack(obj("nowMs", now, "trail", tr, "plan", obj("pts", new ArrayList<Object>(), "boarded", !Boolean.FALSE.equals(eta.get("boarded")) && !Boolean.TRUE.equals(eta.get("notDeparted")),
                 "notDeparted", Boolean.FALSE, "stops", stops, "subConfirmed", !progBus, "progIsBus", progBus, "suppress", list("standby")), "want", obj("zero", Boolean.TRUE, "bus", progBus)));
             zero = tk != null ? mm(tk.get("zero")) : null;
@@ -1837,6 +1874,7 @@ final class RideStandbyJ {
                     if (z.get("passMs") != null && fin(z.get("passMs")) && truthy(z.get("apply"))) {
                         int hit = -1; for (int k = 0; k < passes.size(); k++) if (gn(passes.get(k), "idx") == num(z.get("i"))) { hit = k; break; }
                         if (hit >= 0 && doneAt(st, num(z.get("i")))) continue;      // s266: 시각표·버튼으로 탔다고 확정한 환승 승차역은 위치로 다시 쓰지 않는다
+                        if (hit >= 0 && "gps".equals(g(passes.get(hit), "src")) && num(z.get("i")) < progMax) continue;      // s456: 뒤에 통과 증거가 있는(이미 지난) 정류장·역의 GPS 통과 시각은 다시 쓰지 않는다
                         Map<String, Object> np = obj("idx", z.get("i"), "ms", z.get("passMs"), "src", "gps");
                         if (hit >= 0) passes.set(hit, np); else passes.add(np);
                         newPass = true; notYet.remove(ik(num(z.get("i"))));
@@ -1877,13 +1915,14 @@ final class RideStandbyJ {
         if (ttNowF || truthy(st.get("dr"))) ein.put("timetableFirst", Boolean.TRUE); else ein.remove("timetableFirst");
         ein.put("passes", passes);
         if (!nyList.isEmpty() && ttNowF) ein.put("notYet", nyList); else ein.remove("notYet");
-        final String fzKey = fzKey(eta); { Map<String, Object> fz0 = mm(st.get("fz")); if (fz0 != null && fzKey.equals(fz0.get("key"))) ein.put("frozen", fz0.get("m")); else { ein.remove("frozen"); st.remove("fz"); } }      // s379: 지난(확정) 역 시각 잠금
+        final String fzKey = fzKey(eta); { Map<String, Object> fz0 = mm(st.get("fz")); if (fz0 != null && fzKey.equals(fz0.get("key"))) { fzPrune(st, passes, notYet, now, notYetKeepSec * 1000); ein.put("frozen", fz0.get("m")); } else { ein.remove("frozen"); st.remove("fz"); } }      // s379: 지난(확정) 역 시각 잠금 · s456: 아직 안 지난 것으로 드러난 역은 먼저 푼다
         Map<String, Object> fired = mm(st.get("fired")); if (fired == null) { fired = obj(); st.put("fired", fired); }
         Map<String, Object> r = RideEtaJ.rideEta(ein);
         if (r == null || r.get("etaMs") == null) return obj("v", 1, "state", st, "ongoing", obj("title", ongoingTitle, "text", ""), "alert", null, "done", Boolean.FALSE, "nextMs", stepMs, "notes", list("도착 시각 계산 실패"));
         st.put("etaMs", r.get("etaMs"));
-        freeze(st, r, now, passes, fzKey);
+        if (r.get("xfer") != null) eta.put("prevXfer", r.get("xfer")); else eta.remove("prevXfer");      // s456: 환승 지하철 판단을 다음 걸음에 되돌려 준다(뒤집힘 방지)
         try { monoPos(st, r, now, notes); } catch (RuntimeException eMk) { notes.add("마커 보정 실패: " + eMk.getMessage()); }
+        freeze(st, r, now, passes, fzKey);      // s456: 마커 자리가 정해진 뒤에 잠근다(마커가 이미 떠난 역)
         { Map<String, Object> wq = mm(st.get("wait")); if (wq != null && eta.get("boardNext") != null) { Object bv = at(r.get("etaMs"), (int) num(wq.get("i"))); if (bv != null && fin(bv)) wq.put("arrMs", num(bv)); } }
         if (r.get("delayMin") != null) { eta.put("prevLevelMin", r.get("delayMin")); eta.put("prevAnchorIdx", r.get("anchorIdx")); }
         // 4) 지금 어느 역까지 왔나

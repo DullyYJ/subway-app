@@ -225,6 +225,17 @@ ok(E.hcNearest(0, 0) === null && E.hcNearest(37.4979, 127.0276)[0] === '강남',
   ok(multi.ok && multi.alts && Object.keys(multi.alts).join() === 'less,sub' && JSON.stringify(multi.alts.less) === JSON.stringify(solo), '여러 탭 한 번에: alts[탭] 이 따로 요청한 화면과 같다 · 지금 탭 · 모르는 탭 · 중복은 뺀다');
   ok(JSON.stringify(multi.body) === JSON.stringify(E.hcardsScreen({ cap: 25 }, fb('fast')).body) && !('alts' in E.hcardsScreens({ cap: 25 }, fb('fast'), [])) && E.hcardsScreens({ cap: 17 }, fb('fast'), ['less']).ok === false, 'alts 를 달아도 본 화면은 그대로 · alts 없으면 예전과 같다');
 }
+{   // s456 (YJ: 탑승 안내는 07:01 도착인데 브리핑은 '지금 + 소요시간'이라 07:20경 — 서로 달랐다): 탑승 안내 중이면 도착 시각은 탑승 엔진이 계산한 값(rd.eta)을 그대로 쓴다
+  const arrOf = f => { const m = /도착은 (\d\d:\d\d)경/.exec(txt(E.hcardsScreen({ cap: 25 }, f).body)); return m ? m[1] : null; };
+  const RD = { here: 1, boarded: true, key: 's', nodes: [{ name: '출발', isOrigin: true }, { name: '부평', isSub: true, lineName: '1호선' }, { name: '강남', isSub: true, lineName: '1호선' }] };
+  ok(arrOf(base()) === '08:54' && arrOf(base({ rd: RD })) === '08:54', 's456: 탑승 엔진 값이 없으면 예전처럼 지금 + 소요시간(08:30 + 24분) ' + arrOf(base()));
+  ok(arrOf(base({ rd: Object.assign({}, RD, { eta: now + 13 * 60000 + 22000 }) })) === '08:43', 's456: 탑승 중이면 탑승 엔진의 도착 시각(08:43:22 → 08:43) ' + arrOf(base({ rd: Object.assign({}, RD, { eta: now + 13 * 60000 + 22000 }) })));
+  ok(arrOf(base({ rd: Object.assign({}, RD, { eta: now + 47 * 60000 }) })) === '09:17', 's456: 늦어지면 늦어진 시각 그대로(09:17)');
+  ok(arrOf(base({ rd: Object.assign({}, RD, { eta: now - 5 * 60000 }) })) === '08:54' && arrOf(base({ rd: Object.assign({}, RD, { eta: now + 13 * 3600000 }) })) === '08:54' && arrOf(base({ rd: Object.assign({}, RD, { eta: 'x' }) })) === '08:54', 's456: 이미 지난 값 · 터무니없이 먼 값 · 숫자가 아닌 값은 쓰지 않는다');
+  ok(arrOf(base({ rd: { eta: now + 13 * 60000 } })) === '08:54', 's456: 탑승 재료(노드)가 없으면 쓰지 않는다');
+  const jv = fs.readFileSync(R('native/shell/RideCore.java'), 'utf8');
+  ok(/res\.put\("eta", Long\.valueOf\(etaEnd\)\)/.test(jv) && /sceneEta\(m\.get\("etaMs"\)\)/.test(jv) && /Math\.floor\(d \/ 60000\.0\) \* 60000L/.test(jv), 's456: 앱(RideCore.sceneJson)은 엔진이 계산해 둔 state.etaMs 의 마지막 칸을 분 단위로 옮겨 담기만 한다(계산하지 않는다)');
+}
 console.log(pass + ' 통과 / ' + fail + ' 실패');
 if (fail) process.exit(1);
 })();

@@ -375,7 +375,7 @@ final class RideTrackJ {
     static double notYet(Map<String, Object> s, Map<String, Object> prev, List<Fix> tr, double now) {
         if (prev == null || !fin(prev.get("lat")) || !fin(prev.get("lng"))) return Double.NaN;
         double late = now - gn(s, "arrMs");
-        if (late < 0 || late > notYetMaxLateSec * 1000 || tr.isEmpty()) return Double.NaN;
+        if ((late < 0 && !Boolean.TRUE.equals(s.get("ny"))) || late > notYetMaxLateSec * 1000 || tr.isEmpty()) return Double.NaN;      // s456: 이미 '아직 안 닿음'으로 올려 둔 정류장(ny)은 표시 시각이 미래여도 다시 판정
         Fix q = null;
         for (int i = tr.size() - 1; i >= 0; i--) { if (tr.get(i).noAcc() || tr.get(i).acc <= notYetAccM) { q = tr.get(i); break; } }
         if (q == null || now - q.ts > freshSec * 1000) return Double.NaN;
