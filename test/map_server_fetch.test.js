@@ -320,7 +320,7 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) return new Response(AR, { status: 200 });
       if (/getSttnThrghRouteList/.test(inner)) return new Response('{"response":{"body":{"items":""}}}', { status: 200 });
       return new Response('', { status: 200 }); } });
-    const go = async (tnMs, d1Ms, d1Fail, extra) => { const c = load(extra), t0 = Date.now(), r = await post(c.H, { BUSAPI: mk(tnMs, d1Ms, d1Fail) }, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: ME[0], lng: ME[1], res: {}, sv: 1, svb: 300 } } }); return { names: r.j.body.filter(n => n.t === 'bcard').map(n => n.nm), ms: Date.now() - t0, bres: r.j.info.bres || {}, nc: r.j.info.bus && r.j.info.bus.nc }; };
+    const go = async (tnMs, d1Ms, d1Fail, extra) => { const c = load(extra), t0 = Date.now(), r = await post(c.H, { BUSAPI: mk(tnMs, d1Ms, d1Fail) }, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: ME[0], lng: ME[1], res: {}, sv: 1, svb: 300 } } }); return { names: r.j.body.filter(n => n.t === 'bcard').map(n => n.nm), ms: Date.now() - t0, bres: r.j.info.bres || {}, nc: r.j.info.bus && r.j.info.bus.nc, need: (r.j.info.bus && r.j.info.bus.need || []).map(n => n.k) }; };
     const EX7 = ['아라역1번출구', '아라역3번출구', '아라역4번출구', '아라역5번출구', '아라역6번출구', '아라역8번출구', '아라역7번출구'];
     let a = await go(50, 300);
     ok(JSON.stringify(a.names.slice(0, 7)) === JSON.stringify(EX7) && a.names.length === 8 && !/출구/.test(a.names[7]), 's458: TAGO 가 먼저 와도 D1 을 기다려 출구 7곳이 모두 맨 앞(가까운 순) · 그 뒤에 다른 정류장 — ' + a.names.join(' / '));
@@ -328,7 +328,7 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     a = await go(300, 50);
     ok(JSON.stringify(a.names.slice(0, 7)) === JSON.stringify(EX7), 's458: D1 이 먼저 오면 예전 그대로 바로(TAGO 를 기다리지 않는다) — 출구 7곳 ' + a.ms + 'ms');
     a = await go(50, 4000);
-    ok(a.ms < 2600 && a.names.length === 6 && a.names.indexOf('아라역5번출구') < 0 && a.bres.d1 === '' && a.nc === 1, 's458: D1 이 1.5초 넘게 안 오면 더 기다리지 않고 TAGO 만으로 그린다(' + a.ms + 'ms · ' + a.names.length + '곳) — 기기는 이 목록을 보관하지 않는다');
+    ok(a.ms < 2600 && a.names.length === 6 && a.names.indexOf('아라역5번출구') < 0 && a.bres.d1 === undefined && a.need.indexOf('d1') >= 0 && a.nc === 1, 's458: D1 이 1.5초 넘게 안 오면 더 기다리지 않고 TAGO 만으로 그린다(' + a.ms + 'ms · ' + a.names.length + '곳) — 기기는 이 목록을 보관하지 않는다 · s459: D1 은 빈 값으로 굳히지 않고 need 로 되묻는다');
     a = await go(50, 100, true);
     ok(a.names.length === 6 && a.ms < 1200 && a.nc === 1, 's458: D1 이 실패해도 멈추지 않는다 ' + a.ms + 'ms · 보관하지 말라고(nc) 알린다');
     const old = load(); old.mapBusWantD1 = () => false;      // 예전 동작(기다리지 않음) 재현 — 화면과 같은 6곳이 나오는지 확인
