@@ -166,6 +166,13 @@ function mapSvOne(env, k, url, fresh) {                            // → Promis
   return ent.p;
 }
 var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: 정류장 목록 단계에서 우리 정류장 표(D1)를 기다리는 한도
+var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: 정류장 단계에서 못 기다린 D1(우리 정류장 표)을 도착정보 단계에서 되받을 때 더 기다리는 한도 — 도착정보가 다 온 뒤부터 · 예산 안에서
+async function mapSvArrWait(ps, need, done, budget) {
+  var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
+  var tW = Date.now();
+  await Promise.race([Promise.all(ps.filter(function (p, i) { return i !== dIx; })), new Promise(function (r) { setTimeout(r, budget); })]);
+  if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
+}
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
@@ -175,12 +182,12 @@ async function mapSvResolve(env, cap, body, out) {
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
     if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;                       // s199: 노선 경유 정류장 목록(방면 이름용 · 큰 본문)은 기기가 천천히 받는다 — 서버가 기다리지 않는다
-    var arrWave = need.every(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });
+    var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: 도착정보 바퀴에 D1 되받기가 끼어 있어도 함께 받는다(D1 만 남은 것은 정류장 바퀴)
     var slot = new Array(need.length);
     var done = new Array(need.length);
     var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
-    if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
+    if (arrWave) await mapSvArrWait(ps, need, done, budget);
     else if (stopWave) {                                    // s177: 정류장 목록 — 우선순위 앞 출처가 정류장을 주면 나머지(느린 TAGO)는 기다리지 않고 도착정보로 넘어간다. 못 기다린 출처는 빈 값으로 둔다.
       var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO 가 먼저 와도 우리 정류장 표(D1)는 이 시간까지 기다린다(역 출구가 빠지지 않게) — 넘으면 없는 것으로 치고 그린다
       for (;;) {
@@ -204,7 +211,7 @@ async function mapSvResolve(env, cap, body, out) {
         if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else if (/^[af]/.test(k)) failA++;       // 이웃·바꾼 ID·경유노선(g·h·t·u)은 덤 — 못 받아도 실패로 세지 않는다
         return;
       }
-      if (t) any = true;
+      if (t) any = true; if (k === 'd1' && !t) return;                           // s459: D1 을 못 받았으면(한도 넘김·실패) 빈 값으로 굳히지 않는다 — 기기도 빈 값을 안 받으니 다음 요청에 다시 받는다(예전엔 res.d1='' 가 그 자리에 남아 그 뒤로는 영영 안 받았다)
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;
