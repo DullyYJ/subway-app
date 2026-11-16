@@ -180,5 +180,27 @@ t('ride-track: "아직 안 닿음"으로 올려 둔 정류장(ny)은 표시 시�
   assert.strictEqual((z(q(true, mid)) || {}).notYet, true, '표시가 있으면 아라~계양 사이 · 계양에서 먼 위치 → 아직 안 닿음');
   assert.ok(!(z(q(true, [37.5722, 126.7359])) || {}).notYet, '계양에 다 왔으면(400m 안) 아직 안 닿음이 아니다');
 });
+// ── 5. s457 굳은 좌표(YJ: "GPS 가 지하철에서 안 흔들려야 해") ──
+t('s457 지하에서 같은 좌표가 10분 동안 새 시각으로 계속 와도 마커가 승차역에 붙들리지 않는다 — 시각표대로 계양 06:22 · 귤현 06:24 · 박촌 06:27(예전: 계양 06:22 → … → 06:29 로 밀리다 마커가 4역을 한 번에 건너뜀)', () => {
+  for (const o of [{ mode: 'stale', staleSec: 600, end: 30 }, { mode: 'stale', staleSec: 600, staleAcc: 25, end: 30 }, { mode: 'stale', staleSec: 600, press: '18:40', end: 30 }]) {
+    const r = run(o);
+    assert.deepStrictEqual([seq(r, A), seq(r, A + 1), seq(r, A + 2), seq(r, A + 3)], [['06:18'], ['06:22'], ['06:24'], ['06:27']], JSON.stringify(o) + ' ' + seq(r, A + 1).join(' → '));
+    assert.strictEqual(r.changed.length, 0, r.changed.join(' / '));
+    const mk = []; for (const row of r.rows) if (row.from >= A && row.from !== mk[mk.length - 1]) mk.push(row.from);
+    assert.ok(mk.every((v, i) => i === 0 || v === mk[i - 1] + 1), '마커는 한 역씩 앞으로만 ' + mk.join(' → '));
+    const at2410 = r.rows.find((x) => x.ms === SC.at(6, 24, 30)); assert.ok(at2410.from >= A + 2, '06:24:30 에는 귤현 근처(시각표) — 마커 ' + at2410.from);
+  }
+});
+t('s457 ride-track: 굳은 좌표 판정 — 정확도 20m 넘고 30초 이상(4개 이상) 3m 안에 머문 좌표만 뺀다 · 정확도 좋은 GPS · 정확도 모름 · 움직이는 좌표 · 짧은 기록은 그대로 증거', () => {
+  const U = SC.unitInputs(), ny = (n, acc, j) => { const z = (TR.rideTrack(U.frozenQ(n, acc, j)).zero.stops || []).find((s) => s.i === 7); return !!(z && z.notYet); };
+  assert.strictEqual(ny(12, 60, 0), false, '정확도 60m · 55초 굳음 → 증거 아님');
+  assert.strictEqual(ny(12, 25, 0), false, '정확도 25m 도 마찬가지');
+  assert.strictEqual(ny(12, 15, 0), true, '정확도 15m(진짜 GPS)는 멈춰 있어도 증거 — 지상에서 열차가 서 있는 경우');
+  assert.strictEqual(ny(12, null, 0), true, '정확도를 모르면 예전 그대로');
+  assert.strictEqual(ny(3, 60, 0), true, '3개(10초)뿐이면 아직 굳었다고 보지 않는다');
+  assert.strictEqual(ny(6, 21, 0), true, '25초면 아직 아니다');
+  assert.strictEqual(ny(7, 60, 0), false, '30초를 채우면(7개) 굳은 것으로 본다');
+  assert.strictEqual(ny(12, 60, 1), true, '5초마다 5m 씩 움직이는 좌표는 굳은 것이 아니다');
+});
 console.log('\nride_xfer_tt: ' + pass + ' 통과 / ' + fail + ' 실패');
 process.exit(fail ? 1 : 0);

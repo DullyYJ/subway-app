@@ -33,6 +33,7 @@ final class RideTrackJ {
         zeroApplyLeadSec = 3, zeroKeepSec = 20, zeroFinalKeepMin = 30,
         passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 100, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
         notYetFarM = 400, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
+        frozenAccM = 20, frozenSec = 30, frozenMinN = 4, frozenM = 3,      // s457 굳은 좌표(지하에서 같은 좌표가 새 시각으로 계속 옴)
         motionWinSec = 14, motionMinSpanSec = 4, motionMaxAcc = 60, motionMoveMps = 1.4, motionStopMps = 0.7,
         busPosOffM = 150, busPosFixAccM = 60, busPosMinStops = 2, busPosMinGapM = 15;
 
@@ -371,14 +372,23 @@ final class RideTrackJ {
         }
         return new double[] { ms, round(dMin) };
     }
+    /** s457 (engine rtFrozen): 정확도 나쁜 좌표가 frozenSec 초 이상(frozenMinN 개 이상) 같은 자리(frozenM 안)에 굳어 있는가 */
+    static boolean frozen(List<Fix> tr, int at) {
+        if (at < 0 || at >= tr.size()) return false;
+        Fix q = tr.get(at); if (q.noAcc() || !(q.acc > frozenAccM)) return false;
+        int n = 1; double first = q.ts;
+        for (int k = at - 1; k >= 0; k--) { if (hav(tr.get(k).lat, tr.get(k).lng, q.lat, q.lng) > frozenM) break; n++; first = tr.get(k).ts; }
+        return n >= frozenMinN && q.ts - first >= frozenSec * 1000;
+    }
     /** 아직 안 닿음 — distM 또는 NaN(null). */
     static double notYet(Map<String, Object> s, Map<String, Object> prev, List<Fix> tr, double now) {
         if (prev == null || !fin(prev.get("lat")) || !fin(prev.get("lng"))) return Double.NaN;
         double late = now - gn(s, "arrMs");
         if ((late < 0 && !Boolean.TRUE.equals(s.get("ny"))) || late > notYetMaxLateSec * 1000 || tr.isEmpty()) return Double.NaN;      // s456: 이미 '아직 안 닿음'으로 올려 둔 정류장(ny)은 표시 시각이 미래여도 다시 판정
-        Fix q = null;
-        for (int i = tr.size() - 1; i >= 0; i--) { if (tr.get(i).noAcc() || tr.get(i).acc <= notYetAccM) { q = tr.get(i); break; } }
+        Fix q = null; int qi = -1;
+        for (int i = tr.size() - 1; i >= 0; i--) { if (tr.get(i).noAcc() || tr.get(i).acc <= notYetAccM) { q = tr.get(i); qi = i; break; } }
         if (q == null || now - q.ts > freshSec * 1000) return Double.NaN;
+        if (frozen(tr, qi)) return Double.NaN;      // s457: 굳은 좌표는 '아직 안 닿음'의 증거가 아니다
         double sl = gn(s, "lat"), sg = gn(s, "lng"), pl = gn(prev, "lat"), pg = gn(prev, "lng");
         double dn = hav(q.lat, q.lng, sl, sg), dp = hav(q.lat, q.lng, pl, pg), L = hav(pl, pg, sl, sg);
         if (dn <= notYetFarM || L <= 0) return Double.NaN;

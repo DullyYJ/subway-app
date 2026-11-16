@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-16s456";
+var ENGINE_VERSION = "route-v2-2026-11-16s457";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -9560,6 +9560,10 @@ var RIDE_TRACK_DEFAULTS = {
   passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
   // \u2605 2026-10-13 (YJ: "\ub9c8\ucee4\ub3c4 \uacc4\uc18d \uc5d4\uc9c4\uc5d0 \uc704\uce58\ub97c \ubb3c\uc5b4\ubcf4\uace0 \uc601\uc810 \uc7a1\uace0 \ubcf4\uc815\ud574\uc57c\uc9c0 \u2014 \ubc00\uac70\ub098 \ub2f9\uae30\uac70\ub098"): \ub2a6\uac8c \uc624\ub294 \uc5f4\ucc28 \u2014 \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\ub294\ub370 \uc2e0\uc120\ud55c GPS \uac00 '\uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 \uc0ac\uc774'\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uacfc notYetFarM \ub118\uac8c \ub5a8\uc5b4\uc838 \uc788\uc73c\uba74 notYet:true(\uc544\uc9c1 \uc548 \ub2ff\uc74c). \uc571\uc740 \uc774 \uc99d\uac70\ub97c /ride-eta \uc5d0 \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ub4a4 \uc2dc\uac01\uc744 \ubbfc\ub2e4.
   notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  // \u2605 2026-11-16 s457 (YJ: "GPS \uac00 \uc9c0\ud558\ucca0\uc5d0\uc11c \uc548 \ud754\ub4e4\ub824\uc57c \ud574"): \uad73\uc740 \uc88c\ud45c \u2014 \uc9c0\ud558\uc5d0\uc11c\ub294 \ud3f0\uc774 \ub9c8\uc9c0\ub9c9 \uc640\uc774\ud30c\uc774\u00b7\uae30\uc9c0\uad6d \uc704\uce58\ub97c \uc0c8 \uc2dc\uac01\uc73c\ub85c \uacc4\uc18d \ub3cc\ub824\uc900\ub2e4(\uac19\uc740 \uc88c\ud45c \u00b7 \uc815\ud655\ub3c4 \ub098\uc068).
+  //   \uadf8 \uc88c\ud45c\ub294 '\uc544\uc9c1 \uc55e \uc5ed\uc5d0 \uc788\ub2e4'\ub294 \uc99d\uac70\uac00 \uc544\ub2c8\ub2e4. \uc815\ud655\ub3c4\uac00 frozenAccM \ubcf4\ub2e4 \ub098\uc058\uace0, \ub9c8\uc9c0\ub9c9 frozenSec \ucd08(\uc88c\ud45c frozenMinN \uac1c \uc774\uc0c1) \ub3d9\uc548 frozenM \uc548\uc5d0\uc11c \uaf3c\uc9dd \uc54a\uc73c\uba74 '\uc544\uc9c1 \uc548 \ub2ff\uc74c' \ud310\uc815\uc5d0 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
+  //   \u2192 \uc2dc\uac01\ud45c\ub300\ub85c \uac04\ub2e4(\uc2e4\uc2dc\uac04 \uc5c6\ub294 \ub178\uc120\uc758 \uae30\uc874 \uaddc\uce59). \uc815\ud655\ub3c4 \uc88b\uc740 \uc9c4\uc9dc GPS(\uc9c0\uc0c1)\ub294 \uba48\ucdb0 \uc788\uc5b4\ub3c4 \uadf8\ub300\ub85c \uc99d\uac70\ub2e4.
+  frozenAccM: 20, frozenSec: 30, frozenMinN: 4, frozenM: 3,
   // \u2605 2026-10-19 (YJ: "\ubc84\uc2a4\ub294 \uc9c0\uc0c1\uc774 \ub300\ubd80\ubd84\uc774\ub2c8\uae4c \ub124\ube44\uac8c\uc774\uc158\ucc98\ub7fc GPS \ub97c \uc368 \u00b7 \ubc84\uc2a4\uac00 \uacc4\uc18d \uc6c0\uc9c1\uc774\ub294\ub370 \ub9c8\ucee4\ub294 \uc815\uc9c0(\ub178\ub791)"): \uc6c0\uc9c1\uc784 \u00b7 \ubc84\uc2a4 \uc704\uce58.
   //   motion : \uc2e0\uc120\ud55c \uc88c\ud45c \uba87 \uac1c\uc758 '\uc21c \uc774\ub3d9 \uc18d\ub3c4'(m/s)\ub85c \uc9c0\uae08 \ub2ec\ub9ac\ub294 \uc911\uc778\uc9c0 \ubcf8\ub2e4(\uc9c0\ud558\ucca0 PF \uc758 \uc815\ucc28 \ud310\uc815\uacfc \ubb34\uad00 \u2014 \ub124\ube44\uac8c\uc774\uc158\uc2dd).
   //   busPos : \ubc84\uc2a4 \uad6c\uac04 \uc815\ub958\uc7a5\uc744 \uc774\uc740 \uc120 \uc704\uc5d0\uc11c \uc9c0\uae08 \uc704\uce58(\uc815\ub958\uc7a5 \uc0ac\uc774 \ube44\uc728)\uc640 \uc774\ubbf8 \uc9c0\ub09c \uc815\ub958\uc7a5\uc758 \ud1b5\uacfc \uc2dc\uac01(\uc120 \uc704 \uc774\ub3d9 \uac70\ub9ac\ub85c \ubcf4\uac04).
@@ -9848,6 +9852,13 @@ function rtPassTime(s, tr, now, O) {
   }
   return { ms: ms, distM: Math.round(dMin) };
 }
+// s457 \uad73\uc740 \uc88c\ud45c\uc778\uac00: tr[at] \uac00 \uc815\ud655\ub3c4 \ub098\uc05c \uc88c\ud45c\uc774\uace0, \uadf8 \uc55e \uc88c\ud45c\ub4e4\uc774 frozenSec \ucd08 \uc774\uc0c1(frozenMinN \uac1c \uc774\uc0c1) \uac19\uc740 \uc790\ub9ac(frozenM \uc548)\uc5d0 \uc788\ub2e4.
+function rtFrozen(tr, at, O) {
+  var q = tr[at]; if (!q || q.acc == null || !(q.acc > O.frozenAccM)) return false;
+  var n = 1, first = q.ts, k;
+  for (k = at - 1; k >= 0; k--) { if (rtHav(tr[k].lat, tr[k].lng, q.lat, q.lng) > O.frozenM) break; n++; first = tr[k].ts; }
+  return n >= O.frozenMinN && q.ts - first >= O.frozenSec * 1000;
+}
 // \uc544\uc9c1 \uc548 \ub2ff\uc74c: \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\ub294\ub370(\ucd5c\ub300 notYetMaxLateSec) \ub9c8\uc9c0\ub9c9 \uc2e0\uc120\ud55c \uc88c\ud45c\uac00 \uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 '\uc0ac\uc774'\uc5d0 \uc788\uace0 \uc774 \uc815\ub958\uc7a5\uc5d0\uc11c notYetFarM \ub118\uac8c \uba40\ub2e4.
 //   (\uc774\ubbf8 \uc9c0\ub098\uccd0 \uba40\uc5b4\uc9c4 \uacbd\uc6b0\uc640 \uac00\ub974\uae30 \uc704\ud574 '\uc0ac\uc774'\uc77c \ub54c\ub9cc \u2014 \uc55e \uc815\ub958\uc7a5 \uc88c\ud45c\uac00 \uc5c6\uc73c\uba74 \ud310\uc815\ud558\uc9c0 \uc54a\ub294\ub2e4.)
 function rtNotYet(s, prev, tr, now, O) {
@@ -9859,6 +9870,7 @@ function rtNotYet(s, prev, tr, now, O) {
   var q = null;
   for (var i = tr.length - 1; i >= 0; i--) { if (tr[i].acc == null || tr[i].acc <= O.notYetAccM) { q = tr[i]; break; } }
   if (!q || now - q.ts > O.freshSec * 1000) return null;
+  if (rtFrozen(tr, i, O)) return null;      // s457: \uad73\uc740 \uc88c\ud45c\ub294 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc758 \uc99d\uac70\uac00 \uc544\ub2c8\ub2e4
   var dn = rtHav(q.lat, q.lng, s.lat, s.lng), dp = rtHav(q.lat, q.lng, prev.lat, prev.lng), L = rtHav(prev.lat, prev.lng, s.lat, s.lng);
   if (dn <= O.notYetFarM || L <= 0) return null;
   if (dp + dn > L * O.notYetBetween) return null;

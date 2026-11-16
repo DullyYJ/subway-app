@@ -51,7 +51,7 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     const rec = (req, o) => { fs.writeSync(fd, JSON.stringify({ fn: 'standby', in: req, out: J(o) }) + '\n'); n++; const st = o.state; if (st.eta.live && st.eta.live.some(q => q.tt === 1)) sawTt = true; if (st.fz && Object.keys(st.fz.m).length > 3) sawFz = true; if (st.notYet && Object.keys(st.notYet).length) sawNy = true; if (st.eta.prevXfer) sawXf = true; };
     // 실기기 화면(991 버스 → 아라 06:18)을 위치 받는 방식 · 버스 지연 · 열차 지연 · [탑승] 누름을 바꿔 가며 처음부터 끝까지
     for (const c of [{ mode: 'none' }, { mode: 'stale', press: '17:30' }, { mode: 'ground', depLate: 120 }, { mode: 'live', depLate: 120 }, { mode: 'none', busLate: 480, tt: true, dep: 28, end: 34 }, { mode: 'none', busLate: 480, dep: 28, end: 34 },
-      { mode: 'none', busLate: 400, tt: true, dep: 28, end: 34 }, { mode: 'live', busLate: 600, tt: true, dep: 28, end: 36 }, { mode: 'none', busLate: 0 }, { mode: 'ground', press: '18:10' }]) SC.run(SB.rideStandby, Object.assign({ rec, attachPress: SB.rsAttachPressTT }, c));
+      { mode: 'none', busLate: 400, tt: true, dep: 28, end: 34 }, { mode: 'live', busLate: 600, tt: true, dep: 28, end: 36 }, { mode: 'none', busLate: 0 }, { mode: 'ground', press: '18:10' }, { mode: 'stale', staleSec: 600, end: 30 }, { mode: 'stale', staleSec: 600, staleAcc: 25, press: '18:40', end: 30 }]) SC.run(SB.rideStandby, Object.assign({ rec, attachPress: SB.rsAttachPressTT }, c));
     const U = SC.unitInputs();
     for (const inp of U.eta) { fs.writeSync(fd, JSON.stringify({ fn: 'eta', in: inp, out: J(rideEta(J(inp))) }) + '\n'); n++; }
     for (const inp of U.track) { fs.writeSync(fd, JSON.stringify({ fn: 'track', in: inp, out: J(rideTrack(J(inp))) }) + '\n'); n++; }

@@ -82,6 +82,10 @@ var RIDE_TRACK_DEFAULTS = {
   passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정해야지 — 밀거나 당기거나"): 늦게 오는 열차 — 표시 도착 시각이 지났는데 신선한 GPS 가 '앞 정류장과 이 정류장 사이'에서 이 정류장과 notYetFarM 넘게 떨어져 있으면 notYet:true(아직 안 닿음). 앱은 이 증거를 /ride-eta 에 보내고 엔진이 뒤 시각을 민다.
   notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  // ★ 2026-11-16 s457 (YJ: "GPS 가 지하철에서 안 흔들려야 해"): 굳은 좌표 — 지하에서는 폰이 마지막 와이파이·기지국 위치를 새 시각으로 계속 돌려준다(같은 좌표 · 정확도 나쁨).
+  //   그 좌표는 '아직 앞 역에 있다'는 증거가 아니다. 정확도가 frozenAccM 보다 나쁘고, 마지막 frozenSec 초(좌표 frozenMinN 개 이상) 동안 frozenM 안에서 꼼짝 않으면 '아직 안 닿음' 판정에 쓰지 않는다
+  //   → 시각표대로 간다(실시간 없는 노선의 기존 규칙). 정확도 좋은 진짜 GPS(지상)는 멈춰 있어도 그대로 증거다.
+  frozenAccM: 20, frozenSec: 30, frozenMinN: 4, frozenM: 3,
   // ★ 2026-10-19 (YJ: "버스는 지상이 대부분이니까 네비게이션처럼 GPS 를 써 · 버스가 계속 움직이는데 마커는 정지(노랑)"): 움직임 · 버스 위치.
   //   motion : 신선한 좌표 몇 개의 '순 이동 속도'(m/s)로 지금 달리는 중인지 본다(지하철 PF 의 정차 판정과 무관 — 네비게이션식).
   //   busPos : 버스 구간 정류장을 이은 선 위에서 지금 위치(정류장 사이 비율)와 이미 지난 정류장의 통과 시각(선 위 이동 거리로 보간).
@@ -370,6 +374,13 @@ function rtPassTime(s, tr, now, O) {
   }
   return { ms: ms, distM: Math.round(dMin) };
 }
+// s457 굳은 좌표인가: tr[at] 가 정확도 나쁜 좌표이고, 그 앞 좌표들이 frozenSec 초 이상(frozenMinN 개 이상) 같은 자리(frozenM 안)에 있다.
+function rtFrozen(tr, at, O) {
+  var q = tr[at]; if (!q || q.acc == null || !(q.acc > O.frozenAccM)) return false;
+  var n = 1, first = q.ts, k;
+  for (k = at - 1; k >= 0; k--) { if (rtHav(tr[k].lat, tr[k].lng, q.lat, q.lng) > O.frozenM) break; n++; first = tr[k].ts; }
+  return n >= O.frozenMinN && q.ts - first >= O.frozenSec * 1000;
+}
 // 아직 안 닿음: 표시 도착 시각이 지났는데(최대 notYetMaxLateSec) 마지막 신선한 좌표가 앞 정류장과 이 정류장 '사이'에 있고 이 정류장에서 notYetFarM 넘게 멀다.
 //   (이미 지나쳐 멀어진 경우와 가르기 위해 '사이'일 때만 — 앞 정류장 좌표가 없으면 판정하지 않는다.)
 function rtNotYet(s, prev, tr, now, O) {
@@ -381,6 +392,7 @@ function rtNotYet(s, prev, tr, now, O) {
   var q = null;
   for (var i = tr.length - 1; i >= 0; i--) { if (tr[i].acc == null || tr[i].acc <= O.notYetAccM) { q = tr[i]; break; } }
   if (!q || now - q.ts > O.freshSec * 1000) return null;
+  if (rtFrozen(tr, i, O)) return null;      // s457: 굳은 좌표는 '아직 안 닿음'의 증거가 아니다
   var dn = rtHav(q.lat, q.lng, s.lat, s.lng), dp = rtHav(q.lat, q.lng, prev.lat, prev.lng), L = rtHav(prev.lat, prev.lng, s.lat, s.lng);
   if (dn <= O.notYetFarM || L <= 0) return null;
   if (dp + dn > L * O.notYetBetween) return null;

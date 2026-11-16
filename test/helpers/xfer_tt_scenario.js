@@ -1,6 +1,7 @@
 // s456 시나리오(YJ 2026-11-16 실기기 화면 재현): 991 버스 → 아라역3번출구 하차 → 인천1호선 아라 06:18 → 계양 06:22 → 귤현 06:24 → 박촌 06:27 → …
 //   run(rideStandby, { mode, busLate, depLate, tt, press, end, rec }) → { rows, changed, st, names }
 //   mode   : 'none' 하차 1분 뒤부터 지하(위치 없음) · 'stale' 지하에서도 같은 좌표가 새 시각으로 계속 옴(정확도 60m) · 'ground' 지상역(계양·귤현) 근처에서만 위치 · 'live' 열차를 따라 정확한 위치
+//   staleSec: stale 방식에서 열차 출발 뒤 같은 좌표가 계속 오는 시간(초, 기본 210) · staleAcc: 그 좌표의 정확도(m, 기본 60)
 //   busLate: 버스가 계획보다 늦는 초 · dep: 내가 타는 열차의 시각표 출발 분(06:dep, 기본 18) · depLate: 그 열차가 시각표보다 늦게 떠나는 초 · tt: 승차역 node.tt(그 역 시각표)를 싣는다(/ride/start 가 실어 준 경우)
 //   press  : 'M:S' — 그 시각(06:M:S)에 [탑승]을 누른다(attachPress = rsAttachPressTT 를 주면 서버처럼 시각표 답을 붙인다) · end: 끝낼 분(06:end) · rec(req, out): 걸음마다 부른다(자바 대조용 녹화)
 'use strict';
@@ -32,7 +33,7 @@ function mkState(o) {
     stops, trail: [], cfg: { targets: [{ seqPos: 4, nodeIdx: 5, name: '아라역3번출구', kind: 'transfer', nextLine: '인천1호선' }, { seqPos: all.length - 1, nodeIdx: all.length, name: SUB[SUB.length - 1][0], kind: 'dest' }], seq: all.map((_, k) => k + 1), allowed: {}, destName: SUB[SUB.length - 1][0] }, fired: {}, notYet: {}, steps: 0, startedAt: at(6, 3, 0) };
 }
 function run(rideStandby, opts) {
-  const o = Object.assign({ mode: 'none', busLate: 180, dep: 18, depLate: 0, tt: false, press: '', end: 26 }, opts || {});
+  const o = Object.assign({ mode: 'none', busLate: 180, dep: 18, depLate: 0, tt: false, press: '', end: 26, staleSec: null, staleAcc: 60 }, opts || {});
   const REAL_DEP = at(6, o.dep, 0) + 1000 * o.depLate, ALIGHT = DAY + BUS[4][3] * 60000 + o.busLate * 1000;
   const busPos = (ms) => {
     const T = BUS.map((b) => DAY + b[3] * 60000 + o.busLate * 1000);
@@ -45,7 +46,7 @@ function run(rideStandby, opts) {
     if (b) return [ms, b[0], b[1], 12];
     if (ms <= ALIGHT + 60000) { const f = (ms - ALIGHT) / 60000; return [ms, BUS[4][1] + (SUB[0][1] - BUS[4][1]) * f, BUS[4][2] + (SUB[0][2] - BUS[4][2]) * f, 15]; }
     if (o.mode === 'none') return null;
-    if (o.mode === 'stale') return ms <= REAL_DEP + 210000 ? [ms, SUB[0][1] + 0.0001, SUB[0][2] + 0.0001, 60] : null;
+    if (o.mode === 'stale') return ms <= REAL_DEP + (o.staleSec != null ? o.staleSec * 1000 : 210000) ? [ms, SUB[0][1] + 0.0001, SUB[0][2] + 0.0001, o.staleAcc] : null;
     if (ms <= REAL_DEP) return o.mode === 'ground' ? (ms <= REAL_DEP - 120000 ? [ms, SUB[0][1], SUB[0][2], 20] : null) : [ms, SUB[0][1], SUB[0][2], 20];
     const T = SUB.map((s) => REAL_DEP + (s[3] - SUB[0][3]) * 60000);
     for (let i = 1; i < SUB.length; i++) if (ms <= T[i]) {
@@ -97,6 +98,9 @@ function unitInputs() {
   const now = at(6, 23, 0), stops = (ny) => [{ i: 6, lat: 37.594118, lng: 126.71301, arrMs: at(6, 18, 22), pass: true }, Object.assign({ i: 7, lat: 37.571769, lng: 126.736319, arrMs: now + 30000, pass: true }, ny ? { ny: true } : {}), { i: 8, lat: 37.566362, lng: 126.742498, arrMs: now + 150000, pass: true, fin: true }];
   const q = (ny, p) => ({ nowMs: now, trail: [[now - 10000, p[0] + 0.0012, p[1] - 0.0012, 15], [now - 5000, p[0] + 0.0006, p[1] - 0.0006, 15], [now, p[0], p[1], 15]], plan: { pts: [], boarded: true, notDeparted: false, stops: stops(ny), subConfirmed: true, progIsBus: false, suppress: ['standby'] }, want: { zero: true } });
   [[37.583, 126.7247], [37.5722, 126.7359], [37.59, 126.717]].forEach((p) => { track.push(q(false, p)); track.push(q(true, p)); });
-  return { eta, track, TT, nodes };
+  // s457 굳은 좌표: 아라역 근처 같은 좌표가 5초마다 n 번(정확도 acc) — 계양(7번)이 '아직 안 닿음'인가
+  const frozenQ = (n, acc, jitter) => { const tr = []; for (let k = n - 1; k >= 0; k--) tr.push([now - k * 5000, 37.5941 + (jitter ? k * 0.00005 : 0), 126.7131, acc]); return { nowMs: now, trail: tr, plan: { pts: [], boarded: true, notDeparted: false, stops: stops(true), subConfirmed: true, progIsBus: false, suppress: ['standby'] }, want: { zero: true } }; };
+  [[12, 60, 0], [12, 25, 0], [12, 15, 0], [12, null, 0], [3, 60, 0], [7, 60, 0], [12, 60, 1], [6, 21, 0]].forEach((a) => track.push(frozenQ(a[0], a[1], a[2])));
+  return { eta, track, TT, nodes, frozenQ };
 }
 module.exports = { run, at, hms, ARA, DAY, BUS, SUB, TT_ARA, unitInputs };
