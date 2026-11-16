@@ -328,7 +328,7 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     a = await go(300, 50);
     ok(JSON.stringify(a.names.slice(0, 7)) === JSON.stringify(EX7), 's458: D1 이 먼저 오면 예전 그대로 바로(TAGO 를 기다리지 않는다) — 출구 7곳 ' + a.ms + 'ms');
     a = await go(50, 4000);
-    ok(a.ms < 2600 && a.names.length === 6 && a.names.indexOf('아라역5번출구') < 0 && a.bres.d1 === undefined && a.need.indexOf('d1') >= 0 && a.nc === 1, 's458: D1 이 1.5초 넘게 안 오면 더 기다리지 않고 TAGO 만으로 그린다(' + a.ms + 'ms · ' + a.names.length + '곳) — 기기는 이 목록을 보관하지 않는다 · s459: D1 은 빈 값으로 굳히지 않고 need 로 되묻는다');
+    ok(a.ms < 2600 && a.names.length === 6 && a.names.indexOf('아라역5번출구') < 0 && a.bres.d1 === undefined && a.nc === 1, 's458: D1 이 1.5초 넘게 안 오면 더 기다리지 않고 TAGO 만으로 그린다(' + a.ms + 'ms · ' + a.names.length + '곳) — 기기는 이 목록을 보관하지 않는다 · s459: D1 은 빈 값으로 굳히지 않고 서버가 도착정보 바퀴에서 되묻는다');
     a = await go(50, 100, true);
     ok(a.names.length === 6 && a.ms < 1200 && a.nc === 1, 's458: D1 이 실패해도 멈추지 않는다 ' + a.ms + 'ms · 보관하지 말라고(nc) 알린다');
     const old = load(); old.mapBusWantD1 = () => false;      // 예전 동작(기다리지 않음) 재현 — 화면과 같은 6곳이 나오는지 확인
