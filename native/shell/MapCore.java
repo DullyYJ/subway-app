@@ -129,9 +129,10 @@ public final class MapCore {
     }
     public static String cellOf(double la, double lo) { return "bsc_" + Math.round(la * 1000.0) + "_" + Math.round(lo * 1000.0); }
     // ── 주변 정류장 목록(tp · gg · tn · d1)은 거의 안 바뀐다 — 같은 곳(약 110m 칸)이면 기기에 24시간 두고 바로 쓴다(SWR: 도착정보만 새로). 도착정보(a · f)는 절대 두지 않는다.
-    private static final int STOPS_V = 2;                                                          // s451: 정류장 목록 보관본 버전 — 옛 보관본(역 출구 정류장이 빠진 채 72시간 남던 것)은 버린다
+    private static final int STOPS_V = 3;                                                          // s451 · s458: 정류장 목록 보관본 버전 — 옛 보관본(역 출구 정류장이 빠진 채 72시간 남던 것 · 우리 정류장 표 없이 TAGO 만으로 저장된 것)은 버린다
     private static final long STOPS_TTL_MS = 72L * 3600L * 1000L;
     private boolean stopsSaved;
+    private boolean stopsNoKeep;                                                                // s458: 엔진이 알려 준 값(info.bus.nc) — 앱은 판단하지 않고 따른다
     /** 지금 위치가 속한 정류장 칸(약 110m) 이름 — 정류장 뼈대를 그 칸 것만 쓰게 하는 열쇠(위치를 모르면 빈 글). */
     public String stopsCell() { return stopsKey(); }
     private String stopsKey() { return busLL == null || busPin != null ? "" : cellOf(busLL[0], busLL[1]); }          // 고른 곳(busPin)이 있는 동안은 내 위치 칸의 보관본 · 뼈대를 쓰지도 쓰지도 않는다
@@ -192,6 +193,7 @@ public final class MapCore {
             b.append(ShellCore.q(key)).append(':').append(ShellCore.q(v));
         }
         if (first || total > 200000) return false;
+        if (stopsNoKeep) return false;                                                           // s458: 엔진이 '이 목록은 보관하지 말 것'(info.bus.nc — 우리 정류장 표를 못 받아 역 출구가 빠졌을 수 있다)이라고 했다 — 다음에 다시 받는다
         b.append("}}");
         String idx = st.get("bsc_idx", "");
         List<String> ids = new ArrayList<String>(java.util.Arrays.asList(idx.length() == 0 ? new String[0] : idx.split(",")));
@@ -494,6 +496,7 @@ public final class MapCore {
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List)
                 for (Object x : (List<Object>) ((Map<String, Object>) im.get("bus")).get("need")) if (x instanceof Map && busNeed.size() < 64) busNeed.add(new String[] { BoardCore.s(((Map<String, Object>) x).get("k"), 4), BoardCore.s(((Map<String, Object>) x).get("url"), 600) });
             svFail = 0;
+            { Object nc = im.get("bus") instanceof Map ? ((Map<String, Object>) im.get("bus")).get("nc") : null; stopsNoKeep = nc instanceof Number && ((Number) nc).intValue() != 0; }      // s458
             if (im.get("nx") instanceof Map) nxTake((Map<String, Object>) im.get("nx"));
             { java.util.Iterator<String> ri = busRes.keySet().iterator(); while (ri.hasNext()) if (ri.next().matches("r[0-9]{1,3}")) ri.remove(); }          // 노선 경유 정류장 목록(큰 본문)은 엔진이 이름만 뽑은 뒤 바로 버린다
             if (im.get("bus") instanceof Map && ((Map<String, Object>) im.get("bus")).get("need") instanceof List && !busNeed.isEmpty()) svServer = false;     // 서버가 못 받았다 — 기기가 받는 옛 길로

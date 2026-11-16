@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-16s457";
+var ENGINE_VERSION = "route-v2-2026-11-16s458";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23082,6 +23082,19 @@ function mapBusReady(f) {
   }
   return true;
 }
+// \u2605 s458 (YJ 11-16: \uc544\ub77c\uc5ed \uc0ac\uac70\ub9ac\uc778\ub370 4 \u00b7 5 \u00b7 8\ubc88\ucd9c\uad6c\uac00 \ube60\uc9c0\uace0 \uba3c \uc815\ub958\uc7a5\uc774 \ub098\uc628\ub2e4): TAGO \uc8fc\ubcc0 \ubaa9\ub85d\uc73c\ub85c \uc815\ub958\uc7a5\uc744 \ucc3e\uc558\ub294\ub370 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uc544\uc9c1 \ubabb \ubc1b\uc558\ub294\uac00.
+//   TAGO \ubaa9\ub85d\uc5d0\ub294 \uc0c8\ub85c \uc0dd\uae34 \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \ube60\uc838 \uc788\ub294 \uacf3\uc774 \uc788\ub2e4 \u2014 D1 \uae4c\uc9c0 \ubc1b\uc544\uc57c '\uc5ed \ucd9c\uad6c\ub294 \ud55c \uacf3\ub3c4 \ube60\uc9c0\uc9c0 \uc54a\uac8c'(mapExitMore)\uac00 \ub41c\ub2e4. D1 \uc740 \uc6b0\ub9ac \uc11c\ubc84\ub77c \ube60\ub974\ub2e4(\ubcf4\ud1b5 0.3\ucd08).
+//   \uc11c\ubc84(mapSvResolve)\uac00 \uc774 \ud568\uc218\uac00 \ucc38\uc778 \ub3d9\uc548\uc740 D1 \uc744 \uc870\uae08 \ub354(\ud55c\ub3c4 MAPSV_D1_WAIT_MS) \uae30\ub2e4\ub9b0\ub2e4. \uc608\uc804\uc5d4 TAGO \uac00 \uba3c\uc800 \uc624\uba74 D1 \uc744 \ube48 \uac12\uc73c\ub85c \ubc84\ub9ac\uace0 \uadf8\ub838\uace0, \uadf8 \ubaa9\ub85d\uc774 \uae30\uae30\uc5d0 72\uc2dc\uac04 \ub0a8\uc558\ub2e4.
+//   \uc11c\uc6b8(TOPIS) \u00b7 \uacbd\uae30(GBIS)\uac00 \uc815\ub958\uc7a5\uc744 \uc900 \uacbd\uc6b0\uc640 D1 \uc774 \uba3c\uc800 \uc628 \uacbd\uc6b0\ub294 \ud574\ub2f9 \uc5c6\ub2e4(\uc608\uc804 \uadf8\ub300\ub85c \ubc14\ub85c \uadf8\ub9b0\ub2e4).
+function mapBusTagoLed(f) {                            // \uc774 \ud654\uba74\uc758 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc774 TAGO \uc8fc\ubcc0 \ubaa9\ub85d\uc5d0\uc11c \ub098\uc624\ub294\uac00(\uc11c\uc6b8 TOPIS \u00b7 \uacbd\uae30 GBIS \uac00 \uc815\ub958\uc7a5\uc744 \uc900 \uacbd\uc6b0\uac00 \uc544\ub2c8\ub2e4)
+  var b = f && f.bus, res = (b && b.res && typeof b.res === 'object') ? b.res : {}, c = mapBusCenter(b), la = c.la, lo = c.lo;
+  if (!isFinite(la) || !isFinite(lo) || !res.tn) return false;
+  if (mapInSeoul(la, lo) && res.tp !== undefined && mapStopsOf('tp', res.tp, la, lo, c.r) > 0) return false;
+  if (mapInGG(la, lo) && mapGGPreferred(la, lo) && res.gg !== undefined && mapStopsOf('gg', res.gg, la, lo, c.r) > 0) return false;
+  return mapStopsOf('tn', res.tn, la, lo, c.r) > 0;
+}
+function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 === undefined && mapBusTagoLed(f); }      // \uc11c\ubc84\uac00 D1 \uc744 \ub354 \uae30\ub2e4\ub9b4 \uac83\uc778\uac00
+function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 \uc5c6\uc774(\ubabb \ubc1b\uc74c \u00b7 \uc2e4\ud328) TAGO \ub9cc\uc73c\ub85c \uadf8\ub9b0 \ubaa9\ub85d \u2014 \ucd9c\uad6c\uac00 \ube60\uc84c\uc744 \uc218 \uc788\uc73c\ub2c8 \uae30\uae30\uac00 \ubcf4\uad00\ud558\uc9c0 \uc54a\uac8c \uc54c\ub9b0\ub2e4(info.bus.nc)
 function mapArrErr(t) {                                    // \uacf5\uacf5 API \uac00 HTTP 200 \uc73c\ub85c \uac74\ub128 \uc624\ub958 \ubd09\ud22c({"OpenAPI_ServiceResponse":\u2026"HTTP_ERROR"})\uc778\uac00 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4(\uc6f9 _safeParseResponse \uc640 \uac19\uc740 \uae00\uc790). \ubc1b\uc9c0 \ubabb\ud55c \uac83\uc73c\ub85c \uce5c\ub2e4
   var x = typeof t === 'string' ? t : '';
   return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
@@ -23615,6 +23628,7 @@ function mapBusBody(f, info) {
   miss = miss.concat(nxr.ask);
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
+  if (mapBusNoKeep(f)) info.bus.nc = 1;                                                            // s458: \uc774 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 \ubcf4\uad00\ud558\uc9c0 \ub9d0 \uac83(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c\ub97c \ubabb \ubc1b\uc558\ub2e4) \u2014 \uc571\uc740 \ub530\ub974\uae30\ub9cc \ud55c\ub2e4
   var body = [];
   if (pin) {                                                                                   // s451: \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3 \u2014 \ubb34\uc5c7\uc744 \ubcf4\uace0 \uc788\ub294\uc9c0 \uc54c\ub9ac\uace0 \ub0b4 \uc704\uce58\ub85c \ub3cc\uc544\uc624\ub294 \ub2e8\ucd94
     body.push({ t: 'text', s: '\ud83d\udccd \uc9c0\ub3c4\uc5d0\uc11c \uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, bold: true, color: 'gold', align: 'center', pad: [10, 12, 0, 12] });
@@ -23994,6 +24008,7 @@ function mapSvOne(env, k, url, fresh) {                            // \u2192 Pro
   MAPSV_MEMO[url] = ent;
   return ent.p;
 }
+var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: \uc815\ub958\uc7a5 \ubaa9\ub85d \ub2e8\uacc4\uc5d0\uc11c \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // \uae30\uae30\uac00 \uc815\ud55c \uae30\ub2e4\ub9bc(\ucc98\uc74c \uadf8\ub9ac\uae30\ub294 \uc9e7\uac8c \u2014 \uc815\ub958\uc7a5\ubd80\ud130 \uba3c\uc800 \ubcf4\uc774\uace0 \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\uc5b4\uc11c \ucc44\uc6b4\ub2e4)          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
@@ -24010,14 +24025,17 @@ async function mapSvResolve(env, cap, body, out) {
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
     if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
     else if (stopWave) {                                    // s177: \uc815\ub958\uc7a5 \ubaa9\ub85d \u2014 \uc6b0\uc120\uc21c\uc704 \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc8fc\uba74 \ub098\uba38\uc9c0(\ub290\ub9b0 TAGO)\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub118\uc5b4\uac04\ub2e4. \ubabb \uae30\ub2e4\ub9b0 \ucd9c\ucc98\ub294 \ube48 \uac12\uc73c\ub85c \ub454\ub2e4.
+      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO \uac00 \uba3c\uc800 \uc640\ub3c4 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub294 \uc774 \uc2dc\uac04\uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\uc5ed \ucd9c\uad6c\uac00 \ube60\uc9c0\uc9c0 \uc54a\uac8c) \u2014 \ub118\uc73c\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \uce58\uace0 \uadf8\ub9b0\ub2e4
       for (;;) {
         var tmp = {}, pend = [];
         Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
         need.forEach(function (n, i) { if (done[i]) tmp[String(n.k)] = slot[i] || ''; else pend.push(ps[i]); });
+        if (tmp.d1 === undefined && Date.now() >= d1Dead) tmp.d1 = '';
         var rdy = false;
-        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }); } catch (eR) { rdy = false; }
+        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }) && !(typeof mapBusWantD1 === 'function' && mapBusWantD1({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } })); } catch (eR) { rdy = false; }
         if (rdy || !pend.length) break;
-        await Promise.race(pend);
+        await Promise.race(pend.concat([new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, d1Dead - Date.now() + 5)); })]));
+        if (d1Tick) { clearTimeout(d1Tick); d1Tick = null; }
       }
     }
     else await Promise.all(ps);

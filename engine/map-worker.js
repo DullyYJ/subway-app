@@ -165,6 +165,7 @@ function mapSvOne(env, k, url, fresh) {                            // → Promis
   MAPSV_MEMO[url] = ent;
   return ent.p;
 }
+var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: 정류장 목록 단계에서 우리 정류장 표(D1)를 기다리는 한도
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
@@ -181,14 +182,17 @@ async function mapSvResolve(env, cap, body, out) {
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
     if (arrWave) await Promise.race([Promise.all(ps), new Promise(function (r) { setTimeout(r, budget); })]);
     else if (stopWave) {                                    // s177: 정류장 목록 — 우선순위 앞 출처가 정류장을 주면 나머지(느린 TAGO)는 기다리지 않고 도착정보로 넘어간다. 못 기다린 출처는 빈 값으로 둔다.
+      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO 가 먼저 와도 우리 정류장 표(D1)는 이 시간까지 기다린다(역 출구가 빠지지 않게) — 넘으면 없는 것으로 치고 그린다
       for (;;) {
         var tmp = {}, pend = [];
         Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
         need.forEach(function (n, i) { if (done[i]) tmp[String(n.k)] = slot[i] || ''; else pend.push(ps[i]); });
+        if (tmp.d1 === undefined && Date.now() >= d1Dead) tmp.d1 = '';
         var rdy = false;
-        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }); } catch (eR) { rdy = false; }
+        try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }) && !(typeof mapBusWantD1 === 'function' && mapBusWantD1({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } })); } catch (eR) { rdy = false; }
         if (rdy || !pend.length) break;
-        await Promise.race(pend);
+        await Promise.race(pend.concat([new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, d1Dead - Date.now() + 5)); })]));
+        if (d1Tick) { clearTimeout(d1Tick); d1Tick = null; }
       }
     }
     else await Promise.all(ps);

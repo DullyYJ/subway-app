@@ -1109,7 +1109,19 @@ public class ShellJvmTest {
                 ob.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"s\",\"id\":\"SEOUL:1\"}],\"bus\":{\"st\":\"need\",\"need\":[]}}}");
                 boolean sv1 = ob.saveStopsCache();
                 MapCore oc = new MapCore(os); oc.setBusLoc(37.5, 127.0);
-                ok(sv1 && os.get("bsc_37500_127000", "").startsWith("{\"v\":2,") && oc.bodyRequest(23, "dark").contains("\"tn\":\"{\\\"x\\\":1}\""), "s451: 새로 저장한 보관본은 v:2 로 쓰고 다시 읽는다");
+                ok(sv1 && os.get("bsc_37500_127000", "").startsWith("{\"v\":3,") && oc.bodyRequest(23, "dark").contains("\"tn\":\"{\\\"x\\\":1}\""), "s451 · s458: 새로 저장한 보관본은 v:3 으로 쓰고 다시 읽는다");
+                {   // s458: v:2 보관본(우리 정류장 표 없이 TAGO 만으로 저장됐을 수 있다)은 버린다 · 엔진이 nc 를 주면 보관하지 않는다
+                    ShellCore.MemStore o2 = new ShellCore.MemStore();
+                    o2.put("bsc_37500_127000", "{\"v\":2,\"t\":" + System.currentTimeMillis() + ",\"r\":{\"tn\":\"OLD2\",\"d1\":\"\"}}");
+                    MapCore q1 = new MapCore(o2); q1.setBusLoc(37.5, 127.0);
+                    ok(!q1.bodyRequest(23, "dark").contains("OLD2"), "s458: v:2 보관본은 쓰지 않는다");
+                    q1.addBusRes("tn", "{\"x\":1}"); q1.addBusRes("d1", "");
+                    q1.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"s\",\"id\":\"ICB1\"}],\"bus\":{\"st\":\"ok\",\"nc\":1}}}");
+                    ok(!q1.saveStopsCache() && o2.get("bsc_37500_127000", "").contains("OLD2"), "s458: 엔진이 nc(보관하지 말 것)를 주면 정류장 목록을 보관하지 않는다");
+                    q1.addBusRes("d1", "{\"ok\":true}");
+                    q1.onScreen("{\"info\":{\"view\":\"bus\",\"stops\":[{\"nm\":\"s\",\"id\":\"ICB1\"}],\"bus\":{\"st\":\"ok\"}}}");
+                    ok(q1.saveStopsCache() && o2.get("bsc_37500_127000", "").startsWith("{\"v\":3,") && o2.get("bsc_37500_127000", "").contains("\"d1\""), "s458: nc 가 없어지면(우리 정류장 표까지 받음) 보관한다");
+                }
                 ShellCore.MemStore ps = new ShellCore.MemStore(); MapCore pm = new MapCore(ps); pm.primary = true;
                 pm.cat("m:bus"); pm.setBusLoc(37.5, 127.0);
                 ok(!pm.bodyRequest(23, "dark").contains("\"pin\"") && pm.busPin == null, "고른 곳이 없으면 요청에 pin 이 없다");
@@ -1175,7 +1187,7 @@ public class ShellJvmTest {
             ok(bm.act("mp.rf", null) == MapCore.R_BUS_REF && bm.bodyRequest(18, "dark").contains("\"vw\":\"fav\"") && bm.act("mp.vw.near", null) == MapCore.R_BUS_VIEW && bm.act("mp.rf", null) == MapCore.R_BUS_LOC, "새로고침: 즐겨찾기는 도착정보만 · 주변은 위치부터");
             ok(bm.takeRefLoc() && !bm.takeRefLoc(), "s283: 즐겨찾기 새로고침은 현재 위치 재확인 표시를 한 번 남긴다");
             ok(bm.act("mp.rt", null) == MapCore.R_BUS_REF && !bm.takeRefLoc(), "s283: 카드의 다시 시도는 위치를 다시 확인하지 않는다");
-            { ShellCore.MemStore fs = new ShellCore.MemStore(); MapCore fm = new MapCore(fs); fm.setBusLoc(37.5, 127.0); String ck = MapCore.cellOf(37.5, 127.0); fs.put(ck, "{\"v\":2,\"t\":" + System.currentTimeMillis() + ",\"r\":{\"tp\":\"{}\"}}");
+            { ShellCore.MemStore fs = new ShellCore.MemStore(); MapCore fm = new MapCore(fs); fm.setBusLoc(37.5, 127.0); String ck = MapCore.cellOf(37.5, 127.0); fs.put(ck, "{\"v\":3,\"t\":" + System.currentTimeMillis() + ",\"r\":{\"tp\":\"{}\"}}");
               fm.setBusLocFresh(37.5, 127.0); ok(fm.busLL[0] == 37.5 && fm.busRes.get("tp") == null && fm.stopsFresh && fm.bodyRequest(18, "dark").contains("\"nf\":1"), "s383: 새로고침은 같은 칸 보관본을 쓰지 않고 정류장 목록을 다시 조회한다(서버에도 nf=1)");
               fm.setBusLoc(37.5, 127.0); ok("{}".equals(fm.busRes.get("tp")) && !fm.stopsFresh && !fm.bodyRequest(18, "dark").contains("\"nf\""), "s383: 처음 열기·탭 전환은 보관본을 그대로 쓴다(빠르게)");
               fm.setBusLocFresh(37.5, 127.0); ok(fm.busRes.get("tp") != null && !fm.stopsFresh, "s383: 같은 칸 1분 안 재새로고침은 보관본(공공 API 보호)"); }

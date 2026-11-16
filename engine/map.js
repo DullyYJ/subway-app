@@ -515,6 +515,19 @@ function mapBusReady(f) {
   }
   return true;
 }
+// ★ s458 (YJ 11-16: 아라역 사거리인데 4 · 5 · 8번출구가 빠지고 먼 정류장이 나온다): TAGO 주변 목록으로 정류장을 찾았는데 우리 정류장 표(D1)를 아직 못 받았는가.
+//   TAGO 목록에는 새로 생긴 출구 정류장이 빠져 있는 곳이 있다 — D1 까지 받아야 '역 출구는 한 곳도 빠지지 않게'(mapExitMore)가 된다. D1 은 우리 서버라 빠르다(보통 0.3초).
+//   서버(mapSvResolve)가 이 함수가 참인 동안은 D1 을 조금 더(한도 MAPSV_D1_WAIT_MS) 기다린다. 예전엔 TAGO 가 먼저 오면 D1 을 빈 값으로 버리고 그렸고, 그 목록이 기기에 72시간 남았다.
+//   서울(TOPIS) · 경기(GBIS)가 정류장을 준 경우와 D1 이 먼저 온 경우는 해당 없다(예전 그대로 바로 그린다).
+function mapBusTagoLed(f) {                            // 이 화면의 정류장 목록이 TAGO 주변 목록에서 나오는가(서울 TOPIS · 경기 GBIS 가 정류장을 준 경우가 아니다)
+  var b = f && f.bus, res = (b && b.res && typeof b.res === 'object') ? b.res : {}, c = mapBusCenter(b), la = c.la, lo = c.lo;
+  if (!isFinite(la) || !isFinite(lo) || !res.tn) return false;
+  if (mapInSeoul(la, lo) && res.tp !== undefined && mapStopsOf('tp', res.tp, la, lo, c.r) > 0) return false;
+  if (mapInGG(la, lo) && mapGGPreferred(la, lo) && res.gg !== undefined && mapStopsOf('gg', res.gg, la, lo, c.r) > 0) return false;
+  return mapStopsOf('tn', res.tn, la, lo, c.r) > 0;
+}
+function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 === undefined && mapBusTagoLed(f); }      // 서버가 D1 을 더 기다릴 것인가
+function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 없이(못 받음 · 실패) TAGO 만으로 그린 목록 — 출구가 빠졌을 수 있으니 기기가 보관하지 않게 알린다(info.bus.nc)
 function mapArrErr(t) {                                    // 공공 API 가 HTTP 200 으로 건넨 오류 봉투({"OpenAPI_ServiceResponse":…"HTTP_ERROR"})인가 — 도착정보가 아니다(웹 _safeParseResponse 와 같은 글자). 받지 못한 것으로 친다
   var x = typeof t === 'string' ? t : '';
   return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
@@ -1048,6 +1061,7 @@ function mapBusBody(f, info) {
   miss = miss.concat(nxr.ask);
   if (miss.length) info.bus = { st: 'need', vw: 'near', need: miss };
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
+  if (mapBusNoKeep(f)) info.bus.nc = 1;                                                            // s458: 이 정류장 목록은 보관하지 말 것(우리 정류장 표를 못 받았다) — 앱은 따르기만 한다
   var body = [];
   if (pin) {                                                                                   // s451: 꾹 눌러 고른 곳 — 무엇을 보고 있는지 알리고 내 위치로 돌아오는 단추
     body.push({ t: 'text', s: '📍 지도에서 고른 곳 주변 100m 정류장 ' + stops.length + '곳', size: 12, bold: true, color: 'gold', align: 'center', pad: [10, 12, 0, 12] });
@@ -1260,4 +1274,4 @@ function mapBusRouteSheet(f0) {
   if (bar) foot = [{ t: 'panel', pad: [0, 0, 0, 0], ip: [0, 0, 0, 0], r: 0, fill: 'card', line: 'border', kids: bar }];
   return mapFinish({ ok: true, v: 1, screen: 'mapbr', cover: 'tab', head: head, body: body, foot: foot, info: info }, 'br' + (pk ? 'p' : '') + sel);
 }
-if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapRegionOfLine: mapRegionOfLine, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, mapBusReady: mapBusReady, MAP_FILTERS: MAP_FILTERS };
+if (typeof module !== 'undefined' && module.exports) module.exports = { mapQ: mapQ, mapBusWantD1: mapBusWantD1, mapBusNoKeep: mapBusNoKeep, mapRegionOfLine: mapRegionOfLine, mapLineNum: mapLineNum, mapCdFmt: mapCdFmt, mapBusRouteSheet: mapBusRouteSheet, mapBrCity: mapBrCity, mapBrStnTago: mapBrStnTago, mapBrStnGbis: mapBrStnGbis, mapBrPos: mapBrPos, mapCityOf: mapCityOf, mapGGPreferred: mapGGPreferred, mapGbisArr: mapGbisArr, mapScreen: mapScreen, mapFacts: mapFacts, mapLinesOf: mapLinesOf, mapFind: mapFind, mapNearest: mapNearest, mapIsStationLabel: mapIsStationLabel, mapPickRow: mapPickRow, mapRegionLines: mapRegionLines, mapDedupStops: mapDedupStops, mapStopOrder: mapStopOrder, mapApplyNearOrder: mapApplyNearOrder, mapBusOrd: mapBusOrd, mapBusReady: mapBusReady, MAP_FILTERS: MAP_FILTERS };
