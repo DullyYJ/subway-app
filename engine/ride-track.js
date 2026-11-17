@@ -79,9 +79,9 @@ var RIDE_TRACK_DEFAULTS = {
   // ★ 2026-10-13 (YJ: "시간표보다 빠르게 선학에 왔어. 위치는 맞혔는데 시간이 안맞춰져. 시간도 같이 밀거나 당기며 계속 영점"): 시각표 창(도착 15초 전~30초 뒤) 밖에서 닿은 열차(일찍·늦게)도 놓치지 않도록
   //   pass:true 인 정류장은 '표시 도착 시각 앞뒤' 넓은 창에서 GPS 가 그 정류장 150m 안(정확도 60m 이하 좌표)에 든 가장 가까운 순간을 통과 시각(passMs)으로 돌려준다 — 앱은 그 시각을 통과 증거로 엔진에 다시 보낸다.
   passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 100,   // ★ 2026-10-26 s230 (YJ: 지하에서 영점이 안 잡혀 마커가 열차보다 2~3정거장 뒤처짐): 정확도 60 → 100m — 터널·역사 안 좌표는 정확도가 60m 넘게 나와 전부 버려졌다
-  passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
+  passInterpMaxGapSec: 30, passConfirmSec: 20, passConfirmNySec: 6, passConfirmNyM: 50, passAwayM: 100,
   // ★ 2026-10-13 (YJ: "마커도 계속 엔진에 위치를 물어보고 영점 잡고 보정해야지 — 밀거나 당기거나"): 늦게 오는 열차 — 표시 도착 시각이 지났는데 신선한 GPS 가 '앞 정류장과 이 정류장 사이'에서 이 정류장과 notYetFarM 넘게 떨어져 있으면 notYet:true(아직 안 닿음). 앱은 이 증거를 /ride-eta 에 보내고 엔진이 뒤 시각을 민다.
-  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  notYetFarM: 400, notYetGapLateSec: 150, notYetGapMinSec: 20, notYetGapMps: 15, notYetLeadSec: 15, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
   // ★ 2026-11-16 s457 (YJ: "GPS 가 지하철에서 안 흔들려야 해"): 굳은 좌표 — 지하에서는 폰이 마지막 와이파이·기지국 위치를 새 시각으로 계속 돌려준다(같은 좌표 · 정확도 나쁨).
   //   그 좌표는 '아직 앞 역에 있다'는 증거가 아니다. 정확도가 frozenAccM 보다 나쁘고, 마지막 frozenSec 초(좌표 frozenMinN 개 이상) 동안 frozenM 안에서 꼼짝 않으면 '아직 안 닿음' 판정에 쓰지 않는다
   //   → 시각표대로 간다(실시간 없는 노선의 기존 규칙). 정확도 좋은 진짜 GPS(지상)는 멈춰 있어도 그대로 증거다.
@@ -349,7 +349,10 @@ function rtPassTime(s, tr, now, O) {
   if (!best) return null;
   // ★ 2026-10-26 s207 (보수화): '가장 가까운 순간'은 지나고 나서야 알 수 있다. 아직 다가오는 중(가장 가까운 좌표가 맨 끝이고 더 가까워지는 중)에 통과로 적으면 열차가 닿기 전 시각이 박힌다
   //   (모의 실험: 처음 박힌 통과 시각이 실제보다 10~25초 이르다가 나중에 고쳐짐). 그 뒤 좌표가 passAwayM 이상 멀어졌거나, 가장 가까웠던 순간에서 passConfirmSec 가 지났을 때(정차 · 좌표 끊김 포함)에만 통과로 적는다.
-  var conf = now - tr[best.i].ts >= O.passConfirmSec * 1000;
+  // ★ s460: 이미 '아직 안 닿음'으로 올려 둔(ny) 정류장은 도착 시각이 '지금 + 30초'로 계속 밀리고 있어 20초를 기다리는 동안 마커가 역 앞에서 맴돌았다.
+  //   가장 가까운 좌표가 정류장 50m 안이고 그 뒤 6초 동안 더 가까워지지 않았으면(정차) 통과로 확정한다 — 통과 시각은 가장 가까웠던 순간(보간)이라 그대로다.
+  var confSec = (s.ny === true && best.d <= O.passConfirmNyM) ? O.passConfirmNySec : O.passConfirmSec;
+  var conf = now - tr[best.i].ts >= confSec * 1000;
   for (var cj = best.i + 1; !conf && cj < tr.length; cj++) {
     var cq = tr[cj];
     if (cq.ts > now + 1000) break;
@@ -388,14 +391,24 @@ function rtNotYet(s, prev, tr, now, O) {
   var late = now - s.arrMs;
   // ★ s456 (YJ: "시간이 오락가락한다"): 이미 '아직 안 닿음'으로 보고 도착 시각을 '지금 + 30초'로 올려 둔 정류장(s.ny — ride-standby 가 표시)은 표시 시각이 미래여도(late < 0) 다시 판정한다.
   //   예전엔 올린 시각 때문에 late < 0 이 되어 판정이 끊기고, 45초 뒤 증거가 만료되면 시각표로 되돌아갔다가(마커가 앞 역으로 튐) 다음 걸음에 다시 '아직 안 닿음' — 늦는 열차에서 도착 시각과 마커가 1분마다 오락가락했다.
-  if ((late < 0 && s.ny !== true) || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;
+  if ((late < -O.notYetLeadSec * 1000 && s.ny !== true) || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;      // s460: 표시 도착 시각 notYetLeadSec 초 전부터 본다(마커가 도착 시각보다 몇 초 먼저 역에 올라가므로)
   var q = null;
   for (var i = tr.length - 1; i >= 0; i--) { if (tr[i].acc == null || tr[i].acc <= O.notYetAccM) { q = tr[i]; break; } }
   if (!q || now - q.ts > O.freshSec * 1000) return null;
   if (rtFrozen(tr, i, O)) return null;      // s457: 굳은 좌표는 '아직 안 닿음'의 증거가 아니다
   var dn = rtHav(q.lat, q.lng, s.lat, s.lng), dp = rtHav(q.lat, q.lng, prev.lat, prev.lng), L = rtHav(prev.lat, prev.lng, s.lat, s.lng);
-  if (dn <= O.notYetFarM || L <= 0) return null;
+  if (L <= 0) return null;
   if (dp + dn > L * O.notYetBetween) return null;
+  // ★ s460 (YJ 11-16 귤현: 열차가 2분 늦어 귤현 400m 안까지 오자 '아직 안 닿음'이 끊겨 마커가 계양→아라로 튀고 '곧 하차'가 울렸다):
+  //   예전엔 이 정류장에서 notYetFarM(400m) 안이면 판정을 접어(150m 영점 반경 밖 150~400m 는 '근접'도 '아직'도 아닌 빈칸) 엔진이 시각표로 돌아가 앞 역으로 마커를 보냈다.
+  //   표시 도착 시각이 지났어도 '앞 정류장과 이 정류장 사이'에서 이 정류장으로 다가가는 중이면(정류장 notYetGapLateSec 초 안) 영점이 잡힐 때까지 계속 '아직 안 닿음'이다.
+  //   (영점 반경 안이면 rtZero 가 'near' 를 우선한다.)
+  //   다만 제때 오는 열차를 늦다고 잘못 보지 않게(마지막 수십 초 접근) — 이미 올려 둔 정류장(ny)이 아니면, 이 거리를 달려 올 시간(dn ÷ notYetGapMps + notYetGapMinSec)이 지나도록 안 닿았을 때만 본다.
+  if (dn <= O.notYetFarM) {
+    if (!(O.notYetGapLateSec > 0)) return null;
+    if (!(dn > O.zeroNearM)) return null;      // 영점 반경 안이면 rtZero 에 맡긴다
+    if (s.ny !== true && (late > O.notYetGapLateSec * 1000 || late < (O.notYetGapMinSec + dn / O.notYetGapMps) * 1000)) return null;
+  }
   return { distM: Math.round(dn) };
 }
 // ★ 2026-10-14 (실기기 로그: 앱을 다시 켜자 쌓였던 위치가 한꺼번에 와 모두 '지금' 시각이 찍혀, 지난 역 전부가 19:16 에 지난 것으로 읽혔다 — 동수 +6.2분·부평 +4.2분 …):
