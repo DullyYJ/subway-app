@@ -64,6 +64,29 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     console.log('        s456: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
     try { fs.unlinkSync(f); } catch (e) { }
   });
+  await t('s460 귤현(인천1호선 늦은 열차 · 아직 안 닿음 400m 안 · 앵커 뒤 역 · 영점 반경 안 이어가기): 폰 안 엔진(자바)이 서버 JS 와 걸음마다 같은 답 · 같은 상태를 낸다', async () => {
+    const GY = require(path.join(__dirname, 'helpers', 'gyul_scenario.js')), SB = require(path.join(ROOT, 'engine', 'ride-standby.js')), { rideEta } = require(path.join(ROOT, 'engine', 'ride-eta.js')), { rideTrack } = require(path.join(ROOT, 'engine', 'ride-track.js'));
+    const f = path.join(out, 'ride_corpus_s460.jsonl'), fd = fs.openSync(f, 'w'), J = (x) => JSON.parse(JSON.stringify(x));
+    let n = 0, sawNy = false;
+    const rec = (req, o) => { fs.writeSync(fd, JSON.stringify({ fn: 'standby', in: req, out: J(o) }) + '\n'); n++; if (o.state.notYet && Object.keys(o.state.notYet).length) sawNy = true; };
+    for (const mode of ['live', 'ground', 'none']) for (const delaySec of [0, 60, 120, 180, 240]) GY.run(SB.rideStandby, { mode, delaySec, end: 33, rec });
+    // 낱개: 앵커가 임학인데 귤현이 아직 안 닿음 · 400m 안 판정 경계(영점 반경 150m · 달려 올 시간 · ny 이어가기 · 15초 앞)
+    const st = GY.mkState(), now = GY.at(18, 23, 20);
+    for (const ny of [[4], [5], [4, 5], [3], [], [6]]) for (const dm of [0, 20]) { const inp = { nodes: st.eta.nodes, passes: [{ idx: 2, ms: GY.at(18, 19, 0), src: 'gps' }], boarded: true, nowMs: now + dm * 1000, tzOffsetMin: 540, timetableFirst: true, notYet: ny }; fs.writeSync(fd, JSON.stringify({ fn: 'eta', in: inp, out: J(rideEta(J(inp))) }) + '\n'); n++; }
+    const KX = 111320 * Math.cos(37.5 * Math.PI / 180), NOW = GY.at(18, 23, 0);
+    for (const arrOff of [-200, -160, -60, -20, -5, 10, 30]) for (const x of [1900, 2600, 2800, 2860, 2900, 3200]) for (const ny of [false, true]) {
+      const inp = { nowMs: NOW, trail: [[NOW - 10000, 37.5, 126.7 + x / KX, 20]], plan: { pts: [], boarded: true, stops: [{ i: 1, lat: 37.5, lng: 126.7, arrMs: NOW - 200000 }, { i: 2, lat: 37.5, lng: 126.7 + 3000 / KX, arrMs: NOW + arrOff * 1000, pass: true, ny: ny || undefined }] }, want: { zero: true } };
+      fs.writeSync(fd, JSON.stringify({ fn: 'track', in: inp, out: J(rideTrack(J(inp))) }) + '\n'); n++;
+    }
+    fs.closeSync(fd);
+    assert.ok(sawNy, '아직 안 닿음 상태가 녹화에 있어야 한다');
+    const r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', f], { env: ENV, encoding: 'utf8', maxBuffer: 1 << 26 });
+    assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1800) + (r.stderr || '').slice(-300));
+    assert.strictEqual(+/ALL OK \((\d+)\)/.exec(r.stdout)[1], n, '모든 줄을 견줬다');
+    assert.ok(n >= 2500, '걸음 ' + n);
+    console.log('        s460: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
+    try { fs.unlinkSync(f); } catch (e) { }
+  });
   await t('계산 코어는 안드로이드·네트워크·시계를 쓰지 않는다(순수 자바)', async () => {
     for (const c of RIDE) {
       const src = fs.readFileSync(N(c + '.java'), 'utf8').replace(/System\.currentTimeMillis\(\)/g, '0');   // 서버 JS 의 'nowMs 없으면 Date.now()' 대비 줄만 허용(승차 엔진은 늘 nowMs 를 준다)

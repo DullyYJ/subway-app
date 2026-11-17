@@ -368,7 +368,14 @@ r = rideTrack({ nowMs: NOW }); ok(r.off.confirmed === false && r.fix.n === 0, '�
   let z = run(-60, [{ t: -10, x: 1900 }]), s2 = z.zero.stops.find(x => x.i === 2);
   ok(s2 && s2.notYet === true && s2.notYetDistM > 1000, '표시 도착 60초 지남 + 1.1km 앞(두 역 사이) → notYet ' + JSON.stringify(s2));
   z = run(30, [{ t: -10, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '아직 표시 도착 시각 전이면 notYet 아님');
-  z = run(-60, [{ t: -10, x: 2800 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '400m 안이면 notYet 아님(곧 닿는다)');
+  // s460 (YJ 11-16 귤현: 열차가 2분 늦어 귤현 400m 안까지 오자 '아직 안 닿음'이 끊겨 마커가 계양→아라로 튀고 '곧 하차'가 울렸다): 영점 반경(150m) 밖 150~400m 도 표시 시각이 한참 지났으면 아직이다
+  const ny2 = (arrOff, x, extra) => { const zz = rideTrack({ nowMs: NOW, trail: [[NOW - 10000, 0, x / KX, 20]], plan: plan({ stops: [{ i: 1, lat: 0, lng: 0, arrMs: NOW - 200000 }, Object.assign({ i: 2, lat: 0, lng: 3000 / KX, arrMs: NOW + arrOff * 1000, pass: true }, extra || {})] }), want: { zero: true } }); return zz.zero.stops.find(q => q.i === 2) || {}; };
+  ok(ny2(-60, 2800).notYet === true, '표시 도착 60초 지남 + 200m 앞(영점 반경 밖 · 400m 안) → notYet(예전: 빈칸) ' + JSON.stringify(ny2(-60, 2800)));
+  ok(!ny2(-20, 2800).notYet, '제때 오는 열차의 마지막 접근(200m 앞 · 표시 도착 20초 지남 — 달려 올 시간 33초 안 됨)은 notYet 아님');
+  ok(!ny2(-60, 2900).notYet, '영점 반경(150m) 안이면 notYet 아님(영점에 맡긴다)');
+  ok(!ny2(-160, 2800).notYet, '표시 도착이 150초 넘게 지났으면 400m 안은 판정하지 않는다(시각표 어긋남)');
+  ok(ny2(-5, 2800, { ny: true }).notYet === true && ny2(30, 2800, { ny: true }).notYet === true, '이미 올려 둔(ny) 정류장은 표시 시각이 미래여도 400m 안에서 영점 반경 밖이면 계속 notYet');
+  ok(ny2(10, 1900).notYet === true && !ny2(30, 1900).notYet, '400m 밖(두 역 사이): 표시 도착 15초 전부터 본다(마커가 도착 시각보다 몇 초 먼저 올라가므로)');
   z = run(-60, [{ t: -10, x: 4500 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '이미 지나쳐 멀어졌으면(두 역 사이가 아님) notYet 아님');
   z = run(-60, [{ t: -60, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '좌표가 낡았으면(50초) 판정하지 않는다');
   z = run(-400, [{ t: -10, x: 1900 }]); ok(!(z.zero.stops.find(x => x.i === 2) || {}).notYet, '표시 도착이 5분 넘게 지났으면 판정하지 않는다');
