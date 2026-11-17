@@ -43,6 +43,7 @@ public final class NetPost {
     // 그걸 "받았다"로 치면 엔진이 '도착정보 없음'으로 그린다. 그래서 ① 동시에 4곳까지만 묻고(웹의 요청 줄과 같은 취지) ② 오류 봉투 · 빈 본문은 받지 못한 것으로 보고 짧게 쉬었다 두 번 더 묻는다. 끝내 못 받으면 빈 본문(status -3).
     // 본문이 맞는지(도착 정보가 있는지 · 없는지)는 엔진이 판단한다 — 여기서는 "서버가 준 오류 봉투인가"만 본다(웹 _safeParseResponse 의 오류 글자와 같다).
     private static final java.util.concurrent.Semaphore BUS_GATE = new java.util.concurrent.Semaphore(4);
+    private static final java.util.regex.Pattern BUS_CODE99 = java.util.regex.Pattern.compile("\"resultCode\"\\s*:\\s*\"?99\"?\\s*[,}]");
     private static final String[] BUS_ERR = { "OpenAPI_ServiceResponse", "cmmMsgHeader", "SERVICE_KEY_IS_NOT_REGISTERED_ERROR", "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR" };
     /** 다시 물을 때 주소 뒤에 일회용 글자(_r)를 붙인다 — 버스 서버가 공공 API 오류 봉투(HTTP_ERROR)를 같은 주소로 한동안 그대로 되돌려주는(캐시) 정류장이 있다(실측: 인천 검단대성베르힐 — 같은 주소는 계속 오류, _r 만 달리하면 바로 5건). 첫 시도는 그대로(캐시 이득 유지). */
     public static String busBust(String url, int attempt) {
@@ -54,7 +55,7 @@ public final class NetPost {
         if (b == null || b.length() == 0) return true;
         if (b.length() > 4000) return false;                                  // 오류 봉투는 짧다 — 긴 본문은 정상(속도)
         for (String m : BUS_ERR) if (b.indexOf(m) >= 0) return true;
-        return false;
+        return BUS_CODE99.matcher(b).find();                                 // s461: 인천 BIS 의 '가용한 세션이 존재하지 않습니다 (30/30)' — HTTP 200 · resultCode 99 (빈 도착정보가 아니라 못 받은 것)
     }
     /** 버스 서버에서 GET: 오류 봉투 · 빈 본문이면 0.2 · 0.4초 뒤 다시(최대 3번 — 1초 안쪽). 네트워크가 느리게 실패하면(2.5초 넘게) 또 매달리지 않는다. 못 받으면 status -3 · 빈 본문. */
     public static Res getBus(String url, double firstMs, double retryMs) {
