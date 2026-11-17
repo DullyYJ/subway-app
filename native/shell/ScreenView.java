@@ -1586,13 +1586,36 @@ public class ScreenView extends View {
             for (int k = 0; k < it.bs.length; k++) {
                 float sec = it.bs[k];
                 if (sec <= 0f || it.ck[k] == null) continue;
-                if (fresh || !cdState.containsKey(it.ck[k])) cdState.put(it.ck[k], new double[] { sec, now - age });      // 새로 받은 실시간 값이 오면 줄어들던 옛 값은 버리고 바로 그 값에서 다시 센다
+                double ph = cdPHash(it, k);
+                double[] st0 = cdState.get(it.ck[k]);
+                if (st0 != null && st0.length >= 3 && st0[0] == sec && st0[2] == ph) continue;                        // s461: 원본 값(초 · 몇 번째전)이 그대로면 흐르던 시작점을 이어 간다 — 공공 API 값은 1분마다 한 번 바뀌는 스냅샷이라, 같은 값을 다시 받을 때마다 처음부터 세면 숫자가 도로 늘어난다
+                if (fresh || st0 == null) cdState.put(it.ck[k], new double[] { sec, now - age, ph });                   // 값이 바뀌어 온 새 실시간 값은 줄어들던 옛 값을 버리고 바로 그 값에서 다시 센다
             }
         }
     }
     private double cdRem(String key, float sec0, long now) {
         double[] st = key == null ? null : cdState.get(key);
         return st == null ? sec0 : st[0] - (now - (long) st[1]) / 1000.0;
+    }
+    /** 이 도착 칸의 값을 받은 지 몇 초인가(시작점이 없으면 0). 캐시 화면은 받은 뒤 이미 흐른 만큼 더해져 있다. */
+    private double cdAge(String key, long now) {
+        double[] st = key == null ? null : cdState.get(key);
+        return st == null ? 0.0 : (now - (long) st[1]) / 1000.0;
+    }
+    /** 도착 칸 k 의 '몇 번째전' 글자 지문 — 초가 같아도 몇 번째전이 달라졌으면 다른 값이다. */
+    private static double cdPHash(ScreenCore.Item it, int k) {
+        int bi = (k / 2) * 6 + 3 + (k % 2) * 2;
+        return bi < it.sa.length && it.sa[bi] != null ? it.sa[bi].hashCode() : 0.0;
+    }
+    /** s461: 엔진이 정한 유통기한(bx)이 지나 '확인 중'으로 그려지는 도착 칸이 있는가 — 있으면 앱은 박자를 기다리지 않고 곧 다시 받는다. */
+    public boolean arrStale() {
+        if (lay == null) return false;
+        long now = SystemClock.uptimeMillis();
+        for (ScreenCore.Item it : lay.body) {
+            if (it.kind != ScreenCore.K_BCARD || it.bs.length == 0) continue;
+            for (int k = 0; k < it.bs.length; k++) if (it.bs[k] > 0f && k < it.bex.length && it.bex[k] > 0f && cdAge(it.ck[k], now) > it.bex[k]) return true;
+        }
+        return false;
     }
     /** 지금 화면에 올라온 도착정보 가운데 가장 빨리 오는 차의 남은 초(0 이하면 이미 '곧 도착' 이거나 지나간 차). 도착 숫자가 없으면 Float.MAX_VALUE — 앱이 다시 받는 박자를 정한다. */
     public float minArrRemainSec() {
@@ -1865,10 +1888,13 @@ public class ScreenView extends View {
                 float alh = ScreenCore.BC_ARR * ScreenCore.BC_ARR_LH, rt0 = c0 + (inner - (ac * alh + (ac - 1) * ScreenCore.BC_ARR_GAP)) / 2f;
                 for (int k = 0; k < ac; k++) {
                     String tm = it.sa[i * 6 + 2 + k * 2], cn = it.sa[i * 6 + 3 + k * 2];
-                    boolean soonNow = it.gb[i * 3 + k];
+                    boolean soonNow = it.gb[i * 3 + k], staleNow = false;
                     if (it.bs.length > i * 2 + k && it.bs[i * 2 + k] > 0f) {                                  // 초 카운트다운: 받은 뒤 흐른 만큼 줄인 값을 그린다
-                        double rem = cdRem(it.ck[i * 2 + k], it.bs[i * 2 + k], now);
-                        tm = ScreenCore.cdFmt(rem); soonNow = rem <= 60.0; cdDrawn = true;
+                        int bk = i * 2 + k;
+                        double rem = cdRem(it.ck[bk], it.bs[bk], now);
+                        if (bk < it.bex.length && it.bex[bk] > 0f && bk < it.xa.length && it.xa[bk].length() > 0 && cdAge(it.ck[bk], now) > it.bex[bk]) { tm = it.xa[bk]; cn = ""; soonNow = false; staleNow = true; }   // s461: 엔진이 정한 유통기한이 지났다 — 낡은 '곧 도착 4번째전' 대신 '확인 중'(옅게)
+                        else { tm = ScreenCore.cdFmt(rem); soonNow = rem <= 60.0; }
+                        cdDrawn = true;
                     }
                     float ay = rt0 + k * (alh + ScreenCore.BC_ARR_GAP), rx = xr;
                     if (cn.length() > 0) {
@@ -1876,7 +1902,7 @@ public class ScreenView extends View {
                         cv.drawText(cn, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
                         rx -= tp.measureText(cn) + ScreenCore.BC_CNT_GAP;
                     }
-                    setText(ScreenCore.BC_ARR, true, soonNow ? C_SOON : pal[R_TEXT]); tp.setTextAlign(Paint.Align.RIGHT);
+                    setText(ScreenCore.BC_ARR, true, staleNow ? pal[R_SUB] : soonNow ? C_SOON : pal[R_TEXT]); tp.setTextAlign(Paint.Align.RIGHT);
                     cv.drawText(tm, rx, base(ay, alh, 0), tp); tp.setTextAlign(Paint.Align.LEFT);
                 }
                 if (bell) drawBell(cv, bellX, top + 1f + (rh - 1f - ScreenCore.BC_BELL) / 2f);

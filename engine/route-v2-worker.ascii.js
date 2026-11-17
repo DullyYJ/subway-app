@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-17s460";
+var ENGINE_VERSION = "route-v2-2026-11-18s461";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23138,7 +23138,7 @@ function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 =
 function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 \uc5c6\uc774(\ubabb \ubc1b\uc74c \u00b7 \uc2e4\ud328) TAGO \ub9cc\uc73c\ub85c \uadf8\ub9b0 \ubaa9\ub85d \u2014 \ucd9c\uad6c\uac00 \ube60\uc84c\uc744 \uc218 \uc788\uc73c\ub2c8 \uae30\uae30\uac00 \ubcf4\uad00\ud558\uc9c0 \uc54a\uac8c \uc54c\ub9b0\ub2e4(info.bus.nc)
 function mapArrErr(t) {                                    // \uacf5\uacf5 API \uac00 HTTP 200 \uc73c\ub85c \uac74\ub128 \uc624\ub958 \ubd09\ud22c({"OpenAPI_ServiceResponse":\u2026"HTTP_ERROR"})\uc778\uac00 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4(\uc6f9 _safeParseResponse \uc640 \uac19\uc740 \uae00\uc790). \ubc1b\uc9c0 \ubabb\ud55c \uac83\uc73c\ub85c \uce5c\ub2e4
   var x = typeof t === 'string' ? t : '';
-  return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
+  return x.length > 0 && x.length < 4000 && (/OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x) || /"resultCode"\s*:\s*"?99"?\s*[,}]/.test(x));   // s461: \uc778\ucc9c BIS \uac00 '\uac00\uc6a9\ud55c \uc138\uc158\uc774 \uc874\uc7ac\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4 (30/30)'\ub97c HTTP 200 \u00b7 resultCode 99 \ub85c \ubcf4\ub0b8\ub2e4(\ube48 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4 \u2014 \ubabb \ubc1b\uc740 \uac83)
 }
 function mapArrMissing(res, k) { return res[k] === undefined || mapArrErr(res[k]); }     // \uc544\uc9c1 \ubabb \ubc1b\uc558\uac70\ub098 \uc624\ub958 \ubd09\ud22c\ub9cc \ubc1b\uc558\ub2e4 \u2192 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \uadf8\ub9ac\uace0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4
 function mapBusArrUrl(s, id, city) {                               // id\u00b7city: \uc774\uc6c3 \uc815\ub958\uc7a5\u00b7\ubc14\uafd4 \ubcf4\ub294 ID \ub85c \uac19\uc740 \uc8fc\uc18c\ub97c \ub9cc\ub4e4 \ub54c\ub9cc \uc900\ub2e4
@@ -23344,6 +23344,16 @@ function mapBusToggle(vw) {
     { label: '\ud83d\udccd \uc8fc\ubcc0 \uc815\ub958\uc7a5', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
     { label: '\u2b50 \uc990\uaca8\ucc3e\uae30', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }] };          // s383: \ud83d\udd04 \ub2e8\ucd94\ub294 \uc5c6\uc574\ub2e4 \u2014 \uc0c8\ub85c\uace0\uce68\uc740 \uc544\ub798\ub85c \ub2f9\uae30\uae30\ub9cc(\uc571\uc758 \ub2f9\uae30\uae30\uac00 mp.rf \ub97c \ubcf4\ub0b8\ub2e4)
 }
+// \u2500\u2500 s461 (YJ: \uc774\ubbf8 \uc9c0\ub098\uac04 75\ubc88\uc774 '\uace7 \ub3c4\ucc29 4\ubc88\uc9f8\uc804'\uc73c\ub85c \ub5a0 \ud5db\uac78\uc74c\ud55c\ub2e4 \u00b7 \uce74\uce74\uc624\ubc84\uc2a4\ub294 \uc774\ub807\uac8c \uc548 \ud2c0\ub9b0\ub2e4): \ub3c4\ucc29 \uc22b\uc790\uc758 '\uc720\ud1b5\uae30\ud55c'\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
+//   \uacf5\uacf5 API(TAGO)\uc758 \ub3c4\ucc29 \uac12\uc740 \uc57d 1\ubd84\ub9c8\ub2e4 \ud55c \ubc88\ub9cc \ubc14\ub00c\ub294 \uc2a4\ub0c5\uc0f7\uc774\ub2e4. \uc571\uc740 \ubc1b\uc740 \uc21c\uac04\ubd80\ud130 1\ucd08\uc529 \uc904\uc5ec \uadf8\ub9ac\ub294\ub370, 0\ucd08\uac00 \ub418\uc5b4\ub3c4 \uac12\uc774 \uc548 \ubc14\ub00c\uba74(\uac31\uc2e0 \uc2e4\ud328 \u00b7 \uc6d0\ubcf8 \uba48\ucda4 \u00b7 \ud0ed\uc744 \uc624\ub798 \ub5a0\ub0ac\ub2e4 \uc634)
+//   \uc608\uc804\uc5d4 '\uace7 \ub3c4\ucc29'\uc73c\ub85c \uad73\uace0 '4\ubc88\uc9f8\uc804'\uc740 \uadf8\ub300\ub85c \ub0a8\uc558\ub2e4. \uc774\uc81c \uac01 \ub3c4\ucc29 \uce78\uc5d0 ex(\ubc1b\uc740 \ub4a4 \uc774 \ucd08\uac00 \uc9c0\ub098\uba74 \ubbff\uc9c0 \uc54a\ub294\ub2e4)\uc640 xs(\uadf8\ub54c \ub300\uc2e0 \uadf8\ub9b4 \uae00)\ub97c \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4 \u2014 \uc571\uc740 \ube44\uad50\ud574\uc11c \uadf8\ub9b4 \ubfd0\uc774\ub2e4.
+//   ex = \ub0a8\uc740 \ucd08 + 45\ucd08(\ucc28\uac00 \uc815\ub958\uc7a5\uc5d0 \uc11c \uc788\ub294 \uc5ec\uc720) \u00b7 \uc544\ubb34\ub9ac \uae38\uc5b4\ub3c4 240\ucd08. 3\uc815\uac70\uc7a5 \uc774\uc0c1 \ub5a8\uc5b4\uc9c4 \ucc28\ub294 '\uace7 \ub3c4\ucc29'\uc77c \uc218 \uc5c6\uc73c\ub2c8 (\uc815\uac70\uc7a5 \uc218 \u2212 2) \u00d7 25\ucd08 \uc544\ub798\ub85c\ub294 \uc54c\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+var MAP_ARR_GRACE = 45, MAP_ARR_MAXAGE = 240, MAP_ARR_XS = '\ud655\uc778 \uc911', MAP_SEC_PER_STOP = 25;
+function mapSecFloor(sec, prev) {
+  sec = Number(sec); prev = Number(prev);
+  if (isFinite(sec) && isFinite(prev) && prev >= 3) { var f = (prev - 2) * MAP_SEC_PER_STOP; if (sec < f) return f; }
+  return sec;
+}
 function mapBusRows(rows, info, si) {                              // \ub178\uc120+\ubc29\uba74\ub9c8\ub2e4 \ud55c \uc904: \ub178\uc120 \ubc88\ud638 \u00b7 \u2192 \ubc29\uba74 \u00b7 \uccab \ub3c4\ucc29(+\ub458\uc9f8 \ub3c4\ucc29). \ub178\uc120 id \uac00 \uc788\uc73c\uba74 \uc904\uc744 \ub20c\ub7ec \ub178\uc120 \uc0c1\uc138(info.rts[si][\uc904] = [\ub178\uc120 id, \ubc88\ud638, \uc885\ub958])
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
@@ -23357,7 +23367,10 @@ function mapBusRows(rows, info, si) {                              // \ub178\uc1
     var arr = g.slice(0, 2).map(function (x) {
       if (x.est) { var eo = { s: x.prev <= 0 ? '\uace7 \ub3c4\ucc29' : '\uc57d ' + Math.max(1, Math.round(x.prev * MAP_EST_MIN)) + '\ubd84', sec: 0 }; if (x.prev > 0) eo.p = x.prev + '\ubc88\uc9f8\uc804'; else eo.soon = 1; return eo; }     // s270: \ubc84\uc2a4 \uc704\uce58\ub85c \uc5b4\ub9bc\ud55c \uc2dc\uac04(\ucd08 \ub2e8\uc704 \uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc774 \uc544\ub2c8\ub2e4)
       if (x.none) return { s: '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c', sec: 0 };                                                    // \uacbd\uc720\ub178\uc120\ub9cc \uc54c\uace0 \uc9c0\uae08 \uc624\ub294 \ucc28\ub294 \ubaa8\ub97c \ub54c(\uc6f9 _noArr)
-      var o = { s: x.sec <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (x.sec <= 60) o.soon = 1; return o; });
+      var sc = mapSecFloor(x.sec, x.prev);                                                                   // s461: 3\uc815\uac70\uc7a5 \uc774\uc0c1 \ub5a8\uc5b4\uc9c4 \ucc28\ub97c '\uace7 \ub3c4\ucc29'\uc73c\ub85c \uc54c\ub9ac\uc9c0 \uc54a\ub294\ub2e4
+      var o = { s: sc <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(sc), sec: Math.round(sc) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (sc <= 60) o.soon = 1;
+      if (o.sec > 0) { o.ex = Math.min(o.sec + MAP_ARR_GRACE, MAP_ARR_MAXAGE); o.xs = MAP_ARR_XS; }          // s461: \ubc1b\uc740 \ub4a4 ex \ucd08\uac00 \uc9c0\ub098\ub3c4 \uac12\uc774 \uc548 \ubc14\ub00c\uba74 \uc571\uc740 \uc22b\uc790 \ub300\uc2e0 xs \ub97c \uadf8\ub9b0\ub2e4(\ub0a1\uc740 '\uace7 \ub3c4\ucc29' \ubc29\uc9c0)
+      return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
     if (r.dir) row.dir = '\u2192 ' + r.dir + '\ubc29\ud5a5';
     var rid = mapStr(r.rid, 40);

@@ -459,12 +459,20 @@ var index_default = {
       }
       return out;
     };
+    // s461: Incheon BIS answers HTTP 200 + resultCode 99 ("no free session (30/30)") when its session pool is spent. That is not an arrival list,
+    // and the edge cache (cacheTtlByStatus 200-299) would hand the same error to every user of the stop for the next ttl seconds.
+    // The candidate URLs differ in parameter order, so each has its own edge-cache key: on this error try the next one (after a short pause) instead of
+    // returning the poisoned entry. Gives up after two retries and returns the error as is (the app treats it as "not received" and asks again).
+    const isSessionErr = (t) => /"resultCode"\s*:\s*"?99"?\s*[,}]/.test(t || "") || /<resultCode>\s*99\s*<\/resultCode>/.test(t || "");
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const fetchUpstream = async () => {
       const candidates = buildCandidates();
-      let res;
+      let res, again = 0;
       for (let i = 0; i < candidates.length; i++) {
         res = await attempt(candidates[i]);
-        if (!isKeyError(res.text)) break;
+        if (isKeyError(res.text)) continue;
+        if (ttl > 0 && res.status === 200 && isSessionErr(res.text) && again < 2 && i < candidates.length - 1) { again++; await sleep(150 * again); continue; }
+        break;
       }
       return res;
     };

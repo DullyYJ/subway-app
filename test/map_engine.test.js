@@ -223,6 +223,14 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
     b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: ENV } });
     const c0 = b.body.filter(n => n.t === 'bcard')[0];
     ok(b.info.bus.st === 'need' && b.info.bus.need.filter(n => /^a/.test(n.k)).length === 1 && b.info.bus.need[0].k === 'a0' && c0.ld === '도착 정보 불러오는 중...' && !c0.em, '오류 봉투는 받지 못한 것: 불러오는 중 + 다시 받기(need)');
+    // s461: 인천 BIS 세션 소진 — HTTP 200 + resultCode 99 ("가용한 세션이 존재하지 않습니다. (30/30)") 도 도착정보가 아니다
+    { const S99 = '{"response":{"header":{"resultCode":99,"resultMsg":"가용한 세션이 존재하지 않습니다. (30/30)"},"body":""}}';
+      b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: S99 } });
+      const c99 = b.body.filter(n => n.t === 'bcard')[0];
+      ok(b.info.bus.st === 'need' && b.info.bus.need[0].k === 'a0' && c99.ld === '도착 정보 불러오는 중...' && !c99.em, 's461: resultCode 99(세션 소진)는 받지 못한 것: 불러오는 중 + 다시 받기');
+      const S99q = '{"response":{"header":{"resultCode":"99","resultMsg":"x"},"body":{}}}';
+      b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: S99q } });
+      ok(b.info.bus.st === 'need' && b.info.bus.need[0].k === 'a0', 's461: resultCode "99" (문자열)도 동일'); }
     b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '{"response":{"header":{"resultCode":"00"},"body":{"items":"","totalCount":0}}}', g0: '', t0: '{}', t100: '{}' } });
     ok(b.info.bus.st === 'ok' && b.body.filter(n => n.t === 'bcard')[0].em === '운행 정보 없음', '정상 응답인데 버스가 없으면 그대로 "도착정보 없음"');
     b = mk({ lat: 37.489, lng: 126.724, res: { tp: '', gg: '', tn: TAGO, a0: '', g0: '', t0: '{}', t100: '{}' } });
@@ -636,6 +644,20 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(rows.every(r => /^#[0-9a-fA-F]{6}$/.test(r.c)), '노선 색');
   const colRows = E.mapScreen({ cap: 18 }, { part: 'b', mode: 'bus', bus: { lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '', a0: '<ServiceResult><msgBody>' + ['5', '150', '300', '700', '3012', 'N13'].map(n => '<itemList><rtNm>' + n + '</rtNm><arrmsg1>2분후</arrmsg1><traTime1>59</traTime1></itemList>').join('') + '</msgBody></ServiceResult>', a1: '', a2: '', a3: '' } } }).body.find(n => n.t === 'bcard').rows;
   ok(colRows.map(r => r.c).join() === '#e74c3c,#0066FF,#00b341,#9b59b6,#7f8c8d,#7f8c8d' && colRows.every(r => r.a[0].s === '59초' && r.a[0].soon === 1), '노선 색(웹 _busNumClass: 광역 빨강·간선 파랑·지선 초록·순환 보라·그 밖 회색) · 60초 안은 임박');
+  // s461 (YJ: 이미 지나간 75번이 '곧 도착 4번째전'으로 뜬다): 도착 칸마다 유통기한(ex)과 만료 글(xs)을 싣고, 3정거장 이상 떨어진 차는 '곧 도착'으로 알리지 않는다
+  { const item = (no, m1, t1) => '<itemList><rtNm>' + no + '</rtNm><arrmsg1>' + m1 + '</arrmsg1><traTime1>' + t1 + '</traTime1></itemList>';
+    const xml = '<ServiceResult><msgBody>' + item('A1', '3분30초후[2번째 전]', 210) + item('A2', '곧 도착', 0) + item('A3', '1분후[5번째 전]', 40) + item('A4', '곧 도착[4번째 전]', 0) + item('A5', '20분후[14번째 전]', 1152) + item('A6', '1분후[3번째 전]', 5) + '</msgBody></ServiceResult>';
+    const rs = E.mapScreen({ cap: 18 }, { part: 'b', mode: 'bus', bus: { lat: 37.5, lng: 127.0, res: { tp: SEOUL_POS, gg: '', tn: '', a0: xml, a1: '', a2: '', a3: '' } } }).body.find(n => n.t === 'bcard').rows;
+    const by = {}; rs.forEach(r => { by[r.no] = r.a[0]; });
+    ok(by.A1.sec === 210 && by.A1.ex === 240 && by.A1.xs === '확인 중', 's461: 3분 30초 → 유통기한은 최대 240초(남은 초 + 45초가 240을 넘으면 240)');
+    ok(by.A2.s === '곧 도착' && by.A2.soon === 1 && by.A2.sec === 1 && by.A2.ex === 46, 's461: 곧 도착(1초)의 유통기한은 46초 — 그 뒤엔 앱이 \'확인 중\'으로 바꾼다');
+    ok(by.A3.sec === 75 && by.A3.s === '1분 15초' && by.A3.p === '5번째전' && !by.A3.soon && by.A3.ex === 120, 's461: 5정거장 떨어진 차가 40초라면 (5−2)×25 = 75초 아래로는 알리지 않는다(곧 도착 아님)');
+    ok(by.A4.sec === 50 && by.A4.s === '50초' && by.A4.p === '4번째전' && by.A4.s !== '곧 도착', 's461: "곧 도착"이라 해도 4정거장 떨어졌으면 \'곧 도착\' 글자를 쓰지 않는다(50초로 읽는다)');
+    ok(by.A5.sec === 1152 && by.A5.ex === 240 && by.A5.xs === '확인 중', 's461: 먼 차(19분)도 240초 안에 다시 받지 못하면 믿지 않는다');
+    ok(by.A6.sec === 25 && by.A6.s === '25초' && by.A6.soon === 1 && by.A6.ex === 70, 's461: 3정거장은 (3−2)×25 = 25초가 바닥 · 2정거장 이하는 값을 그대로 둔다');
+    const n2 = rs.filter(r => r.a.length === 2).length;
+    ok(n2 === 0 && rs.every(r => r.a.every(a => a.sec === 0 || (a.ex > 0 && a.ex <= 240 && a.xs === '확인 중'))), 's461: 모든 카운트다운 칸은 0 < ex ≤ 240 이고 xs 가 있다(초가 짧은 칸은 ex > sec)'); }
+  // 앱 검증기가 새 필드(ex · xs)를 받아들이고 값을 읽는다는 것은 ScreenCheck(자바) 시험이 맞춰 본다
 }
 
 

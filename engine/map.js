@@ -530,7 +530,7 @@ function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 =
 function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 없이(못 받음 · 실패) TAGO 만으로 그린 목록 — 출구가 빠졌을 수 있으니 기기가 보관하지 않게 알린다(info.bus.nc)
 function mapArrErr(t) {                                    // 공공 API 가 HTTP 200 으로 건넨 오류 봉투({"OpenAPI_ServiceResponse":…"HTTP_ERROR"})인가 — 도착정보가 아니다(웹 _safeParseResponse 와 같은 글자). 받지 못한 것으로 친다
   var x = typeof t === 'string' ? t : '';
-  return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
+  return x.length > 0 && x.length < 4000 && (/OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x) || /"resultCode"\s*:\s*"?99"?\s*[,}]/.test(x));   // s461: 인천 BIS 가 '가용한 세션이 존재하지 않습니다 (30/30)'를 HTTP 200 · resultCode 99 로 보낸다(빈 도착정보가 아니다 — 못 받은 것)
 }
 function mapArrMissing(res, k) { return res[k] === undefined || mapArrErr(res[k]); }     // 아직 못 받았거나 오류 봉투만 받았다 → '도착정보 없음'이 아니라 '불러오는 중'으로 그리고 다시 받는다
 function mapBusArrUrl(s, id, city) {                               // id·city: 이웃 정류장·바꿔 보는 ID 로 같은 주소를 만들 때만 준다
@@ -736,6 +736,16 @@ function mapBusToggle(vw) {
     { label: '📍 주변 정류장', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
     { label: '⭐ 즐겨찾기', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }] };          // s383: 🔄 단추는 없앴다 — 새로고침은 아래로 당기기만(앱의 당기기가 mp.rf 를 보낸다)
 }
+// ── s461 (YJ: 이미 지나간 75번이 '곧 도착 4번째전'으로 떠 헛걸음한다 · 카카오버스는 이렇게 안 틀린다): 도착 숫자의 '유통기한'은 엔진이 정한다.
+//   공공 API(TAGO)의 도착 값은 약 1분마다 한 번만 바뀌는 스냅샷이다. 앱은 받은 순간부터 1초씩 줄여 그리는데, 0초가 되어도 값이 안 바뀌면(갱신 실패 · 원본 멈춤 · 탭을 오래 떠났다 옴)
+//   예전엔 '곧 도착'으로 굳고 '4번째전'은 그대로 남았다. 이제 각 도착 칸에 ex(받은 뒤 이 초가 지나면 믿지 않는다)와 xs(그때 대신 그릴 글)를 실어 보낸다 — 앱은 비교해서 그릴 뿐이다.
+//   ex = 남은 초 + 45초(차가 정류장에 서 있는 여유) · 아무리 길어도 240초. 3정거장 이상 떨어진 차는 '곧 도착'일 수 없으니 (정거장 수 − 2) × 25초 아래로는 알리지 않는다.
+var MAP_ARR_GRACE = 45, MAP_ARR_MAXAGE = 240, MAP_ARR_XS = '확인 중', MAP_SEC_PER_STOP = 25;
+function mapSecFloor(sec, prev) {
+  sec = Number(sec); prev = Number(prev);
+  if (isFinite(sec) && isFinite(prev) && prev >= 3) { var f = (prev - 2) * MAP_SEC_PER_STOP; if (sec < f) return f; }
+  return sec;
+}
 function mapBusRows(rows, info, si) {                              // 노선+방면마다 한 줄: 노선 번호 · → 방면 · 첫 도착(+둘째 도착). 노선 id 가 있으면 줄을 눌러 노선 상세(info.rts[si][줄] = [노선 id, 번호, 종류])
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
@@ -749,7 +759,10 @@ function mapBusRows(rows, info, si) {                              // 노선+방
     var arr = g.slice(0, 2).map(function (x) {
       if (x.est) { var eo = { s: x.prev <= 0 ? '곧 도착' : '약 ' + Math.max(1, Math.round(x.prev * MAP_EST_MIN)) + '분', sec: 0 }; if (x.prev > 0) eo.p = x.prev + '번째전'; else eo.soon = 1; return eo; }     // s270: 버스 위치로 어림한 시간(초 단위 카운트다운이 아니다)
       if (x.none) return { s: '도착정보 없음', sec: 0 };                                                    // 경유노선만 알고 지금 오는 차는 모를 때(웹 _noArr)
-      var o = { s: x.sec <= 1 ? '곧 도착' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (x.sec <= 60) o.soon = 1; return o; });
+      var sc = mapSecFloor(x.sec, x.prev);                                                                   // s461: 3정거장 이상 떨어진 차를 '곧 도착'으로 알리지 않는다
+      var o = { s: sc <= 1 ? '곧 도착' : mapCdFmt(sc), sec: Math.round(sc) }; if (x.prev > 0) o.p = x.prev + '번째전'; if (sc <= 60) o.soon = 1;
+      if (o.sec > 0) { o.ex = Math.min(o.sec + MAP_ARR_GRACE, MAP_ARR_MAXAGE); o.xs = MAP_ARR_XS; }          // s461: 받은 뒤 ex 초가 지나도 값이 안 바뀌면 앱은 숫자 대신 xs 를 그린다(낡은 '곧 도착' 방지)
+      return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
     if (r.dir) row.dir = '→ ' + r.dir + '방향';
     var rid = mapStr(r.rid, 40);

@@ -2971,13 +2971,14 @@ public class ShellActivity extends Activity {
         if (cell.length() == 0 || sig.equals(skelSig)) return;
         skelSig = sig;
         final String json = map.bodyRequest(ShellCore.CAP, ShellCore.theme(store), true), key = ShellCore.busSkelKey(store);
-        ioExec.execute(new Runnable() { @Override public void run() {
+        Thread tb = new Thread(new Runnable() { @Override public void run() {          // s461 (YJ: 탭 전환이 너무 느려졌다): 서버 통신(최대 8초)을 디스크 IO 줄(ioExec 한 줄) 안에서 하면 그동안 다른 탭의 캐시 화면 읽기가 그 뒤에 선다 — 통신은 따로 달린다
             NetPost.Res r = NetPost.post(ShellCore.BASE + "/screen/map", json, 8000);
             final String txt = r.status == 200 && r.body != null ? r.body : "";
             if (txt.length() == 0) { skelSig = ""; return; }
             warm(txt);
             main.post(new Runnable() { @Override public void run() { store.put("bsk_cell", cell); cachePut(key, txt); } });
-        } });
+        } }, "shell-bsk");
+        tb.setDaemon(true); tb.setPriority(Thread.NORM_PRIORITY - 1); tb.start();
     }
     /** 버스는 엔진이 "이 주소들을 받아 와라" 하면 받아서 다시 묻는다(위치 → 정류장 → 도착정보, 최대 3번). */
     private void loadMapBodyRound(final ScreenView v, final boolean keep, final int round) {
@@ -3224,8 +3225,9 @@ public class ShellActivity extends Activity {
     }
     private boolean busRefreshing; private long busRefAt;                // 갱신 한 번이 오가는 중인가(느린 통신이 다음 박자에 끊기지 않게 · 20초가 지나면 포기)
     private void busEnd() { busRefreshing = false; startBusTick(); }
-    private void busFail() { map.restoreArrivals(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 다음 박자에
-    private void busOk() { map.commitArrivals(); busEnd(); }
+    private long busFailAt = 0L;                                                              // s461: 마지막 갱신이 실패한 시각(성공하면 0) — 실패 뒤에는 8초 뒤 다시(busArrCheck)
+    private void busFail() { map.restoreArrivals(); busFailAt = System.currentTimeMillis(); busEnd(); }                               // 받기 실패: 보던 도착정보를 그대로 돌려놓고 8초 뒤 다시
+    private void busOk() { busFailAt = 0L; map.commitArrivals(); busEnd(); }
     /** 도착정보만 새로 받는다: 성공하면 새 값으로 바로 덮고(카운트다운 시작점도 새로), 실패하면 아무것도 건드리지 않는다. */
     /** 주변 정류장 카드를 끌어서 순서를 바꿨다 — 새 순서를 저장하고(이미 받은 도착정보는 번호를 옮겨 둔다) 엔진이 그 순서로 곧장 다시 그린다(도착정보를 다시 받지 않는다). */
     private void reorderBusNear(String[] keys, int[] perm) {
@@ -3352,6 +3354,7 @@ public class ShellActivity extends Activity {
         if (!busShowing()) return;
         busLocCheck();                                                                    // 위치가 그대로면 아무것도 받지 않는다(시간만 줄어든다)
         startBusTick();
+        busStaleKick();                                                                   // s461: 그래도 도착정보는 15초가 넘었으면 곧바로 새로 받는다
     }
     private boolean busTicking;
     /** 다른 탭에 갔다 버스 탭으로 돌아왔다(위치가 그대로라 정류장 목록이 같다): 기억해 둔 화면을 지난 시간만큼 줄여 바로 보이고, 정류장 · 엔진 왕복 없이 도착정보만 뒤에서 새로 받아
@@ -3361,12 +3364,15 @@ public class ShellActivity extends Activity {
         busLocCheck();                                                                    // 위치가 바뀌었을 때만 새로 받는다 — 그대로면 보던 화면에서 시간만 줄어든다
         startBusTick();
         syncMapView();
+        busStaleKick();                                                                   // s461: 도착정보는 15초가 넘었으면 곧바로 조용히 새로 받는다(그 사이 낡은 숫자는 '확인 중')
         return true;
     }
     private void startBusTick() { if (!busTicking) { busTicking = true; main.postDelayed(busTick, BUS_POLL_MS); } startBusArrTick(); }
     // s454 (YJ: 1분 남았다고 나오는데 버스는 이미 지나갔다): 도착정보를 위치가 바뀔 때·10분마다만 받아 오래된 숫자가 그대로 줄어들었다.
     //   이제 가장 빨리 오는 차가 가까울수록 자주 다시 받는다(2분 안 20초 · 5분 안 60초 · 그 밖 3분). 서버 캐시(15~20초)가 공공 API 를 지켜 준다.
-    static final long BUS_ARR_NEAR_MS = 20000L, BUS_ARR_MID_MS = 60000L, BUS_ARR_FAR_MS = 180000L, BUS_ARR_BEAT_MS = 10000L;
+    //   s461 (YJ: 이미 지나간 75번이 '곧 도착'으로 뜬다 · 탭을 다녀오면 첫 시간이 다시 로딩된다 · 카카오버스는 이렇게 안 틀린다): 공공 API 값은 1분마다 한 번 바뀌므로 간격을 줄이고(15 · 30 · 90초),
+    //   박자 확인은 5초마다(받기에 실패했거나 엔진이 정한 유통기한이 지난 숫자가 있으면 8초 뒤 곧바로 다시 · 다른 탭을 다녀왔거나 앱을 다시 켰을 때 15초가 넘었으면 곧바로).
+    static final long BUS_ARR_NEAR_MS = 15000L, BUS_ARR_MID_MS = 30000L, BUS_ARR_FAR_MS = 90000L, BUS_ARR_BEAT_MS = 5000L, BUS_ARR_RETRY_MS = 8000L, BUS_RESUME_MS = 15000L;
     static long busArrGap(float remSec) { return remSec <= 120f ? BUS_ARR_NEAR_MS : remSec <= 300f ? BUS_ARR_MID_MS : BUS_ARR_FAR_MS; }
     private boolean busArrTicking;
     private final Runnable busArrTick = new Runnable() { @Override public void run() {
@@ -3381,10 +3387,15 @@ public class ShellActivity extends Activity {
     private boolean rideAboard() { return home.riding() && !ShellCore.rideWaiting(RideService.running ? RideService.liveLv : home.lvJson); }
     private void busArrCheck() {
         if (!busShowing() || rideAboard() || busRefreshing) return;
+        long now = System.currentTimeMillis();
+        if (busFailAt > 0L && now - busFailAt >= BUS_ARR_RETRY_MS) { busRefresh(); return; }       // s461: 받기가 실패했으면 박자(15~90초)를 기다리지 않고 8초 뒤 다시 — 실패한 채 낡은 숫자로 남지 않게
+        if (body.arrStale() && now - busAt >= BUS_ARR_RETRY_MS) { busRefresh(); return; }          // s461: 엔진이 정한 유통기한이 지나 '확인 중'이 된 숫자가 있다 — 곧 다시
         float r = body.minArrRemainSec();
         if (r == Float.MAX_VALUE) return;                                                  // 도착 숫자가 없으면 비어 있는 곳 재시도(busEmptyCheck)가 맡는다
-        if (System.currentTimeMillis() - busAt >= busArrGap(r)) busRefresh();
+        if (now - busAt >= busArrGap(r)) busRefresh();
     }
+    /** s461: 다른 탭을 다녀왔거나 앱을 다시 켰다 — 마지막으로 받은 지 15초가 넘었으면 박자를 기다리지 않고 곧바로 조용히 다시 받는다(그 사이 유통기한이 지난 칸은 '확인 중'으로 보이다가 새 숫자로 바뀐다). */
+    private void busStaleKick() { if (busShowing() && !rideAboard() && !busRefreshing && System.currentTimeMillis() - busAt >= BUS_RESUME_MS) busRefresh(); }
     private void reloadMap(boolean headToo) {
         seedMapLoc();
         if (headToo) { keyedShow(head, ShellCore.S_MAPH); loadMapHead(head, true, null, null); }
@@ -4145,6 +4156,8 @@ public class ShellActivity extends Activity {
     }
 
     /** 홈 화면: 입력 상태를 엔진에 보내고, 경로 결과가 있으면 결과 화면도 받아 이어 붙여 올린다. */
+    /** s461: 경로 결과가 준비됐는데 홈 카드(AI 승무원 · 대화)가 아직이면 첫 탐색에서 더 기다리는 시간(s330 은 0.5초 — 결과만 먼저 뜨고 나머지 화면이 뒤늦게 끼어들었다). 이보다 늦으면 결과부터 올리고 카드는 도착하는 대로 끼운다. */
+    static final long HC_FIRST_WAIT_MS = 2000L;
     private void loadHome(final ScreenView v, final boolean keep) {
         final int my = ++seqHome;
         startHomeTick();
@@ -4212,7 +4225,7 @@ public class ShellActivity extends Activity {
                     if (tr != null) tr.join(16000);
                     if (tc != null && !staleCards) {
                         if (hasRes) {                                                                    // s330: 경로 결과가 준비됐는데 홈 카드(AI 승무원 · 대화)가 늦으면 0.5초만 더 기다리고 결과부터 올린다 — 카드는 도착하는 대로 끼운다
-                            tc.join(hcFor.startsWith("r" + home.routeId + "#") ? 1500L : 500L);                     // s343: 첫 탐색 결과는 0.5초만 기다리되(s330), 탭·편을 넘길 땐 브리핑도 같이 바뀌도록 조금 더 기다린다(미리 받아 둔 게 없을 때만 해당)
+                            tc.join(hcFor.startsWith("r" + home.routeId + "#") ? 1500L : HC_FIRST_WAIT_MS);          // s343: 탭·편을 넘길 땐 브리핑도 같이 바뀌도록 1.5초까지. s461(YJ: 경로탐색 때 경로만 먼저 나오고 나머지 화면이 뒤늦게 나온다): 첫 탐색도 0.5초 → 2초까지 기다려 한 번에 그린다(그보다 늦은 카드만 s330 처럼 도착하는 대로 끼운다)
                             if (tc.isAlive()) { cardsLate.set(true); if (!tc.isAlive()) cardsLate.set(false); }
                         } else tc.join(16000);
                     }
