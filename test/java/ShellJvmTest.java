@@ -977,6 +977,12 @@ public class ShellJvmTest {
             // s170: 공공 API 오류 봉투(HTTP 200 으로 옴)는 받지 못한 것 — 'OpenAPI_ServiceResponse'. 통신 실패(빈 본문)도 '도착정보 없음'이 아니라 아직 못 받은 것으로 둔다
             String envl = "{\n  \"OpenAPI_ServiceResponse\": {\n    \"cmmMsgHeader\": {\n      \"errMsg\": \"HTTP_ERROR\",\n      \"returnReasonCode\": \"04\"\n    }\n  }\n}\n";
             ok(NetPost.busBodyBad(envl) && NetPost.busBodyBad("") && NetPost.busBodyBad(null) && !NetPost.busBodyBad(good) && !NetPost.busBodyBad(empty) && !NetPost.busBodyBad("<itemList><rtNm>1</rtNm></itemList>"), "버스 본문: 오류 봉투 · 빈 본문만 받지 못한 것");
+            {   // s461: 인천 BIS 세션 소진 — HTTP 200 + resultCode 99 도 받지 못한 것(엣지 캐시가 10초 동안 돌려줘도 다시 받는다)
+                String s99 = "{\"response\":{\"header\":{\"resultCode\":99,\"resultMsg\":\"가용한 세션이 존재하지 않습니다. (30/30)\"},\"body\":\"\"}}";
+                String s99q = "{\"response\":{\"header\":{\"resultCode\": \"99\" ,\"resultMsg\":\"x\"}}}";
+                String ok00 = "{\"response\":{\"header\":{\"resultCode\":\"00\"},\"body\":{\"items\":\"\",\"totalCount\":0}}}";
+                ok(NetPost.busBodyBad(s99) && NetPost.busBodyBad(s99q) && !NetPost.busBodyBad(ok00) && !NetPost.busBodyBad("{\"a\":{\"resultCode\":\"990\"}}"), "s461: resultCode 99(세션 소진)만 받지 못한 것 — 정상 00 · 빈 목록은 그대로");
+            }
             MapCore bo = new MapCore(new ShellCore.MemStore());
             bo.addBusRes("a0", ""); bo.addBusRes("a1", good);
             ok(!bo.busRes.containsKey("a0") && good.equals(bo.busRes.get("a1")), "통신에 실패한 정류장은 '없음'으로 굳히지 않고 비워 둔다(엔진이 불러오는 중으로 그린다)");
