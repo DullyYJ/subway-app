@@ -31,8 +31,8 @@ final class RideTrackJ {
         busStopNearReachM = 200, busGpsSnapM = 500, busAdvanceSec = 8,
         trailMaxSpeedMps = 60, zeroLeadSec = 25, zeroWinSec = 55, zeroSlideSec = 45, zeroNearM = 150, zeroFinalNearM = 250, zeroFarM = 600, zeroAccCapM = 50, zeroAccMaxM = 100,
         zeroApplyLeadSec = 3, zeroKeepSec = 20, zeroFinalKeepMin = 30,
-        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 100, passInterpMaxGapSec = 30, passConfirmSec = 20, passAwayM = 100,
-        notYetFarM = 400, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
+        passAheadSec = 300, passLateSec = 420, passBackSec = 300, passNearM = 150, passAccM = 100, passInterpMaxGapSec = 30, passConfirmSec = 20, passConfirmNySec = 6, passConfirmNyM = 50, passAwayM = 100,
+        notYetFarM = 400, notYetGapLateSec = 150, notYetGapMinSec = 20, notYetGapMps = 15, notYetLeadSec = 15, notYetMaxLateSec = 300, notYetBetween = 1.25, notYetAccM = 100,
         frozenAccM = 20, frozenSec = 30, frozenMinN = 4, frozenM = 3,      // s457 굳은 좌표(지하에서 같은 좌표가 새 시각으로 계속 옴)
         motionWinSec = 14, motionMinSpanSec = 4, motionMaxAcc = 60, motionMoveMps = 1.4, motionStopMps = 0.7,
         busPosOffM = 150, busPosFixAccM = 60, busPosMinStops = 2, busPosMinGapM = 15;
@@ -348,7 +348,9 @@ final class RideTrackJ {
         }
         if (bi < 0) return null;
         // s207 보수화(엔진 rtPassTime 과 같다): 가장 가까운 순간이 지난 뒤에야 통과로 적는다 — 아직 다가오는 중이면 null. 그 뒤 좌표가 passAwayM 이상 멀어졌거나, 그 순간에서 passConfirmSec 가 지났을 때(정차 · 좌표 끊김 포함) 확인.
-        boolean conf = now - tr.get(bi).ts >= passConfirmSec * 1000;
+        // s460: 이미 '아직 안 닿음'으로 올려 둔(ny) 정류장은 가장 가까운 좌표가 50m 안이면 6초 만에 확정(엔진 rtPassTime 과 같다)
+        double confSec = (Boolean.TRUE.equals(s.get("ny")) && bd <= passConfirmNyM) ? passConfirmNySec : passConfirmSec;
+        boolean conf = now - tr.get(bi).ts >= confSec * 1000;
         for (int cj = bi + 1; !conf && cj < tr.size(); cj++) {
             Fix cq = tr.get(cj);
             if (cq.ts > now + 1000) break;
@@ -384,15 +386,22 @@ final class RideTrackJ {
     static double notYet(Map<String, Object> s, Map<String, Object> prev, List<Fix> tr, double now) {
         if (prev == null || !fin(prev.get("lat")) || !fin(prev.get("lng"))) return Double.NaN;
         double late = now - gn(s, "arrMs");
-        if ((late < 0 && !Boolean.TRUE.equals(s.get("ny"))) || late > notYetMaxLateSec * 1000 || tr.isEmpty()) return Double.NaN;      // s456: 이미 '아직 안 닿음'으로 올려 둔 정류장(ny)은 표시 시각이 미래여도 다시 판정
+        boolean nyOn = Boolean.TRUE.equals(s.get("ny"));
+        if ((late < -notYetLeadSec * 1000 && !nyOn) || late > notYetMaxLateSec * 1000 || tr.isEmpty()) return Double.NaN;      // s456: 이미 '아직 안 닿음'으로 올려 둔 정류장(ny)은 표시 시각이 미래여도 다시 판정 · s460: 표시 도착 notYetLeadSec 초 전부터 본다
         Fix q = null; int qi = -1;
         for (int i = tr.size() - 1; i >= 0; i--) { if (tr.get(i).noAcc() || tr.get(i).acc <= notYetAccM) { q = tr.get(i); qi = i; break; } }
         if (q == null || now - q.ts > freshSec * 1000) return Double.NaN;
         if (frozen(tr, qi)) return Double.NaN;      // s457: 굳은 좌표는 '아직 안 닿음'의 증거가 아니다
         double sl = gn(s, "lat"), sg = gn(s, "lng"), pl = gn(prev, "lat"), pg = gn(prev, "lng");
         double dn = hav(q.lat, q.lng, sl, sg), dp = hav(q.lat, q.lng, pl, pg), L = hav(pl, pg, sl, sg);
-        if (dn <= notYetFarM || L <= 0) return Double.NaN;
+        if (L <= 0) return Double.NaN;
         if (dp + dn > L * notYetBetween) return Double.NaN;
+        // s460 (귤현): 400m 안 '빈칸' 메움 — 영점 반경 밖이고(제때 오는 열차를 잘못 늦다고 보지 않게) 이 거리를 달려 올 시간이 지나도록 안 닿았을 때만(이미 올려 둔 정류장 ny 는 계속)
+        if (dn <= notYetFarM) {
+            if (!(notYetGapLateSec > 0)) return Double.NaN;
+            if (!(dn > zeroNearM)) return Double.NaN;
+            if (!nyOn && (late > notYetGapLateSec * 1000 || late < (notYetGapMinSec + dn / notYetGapMps) * 1000)) return Double.NaN;
+        }
         return round(dn);
     }
     /** 같은 시각인데 멀리 떨어진 좌표는 사실일 수 없다 — 뒤에서부터 보며 그런 앞 좌표를 버린다. */

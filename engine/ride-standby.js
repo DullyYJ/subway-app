@@ -889,15 +889,17 @@ function rsPosFromSegs(pos, segs, now) {
     return;
   }
 }
-var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000;
+var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000, RS_NY_NEAR_M = 150, RS_NY_FIX_MS = 25000, RS_NY_ACC_M = 100;
 //   마커가 GPS 가 확정한 역 p 보다 앞서 있는데(시각표가 앞섰다) ① 마커가 닿은 역에 '아직 안 옴' 증거가 45초 안에 있고 가드가 실제로 마커를 붙잡는 중(held) 이거나
 //   ② p 에서 '지금도' 문이 열려 있다(8초 안의 좋은 위치가 p 의 문 열림 반경 RS_DOOR_M 안, 출발 판정·정차 종료가 없음) — 열차는 아직 p 에 서 있으니 마커를 p 로 내린다.
 //   풀면 정차 시계가 지금부터 다시 시작해 s322 규칙대로(신호가 끊기고 10초 뒤) 출발한다. 같은 GPS 확정은 한 번만 푼다.
 function rsMkRelease(st, prevP, now, held, nrt) {
   try {
     var eta = st.eta || {}, ny = st.notYet || {}, passes = eta.passes || [], tr = st.trail || [], k, i, best = null;
-    if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) best = { i: i }; } }
-    if (best) return { n: best.i - 1, why: best.i + '번 역 아직 안 옴(GPS)' };
+    var lf0 = tr.length ? tr[tr.length - 1] : null;      // s460: 가장 최근 좋은 위치가 그 역 영점 반경(150m) 안이면 열차는 이미 역에 왔다 — 낡은 '아직 안 옴'(45초 안)으로 마커를 뒤로 끌지 않는다(통과 확정만 기다린다)
+    var lfOk = !!(lf0 && now - lf0[0] <= RS_NY_FIX_MS && !(lf0[3] != null && isFinite(lf0[3]) && lf0[3] > RS_NY_ACC_M));
+    if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) { var spn = lfOk ? rsStopOf(st, i) : null; if (spn && isFinite(spn.lat) && isFinite(spn.lng) && rsHav(lf0[1], lf0[2], spn.lat, spn.lng) - Math.min(lf0[3] == null || !isFinite(lf0[3]) ? 50 : lf0[3], 50) <= RS_NY_NEAR_M) continue; best = { i: i }; } } }
+    if (best) return { n: best.i - 1, why: best.i + '번 역 아직 안 옴(GPS)', ny: true };
     if (nrt) return null;      // s379: 실시간 없는 노선은 '문 열림'으로 마커를 역에 다시 내리지 않는다(시각표 기준 — 마커가 뒤로 튀지 않는다)
     var last = tr.length ? tr[tr.length - 1] : null;
     if (!last || now - last[0] > RS_REL_FIX_MS || (last[3] != null && last[3] > RS_DOOR_ACC_M)) return null;
@@ -939,7 +941,12 @@ function rsMonoPos(st, r, now, notes) {
     prevP = mk.s[mk.s.length - 1][1];
     for (i = 0; i < mk.s.length; i++) {
       var q = mk.s[i];
-      if (now < q[3]) { prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]); break; }
+      if (now < q[3]) {
+        prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]);
+        // ★ s460: 도착 시각이 '지금 + 30초'로 계속 밀리는 동안(GPS 가 '아직 안 닿음')에는 이전 걸음의 구간표를 따라 마커가 슬금슬금 98% 를 넘어 먼저 도착하지 않게 한다.
+        if (st.notYet && st.notYet[q[1]] != null && now - st.notYet[q[1]] <= RS_REL_NY_MS && q[1] > q[0] && prevP > q[0] + 0.98 * (q[1] - q[0])) prevP = q[0] + 0.98 * (q[1] - q[0]);
+        break;
+      }
     }
   }
   // ★ 2026-10-30 s349 (YJ: "명확한 GPS 가 확정한 역이 있으면 앞에 남아 있던 마커를 끌어내려도 된다"): 되돌아감 방지는 시각표가 앞서 있다가 GPS 가 '아직 안 왔다'고 해도 마커를 그 앞 자리에 붙잡았다(로그: 2.66 → 3 자리 유지).
@@ -953,6 +960,9 @@ function rsMonoPos(st, r, now, notes) {
     var pfR = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
     if (pfR.n > rel.n) pfR.n = rel.n;
     delete st.mk; mk = null; prevP = null; delete st.dw;
+    // ★ s460 (다중 시뮬: 열차가 다음 역 150m 앞인데 마커가 직전 역(1.4km 뒤)에 18초 서 있었다): '아직 안 옴'으로 풀 때는 열차가 직전 역을 이미 떠나 다음 역으로 오는 중이다 — 직전 역에서 정차 시계를 새로 시작하지 않는다(끝난 정차로 적는다).
+    //   (문 열림으로 풀 때는 열차가 그 역에 아직 서 있으므로 예전처럼 다시 시작한다.)
+    if (rel.ny) st.dw = { key: key, i: rel.n, s: 0, g: 1, e: 0, dl: 1 };
     notes.push('마커 되돌아감 방지 해제: ' + rel.why);
   }
   if (prevP != null && newP < prevP - 0.002) {
@@ -1928,6 +1938,18 @@ function rideStandby(req) {
           notes.push('영점 ' + z.i + '번 통과 반영');
         } else if (z.notYet) { notYet[z.i] = now; }
       });
+    }
+  }
+  // ★ s460 (4분 늦은 열차: 귤현 150m 안에서 천천히 들어오는 동안 '아직 안 닿음'이 45초 만에 만료돼 시각표로 돌아가 마커가 앞서 가고 '곧 하차'가 일찍 울렸다):
+  //   이미 '아직 안 닿음'으로 올려 둔 정류장에 열차가 영점 반경(150m) 안까지 왔어도 통과가 '확정'되기 전까지는 아직이다 — 증거를 이어 둔다(통과가 확정되면 위의 영점 반영이 지운다).
+  if (tr.length) {
+    var lfN = tr[tr.length - 1];
+    if (lfN && now - lfN[0] <= RS_NY_FIX_MS && !(lfN[3] != null && isFinite(lfN[3]) && lfN[3] > RS_NY_ACC_M)) {
+      for (var nk0 in notYet) {
+        if (!(now - notYet[nk0] <= O.notYetKeepSec * 1000)) continue;
+        var spN = rsStopOf(st, +nk0);
+        if (spN && isFinite(spN.lat) && isFinite(spN.lng) && rsHav(lfN[1], lfN[2], spN.lat, spN.lng) - Math.min(lfN[3] == null || !isFinite(lfN[3]) ? 50 : lfN[3], 50) <= RS_NY_NEAR_M) notYet[nk0] = now;
+      }
     }
   }
   if (st.srch && rsSearch(st, tr, now, passes, notYet, notes)) newPass = true;      // 2.2) s231 연쇄 2회 실패 뒤 5분 GPS 탐색

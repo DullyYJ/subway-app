@@ -1127,6 +1127,12 @@ public class ScreenJvmTest {
                 ScreenCore.Item bc = cl.body[0];
                 ok(bc.ra.length == 2 && bc.ra[0] != null && "br.0.0".equals(bc.ra[0].v) && bc.ra[1] == null, "bcard: 노선 줄마다 누름 행동");
             } catch (Exception ex) { ok(false, "bcard 줄 행동: " + ex); }
+            try {                                                                       // s461: 도착 칸의 유통기한(ex)과 만료 글(xs) — 엔진이 정한 값을 그대로 담는다(없으면 0 · 빈 글 = 옛 엔진 화면)
+                ScreenCore.Layout el = ScreenCore.layout(ScreenCore.load("{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[{\"t\":\"bcard\",\"k\":\"SEOUL:1\",\"nm\":\"가\",\"mode\":\"near\",\"act\":{\"a\":\"call\",\"v\":\"mp.pc.0\"},\"rows\":[{\"no\":\"75\",\"a\":[{\"s\":\"5분 20초\",\"sec\":320,\"p\":\"4번째전\",\"ex\":240,\"xs\":\"확인 중\"},{\"s\":\"19분 52초\",\"sec\":1192,\"p\":\"14번째전\"}]},{\"no\":\"77\",\"a\":[{\"s\":\"곧 도착\",\"sec\":1,\"ex\":46,\"xs\":\"확인 중\"}]}]}]}"), 360f, M);
+                ScreenCore.Item eb = el.body[0];
+                ok(eb.bex.length == 4 && eb.xa.length == 4 && eb.bex[0] == 240f && "확인 중".equals(eb.xa[0]) && eb.bex[1] == 0f && "".equals(eb.xa[1]) && eb.bex[2] == 46f && "확인 중".equals(eb.xa[2]) && eb.bex[3] == 0f && "".equals(eb.xa[3]), "bcard(s461): 도착 칸마다 유통기한(ex)·만료 글(xs)을 담는다 · 없으면 0 · 빈 글(옛 엔진 화면 그대로)");
+                ok(eb.bs[0] == 320f && eb.bs[1] == 1192f && eb.bs[2] == 1f && eb.ck[0] != null && !eb.ck[0].equals(eb.ck[1]), "bcard(s461): 초(sec)와 카운트다운 열쇠는 그대로");
+            } catch (Exception ex) { ok(false, "bcard 유통기한: " + ex); }
             try {                                                                       // 순서 바꾸기 줄 글(첫 주변 카드에만 오는 rol · rod)
                 String ro_c = "{\"t\":\"bcard\",\"k\":\"SEOUL:%d\",\"nm\":\"가\",\"mode\":\"near\",\"act\":{\"a\":\"call\",\"v\":\"mp.pc.%d\"}%s}";
                 String ro_j = "{\"ok\":true,\"v\":1,\"screen\":\"maph\",\"head\":[],\"body\":[" + String.format(ro_c, 1, 0, ",\"rol\":\"끌어서 순서 변경\",\"rod\":\"완료\"") + "," + String.format(ro_c, 2, 1, "") + "]}";

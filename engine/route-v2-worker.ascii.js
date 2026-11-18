@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-16s458";
+var ENGINE_VERSION = "route-v2-2026-11-18s461";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -8639,6 +8639,7 @@ var RIDE_ETA_DEFAULTS = {
   holdAfterStops: 1,
   holdGraceSec: 60,
   posSegCount: 80,        // pos.segs \u2014 \uc55e\uc73c\ub85c \uadf8\ub9b4 \uad6c\uac04 \uc218(\uc751\ub2f5\uc774 \ub04a\uaca8\ub3c4 \uc2dc\uac01\ud45c\ub300\ub85c \ub05d\uae4c\uc9c0 \uc774\uc5b4 \uadf8\ub9ac\uac8c)
+  notYetLeadSec: 15,
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // \uc2b9\uac15\uc7a5\uc5d0\uc11c \uc5f4\ucc28\ub97c \uae30\ub2e4\ub9ac\ub294 \uc911(platformWaiting): \uc608\uc815 \ucd9c\ubc1c\uc774 platMinOverMin \ubd84 \ub118\uac8c \uc9c0\ub0ac\uace0 platGraceMin \ubd84 \uc548\uc774\uba74 \ub2a6\ub294 \uac83\uc73c\ub85c \ubcf4\uace0 \uc2b9\ucc28\uc5ed\ubd80\ud130 '\uc9c0\uae08 + platExtraMin \ubd84'\uc73c\ub85c \ubbfc\ub2e4(\uc608\uc804 \uc571\uc758 _platformLateShift).
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
@@ -9185,13 +9186,18 @@ function _rideEtaCore(input) {
   var nyHit = false;
   if (nxO >= 0 && input.timetableFirst === true) {
     var nyl = input.notYet || [];
-    for (var nyi = 0; nyi < nyl.length; nyi++) if (+nyl[nyi] === nxO) nyHit = true;
+    // \u2605 s460 (YJ: "\uade4\ud604\uc5d0 \ub3c4\ucc29\ud588\ub294\ub370 \uacc4\uc591 \ub3c4\ucc29\uc774\ub77c\uace0 \ub728\uace0 \uc54c\ub78c\uc774 \uc798\ubabb \uc654\ub2e4 \u2014 \uc815\ud655\ub3c4\uac00 \uac00\uc7a5 \uc911\uc694"): \uc9c0\ud558 \uad6c\uac04\uc740 GPS \uac00 \ub4dc\ubb38\ub4dc\ubb38\uc774\ub77c \uc575\ucee4(\ub9c8\uc9c0\ub9c9 \ud1b5\uacfc \uc99d\uac70)\uac00 \ud55c\ucc38 \ub4a4\uc5d0 \uc788\ub2e4.
+    //   \uadf8\ub54c GPS \uac00 \uade4\ud604 \uadfc\ucc98\uc5d0\uc11c '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc744 \ub9d0\ud574\ub3c4 '\uc575\ucee4 \ub4a4 \uccab \uc815\ucc28 \ub178\ub4dc'(\uc784\ud559)\ub9cc \ubcf4\uba74 \uade4\ud604\uc740 \ubb34\uc2dc\ub3fc, \uc2dc\uac01\ud45c\uac00 \ub9c8\ucee4\u00b7\uc54c\ub9bc\uc744 \ub2a6\uc740 \uc5f4\ucc28\ubcf4\ub2e4 \uc55e\uc11c \ubcf4\ub0c8\ub2e4.
+    //   '\uc544\uc9c1 \uc548 \ub2ff\uc74c' \ub178\ub4dc\uac00 \uc575\ucee4 \ub4a4 \uc5b4\ub514\uc5d0 \uc788\ub4e0(\uc815\ucc28 \ub178\ub4dc\u00b7\uc720\ud6a8\ud55c \uc2dc\uac01) \uadf8 \uac00\uc7a5 \uc55e \ub178\ub4dc\ubd80\ud130 \uc5f0\ucc29\uc73c\ub85c \uc62c\ub9b0\ub2e4 \u2014 \uadf8 \uc55e \ub178\ub4dc\ub4e4\uc740 \uc2dc\uac01\ud45c\ub300\ub85c \uc9c0\ub09c \uac83\uc73c\ub85c \ub454\ub2e4.
+    var nyBest = -1;
+    for (var nyi = 0; nyi < nyl.length; nyi++) { var nyk = +nyl[nyi]; if (isFinite(nyk) && nyk >= nxO && nyk < n && valid[nyk] && _reIsTransit(nodes[nyk]) && out[nyk] != null && (nyBest < 0 || nyk < nyBest)) nyBest = nyk; }
+    if (nyBest >= 0) { nyHit = true; nxO = nyBest; }
     if (!nyHit) { notes.push('\uc2dc\uac01\ud45c \uae30\uc900: \uc99d\uac70 \uc5c6\uc74c\uc744 \uc5f0\ucc29\uc73c\ub85c \ubcf4\uc9c0 \uc54a\uc74c'); nxO = -1; }
     else notes.push('GPS \uac00 ' + (nodes[nxO].name || nxO) + ' \uc5d0 \uc544\uc9c1 \uc548 \ub2ff\uc558\ub2e4\uace0 \ud568 \u2192 \uc5f0\ucc29\uc73c\ub85c \ubd04');
   }
   if (nxO >= 0) {
     var overO = (nowMs - out[nxO]) / 1000;
-    if (overO >= (nyHit ? 0 : O.overdueSec)) {
+    if (overO >= (nyHit ? -(O.notYetLeadSec != null ? O.notYetLeadSec : 15) : O.overdueSec)) {      // s460: GPS \uac00 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc774\uba74 \uc608\uc815 \uc2dc\uac01 15\ucd08 \uc804\ubd80\ud130 '\uc9c0\uae08 + 30\ucd08'\ub85c \uc62c\ub824 \ub9c8\ucee4\uac00 \uba3c\uc800 \uc5ed\uc5d0 \uc62c\ub77c\uac00 '2\uc815\uac70\uc7a5 \uc804\u00b7\uace7 \ud558\ucc28'\uac00 \uc77c\ucc0d \uc6b8\ub9ac\ub294 \uac83\uc744 \ub9c9\ub294\ub2e4
       if (O.overdueMode === 'shift') {
         // \ub4a4 \uc2dc\uac01\uc744 \ud1b5\uc9f8\ub85c \ubbfc\ub2e4(\uc608\uc804 \uc571 \ubc29\uc2dd). \uc704\uce58 \ud310\ub2e8\uc774 \uc9c0\ud558\uc5d0\uc11c \uc5ed\uc744 \uac74\ub108\ub6f4 \uacbd\uc6b0(\uc99d\uac70 \uc5c6\uc74c \u2260 \uc5f0\ucc29)\uc5d0\ub3c4 \ubc00\uc5b4 \ubc84\ub824 \uc2dc\ubbac\uc5d0\uc11c \uc815\ud655\ub3c4\uac00 \ub098\ube60\uc9c4\ub2e4 \u2192 \uae30\ubcf8\uac12 \uc544\ub2d8
         var addO = Math.min(O.overdueMaxMin, (overO / 60 + O.overdueExtraMin) * O.overdueGain) * 60000;
@@ -9557,9 +9563,9 @@ var RIDE_TRACK_DEFAULTS = {
   // \u2605 2026-10-13 (YJ: "\uc2dc\uac04\ud45c\ubcf4\ub2e4 \ube60\ub974\uac8c \uc120\ud559\uc5d0 \uc654\uc5b4. \uc704\uce58\ub294 \ub9de\ud614\ub294\ub370 \uc2dc\uac04\uc774 \uc548\ub9de\ucdb0\uc838. \uc2dc\uac04\ub3c4 \uac19\uc774 \ubc00\uac70\ub098 \ub2f9\uae30\uba70 \uacc4\uc18d \uc601\uc810"): \uc2dc\uac01\ud45c \ucc3d(\ub3c4\ucc29 15\ucd08 \uc804~30\ucd08 \ub4a4) \ubc16\uc5d0\uc11c \ub2ff\uc740 \uc5f4\ucc28(\uc77c\ucc0d\u00b7\ub2a6\uac8c)\ub3c4 \ub193\uce58\uc9c0 \uc54a\ub3c4\ub85d
   //   pass:true \uc778 \uc815\ub958\uc7a5\uc740 '\ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01 \uc55e\ub4a4' \ub113\uc740 \ucc3d\uc5d0\uc11c GPS \uac00 \uadf8 \uc815\ub958\uc7a5 150m \uc548(\uc815\ud655\ub3c4 60m \uc774\ud558 \uc88c\ud45c)\uc5d0 \ub4e0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc21c\uac04\uc744 \ud1b5\uacfc \uc2dc\uac01(passMs)\uc73c\ub85c \ub3cc\ub824\uc900\ub2e4 \u2014 \uc571\uc740 \uadf8 \uc2dc\uac01\uc744 \ud1b5\uacfc \uc99d\uac70\ub85c \uc5d4\uc9c4\uc5d0 \ub2e4\uc2dc \ubcf4\ub0b8\ub2e4.
   passAheadSec: 300, passLateSec: 420, passBackSec: 300, passNearM: 150, passAccM: 100,   // \u2605 2026-10-26 s230 (YJ: \uc9c0\ud558\uc5d0\uc11c \uc601\uc810\uc774 \uc548 \uc7a1\ud600 \ub9c8\ucee4\uac00 \uc5f4\ucc28\ubcf4\ub2e4 2~3\uc815\uac70\uc7a5 \ub4a4\ucc98\uc9d0): \uc815\ud655\ub3c4 60 \u2192 100m \u2014 \ud130\ub110\u00b7\uc5ed\uc0ac \uc548 \uc88c\ud45c\ub294 \uc815\ud655\ub3c4\uac00 60m \ub118\uac8c \ub098\uc640 \uc804\ubd80 \ubc84\ub824\uc84c\ub2e4
-  passInterpMaxGapSec: 30, passConfirmSec: 20, passAwayM: 100,
+  passInterpMaxGapSec: 30, passConfirmSec: 20, passConfirmNySec: 6, passConfirmNyM: 50, passAwayM: 100,
   // \u2605 2026-10-13 (YJ: "\ub9c8\ucee4\ub3c4 \uacc4\uc18d \uc5d4\uc9c4\uc5d0 \uc704\uce58\ub97c \ubb3c\uc5b4\ubcf4\uace0 \uc601\uc810 \uc7a1\uace0 \ubcf4\uc815\ud574\uc57c\uc9c0 \u2014 \ubc00\uac70\ub098 \ub2f9\uae30\uac70\ub098"): \ub2a6\uac8c \uc624\ub294 \uc5f4\ucc28 \u2014 \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\ub294\ub370 \uc2e0\uc120\ud55c GPS \uac00 '\uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 \uc0ac\uc774'\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uacfc notYetFarM \ub118\uac8c \ub5a8\uc5b4\uc838 \uc788\uc73c\uba74 notYet:true(\uc544\uc9c1 \uc548 \ub2ff\uc74c). \uc571\uc740 \uc774 \uc99d\uac70\ub97c /ride-eta \uc5d0 \ubcf4\ub0b4\uace0 \uc5d4\uc9c4\uc774 \ub4a4 \uc2dc\uac01\uc744 \ubbfc\ub2e4.
-  notYetFarM: 400, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
+  notYetFarM: 400, notYetGapLateSec: 150, notYetGapMinSec: 20, notYetGapMps: 15, notYetLeadSec: 15, notYetMaxLateSec: 300, notYetBetween: 1.25, notYetAccM: 100,
   // \u2605 2026-11-16 s457 (YJ: "GPS \uac00 \uc9c0\ud558\ucca0\uc5d0\uc11c \uc548 \ud754\ub4e4\ub824\uc57c \ud574"): \uad73\uc740 \uc88c\ud45c \u2014 \uc9c0\ud558\uc5d0\uc11c\ub294 \ud3f0\uc774 \ub9c8\uc9c0\ub9c9 \uc640\uc774\ud30c\uc774\u00b7\uae30\uc9c0\uad6d \uc704\uce58\ub97c \uc0c8 \uc2dc\uac01\uc73c\ub85c \uacc4\uc18d \ub3cc\ub824\uc900\ub2e4(\uac19\uc740 \uc88c\ud45c \u00b7 \uc815\ud655\ub3c4 \ub098\uc068).
   //   \uadf8 \uc88c\ud45c\ub294 '\uc544\uc9c1 \uc55e \uc5ed\uc5d0 \uc788\ub2e4'\ub294 \uc99d\uac70\uac00 \uc544\ub2c8\ub2e4. \uc815\ud655\ub3c4\uac00 frozenAccM \ubcf4\ub2e4 \ub098\uc058\uace0, \ub9c8\uc9c0\ub9c9 frozenSec \ucd08(\uc88c\ud45c frozenMinN \uac1c \uc774\uc0c1) \ub3d9\uc548 frozenM \uc548\uc5d0\uc11c \uaf3c\uc9dd \uc54a\uc73c\uba74 '\uc544\uc9c1 \uc548 \ub2ff\uc74c' \ud310\uc815\uc5d0 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
   //   \u2192 \uc2dc\uac01\ud45c\ub300\ub85c \uac04\ub2e4(\uc2e4\uc2dc\uac04 \uc5c6\ub294 \ub178\uc120\uc758 \uae30\uc874 \uaddc\uce59). \uc815\ud655\ub3c4 \uc88b\uc740 \uc9c4\uc9dc GPS(\uc9c0\uc0c1)\ub294 \uba48\ucdb0 \uc788\uc5b4\ub3c4 \uadf8\ub300\ub85c \uc99d\uac70\ub2e4.
@@ -9827,7 +9833,10 @@ function rtPassTime(s, tr, now, O) {
   if (!best) return null;
   // \u2605 2026-10-26 s207 (\ubcf4\uc218\ud654): '\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc21c\uac04'\uc740 \uc9c0\ub098\uace0 \ub098\uc11c\uc57c \uc54c \uc218 \uc788\ub2e4. \uc544\uc9c1 \ub2e4\uac00\uc624\ub294 \uc911(\uac00\uc7a5 \uac00\uae4c\uc6b4 \uc88c\ud45c\uac00 \ub9e8 \ub05d\uc774\uace0 \ub354 \uac00\uae4c\uc6cc\uc9c0\ub294 \uc911)\uc5d0 \ud1b5\uacfc\ub85c \uc801\uc73c\uba74 \uc5f4\ucc28\uac00 \ub2ff\uae30 \uc804 \uc2dc\uac01\uc774 \ubc15\ud78c\ub2e4
   //   (\ubaa8\uc758 \uc2e4\ud5d8: \ucc98\uc74c \ubc15\ud78c \ud1b5\uacfc \uc2dc\uac01\uc774 \uc2e4\uc81c\ubcf4\ub2e4 10~25\ucd08 \uc774\ub974\ub2e4\uac00 \ub098\uc911\uc5d0 \uace0\uccd0\uc9d0). \uadf8 \ub4a4 \uc88c\ud45c\uac00 passAwayM \uc774\uc0c1 \uba40\uc5b4\uc84c\uac70\ub098, \uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc21c\uac04\uc5d0\uc11c passConfirmSec \uac00 \uc9c0\ub0ac\uc744 \ub54c(\uc815\ucc28 \u00b7 \uc88c\ud45c \ub04a\uae40 \ud3ec\ud568)\uc5d0\ub9cc \ud1b5\uacfc\ub85c \uc801\ub294\ub2e4.
-  var conf = now - tr[best.i].ts >= O.passConfirmSec * 1000;
+  // \u2605 s460: \uc774\ubbf8 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc73c\ub85c \uc62c\ub824 \ub454(ny) \uc815\ub958\uc7a5\uc740 \ub3c4\ucc29 \uc2dc\uac01\uc774 '\uc9c0\uae08 + 30\ucd08'\ub85c \uacc4\uc18d \ubc00\ub9ac\uace0 \uc788\uc5b4 20\ucd08\ub97c \uae30\ub2e4\ub9ac\ub294 \ub3d9\uc548 \ub9c8\ucee4\uac00 \uc5ed \uc55e\uc5d0\uc11c \ub9f4\ub3cc\uc558\ub2e4.
+  //   \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc88c\ud45c\uac00 \uc815\ub958\uc7a5 50m \uc548\uc774\uace0 \uadf8 \ub4a4 6\ucd08 \ub3d9\uc548 \ub354 \uac00\uae4c\uc6cc\uc9c0\uc9c0 \uc54a\uc558\uc73c\uba74(\uc815\ucc28) \ud1b5\uacfc\ub85c \ud655\uc815\ud55c\ub2e4 \u2014 \ud1b5\uacfc \uc2dc\uac01\uc740 \uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc21c\uac04(\ubcf4\uac04)\uc774\ub77c \uadf8\ub300\ub85c\ub2e4.
+  var confSec = (s.ny === true && best.d <= O.passConfirmNyM) ? O.passConfirmNySec : O.passConfirmSec;
+  var conf = now - tr[best.i].ts >= confSec * 1000;
   for (var cj = best.i + 1; !conf && cj < tr.length; cj++) {
     var cq = tr[cj];
     if (cq.ts > now + 1000) break;
@@ -9866,14 +9875,24 @@ function rtNotYet(s, prev, tr, now, O) {
   var late = now - s.arrMs;
   // \u2605 s456 (YJ: "\uc2dc\uac04\uc774 \uc624\ub77d\uac00\ub77d\ud55c\ub2e4"): \uc774\ubbf8 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc73c\ub85c \ubcf4\uace0 \ub3c4\ucc29 \uc2dc\uac01\uc744 '\uc9c0\uae08 + 30\ucd08'\ub85c \uc62c\ub824 \ub454 \uc815\ub958\uc7a5(s.ny \u2014 ride-standby \uac00 \ud45c\uc2dc)\uc740 \ud45c\uc2dc \uc2dc\uac01\uc774 \ubbf8\ub798\uc5ec\ub3c4(late < 0) \ub2e4\uc2dc \ud310\uc815\ud55c\ub2e4.
   //   \uc608\uc804\uc5d4 \uc62c\ub9b0 \uc2dc\uac01 \ub54c\ubb38\uc5d0 late < 0 \uc774 \ub418\uc5b4 \ud310\uc815\uc774 \ub04a\uae30\uace0, 45\ucd08 \ub4a4 \uc99d\uac70\uac00 \ub9cc\ub8cc\ub418\uba74 \uc2dc\uac01\ud45c\ub85c \ub418\ub3cc\uc544\uac14\ub2e4\uac00(\ub9c8\ucee4\uac00 \uc55e \uc5ed\uc73c\ub85c \ud290) \ub2e4\uc74c \uac78\uc74c\uc5d0 \ub2e4\uc2dc '\uc544\uc9c1 \uc548 \ub2ff\uc74c' \u2014 \ub2a6\ub294 \uc5f4\ucc28\uc5d0\uc11c \ub3c4\ucc29 \uc2dc\uac01\uacfc \ub9c8\ucee4\uac00 1\ubd84\ub9c8\ub2e4 \uc624\ub77d\uac00\ub77d\ud588\ub2e4.
-  if ((late < 0 && s.ny !== true) || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;
+  if ((late < -O.notYetLeadSec * 1000 && s.ny !== true) || late > O.notYetMaxLateSec * 1000 || !tr.length) return null;      // s460: \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01 notYetLeadSec \ucd08 \uc804\ubd80\ud130 \ubcf8\ub2e4(\ub9c8\ucee4\uac00 \ub3c4\ucc29 \uc2dc\uac01\ubcf4\ub2e4 \uba87 \ucd08 \uba3c\uc800 \uc5ed\uc5d0 \uc62c\ub77c\uac00\ubbc0\ub85c)
   var q = null;
   for (var i = tr.length - 1; i >= 0; i--) { if (tr[i].acc == null || tr[i].acc <= O.notYetAccM) { q = tr[i]; break; } }
   if (!q || now - q.ts > O.freshSec * 1000) return null;
   if (rtFrozen(tr, i, O)) return null;      // s457: \uad73\uc740 \uc88c\ud45c\ub294 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc758 \uc99d\uac70\uac00 \uc544\ub2c8\ub2e4
   var dn = rtHav(q.lat, q.lng, s.lat, s.lng), dp = rtHav(q.lat, q.lng, prev.lat, prev.lng), L = rtHav(prev.lat, prev.lng, s.lat, s.lng);
-  if (dn <= O.notYetFarM || L <= 0) return null;
+  if (L <= 0) return null;
   if (dp + dn > L * O.notYetBetween) return null;
+  // \u2605 s460 (YJ 11-16 \uade4\ud604: \uc5f4\ucc28\uac00 2\ubd84 \ub2a6\uc5b4 \uade4\ud604 400m \uc548\uae4c\uc9c0 \uc624\uc790 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc774 \ub04a\uaca8 \ub9c8\ucee4\uac00 \uacc4\uc591\u2192\uc544\ub77c\ub85c \ud280\uace0 '\uace7 \ud558\ucc28'\uac00 \uc6b8\ub838\ub2e4):
+  //   \uc608\uc804\uc5d4 \uc774 \uc815\ub958\uc7a5\uc5d0\uc11c notYetFarM(400m) \uc548\uc774\uba74 \ud310\uc815\uc744 \uc811\uc5b4(150m \uc601\uc810 \ubc18\uacbd \ubc16 150~400m \ub294 '\uadfc\uc811'\ub3c4 '\uc544\uc9c1'\ub3c4 \uc544\ub2cc \ube48\uce78) \uc5d4\uc9c4\uc774 \uc2dc\uac01\ud45c\ub85c \ub3cc\uc544\uac00 \uc55e \uc5ed\uc73c\ub85c \ub9c8\ucee4\ub97c \ubcf4\ub0c8\ub2e4.
+  //   \ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\ub0ac\uc5b4\ub3c4 '\uc55e \uc815\ub958\uc7a5\uacfc \uc774 \uc815\ub958\uc7a5 \uc0ac\uc774'\uc5d0\uc11c \uc774 \uc815\ub958\uc7a5\uc73c\ub85c \ub2e4\uac00\uac00\ub294 \uc911\uc774\uba74(\uc815\ub958\uc7a5 notYetGapLateSec \ucd08 \uc548) \uc601\uc810\uc774 \uc7a1\ud790 \ub54c\uae4c\uc9c0 \uacc4\uc18d '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc774\ub2e4.
+  //   (\uc601\uc810 \ubc18\uacbd \uc548\uc774\uba74 rtZero \uac00 'near' \ub97c \uc6b0\uc120\ud55c\ub2e4.)
+  //   \ub2e4\ub9cc \uc81c\ub54c \uc624\ub294 \uc5f4\ucc28\ub97c \ub2a6\ub2e4\uace0 \uc798\ubabb \ubcf4\uc9c0 \uc54a\uac8c(\ub9c8\uc9c0\ub9c9 \uc218\uc2ed \ucd08 \uc811\uadfc) \u2014 \uc774\ubbf8 \uc62c\ub824 \ub454 \uc815\ub958\uc7a5(ny)\uc774 \uc544\ub2c8\uba74, \uc774 \uac70\ub9ac\ub97c \ub2ec\ub824 \uc62c \uc2dc\uac04(dn \u00f7 notYetGapMps + notYetGapMinSec)\uc774 \uc9c0\ub098\ub3c4\ub85d \uc548 \ub2ff\uc558\uc744 \ub54c\ub9cc \ubcf8\ub2e4.
+  if (dn <= O.notYetFarM) {
+    if (!(O.notYetGapLateSec > 0)) return null;
+    if (!(dn > O.zeroNearM)) return null;      // \uc601\uc810 \ubc18\uacbd \uc548\uc774\uba74 rtZero \uc5d0 \ub9e1\uae34\ub2e4
+    if (s.ny !== true && (late > O.notYetGapLateSec * 1000 || late < (O.notYetGapMinSec + dn / O.notYetGapMps) * 1000)) return null;
+  }
   return { distM: Math.round(dn) };
 }
 // \u2605 2026-10-14 (\uc2e4\uae30\uae30 \ub85c\uadf8: \uc571\uc744 \ub2e4\uc2dc \ucf1c\uc790 \uc313\uc600\ub358 \uc704\uce58\uac00 \ud55c\uaebc\ubc88\uc5d0 \uc640 \ubaa8\ub450 '\uc9c0\uae08' \uc2dc\uac01\uc774 \ucc0d\ud600, \uc9c0\ub09c \uc5ed \uc804\ubd80\uac00 19:16 \uc5d0 \uc9c0\ub09c \uac83\uc73c\ub85c \uc77d\ud614\ub2e4 \u2014 \ub3d9\uc218 +6.2\ubd84\u00b7\ubd80\ud3c9 +4.2\ubd84 \u2026):
@@ -11025,15 +11044,17 @@ function rsPosFromSegs(pos, segs, now) {
     return;
   }
 }
-var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000;
+var RS_REL_NY_MS = 45000, RS_REL_GPS_MS = 90000, RS_REL_FIX_MS = 8000, RS_NY_NEAR_M = 150, RS_NY_FIX_MS = 25000, RS_NY_ACC_M = 100;
 //   \ub9c8\ucee4\uac00 GPS \uac00 \ud655\uc815\ud55c \uc5ed p \ubcf4\ub2e4 \uc55e\uc11c \uc788\ub294\ub370(\uc2dc\uac01\ud45c\uac00 \uc55e\uc130\ub2e4) \u2460 \ub9c8\ucee4\uac00 \ub2ff\uc740 \uc5ed\uc5d0 '\uc544\uc9c1 \uc548 \uc634' \uc99d\uac70\uac00 45\ucd08 \uc548\uc5d0 \uc788\uace0 \uac00\ub4dc\uac00 \uc2e4\uc81c\ub85c \ub9c8\ucee4\ub97c \ubd99\uc7a1\ub294 \uc911(held) \uc774\uac70\ub098
 //   \u2461 p \uc5d0\uc11c '\uc9c0\uae08\ub3c4' \ubb38\uc774 \uc5f4\ub824 \uc788\ub2e4(8\ucd08 \uc548\uc758 \uc88b\uc740 \uc704\uce58\uac00 p \uc758 \ubb38 \uc5f4\ub9bc \ubc18\uacbd RS_DOOR_M \uc548, \ucd9c\ubc1c \ud310\uc815\u00b7\uc815\ucc28 \uc885\ub8cc\uac00 \uc5c6\uc74c) \u2014 \uc5f4\ucc28\ub294 \uc544\uc9c1 p \uc5d0 \uc11c \uc788\uc73c\ub2c8 \ub9c8\ucee4\ub97c p \ub85c \ub0b4\ub9b0\ub2e4.
 //   \ud480\uba74 \uc815\ucc28 \uc2dc\uacc4\uac00 \uc9c0\uae08\ubd80\ud130 \ub2e4\uc2dc \uc2dc\uc791\ud574 s322 \uaddc\uce59\ub300\ub85c(\uc2e0\ud638\uac00 \ub04a\uae30\uace0 10\ucd08 \ub4a4) \ucd9c\ubc1c\ud55c\ub2e4. \uac19\uc740 GPS \ud655\uc815\uc740 \ud55c \ubc88\ub9cc \ud47c\ub2e4.
 function rsMkRelease(st, prevP, now, held, nrt) {
   try {
     var eta = st.eta || {}, ny = st.notYet || {}, passes = eta.passes || [], tr = st.trail || [], k, i, best = null;
-    if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) best = { i: i }; } }
-    if (best) return { n: best.i - 1, why: best.i + '\ubc88 \uc5ed \uc544\uc9c1 \uc548 \uc634(GPS)' };
+    var lf0 = tr.length ? tr[tr.length - 1] : null;      // s460: \uac00\uc7a5 \ucd5c\uadfc \uc88b\uc740 \uc704\uce58\uac00 \uadf8 \uc5ed \uc601\uc810 \ubc18\uacbd(150m) \uc548\uc774\uba74 \uc5f4\ucc28\ub294 \uc774\ubbf8 \uc5ed\uc5d0 \uc654\ub2e4 \u2014 \ub0a1\uc740 '\uc544\uc9c1 \uc548 \uc634'(45\ucd08 \uc548)\uc73c\ub85c \ub9c8\ucee4\ub97c \ub4a4\ub85c \ub04c\uc9c0 \uc54a\ub294\ub2e4(\ud1b5\uacfc \ud655\uc815\ub9cc \uae30\ub2e4\ub9b0\ub2e4)
+    var lfOk = !!(lf0 && now - lf0[0] <= RS_NY_FIX_MS && !(lf0[3] != null && isFinite(lf0[3]) && lf0[3] > RS_NY_ACC_M));
+    if (held) for (k in ny) { i = +k; if (isFinite(i) && now - ny[k] <= RS_REL_NY_MS && prevP >= i - 0.0001 && (best === null || i < best.i)) { var rn0 = (eta.nodes || [])[i]; if (rn0 && rn0.isSub && !rn0.isBus && !rn0.isWalk) { var spn = lfOk ? rsStopOf(st, i) : null; if (spn && isFinite(spn.lat) && isFinite(spn.lng) && rsHav(lf0[1], lf0[2], spn.lat, spn.lng) - Math.min(lf0[3] == null || !isFinite(lf0[3]) ? 50 : lf0[3], 50) <= RS_NY_NEAR_M) continue; best = { i: i }; } } }
+    if (best) return { n: best.i - 1, why: best.i + '\ubc88 \uc5ed \uc544\uc9c1 \uc548 \uc634(GPS)', ny: true };
     if (nrt) return null;      // s379: \uc2e4\uc2dc\uac04 \uc5c6\ub294 \ub178\uc120\uc740 '\ubb38 \uc5f4\ub9bc'\uc73c\ub85c \ub9c8\ucee4\ub97c \uc5ed\uc5d0 \ub2e4\uc2dc \ub0b4\ub9ac\uc9c0 \uc54a\ub294\ub2e4(\uc2dc\uac01\ud45c \uae30\uc900 \u2014 \ub9c8\ucee4\uac00 \ub4a4\ub85c \ud280\uc9c0 \uc54a\ub294\ub2e4)
     var last = tr.length ? tr[tr.length - 1] : null;
     if (!last || now - last[0] > RS_REL_FIX_MS || (last[3] != null && last[3] > RS_DOOR_ACC_M)) return null;
@@ -11075,7 +11096,12 @@ function rsMonoPos(st, r, now, notes) {
     prevP = mk.s[mk.s.length - 1][1];
     for (i = 0; i < mk.s.length; i++) {
       var q = mk.s[i];
-      if (now < q[3]) { prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]); break; }
+      if (now < q[3]) {
+        prevP = now < q[2] ? q[0] : q[0] + Math.max(0, Math.min(1, (now - q[2]) / (q[3] - q[2]))) * (q[1] - q[0]);
+        // \u2605 s460: \ub3c4\ucc29 \uc2dc\uac01\uc774 '\uc9c0\uae08 + 30\ucd08'\ub85c \uacc4\uc18d \ubc00\ub9ac\ub294 \ub3d9\uc548(GPS \uac00 '\uc544\uc9c1 \uc548 \ub2ff\uc74c')\uc5d0\ub294 \uc774\uc804 \uac78\uc74c\uc758 \uad6c\uac04\ud45c\ub97c \ub530\ub77c \ub9c8\ucee4\uac00 \uc2ac\uae08\uc2ac\uae08 98% \ub97c \ub118\uc5b4 \uba3c\uc800 \ub3c4\ucc29\ud558\uc9c0 \uc54a\uac8c \ud55c\ub2e4.
+        if (st.notYet && st.notYet[q[1]] != null && now - st.notYet[q[1]] <= RS_REL_NY_MS && q[1] > q[0] && prevP > q[0] + 0.98 * (q[1] - q[0])) prevP = q[0] + 0.98 * (q[1] - q[0]);
+        break;
+      }
     }
   }
   // \u2605 2026-10-30 s349 (YJ: "\uba85\ud655\ud55c GPS \uac00 \ud655\uc815\ud55c \uc5ed\uc774 \uc788\uc73c\uba74 \uc55e\uc5d0 \ub0a8\uc544 \uc788\ub358 \ub9c8\ucee4\ub97c \ub04c\uc5b4\ub0b4\ub824\ub3c4 \ub41c\ub2e4"): \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0\ub294 \uc2dc\uac01\ud45c\uac00 \uc55e\uc11c \uc788\ub2e4\uac00 GPS \uac00 '\uc544\uc9c1 \uc548 \uc654\ub2e4'\uace0 \ud574\ub3c4 \ub9c8\ucee4\ub97c \uadf8 \uc55e \uc790\ub9ac\uc5d0 \ubd99\uc7a1\uc558\ub2e4(\ub85c\uadf8: 2.66 \u2192 3 \uc790\ub9ac \uc720\uc9c0).
@@ -11089,6 +11115,9 @@ function rsMonoPos(st, r, now, notes) {
     var pfR = st.mkFloor && st.mkFloor.key === key ? st.mkFloor : (st.mkFloor = { key: key, n: -1 });
     if (pfR.n > rel.n) pfR.n = rel.n;
     delete st.mk; mk = null; prevP = null; delete st.dw;
+    // \u2605 s460 (\ub2e4\uc911 \uc2dc\ubbac: \uc5f4\ucc28\uac00 \ub2e4\uc74c \uc5ed 150m \uc55e\uc778\ub370 \ub9c8\ucee4\uac00 \uc9c1\uc804 \uc5ed(1.4km \ub4a4)\uc5d0 18\ucd08 \uc11c \uc788\uc5c8\ub2e4): '\uc544\uc9c1 \uc548 \uc634'\uc73c\ub85c \ud480 \ub54c\ub294 \uc5f4\ucc28\uac00 \uc9c1\uc804 \uc5ed\uc744 \uc774\ubbf8 \ub5a0\ub098 \ub2e4\uc74c \uc5ed\uc73c\ub85c \uc624\ub294 \uc911\uc774\ub2e4 \u2014 \uc9c1\uc804 \uc5ed\uc5d0\uc11c \uc815\ucc28 \uc2dc\uacc4\ub97c \uc0c8\ub85c \uc2dc\uc791\ud558\uc9c0 \uc54a\ub294\ub2e4(\ub05d\ub09c \uc815\ucc28\ub85c \uc801\ub294\ub2e4).
+    //   (\ubb38 \uc5f4\ub9bc\uc73c\ub85c \ud480 \ub54c\ub294 \uc5f4\ucc28\uac00 \uadf8 \uc5ed\uc5d0 \uc544\uc9c1 \uc11c \uc788\uc73c\ubbc0\ub85c \uc608\uc804\ucc98\ub7fc \ub2e4\uc2dc \uc2dc\uc791\ud55c\ub2e4.)
+    if (rel.ny) st.dw = { key: key, i: rel.n, s: 0, g: 1, e: 0, dl: 1 };
     notes.push('\ub9c8\ucee4 \ub418\ub3cc\uc544\uac10 \ubc29\uc9c0 \ud574\uc81c: ' + rel.why);
   }
   if (prevP != null && newP < prevP - 0.002) {
@@ -12064,6 +12093,18 @@ function rideStandby(req) {
           notes.push('\uc601\uc810 ' + z.i + '\ubc88 \ud1b5\uacfc \ubc18\uc601');
         } else if (z.notYet) { notYet[z.i] = now; }
       });
+    }
+  }
+  // \u2605 s460 (4\ubd84 \ub2a6\uc740 \uc5f4\ucc28: \uade4\ud604 150m \uc548\uc5d0\uc11c \ucc9c\ucc9c\ud788 \ub4e4\uc5b4\uc624\ub294 \ub3d9\uc548 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc774 45\ucd08 \ub9cc\uc5d0 \ub9cc\ub8cc\ub3fc \uc2dc\uac01\ud45c\ub85c \ub3cc\uc544\uac00 \ub9c8\ucee4\uac00 \uc55e\uc11c \uac00\uace0 '\uace7 \ud558\ucc28'\uac00 \uc77c\ucc0d \uc6b8\ub838\ub2e4):
+  //   \uc774\ubbf8 '\uc544\uc9c1 \uc548 \ub2ff\uc74c'\uc73c\ub85c \uc62c\ub824 \ub454 \uc815\ub958\uc7a5\uc5d0 \uc5f4\ucc28\uac00 \uc601\uc810 \ubc18\uacbd(150m) \uc548\uae4c\uc9c0 \uc654\uc5b4\ub3c4 \ud1b5\uacfc\uac00 '\ud655\uc815'\ub418\uae30 \uc804\uae4c\uc9c0\ub294 \uc544\uc9c1\uc774\ub2e4 \u2014 \uc99d\uac70\ub97c \uc774\uc5b4 \ub454\ub2e4(\ud1b5\uacfc\uac00 \ud655\uc815\ub418\uba74 \uc704\uc758 \uc601\uc810 \ubc18\uc601\uc774 \uc9c0\uc6b4\ub2e4).
+  if (tr.length) {
+    var lfN = tr[tr.length - 1];
+    if (lfN && now - lfN[0] <= RS_NY_FIX_MS && !(lfN[3] != null && isFinite(lfN[3]) && lfN[3] > RS_NY_ACC_M)) {
+      for (var nk0 in notYet) {
+        if (!(now - notYet[nk0] <= O.notYetKeepSec * 1000)) continue;
+        var spN = rsStopOf(st, +nk0);
+        if (spN && isFinite(spN.lat) && isFinite(spN.lng) && rsHav(lfN[1], lfN[2], spN.lat, spN.lng) - Math.min(lfN[3] == null || !isFinite(lfN[3]) ? 50 : lfN[3], 50) <= RS_NY_NEAR_M) notYet[nk0] = now;
+      }
     }
   }
   if (st.srch && rsSearch(st, tr, now, passes, notYet, notes)) newPass = true;      // 2.2) s231 \uc5f0\uc1c4 2\ud68c \uc2e4\ud328 \ub4a4 5\ubd84 GPS \ud0d0\uc0c9
@@ -23097,7 +23138,7 @@ function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 =
 function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 \uc5c6\uc774(\ubabb \ubc1b\uc74c \u00b7 \uc2e4\ud328) TAGO \ub9cc\uc73c\ub85c \uadf8\ub9b0 \ubaa9\ub85d \u2014 \ucd9c\uad6c\uac00 \ube60\uc84c\uc744 \uc218 \uc788\uc73c\ub2c8 \uae30\uae30\uac00 \ubcf4\uad00\ud558\uc9c0 \uc54a\uac8c \uc54c\ub9b0\ub2e4(info.bus.nc)
 function mapArrErr(t) {                                    // \uacf5\uacf5 API \uac00 HTTP 200 \uc73c\ub85c \uac74\ub128 \uc624\ub958 \ubd09\ud22c({"OpenAPI_ServiceResponse":\u2026"HTTP_ERROR"})\uc778\uac00 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4(\uc6f9 _safeParseResponse \uc640 \uac19\uc740 \uae00\uc790). \ubc1b\uc9c0 \ubabb\ud55c \uac83\uc73c\ub85c \uce5c\ub2e4
   var x = typeof t === 'string' ? t : '';
-  return x.length > 0 && x.length < 4000 && /OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x);
+  return x.length > 0 && x.length < 4000 && (/OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x) || /"resultCode"\s*:\s*"?99"?\s*[,}]/.test(x));   // s461: \uc778\ucc9c BIS \uac00 '\uac00\uc6a9\ud55c \uc138\uc158\uc774 \uc874\uc7ac\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4 (30/30)'\ub97c HTTP 200 \u00b7 resultCode 99 \ub85c \ubcf4\ub0b8\ub2e4(\ube48 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4 \u2014 \ubabb \ubc1b\uc740 \uac83)
 }
 function mapArrMissing(res, k) { return res[k] === undefined || mapArrErr(res[k]); }     // \uc544\uc9c1 \ubabb \ubc1b\uc558\uac70\ub098 \uc624\ub958 \ubd09\ud22c\ub9cc \ubc1b\uc558\ub2e4 \u2192 '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c'\uc774 \uc544\ub2c8\ub77c '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \uadf8\ub9ac\uace0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4
 function mapBusArrUrl(s, id, city) {                               // id\u00b7city: \uc774\uc6c3 \uc815\ub958\uc7a5\u00b7\ubc14\uafd4 \ubcf4\ub294 ID \ub85c \uac19\uc740 \uc8fc\uc18c\ub97c \ub9cc\ub4e4 \ub54c\ub9cc \uc900\ub2e4
@@ -23303,6 +23344,16 @@ function mapBusToggle(vw) {
     { label: '\ud83d\udccd \uc8fc\ubcc0 \uc815\ub958\uc7a5', on: vw === 'near', act: { a: 'call', v: 'mp.vw.near' } },
     { label: '\u2b50 \uc990\uaca8\ucc3e\uae30', on: vw === 'fav', act: { a: 'call', v: 'mp.vw.fav' } }] };          // s383: \ud83d\udd04 \ub2e8\ucd94\ub294 \uc5c6\uc574\ub2e4 \u2014 \uc0c8\ub85c\uace0\uce68\uc740 \uc544\ub798\ub85c \ub2f9\uae30\uae30\ub9cc(\uc571\uc758 \ub2f9\uae30\uae30\uac00 mp.rf \ub97c \ubcf4\ub0b8\ub2e4)
 }
+// \u2500\u2500 s461 (YJ: \uc774\ubbf8 \uc9c0\ub098\uac04 75\ubc88\uc774 '\uace7 \ub3c4\ucc29 4\ubc88\uc9f8\uc804'\uc73c\ub85c \ub5a0 \ud5db\uac78\uc74c\ud55c\ub2e4 \u00b7 \uce74\uce74\uc624\ubc84\uc2a4\ub294 \uc774\ub807\uac8c \uc548 \ud2c0\ub9b0\ub2e4): \ub3c4\ucc29 \uc22b\uc790\uc758 '\uc720\ud1b5\uae30\ud55c'\uc740 \uc5d4\uc9c4\uc774 \uc815\ud55c\ub2e4.
+//   \uacf5\uacf5 API(TAGO)\uc758 \ub3c4\ucc29 \uac12\uc740 \uc57d 1\ubd84\ub9c8\ub2e4 \ud55c \ubc88\ub9cc \ubc14\ub00c\ub294 \uc2a4\ub0c5\uc0f7\uc774\ub2e4. \uc571\uc740 \ubc1b\uc740 \uc21c\uac04\ubd80\ud130 1\ucd08\uc529 \uc904\uc5ec \uadf8\ub9ac\ub294\ub370, 0\ucd08\uac00 \ub418\uc5b4\ub3c4 \uac12\uc774 \uc548 \ubc14\ub00c\uba74(\uac31\uc2e0 \uc2e4\ud328 \u00b7 \uc6d0\ubcf8 \uba48\ucda4 \u00b7 \ud0ed\uc744 \uc624\ub798 \ub5a0\ub0ac\ub2e4 \uc634)
+//   \uc608\uc804\uc5d4 '\uace7 \ub3c4\ucc29'\uc73c\ub85c \uad73\uace0 '4\ubc88\uc9f8\uc804'\uc740 \uadf8\ub300\ub85c \ub0a8\uc558\ub2e4. \uc774\uc81c \uac01 \ub3c4\ucc29 \uce78\uc5d0 ex(\ubc1b\uc740 \ub4a4 \uc774 \ucd08\uac00 \uc9c0\ub098\uba74 \ubbff\uc9c0 \uc54a\ub294\ub2e4)\uc640 xs(\uadf8\ub54c \ub300\uc2e0 \uadf8\ub9b4 \uae00)\ub97c \uc2e4\uc5b4 \ubcf4\ub0b8\ub2e4 \u2014 \uc571\uc740 \ube44\uad50\ud574\uc11c \uadf8\ub9b4 \ubfd0\uc774\ub2e4.
+//   ex = \ub0a8\uc740 \ucd08 + 45\ucd08(\ucc28\uac00 \uc815\ub958\uc7a5\uc5d0 \uc11c \uc788\ub294 \uc5ec\uc720) \u00b7 \uc544\ubb34\ub9ac \uae38\uc5b4\ub3c4 240\ucd08. 3\uc815\uac70\uc7a5 \uc774\uc0c1 \ub5a8\uc5b4\uc9c4 \ucc28\ub294 '\uace7 \ub3c4\ucc29'\uc77c \uc218 \uc5c6\uc73c\ub2c8 (\uc815\uac70\uc7a5 \uc218 \u2212 2) \u00d7 25\ucd08 \uc544\ub798\ub85c\ub294 \uc54c\ub9ac\uc9c0 \uc54a\ub294\ub2e4.
+var MAP_ARR_GRACE = 45, MAP_ARR_MAXAGE = 240, MAP_ARR_XS = '\ud655\uc778 \uc911', MAP_SEC_PER_STOP = 25;
+function mapSecFloor(sec, prev) {
+  sec = Number(sec); prev = Number(prev);
+  if (isFinite(sec) && isFinite(prev) && prev >= 3) { var f = (prev - 2) * MAP_SEC_PER_STOP; if (sec < f) return f; }
+  return sec;
+}
 function mapBusRows(rows, info, si) {                              // \ub178\uc120+\ubc29\uba74\ub9c8\ub2e4 \ud55c \uc904: \ub178\uc120 \ubc88\ud638 \u00b7 \u2192 \ubc29\uba74 \u00b7 \uccab \ub3c4\ucc29(+\ub458\uc9f8 \ub3c4\ucc29). \ub178\uc120 id \uac00 \uc788\uc73c\uba74 \uc904\uc744 \ub20c\ub7ec \ub178\uc120 \uc0c1\uc138(info.rts[si][\uc904] = [\ub178\uc120 id, \ubc88\ud638, \uc885\ub958])
   var by = {}, order = [];
   rows.forEach(function (r) { var k = r.no + '|' + r.dir; if (!by[k]) { by[k] = []; order.push(k); } by[k].push(r); });
@@ -23316,7 +23367,10 @@ function mapBusRows(rows, info, si) {                              // \ub178\uc1
     var arr = g.slice(0, 2).map(function (x) {
       if (x.est) { var eo = { s: x.prev <= 0 ? '\uace7 \ub3c4\ucc29' : '\uc57d ' + Math.max(1, Math.round(x.prev * MAP_EST_MIN)) + '\ubd84', sec: 0 }; if (x.prev > 0) eo.p = x.prev + '\ubc88\uc9f8\uc804'; else eo.soon = 1; return eo; }     // s270: \ubc84\uc2a4 \uc704\uce58\ub85c \uc5b4\ub9bc\ud55c \uc2dc\uac04(\ucd08 \ub2e8\uc704 \uce74\uc6b4\ud2b8\ub2e4\uc6b4\uc774 \uc544\ub2c8\ub2e4)
       if (x.none) return { s: '\ub3c4\ucc29\uc815\ubcf4 \uc5c6\uc74c', sec: 0 };                                                    // \uacbd\uc720\ub178\uc120\ub9cc \uc54c\uace0 \uc9c0\uae08 \uc624\ub294 \ucc28\ub294 \ubaa8\ub97c \ub54c(\uc6f9 _noArr)
-      var o = { s: x.sec <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(x.sec), sec: Math.round(x.sec) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (x.sec <= 60) o.soon = 1; return o; });
+      var sc = mapSecFloor(x.sec, x.prev);                                                                   // s461: 3\uc815\uac70\uc7a5 \uc774\uc0c1 \ub5a8\uc5b4\uc9c4 \ucc28\ub97c '\uace7 \ub3c4\ucc29'\uc73c\ub85c \uc54c\ub9ac\uc9c0 \uc54a\ub294\ub2e4
+      var o = { s: sc <= 1 ? '\uace7 \ub3c4\ucc29' : mapCdFmt(sc), sec: Math.round(sc) }; if (x.prev > 0) o.p = x.prev + '\ubc88\uc9f8\uc804'; if (sc <= 60) o.soon = 1;
+      if (o.sec > 0) { o.ex = Math.min(o.sec + MAP_ARR_GRACE, MAP_ARR_MAXAGE); o.xs = MAP_ARR_XS; }          // s461: \ubc1b\uc740 \ub4a4 ex \ucd08\uac00 \uc9c0\ub098\ub3c4 \uac12\uc774 \uc548 \ubc14\ub00c\uba74 \uc571\uc740 \uc22b\uc790 \ub300\uc2e0 xs \ub97c \uadf8\ub9b0\ub2e4(\ub0a1\uc740 '\uace7 \ub3c4\ucc29' \ubc29\uc9c0)
+      return o; });
     var row = { no: r.no, c: mapRouteColor(r.no), a: arr, bell: 1 };
     if (r.dir) row.dir = '\u2192 ' + r.dir + '\ubc29\ud5a5';
     var rid = mapStr(r.rid, 40);

@@ -241,6 +241,7 @@ public final class ScreenCore {
         public List<Node> items = new ArrayList<Node>();
         public Mark mk;                                    // trk: 내 위치 마커(엔진이 정한 것)
         public float val;                                  // gauge: 채움 비율(0~100)
+        public float ex = 0f; public String xs = "";       // barr(s461): 받은 뒤 이 초가 지나도 값이 안 바뀌면 숫자 대신 xs 를 그린다(0 이면 기한 없음 — 옛 엔진 화면)
         public int ci = -1;                                // chart: 지금 시각 막대 번호(가운데로 맞출 곳)
         public String[] hlc = new String[0];               // text·box: hl 구간마다 글자색(빈 글이면 기본)
         public long until;                                 // aih: 다음 갱신 마감 시각(기기 시계 ms, 0 이면 카운트다운 없음)
@@ -927,6 +928,7 @@ public final class ScreenCore {
                         Node a = new Node(); a.t = "barr";
                         a.s = optStr(am, "s", "", 20); if (a.s.length() == 0) throw new ParseError("bcard: 도착 s 없음");
                         a.badge = optStr(am, "p", "", 12); a.on = optNum(am, "soon", 0f, 0f, 1f) > 0f; a.val = optNum(am, "sec", 0f, 0f, 100000f);
+                        a.ex = optNum(am, "ex", 0f, 0f, 100000f); a.xs = optStr(am, "xs", "", 12);
                         r.items.add(a);
                     }
                     n.items.add(r); sc.nodes++;
@@ -1327,6 +1329,8 @@ public final class ScreenCore {
         public float yo; public long yt;             // bcard: 자리가 바뀔 때 옛 자리에서 스프링으로 옮겨 오는 거리(dp, 시작 때)와 시작 시각 — 위 카드가 커지면 아래 카드가 미끄러져 내려간다
         public float[] bs = new float[0];            // bcard: 줄마다 도착 둘의 남은 초(엔진이 준 값; 0 이면 카운트다운 없음) — 앱은 1초마다 줄여 그린다(웹 _busFmtCd)
         public String[] ck = new String[0];          // bcard: 줄마다 도착 둘의 카운트다운 열쇠(카드 열쇠|노선|방면|칸) — 새로 그려도 흐르던 값을 이어 가려고
+        public float[] bex = new float[0];            // bcard(s461): 줄마다 도착 둘의 유통기한(받은 뒤 초; 0 이면 없음)
+        public String[] xa = new String[0];          // bcard(s461): 유통기한이 지나면 숫자 대신 그릴 글('확인 중')
         public float[] zs = new float[0];            // bcard: 누르는 자리 [x,y,w,h]×(별·✏️·🗺️)
         public Act[] za = new Act[0];
         public float sw2;                            // trow: 단추 글 폭
@@ -1784,7 +1788,7 @@ public final class ScreenCore {
         float cy = hdrH;
         if (rc > 0) {
             it.gf = new float[rc * 2]; it.gb = new boolean[rc * 3]; it.sa = new String[rc * 6]; it.ca = new Col[rc]; it.rt = new long[rc];
-            it.bs = new float[rc * 2]; it.ck = new String[rc * 2]; it.ra = new Act[rc];
+            it.bs = new float[rc * 2]; it.ck = new String[rc * 2]; it.ra = new Act[rc]; it.bex = new float[rc * 2]; it.xa = new String[rc * 2]; java.util.Arrays.fill(it.xa, "");
             float rowRight = ox + w - 1f - BC_ROW_PX;
             float bellX = rowRight - BC_BELL;
             float maxLeft = Math.max(BC_LEFT_MIN, Math.min(BC_LEFT_MAX, w - 2f - BC_ROW_PX * 2f - BC_ROW_GAP * 2f - BC_BELL - 90f));
@@ -1800,7 +1804,7 @@ public final class ScreenCore {
                 it.sa[i * 6] = ellipsize(r.name, maxLeft, BC_NO, true, m); it.sa[i * 6 + 1] = dir;
                 it.ca[i] = col(r.fill, new Col(null, 0xFF0066FF));
                 for (int a = 0; a < 2; a++) {
-                    if (a < ac) { Node ar = r.items.get(a); it.sa[i * 6 + 2 + a * 2] = ar.s; it.sa[i * 6 + 3 + a * 2] = ar.badge; it.gb[i * 3 + a] = ar.on; it.bs[i * 2 + a] = ar.val; it.ck[i * 2 + a] = n.key + "|" + r.name + "|" + r.title + "|" + a; }
+                    if (a < ac) { Node ar = r.items.get(a); it.sa[i * 6 + 2 + a * 2] = ar.s; it.sa[i * 6 + 3 + a * 2] = ar.badge; it.gb[i * 3 + a] = ar.on; it.bs[i * 2 + a] = ar.val; it.ck[i * 2 + a] = n.key + "|" + r.name + "|" + r.title + "|" + a; it.bex[i * 2 + a] = ar.ex; it.xa[i * 2 + a] = ar.xs; }
                     else { it.sa[i * 6 + 2 + a * 2] = ""; it.sa[i * 6 + 3 + a * 2] = ""; }
                 }
                 it.gb[i * 3 + 2] = r.on;

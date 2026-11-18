@@ -32,7 +32,7 @@ final class RideEtaJ {
         priorDelayMin = 0.5, priorNarrowW = 0.5, priorNarrowSd = 3, priorWideSd = 8, softMin = 0.2, quantile = 0.1,
         snapBackMin = 2, snapLateMaxMin = 1.5, snapCandMaxMin = 6, snapEps = 0.5, snapOldW = 0.4, staleShiftMin = 40,
         stopDwellSec = 18, markerDwellSec = 18, arriveEarlySec = 2, posSegCount = 80,
-        overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
+        notYetLeadSec = 15, overdueSec = 60, overdueMaxMin = 15, overdueExtraMin = 0.5, overdueGain = 1,
         platMinOverMin = 1, platGraceMin = 4, platExtraMin = 0.5, liveMinSec = 20, liveMaxSec = 900, liveHmm = 1, liveSdSec = 30, epsLive = 0.35,
         boardMaxWaitMin = 30, planSecMin = 20, planSecMax = 30, holdAfterStops = 1, holdGraceSec = 60;
     static final boolean burstRamp = true, arriveEarlyAfterZero = true;
@@ -556,13 +556,16 @@ final class RideEtaJ {
         boolean nyHit = false;
         if (nxO >= 0 && Boolean.TRUE.equals(input.get("timetableFirst"))) {
             List<Object> nyl = l(input.get("notYet")); if (nyl == null) nyl = new ArrayList<Object>();
-            for (int nyi = 0; nyi < nyl.size(); nyi++) if (num(nyl.get(nyi)) == nxO) nyHit = true;
+            // s460: 앵커 뒤 어디든 '아직 안 닿음' 노드가 있으면 그 가장 앞 노드부터 연착으로 올린다(지하에서 앵커가 한참 뒤일 때)
+            int nyBest = -1;
+            for (int nyi = 0; nyi < nyl.size(); nyi++) { double nyk = num(nyl.get(nyi)); if (!Double.isNaN(nyk) && !Double.isInfinite(nyk) && nyk >= nxO && nyk < n && valid[(int) nyk] && isTransit(nodes.get((int) nyk)) && !Double.isNaN(out[(int) nyk]) && (nyBest < 0 || nyk < nyBest)) nyBest = (int) nyk; }
+            if (nyBest >= 0) { nyHit = true; nxO = nyBest; }
             if (!nyHit) { notes.add("시각표 기준: 증거 없음을 연착으로 보지 않음"); nxO = -1; }
             else notes.add("GPS 가 " + nameOr(nodes.get(nxO), nxO) + " 에 아직 안 닿았다고 함 → 연착으로 봄");
         }
         if (nxO >= 0) {
             double overO = (nowMs - out[nxO]) / 1000;
-            if (overO >= (nyHit ? 0 : overdueSec)) {
+            if (overO >= (nyHit ? -notYetLeadSec : overdueSec)) {
                 if ("shift".equals(overdueMode)) {
                     double addO = Math.min(overdueMaxMin, (overO / 60 + overdueExtraMin) * overdueGain) * 60000;
                     for (int kx = nxO; kx < n; kx++) if (!Double.isNaN(out[kx])) out[kx] += addO;

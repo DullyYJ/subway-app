@@ -629,17 +629,23 @@ final class RideStandbyJ {
             return;
         }
     }
-    static final double REL_NY_MS = 45000, REL_GPS_MS = 90000, REL_FIX_MS = 8000;
+    static final double REL_NY_MS = 45000, REL_GPS_MS = 90000, REL_FIX_MS = 8000, NY_NEAR_M = 150, NY_FIX_MS = 25000, NY_ACC_M = 100;
     /** engine rsMkRelease — {바닥 n, 종류(0 아직안옴 | 1 GPS확정), 역 번호} 또는 null. held = 가드가 실제로 마커를 붙잡는 중(새 계산이 마커보다 뒤) */
     static double[] mkRelease(Map<String, Object> st, double prevP, double now, boolean held, boolean nrt) {
         try {
             Map<String, Object> eta = mm(st.get("eta")), ny = mm(st.get("notYet")); List<Object> passes = eta == null ? null : l(eta.get("passes")), nds = eta == null ? null : l(eta.get("nodes")), tr = trailOf(st);
             double bestI = Double.NaN, bestMs = 0;
+            Object lf0 = tr.isEmpty() ? null : tr.get(tr.size() - 1);      // s460: 가장 최근 좋은 위치가 그 역 영점 반경(150m) 안이면 낡은 '아직 안 옴'으로 마커를 뒤로 끌지 않는다
+            boolean lfOk = lf0 != null && now - num(at(lf0, 0)) <= NY_FIX_MS && !(at(lf0, 3) != null && fin(at(lf0, 3)) && num(at(lf0, 3)) > NY_ACC_M);
             if (held && ny != null) for (Map.Entry<String, Object> e : ny.entrySet()) {
                 double ii; try { ii = Double.parseDouble(e.getKey()); } catch (NumberFormatException ex) { continue; }
                 Object rn0 = nds != null && ii >= 0 && ii < nds.size() ? nds.get((int) ii) : null;
                 if (!(rn0 != null && truthy(g(rn0, "isSub")) && !truthy(g(rn0, "isBus")) && !truthy(g(rn0, "isWalk")))) continue;
-                if (now - num(e.getValue()) <= REL_NY_MS && prevP >= ii - 0.0001 && (Double.isNaN(bestI) || ii < bestI)) bestI = ii;
+                if (now - num(e.getValue()) <= REL_NY_MS && prevP >= ii - 0.0001 && (Double.isNaN(bestI) || ii < bestI)) {
+                    Map<String, Object> spn = lfOk ? stopOf(st, ii) : null;
+                    if (spn != null && fin(spn.get("lat")) && fin(spn.get("lng")) && hav(num(at(lf0, 1)), num(at(lf0, 2)), num(spn.get("lat")), num(spn.get("lng"))) - Math.min(at(lf0, 3) != null && fin(at(lf0, 3)) ? num(at(lf0, 3)) : 50, 50) <= NY_NEAR_M) continue;
+                    bestI = ii;
+                }
             }
             if (!Double.isNaN(bestI)) return new double[] { bestI - 1, 0, bestI };
             if (nrt) return null;      // s379: 실시간 없는 노선은 '문 열림'으로 마커를 역에 다시 내리지 않는다
@@ -744,7 +750,13 @@ final class RideStandbyJ {
             prevP = num(at(l(ms.get(ms.size() - 1)), 1));
             for (i = 0; i < ms.size(); i++) {
                 List<Object> q = l(ms.get(i));
-                if (now < num(q.get(3))) { double q0 = num(q.get(0)), q1 = num(q.get(1)), q2 = num(q.get(2)), q3 = num(q.get(3)); prevP = now < q2 ? q0 : q0 + Math.max(0, Math.min(1, (now - q2) / (q3 - q2))) * (q1 - q0); break; }
+                if (now < num(q.get(3))) {
+                    double q0 = num(q.get(0)), q1 = num(q.get(1)), q2 = num(q.get(2)), q3 = num(q.get(3)); prevP = now < q2 ? q0 : q0 + Math.max(0, Math.min(1, (now - q2) / (q3 - q2))) * (q1 - q0);
+                    // s460: 도착 시각이 '지금 + 30초'로 계속 밀리는 동안(GPS '아직 안 닿음')에는 마커가 이전 구간표를 따라 98% 를 넘어 먼저 도착하지 않게 한다
+                    Map<String, Object> nyc = mm(st.get("notYet")); Object nyv = nyc == null ? null : nyc.get(ik(q1));
+                    if (nyv != null && now - num(nyv) <= REL_NY_MS && q1 > q0 && prevP > q0 + 0.98 * (q1 - q0)) prevP = q0 + 0.98 * (q1 - q0);
+                    break;
+                }
             }
         }
         int cur = -1;
@@ -758,6 +770,7 @@ final class RideStandbyJ {
             Map<String, Object> pfR = mm(st.get("mkFloor")); if (pfR == null || !key.equals(pfR.get("key"))) { pfR = obj("key", key, "n", -1.0); st.put("mkFloor", pfR); }
             if (num(pfR.get("n")) > rel[0]) pfR.put("n", rel[0]);
             st.remove("mk"); mk = null; prevP = Double.NaN; st.remove("dw");
+            if (rel[1] == 0) st.put("dw", obj("key", key, "i", rel[0], "s", 0.0, "g", 1.0, "e", 0.0, "dl", 1.0));      // s460: '아직 안 옴'으로 풀 때는 직전 역에서 정차를 새로 시작하지 않는다(끝난 정차로 적는다)
             notes.add("마커 되돌아감 방지 해제: " + (rel[1] == 0 ? ns(rel[2]) + "번 역 아직 안 옴(GPS)" : ns(rel[2]) + "번 역에서 GPS 확정 · 아직 문 열림"));
         }
         if (fin(prevP) && newP < prevP - 0.002) {
@@ -1881,6 +1894,17 @@ final class RideStandbyJ {
                         { Map<String, Object> sr0 = mm(st.get("srch")); if (sr0 != null && num(z.get("i")) >= num(sr0.get("i"))) st.remove("srch"); }
                         notes.add("영점 " + ns(num(z.get("i"))) + "번 통과 반영");
                     } else if (truthy(z.get("notYet"))) notYet.put(ik(num(z.get("i"))), now);
+                }
+            }
+        }
+        // s460: 영점 반경(150m) 안까지 왔어도 통과가 확정되기 전까지는 '아직 안 닿음' 증거를 이어 둔다(엔진 ride-standby 와 같다)
+        if (!tr.isEmpty()) {
+            Object lfN = tr.get(tr.size() - 1);
+            if (lfN != null && now - num(at(lfN, 0)) <= NY_FIX_MS && !(at(lfN, 3) != null && fin(at(lfN, 3)) && num(at(lfN, 3)) > NY_ACC_M)) {
+                for (String nk0 : keys(notYet)) {
+                    if (!(now - num(notYet.get(nk0)) <= notYetKeepSec * 1000)) continue;
+                    Map<String, Object> spN = stopOf(st, num(nk0));
+                    if (spN != null && fin(spN.get("lat")) && fin(spN.get("lng")) && hav(num(at(lfN, 1)), num(at(lfN, 2)), num(spN.get("lat")), num(spN.get("lng"))) - Math.min(at(lfN, 3) != null && fin(at(lfN, 3)) ? num(at(lfN, 3)) : 50, 50) <= NY_NEAR_M) notYet.put(nk0, now);
                 }
             }
         }

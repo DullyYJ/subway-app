@@ -115,6 +115,7 @@ var RIDE_ETA_DEFAULTS = {
   holdAfterStops: 1,
   holdGraceSec: 60,
   posSegCount: 80,        // pos.segs — 앞으로 그릴 구간 수(응답이 끊겨도 시각표대로 끝까지 이어 그리게)
+  notYetLeadSec: 15,
   overdueSec: 60, overdueMaxMin: 15, overdueExtraMin: 0.5, overdueGain: 1, overdueMode: 'clamp',
   // 승강장에서 열차를 기다리는 중(platformWaiting): 예정 출발이 platMinOverMin 분 넘게 지났고 platGraceMin 분 안이면 늦는 것으로 보고 승차역부터 '지금 + platExtraMin 분'으로 민다(예전 앱의 _platformLateShift).
   platMinOverMin: 1, platGraceMin: 4, platExtraMin: 0.5,
@@ -661,13 +662,18 @@ function _rideEtaCore(input) {
   var nyHit = false;
   if (nxO >= 0 && input.timetableFirst === true) {
     var nyl = input.notYet || [];
-    for (var nyi = 0; nyi < nyl.length; nyi++) if (+nyl[nyi] === nxO) nyHit = true;
+    // ★ s460 (YJ: "귤현에 도착했는데 계양 도착이라고 뜨고 알람이 잘못 왔다 — 정확도가 가장 중요"): 지하 구간은 GPS 가 드문드문이라 앵커(마지막 통과 증거)가 한참 뒤에 있다.
+    //   그때 GPS 가 귤현 근처에서 '아직 안 닿음'을 말해도 '앵커 뒤 첫 정차 노드'(임학)만 보면 귤현은 무시돼, 시각표가 마커·알림을 늦은 열차보다 앞서 보냈다.
+    //   '아직 안 닿음' 노드가 앵커 뒤 어디에 있든(정차 노드·유효한 시각) 그 가장 앞 노드부터 연착으로 올린다 — 그 앞 노드들은 시각표대로 지난 것으로 둔다.
+    var nyBest = -1;
+    for (var nyi = 0; nyi < nyl.length; nyi++) { var nyk = +nyl[nyi]; if (isFinite(nyk) && nyk >= nxO && nyk < n && valid[nyk] && _reIsTransit(nodes[nyk]) && out[nyk] != null && (nyBest < 0 || nyk < nyBest)) nyBest = nyk; }
+    if (nyBest >= 0) { nyHit = true; nxO = nyBest; }
     if (!nyHit) { notes.push('시각표 기준: 증거 없음을 연착으로 보지 않음'); nxO = -1; }
     else notes.push('GPS 가 ' + (nodes[nxO].name || nxO) + ' 에 아직 안 닿았다고 함 → 연착으로 봄');
   }
   if (nxO >= 0) {
     var overO = (nowMs - out[nxO]) / 1000;
-    if (overO >= (nyHit ? 0 : O.overdueSec)) {
+    if (overO >= (nyHit ? -(O.notYetLeadSec != null ? O.notYetLeadSec : 15) : O.overdueSec)) {      // s460: GPS 가 '아직 안 닿음'이면 예정 시각 15초 전부터 '지금 + 30초'로 올려 마커가 먼저 역에 올라가 '2정거장 전·곧 하차'가 일찍 울리는 것을 막는다
       if (O.overdueMode === 'shift') {
         // 뒤 시각을 통째로 민다(예전 앱 방식). 위치 판단이 지하에서 역을 건너뛴 경우(증거 없음 ≠ 연착)에도 밀어 버려 시뮬에서 정확도가 나빠진다 → 기본값 아님
         var addO = Math.min(O.overdueMaxMin, (overO / 60 + O.overdueExtraMin) * O.overdueGain) * 60000;
