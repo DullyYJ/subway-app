@@ -768,6 +768,36 @@ const SEOUL_ARR = '<ServiceResult><msgBody><itemList><rtNm>146</rtNm><arrmsg1>3�
   ok(nm(L({ pin: [0, 0] })).join() === base.join() && nm(L({ pin: ['a', 'b'] })).join() === base.join() && nm(L({ pin: [95, 10] })).join() === base.join(), '엉뚱한 pin 은 무시(내 위치 기준)');
 }
 
+// ⑦-d s464b — 서울 TOPIS 응답이 JSON 으로 와도(서울 사당 근처 실측: 정류장 33곳이 있는데 XML 만 읽어 '찾지 못했어요') 같은 정류장 · 같은 도착정보
+{
+  const rows = [['22391', '내방역5번출구', 126.9927493333, 37.487533232, 163], ['22387', '방배고개', 126.9901827615, 37.4864946348, 182], ['22488', '방배열린문화센터.가야치과병원', 126.9923780416, 37.4893578225, 193], ['0', '미정차', 126.99, 37.4875, 10], ['22558', '디에이치방배상가', 126.986334, 37.484584, 560]];
+  const jsonPos = JSON.stringify({ comMsgHeader: { responseMsgID: null, errMsg: null }, msgHeader: { headerMsg: '정상적으로 처리되었습니다.', headerCd: '0', itemCount: 0 },
+    msgBody: { itemList: rows.map(r => ({ stationId: '1210' + r[0], stationNm: r[1], gpsX: String(r[2]), gpsY: String(r[3]), posX: '199358.83', posY: '443126.59', stationTp: '0', arsId: r[0], dist: String(r[4]) })) } });
+  const xmlPos = '<ServiceResult><msgBody>' + rows.map(r => `<itemList><arsId>${r[0]}</arsId><stationNm>${r[1]}</stationNm><gpsX>${r[2]}</gpsX><gpsY>${r[3]}</gpsY><dist>${r[4]}</dist></itemList>`).join('') + '</msgBody></ServiceResult>';
+  const la = 37.4875, lo = 126.9906, key = a => a.map(x => x.id + '|' + x.nm).join();
+  const sj = E.mapSeoulStops(jsonPos, la, lo), sx = E.mapSeoulStops(xmlPos, la, lo);
+  ok(sj.length === 4 && key(sj) === key(sx), 's464b: TOPIS 정류장 — JSON 도 XML 과 같은 4곳(arsId 0 미정차 제외)');
+  const one = JSON.stringify({ msgHeader: { headerCd: '0' }, msgBody: { itemList: { stationNm: '한곳', arsId: '12345', gpsX: '126.99', gpsY: '37.4875', dist: '10' } } });
+  ok(E.mapSeoulStops(one, la, lo).length === 1, 's464b: JSON 항목이 하나뿐이어서 객체로 와도 읽는다');
+  ok(E.mapSeoulStops(JSON.stringify({ msgHeader: { headerCd: '7', headerMsg: '오류' } }), la, lo).length === 0 && E.mapSeoulStops('{깨진', la, lo).length === 0 && E.mapSeoulStops('', la, lo).length === 0, 's464b: 오류 봉투 · 깨진 JSON · 빈 글은 0곳');
+  ok(E.mapStopsOf('tp', jsonPos, la, lo, 300) === 3, 's464b: mapStopsOf — JSON 은 반경 300m 안 3곳');
+  // 사당 재현: 경기(GBIS) 가 먼 한 곳(370m)만, TAGO 도 먼 한 곳, D1 은 가까운 곳 — TOPIS 가 JSON 이어도 TOPIS 가 먼저라 가까운 정류장이 나온다
+  const gg = JSON.stringify({ response: { msgHeader: { resultCode: 0 }, msgBody: { busStationAroundList: { mobileNo: '22415', stationId: 121001327, stationName: '내방역1번출구', x: 126.9948, y: 37.48785 } } } });
+  const tn = JSON.stringify({ response: { header: { resultCode: '00' }, body: { items: { item: { citycode: 23, gpslati: 37.487758, gpslong: 126.994546, nodeid: 'ICB321900211', nodenm: '내방역1번출구', nodeno: 22836 } } } } });
+  const d1 = JSON.stringify({ ok: true, count: 1, stops: [{ node_id: 'SEB121000309', node_nm: '내방역', city_code: '11', lat: 37.487527, lng: 126.992748, dist: 163 }] });
+  const run = tp => E.mapScreen({ cap: 29 }, { part: 'b', mode: 'bus', th: 'dark', bus: { lat: la, lng: lo, res: { tp, gg, tn, d1 } } }, {});
+  const nmOf = r => JSON.stringify(r.body);
+  const rj = run(jsonPos), rx = run(xmlPos);
+  ok(!/찾지 못했어요/.test(nmOf(rj)) && /내방역5번출구/.test(nmOf(rj)) && /방배고개/.test(nmOf(rj)), 's464b: 사당 재현 — TOPIS 가 JSON 이어도 가까운 정류장이 나온다(예전: 찾지 못했어요)');
+  ok(rj.info.bus.stops && rx.info.bus.stops ? rj.info.bus.stops.length === rx.info.bus.stops.length : /내방역5번출구/.test(nmOf(rx)), 's464b: JSON · XML 이 같은 개수');
+  ok(E.mapBusReady({ bus: { lat: la, lng: lo, res: { tp: jsonPos } } }) === true, 's464b: mapBusReady — JSON TOPIS 만으로 정류장 충분');
+  // 도착정보도 JSON
+  const arrJson = JSON.stringify({ msgHeader: { headerCd: '0' }, msgBody: { itemList: [{ rtNm: '146', arrmsg1: '3분30초후[2번째 전]', traTime1: '210', arrmsg2: '10분후[5번째 전]', traTime2: '', congestion1: '2', busType1: '1', adirection: '강남역', busRouteId: '100100124' }, { rtNm: 'N13', arrmsg1: '곧 도착', traTime1: '0', arrmsg2: '운행종료' }] } });
+  const aj = E.mapSeoulArr(arrJson), ax = E.mapSeoulArr(SEOUL_ARR);
+  ok(aj.length === ax.length && aj.length >= 2 && aj[0].no === '146' && aj[0].sec === 210 && aj[0].prev === 2 && aj[0].cong === 2 && aj[0].low === true && aj[0].dir === '강남역' && aj[0].rid === '100100124', 's464b: 도착정보 — JSON 도 XML 과 같게(노선 · 초 · 몇 번째 전 · 혼잡 · 저상 · 방향)');
+  ok(E.mapSeoulArr(JSON.stringify({ msgHeader: { headerCd: '7' }, msgBody: { itemList: [{ rtNm: '146', traTime1: '60' }] } })).length === 0, 's464b: 도착정보 JSON 오류 봉투는 빈 목록');
+}
+
 // ⑧ 워커
 (async () => {
   const w = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');

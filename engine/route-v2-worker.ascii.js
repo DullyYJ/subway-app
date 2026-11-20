@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-20s464";
+var ENGINE_VERSION = "route-v2-2026-11-20s465";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -22933,15 +22933,34 @@ function mapXmlVal(chunk, tag) {
   var m = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>').exec(chunk);
   return m ? String(m[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
 }
+// s464b: \uc11c\uc6b8 TOPIS \ub294 \ubcf4\ud1b5 XML \ub85c \uc624\uc9c0\ub9cc JSON({"msgBody":{"itemList":[...]}})\ub85c \uc624\ub294 \ub54c\uac00 \uc788\ub2e4(\uc11c\uc6b8 \uc0ac\ub2f9 \uadfc\ucc98 \u2014 \uc815\ub958\uc7a5 33\uacf3\uc774 \uc788\ub294\ub370 XML \ub9cc \uc77d\uc5b4 \ud1b5\uc9f8\ub85c \ub193\uccd0 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694'). \ub458 \ub2e4 \uc77d\ub294\ub2e4.
+function mapTopisItems(text) {
+  var t = String(text || '').replace(/^\s+/, '');
+  if (t.charAt(0) !== '{') return mapXmlItems(t, 'itemList');
+  try {
+    var o = JSON.parse(t), b = o && (o.msgBody || (o.ServiceResult && o.ServiceResult.msgBody)), it = b && b.itemList;
+    if (it === undefined || it === null) return [];
+    return (Array.isArray(it) ? it : [it]).slice(0, 400).filter(function (x) { return x && typeof x === 'object'; });
+  } catch (e) { return []; }
+}
+function mapTopisVal(item, tag) {                                 // XML \uc870\uac01(\uae00) \uc774\ub4e0 JSON \ud56d\ubaa9(\uac1d\uccb4) \uc774\ub4e0 \uac19\uc740 \uc774\ub984\uc73c\ub85c \uac12\uc744 \uc77d\ub294\ub2e4
+  if (item && typeof item === 'object') { var v = item[tag]; return (v === undefined || v === null) ? '' : String(v).trim(); }
+  return mapXmlVal(item, tag);
+}
+function mapTopisErr(text) {                                      // \uc5f4\uc1e0 \uc624\ub958 \u00b7 \uc624\ub958 \ubd09\ud22c(headerCd 1~9) \u2014 XML \u00b7 JSON \ubaa8\ub450
+  var t = String(text || '');
+  return /Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) || /<headerCd>\s*[1-9]/.test(t) || /"headerCd"\s*:\s*"?[1-9]/.test(t.slice(0, 600));
+}
 function mapJsonItems(text) {
   try { var o = JSON.parse(String(text || '')), it = o.response.body.items.item || []; return Array.isArray(it) ? it : [it]; } catch (e) { return []; }
 }
 function mapSeoulStops(text, la, lo) {
   var stops = [];
-  mapXmlItems(text, 'itemList').forEach(function (ch) {
-    var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
+  if (mapTopisErr(text)) return stops;
+  mapTopisItems(text).forEach(function (ch) {
+    var ars = mapTopisVal(ch, 'arsId'), nm = mapTopisVal(ch, 'stationNm');
     if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = \ubbf8\uc815\ucc28
-    var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
+    var gx = parseFloat(mapTopisVal(ch, 'gpsX')), gy = parseFloat(mapTopisVal(ch, 'gpsY')), d = parseFloat(mapTopisVal(ch, 'dist'));
     var hasXY = !(isNaN(gx) || isNaN(gy));
     if (!hasXY) { gx = lo; gy = la; }
     stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: (hasXY || !isFinite(d)) ? mapHav(la, lo, gy, gx) : d, src: 'topis' });
@@ -23254,16 +23273,16 @@ function mapSecOfMsg(msg) {
 }
 function mapSeoulArr(text) {
   var rows = [];
-  if (/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(text) || /<headerCd>\s*[1-9]/.test(text)) return rows;
-  mapXmlItems(text, 'itemList').forEach(function (ch) {
-    var rt = mapXmlVal(ch, 'rtNm') || mapXmlVal(ch, 'busRouteAbrv');
+  if (mapTopisErr(text)) return rows;
+  mapTopisItems(text).forEach(function (ch) {
+    var rt = mapTopisVal(ch, 'rtNm') || mapTopisVal(ch, 'busRouteAbrv');
     if (!rt) return;
-    var dir = mapXmlVal(ch, 'adirection') || mapXmlVal(ch, 'nxtStn');
+    var dir = mapTopisVal(ch, 'adirection') || mapTopisVal(ch, 'nxtStn');
     [1, 2].forEach(function (n) {
-      var msg = mapXmlVal(ch, 'arrmsg' + n), t = parseInt(mapXmlVal(ch, 'traTime' + n), 10);
+      var msg = mapTopisVal(ch, 'arrmsg' + n), t = parseInt(mapTopisVal(ch, 'traTime' + n), 10);
       var sec = (isFinite(t) && t > 0) ? t : mapSecOfMsg(msg);
-      var pm = /(\d+)\s*\ubc88\uc9f8/.exec(msg), cg = parseInt(mapXmlVal(ch, 'congestion' + n), 10);
-      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir, rid: mapXmlVal(ch, 'busRouteId'), tp: '' });
+      var pm = /(\d+)\s*\ubc88\uc9f8/.exec(msg), cg = parseInt(mapTopisVal(ch, 'congestion' + n), 10);
+      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapTopisVal(ch, 'busType' + n), 10) === 1, dir: dir, rid: mapTopisVal(ch, 'busRouteId'), tp: '' });
     });
   });
   return rows;
@@ -23918,7 +23937,7 @@ function mapSvStaticCls(url) {                            // \uce90\uc2dc \uc885
 function mapSvOkBody(k, t) {                              // \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \uc815\uc0c1 \ubcf8\ubb38\uc778\uac00(\uc815\ub958\uc7a5 \ubaa9\ub85d \u00b7 \uacbd\uc720\ub178\uc120 \u00b7 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d)
   if (typeof t !== 'string' || t.length < 40) return false;
   if (k === 'tl' || k === 'rl') { try { var o2 = JSON.parse(t), it2 = o2.response.body.items; if (!it2 || !it2.item) return false; return !Array.isArray(it2.item) || it2.item.length > 0; } catch (e2) { return false; } }          // \ube48 \ubaa9\ub85d \u00b7 \uc624\ub958 \ubd09\ud22c\ub294 \uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc7a0\uae50\uc758 \ube48 \uc751\ub2f5\uc774 12\uc2dc\uac04 \uad73\uc9c0 \uc54a\uac8c)
-  if (k === 'tp') return t.indexOf('<itemList>') >= 0 && !/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t);
+  if (k === 'tp') return (t.indexOf('<itemList>') >= 0 || /"itemList"\s*:\s*[\[{]/.test(t)) && !/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t) && !/"headerCd"\s*:\s*"?[1-9]/.test(t.slice(0, 600));
   if (k === 'gg') return t.indexOf('busStationAroundList') >= 0;
   if (k === 'tn') { try { var o = JSON.parse(t); var it = o.response.body.items; return !!(it && it.item); } catch (e) { return false; } }
   if (k === 'd1') return t.indexOf('"stops":[{') >= 0 || t.indexOf('"stops": [{') >= 0;
@@ -24033,7 +24052,7 @@ function mapSvArrFam(url) {                                // \ub3c4\ucc29\uc815
   return '';
 }
 function mapSvArrOk(t) {                                   // \uacf5\uc720 \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\uc778\uac00: \uc624\ub958 \ubd09\ud22c\uac00 \uc544\ub2c8\uace0 \uc815\ub958\uc7a5\uc5d0 \ubc84\uc2a4\uac00 \ud55c \ub300\ub77c\ub3c4 \uc788\ub2e4(\ube48 \ubaa9\ub85d\uc740 \uc7a0\uae50\uc758 \ube48 \uc751\ub2f5\uc77c \uc218 \uc788\uc5b4 \ub450\uc9c0 \uc54a\ub294\ub2e4)
-  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
+  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"itemList"\s*:\s*[\[{]|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
 }
 function mapSvBudMode(fam) { return (fam && MAPSV_BUD.modes[fam]) || 'normal'; }
 function mapSvArrTtl(url) { return MAPSV_ARR_TTL[mapSvBudMode(mapSvArrFam(url))] || MAPSV_ARR_TTL.normal; }

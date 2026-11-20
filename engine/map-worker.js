@@ -21,7 +21,7 @@ function mapSvStaticCls(url) {                            // 캐시 종류: 'tl'
 function mapSvOkBody(k, t) {                              // 캐시에 둘 만한 정상 본문인가(정류장 목록 · 경유노선 · 노선 정류장 목록)
   if (typeof t !== 'string' || t.length < 40) return false;
   if (k === 'tl' || k === 'rl') { try { var o2 = JSON.parse(t), it2 = o2.response.body.items; if (!it2 || !it2.item) return false; return !Array.isArray(it2.item) || it2.item.length > 0; } catch (e2) { return false; } }          // 빈 목록 · 오류 봉투는 캐시하지 않는다(잠깐의 빈 응답이 12시간 굳지 않게)
-  if (k === 'tp') return t.indexOf('<itemList>') >= 0 && !/Key인증실패|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t);
+  if (k === 'tp') return (t.indexOf('<itemList>') >= 0 || /"itemList"\s*:\s*[\[{]/.test(t)) && !/Key인증실패|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t) && !/"headerCd"\s*:\s*"?[1-9]/.test(t.slice(0, 600));
   if (k === 'gg') return t.indexOf('busStationAroundList') >= 0;
   if (k === 'tn') { try { var o = JSON.parse(t); var it = o.response.body.items; return !!(it && it.item); } catch (e) { return false; } }
   if (k === 'd1') return t.indexOf('"stops":[{') >= 0 || t.indexOf('"stops": [{') >= 0;
@@ -136,7 +136,7 @@ function mapSvArrFam(url) {                                // 도착정보 주�
   return '';
 }
 function mapSvArrOk(t) {                                   // 공유 캐시에 둘 만한 도착정보인가: 오류 봉투가 아니고 정류장에 버스가 한 대라도 있다(빈 목록은 잠깐의 빈 응답일 수 있어 두지 않는다)
-  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
+  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"itemList"\s*:\s*[\[{]|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
 }
 function mapSvBudMode(fam) { return (fam && MAPSV_BUD.modes[fam]) || 'normal'; }
 function mapSvArrTtl(url) { return MAPSV_ARR_TTL[mapSvBudMode(mapSvArrFam(url))] || MAPSV_ARR_TTL.normal; }

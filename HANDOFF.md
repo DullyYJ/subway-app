@@ -4167,3 +4167,12 @@ YJ: "닫기버튼은 지워줘. 스크롤시 저 부분은 유지하고 현시�
 - 시험: `map_server_fetch` 135 → **152**(조기 반환 · 모두 빠를 때 · 정류장만 먼저 · 이중 요청 normal/saver · 0건 재시도 · 진짜 빈 곳 · pin · 오류 본문 제거 · lastErr) · `shell_native` 139(s160/s174/s200 정규식 갱신 + s464) · 전체 `test/*` 74개 파일 통과.
 - 배포(서버만으로도 효과 · 앱 변경 없이): **엔진 워커 붙여넣기(`engine/route-v2-worker.ascii.js` · `route-v2-2026-11-20s464`)** → 배포 뒤 `/health`(버전) · `/bus-budget`(`lastErr` 필드) 확인 · 앱 새 빌드는 ⑥⑦ 이득(옛 앱도 ①~⑤ 이득).
 - 한계(솔직하게): 처음 가는 동네의 도착정보 자체는 상류(TAGO)가 1~5초 걸릴 수 있어(제천 · 안동 · 거제 · 통영 …) "도착정보 3초 보장"은 불가능 — 이중 요청(③) · 기기 직접 한 번 더(⑦) · 조기 반환(①)으로 3초 이내 비율을 끌어올리는 것이 목표. 대도시 자체 BIS API(부산 · 대구 · 대전 · 광주 · 울산)는 키 발급(사용자)이 필요해 미착수. 동해(우리 DB 기준 990m 안 정류장 없음) · 전주 혁신도시(최근접 403m — 검색 반경 밖) · 속초(정류장 2곳 모두 도착 데이터 없음)는 속도가 아니라 데이터 문제.
+
+## s465 (2026-11-20) — 서울 TOPIS 응답이 JSON 으로 올 때 정류장을 통째로 놓치던 문제 (s464 배포 검증 중 발견)
+- **증상**: 서울 사당(37.4875,126.9906) 근처에서 `/screen/map` 이 항상 `st:"empty"`("주변에 정류장을 찾지 못했어요"). D1 에는 163m 이내 정류장이 있고, 서울 TOPIS 응답(`bres.tp`)에도 33곳이 들어 있었다(4번 연속 같은 결과).
+- **원인**: TOPIS(ws.bus.go.kr) 응답이 이 좌표에서는 XML 이 아니라 JSON(`{"msgBody":{"itemList":[…]}}`)으로 왔고, 엔진(`mapSeoulStops`·`mapSeoulArr`)은 XML(`<itemList>`)만 읽어 0곳으로 처리했다. TOPIS 가 비면 경기 GBIS(1곳, 370m 밖)로 넘어가고 반경 300m 필터에서 모두 걸러져 빈 화면. 즉 s464 회귀가 아니라 기존에 있던 해석 구멍(옛 엔진에서도 같은 입력으로 재현 확인).
+- **수정**(`engine/map.js`): `mapTopisItems`·`mapTopisVal`·`mapTopisErr` 추가 — XML · JSON(항목이 1개여서 객체로 오는 경우 포함) 겸용, 오류 봉투(headerCd 1~9)는 XML · JSON 모두 빈 목록. `mapSeoulStops`(정류장)와 `mapSeoulArr`(도착정보) 둘 다 적용. (`engine/map-worker.js`): `mapSvOkBody('tp')` · `mapSvArrOk` 가 JSON itemList 도 정상 본문으로 인정(공유 캐시에 둘 수 있게).
+- **시험**: `test/map_engine.test.js` ⑦-d 신설(JSON=XML 같은 4곳 · 항목 1개 객체 · 오류/깨진/빈 글 0곳 · `mapStopsOf` · 사당 재현 · `mapBusReady` · 도착정보 JSON), `test/shell_native.test.js` s465. 전체 71개 파일 통과. 옛 엔진 + 같은 입력 = EMPTY 재현, 새 엔진 = 정류장 표시.
+- **배포**: `route-v2-worker.ascii.js`(ENGINE_VERSION `route-v2-2026-11-20s465`) 한 파일만 붙여넣기. 확인: `/health` · `/bus-budget` 의 ver 가 s465.
+- **한계**: TOPIS 가 왜 이 좌표에서만 JSON 으로 오는지(BUSAPI 중계/캐시 쪽 형식 차이로 보임)는 확인 못 함 — 엔진이 둘 다 읽으므로 증상은 해결되지만 근본 원인은 버스 서버(gildongmu-bus) 쪽에서 볼 일.
+- **범위 확인(배포 s464 실측)**: 서울 12곳(원 좌표 6 + 어긋난 좌표 6) 전부 `bres.tp` 가 JSON 이었다(12/12). 버스 서버 바인딩(`BUSAPI /tago?url=ws.bus.go.kr…`)은 정류장(getStationByPos)·도착정보(getStationByUid) 모두 JSON 을 주고(필드 이름은 XML 과 같고 값은 문자열, 일부 null), route-v2 자신의 `/bus-tago` 는 XML 을 준다. 그래서 s464 까지는 서울에서 TOPIS 를 못 읽어 TAGO · 우리 표(D1)로 대신 그렸다(정류장은 나왔지만 TOPIS 가 아닌 출처 · 사당처럼 가까운 정류장을 통째로 놓치는 곳 발생). s465 로 TOPIS 를 다시 읽는다 — 서울 도착정보는 이제 TOPIS(arsId) 로 받으므로 배포 직후 서울 몇 곳에서 도착정보가 뜨는지 다시 재 볼 것.
