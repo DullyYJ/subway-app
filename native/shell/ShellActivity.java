@@ -3006,7 +3006,7 @@ public class ShellActivity extends Activity {
                     if (dual && st[2]) return;                                                       // 전체 화면이 이미 왔다 — 늦게 온 정류장만 화면은 버린다
                     final boolean wait = dual && !st[1];
                     mapBodyApply(v, keep, round, my, txt, wait);
-                    if (wait && txt.length() > 0) st[0] = true;
+                    if (wait && txt.length() > 0) { st[0] = true; busEarly(v, my, st); }                  // s464: 전체 요청이 0.7초 안에 안 오면 가까운 정류장 도착정보를 기기가 직접 한 번 더 받아 본다
                 } });
             }
         }, "shell-mapb").start();
@@ -3017,7 +3017,7 @@ public class ShellActivity extends Activity {
                 main.post(new Runnable() { @Override public void run() {
                     if (my != seqMapB) return;
                     st[1] = true;
-                    if (txt.length() > 0) { st[2] = true; mapBodyApply(v, keep || st[0], round, my, txt, false); return; }
+                    if (txt.length() > 0) { st[2] = true; mapBodyApply(v, keep || st[0], round, my, txt, false, st[0]); return; }          // s464: st[0] — 정류장만 먼저 그린 화면이 떠 있으면 받은 도착정보부터 바로 채워 그린다
                     if (st[0] && !map.busNeed.isEmpty()) fetchBusNeed(v, keep, round, my, true);       // 전체 요청이 실패 — 먼저 그린 정류장 화면에서 예전처럼 기기가 도착정보를 받는다(정류장만 화면이 아직 안 왔으면 그쪽이 이어 간다)
                 } });
             }
@@ -3026,7 +3026,12 @@ public class ShellActivity extends Activity {
     /** 버스 화면 응답 하나를 반영한다. deferNeed 면 그리기만 하고 도착정보 받기·마무리는 하지 않는다(동시에 보낸 전체 요청이 이어 간다). */
     /** 버스 본문 캐시 열쇠를 지금 위치 칸으로 맞춘다(응답이 오는 사이 위치 칸이 바뀌어도 그 동네 화면으로 저장되게). */
     private void rekeyMapBody() { if (slots.length > 1 && ShellCore.S_MAPB.equals(slots[1])) viewKey.put(body, ShellCore.cacheKey(ShellCore.S_MAPB, store)); }
-    private void mapBodyApply(final ScreenView v, final boolean keep, final int round, final int my, final String txt, final boolean deferNeed) {
+    private void mapBodyApply(final ScreenView v, final boolean keep, final int round, final int my, final String txt, final boolean deferNeed) { mapBodyApply(v, keep, round, my, txt, deferNeed, false); }
+    /**
+     * progressive: 정류장만 먼저 그린 화면(도착정보 "불러오는 중" 카드) 위에 받은 만큼만 채운 화면이 온다 — s464 (YJ: 첫 도착정보 3초): 예전엔 도착정보를 더 받아야 하면 이 화면을 그리지 않아
+     * 서버가 먼저 준 정류장 도착정보가 가장 느린 한 곳을 기다리며 보이지 않았다. 이미 '불러오는 중' 카드가 떠 있으니 받은 곳부터 바로 채워 그리고, 이어 오는 곳도 오는 대로(partial) 그린다.
+     */
+    private void mapBodyApply(final ScreenView v, final boolean keep, final int round, final int my, final String txt, final boolean deferNeed, final boolean progressive) {
         if (my != seqMapB) return;
         rekeyMapBody();
         if (deferNeed && txt.length() == 0) return;
@@ -3038,7 +3043,7 @@ public class ShellActivity extends Activity {
         }
         if (txt.length() > 0) map.onScreen(txt);
         if (busRefreshing && map.svFail > 0 && round == 0 && map.fillFromStash() > 0) { loadMapBodyRound(v, true, 1); return; }      // 서버가 몇 곳을 못 받았다 — 그 곳만 보던 값으로 채워 한 번 더 그린다(한 곳 때문에 전체 갱신이 막히지 않게)
-        final boolean shownNow = round >= MapCore.BUS_ROUNDS || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다)
+        final boolean shownNow = round >= MapCore.BUS_ROUNDS || progressive || map.needOptionalOnly() || !(keep && txt.length() > 0 && !map.busNeed.isEmpty());          // 방면 목록(r)만 남았거나 바퀴가 끝났으면 지금 그린다(옛 코드는 3바퀴째 그림을 버려 정류장이 비어 보였다) · s464: progressive — 정류장만 먼저 그린 위에는 받은 만큼 바로
         if (shownNow) { v.setSourceAge(map.arrAge()); present(v, txt, keep); if (txt.length() > 0 && map.stopCount() > 0) PerfLog.end("bus.stops", "버스 진입→정류장"); if (txt.length() > 0 && map.routeCount(0) > 0) PerfLog.end("bus.first", "버스 진입→첫 도착정보"); }          // 버스 도착정보를 더 받아야 하면 캐시 화면을 중간 화면으로 덮지 않는다
         syncMapView();
         if ("bus".equals(map.view)) { if (round == 0) busAt = System.currentTimeMillis(); startBusTick(); if (txt.length() > 0 && map.stopCount() > 0) map.saveStopsCache(); }
@@ -3089,6 +3094,30 @@ public class ShellActivity extends Activity {
                 }
             }
         }, "shell-brpf").start();
+    }
+    /**
+     * s464 (YJ: "순서대로 해줘" — 도착정보 3초 안): 정류장만 먼저 온 뒤 전체 요청이 0.7초 안에 안 오면(공공 API 가 느린 곳) 가장 가까운 정류장(최대 3곳) 도착정보를 기기가 직접 한 번 더 받는다.
+     * 서버가 받는 것과 별개의 길이라 먼저 오는 쪽이 이긴다(예전엔 전체 요청이 올 때까지 기기는 놀았다). 받은 본문은 엔진에 넘겨 그리게 하고(busPaint) 앱은 받아서 전하기만 한다.
+     */
+    private void busEarly(final ScreenView v, final int my, final boolean[] st) {
+        main.postDelayed(new Runnable() { @Override public void run() {
+            if (my != seqMapB || st[1] || busRefreshing || !busShowing()) return;                      // 전체 요청이 이미 왔거나 다른 요청 · 화면으로 넘어갔다
+            final List<String[]> pick = new ArrayList<String[]>();
+            for (String[] n : map.busNeed) if (pick.size() < 3 && n != null && n.length > 1 && n[0] != null && n[0].matches("a[0-2]") && n[1] != null && n[1].length() > 0) pick.add(n);
+            for (final String[] n : pick) {
+                Thread te = new Thread(new Runnable() { @Override public void run() {
+                    NetPost.Res r = MapCore.busGet(n[0], n[1], 8000, 5000);
+                    final String got = r != null && r.status == 200 && r.body != null ? r.body : "";
+                    if (got.length() == 0) return;
+                    main.post(new Runnable() { @Override public void run() {
+                        if (my != seqMapB || busRefreshing) return;                                   // 그 사이 다음 통신 · 갱신으로 넘어갔으면 버린다(최종 그림이 곧 온다)
+                        map.addBusRes(n[0], got);
+                        busPaint(v, my);
+                    } });
+                } }, "shell-buse");
+                te.setDaemon(true); te.start();
+            }
+        } }, 700L);
     }
     private boolean busPaintFly, busPaintDirty;
     /** 정류장마다 도착정보가 오는 대로 그 카드만 채운다(웹처럼 병렬로 받고 먼저 온 곳부터 보인다) — 아직 못 받은 카드는 엔진이 '불러오는 중'으로 그린다. 계산은 엔진, 앱은 그리기만. */

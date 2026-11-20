@@ -394,7 +394,7 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     {
       const flow = async (svo) => { const log = [], c = load(); let res = {}, rounds = 0, last = null;
         for (; rounds < 8; rounds++) {
-          const r = await post(c.H, { BUSAPI: mkB(log, { emptyB1: true }) }, body({ svb: 300, svo: svo ? 1 : 0 }, res)); last = r.j;
+          const r = await post(c.H, { BUSAPI: mkB(log, { emptyB1: true }) }, body({ svb: svo ? 2200 : 300, svo: svo ? 1 : 0 }, res)); last = r.j;       // s464: svb 300 + svo 는 '정류장만 먼저' 요청(도착정보를 받지 않는다) — 전체 요청은 svb 2200
           const need = r.j.info.bus.need || [];
           for (const k in (r.j.info.bres || {})) res[k] = r.j.info.bres[k];
           if (!need.length) break;
@@ -600,6 +600,96 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       ok(jp.probe.cacheCallsOk === 60 && /paid/.test(jp.probe.plan), '11-i: 60번 모두 되면 유료로 본다');
       const jn = await (await load({}).B(new Request('https://x/bus-budget'), {})).json();
       ok(jn.ok && jn.modes.tago === 'normal' && jn.hasDb === false && jn.probe === undefined, '11-i: DB 가 없어도 동작(normal)');
+    }
+  }
+  // ⑫ s464 (YJ: "순서대로 해줘" — 첫 도착정보를 3초 안에): 조기 반환 · '정류장만 먼저' 요청은 도착정보를 받지 않는다 · 가까운 정류장 도착정보는 두 길을 동시에 · 정류장 0건 재시도 · 엔진을 터뜨린 본문 하나만 빼고 다시 그리기
+  {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+    const D1E = '{"ok":true,"count":0,"stops":[]}';
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const mkB = (log, o) => { o = o || {}; return { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+      if (/getCrdntPrxmtSttnList/.test(inner)) return new Response('', { status: 200 });
+      if (/bus-stops/.test(inner)) { const n = log.filter(x => /bus-stops/.test(x)).length; return new Response(o.d1 ? o.d1(n) : D1, { status: 200 }); }
+      if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { const node = (inner.match(/nodeId=(\w+)/) || [])[1]; await sleep((o.arrMs && o.arrMs[node]) || 0); return new Response(AR, { status: 200 }); }
+      return new Response('', { status: 200 }); } }; };
+    const body = (extra, res) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0756, res: res || {}, sv: 1, svb: 2200, svo: 1 }, extra || {}) } });
+    const arrN = log => log.filter(u => /getSttnAcctoArvlPrearngeInfoList/.test(u)).length;
+    const mkU = () => { const n = {}; return { n, usageAdd: k => { n[k] = (n[k] || 0) + 1; } }; };
+    // 12-a 조기 반환: 한 곳은 바로 오고 한 곳은 3초 걸린다 → 새 앱(svo)은 예산 끝(2.8초)까지 붙잡히지 않고 곧 돌려준다 · 못 받은 곳은 응답 뒤에서 계속 받는다 · 예전 앱은 예전 그대로
+    {
+      const l1 = [], pend = [], c = load(); c.MAPSV_CTX = { waitUntil: p => pend.push(p) };
+      const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB2: 3000 } }) }, body());
+      const dt = Date.now() - t0, cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(dt < 1500 && cards.length === 2 && cards[0].rows && cards[0].rows.length === 1 && cards[1].ld && r.j.info.bus.st === 'need', '12-a: 첫 도착정보가 오면 곧 돌려준다(' + dt + 'ms) · 느린 정류장은 "불러오는 중"으로 남겨 기기가 이어 받는다');
+      ok(r.j.info.bres && r.j.info.bres.a0 && !r.j.info.bres.a1 && r.j.info.svf === 1 && pend.length >= 1, '12-a: 받은 본문만 bres 에 · 못 받은 1곳은 svf · 응답 뒤 받기는 waitUntil 에 맡긴다(' + pend.length + ')');
+      await Promise.all(pend);
+      const l2 = [], c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+      const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB(l2, { arrMs: { BSB2: 3000 } }) }, body({ svo: 0, svb: 1200 }));
+      const dt2 = Date.now() - t1;
+      ok(dt2 >= 1100 && r2.j.body.filter(n => n.t === 'bcard')[1].ld, '12-a: 예전 앱(svo 없음)은 예전 그대로 예산 끝까지 기다린다(' + dt2 + 'ms)');
+    }
+    // 12-b 모두 빨리 오면 기다리지 않는다(조기 반환은 core 가 덜 왔을 때만) · 느리지 않은 요청은 완성 화면
+    {
+      const l1 = [], c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+      const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB1: 40, BSB2: 120 } }) }, body());
+      const cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(Date.now() - t0 < 900 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1) && !(r.j.info.bus.need || []).some(n => /^a/.test(n.k)) && r.j.info.svf === 0, '12-b: 모두 곧 오면 도착정보 전부 채운 화면 ' + (Date.now() - t0) + 'ms');
+    }
+    // 12-c '정류장만 먼저'(svb 300 + svo) 요청은 도착정보를 받지 않는다(전체 요청과 같은 곳을 두 번 부르지 않는다) · 정류장은 그대로 · need 로 남긴다
+    {
+      const l1 = [], c = load(), t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB1: 800, BSB2: 800 } }) }, body({ svb: 300 }));
+      const cards = r.j.body.filter(n => n.t === 'bcard'), need = r.j.info.bus.need || [];
+      ok(arrN(l1) === 0 && cards.length === 2 && cards.every(x => x.ld) && need.some(n => n.k === 'a0') && need.some(n => n.k === 'a1') && Date.now() - t0 < 700, '12-c: 정류장만 먼저 — 도착정보는 안 받고(공공 API ' + arrN(l1) + '번) need 로 남긴다 ' + (Date.now() - t0) + 'ms');
+      const l2 = [], c2 = load(); await post(c2.H, { BUSAPI: mkB(l2) }, body({ svb: 300, svo: 0 }));
+      ok(arrN(l2) === 2, '12-c: 예전 앱(svo 없음)의 svb 300 은 예전 그대로 도착정보를 짧게 기다려 받는다(' + arrN(l2) + ')');
+      const l3 = [], c3 = load(); c3.MAPSV_CTX = { waitUntil: () => {} }; await post(c3.H, { BUSAPI: mkB(l3) }, body({ svb: 300 }, { d1: D1 }));
+      ok(arrN(l3) === 2, '12-c: 정류장 본문을 이미 받은 뒤 바퀴(svb 300 + svo)는 예전 그대로 모자란 도착정보를 받는다(' + arrN(l3) + ')');
+    }
+    // 12-d 가장 가까운 정류장 셋(a0~a2)은 두 길을 동시에(normal 모드) · 넷째부터는 예전 간격(0.7초) · 아낌 모드는 예전 간격
+    {
+      const TN = JSON.stringify({ response: { body: { items: { item: [0, 1, 2, 3].map(i => ({ nodeid: 'ICB36800043' + i, nodenm: '정류장' + i, gpslati: 37.489 + i * 0.0003, gpslong: 126.724, citycode: '23', nodeno: '1' + i })) } } } });
+      const AR2 = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }] } } } });
+      const run = async (mode) => {
+        const calls = [], tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner) => { calls.push([n, inner]); return sleep(120).then(() => new Response(/getCrdntPrxmtSttnList/.test(inner) ? TN : AR2, { status: 200 })); } }));
+        const u = mkU(), c = load({ tagoAttempts, usageAdd: u.usageAdd }); c.MAPSV_CTX = { waitUntil: () => {} };
+        if (mode) c.MAPSV_BUD.modes.tago = mode;
+        await post(c.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, { cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.489, lng: 126.724, res: {}, sv: 1, svb: 2200, svo: 1 } } });
+        const per = {}; calls.filter(x => /getSttnAcctoArvlPrearngeInfoList/.test(x[1])).forEach(x => { const id = x[1].match(/nodeId=(\w+)/)[1]; (per[id] = per[id] || []).push(x[0]); });
+        return { per, u };
+      };
+      const a = await run(null), ids = Object.keys(a.per).sort();
+      ok(ids.length === 4 && ids.slice(0, 3).every(id => a.per[id].length === 2 && new Set(a.per[id]).size === 2) && a.per[ids[3]].length === 1, '12-d: 가까운 셋은 두 키를 동시에(각 2번 · 서로 다른 키) · 넷째는 1번 — ' + JSON.stringify(a.per));
+      ok((a.u.n['map.hedge'] || 0) === 3, '12-d: 동시에 띄운 두 번째 호출 3개를 map.hedge 로 센다(' + (a.u.n['map.hedge'] || 0) + ')');
+      const b = await run('saver');
+      ok(Object.keys(b.per).every(id => b.per[id].length === 1), '12-d: 아낌(saver) 모드는 동시에 띄우지 않는다 — 빨리 오면 1번씩 ' + JSON.stringify(b.per));
+    }
+    // 12-e 정류장 0건: 서버 정류장 표(D1)가 잠깐 빈 값을 주면(청라) 캐시를 건너뛰고 한 번 더 · 진짜 비어 있으면 한 번만 더 · 고른 곳(pin)은 다시 안 받는다
+    {
+      const l1 = [], u = mkU(), c = load({ usageAdd: u.usageAdd }); c.MAPSV_CTX = { waitUntil: () => {} };
+      const r = await post(c.H, { BUSAPI: mkB(l1, { d1: n => n === 1 ? D1E : D1 }) }, body());
+      const cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(cards.length === 2 && l1.filter(x => /bus-stops/.test(x)).length === 2 && u.n['map.empty.retry'] === 1 && u.n['map.empty.fix'] === 1, '12-e: 첫 응답이 빈 값이어도 한 번 더 받아 정류장 ' + cards.length + '곳 · 정류장 조회 ' + l1.filter(x => /bus-stops/.test(x)).length + '번');
+      const l2 = [], u2 = mkU(), c2 = load({ usageAdd: u2.usageAdd }); c2.MAPSV_CTX = { waitUntil: () => {} };
+      const r2 = await post(c2.H, { BUSAPI: mkB(l2, { d1: () => D1E }) }, body());
+      ok(r2.j.info.bus.st === 'empty' && l2.filter(x => /bus-stops/.test(x)).length === 2 && u2.n['map.empty.fix'] === undefined, '12-e: 진짜 비어 있으면 한 번만 더 받고 빈 화면 — 조회 ' + l2.filter(x => /bus-stops/.test(x)).length + '번');
+      const l3 = [], c3 = load(); c3.MAPSV_CTX = { waitUntil: () => {} };
+      const r3 = await post(c3.H, { BUSAPI: mkB(l3, { d1: () => D1E }) }, body({ pin: [35.1796, 129.0756] }));
+      ok(r3.j.info.bus.st === 'empty' && l3.filter(x => /bus-stops/.test(x)).length === 1, '12-e: 지도에서 고른 곳(pin)의 빈 결과는 다시 받지 않는다(' + l3.filter(x => /bus-stops/.test(x)).length + '번)');
+    }
+    // 12-f 엔진을 터뜨린 받은 본문 하나만 빼고 다시 그린다(500 대신) · 원인은 /bus-budget lastErr 에 · 그래도 안 되면 500
+    {
+      const u = mkU(), c = load({ usageAdd: u.usageAdd }), real = c.mapScreen; c.MAPSV_CTX = { waitUntil: () => {} };
+      c.mapScreen = function (cap, f, d) { const r = f && f.bus && f.bus.res; if (r && r.a1 === 'POISON') throw new Error('Cannot read properties of undefined (reading x)'); return real(cap, f, d); };
+      const D1R = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }] });
+      const r = await post(c.H, { BUSAPI: mkB([]) }, body({ sv: 0 }, { d1: D1R, a0: AR, a1: 'POISON', t0: '{}' }));
+      ok(r.status === 200 && r.j.ok && r.j.body.some(n => n.t === 'bcard'), '12-f: 본문 하나(a1)가 엔진을 터뜨려도 500 이 아니라 그 본문만 빼고 다시 그린다(status ' + r.status + ')');
+      ok(c.MAPSV_ERR && c.MAPSV_ERR.stage === 'salvage' && c.MAPSV_ERR.key === 'a1' && /Cannot read/.test(c.MAPSV_ERR.msg) && u.n['map.err.salvage'] === 1, '12-f: 범인(a1)과 오류를 lastErr 에 남기고 센다 ' + JSON.stringify(c.MAPSV_ERR));
+      const jb = await (await c.B(new Request('https://x/bus-budget'), {})).json();
+      ok(jb.lastErr && jb.lastErr.key === 'a1', '12-f: /bus-budget 으로 마지막 오류를 볼 수 있다');
+      const c2 = load({ usageAdd: u.usageAdd }); c2.mapScreen = function () { throw new Error('always'); };
+      const r2 = await post(c2.H, { BUSAPI: mkB([]) }, body({ sv: 0 }, { a0: AR }));
+      ok(r2.status === 500 && /always/.test(r2.j.error) && c2.MAPSV_ERR.stage === '500', '12-f: 본문 탓이 아니면 예전처럼 500(원인 기록)');
     }
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');

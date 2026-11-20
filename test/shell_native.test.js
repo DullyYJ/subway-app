@@ -486,7 +486,7 @@ function findAndroidJar() {
     assert.ok(/BUS_BASE = "https:\/\/gildongmu-bus\.phg0643\.workers\.dev"/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /ShellCore\.BUS_BASE \+ "\/tago\?url="/.test(mc), 's164: 버스 도착정보·정류장은 웹과 같은 버스 프록시(gildongmu-bus) — gentle-lab /tago 는 522');
     assert.ok(/HomeSearchCore\.busUrl\(HomeSearchCore\.BUS_BASE,/.test(a), 's164: 정류장 검색도 버스 프록시');
     assert.ok(/KEEP_OLD_MS = 45000L/.test(mc), '받아 둔 도착정보는 45초까지 둔다(앱은 판단하지 않는다 — 서버가 정한다)');
-    assert.ok(/arrWave/.test(w) && /else if \(\/\^\[af\]\/\.test\(k\)\) failA\+\+;/.test(w) && /if \(arrWave\) \{ arrWaves\+\+; if \(!svo \|\| arrWaves >= MAPSV_SVO_WAVES/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다(예전 앱은 한 번만 · s462 새 앱 svo 는 시간이 남으면 같은 요청 안에서 최대 3바퀴)');
+    assert.ok(/arrWave/.test(w) && /else if \(\/\^\[af\]\/\.test\(k\)\) failA\+\+;/.test(w) && /if \(arrWave\) \{ arrWaves\+\+; if \(!svo \|\| earlyRet \|\| arrWaves >= MAPSV_SVO_WAVES/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다(예전 앱은 한 번만 · s462 새 앱 svo 는 시간이 남으면 같은 요청 안에서 최대 3바퀴)');
   });
   await t('s462: 3초 약속 — 경유노선(덤)은 화면을 막지 않고 · 새 요청 신호(svo) · 보조 길 0.9초 · 서버 캐시/먼저 도착정보', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
@@ -507,8 +507,19 @@ function findAndroidJar() {
     assert.ok(/MAPSV_OPS_SOFT = 32/.test(w) && /ops\.n >= MAPSV_OPS_SOFT/.test(w), '서버: 무료 요금제 하위 요청 50개 한도를 넘기지 않게 한 요청 안에서 세어 공유 캐시를 건너뛴다');
     assert.ok(/mapSvUse\(af \? 'map\.arr\.' \+ af/.test(w) && /map\.hedge/.test(w) && /map\.arr\.saved/.test(w) && (w.match(/mapSvUse\('map\.arr\.saved'\)/g) || []).length >= 3, '서버: 나간 호출 · 헤지 · 아낀 호출을 live_usage 에 센다(예전엔 이 길 호출이 아예 안 세어졌다)');
     assert.ok(/X-Bus-Mode/.test(w) && /async function handleBusBudget\(request, env\)/.test(w) && /probe/.test(w), '서버: 응답 머리 X-Bus-Mode · /bus-budget 진단 · 요금제 확인(probe)');
-    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s463"/.test(r2) && /url\.pathname === "\/bus-budget"\) return handleBusBudget\(request, env\)/.test(r2) && r2.indexOf('function mapSvBudEval') > 0, 'route-v2 번들: 버전 s463 · /bus-budget 길 · 새 코드 포함');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s46[34]"/.test(r2) && /url\.pathname === "\/bus-budget"\) return handleBusBudget\(request, env\)/.test(r2) && r2.indexOf('function mapSvBudEval') > 0, 'route-v2 번들: 버전 s463 · /bus-budget 길 · 새 코드 포함');
     assert.ok(/BUD_LIMIT = \{ tago: 500000, seoul: 10000 \}/.test(b) && /budRefresh\(env\);/.test(b) && /function budTtl\(fam\)/.test(b) && g.indexOf('function budTtl') >= 0 && /budget: \{ modes: BUD\.modes/.test(b), '버스 서버: 같은 하루 예산 조절(TAGO 10→12→15초 · 서울 15→20→25초) · /usage.json 에 모드');
+  });
+  await t('s464: 첫 도착정보 3초 — 서버 조기 반환 · 정류장만 먼저 요청은 도착정보를 안 받는다 · 가까운 셋 이중 요청 · 0건 재시도 · 오류 본문 제거 · 앱은 받은 만큼 바로 그리고 느리면 직접 한 번 더', () => {
+    const R = (...x) => fs.readFileSync(path.join(__dirname, '..', ...x), 'utf8');
+    const w = R('engine', 'map-worker.js'), a = R('native', 'shell', 'ShellActivity.java'), r2 = R('engine', 'route-v2-worker.ascii.js');
+    assert.ok(/MAPSV_EARLY_GRACE_MS = 400, MAPSV_EARLY_MIN_MS = 600/.test(w) && /why === 'first'/.test(w) && /return early;/.test(w) && /earlyRet = await mapSvArrWait\(/.test(w), '서버: 쓸 만한 첫 도착정보가 오면 0.4초(받기 시작 0.6초 이후)만 더 기다리고 돌려준다 · 추가 바퀴는 건너뛴다');
+    assert.ok(/var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !\(res\.tp \|\| res\.gg \|\| res\.tn \|\| res\.d1\)/.test(w) && /if \(stopsOnly && arrWave\) break;/.test(w), '서버: 정류장만 먼저(svb 300 · 정류장 본문 없음) 요청은 도착정보를 받지 않는다');
+    assert.ok(/MAPSV_NEAR_GAP = 0/.test(w) && /\/\^\[af\]\[0-2\]\$\/\.test\(String\(k\)\)/.test(w) && /bm === 'normal'/.test(w), '서버: 가까운 셋(a0~a2)은 normal 모드에서 두 길을 동시에');
+    assert.ok(/map\.empty\.retry/.test(w) && /bf2\.nf = 1/.test(w) && /!bf\.pin && Date\.now\(\) - tSv < 1500/.test(w) && /function mapSvSalvage\(cap, body, err\)/.test(w) && /lastErr: MAPSV_ERR/.test(w), '서버: 정류장 0건은 캐시 건너뛰고 한 번 더 · 엔진을 터뜨린 본문 하나만 빼고 다시 · 마지막 오류는 /bus-budget lastErr');
+    assert.ok(/private void mapBodyApply\([^)]*final boolean deferNeed, final boolean progressive\)/.test(a) && /round >= MapCore\.BUS_ROUNDS \|\| progressive \|\|/.test(a), '앱: 정류장만 먼저 그린 위에는 받은 도착정보부터 바로 채워 그린다(가장 느린 한 곳을 기다리지 않는다)');
+    assert.ok(/private void busEarly\(final ScreenView v, final int my, final boolean\[\] st\)/.test(a) && /n\[0\]\.matches\("a\[0-2\]"\)/.test(a) && /\}, 700L\);/.test(a) && /busEarly\(v, my, st\)/.test(a) && /map\.addBusRes\(n\[0\], got\);\s*busPaint\(v, my\);/.test(a), '앱: 전체 요청이 0.7초 안에 안 오면 가까운 3곳 도착정보를 기기가 직접 한 번 더 · 받은 본문은 엔진이 그린다(busPaint)');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s464"/.test(r2) && r2.indexOf('function mapSvSalvage') > 0 && r2.indexOf('MAPSV_EARLY_GRACE_MS') > 0, 'route-v2 번들: 버전 s464 · 새 코드 포함');
   });
   await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
@@ -742,11 +753,11 @@ function findAndroidJar() {
   await t('s174: 처음 그릴 때 정류장만(0.3초)·전체(서버가 도착정보까지) 두 요청을 동시에 · 늦은 정류장만 화면은 버린다 · 전체가 실패하면 예전처럼', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
     assert.ok(/final boolean dual = round == 0 && wtxt\.length\(\) == 0 && "bus"\.equals\(modeNow\) && !busRefreshing/.test(a) && /map\.svb = 2200; jf = map\.bodyRequest/.test(a) && /"shell-mapfull"/.test(a), '동시에 두 요청(전체는 svb 2200 — s283 3초 약속)');
-    assert.ok(/if \(dual && st\[2\]\) return;/.test(a) && /mapBodyApply\(v, keep \|\| st\[0\], round, my, txt, false\)/.test(a) && /if \(st\[0\] && !map\.busNeed\.isEmpty\(\)\) fetchBusNeed/.test(a), '늦은 정류장만 화면 버림 · 전체 성공이면 그 화면 · 실패면 기기가 이어 받는다');
+    assert.ok(/if \(dual && st\[2\]\) return;/.test(a) && /mapBodyApply\(v, keep \|\| st\[0\], round, my, txt, false, st\[0\]\)/.test(a) && /if \(st\[0\] && !map\.busNeed\.isEmpty\(\)\) fetchBusNeed/.test(a), '늦은 정류장만 화면 버림 · 전체 성공이면 그 화면 · 실패면 기기가 이어 받는다');
     assert.ok(/private void mapBodyApply\(/.test(a) && /if \(deferNeed\) return;/.test(a) && /NetPost\.get\(ShellCore\.BASE \+ "\/health"/.test(a), '응답 반영 분리 · 엔진 연결도 미리');
     assert.ok(/ALT_GATE = new java\.util\.concurrent\.Semaphore\(4\)/.test(np) && /isAlt \? ALT_GATE : BUS_GATE/.test(np), '두 번째 길은 줄을 따로(8곳 동시)');
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
-    assert.ok(/헤지/.test(w) && /setTimeout\(function \(\) \{ r\(null\); \}, gap\)/.test(w) && /MAPSV_HEDGE_GAP = \{ normal: 700, saver: 1200, critical: 1800 \}/.test(w), '서버 헤지(보통 0.7초 · s463: 아낌 모드는 1.2 · 1.8초)');
+    assert.ok(/헤지/.test(w) && /setTimeout\(function \(\) \{ r\(null\); \}, launched === 1 \? g1 : gap\)/.test(w) && /MAPSV_HEDGE_GAP = \{ normal: 700, saver: 1200, critical: 1800 \}/.test(w), '서버 헤지(보통 0.7초 · s463: 아낌 모드는 1.2 · 1.8초)');
   });
   await t('s172: 공공데이터 키 두 개를 두 길(버스 서버 · route-v2 /bus-tago)로 반반 · 정류장 목록은 동시에 · 가까운 역 팝업 미리', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
@@ -793,7 +804,7 @@ function findAndroidJar() {
   await t('s200: 버스 정류장이 다른 탭을 다녀와야 나오던 일 — 엔진과 주고받는 바퀴 한도(3)가 이웃·바꾼 ID·방면으로 길어진 체인보다 짧아 마지막 그림을 버렸다', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
     assert.ok(/BUS_ROUNDS = 8/.test(mc) && /public boolean needOptionalOnly\(\)/.test(mc) && /matches\("r\[0-9\]\{1,3\}"\)/.test(mc), '바퀴 한도 8 · 남은 것이 방면 목록(r)뿐이면 완성된 화면');
-    assert.ok(/round >= MapCore\.BUS_ROUNDS \|\| map\.needOptionalOnly\(\)/.test(a) && /round < MapCore\.BUS_ROUNDS\) fetchBusNeed\(/.test(a), '앱: 방면만 남았거나 바퀴가 끝나면 지금 화면을 그린다 · 한도까지 계속 받는다');
+    assert.ok(/round >= MapCore\.BUS_ROUNDS \|\| progressive \|\| map\.needOptionalOnly\(\)/.test(a) && /round < MapCore\.BUS_ROUNDS\) fetchBusNeed\(/.test(a), '앱: 방면만 남았거나 바퀴가 끝나면 지금 화면을 그린다 · 한도까지 계속 받는다');
     assert.ok(!/round < 3\) fetchBusNeed|round < 4; round\+\+\) \{\s*NetPost\.Res (br|r) = NetPost\.post\(ShellCore\.BASE \+ "\/screen\/map", (pfMap|w)\.bodyRequest/.test(a) && (a.match(/MapCore\.BUS_ROUNDS/g) || []).length >= 5, '미리 받기 · 조용한 새로고침도 같은 한도');
   });
   await t('s320: 경로 이탈 팝업은 엔진 카드(offroute) · 역까지 이동은 dl.bp.0 · 환승 대기 마커', () => {
