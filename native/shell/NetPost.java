@@ -76,7 +76,7 @@ public final class NetPost {
     // 버스 서버(gildongmu-bus)는 키 1개, route-v2 의 /bus-tago 는 키 2개를 번갈아 쓴다. 정류장을 번호 짝·홀로 나눠 서로 다른 길로 먼저 보내면(반반) 같은 키에 몰리지 않아 오류가 줄고 빠르다.
     // 정류장 목록처럼 하나뿐인 요청은 두 길에 동시에 보내(hedge) 먼저 온 정상 본문을 쓴다. route-v2 쪽이 아직 없거나(404) 막혀 있으면 이번 실행 동안 그 길을 끄고 예전처럼 버스 서버만 쓴다.
     private static volatile boolean altOff = false;
-    static final long HEDGE_LATE_MS = 1500L;
+    static final long HEDGE_LATE_MS = 900L;                                                      // s462 (3초 약속): 첫 길이 0.9초 안에 정상 본문을 못 주면 다른 길(키 2개)도 같이 — 1.5초 → 0.9초(평소엔 요청이 늘지 않는다)
     private static final java.util.concurrent.Semaphore ALT_GATE = new java.util.concurrent.Semaphore(4);     // 두 번째 길은 자기 줄을 따로 쓴다 — 두 길이 동시에 4곳씩, 모두 8곳이 한꺼번에
     public static boolean altEnabled() { return !altOff; }
     public static void altReset() { altOff = false; }

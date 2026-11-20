@@ -24,9 +24,16 @@ var MEM = new Map();        // key -> { ts, res }
 var INFLIGHT = new Map();   // key -> Promise<res>  (merge identical concurrent requests)
 var MEM_MAX = 1500;
 
+// s462: lists that almost never change (routes through a stop / stops found by coordinates / a route's stop list) used to be fetched from data.go.kr on every call (2-21 s,
+// and 8 stops x 1 call each competed with the arrival calls). They are now kept for 6 hours - validated (never an empty list or an error envelope) and without Cloudflare's
+// upstream cacheEverything, which would freeze a 200-status error envelope for the whole ttl.
+function isStaticPath(p) { return /getSttnThrghRouteList|getCrdntPrxmtSttnList|getRouteAcctoThrghSttnList/i.test(String(p || "")); }
+var STATIC_TTL_SEC = 6 * 3600;
+var STATIC_MEM_BYTES = 60000;   // the in-memory copy skips big bodies (route stop lists); the colo cache (Cache API) keeps them
 function ttlSecFor(u) {
   const h = String(u.hostname || "").toLowerCase().replace(/\.$/, "");
   const p = u.pathname || "";
+  if (h === "apis.data.go.kr" && isStaticPath(p)) return STATIC_TTL_SEC;
   if (h === "ws.bus.go.kr") {
     if (/getStationByUid/i.test(p)) return 15;   // Seoul stop arrivals (s454: 20 -> 15; Seoul API quota is 10k/day, so only a small cut)
     if (/getStationByPos/i.test(p)) return 60;   // Seoul nearby stops
@@ -42,7 +49,9 @@ function okBody(u, text) {
   if (/(^|\.)ws\.bus\.go\.kr$/i.test(u.hostname)) {
     return /<headerCd>\s*[04]\s*<\/headerCd>/.test(t);
   }
-  return /"resultCode"\s*:\s*"?(0|00|4)"?\s*[,}]/.test(t) || /<resultCode>\s*(0|00|4)\s*<\/resultCode>/.test(t);
+  const good = /"resultCode"\s*:\s*"?(0|00|4)"?\s*[,}]/.test(t) || /<resultCode>\s*(0|00|4)\s*<\/resultCode>/.test(t);
+  if (good && isStaticPath(u.pathname)) return /"item"\s*:\s*[\[{]/.test(t) || /<item>/.test(t);   // s462: an empty list may be a passing glitch - never keep it for 6 hours
+  return good;
 }
 function cacheKeyOf(cleaned) {
   const pairs = [];
@@ -421,7 +430,8 @@ var index_default = {
       qs.push(encodeURIComponent(k) + "=" + encodeURIComponent(v));
     });
     const ttl = ttlSecFor(cleaned);
-    const cfOpt = ttl > 0
+    const isStatic = ttl > 0 && isStaticPath(cleaned.pathname);
+    const cfOpt = ttl > 0 && !isStatic
       ? { cacheTtlByStatus: { "200-299": ttl, "400-599": 0 }, cacheEverything: true }
       : { cacheTtl: 5, cacheEverything: false };
 
@@ -496,6 +506,21 @@ var index_default = {
       usageFlush(env);
       return reply(hit.res, "HIT");
     }
+    let sck = null;   // s462: static lists also live in this data center's Cache API (shared by every isolate here), only ever filled with validated bodies
+    if (isStatic && typeof caches !== "undefined" && caches.default) {
+      try {
+        sck = new Request("https://bus-static.internal/v1?u=" + encodeURIComponent(ckey));
+        const sh = await caches.default.match(sck);
+        if (sh) {
+          const st = await sh.text();
+          if (okBody(cleaned, st)) {
+            usageAdd(ukey + ".saved");
+            usageFlush(env);
+            return reply({ status: 200, text: st, ct: sh.headers.get("Content-Type") }, "HIT-S");
+          }
+        }
+      } catch (e) { sck = null; }
+    }
     let p = INFLIGHT.get(ckey);
     let tag = "JOIN";
     if (!p) {
@@ -503,8 +528,16 @@ var index_default = {
       p = fetchUpstream()
         .then((r) => {
           if (r.status === 200 && !isKeyError(r.text) && okBody(cleaned, r.text)) {
-            if (MEM.size >= MEM_MAX) MEM.clear();
-            MEM.set(ckey, { ts: Date.now(), res: r });
+            if (!isStatic || r.text.length <= STATIC_MEM_BYTES) {
+              if (MEM.size >= MEM_MAX) MEM.clear();
+              MEM.set(ckey, { ts: Date.now(), res: r });
+            }
+            if (sck) {
+              try {
+                const put = caches.default.put(sck, new Response(r.text, { headers: { "Cache-Control": "public, max-age=43200", "Content-Type": r.ct || "application/json; charset=utf-8" } })).catch(() => {});
+                if (_ctx && _ctx.waitUntil) _ctx.waitUntil(put);
+              } catch (e) { /* cache failure is harmless */ }
+            }
           }
           return r;
         })

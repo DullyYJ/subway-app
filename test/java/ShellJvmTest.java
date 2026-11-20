@@ -1070,7 +1070,18 @@ public class ShellJvmTest {
         {
             ShellCore.MemStore sv = new ShellCore.MemStore(); MapCore sm = new MapCore(sv);
             sm.setBusLoc(37.5, 127.0);
-            ok(sm.bodyRequest(23, "dark").contains("\"sel\":-1,\"sv\":1,\"svb\":300,\"fav\""), "버스 요청에 sv:1(서버가 받아 줄 수 있다)");
+            ok(sm.bodyRequest(23, "dark").contains("\"sel\":-1,\"sv\":1,\"svb\":300,\"svo\":1,\"fav\""), "버스 요청에 sv:1(서버가 받아 줄 수 있다) · svo:1(s462: 경유노선 같은 덤은 기다리지 않아도 된다)");
+            ok(MapCore.optionalKey("t0") && MapCore.optionalKey("u59") && MapCore.optionalKey("r3") && !MapCore.optionalKey("t100") && !MapCore.optionalKey("u101") && !MapCore.optionalKey("a0") && !MapCore.optionalKey("g500") && !MapCore.optionalKey("f2") && !MapCore.optionalKey(null), "s462: 덤(경유노선 t·u 0~99 · 방면 r)만 화면을 막지 않는다 — 좌표 정류장 t·u 100+ · 도착정보는 아니다");
+            {
+                MapCore on = new MapCore(new ShellCore.MemStore());
+                on.busNeed.add(new String[] { "t0", "u" }); on.busNeed.add(new String[] { "t5", "u" }); on.busNeed.add(new String[] { "r1", "u" });
+                boolean o1 = on.needOptionalOnly();
+                on.busNeed.add(new String[] { "a2", "u" });
+                boolean o2 = on.needOptionalOnly();
+                on.busNeed.clear(); on.busNeed.add(new String[] { "t101", "u" });
+                boolean o3 = on.needOptionalOnly();
+                ok(o1 && !o2 && !o3, "s462: 남은 것이 경유노선 · 방면뿐이면 지금 그린다(도착정보나 좌표 정류장이 섞이면 아니다)");
+            }
             sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"tp\":\"<a/>\",\"a0\":\"AAA\",\"BAD KEY\":\"x\"},\"svf\":2}}");
             ok(sm.svServer && sm.svFail == 2 && sm.bodyRequest(23, "dark").contains("\"a0\":\"AAA\"") && sm.bodyRequest(23, "dark").contains("\"tp\":\"<a/>\"") && !sm.bodyRequest(23, "dark").contains("BAD"), "info.bres 를 받은 본문으로 모은다 · 못 받은 수(svf)");
             sm.dropArrivals(); sm.onScreen("{\"info\":{\"view\":\"bus\",\"bus\":{\"st\":\"ok\"},\"bres\":{\"a1\":\"B\"},\"svf\":1}}");
