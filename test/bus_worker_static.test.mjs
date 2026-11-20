@@ -51,4 +51,39 @@ body = TH; calls = []; w = await load();
 const CR = mk('BusSttnInfoInqireService/getCrdntPrxmtSttnList', 'gpsLati=35.18&gpsLong=129.076');
 await ask(w, CR); const c2 = await ask(w, CR);
 ok(calls.length === 1 && c2[2] === 'HIT', '좌표로 찾은 정류장 목록도 캐시');
+// ── s463: 하루 예산 조절기 — 사용량이 70% 를 넘으면 도착정보 기억을 늘린다(TAGO 10→12→15초 · 서울 15→20→25초). 읽기는 뒤에서(요청을 막지 않는다) · 못 읽으면 normal
+const askE = async (w, url, e) => { const r = await w.fetch(new Request('https://x/tago?url=' + encodeURIComponent(url)), e, ctx); return [r.status, await r.text(), r.headers.get('x-gm-cache')]; };
+const dbR = (rows, o) => { o = o || {}; const st = { q: 0 }; return { st, prepare: (sql) => ({ bind: (day) => ({ all: async () => { st.q++; st.sql = sql; st.day = day; if (o.err) throw new Error(o.err); return { results: rows }; } }) }), batch: async () => [], }; };
+const ARRU = (id) => mk('ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList', 'nodeId=' + id);
+const SEOU = (id) => 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=' + id;
+const ttlOf = async (rows, url, o) => { store.clear(); calls = []; opts = []; body = ARR; const d = dbR(rows, o), e2 = { DATA_GO_KR_KEY: 'abc%2Bdef', DB: d }; const w2 = await load();
+  await askE(w2, ARRU('WARM1'), e2); await Promise.all(pend);                 // 첫 요청: 읽기를 시작(이 요청은 normal 로 간다)
+  opts = []; await askE(w2, url, e2); return { ttl: opts[0] && opts[0].cacheTtlByStatus && opts[0].cacheTtlByStatus['200-299'], q: d.st.q, day: d.st.day, sql: d.st.sql }; };
+let t = await ttlOf([{ k: 'bus.tago.arr', n: 1000 }], ARRU('BSB2'));
+ok(t.ttl === 10 && t.q === 1 && /live_usage/.test(t.sql) && /^\d{4}-\d\d-\d\d$/.test(t.day), '예산 조절기: 사용량이 적으면 도착정보 10초 · D1 은 1번만 읽는다');
+t = await ttlOf([{ k: 'bus.tago.arr', n: 250000 }, { k: 'map.arr.tago', n: 110000 }], ARRU('BSB3'));
+ok(t.ttl === 12, 'TAGO 70% 넘음(버스 서버 + 지도 서버 호출 합) → 12초 ' + t.ttl);
+t = await ttlOf([{ k: 'tago.env-key', n: 300000 }, { k: 'tago.env-key2', n: 160000 }], ARRU('BSB4'));
+ok(t.ttl === 15, 'TAGO 90% 넘음 → 15초(그 이상은 늘리지 않는다) ' + t.ttl);
+t = await ttlOf([{ k: 'bus.seoul.arr', n: 7500 }], SEOU('11111'));
+ok(t.ttl === 20, '서울 75%(1만/일 한도) → 서울 도착정보 20초 ' + t.ttl);
+t = await ttlOf([{ k: 'bus.seoul.arr', n: 9500 }], SEOU('22222'));
+ok(t.ttl === 25, '서울 95% → 25초 ' + t.ttl);
+t = await ttlOf([{ k: 'bus.seoul.arr', n: 9500 }], ARRU('BSB5'));
+ok(t.ttl === 10, '서울이 많아도 TAGO 도착정보는 그대로 10초(종류별로 따로) ' + t.ttl);
+t = await ttlOf([{ k: 'bus.tago.arr', n: 480000 }], mk('ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList', 'nodeId=BSB6').replace('/1613000/ArvlInfoInqireService', '/6410000/busarrivalservice/v2').replace('getSttnAcctoArvlPrearngeInfoList', 'getBusArrivalListv2'));
+ok(t.ttl === 10, '경기(GBIS) 도착정보는 조절 대상이 아니다(10초) ' + t.ttl);
+t = await ttlOf([], ARRU('BSB7'), { err: 'D1 down' });
+ok(t.ttl === 10, 'D1 을 못 읽으면 normal 그대로(요청은 막히지 않는다)');
+{ // 정적 조회(경유노선 등)는 예산과 무관하게 6시간
+  store.clear(); calls = []; opts = []; body = TH; const d = dbR([{ k: 'bus.tago.arr', n: 490000 }]), e2 = { DATA_GO_KR_KEY: 'abc%2Bdef', DB: d }; const w2 = await load();
+  await askE(w2, ARRU('WARM2'), e2); await Promise.all(pend); const rr2 = await askE(w2, THRU, e2); const rr3 = await askE(w2, THRU, e2);
+  ok(rr2[0] === 200 && rr3[2] === 'HIT', '예산 모드와 관계없이 경유노선 목록은 그대로 캐시');
+}
+{ // /usage.json 에 모드가 보인다
+  store.clear(); const d = dbR([{ k: 'bus.tago.arr', n: 400000 }]), e2 = { DATA_GO_KR_KEY: 'abc%2Bdef', DB: d }; const w2 = await load();
+  body = ARR; await askE(w2, ARRU('WARM3'), e2); await Promise.all(pend);
+  const r2 = await w2.fetch(new Request('https://x/usage.json'), e2, ctx); const j = await r2.json();
+  ok(j.budget && j.budget.modes.tago === 'saver' && j.budget.ttlSec.tago === 12 && j.budget.limit.tago === 500000, '/usage.json 에 budget(모드 · TTL · 한도) ' + JSON.stringify(j.budget));
+}
 process.exit(fails ? 1 : 0);

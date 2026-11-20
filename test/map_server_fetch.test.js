@@ -6,7 +6,7 @@ const R = p => path.join(__dirname, '..', p);
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
-const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
+const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.B = handleBusBudget; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
 function load(extra) {
   const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
   vm.runInNewContext(code, ctx);
@@ -427,6 +427,179 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       await call(c, THU.replace('serviceKey=&', 'serviceKey=REALKEY&')); await call(c, THU.replace('serviceKey=&', 'serviceKey=REALKEY&'));
       ok(nf === 2, '10-e: 키가 박힌 주소는 캐시 열쇠에 키가 섞이지 않게 캐시하지 않는다');
       ok(c.mapSvStaticCls(THU) === 'tl' && c.mapSvStaticCls(THU.replace('getSttnThrghRouteList', 'getRouteAcctoThrghSttnList')) === 'rl' && c.mapSvStaticCls(ARU) === '' && c.mapSvStaticCls('https://evil.example/getSttnThrghRouteList?serviceKey=&a=1') === '', '10-e: 캐시 종류 판별(경유노선 tl · 노선 정류장 rl · 도착정보/남의 호스트는 안 함)');
+    }
+  }
+  // ⑪ s463 (YJ: "API 호출량 조절 · 카카오처럼 — 클라우드플레어만으로"): 호출 세기 · 하루 예산 조절기 · 데이터센터 도착정보 공유 캐시 · /bus-budget
+  {
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+    const ERRB = '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR","returnReasonCode":"04"}}}';
+    const ARU = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=21&nodeId=BSB1&_type=json';
+    const SEU = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=11111';
+    // 받은 시각(x-at)을 담는 모의 데이터센터 캐시(머리글까지 보관) + 시계를 옮길 수 있는 Date
+    const mkCs = () => { const store = new Map(), calls = { match: 0, put: 0 };
+      return { store, calls, default: { match: async (rq) => { calls.match++; const e = store.get(rq.url); return e ? new Response(e.t, { headers: e.h }) : undefined; }, put: async (rq, rs) => { calls.put++; const h = {}; rs.headers.forEach((v, k) => { h[k] = v; }); store.set(rq.url, { t: await rs.text(), h }); } } }; };
+    const tick = () => new Promise(r => setTimeout(r, 15));                                  // 공유 캐시 쓰기는 응답 뒤에(waitUntil) 끝난다 — 시험은 잠깐 기다린다
+    const clock = () => { const T = { off: 0 }; class MD extends Date { static now() { return Date.now.call(Date) + T.off; } } return { T, MD }; };
+    const usageOf = () => { const n = {}; return { n, usageAdd: (k) => { n[k] = (n[k] || 0) + 1; } }; };
+    const dbOf = (rows, o) => { o = o || {}; const st = { q: 0 }; return { st, DB: { prepare: (sql) => ({ bind: (day) => ({ all: async () => { st.q++; st.sql = sql; st.day = day; if (o.err) throw new Error(o.err); if (o.slow) await new Promise(r => setTimeout(r, o.slow)); return { results: rows }; } }) }) } }; };
+    const tagoK = (log, ms, bad) => (env) => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner) => { log.push(n + ':' + inner); return new Promise(r => setTimeout(() => r(new Response(bad ? ERRB : AR, { status: 200 })), ms || 0)); } }));
+
+    // 11-a 순수 계산: 종류별 사용량 → 모드(70% saver · 90% critical) · 이 isolate 의 아직 못 올린 세기도 더한다 · 환경값으로 한도를 바꾼다
+    {
+      const c = load();
+      const ev = (rows, pend, lim) => c.mapSvBudEval(rows, pend, lim);
+      let e = ev([{ k: 'bus.tago.arr', n: 100000 }]);
+      ok(e.modes.tago === 'normal' && e.modes.seoul === 'normal' && e.used.tago === 100000, '11-a: 10만 건(20%)은 normal');
+      e = ev([{ k: 'bus.tago.arr', n: 200000 }, { k: 'map.arr.tago', n: 150000 }]);
+      ok(e.modes.tago === 'saver' && e.used.tago === 350000, '11-a: 버스 서버 + 지도 서버 호출을 합쳐 70% → saver');
+      e = ev([{ k: 'tago.env-key', n: 440000 }, { k: 'tago.env-key2', n: 10000 }]);
+      ok(e.modes.tago === 'critical', '11-a: 90% → critical (route-v2 의 tago.env-key · env-key2 도 센다)');
+      e = ev([{ k: 'bus.seoul.arr', n: 7000 }, { k: 'bus.tago.arr', n: 10 }]);
+      ok(e.modes.seoul === 'saver' && e.modes.tago === 'normal', '11-a: 서울(1만/일)은 따로 — 7천 건 → seoul 만 saver');
+      e = ev([{ k: 'bus.seoul.arr', n: 8500 }], { 'map.arr.seoul': 500 });
+      ok(e.modes.seoul === 'critical', '11-a: 아직 올리지 못한 이 isolate 의 세기(pending)도 더한다');
+      e = ev([{ k: 'bus.tago.arr', n: 60000 }], null, { tago: 80000 });
+      ok(e.modes.tago === 'saver' && e.limit.tago === 80000, '11-a: 한도를 환경값(TAGO_ARR_LIMIT)으로 바꿀 수 있다');
+      e = ev([{ k: 'bus.gbis', n: 9e9 }, { k: 'x', n: 9e9 }, null, { k: 'bus.tago.arr', n: 'zz' }]);
+      ok(e.modes.tago === 'normal' && e.modes.seoul === 'normal', '11-a: 다른 종류의 세기 · 깨진 행은 무시');
+    }
+    // 11-b 조절기 갱신: D1 에서 오늘 행을 읽어 모드 반영 · 1분에 한 번 · 못 읽으면 지난 모드 · DB 없으면 normal
+    {
+      const { T, MD } = clock(), u = usageOf();
+      const c = load({ Date: MD, USAGE: { n: {}, last: 0, ready: true } });
+      const d = dbOf([{ k: 'bus.tago.arr', n: 360000 }]);
+      ok(c.mapSvBudRefresh({}) === null && c.mapSvBudMode('tago') === 'normal', '11-b: DB 가 없으면 읽지 않고 normal');
+      const p = c.mapSvBudRefresh({ DB: d.DB }); ok(p && typeof p.then === 'function', '11-b: 뒤에서 읽는다(약속을 돌려준다)');
+      ok(c.mapSvBudMode('tago') === 'normal', '11-b: 읽는 동안 이 요청은 막히지 않는다(아직 normal)');
+      await p;
+      ok(c.mapSvBudMode('tago') === 'saver' && c.mapSvBudMode('seoul') === 'normal' && d.st.q === 1 && /live_usage/.test(d.st.sql) && /^\d{4}-\d\d-\d\d$/.test(d.st.day), '11-b: 읽은 뒤 saver · 한국 날짜 키로 live_usage 조회 1번');
+      ok(c.mapSvBudRefresh({ DB: d.DB }) === null && d.st.q === 1, '11-b: 1분 안에는 다시 읽지 않는다(D1 읽기 보호)');
+      T.off = 61000; const d2 = dbOf([{ k: 'bus.tago.arr', n: 470000 }]);
+      await c.mapSvBudRefresh({ DB: d2.DB });
+      ok(c.mapSvBudMode('tago') === 'critical', '11-b: 1분 뒤에는 다시 읽어 critical 로');
+      T.off = 130000; const d3 = dbOf([], { err: 'D1 down' });
+      await c.mapSvBudRefresh({ DB: d3.DB });
+      ok(c.mapSvBudMode('tago') === 'critical' && /D1 down/.test(c.MAPSV_BUD.err) && c.MAPSV_BUD.busy === false, '11-b: 못 읽으면 지난 모드를 그대로(갑자기 풀리지 않는다) · 다음에 다시');
+      T.off = 200000; const d4 = dbOf([], { slow: 2500 }); const t0 = Date.now();
+      await c.mapSvBudRefresh({ DB: d4.DB });
+      ok(Date.now() - t0 < 2200 && /timeout/.test(c.MAPSV_BUD.err), '11-b: D1 이 느려도 1.5초에서 포기 ' + (Date.now() - t0) + 'ms');
+      T.off = 300000; const d5 = dbOf([{ k: 'bus.tago.arr', n: 1 }]);
+      await c.mapSvBudRefresh({ DB: d5.DB });
+      ok(c.mapSvBudMode('tago') === 'normal', '11-b: 사용량이 줄면(다음 날) normal 로 돌아온다');
+    }
+    // 11-c 도착정보 공유 캐시: 같은 데이터센터의 다른 isolate 는 TTL 안이면 공공 API 를 부르지 않는다 · TTL 은 모드에 따라 5/9/15초
+    {
+      const cs = mkCs(), { T, MD } = clock(), l1 = [], l2 = [], u = usageOf();
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      let c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l1, 0), usageAdd: u.usageAdd }); const b1 = await c.mapSvOne(env, 'a0', ARU);
+      await tick(); ok(b1 === AR && l1.length === 1 && cs.calls.put === 1, '11-c: 처음엔 공공 API 1번 · 공유 캐시에 둔다');
+      c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l2, 0), usageAdd: u.usageAdd }); // 다른 isolate(기억 없음)
+      T.off = 4000; const b2 = await c.mapSvOne(env, 'a0', ARU);
+      ok(b2 === AR && l2.length === 0 && u.n['map.arr.saved'] === 1, '11-c: 4초 뒤 다른 isolate — 공공 호출 0번(map.arr.saved 1)');
+      c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l2, 0), usageAdd: u.usageAdd }); T.off = 6000; await c.mapSvOne(env, 'a0', ARU); await tick();
+      ok(l2.length === 1, '11-c: 6초 뒤에는 새로 받는다(normal TTL 5초 — 오래된 도착정보를 내지 않는다)');
+      // saver: 9초 · critical: 15초(그 이상은 절대 안 쓴다)
+      for (const [mode, hit, miss] of [['saver', 8000, 10000], ['critical', 14000, 16000]]) {
+        const cs2 = mkCs(), ck = clock(), la = [];
+        const rows = [{ k: 'bus.tago.arr', n: mode === 'saver' ? 400000 : 480000 }];
+        const mk = () => { const cc = load({ caches: cs2, Date: ck.MD, tagoAttempts: tagoK(la, 0), usageAdd: usageOf().usageAdd }); return cc; };
+        let cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); await new Promise(r => setTimeout(r, 5));
+        ok(cc.mapSvBudMode('tago') === mode, '11-c: ' + mode + ' 모드');
+        await cc.mapSvOne(env, 'a0', ARU); await tick(); const n0 = la.length;
+        cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); ck.T.off = hit; await cc.mapSvOne(env, 'a0', ARU);
+        ok(la.length === n0, '11-c: ' + mode + ' — ' + hit / 1000 + '초 뒤에도 공유본을 쓴다');
+        cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); ck.T.off = miss; await cc.mapSvOne(env, 'a0', ARU);
+        ok(la.length === n0 + 1, '11-c: ' + mode + ' — ' + miss / 1000 + '초 뒤에는 새로 받는다');
+      }
+    }
+    // 11-d 공유 캐시에 두지 않는 것: 빈 목록 · 오류 봉투 · 열쇠가 박힌 주소 · 도착정보가 아닌 주소 · 머리글(x-at)이 없거나 미래인 것
+    {
+      const { T, MD } = clock(), env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      const run = async (body, url) => { const cs = mkCs(), l = []; const c = load({ caches: cs, Date: MD, tagoAttempts: (e) => [{ via: 'env-key', run: (inner) => { l.push(inner); return Promise.resolve(new Response(body, { status: 200 })); } }, { via: 'env-key2', run: (inner) => { l.push(inner); return Promise.resolve(new Response(body, { status: 200 })); } }] });
+        await c.mapSvOne(env, 'a0', url || ARU); await tick(); const ent = [...cs.store.keys()].filter(k => /map-sv-cache\.internal\/a\?/.test(k)).length; return { cs, c, ent }; };
+      ok((await run(EMPTY)).ent === 0, '11-d: 빈 도착정보 응답은 공유하지 않는다(잠깐의 빈 응답이 모두에게 퍼지지 않게)');
+      ok((await run(ERRB)).ent === 0, '11-d: 오류 봉투는 공유하지 않는다');
+      ok((await run(AR, ARU.replace('serviceKey=&', 'serviceKey=REAL&'))).ent === 0, '11-d: 열쇠가 박힌 주소는 공유하지 않는다');
+      const r0 = await run(AR); ok(r0.ent === 1 && [...r0.cs.store.entries()].every(([k, v]) => !/k1|k2|REAL/.test(k) && /^\d+$/.test(v.h['x-at'] || '') && /max-age=30/.test(v.h['cache-control'] || '')), '11-d: 정상 도착정보는 열쇠 없는 주소로 · 받은 시각 · max-age 30초와 함께');
+      const c = r0.c; const url = ARU;
+      const key = [...r0.cs.store.keys()][0];
+      const get = async (h) => { r0.cs.store.set(key, { t: AR, h }); return c.mapSvArrGet(url, null); };
+      ok((await get({})) === '' && (await get({ 'x-at': String(Date.now() + 60000) })) === '' && (await get({ 'x-at': String(Date.now()) })) === AR, '11-d: 받은 시각이 없거나 미래(시계 이상)인 것은 쓰지 않는다');
+      ok((await c.mapSvArrGet(url, { n: 40 })) === '' && (await c.mapSvArrGet(url, { n: 3 })) === AR, '11-d: 한 요청이 하위 요청을 이미 많이 썼으면(무료 50개 한도 보호) 공유 캐시는 건너뛴다');
+      ok(c.mapSvArrFam(ARU) === 'tago' && c.mapSvArrFam(SEU) === 'seoul' && c.mapSvArrFam('https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json') === 'gbis' && c.mapSvArrFam('https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnThrghRouteList?serviceKey=&cityCode=21') === '' && c.mapSvArrFam(ARU.replace('serviceKey=&', 'serviceKey=X&')) === '', '11-d: 도착정보 종류 판별(tago · seoul · gbis · 그 밖은 아님)');
+    }
+    // 11-e 호출 세기: 실제로 나간 호출만 map.arr.<종류> · 동시에 띄운 호출은 map.hedge · 아낀 호출은 map.arr.saved
+    {
+      const u = usageOf(), l = [], env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, { MD } = clock();
+      const c = load({ caches: mkCs(), Date: MD, tagoAttempts: tagoK(l, 900), usageAdd: u.usageAdd });
+      await c.mapSvOne(env, 'a0', ARU); await c.mapSvOne(env, 'a0', ARU);       // 두 번째는 5초 기억
+      ok(u.n['map.arr.tago'] === 2 && u.n['map.hedge'] === 1 && u.n['map.arr.saved'] === 1 && l.length === 2, '11-e: 느린 첫 호출(0.9초) → 0.7초에 한 번 더(hedge) = 나간 호출 2 · 아낀 호출 1 ' + JSON.stringify(u.n));
+      const u2 = usageOf(); const c2 = load({ caches: mkCs(), Date: MD, tagoAttempts: tagoK([], 0), usageAdd: u2.usageAdd });
+      await c2.mapSvOne(env, 'a0', ARU);
+      ok(u2.n['map.arr.tago'] === 1 && !u2.n['map.hedge'], '11-e: 빨리 오면 호출 1 · hedge 0');
+      const u3 = usageOf(), c3 = load({ caches: mkCs(), usageAdd: u3.usageAdd, tagoAttempts: tagoK([], 0) });
+      await c3.mapSvOne(env, 'tp', 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=37.5&gpsLong=127&numOfRows=10&_type=json');
+      ok(u3.n['map.st'] >= 1 && !u3.n['map.arr.tago'], '11-e: 정류장 · 노선 목록 호출은 map.st 로 따로');
+      // usageAdd 가 없는 환경(시험 · 예전 번들)에서도 그대로 동작
+      const c4 = load({ caches: mkCs(), tagoAttempts: tagoK([], 0) }); ok((await c4.mapSvOne(env, 'a0', ARU)) === AR, '11-e: 세기 함수가 없어도 동작');
+    }
+    // 11-f 헤지(느린 호출에 동시에 한 번 더): normal 0.7초 · 3번까지 / saver 1.2초 · 2번까지 / critical 1.8초 · 2번까지
+    {
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2', BUSAPI: { fetch: async () => { calls.push('b'); await new Promise(r => setTimeout(r, 1500)); return new Response(AR, { status: 200 }); } } };
+      let calls = [];
+      const trial = async (rows) => { calls = []; const c = load({ caches: mkCs(), tagoAttempts: (e) => [{ via: 'env-key', run: () => { calls.push('1'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }, { via: 'env-key2', run: () => { calls.push('2'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }, { via: 'binding', run: () => { calls.push('b'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }], usageAdd: usageOf().usageAdd });
+        if (rows) { await c.mapSvBudRefresh({ DB: dbOf(rows).DB }); await new Promise(r => setTimeout(r, 5)); }
+        const t0 = Date.now(); await c.mapSvOne(env, 'a0', ARU); return { n: calls.length, dt: Date.now() - t0, mode: c.mapSvBudMode('tago') }; };
+      const a = await trial(null), b = await trial([{ k: 'bus.tago.arr', n: 400000 }]), d = await trial([{ k: 'bus.tago.arr', n: 480000 }]);
+      ok(a.mode === 'normal' && a.n === 3, '11-f: normal — 1.5초 걸리는 호출에 0.7초 · 1.4초에 동시 호출이 늘어 3번 ' + a.n);
+      ok(b.mode === 'saver' && b.n === 2, '11-f: saver — 1.2초에 한 번만 더 = 2번 ' + b.n);
+      ok(d.mode === 'critical' && d.n === 1, '11-f: critical — 1.8초까지 기다리므로 1.5초에 온 첫 호출로 끝 = 1번 ' + d.n);
+      ok(a.dt < 1800 && b.dt < 1800 && d.dt < 1800, '11-f: 어느 모드든 결과는 첫 호출이 오는 즉시(약 1.5초) ' + [a.dt, b.dt, d.dt].join());
+    }
+    // 11-g /screen/map: 센 호출을 올릴 수 있게 실행 맥락을 알리고 · 응답 머리에 모드 · 끝에 usageFlush
+    {
+      const u = usageOf(), flushed = []; const ctxw = { waitUntil: () => {} };
+      const c = load({ _liveCtx: null, usageFlush: (e) => flushed.push(e), usageAdd: u.usageAdd });
+      c.MAPSV_CTX = ctxw; const log = [];
+      const env = { BUSAPI: binding(log), DB: dbOf([{ k: 'bus.seoul.arr', n: 9500 }]).DB };
+      const rs = await c.H(new Request('https://x/screen/map', { method: 'POST', body: JSON.stringify(base(true)) }), env);
+      ok(rs.status === 200 && /^normal\/normal$/.test(rs.headers.get('X-Bus-Mode') || ''), '11-g: 첫 요청은 읽는 중이라 normal/normal 머리 ' + rs.headers.get('X-Bus-Mode'));
+      await new Promise(r => setTimeout(r, 20));
+      const rs2 = await c.H(new Request('https://x/screen/map', { method: 'POST', body: JSON.stringify(base(true)) }), env);
+      ok(/^normal\/critical$/.test(rs2.headers.get('X-Bus-Mode') || ''), '11-g: 읽은 뒤 요청은 서울 critical 반영 ' + rs2.headers.get('X-Bus-Mode'));
+      ok(flushed.length >= 2 && c._liveCtx === ctxw, '11-g: 요청마다 usageFlush · 실행 맥락(_liveCtx)을 알려 센 호출이 D1 에 올라간다');
+      ok(u.n['map.arr.seoul'] === 3 && u.n['map.arr.saved'] >= 3, '11-g: 서울 도착정보 3곳 = 나간 호출 3(바인딩 길도 이 서버가 낸 호출로 센다) · 둘째 요청은 5초 기억으로 아낌 ' + JSON.stringify(u.n));
+    }
+    // 11-h /bus-tago: 도착정보 공유 캐시(HIT-A) · 센다 · 오류/빈 목록 비공유
+    {
+      let nf = 0, body = AR; const cs = mkCs(), u = usageOf(), { T, MD } = clock();
+      const fx = async () => { nf++; return new Response(body, { status: 200 }); };
+      const call = (c, url) => c.T(new Request('https://x/bus-tago?url=' + encodeURIComponent(url)), { TAGO_KEY: 'K1' });
+      let c = load({ fetch: fx, caches: cs, Date: MD, usageAdd: u.usageAdd });
+      const r1 = await call(c, ARU); await tick(); const r2 = await call(c, ARU);
+      ok(r1.status === 200 && r2.status === 200 && nf === 1 && r2.headers.get('X-Cache') === 'HIT-A' && (await r2.text()) === AR, '11-h: 두 번째는 공공 API 를 부르지 않고 공유본(HIT-A) ' + nf);
+      ok(u.n['map.arr.tago'] === 1 && u.n['map.arr.saved'] === 1, '11-h: 센다 — 나간 호출 1 · 아낀 호출 1 ' + JSON.stringify(u.n));
+      T.off = 6000; await call(c, ARU); await tick();
+      ok(nf === 2, '11-h: 5초가 지나면 새로 받는다');
+      body = EMPTY; const cs2 = mkCs(); c = load({ fetch: fx, caches: cs2, Date: MD }); nf = 0; await call(c, ARU); await tick(); await call(c, ARU); await tick();
+      ok(nf === 2 && ![...cs2.store.keys()].some(k => /\/a\?/.test(k)), '11-h: 빈 도착정보는 공유하지 않는다');
+      body = AR; nf = 0; c = load({ fetch: fx, caches: mkCs(), Date: MD }); await call(c, ARU.replace('serviceKey=&', 'serviceKey=REAL&')); await tick(); await call(c, ARU.replace('serviceKey=&', 'serviceKey=REAL&'));
+      ok(nf === 2, '11-h: 열쇠가 박힌 주소는 공유하지 않는다');
+    }
+    // 11-i /bus-budget: 진단 JSON · ?refresh=1 바로 읽기 · ?probe=1 요금제(하위 요청 한도) 재 보기
+    {
+      const c = load({ caches: mkCs() }); c.MAPSV_CTX = { waitUntil: () => {} };
+      const env = { DB: dbOf([{ k: 'bus.tago.arr', n: 450000 }, { k: 'bus.seoul.arr', n: 1000 }]).DB };
+      const r = await c.B(new Request('https://x/bus-budget?refresh=1'), env), j = await r.json();
+      ok(r.status === 200 && j.ok && j.modes.tago === 'critical' && j.modes.seoul === 'normal' && j.used.tago === 450000 && j.limit.tago === 500000 && j.ratio.tago === 0.9 && j.ttlMs.tago === 15000 && j.ttlMs.seoul === 5000 && j.hasDb && !j.err && j.ver === 'test', '11-i: /bus-budget?refresh=1 — 모드 · 사용량 · 한도 · 비율 · TTL ' + JSON.stringify(j).slice(0, 200));
+      const free = { n: 0, default: { match: async () => { if (++free.n > 50) throw new Error('Too many subrequests'); return undefined; } } };
+      const cf = load({ caches: free }), jf = await (await cf.B(new Request('https://x/bus-budget?probe=1'), {})).json();
+      ok(jf.probe.cacheCallsOk === 50 && /free/.test(jf.probe.plan) && /Too many/.test(jf.probe.error), '11-i: 50번째에서 막히면 무료 요금제로 본다 ' + JSON.stringify(jf.probe));
+      const paid = { default: { match: async () => undefined } }, cp = load({ caches: paid }), jp = await (await cp.B(new Request('https://x/bus-budget?probe=1'), {})).json();
+      ok(jp.probe.cacheCallsOk === 60 && /paid/.test(jp.probe.plan), '11-i: 60번 모두 되면 유료로 본다');
+      const jn = await (await load({}).B(new Request('https://x/bus-budget'), {})).json();
+      ok(jn.ok && jn.modes.tago === 'normal' && jn.hasDb === false && jn.probe === undefined, '11-i: DB 가 없어도 동작(normal)');
     }
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');

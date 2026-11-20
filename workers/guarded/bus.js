@@ -29,17 +29,58 @@ var MEM_MAX = 1500;
 // upstream cacheEverything, which would freeze a 200-status error envelope for the whole ttl.
 function isStaticPath(p) { return /getSttnThrghRouteList|getCrdntPrxmtSttnList|getRouteAcctoThrghSttnList/i.test(String(p || "")); }
 var STATIC_TTL_SEC = 6 * 3600;
+
+// s463: daily-budget governor. Reads today's call counters (D1 live_usage, written by this worker and by route-v2) at most once a minute IN THE BACKGROUND (never blocks a request;
+// the first request in a fresh isolate runs as 'normal') and stretches the arrival cache TTL when the day's quota is running out: TAGO arrivals 500,000/day, Seoul TOPIS 10,000/day.
+// normal >= 70% saver, >= 90% critical. TTLs stay short on purpose (TAGO 10 -> 12 -> 15 s, Seoul 15 -> 20 -> 25 s): an old "1 min left" after the bus has gone is worse than a slightly
+// older number, but no number at all (quota spent) is worst. TAGO_ARR_LIMIT / SEOUL_ARR_LIMIT env values override the limits.
+var BUD = { t: 0, busy: false, modes: { tago: "normal", seoul: "normal" }, used: { tago: 0, seoul: 0 }, err: "" };
+var BUD_LIMIT = { tago: 500000, seoul: 10000 };
+var BUD_KEYS = { tago: ["bus.tago.arr", "map.arr.tago", "tago.env-key", "tago.env-key2"], seoul: ["bus.seoul.arr", "map.arr.seoul"] };
+var BUD_TTL = { tago: [10, 12, 15], seoul: [15, 20, 25] };
+function budEval(rows, pend, limit) {
+  const by = {}, used = { tago: 0, seoul: 0 }, modes = {};
+  for (const r of rows || []) if (r && r.k != null) by[String(r.k)] = (by[String(r.k)] || 0) + (Number(r.n) || 0);
+  for (const f of Object.keys(BUD_KEYS)) {
+    for (const k of BUD_KEYS[f]) used[f] += (by[k] || 0) + ((pend && Number(pend[k])) || 0);
+    const lim = limit && Number(limit[f]) > 0 ? Number(limit[f]) : BUD_LIMIT[f];
+    const ratio = used[f] / lim;
+    modes[f] = ratio >= 0.9 ? "critical" : ratio >= 0.7 ? "saver" : "normal";
+  }
+  return { modes, used };
+}
+function budRefresh(env, force) {
+  const now = Date.now();
+  if (BUD.busy || (!force && now - BUD.t < 60000)) return null;
+  if (!env || !env.DB || typeof env.DB.prepare !== "function") return null;
+  BUD.busy = true; BUD.t = now;
+  const run = (async () => {
+    try {
+      const day = usageDay(now);
+      const rs = await Promise.race([env.DB.prepare("SELECT k, n FROM live_usage WHERE day = ?").bind(day).all(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 1500))]);
+      const ev = budEval(rs && rs.results, USAGE.n, { tago: Number(env.TAGO_ARR_LIMIT), seoul: Number(env.SEOUL_ARR_LIMIT) });
+      BUD.modes = ev.modes; BUD.used = ev.used; BUD.err = "";
+    } catch (e) { BUD.err = String((e && e.message) || e).slice(0, 80); }
+    BUD.busy = false;
+  })();
+  if (_ctx && _ctx.waitUntil) { try { _ctx.waitUntil(run); } catch (e) {} }
+  return run;
+}
+function budTtl(fam) {
+  const m = BUD.modes[fam] || "normal", t = BUD_TTL[fam] || BUD_TTL.tago;
+  return m === "critical" ? t[2] : m === "saver" ? t[1] : t[0];
+}
 var STATIC_MEM_BYTES = 60000;   // the in-memory copy skips big bodies (route stop lists); the colo cache (Cache API) keeps them
 function ttlSecFor(u) {
   const h = String(u.hostname || "").toLowerCase().replace(/\.$/, "");
   const p = u.pathname || "";
   if (h === "apis.data.go.kr" && isStaticPath(p)) return STATIC_TTL_SEC;
   if (h === "ws.bus.go.kr") {
-    if (/getStationByUid/i.test(p)) return 15;   // Seoul stop arrivals (s454: 20 -> 15; Seoul API quota is 10k/day, so only a small cut)
+    if (/getStationByUid/i.test(p)) return budTtl("seoul");   // Seoul stop arrivals: 15 s (s454: 20 -> 15; Seoul API quota is 10k/day); s463: 20 / 25 s when the day's quota runs low
     if (/getStationByPos/i.test(p)) return 60;   // Seoul nearby stops
     return 0;
   }
-  if (h === "apis.data.go.kr" && /ArvlInfo|busarrivalservice/i.test(p)) return 10; // TAGO / Gyeonggi arrivals (s454: 15 -> 10; stale "1 min left" after the bus had passed)
+  if (h === "apis.data.go.kr" && /ArvlInfo|busarrivalservice/i.test(p)) return /ArvlInfo/i.test(p) ? budTtl("tago") : 10; // TAGO arrivals 10 s (s454: 15 -> 10; stale "1 min left" after the bus had passed), s463: 12 / 15 s when the quota runs low; Gyeonggi stays 10 s
   return 0;
 }
 // cache only normal responses (never freeze errors / auth failures)
@@ -138,7 +179,7 @@ async function usageJson(env, url) {
       error = String((e && e.message) || e);
     }
   }
-  const body = JSON.stringify({ ok: !error, error: error, start: USAGE_START, today: todayStr, days: list, usage: usage, pending: USAGE.n });
+  const body = JSON.stringify({ ok: !error, error: error, start: USAGE_START, today: todayStr, days: list, usage: usage, pending: USAGE.n, budget: { modes: BUD.modes, used: BUD.used, limit: BUD_LIMIT, ttlSec: { tago: budTtl("tago"), seoul: budTtl("seoul") }, err: BUD.err } });
   return new Response(body, { status: 200, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...CORS } });
 }
 
@@ -367,6 +408,7 @@ var index_default = {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS });
     }
+    budRefresh(env);   // s463: background refresh of the day's quota mode (at most once a minute)
     if (reqUrl.pathname === "/" || reqUrl.pathname === "/health") {
       return new Response(
         JSON.stringify({

@@ -499,6 +499,17 @@ function findAndroidJar() {
     assert.ok(/function mapSvTier\(k\)/.test(w) && /MAPSV_CTX\.waitUntil\(Promise\.all\(lf\)/.test(w), '서버: 도착정보(core) 먼저 · 덤은 기다리지 않고 · 응답 뒤에도 받기는 이어 간다(waitUntil)');
     assert.ok(/isStaticPath\(p\)/.test(b) && /STATIC_TTL_SEC = 6 \* 3600/.test(b) && /HIT-S/.test(b) && b.replace(/\s+/g, ' ').indexOf('isStaticPath') >= 0 && g.indexOf('STATIC_TTL_SEC') >= 0, '버스 워커: 같은 정류장 경유노선 목록은 6시간(검증된 본문만 · 업스트림 엣지 캐시로는 굳히지 않는다) · 보호 래퍼에도 반영');
   });
+  await t('s463: API 호출량 조절 — 호출 세기 · 하루 예산 조절기(70% saver · 90% critical) · 같은 데이터센터 도착정보 공유 · /bus-budget · 버스 서버도 같은 조절', () => {
+    const R = (...x) => fs.readFileSync(path.join(__dirname, '..', ...x), 'utf8');
+    const w = R('engine', 'map-worker.js'), b = R('workers', 'src', 'bus.js'), g = R('workers', 'guarded', 'bus.js'), r2 = R('engine', 'route-v2-worker.ascii.js');
+    assert.ok(/MAPSV_LIMIT_DEF = \{ tago: 500000, seoul: 10000 \}/.test(w) && /MAPSV_BUD_SAVER = 0\.7, MAPSV_BUD_CRIT = 0\.9/.test(w) && /MAPSV_ARR_TTL = \{ normal: 5000, saver: 9000, critical: 15000 \}/.test(w), '서버: 한도(TAGO 50만 · 서울 1만) · 70%/90% · 도착정보 기억 5 · 9 · 15초(15초를 넘기지 않는다)');
+    assert.ok(/function mapSvBudRefresh\(env, force\)/.test(w) && /SELECT k, n FROM live_usage WHERE day = \?/.test(w) && /MAPSV_CTX\.waitUntil\(run\)/.test(w), '서버: 사용량은 뒤에서 1분에 한 번만 읽는다(요청을 막지 않는다)');
+    assert.ok(/MAPSV_OPS_SOFT = 32/.test(w) && /ops\.n >= MAPSV_OPS_SOFT/.test(w), '서버: 무료 요금제 하위 요청 50개 한도를 넘기지 않게 한 요청 안에서 세어 공유 캐시를 건너뛴다');
+    assert.ok(/mapSvUse\(af \? 'map\.arr\.' \+ af/.test(w) && /map\.hedge/.test(w) && /map\.arr\.saved/.test(w) && (w.match(/mapSvUse\('map\.arr\.saved'\)/g) || []).length >= 3, '서버: 나간 호출 · 헤지 · 아낀 호출을 live_usage 에 센다(예전엔 이 길 호출이 아예 안 세어졌다)');
+    assert.ok(/X-Bus-Mode/.test(w) && /async function handleBusBudget\(request, env\)/.test(w) && /probe/.test(w), '서버: 응답 머리 X-Bus-Mode · /bus-budget 진단 · 요금제 확인(probe)');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s463"/.test(r2) && /url\.pathname === "\/bus-budget"\) return handleBusBudget\(request, env\)/.test(r2) && r2.indexOf('function mapSvBudEval') > 0, 'route-v2 번들: 버전 s463 · /bus-budget 길 · 새 코드 포함');
+    assert.ok(/BUD_LIMIT = \{ tago: 500000, seoul: 10000 \}/.test(b) && /budRefresh\(env\);/.test(b) && /function budTtl\(fam\)/.test(b) && g.indexOf('function budTtl') >= 0 && /budget: \{ modes: BUD\.modes/.test(b), '버스 서버: 같은 하루 예산 조절(TAGO 10→12→15초 · 서울 15→20→25초) · /usage.json 에 모드');
+  });
   await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');
     assert.ok(/private void showSkeleton[\s\S]{0,1700}busSkelKey\(store\)/.test(a) && /bsk_cell/.test(a) && /stopsCell\(\)/.test(a), '버스 뼈대: 같은 동네(110m 칸)의 엔진이 그린 정류장 뼈대를 먼저 그린다');
@@ -735,7 +746,7 @@ function findAndroidJar() {
     assert.ok(/private void mapBodyApply\(/.test(a) && /if \(deferNeed\) return;/.test(a) && /NetPost\.get\(ShellCore\.BASE \+ "\/health"/.test(a), '응답 반영 분리 · 엔진 연결도 미리');
     assert.ok(/ALT_GATE = new java\.util\.concurrent\.Semaphore\(4\)/.test(np) && /isAlt \? ALT_GATE : BUS_GATE/.test(np), '두 번째 길은 줄을 따로(8곳 동시)');
     const w = fs.readFileSync(path.join(__dirname, '..', 'engine', 'map-worker.js'), 'utf8');
-    assert.ok(/헤지/.test(w) && /setTimeout\(function \(\) \{ r\(null\); \}, 700\)/.test(w), '서버 헤지(0.7초)');
+    assert.ok(/헤지/.test(w) && /setTimeout\(function \(\) \{ r\(null\); \}, gap\)/.test(w) && /MAPSV_HEDGE_GAP = \{ normal: 700, saver: 1200, critical: 1800 \}/.test(w), '서버 헤지(보통 0.7초 · s463: 아낌 모드는 1.2 · 1.8초)');
   });
   await t('s172: 공공데이터 키 두 개를 두 길(버스 서버 · route-v2 /bus-tago)로 반반 · 정류장 목록은 동시에 · 가까운 역 팝업 미리', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8');
@@ -1307,7 +1318,7 @@ function findAndroidJar() {
     assert.ok(/busRetryN < 3\) \{ \/\/|map\.stopCount\(\) == 0 && busShowing\(\) && busRetryN < 3/.test(a), '정류장 목록을 못 받으면 1.5 · 3 · 4.5초 뒤 처음부터');
     assert.ok(/Math\.min\(6, src\.routeCount\(0\)\)/.test(a) && /ids\.size\(\) > 12/.test(a), '노선 목록 미리 받기 6개 · 기기에 12개');
     const bj = fs.readFileSync(path.join(__dirname, '../workers/src/bus.js'), 'utf8');
-    assert.ok(/getStationByUid\/i\.test\(p\)\) return 15;/.test(bj) && /busarrivalservice\/i\.test\(p\)\) return 10;/.test(bj), '서버 캐시 서울 15초 · TAGO 10초');
+    assert.ok(/getStationByUid\/i\.test\(p\)\) return budTtl\("seoul"\);/.test(bj) && /BUD_TTL = \{ tago: \[10, 12, 15\], seoul: \[15, 20, 25\] \}/.test(bj) && /\/ArvlInfo\/i\.test\(p\) \? budTtl\("tago"\) : 10;/.test(bj), '서버 캐시 서울 15초 · TAGO 10초(s463: 하루 예산이 모자라면 서울 20 · 25초 · TAGO 12 · 15초까지만)');
   });
   await t('s453: 가족 지도(벡터) — 3초 꾹 누르기(lp)로 장소 등록 · 두 번 탭은 마커 위치로(지도 두 번 탭 확대는 끔) · 이동경로 흔적 줄', async () => {
     const sv = fs.readFileSync(N('ScreenView.java'), 'utf8'), vm = fs.readFileSync(N('VecMap.java'), 'utf8'), ta = fs.readFileSync(N('TileMapArt.java'), 'utf8');

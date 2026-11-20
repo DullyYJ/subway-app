@@ -46,30 +46,35 @@ function mapSvAttempts(env, url, seq) {                    // → [() => Promise
   if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
   return out;
 }
-async function mapSvOne0(env, k, url, fresh) {                    // → 본문 글(실패는 '')
+async function mapSvOne0(env, k, url, fresh, ops) {                    // → 본문 글(실패는 ''). s463: ops — 이 요청이 지금까지 쓴 하위 요청(fetch · Cache API · KV) 수({n}) · 무료 요금제 50개 한도를 넘기지 않으려고 세어 둔다
   var stopK = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', sc = stopK ? '' : mapSvStaticCls(url), kc = sc || k;          // s462: sc — 경유노선 · 노선 정류장 목록(거의 안 바뀜)도 데이터센터 캐시에(KV 는 쓰지 않는다 — 쓰기 한도 보호)
   var cacheable = stopK || !!sc, cache = null, ck = null;
   if (cacheable) {
     try {
       if (typeof caches !== 'undefined' && caches.default) {
         cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?v=2&k=' + kc + '&u=' + encodeURIComponent(url));          // s451: v=2 — 역 출구 정류장이 빠진 채 보관된 옛 정류장 목록(데이터센터 12시간 · KV 14일)을 버리고 새로 받는다
+        if (ops) ops.n++;
         var hit = fresh ? null : await cache.match(ck);                                          // s383: 새로고침(fresh)은 보관본을 건너뛰고 공공 API 에서 새로 — 받은 뒤 보관본은 새것으로 덮는다
         if (hit) { var ht = await hit.text(); if (mapSvOkBody(kc, ht)) return ht; }
       }
     } catch (e0) { cache = null; }
+    if (ops && !(fresh || sc)) ops.n++;
     var kvb = (fresh || sc) ? '' : await mapSvKvGet(env, k, url);                                                   // s290: 이 데이터센터 캐시에 없으면 전국 공용 저장소(KV)에서 — 다른 곳에서 한 번이라도 받았으면 바로 나온다
     if (kvb) {
       if (cache && ck) { try { await cache.put(ck, new Response(kvb, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eK) { /* 무시 */ } }
       return kvb;
     }
   }
+  var af = cacheable ? '' : mapSvArrFam(url), tStart = Date.now();                                    // s463: 도착정보는 이 데이터센터 공유 캐시(받은 지 5초 안 · saver 9초 · critical 15초)에 있으면 공공 API 를 부르지 않는다
+  if (af) { var ab = await mapSvArrGet(url, ops); if (ab) { mapSvUse('map.arr.saved'); return ab; } }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // 공공데이터 키가 둘이면 정류장을 반반씩(짝수 번째는 키1 먼저 · 홀수 번째는 키2 먼저) 나눠 묻고, 한쪽이 오류면 바로 다른 쪽 · 마지막은 BUSAPI 바인딩
   if (!atts.length) return '';
   if (atts.length === 1) atts.push(atts[0]);                                                  // 길이 하나뿐이면 한 번 더
   // s174: 헤지 — 첫 시도가 0.7초 안에 안 오면 기다리지 않고 다음 길(다른 키)을 동시에 띄워 먼저 온 정상 본문을 쓴다. 빨리 실패(오류 봉투)하면 즉시 다음 길. 최대 3번.
-  var max = Math.min(atts.length, 3), launched = 0, inflight = [];
+  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: 아낌 모드는 '동시에 한 번 더'를 늦추고 세 번째 길은 띄우지 않는다
   function start() {
     var o = {};
+    mapSvUse(af ? 'map.arr.' + af : (cacheable ? 'map.st' : 'map.etc')); if (launched > 1) mapSvUse('map.hedge'); if (ops) ops.n++;          // s463: 실제로 나가는 호출을 센다
     o.p = (async function () {
       try {
         var p = atts[launched - 1]();
@@ -84,13 +89,14 @@ async function mapSvOne0(env, k, url, fresh) {                    // → 본문 
   launched++; start();
   while (inflight.length) {
     var waiters = inflight.map(function (o) { return o.p; });
-    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, 700); }));
+    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, gap); }));
     var w = await Promise.race(waiters);
     if (w === null) { launched++; start(); continue; }                                         // 느리다 — 다른 길을 동시에
     inflight.splice(inflight.indexOf(w), 1);
     if (w.b) {
-      if (cache && ck && mapSvOkBody(kc, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
-      if (stopK && mapSvOkBody(k, w.b)) mapSvKvPut(env, k, url, w.b);                           // s290: 전국 공용 저장소에도(응답을 붙잡지 않고 뒤에서)
+      if (af) mapSvArrPut(url, w.b, tStart, ops);                                              // s463: 받은 도착정보는 같은 데이터센터의 다른 요청도 쓰게(뒤에서)
+      if (cache && ck && mapSvOkBody(kc, w.b)) { if (ops) ops.n++; try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* 캐시 실패는 무시 */ } }
+      if (stopK && mapSvOkBody(k, w.b)) { if (ops) ops.n += 3; mapSvKvPut(env, k, url, w.b); }                           // s290: 전국 공용 저장소에도(응답을 붙잡지 않고 뒤에서)
       return w.b;
     }
     if (!inflight.length && launched < max) { launched++; start(); }                           // 빨리 실패했다 — 곧바로 다음 길
@@ -104,6 +110,86 @@ async function mapSvOne0(env, k, url, fresh) {                    // → 본문 
 //      도착정보의 원천 갱신이 수십 초 단위라 5초는 화면에 보이는 차이가 없고, 빈 값·오류는 기억하지 않는다.
 var MAPSV_CTX = null;
 var MAPSV_MEMO = {}, MAPSV_MEMO_N = 0, MAPSV_MEMO_MS = 5000;
+// ★ s463 (YJ: "API 호출량 조절 · 기술적으로 최대한 카카오처럼 — 클라우드플레어만으로") — 호출 세기 · 하루 예산 조절기 · 같은 데이터센터 안 도착정보 공유
+//   ① 세기: 이 서버가 공공 API 로 내보내는 호출을 live_usage 에 센다(map.arr.tago|seoul|gbis = 실제 나간 호출 · map.hedge = 그중 '느려서 동시에 한 번 더 띄운' 호출 · map.arr.saved = 기억·공유 캐시로 아낀 호출 · map.st = 정류장·노선 목록 호출).
+//      예전엔 이 길(지도 서버 · /bus-tago)의 호출이 아예 세어지지 않아 하루 사용량이 실제보다 적게 보였다.
+//   ② 조절기: 오늘(한국 날짜) TAGO 도착정보(500,000/일) · 서울 도착정보(10,000/일) 사용량을 D1 live_usage 에서 1분에 한 번만(요청을 막지 않고 뒤에서) 읽어 모드를 정한다 — 70% 이상 'saver' · 90% 이상 'critical'.
+//      saver/critical 에서는 같은 정류장 도착정보를 5초 → 9초/15초 동안 다시 부르지 않고 쓰며, 느린 호출에 '동시에 한 번 더'(헤지)를 늦추고(0.7초 → 1.2/1.8초) 세 번째 길은 띄우지 않는다. 화면의 도착정보는 그래도 15초를 넘지 않는다.
+//   ③ 공유: 도착정보를 이 데이터센터의 Cache API 에 짧게 둔다(받은 시각을 함께 적어 TTL 안에서만 쓴다 · 빈 목록 · 오류 봉투는 두지 않는다) → 같은 곳을 여러 기기가 부르면 공공 API 는 한 번만 나간다.
+//      무료 요금제는 요청 하나당 하위 요청(fetch · Cache API · KV · D1)이 50개까지라, 한 요청 안에서 이미 많이 썼으면(MAPSV_OPS_SOFT) 이 공유 캐시는 건너뛴다(없어도 화면은 같다).
+var MAPSV_LIMIT_DEF = { tago: 500000, seoul: 10000 };
+var MAPSV_BUD = { t: 0, busy: false, modes: { tago: 'normal', seoul: 'normal' }, used: { tago: 0, seoul: 0 }, limit: { tago: 500000, seoul: 10000 }, day: '', err: '', at: 0 };
+var MAPSV_BUD_MS = 60000, MAPSV_BUD_SAVER = 0.7, MAPSV_BUD_CRIT = 0.9;
+var MAPSV_BUD_KEYS = { tago: ['bus.tago.arr', 'map.arr.tago', 'tago.env-key', 'tago.env-key2'], seoul: ['bus.seoul.arr', 'map.arr.seoul'] };
+var MAPSV_ARR_TTL = { normal: 5000, saver: 9000, critical: 15000 };
+var MAPSV_HEDGE_GAP = { normal: 700, saver: 1200, critical: 1800 };
+var MAPSV_OPS_SOFT = 32;
+function mapSvUse(k) { try { if (typeof usageAdd === 'function') usageAdd(k); } catch (e) { /* 세기 실패는 무시 */ } }
+function mapSvArrFam(url) {                                // 도착정보 주소의 종류: 'tago' · 'gbis' · 'seoul' · ''(도착정보가 아니거나 열쇠가 들어 있다 — 캐시하지 않는다)
+  var u = String(url || '');
+  if (/[?&]serviceKey=[^&]/i.test(u)) return '';
+  if (/^https?:\/\/apis\.data\.go\.kr\/1613000\/ArvlInfoInqireService\/getSttnAcctoArvlPrearngeInfoList\?/.test(u)) return 'tago';
+  if (/^https?:\/\/apis\.data\.go\.kr\/6410000\/busarrivalservice\/v2\/getBusArrivalListv2\?/.test(u)) return 'gbis';
+  if (/^https?:\/\/ws\.bus\.go\.kr\/api\/rest\/stationinfo\/getStationByUid\?/.test(u)) return 'seoul';
+  return '';
+}
+function mapSvArrOk(t) {                                   // 공유 캐시에 둘 만한 도착정보인가: 오류 봉투가 아니고 정류장에 버스가 한 대라도 있다(빈 목록은 잠깐의 빈 응답일 수 있어 두지 않는다)
+  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
+}
+function mapSvBudMode(fam) { return (fam && MAPSV_BUD.modes[fam]) || 'normal'; }
+function mapSvArrTtl(url) { return MAPSV_ARR_TTL[mapSvBudMode(mapSvArrFam(url))] || MAPSV_ARR_TTL.normal; }
+function mapSvBudEval(rows, pend, limit) {                 // 순수 계산: live_usage 행 + 이 isolate 에 아직 못 올린 세기 → 종류별 사용량 · 모드
+  var by = {}, used = { tago: 0, seoul: 0 }, modes = {}, lim = {}, worst = 0;
+  (rows || []).forEach(function (r) { if (r && r.k != null) by[String(r.k)] = (by[String(r.k)] || 0) + (Number(r.n) || 0); });
+  Object.keys(MAPSV_BUD_KEYS).forEach(function (f) {
+    MAPSV_BUD_KEYS[f].forEach(function (k) { used[f] += (by[k] || 0) + ((pend && Number(pend[k])) || 0); });
+    lim[f] = (limit && Number(limit[f]) > 0) ? Number(limit[f]) : MAPSV_LIMIT_DEF[f];
+    var ratio = used[f] / lim[f];
+    modes[f] = ratio >= MAPSV_BUD_CRIT ? 'critical' : ratio >= MAPSV_BUD_SAVER ? 'saver' : 'normal';
+    if (ratio > worst) worst = ratio;
+  });
+  return { modes: modes, used: used, limit: lim, ratio: worst };
+}
+function mapSvBudRefresh(env, force) {                     // 1분에 한 번 뒤에서 읽는다(응답을 막지 않는다 — 처음 요청은 'normal'로 가고 읽은 뒤부터 반영). 못 읽으면 지난 모드 그대로
+  var now = Date.now();
+  if (MAPSV_BUD.busy || (!force && now - MAPSV_BUD.t < MAPSV_BUD_MS)) return null;
+  if (!env || !env.DB || typeof env.DB.prepare !== 'function') return null;
+  MAPSV_BUD.busy = true; MAPSV_BUD.t = now;
+  var run = (async function () {
+    try {
+      var day = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      var rs = await Promise.race([env.DB.prepare('SELECT k, n FROM live_usage WHERE day = ?').bind(day).all(), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 1500); })]);
+      var ev = mapSvBudEval(rs && rs.results, (typeof USAGE !== 'undefined' && USAGE) ? USAGE.n : null, { tago: Number(env.TAGO_ARR_LIMIT), seoul: Number(env.SEOUL_ARR_LIMIT) });
+      MAPSV_BUD.modes = ev.modes; MAPSV_BUD.used = ev.used; MAPSV_BUD.limit = ev.limit; MAPSV_BUD.day = day; MAPSV_BUD.err = ''; MAPSV_BUD.at = Date.now();
+    } catch (e) { MAPSV_BUD.err = String(e && e.message || e).slice(0, 80); }
+    MAPSV_BUD.busy = false;
+  })();
+  if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') { try { MAPSV_CTX.waitUntil(run); } catch (e0) { /* 무시 */ } }
+  return run;
+}
+function mapSvArrReq(url) { return new Request('https://map-sv-cache.internal/a?v=1&u=' + encodeURIComponent(url)); }
+async function mapSvArrGet(url, ops) {                     // → 공유 캐시의 도착정보 본문(받은 지 TTL 안인 것만) 또는 ''
+  try {
+    if (!mapSvArrFam(url) || typeof caches === 'undefined' || !caches.default) return '';
+    if (ops && ops.n >= MAPSV_OPS_SOFT) return '';
+    if (ops) ops.n++;
+    var h = await caches.default.match(mapSvArrReq(url));
+    if (!h) return '';
+    var at = Number(h.headers.get('x-at')) || 0, now = Date.now();
+    if (!at || at > now + 1000 || now - at >= mapSvArrTtl(url)) return '';
+    var t = await h.text();
+    return mapSvArrOk(t) ? t : '';
+  } catch (e) { return ''; }
+}
+function mapSvArrPut(url, body, at, ops) {                 // 받은 뒤 뒤에서(waitUntil) — 받기 시작한 시각(at)을 적어 둔다(느리게 받았어도 그만큼 오래된 것으로 친다)
+  try {
+    if (!mapSvArrFam(url) || !mapSvArrOk(body) || typeof caches === 'undefined' || !caches.default) return;
+    if (ops && ops.n >= MAPSV_OPS_SOFT) return;
+    if (ops) ops.n++;
+    var p = caches.default.put(mapSvArrReq(url), new Response(body, { headers: { 'Cache-Control': 'public, max-age=30', 'Content-Type': 'text/plain; charset=utf-8', 'x-at': String(at || Date.now()) } })).catch(function () { /* 캐시 실패는 무시 */ });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(p);
+  } catch (e) { /* 무시 */ }
+}
 var MAPSV_KV_TTL = 14 * 86400, MAPSV_REG = 'bsreg', MAPSV_REG_MAX = 240, MAPSV_WARM_AGE = 6 * 86400000, MAPSV_WARM_N = 8;
 function mapSvHash(s) {                                     // 32비트 두 개(서로 다른 시작값) → 16글자. 저장 값에 원본 주소를 같이 넣어 확인하므로 겹쳐도 틀린 본문은 쓰지 않는다
   var h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x5bd1e995, i, c;
@@ -166,12 +252,12 @@ async function mapBusWarmCron(env, nowMs) {
   if (n > 0) { try { await env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); } catch (e3) { /* 다음에 */ } }
   return n;
 }
-function mapSvOne(env, k, url, fresh) {                            // → Promise<본문 글> (정류장 목록은 mapSvOne0 의 캐시 · 도착정보는 합치기 + 5초 기억)
-  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url, fresh);
-  var now = Date.now(), e = MAPSV_MEMO[url];
-  if (e && now - e.t < MAPSV_MEMO_MS) return e.p;
+function mapSvOne(env, k, url, fresh, ops) {                       // → Promise<본문 글> (정류장 목록은 mapSvOne0 의 캐시 · 도착정보는 합치기 + 5초 기억 — s463: 아낌 모드면 9초 · 15초)
+  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url, fresh, ops);
+  var now = Date.now(), e = MAPSV_MEMO[url], ttl = mapSvArrTtl(url);
+  if (e && now - e.t < ttl) { mapSvUse('map.arr.saved'); return e.p; }
   var ent = { t: now, p: null };
-  ent.p = mapSvOne0(env, k, url).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
+  ent.p = mapSvOne0(env, k, url, undefined, ops).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
   if (++MAPSV_MEMO_N > 300) { MAPSV_MEMO = {}; MAPSV_MEMO_N = 0; }
   MAPSV_MEMO[url] = ent;
   return ent.p;
@@ -201,7 +287,7 @@ var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;             
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
   var f = body.f, b = f.bus, fresh = !!(b && b.nf), res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
-  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0;          // s462: svo — 새 앱이 "경유노선 같은 덤은 기다리지 않고, 도착정보가 오면 바로 · 못 받은 정류장이 생기면 같은 요청 안에서 한 번 더" 를 원한다(전체 약 budget+0.6초)
+  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 };          // s462: svo — 새 앱이 "경유노선 같은 덤은 기다리지 않고, 도착정보가 오면 바로 · 못 받은 정류장이 생기면 같은 요청 안에서 한 번 더" 를 원한다(전체 약 budget+0.6초)
   for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
@@ -216,7 +302,7 @@ async function mapSvResolve(env, cap, body, out) {
     var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;         // 이번 바퀴가 기다릴 시간: 새 앱은 전체 약 budget+0.6초 안에서(정류장이 늦어도 도착정보에 최소 1.2초)
     var slot = new Array(need.length);
     var done = new Array(need.length);
-    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); };
+    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; return t; }); };
     var ps = new Array(need.length);
     if (arrWave && svo) {                                   // s462: 새 앱 — 도착정보(core)를 먼저 띄우고 경유노선(덤)은 도착정보가 오거나 0.5초가 지난 뒤에 — 공공 API 에 한꺼번에 몰려 도착정보까지 느려지던 것을 막는다(둘 다 캐시되면 이 지연도 없다). 예전 앱은 예전 그대로(동시에)
       var coreAll = [], gtm = null;
@@ -271,6 +357,7 @@ async function handleScreenMap(request, env) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  mapSvLive(env); H["X-Bus-Mode"] = mapSvBudMode('tago') + '/' + mapSvBudMode('seoul'); H["Access-Control-Expose-Headers"] = "X-Bus-Mode";          // s463: 세기를 올릴 수 있게 · 하루 예산 모드를 뒤에서 갱신 · 현재 모드를 응답 머리에(진단용)
   var raw = await request.text();
   if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
   var body;
@@ -289,7 +376,31 @@ async function handleScreenMap(request, env) {
   } catch (e3) { /* 서버가 못 받으면 need 가 남은 첫 화면 그대로 — 기기가 이어 간다 */ }
   if (ttFill && out.info) { for (var kf in ttFill) { out.info.fill = ttFill; break; } }
   out.ver = ENGINE_VERSION;
+  if (typeof usageFlush === 'function') { try { usageFlush(env); } catch (eU) { /* 무시 */ } }          // s463: 센 호출을 1분에 한 번 D1 에 올린다(응답 뒤에서)
   return new Response(JSON.stringify(out), { headers: H });
+}
+// s463: 이 요청이 센 호출을 올릴 수 있게 실행 맥락을 알려 주고, 하루 예산 모드를 뒤에서 갱신한다
+function mapSvLive(env) {
+  try { if (typeof _liveCtx !== 'undefined' && MAPSV_CTX) _liveCtx = MAPSV_CTX; } catch (e) { /* 무시 */ }
+  mapSvBudRefresh(env);
+}
+// GET /bus-budget — 하루 예산 모드 · 오늘 사용량(진단). ?refresh=1 은 바로 다시 읽는다 · ?probe=1 은 하위 요청 한도(무료 50 · 유료 1000)를 Cache API 호출로 재 본다(요금제 확인용 · 60번만 부른다)
+async function handleBusBudget(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  var u = new URL(request.url), out = {};
+  if (u.searchParams.get('refresh') === '1') { var rp = mapSvBudRefresh(env, true); if (rp) await rp; }
+  else mapSvLive(env);
+  var ratio = {}; Object.keys(MAPSV_BUD.used).forEach(function (f) { ratio[f] = Math.round(MAPSV_BUD.used[f] / MAPSV_BUD.limit[f] * 10000) / 10000; });
+  out = { ok: true, ver: ENGINE_VERSION, day: MAPSV_BUD.day, modes: MAPSV_BUD.modes, used: MAPSV_BUD.used, limit: MAPSV_BUD.limit, ratio: ratio, saver: MAPSV_BUD_SAVER, critical: MAPSV_BUD_CRIT, ttlMs: { tago: mapSvArrTtl('https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?'), seoul: mapSvArrTtl('http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?') }, readAt: MAPSV_BUD.at, ageMs: MAPSV_BUD.at ? Date.now() - MAPSV_BUD.at : null, err: MAPSV_BUD.err, hasDb: !!(env && env.DB) };
+  if (u.searchParams.get('probe') === '1') {
+    var okN = 0, errMsg = '';
+    try {
+      var pk = new Request('https://map-sv-cache.internal/probe?v=1');
+      for (var i = 0; i < 60; i++) { await caches.default.match(pk); okN++; }
+    } catch (e) { errMsg = String(e && e.message || e).slice(0, 100); }
+    out.probe = { cacheCallsOk: okN, error: errMsg, plan: okN >= 60 ? 'paid(하위 요청 50 초과 가능)' : 'free(50개 한도)' };
+  }
+  return new Response(JSON.stringify(out), { status: 200, headers: H });
 }
 // ═══ s248 역 시간표 서버 채우기 — (YJ: "시간표가 안 나와. 미리 다 받아놔야 해") ═══
 //   f.tt.sv === 1 이면 이 역의 모든 노선(요일 미정)과 고른 노선·요일의 시간표를 서버(다음 열차 엔진)가 바로 채워 한 번에 완성된 화면을 준다.
@@ -368,6 +479,9 @@ async function handleBusTago(request, env) {
       }
     } catch (eC) { cache = null; }
   }
+  mapSvLive(env);
+  var af = mapSvArrFam(raw), tStart = Date.now();                                              // s463: 도착정보는 같은 데이터센터 공유 캐시(받은 지 5초 안 · 아낌 모드 9초 · 15초)를 먼저 — 여러 기기가 같은 정류장을 부르면 공공 API 는 한 번만
+  if (af) { var ab = await mapSvArrGet(raw, null); if (ab) { mapSvUse('map.arr.saved'); return new Response(ab, { status: 200, headers: Object.assign({ "Content-Type": 'text/plain; charset=utf-8', "X-Cache": "HIT-A" }, H) }); } }
   var keys = mapKeyList(env);
   if (!keys.length) return new Response('no-key', { status: 500, headers: H });
   var first = (MAPBT_RR++) % keys.length;
@@ -376,9 +490,12 @@ async function handleBusTago(request, env) {
     for (var pr = 0; pr < 2; pr++) {                                                           // ws.bus.go.kr 는 http 만 받는 때가 있어 프로토콜을 바꿔 한 번 더
       try {
         var u2 = pr === 0 ? tgt : tgt.replace(/^https?:/, /^https:/.test(tgt) ? 'http:' : 'https:');
+        mapSvUse(af ? 'map.arr.' + af : (sc ? 'map.st' : 'map.etc'));                               // s463: 실제로 나가는 호출을 센다
         var res = await Promise.race([fetch(u2, { headers: { 'Accept': '*/*', 'User-Agent': 'gildongmu/1.0' } }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3500); })]);
         var txt = await res.text();
         if (res.status === 200 && !mapBtBad(txt)) {
+          if (af) mapSvArrPut(raw, txt, tStart, null);
+          if (typeof usageFlush === 'function') { try { usageFlush(env); } catch (eU) { /* 무시 */ } }
           if (cache && ck && mapSvOkBody(sc, txt)) { try { await cache.put(ck, new Response(txt, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eP) { /* 캐시 실패는 무시 */ } }
           return new Response(txt, { status: 200, headers: Object.assign({ "Content-Type": res.headers.get('Content-Type') || 'text/plain; charset=utf-8' }, H) });
         }
