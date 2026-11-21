@@ -124,4 +124,7 @@ const GA = () => ({ routeStops: { R1: stopsA.map((s, i) => Object.assign({}, s, 
   const b2 = ctx.lsp([leg2], { accessWalkMin: 2 }, { sx: 127.11, sy: 37.39 }).find((x) => x.trafficType === 2);
   ok(Math.abs((b2.endSec - b2.startSec) - 2070) < 0.5 && b2.stopSec[3] - b2.stopSec[0] === 900, '맞는 구간은 그대로 ' + (b2.endSec - b2.startSec));
 }
+
+// ④ (s470) 요청마다 다른 값인 subOff/subFirst 를 모든 요청이 같이 쓰는 _G 에서 꺼내 쓰지 않는다 — D1 을 기다리는 사이 다른 시각의 요청이 덮어써 새벽 검색에서 운행 끝난 노선이 되살아났다
+ok(/const _subOffReq = subOffSet\(_G\.LN, _nk, _we\);/.test(S) && /subOff: _subOffReq,/.test(S) && /subFirst: _subFirstReq,/.test(S) && !/subOff: _G\.subOff/.test(S), 's470: G.subOff · G.subFirst 는 이 요청이 계산한 지역 값');
 console.log('s469_latenight_direct: pass', pass, 'fail', fail); process.exit(fail ? 1 : 0);

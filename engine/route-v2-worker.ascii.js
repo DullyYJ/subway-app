@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-21s469";
+var ENGINE_VERSION = "route-v2-2026-11-21s470";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -7946,8 +7946,12 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
   const _nk = _nowMinKST(_baseMs);
   const _dk = holDowKST(_baseMs);
   const _we = _dk === 0 || _dk === 6;
-  _G.subOff = subOffSet(_G.LN, _nk, _we);
-  _G.subFirst = subNextFirst(_G.LN, _nk, _we);
+  // s470: _G is shared by every request in this isolate and the D1 reads below await, so another request with a different time could overwrite _G.subOff in between
+  //   (a 00:40 search then saw the lines running at 10:20). Keep this request's values in locals and hand those to G.
+  const _subOffReq = subOffSet(_G.LN, _nk, _we);
+  const _subFirstReq = subNextFirst(_G.LN, _nk, _we);
+  _G.subOff = _subOffReq;
+  _G.subFirst = _subFirstReq;
   var _spanLat = Math.abs(SY - EY);
   var _spanLng = Math.abs(SX - EX) * Math.cos((SY + EY) / 2 * Math.PI / 180);
   var _need = Math.min(0.25, Math.max(MARGIN, 0.35 * Math.max(_spanLat, _spanLng)));
@@ -8162,8 +8166,8 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
     adj: /* @__PURE__ */ Object.create(null),
     ST: _G.ST,
     LN: _G.LN,
-    subOff: _G.subOff,
-    subFirst: _G.subFirst,
+    subOff: _subOffReq,
+    subFirst: _subFirstReq,
     _weekend: _we,
     // \u2605 2026-09-25: \uc704\uc5d0\uc11c \uc774\ubbf8 baseMs \uae30\uc900\uc73c\ub85c \uacc4\uc0b0\ud574 \ub454 \uac12\uc744 \uadf8\ub300\ub85c \uc7ac\uc0ac\uc6a9(\uc911\ubcf5 \uacc4\uc0b0 \uc81c\uac70)
     _baseMs,
