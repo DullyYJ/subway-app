@@ -486,7 +486,7 @@ function findAndroidJar() {
     assert.ok(/BUS_BASE = "https:\/\/gildongmu-bus\.phg0643\.workers\.dev"/.test(fs.readFileSync(N('ShellCore.java'), 'utf8')) && /ShellCore\.BUS_BASE \+ "\/tago\?url="/.test(mc), 's164: 버스 도착정보·정류장은 웹과 같은 버스 프록시(gildongmu-bus) — gentle-lab /tago 는 522');
     assert.ok(/HomeSearchCore\.busUrl\(HomeSearchCore\.BUS_BASE,/.test(a), 's164: 정류장 검색도 버스 프록시');
     assert.ok(/KEEP_OLD_MS = 45000L/.test(mc), '받아 둔 도착정보는 45초까지 둔다(앱은 판단하지 않는다 — 서버가 정한다)');
-    assert.ok(/arrWave/.test(w) && /else if \(\/\^\[af\]\/\.test\(k\)\) failA\+\+;/.test(w) && /if \(arrWave\) \{ arrWaves\+\+; if \(!svo \|\| earlyRet \|\| arrWaves >= MAPSV_SVO_WAVES/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다(예전 앱은 한 번만 · s462 새 앱 svo 는 시간이 남으면 같은 요청 안에서 최대 3바퀴)');
+    assert.ok(/arrWave/.test(w) && /else if \(\/\^\[af\]\/\.test\(k\)\) failA\+\+;/.test(w) && /if \(arrWave\) \{ arrWaves\+\+; if \(!tUseful && mapSvHasUseful\(got\)\) tUseful = Date\.now\(\); if \(!svo \|\| earlyRet \|\| arrWaves >= MAPSV_SVO_WAVES/.test(w), '서버: 도착정보는 온 것만 싣고 못 받은 곳은 need 로 남긴다(예전 앱은 한 번만 · s462 새 앱 svo 는 시간이 남으면 같은 요청 안에서 최대 3바퀴)');
   });
   await t('s462: 3초 약속 — 경유노선(덤)은 화면을 막지 않고 · 새 요청 신호(svo) · 보조 길 0.9초 · 서버 캐시/먼저 도착정보', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), mc = fs.readFileSync(N('MapCore.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8');
@@ -507,7 +507,7 @@ function findAndroidJar() {
     assert.ok(/MAPSV_OPS_SOFT = 32/.test(w) && /ops\.n >= MAPSV_OPS_SOFT/.test(w), '서버: 무료 요금제 하위 요청 50개 한도를 넘기지 않게 한 요청 안에서 세어 공유 캐시를 건너뛴다');
     assert.ok(/mapSvUse\(af \? 'map\.arr\.' \+ af/.test(w) && /map\.hedge/.test(w) && /map\.arr\.saved/.test(w) && (w.match(/mapSvUse\('map\.arr\.saved'\)/g) || []).length >= 3, '서버: 나간 호출 · 헤지 · 아낀 호출을 live_usage 에 센다(예전엔 이 길 호출이 아예 안 세어졌다)');
     assert.ok(/X-Bus-Mode/.test(w) && /async function handleBusBudget\(request, env\)/.test(w) && /probe/.test(w), '서버: 응답 머리 X-Bus-Mode · /bus-budget 진단 · 요금제 확인(probe)');
-    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s46[345]"/.test(r2) && /url\.pathname === "\/bus-budget"\) return handleBusBudget\(request, env\)/.test(r2) && r2.indexOf('function mapSvBudEval') > 0, 'route-v2 번들: 버전 s463 · /bus-budget 길 · 새 코드 포함');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-2[01]s46[3456]"/.test(r2) && /url\.pathname === "\/bus-budget"\) return handleBusBudget\(request, env\)/.test(r2) && r2.indexOf('function mapSvBudEval') > 0, 'route-v2 번들: 버전 s463 · /bus-budget 길 · 새 코드 포함');
     assert.ok(/BUD_LIMIT = \{ tago: 500000, seoul: 10000 \}/.test(b) && /budRefresh\(env\);/.test(b) && /function budTtl\(fam\)/.test(b) && g.indexOf('function budTtl') >= 0 && /budget: \{ modes: BUD\.modes/.test(b), '버스 서버: 같은 하루 예산 조절(TAGO 10→12→15초 · 서울 15→20→25초) · /usage.json 에 모드');
   });
   await t('s464: 첫 도착정보 3초 — 서버 조기 반환 · 정류장만 먼저 요청은 도착정보를 안 받는다 · 가까운 셋 이중 요청 · 0건 재시도 · 오류 본문 제거 · 앱은 받은 만큼 바로 그리고 느리면 직접 한 번 더', () => {
@@ -519,14 +519,21 @@ function findAndroidJar() {
     assert.ok(/map\.empty\.retry/.test(w) && /bf2\.nf = 1/.test(w) && /!bf\.pin && Date\.now\(\) - tSv < 1500/.test(w) && /function mapSvSalvage\(cap, body, err\)/.test(w) && /lastErr: MAPSV_ERR/.test(w), '서버: 정류장 0건은 캐시 건너뛰고 한 번 더 · 엔진을 터뜨린 본문 하나만 빼고 다시 · 마지막 오류는 /bus-budget lastErr');
     assert.ok(/private void mapBodyApply\([^)]*final boolean deferNeed, final boolean progressive\)/.test(a) && /round >= MapCore\.BUS_ROUNDS \|\| progressive \|\|/.test(a), '앱: 정류장만 먼저 그린 위에는 받은 도착정보부터 바로 채워 그린다(가장 느린 한 곳을 기다리지 않는다)');
     assert.ok(/private void busEarly\(final ScreenView v, final int my, final boolean\[\] st\)/.test(a) && /n\[0\]\.matches\("a\[0-2\]"\)/.test(a) && /\}, 700L\);/.test(a) && /busEarly\(v, my, st\)/.test(a) && /map\.addBusRes\(n\[0\], got\);\s*busPaint\(v, my\);/.test(a), '앱: 전체 요청이 0.7초 안에 안 오면 가까운 3곳 도착정보를 기기가 직접 한 번 더 · 받은 본문은 엔진이 그린다(busPaint)');
-    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s46[45]"/.test(r2) && r2.indexOf('function mapSvSalvage') > 0 && r2.indexOf('MAPSV_EARLY_GRACE_MS') > 0, 'route-v2 번들: 버전 s464 · 새 코드 포함');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-2[01]s46[456]"/.test(r2) && r2.indexOf('function mapSvSalvage') > 0 && r2.indexOf('MAPSV_EARLY_GRACE_MS') > 0, 'route-v2 번들: 버전 s464 · 새 코드 포함');
   });
   await t('s465: 서울 TOPIS 가 JSON 으로 와도 읽는다(사당 — 정류장 33곳을 놓쳐 찾지 못했어요) · 번들 포함 · 캐시 판정도 JSON 인정', () => {
     const r2 = fs.readFileSync(path.join(__dirname, '..', 'engine', 'route-v2-worker.ascii.js'), 'utf8');
-    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-20s465"/.test(r2), 'route-v2 번들: 버전 s465');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-2[01]s46[56]"/.test(r2), 'route-v2 번들: 버전 s465 이상');
     assert.ok(/function mapTopisItems\(text\)/.test(r2) && /function mapTopisVal\(item, tag\)/.test(r2) && /function mapTopisErr\(text\)/.test(r2) && /mapTopisItems\(text\)\.forEach/.test(r2), '번들: 정류장 · 도착정보 모두 JSON/XML 겸용 해석');
     assert.ok(!/mapXmlItems\(text, 'itemList'\)\.forEach/.test(r2.slice(r2.indexOf('function mapSeoulStops'), r2.indexOf('function mapTagoStops'))), 'mapSeoulStops 가 XML 만 읽지 않는다');
     assert.ok(/"itemList"\\s\*:\\s\*\[\\\[\{\]/.test(r2), '번들: 캐시 판정(tp · 도착)이 JSON itemList 도 정상으로 본다');
+  });
+  await t('s466: 병목 — 쓸 만한 도착정보를 받은 뒤 추가 바퀴는 합쳐서 0.7초 한도 · 진단(dbg=1 → info.svt) · 시험용 조절(tune: old · w2 · to · gap · near)은 dbg 일 때만', () => {
+    const r2 = fs.readFileSync(path.join(__dirname, '..', 'engine', 'route-v2-worker.ascii.js'), 'utf8');
+    assert.ok(/ENGINE_VERSION = "route-v2-2026-11-21s466"/.test(r2), 'route-v2 번들: 버전 s466');
+    assert.ok(/var MAPSV_W2_CAP_MS = 700;/.test(r2) && /function mapSvHasUseful\(got\)/.test(r2) && /tUseful \+ \(TUNE\.w2 !== undefined/.test(r2) && /if \(!tUseful && mapSvHasUseful\(got\)\) tUseful = Date\.now\(\);/.test(r2), '번들: 추가 바퀴 한도(W2)');
+    assert.ok(/dbg = !!\(b && Number\(b\.dbg\) === 1\), TUNE = \(dbg && b\.tune/.test(r2) && /out\.info\.svt = \{ v: 1/.test(r2), '번들: 진단은 dbg=1 일 때만 · info.svt');
+    assert.ok(/ops\.gap = Math\.max\(100/.test(r2) && /ops\.near = Math\.max\(0/.test(r2) && /\(ops && ops\.to\) \|\| 3000/.test(r2), '번들: 시험용 조절 범위 제한(to · gap · near)');
   });
   await t('s168: 옛 도착 숫자 없이 정류장 뼈대 먼저 · 도착정보만 곧장 · 사전 연결(Keep-Alive) · 해석은 IO 스레드', () => {
     const a = fs.readFileSync(N('ShellActivity.java'), 'utf8'), np = fs.readFileSync(N('NetPost.java'), 'utf8'), sc = fs.readFileSync(N('ShellCore.java'), 'utf8');

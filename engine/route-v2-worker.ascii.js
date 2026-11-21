@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-20s465";
+var ENGINE_VERSION = "route-v2-2026-11-21s466";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23987,8 +23987,8 @@ async function mapSvOne0(env, k, url, fresh, ops) {                    // \u2192
   if (!atts.length) return '';
   if (atts.length === 1) atts.push(atts[0]);                                                  // \uae38\uc774 \ud558\ub098\ubfd0\uc774\uba74 \ud55c \ubc88 \ub354
   // s174: \ud5e4\uc9c0 \u2014 \uccab \uc2dc\ub3c4\uac00 0.7\ucd08 \uc548\uc5d0 \uc548 \uc624\uba74 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub2e4\uc74c \uae38(\ub2e4\ub978 \ud0a4)\uc744 \ub3d9\uc2dc\uc5d0 \ub744\uc6cc \uba3c\uc800 \uc628 \uc815\uc0c1 \ubcf8\ubb38\uc744 \uc4f4\ub2e4. \ube68\ub9ac \uc2e4\ud328(\uc624\ub958 \ubd09\ud22c)\ud558\uba74 \uc989\uc2dc \ub2e4\uc74c \uae38. \ucd5c\ub300 3\ubc88.
-  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: \uc544\ub08c \ubaa8\ub4dc\ub294 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub2a6\ucd94\uace0 \uc138 \ubc88\uc9f8 \uae38\uc740 \ub744\uc6b0\uc9c0 \uc54a\ub294\ub2e4
-  var g1 = (af && bm === 'normal' && /^[af][0-2]$/.test(String(k))) ? MAPSV_NEAR_GAP : gap;      // s464: \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 \uc14b(a0~a2 \u00b7 \uc990\uaca8\ucc3e\uae30 f0~f2)\uc758 \ub3c4\ucc29\uc815\ubcf4\ub294 \ucc98\uc74c\ubd80\ud130 \ub450 \uae38\uc744 \ub3d9\uc2dc\uc5d0 \u2014 \uacf5\uacf5 API \uc758 \ub290\ub9b0 \uaf2c\ub9ac(2~5\ucd08)\ub97c \ud53c\ud55c\ub2e4. \uc544\ub08c\u00b7\uc808\uc57d \ubaa8\ub4dc(70%+)\ub294 \uc608\uc804 \uac04\uaca9 \uadf8\ub300\ub85c
+  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = (ops && ops.gap) || MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: \uc544\ub08c \ubaa8\ub4dc\ub294 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub2a6\ucd94\uace0 \uc138 \ubc88\uc9f8 \uae38\uc740 \ub744\uc6b0\uc9c0 \uc54a\ub294\ub2e4
+  var g1 = (af && bm === 'normal' && /^[af][0-2]$/.test(String(k))) ? ((ops && ops.near !== undefined) ? ops.near : MAPSV_NEAR_GAP) : gap;      // s464: \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 \uc14b(a0~a2 \u00b7 \uc990\uaca8\ucc3e\uae30 f0~f2)\uc758 \ub3c4\ucc29\uc815\ubcf4\ub294 \ucc98\uc74c\ubd80\ud130 \ub450 \uae38\uc744 \ub3d9\uc2dc\uc5d0 \u2014 \uacf5\uacf5 API \uc758 \ub290\ub9b0 \uaf2c\ub9ac(2~5\ucd08)\ub97c \ud53c\ud55c\ub2e4. \uc544\ub08c\u00b7\uc808\uc57d \ubaa8\ub4dc(70%+)\ub294 \uc608\uc804 \uac04\uaca9 \uadf8\ub300\ub85c
   function start() {
     var o = {};
     mapSvUse(af ? 'map.arr.' + af : (cacheable ? 'map.st' : 'map.etc')); if (launched > 1) mapSvUse('map.hedge'); if (ops) ops.n++;          // s463: \uc2e4\uc81c\ub85c \ub098\uac00\ub294 \ud638\ucd9c\uc744 \uc13c\ub2e4
@@ -23996,7 +23996,7 @@ async function mapSvOne0(env, k, url, fresh, ops) {                    // \u2192
       try {
         var p = atts[launched - 1]();
         if (!p) return '';
-        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3000); })]);
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, (ops && ops.to) || 3000); })]);
         if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83
       } catch (e1) { /* \uc2e4\ud328 */ }
       return '';
@@ -24192,6 +24192,13 @@ var MAPSV_OPT_GATE_MS = 500, MAPSV_OPT_GRACE_MS = 250, MAPSV_SVO_ROUNDS = 5, MAP
 // \u2605 s464 (YJ: "\uc21c\uc11c\ub300\ub85c \ud574\uc918" \u2014 \uccab \ub3c4\ucc29\uc815\ubcf4 3\ucd08 \uc548) \u2014 \u2460 \uc0c8 \uc571(svo)\uc740 \uac00\uc7a5 \ub290\ub9b0 \uc815\ub958\uc7a5\uc744 \uc608\uc0b0 \ub05d(\u22483.1\ucd08)\uae4c\uc9c0 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4: \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\uac00 \ud558\ub098\ub77c\ub3c4 \uc624\uba74 0.4\ucd08(\ubc1b\uae30\ub97c \uc2dc\uc791\ud55c \uc9c0 0.6\ucd08\ub294 \uc9c0\ub09c \ub4a4)\ub9cc \ub354 \uae30\ub2e4\ub9ac\uace0 \ub3cc\ub824\uc900\ub2e4.
 //   \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \ubc1b\uc544(waitUntil) \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \uce90\uc2dc\uc5d0\uc11c \ubc14\ub85c \uac00\uc838\uac04\ub2e4. \uac19\uc740 \uc694\uccad \uc548\uc758 \ucd94\uac00 \ubc14\ud034\ub3c4 \uac74\ub108\ub6f4\ub2e4(\uc608\uc804\uc5d4 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\uc544 \uacb0\uad6d \uc608\uc0b0 \ub05d\uae4c\uc9c0 \uac14\ub2e4).
 var MAPSV_EARLY_GRACE_MS = 400, MAPSV_EARLY_MIN_MS = 600;
+// \u2605 s466 (YJ: "\ubcd1\ubaa9\ubd80\ubd84 \ucc3e\uace0" \u2014 \ub0ae \uc2e4\uce21: \uac19\uc740 \uc694\uccad \uc548 \ub450 \ubc88\uc9f8 \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034(\uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5 t100+ \u00b7 \ubc14\uafbc ID \ub3c4\ucc29\uc815\ubcf4)\uac00 \ub05d\ub0a0 \ub54c\uae4c\uc9c0 \ubd99\uc7a1\ud600, \uccab \ubc14\ud034\uc5d0\uc11c \ub3c4\ucc29\uc815\ubcf4\ub97c \uc774\ubbf8 \ubc1b\uace0\ub3c4 \uc751\ub2f5\uc774 \uc608\uc0b0 \ub05d(\u22483.1\ucd08)\uae4c\uc9c0 \ub2a6\ub358 \uacf3\uc774 12%(\ubd80\uc0b0 \ub3d9\ub798 \u00b7 \uc11c\uba74 \u00b7 \uc21c\ucc9c \u2026)).
+//   \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\ub97c \ucc98\uc74c \ubc1b\uc740 \ub54c\ubd80\ud130 \ucd94\uac00 \ubc14\ud034\ub4e4\uc740 \ud569\uccd0\uc11c W2 \ud55c\ub3c4(0.7\ucd08)\uae4c\uc9c0\ub9cc \uae30\ub2e4\ub9ac\uace0 \ub3cc\ub824\uc900\ub2e4(\ube60\ub974\uba74 \uc608\uc804\ucc98\ub7fc \ud55c \uc694\uccad\uc5d0\uc11c \ub05d\uae4c\uc9c0). \ubabb \ub05d\ub0b8 \uac83\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \ubc1b\uace0(waitUntil) \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4. \uc694\uccad f.bus.dbg=1 + f.bus.tune.old=1 \uc774\uba74 \uc608\uc804 \ub3d9\uc791(\uc2dc\ud5d8 \ube44\uad50\uc6a9).
+var MAPSV_W2_CAP_MS = 700;
+function mapSvHasUseful(got) {                              // \uc774 \uc694\uccad\uc5d0\uc11c \uc4f8 \ub9cc\ud55c(\ubc84\uc2a4\uac00 \uc788\ub294) \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4(a\u00b7f)\ub97c \uc774\ubbf8 \ubc1b\uc558\ub098
+  for (var k in got) if (Object.prototype.hasOwnProperty.call(got, k) && /^[af][0-9]{1,3}$/.test(k) && mapSvArrOk(got[k])) return true;
+  return false;
+}
 // \u2192 true \uba74 '\uc77c\ucc0d \ub3cc\ub824\uc900\ub2e4'(core \uac00 \uc544\uc9c1 \ub35c \uc654\ub2e4) \u2014 \ud638\ucd9c\ud55c \ucabd\uc740 \ucd94\uac00 \ubc14\ud034\ub97c \ub3cc\uc9c0 \uc54a\ub294\ub2e4
 async function mapSvArrWait(ps, need, done, budget, svo) {
   var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
@@ -24224,7 +24231,11 @@ var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;             
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // \uae30\uae30\uac00 \uc815\ud55c \uae30\ub2e4\ub9bc(\ucc98\uc74c \uadf8\ub9ac\uae30\ub294 \uc9e7\uac8c \u2014 \uc815\ub958\uc7a5\ubd80\ud130 \uba3c\uc800 \ubcf4\uc774\uace0 \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\uc5b4\uc11c \ucc44\uc6b4\ub2e4)          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
   var f = body.f, b = f.bus, fresh = !!(b && b.nf), res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
-  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 }, earlyRet = false;          // s462: svo \u2014 \uc0c8 \uc571\uc774 "\uacbd\uc720\ub178\uc120 \uac19\uc740 \ub364\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0, \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uba74 \ubc14\ub85c \u00b7 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc774 \uc0dd\uae30\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ud55c \ubc88 \ub354" \ub97c \uc6d0\ud55c\ub2e4(\uc804\uccb4 \uc57d budget+0.6\ucd08)
+  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 }, earlyRet = false;
+  var tUseful = 0, dbg = !!(b && Number(b.dbg) === 1), TUNE = (dbg && b.tune && typeof b.tune === 'object') ? b.tune : {}, trace = dbg ? [] : null;          // s466: \uc9c4\ub2e8(dbg=1) \u2014 \ub2e8\uacc4\ubcc4 \uc2dc\uac04(info.svt) \u00b7 \uc2dc\ud5d8\uc6a9 \uc870\uc808(tune: old \u00b7 w2 \u00b7 to)\uc740 \uc774 \uc694\uccad\uc5d0\ub9cc \u00b7 \uac12\uc740 \ubc94\uc704 \uc548\uc73c\ub85c
+  if (TUNE.to) ops.to = Math.max(500, Math.min(6000, Number(TUNE.to) || 3000));
+  if (TUNE.gap) ops.gap = Math.max(100, Math.min(3000, Number(TUNE.gap) || 700));                      // \uc2dc\ud5d8\uc6a9: \ub290\ub9b0 \ub3c4\ucc29\uc815\ubcf4\uc5d0 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub744\uc6b0\ub294 \uac04\uaca9(ms)
+  if (TUNE.near !== undefined) ops.near = Math.max(0, Math.min(3000, Number(TUNE.near) || 0));         // \uc2dc\ud5d8\uc6a9: \uac00\uae4c\uc6b4 \uc14b \ub450 \ubc88\uc9f8 \uae38 \uac04\uaca9(ms)          // s462: svo \u2014 \uc0c8 \uc571\uc774 "\uacbd\uc720\ub178\uc120 \uac19\uc740 \ub364\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0, \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uba74 \ubc14\ub85c \u00b7 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc774 \uc0dd\uae30\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ud55c \ubc88 \ub354" \ub97c \uc6d0\ud55c\ub2e4(\uc804\uccb4 \uc57d budget+0.6\ucd08)
   var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !(res.tp || res.gg || res.tn || res.d1);            // s464: \ucc98\uc74c \uadf8\ub9ac\uae30\uc758 '\uc815\ub958\uc7a5\ub9cc \uba3c\uc800'(svb 300 \u00b7 \uc544\uc9c1 \uc815\ub958\uc7a5 \ubcf8\ubb38\uc774 \uc5c6\ub2e4) \uc694\uccad \u2014 \ub3c4\ucc29\uc815\ubcf4\ub294 \ub3d9\uc2dc\uc5d0 \uac04 \uc804\uccb4 \uc694\uccad(svb 2200)\uc774 \ubc1b\ub294\ub2e4. \uc5ec\uae30\uc11c\ub3c4 \ubc1b\uc73c\uba74 \uac19\uc740 \uacf3\uc744 \ub450 \ubc88 \ubd80\ub974\uace0 \uc815\ub958\uc7a5\ub3c4 0.6\ucd08 \ub2a6\uac8c \ub72c\ub2e4. \uc815\ub958\uc7a5\uc744 \uc774\ubbf8 \ubc1b\uc740 \ub4a4 \ubc14\ud034(svb 300)\ub294 \uc608\uc804 \uadf8\ub300\ub85c
   for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
@@ -24238,10 +24249,13 @@ async function mapSvResolve(env, cap, body, out) {
     var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc5d0 D1 \ub418\ubc1b\uae30\uac00 \ub07c\uc5b4 \uc788\uc5b4\ub3c4 \ud568\uaed8 \ubc1b\ub294\ub2e4(D1 \ub9cc \ub0a8\uc740 \uac83\uc740 \uc815\ub958\uc7a5 \ubc14\ud034)
     if (stopsOnly && arrWave) break;                                                                      // s464: \uc815\ub958\uc7a5\ub9cc \uba3c\uc800 \u2014 \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\ub294 \uac74\ub108\ub6f0\uace0 need \ub85c \ub0a8\uaca8 \ub454\ub2e4(\uc804\uccb4 \uc694\uccad \u00b7 \uae30\uae30\uac00 \ubc1b\ub294\ub2e4)
     if (svo && arrWaves > 0 && (svoEnd - Date.now() < 400 || !need.some(function (n) { return /^[afghtu]/.test(String(n.k || '')) && mapSvTier(n.k) === 'core'; }))) break;          // s462: \uac19\uc740 \uc694\uccad \uc548\uc758 \ub450 \ubc88\uc9f8 \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\ub294 \uc2dc\uac04\uc774 \ub0a8\uace0 \ubc1b\uc744 core(\ubc14\uafbc ID \u00b7 \uc88c\ud45c \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4)\uac00 \uc788\uc744 \ub54c\ub9cc
-    var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;         // \uc774\ubc88 \ubc14\ud034\uac00 \uae30\ub2e4\ub9b4 \uc2dc\uac04: \uc0c8 \uc571\uc740 \uc804\uccb4 \uc57d budget+0.6\ucd08 \uc548\uc5d0\uc11c(\uc815\ub958\uc7a5\uc774 \ub2a6\uc5b4\ub3c4 \ub3c4\ucc29\uc815\ubcf4\uc5d0 \ucd5c\uc18c 1.2\ucd08)
+    var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;
+    var useful2 = svo && arrWaves > 0 && !TUNE.old && tUseful > 0;                                          // s466: \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\ub97c \uc774\ubbf8 \ubc1b\uc740 \ub4a4\uc758 \ucd94\uac00 \ubc14\ud034 \u2014 \ubc1b\uc740 \ub54c\ubd80\ud130 \ud569\uccd0\uc11c W2 \ud55c\ub3c4\uae4c\uc9c0\ub9cc
+    if (useful2) { wb = Math.min(wb, tUseful + (TUNE.w2 !== undefined ? Math.max(0, Math.min(4000, Number(TUNE.w2) || 0)) : MAPSV_W2_CAP_MS) - Date.now()); if (wb < 80) break; }
+    var tm = new Array(need.length), tw0 = Date.now() - tReq0;         // \uc774\ubc88 \ubc14\ud034\uac00 \uae30\ub2e4\ub9b4 \uc2dc\uac04: \uc0c8 \uc571\uc740 \uc804\uccb4 \uc57d budget+0.6\ucd08 \uc548\uc5d0\uc11c(\uc815\ub958\uc7a5\uc774 \ub2a6\uc5b4\ub3c4 \ub3c4\ucc29\uc815\ubcf4\uc5d0 \ucd5c\uc18c 1.2\ucd08)
     var slot = new Array(need.length);
     var done = new Array(need.length);
-    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; return t; }); };
+    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; if (trace) tm[i] = Date.now() - tReq0; return t; }); };
     var ps = new Array(need.length);
     if (arrWave && svo) {                                   // s462: \uc0c8 \uc571 \u2014 \ub3c4\ucc29\uc815\ubcf4(core)\ub97c \uba3c\uc800 \ub744\uc6b0\uace0 \uacbd\uc720\ub178\uc120(\ub364)\uc740 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uac70\ub098 0.5\ucd08\uac00 \uc9c0\ub09c \ub4a4\uc5d0 \u2014 \uacf5\uacf5 API \uc5d0 \ud55c\uaebc\ubc88\uc5d0 \ubab0\ub824 \ub3c4\ucc29\uc815\ubcf4\uae4c\uc9c0 \ub290\ub824\uc9c0\ub358 \uac83\uc744 \ub9c9\ub294\ub2e4(\ub458 \ub2e4 \uce90\uc2dc\ub418\uba74 \uc774 \uc9c0\uc5f0\ub3c4 \uc5c6\ub2e4). \uc608\uc804 \uc571\uc740 \uc608\uc804 \uadf8\ub300\ub85c(\ub3d9\uc2dc\uc5d0)
       var coreAll = [], gtm = null;
@@ -24273,6 +24287,7 @@ async function mapSvResolve(env, cap, body, out) {
       }
     }
     else await Promise.all(ps);
+    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
@@ -24288,9 +24303,10 @@ async function mapSvResolve(env, cap, body, out) {
     if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
-    if (arrWave) { arrWaves++; if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet \u2014 \uc77c\ucc0d \ub3cc\ub824\uc8fc\uae30\ub85c \ud588\uc73c\uba74 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\ub294 \ucd94\uac00 \ubc14\ud034\ub294 \ub3cc\uc9c0 \uc54a\ub294\ub2e4          // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc608\uc804 \uc571\uc740 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4) \u00b7 \uc0c8 \uc571(svo)\uc740 \uc2dc\uac04\uc774 \ub0a8\uc73c\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ucd5c\ub300 3\ubc14\ud034(\ubc14\uafbc ID \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5)
+    if (arrWave) { arrWaves++; if (!tUseful && mapSvHasUseful(got)) tUseful = Date.now(); if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet \u2014 \uc77c\ucc0d \ub3cc\ub824\uc8fc\uae30\ub85c \ud588\uc73c\uba74 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\ub294 \ucd94\uac00 \ubc14\ud034\ub294 \ub3cc\uc9c0 \uc54a\ub294\ub2e4          // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc608\uc804 \uc571\uc740 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4) \u00b7 \uc0c8 \uc571(svo)\uc740 \uc2dc\uac04\uc774 \ub0a8\uc73c\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ucd5c\ub300 3\ubc14\ud034(\ubc14\uafbc ID \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
+  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace }; }
   return out;
 }
 async function handleScreenMap(request, env) {

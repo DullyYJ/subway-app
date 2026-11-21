@@ -71,8 +71,8 @@ async function mapSvOne0(env, k, url, fresh, ops) {                    // → �
   if (!atts.length) return '';
   if (atts.length === 1) atts.push(atts[0]);                                                  // 길이 하나뿐이면 한 번 더
   // s174: 헤지 — 첫 시도가 0.7초 안에 안 오면 기다리지 않고 다음 길(다른 키)을 동시에 띄워 먼저 온 정상 본문을 쓴다. 빨리 실패(오류 봉투)하면 즉시 다음 길. 최대 3번.
-  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: 아낌 모드는 '동시에 한 번 더'를 늦추고 세 번째 길은 띄우지 않는다
-  var g1 = (af && bm === 'normal' && /^[af][0-2]$/.test(String(k))) ? MAPSV_NEAR_GAP : gap;      // s464: 가장 가까운 정류장 셋(a0~a2 · 즐겨찾기 f0~f2)의 도착정보는 처음부터 두 길을 동시에 — 공공 API 의 느린 꼬리(2~5초)를 피한다. 아낌·절약 모드(70%+)는 예전 간격 그대로
+  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = (ops && ops.gap) || MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: 아낌 모드는 '동시에 한 번 더'를 늦추고 세 번째 길은 띄우지 않는다
+  var g1 = (af && bm === 'normal' && /^[af][0-2]$/.test(String(k))) ? ((ops && ops.near !== undefined) ? ops.near : MAPSV_NEAR_GAP) : gap;      // s464: 가장 가까운 정류장 셋(a0~a2 · 즐겨찾기 f0~f2)의 도착정보는 처음부터 두 길을 동시에 — 공공 API 의 느린 꼬리(2~5초)를 피한다. 아낌·절약 모드(70%+)는 예전 간격 그대로
   function start() {
     var o = {};
     mapSvUse(af ? 'map.arr.' + af : (cacheable ? 'map.st' : 'map.etc')); if (launched > 1) mapSvUse('map.hedge'); if (ops) ops.n++;          // s463: 실제로 나가는 호출을 센다
@@ -80,7 +80,7 @@ async function mapSvOne0(env, k, url, fresh, ops) {                    // → �
       try {
         var p = atts[launched - 1]();
         if (!p) return '';
-        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3000); })]);
+        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, (ops && ops.to) || 3000); })]);
         if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // 공공 API 오류 봉투(200)는 받지 못한 것
       } catch (e1) { /* 실패 */ }
       return '';
@@ -276,6 +276,13 @@ var MAPSV_OPT_GATE_MS = 500, MAPSV_OPT_GRACE_MS = 250, MAPSV_SVO_ROUNDS = 5, MAP
 // ★ s464 (YJ: "순서대로 해줘" — 첫 도착정보 3초 안) — ① 새 앱(svo)은 가장 느린 정류장을 예산 끝(≈3.1초)까지 기다리지 않는다: 쓸 만한 도착정보가 하나라도 오면 0.4초(받기를 시작한 지 0.6초는 지난 뒤)만 더 기다리고 돌려준다.
 //   못 받은 정류장은 응답 뒤에서 계속 받아(waitUntil) 기기의 다음 요청이 캐시에서 바로 가져간다. 같은 요청 안의 추가 바퀴도 건너뛴다(예전엔 남은 정류장을 다시 붙잡아 결국 예산 끝까지 갔다).
 var MAPSV_EARLY_GRACE_MS = 400, MAPSV_EARLY_MIN_MS = 600;
+// ★ s466 (YJ: "병목부분 찾고" — 낮 실측: 같은 요청 안 두 번째 도착정보 바퀴(좌표로 다시 찾은 정류장 t100+ · 바꾼 ID 도착정보)가 끝날 때까지 붙잡혀, 첫 바퀴에서 도착정보를 이미 받고도 응답이 예산 끝(≈3.1초)까지 늦던 곳이 12%(부산 동래 · 서면 · 순천 …)).
+//   쓸 만한 도착정보를 처음 받은 때부터 추가 바퀴들은 합쳐서 W2 한도(0.7초)까지만 기다리고 돌려준다(빠르면 예전처럼 한 요청에서 끝까지). 못 끝낸 것은 응답 뒤에서 계속 받고(waitUntil) 기기가 이어 받는다. 요청 f.bus.dbg=1 + f.bus.tune.old=1 이면 예전 동작(시험 비교용).
+var MAPSV_W2_CAP_MS = 700;
+function mapSvHasUseful(got) {                              // 이 요청에서 쓸 만한(버스가 있는) 정류장 도착정보(a·f)를 이미 받았나
+  for (var k in got) if (Object.prototype.hasOwnProperty.call(got, k) && /^[af][0-9]{1,3}$/.test(k) && mapSvArrOk(got[k])) return true;
+  return false;
+}
 // → true 면 '일찍 돌려준다'(core 가 아직 덜 왔다) — 호출한 쪽은 추가 바퀴를 돌지 않는다
 async function mapSvArrWait(ps, need, done, budget, svo) {
   var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
@@ -308,7 +315,11 @@ var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;             
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // 기기가 정한 기다림(처음 그리기는 짧게 — 정류장부터 먼저 보이고 도착정보는 이어서 채운다)          // need 를 서버가 받아 채운다(최대 3바퀴: 정류장 → 도착정보 …)
   var f = body.f, b = f.bus, fresh = !!(b && b.nf), res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
-  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 }, earlyRet = false;          // s462: svo — 새 앱이 "경유노선 같은 덤은 기다리지 않고, 도착정보가 오면 바로 · 못 받은 정류장이 생기면 같은 요청 안에서 한 번 더" 를 원한다(전체 약 budget+0.6초)
+  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 }, earlyRet = false;
+  var tUseful = 0, dbg = !!(b && Number(b.dbg) === 1), TUNE = (dbg && b.tune && typeof b.tune === 'object') ? b.tune : {}, trace = dbg ? [] : null;          // s466: 진단(dbg=1) — 단계별 시간(info.svt) · 시험용 조절(tune: old · w2 · to)은 이 요청에만 · 값은 범위 안으로
+  if (TUNE.to) ops.to = Math.max(500, Math.min(6000, Number(TUNE.to) || 3000));
+  if (TUNE.gap) ops.gap = Math.max(100, Math.min(3000, Number(TUNE.gap) || 700));                      // 시험용: 느린 도착정보에 '동시에 한 번 더'를 띄우는 간격(ms)
+  if (TUNE.near !== undefined) ops.near = Math.max(0, Math.min(3000, Number(TUNE.near) || 0));         // 시험용: 가까운 셋 두 번째 길 간격(ms)          // s462: svo — 새 앱이 "경유노선 같은 덤은 기다리지 않고, 도착정보가 오면 바로 · 못 받은 정류장이 생기면 같은 요청 안에서 한 번 더" 를 원한다(전체 약 budget+0.6초)
   var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !(res.tp || res.gg || res.tn || res.d1);            // s464: 처음 그리기의 '정류장만 먼저'(svb 300 · 아직 정류장 본문이 없다) 요청 — 도착정보는 동시에 간 전체 요청(svb 2200)이 받는다. 여기서도 받으면 같은 곳을 두 번 부르고 정류장도 0.6초 늦게 뜬다. 정류장을 이미 받은 뒤 바퀴(svb 300)는 예전 그대로
   for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
@@ -322,10 +333,13 @@ async function mapSvResolve(env, cap, body, out) {
     var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: 도착정보 바퀴에 D1 되받기가 끼어 있어도 함께 받는다(D1 만 남은 것은 정류장 바퀴)
     if (stopsOnly && arrWave) break;                                                                      // s464: 정류장만 먼저 — 도착정보 받기는 건너뛰고 need 로 남겨 둔다(전체 요청 · 기기가 받는다)
     if (svo && arrWaves > 0 && (svoEnd - Date.now() < 400 || !need.some(function (n) { return /^[afghtu]/.test(String(n.k || '')) && mapSvTier(n.k) === 'core'; }))) break;          // s462: 같은 요청 안의 두 번째 도착정보 바퀴는 시간이 남고 받을 core(바꾼 ID · 좌표 정류장 → 도착정보)가 있을 때만
-    var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;         // 이번 바퀴가 기다릴 시간: 새 앱은 전체 약 budget+0.6초 안에서(정류장이 늦어도 도착정보에 최소 1.2초)
+    var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;
+    var useful2 = svo && arrWaves > 0 && !TUNE.old && tUseful > 0;                                          // s466: 쓸 만한 도착정보를 이미 받은 뒤의 추가 바퀴 — 받은 때부터 합쳐서 W2 한도까지만
+    if (useful2) { wb = Math.min(wb, tUseful + (TUNE.w2 !== undefined ? Math.max(0, Math.min(4000, Number(TUNE.w2) || 0)) : MAPSV_W2_CAP_MS) - Date.now()); if (wb < 80) break; }
+    var tm = new Array(need.length), tw0 = Date.now() - tReq0;         // 이번 바퀴가 기다릴 시간: 새 앱은 전체 약 budget+0.6초 안에서(정류장이 늦어도 도착정보에 최소 1.2초)
     var slot = new Array(need.length);
     var done = new Array(need.length);
-    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; return t; }); };
+    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; if (trace) tm[i] = Date.now() - tReq0; return t; }); };
     var ps = new Array(need.length);
     if (arrWave && svo) {                                   // s462: 새 앱 — 도착정보(core)를 먼저 띄우고 경유노선(덤)은 도착정보가 오거나 0.5초가 지난 뒤에 — 공공 API 에 한꺼번에 몰려 도착정보까지 느려지던 것을 막는다(둘 다 캐시되면 이 지연도 없다). 예전 앱은 예전 그대로(동시에)
       var coreAll = [], gtm = null;
@@ -357,6 +371,7 @@ async function mapSvResolve(env, cap, body, out) {
       }
     }
     else await Promise.all(ps);
+    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
@@ -372,9 +387,10 @@ async function mapSvResolve(env, cap, body, out) {
     if (!any) break;                                        // 아무것도 못 받았다 — 그대로 돌려줘 기기가 예전 방식으로 이어 간다
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
-    if (arrWave) { arrWaves++; if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet — 일찍 돌려주기로 했으면 남은 정류장을 다시 붙잡는 추가 바퀴는 돌지 않는다          // 도착정보는 예전 앱은 한 번만(못 받은 곳은 기기가 이어 받는다) · 새 앱(svo)은 시간이 남으면 같은 요청 안에서 최대 3바퀴(바꾼 ID · 좌표로 다시 찾은 정류장)
+    if (arrWave) { arrWaves++; if (!tUseful && mapSvHasUseful(got)) tUseful = Date.now(); if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet — 일찍 돌려주기로 했으면 남은 정류장을 다시 붙잡는 추가 바퀴는 돌지 않는다          // 도착정보는 예전 앱은 한 번만(못 받은 곳은 기기가 이어 받는다) · 새 앱(svo)은 시간이 남으면 같은 요청 안에서 최대 3바퀴(바꾼 ID · 좌표로 다시 찾은 정류장)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
+  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace }; }
   return out;
 }
 async function handleScreenMap(request, env) {

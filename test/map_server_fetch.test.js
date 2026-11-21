@@ -691,6 +691,49 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       const r2 = await post(c2.H, { BUSAPI: mkB([]) }, body({ sv: 0 }, { a0: AR }));
       ok(r2.status === 500 && /always/.test(r2.j.error) && c2.MAPSV_ERR.stage === '500', '12-f: 본문 탓이 아니면 예전처럼 500(원인 기록)');
     }
+    // ⑬ s466 (YJ: "병목부분 찾고") — 쓸 만한 도착정보를 이미 받았으면 추가 바퀴(좌표로 다시 찾은 정류장 t100+ → 바꾼 ID 도착정보)는 짧게만 기다린다 · 진단(dbg=1)은 info.svt 에 단계별 시간
+    {
+      const sleep2 = ms => new Promise(r => setTimeout(r, ms));
+      const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+      const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+      const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+      const CR = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'BSB1X', nodenm: '시청역', gpslati: 35.1796, gpslong: 129.0757, citycode: 21, nodeno: '1' }] } } } });
+      const mkB = (log, o) => { o = o || {}; return { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+        if (/getCrdntPrxmtSttnList/.test(inner) && /numOfRows=50/.test(inner)) return new Response('', { status: 200 });
+        if (/getCrdntPrxmtSttnList/.test(inner)) { await sleep2(o.crMs || 0); return new Response(CR, { status: 200 }); }
+        if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+        if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { await sleep2(o.arrMs || 0); return new Response(/nodeId=BSB1&/.test(inner) ? EMPTY : AR, { status: 200 }); }
+        return new Response('', { status: 200 }); } }; };
+      const body = (extra, res) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0756, res: res || {}, sv: 1, svb: 2200, svo: 1 }, extra || {}) } });
+      // 13-a 느린 좌표 정류장 목록(2.5초): 새 방식은 첫 바퀴의 도착정보로 곧 돌려준다 · 예전 방식(dbg + tune.old)은 기다린다
+      {
+        const pend = [], c = load(); c.MAPSV_CTX = { waitUntil: p => pend.push(p) };
+        const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body());
+        const dt = Date.now() - t0, cards = r.j.body.filter(n => n.t === 'bcard');
+        ok(dt < 1500 && cards.some(x => x.rows && x.rows.length >= 1) && r.j.info.bus.st === 'need' && !r.j.info.svt, '13-a: 도착정보를 받았으면 느린 좌표 목록(2.5초)을 끝까지 붙잡히지 않는다(' + dt + 'ms) · 진단 없이는 svt 없음');
+        await Promise.all(pend);
+        const c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+        const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body({ dbg: 1, tune: { old: 1 } }));
+        ok(Date.now() - t1 >= 2300, '13-a: 예전 방식(tune.old)은 느린 좌표 목록까지 기다린다(' + (Date.now() - t1) + 'ms)');
+      }
+      // 13-b 좌표 목록이 빠르면(30ms) 한 요청에서 끝까지(예전과 같다) — 한도(0.7초) 안이라
+      {
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB([], { crMs: 30 }) }, body());
+        ok(r.j.info.bres.t100 && r.j.info.bres.g500 && !(r.j.info.bus.need || []).some(n => /^[afgh][0-9]|^[tu][0-9]{3}/.test(n.k)) && Date.now() - t0 < 900, '13-b: 빠른 좌표 목록은 한도 안이라 한 요청에서 도착정보까지 끝낸다(경유노선 덤만 남음 · ' + (Date.now() - t0) + 'ms)');
+      }
+      // 13-c 진단(dbg=1): 단계별 시간 · 바퀴 구분 · 키별 완료 시각 · 한도 적용 여부 · tune 값 범위 안으로
+      {
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const r = await post(c.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body({ dbg: 1, tune: { w2: 400, to: 99999 } }));
+        const sv = r.j.info.svt;
+        ok(sv && sv.v === 1 && Array.isArray(sv.r) && sv.r.some(x => x.w === 's') && sv.r.some(x => x.w === 'a') && sv.r.every(x => Array.isArray(x.ks) && x.t1 >= x.t0) && sv.ms < 1500, '13-c: dbg=1 → info.svt 에 바퀴별(정류장 s · 도착정보 a) 시간이 있다(' + (sv && sv.ms) + 'ms)');
+        const aw = sv.r.filter(x => x.w === 'a');
+        ok(aw.length >= 2 && aw[1].cap === true && aw[1].wb <= 400 && aw[0].ks.some(k => k[0] === 'a1' && k[1] >= 0), '13-c: 두 번째 도착정보 바퀴는 한도 적용(cap) · tune.w2=400 반영 · 첫 바퀴 a1 완료 시각 기록');
+        const r2 = await post(load().H, { BUSAPI: mkB([]) }, body({ tune: { w2: 5 } }));            // dbg 없이 tune 만 보내면 무시
+        ok(!r2.j.info.svt, '13-c: dbg 없이 보낸 tune 은 무시된다(진단 · 조절은 dbg=1 일 때만)');
+      }
+    }
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
