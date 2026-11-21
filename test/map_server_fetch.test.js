@@ -8,7 +8,7 @@ function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
 const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.B = handleBusBudget; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
 function load(extra) {
-  const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
+  const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console, AbortController }, extra || {});
   vm.runInNewContext(code, ctx);
   return ctx;
 }
@@ -732,6 +732,76 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
         ok(aw.length >= 2 && aw[1].cap === true && aw[1].wb <= 400 && aw[0].ks.some(k => k[0] === 'a1' && k[1] >= 0), '13-c: 두 번째 도착정보 바퀴는 한도 적용(cap) · tune.w2=400 반영 · 첫 바퀴 a1 완료 시각 기록');
         const r2 = await post(load().H, { BUSAPI: mkB([]) }, body({ tune: { w2: 5 } }));            // dbg 없이 tune 만 보내면 무시
         ok(!r2.j.info.svt, '13-c: dbg 없이 보낸 tune 은 무시된다(진단 · 조절은 dbg=1 일 때만)');
+      }
+    }
+
+    // ⑭ s467 (YJ: "2, 3번 먼저") — ② 멈춘 호출 끊기 · 대부분 끝났는데 몇 곳만 멈추면 일찍 응답 · ③ 방향 이름(노선 정류장 목록 r)을 서버가 한 번에 받아 채우기
+    {
+      const sleep3 = ms => new Promise(r => setTimeout(r, ms));
+      const ARU = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=21&nodeId=BSB1&_type=json';
+      const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      // 14-a 가까운 정류장(a0)은 두 길을 동시에 — 한쪽이 멈춰 있고 다른 쪽이 먼저 정상 본문을 주면 멈춘 쪽은 끊는다
+      {
+        const ev = [], tagoAttempts = () => [{ via: 'env-key', run: (inner, sig) => new Promise((res, rej) => { ev.push('k1 start sig=' + !!sig); if (sig) sig.addEventListener('abort', () => { ev.push('k1 abort'); rej(new Error('aborted')); }); }) },
+          { via: 'env-key2', run: (inner, sig) => { ev.push('k2 start'); return sleep3(60).then(() => new Response(AR, { status: 200 })); } }];
+        const c = load({ tagoAttempts }), t0 = Date.now(), b = await c.mapSvOne(env, 'a0', ARU, false, { n: 0 });
+        await sleep3(20);
+        ok(b === AR && Date.now() - t0 < 600 && ev.includes('k1 start sig=true') && ev.includes('k1 abort'), '14-a: 먼저 온 정상 본문이 있으면 멈춘 다른 길은 끊는다(취소 신호가 호출에 전달됨) ' + ev.join('|') + ' ' + (Date.now() - t0) + 'ms');
+      }
+      // 14-b 시간 제한(tune.to=500)을 넘긴 시도는 끊는다 — 멈춘 호출이 동시 연결을 계속 잡지 않게 · 본문 읽기가 멈춰도 같다
+      {
+        const ev = [], mk = () => (inner, sig) => new Promise((res, rej) => { if (sig) sig.addEventListener('abort', () => { ev.push('abort'); rej(new Error('aborted')); }); });
+        const c = load({ tagoAttempts: () => [{ via: 'env-key', run: mk() }, { via: 'env-key2', run: mk() }] }), t0 = Date.now(), b = await c.mapSvOne(env, 'a0', ARU, false, { n: 0, to: 500 });
+        const dt = Date.now() - t0;
+        ok(b === '' && dt >= 450 && dt < 1500 && ev.length >= 2, '14-b: 시간 제한을 넘긴 호출은 끊고(' + ev.length + '건) 빈 값으로 돌려준다 ' + dt + 'ms');
+        const c2 = load({ tagoAttempts: () => [{ via: 'env-key', run: (inner, sig) => Promise.resolve({ status: 200, text: () => new Promise((_, rej) => { if (sig) sig.addEventListener('abort', () => { ev.push('body-abort'); rej(new Error('aborted')); }); }) }) }] });
+        const t1 = Date.now(), b2 = await c2.mapSvOne(env, 'a0', ARU, false, { n: 0, to: 500 });
+        ok(b2 === '' && Date.now() - t1 < 1500 && ev.includes('body-abort'), '14-b: 머리만 오고 본문이 멈춰도 시간 제한 안에 끊는다 ' + (Date.now() - t1) + 'ms');
+        const c3 = load({ tagoAttempts: () => [{ via: 'env-key', run: async () => new Response(AR, { status: 200 }) }] });                       // 취소 신호를 안 받는 옛 run · 신호가 없는 환경에서도 그대로 동작
+        ok(await c3.mapSvOne(env, 'a0', ARU, false, { n: 0 }) === AR, '14-b: 취소 신호를 쓰지 않는 호출도 그대로 정상');
+      }
+      // 14-c 쓸 만한 도착정보가 한 건도 없는데 core 의 75% 이상이 끝났고 한 곳만 멈춘 채 1초가 지나면 마감(≈1.8초)까지 안 붙잡고 돌려준다 · tune.nosettle 은 예전 동작
+      {
+        const D1 = JSON.stringify({ ok: true, count: 4, stops: [1, 2, 3, 4].map(i => ({ node_id: 'BSB' + i, node_nm: '정류장' + i, city_code: '21', lat: 35.1796 + i * 0.0002, lng: 129.0757 })) });
+        const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+        const mkB = () => ({ fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search);
+          if (/getCrdntPrxmtSttnList/.test(inner) && /numOfRows=50/.test(inner)) return new Response('', { status: 200 });
+          if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+          if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { if (/nodeId=BSB4&/.test(inner)) { await sleep3(4000); return new Response(AR, { status: 200 }); } await sleep3(30); return new Response(EMPTY, { status: 200 }); }
+          return new Response('', { status: 200 }); } });
+        const body = (extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0757, res: {}, sv: 1, svb: 1200, svo: 1, dbg: 1 }, extra || {}) } });
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const t0 = Date.now(), r = await post(c.H, { BUSAPI: mkB() }, body()), dt = Date.now() - t0, aw = (r.j.info.svt.r || []).filter(x => x.w === 'a');
+        ok(dt >= 900 && dt < 1500 && aw.length >= 1 && aw[0].early === true && aw[0].why === 'settled' && r.j.info.bus.st === 'need' && (r.j.info.bus.need || []).some(n => n.k === 'a3'), '14-c: 쓸 만한 도착정보 없이 3/4 가 끝나고 1곳이 멈추면 1초 무렵 일찍 돌려준다(' + dt + 'ms · why=' + (aw[0] && aw[0].why) + ') · 멈춘 정류장은 need 로 남는다');
+        const c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+        const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB() }, body({ tune: { nosettle: 1 } }));
+        ok(Date.now() - t1 >= 1500, '14-c: tune.nosettle=1 은 예전처럼 마감까지 기다린다(' + (Date.now() - t1) + 'ms)');
+      }
+      // 14-d 방향 이름: 도착정보는 이미 있고 남은 것이 노선 정류장 목록(r)뿐인 재요청 — 서버가 받아 info.nx 로 채운다(기기 바퀴 없이)
+      {
+        const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+        const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)] } } } });
+        const arrB = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+        const stnList = (rid, names, ids) => JSON.stringify({ response: { body: { items: { item: names.map((n, k) => ({ routeid: rid, nodeord: k + 1, nodeid: ids[k], nodenm: n, gpslati: 37.5, gpslong: 126.7, updowncd: 0 })) } } } });
+        const RT = rid => stnList(rid, ['가', '검단대성베르힐', '다음역' + rid, '종점'], ['X1', 'ICB368001467', 'X3', 'X4']);
+        const res0 = { tp: '', gg: '', tn: only, a0: arrB(['9701', 200], ['77', 300]), t0: '{}' };
+        const mk = (log, extra) => { const tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner, sig) => { log.push(inner); const m = /routeId=(\w+)/.exec(inner); return sleep3(20).then(() => new Response(/getRouteAcctoThrghSttnList/.test(inner) ? RT(m[1]) : /getSttnAcctoArvlPrearngeInfoList/.test(inner) ? arrB(['9701', 200], ['77', 300]) : '{}', { status: 200 })); } }));
+          const c = load({ tagoAttempts }); c.MAPSV_CTX = { waitUntil: () => {} }; return c; };
+        const body = (res, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5824, lng: 126.7085, res: Object.assign({}, res), sv: 1, svb: 300, svo: 1 }, extra || {}) } });
+        const log = [], c = mk(log), t0 = Date.now(), r = await post(c.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0));
+        const cd = r.j.body.filter(n => n.t === 'bcard')[0], rl = log.filter(x => /getRouteAcctoThrghSttnList/.test(x));
+        ok(rl.length === 2 && r.j.info.bus.st === 'ok' && r.j.info.nx['ICB368001467|R9701'] === '다음역R9701' && r.j.info.nx['ICB368001467|R77'] === '다음역R77' && cd.rows.every(x => /방향/.test(x.dir || '')) && !(r.j.info.bres && Object.keys(r.j.info.bres).some(k => /^r/.test(k))), '14-d: 도착정보는 있고 r 만 남은 재요청 — 서버가 두 노선 목록을 한 번에 받아 방향 이름을 채운다(' + rl.length + '건 · ' + (Date.now() - t0) + 'ms) · 큰 본문은 bres 에 싣지 않는다');
+        const log2 = [], c2 = mk(log2), r2 = await post(c2.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        ok(r2.j.info.bres && r2.j.info.bres.a0 && r2.j.info.bus.st === 'need' && (r2.j.info.bus.need || []).every(n => /^r[0-9]/.test(n.k)) && log2.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0, '14-d: 도착정보를 막 받은 첫 응답은 방향 이름 때문에 늦추지 않는다(r 은 need 로 남고 서버가 받지 않음)');
+        const log3 = [], c3 = mk(log3), r3 = await post(c3.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0, { dbg: 1, tune: { nonx: 1 } }));
+        ok(log3.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0 && (r3.j.info.bus.need || []).some(n => /^r/.test(n.k)), '14-d: tune.nonx=1 은 예전처럼 서버가 r 을 받지 않는다');
+        const log4 = [], c4 = mk(log4), r4 = await post(c4.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0, { svo: 0 }));
+        ok(log4.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0 && (r4.j.info.bus.need || []).some(n => /^r/.test(n.k)), '14-d: 예전 앱(svo 없음)은 그대로 — 서버가 r 을 받지 않는다');
+        const slow = { run: null }; const log5 = [], tagoAttempts5 = () => [{ via: 'env-key', run: (inner, sig) => { log5.push(inner); if (/getRouteAcctoThrghSttnList/.test(inner)) return new Promise(() => {}); return Promise.resolve(new Response('{}', { status: 200 })); } }];
+        const c5 = load({ tagoAttempts: tagoAttempts5 }); const pend5 = []; c5.MAPSV_CTX = { waitUntil: p => pend5.push(p) };
+        const t5 = Date.now(), r5 = await post(c5.H, { TAGO_KEY: 'k1' }, body(res0));
+        ok(Date.now() - t5 < 2600 && r5.status === 200 && (r5.j.info.bus.need || []).some(n => /^r/.test(n.k)) && pend5.length >= 1, '14-d: 목록이 멈춰도 1.8초 안에 돌려주고(' + (Date.now() - t5) + 'ms) r 은 need 로 남겨 기기가 이어 받는다 · 못 끝낸 것은 응답 뒤에서 계속');
       }
     }
   }
