@@ -148,7 +148,7 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
       if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { shiftMs = v * 60000; break; }
     }
   }
-  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1;
+  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1, tail0 = ntDayInfo(baseMs).nowMin < NT_SVC_TAIL_MIN;
   for (var f0 = 0; f0 < sub.length; f0++) { var tt0 = sub[f0] && sub[f0].trafficType; if (tt0 === 1 || tt0 === 2 || tt0 === 4) { firstT = f0; break; } }      // 첫 대중교통 구간 자리
   for (var k = 0; k < sub.length; k++) {
     var leg = sub[k];
@@ -164,8 +164,11 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
     var t = base0 + leg.startSec * 1000 + acc;
     var sod = (((Math.floor(t / 1000) + 32400) % 86400) + 86400) % 86400;          // KST 하루 안의 초
     var bm = Math.floor(sod / 3600) * 60 + Math.floor((sod % 3600) / 60) + (sod % 60) / 60;
+    // s469: boarding between 00:00 and 02:59 -> look in the 1440+ part of the service day (previous day's table when the search itself started after midnight)
+    var tailLeg = bm < NT_SVC_TAIL_MIN, dayMs = (tailLeg && tail0) ? baseMs - 86400000 : baseMs;
+    if (tailLeg) bm += 1440;
     var dep = null;
-    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, baseMs, bm); } catch (e) {}
+    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, dayMs, bm); } catch (e) {}
     // s197: 첫 대중교통이 서울 지하철이고 실시간 열차가 가려졌으면 시각표 대기 대신 그 열차까지의 대기(조용한 교체)
     if (live && k === firstT && shiftMs === 0 && st.length > 1) {
       var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];

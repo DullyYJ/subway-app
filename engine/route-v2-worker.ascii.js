@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-21s468";
+var ENGINE_VERSION = "route-v2-2026-11-21s469";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3411,7 +3411,16 @@ function legsToSubPath(legs, r, o) {
       const _w = L.mode === "bus" && L.waitSec != null && isFinite(L.waitSec) ? Math.max(0, L.waitSec) : 0;
       const _arr = cum;
       const _dep = cum + _w;
-      const _sl = Array.isArray(L.secList) && L.secList.length === (L.stopList || []).length ? L.secList : null;
+      let _sl = Array.isArray(L.secList) && L.secList.length === (L.stopList || []).length ? L.secList : null;
+      if (_sl && L.mode === "bus" && _sl.length > 1) {
+        const _lastSl = _sl[_sl.length - 1], _mv = (L.min || 0) * 60 - _w;
+        if (_lastSl > 0 && _mv > 0 && Math.abs(_lastSl - _mv) > Math.max(180, _mv * 0.25)) {
+          const _kk = _mv / _lastSl;
+          _sl = _sl.map(function(v) {
+            return v * _kk;
+          });
+        }
+      }
       const _end = _sl ? _dep + _sl[_sl.length - 1] : cum + (L.min || 0) * 60;
       cum = _end;
       sp.push({
@@ -6348,6 +6357,9 @@ var DIRECT_EGRESS_M = Math.min(1e3, walkCapSec() * WALK_MPS);
 var DIRECT_MAX_CAND = 3;
 var DIRECT_EST_SLACK_MIN = 20;
 var DIRECT_EST_MAX_WAIT = 1200;
+function dirNoStop(G, s) {
+  return !!(s && (G && G.noStop && G.noStop[s.node_id] || isPassStop(s.node_nm)));
+}
 function findDirectRed(G, SY, SX, EY, EX) {
   const RS = G && G.routeStops;
   if (!RS) return [];
@@ -6360,6 +6372,7 @@ function findDirectRed(G, SY, SX, EY, EX) {
     if (!a || a.length < 3) continue;
     let bi = -1, bd = Infinity;
     for (let i = 0; i < a.length; i++) {
+      if (dirNoStop(G, a[i])) continue;
       const d = hav(SY, SX, a[i].lat, a[i].lng);
       if (d < bd) {
         bd = d;
@@ -6369,6 +6382,7 @@ function findDirectRed(G, SY, SX, EY, EX) {
     if (bi < 0 || bd > DIRECT_ACCESS_M) continue;
     let ei = -1, ed = Infinity;
     for (let i = bi + 1; i < a.length; i++) {
+      if (dirNoStop(G, a[i])) continue;
       const d = hav(EY, EX, a[i].lat, a[i].lng);
       if (d < ed) {
         ed = d;
@@ -12398,6 +12412,16 @@ function ntDayInfo(baseMs) {
   };
 }
 
+// s469: clock times 00:00-02:59 belong to the previous night's service. Timetable columns continue past midnight as 1440+ (24:xx, 25:xx),
+//   so for those hours use the previous day's day-type and add 1440 to the minute (otherwise a 00:40 search saw no train until the 05:xx first train).
+var NT_SVC_TAIL_MIN = 180;
+function ntSvcDayInfo(baseMs) {
+  var di = ntDayInfo(baseMs);
+  if (di.nowMin >= NT_SVC_TAIL_MIN) return di;
+  var p = ntDayInfo(baseMs - 86400000);
+  return { nowMin: di.nowMin + 1440, isHol: p.isHol, dayCode: p.dayCode };
+}
+
 function ntCreate(DATA) {
   var window = {};   // \uc571 \ucf54\ub4dc\uac00 \uce90\uc2dc\ub97c window \uc5d0 \ub450\ub358 \uac83\uc744 \uadf8\ub300\ub85c \uc4f0\uae30 \uc704\ud55c \uc9c0\uc5ed \uac1d\uccb4
   var _REAL_TT = DATA._REAL_TT || {}, _GIMPO_TT = DATA._GIMPO_TT || {}, _INCHEON_TT = DATA._INCHEON_TT || {};
@@ -12972,7 +12996,7 @@ function ntCreate(DATA) {
       // \u2500\u2500 \ud3f4\ubc31: \uae30\uc874 _realNextDep (\uc11c\uc6b8 1~9\ud638\uc120) \u2500\u2500
       var dep2 = (typeof _realNextDep==='function') ? _realNextDep(line, stn, dirKey, nowMin, isWk) : null;
       if(dep2 != null){
-        if(dep2 < 1440){
+        if(nowMin >= 1440 ? (dep2 - nowMin) <= 90 : dep2 < 1440){
           return { found:true, depMin:dep2, arrMin:dep2 + (mins||0), firstMin:null, line:line, stn:stn, dir:dirKey };
         }
         var fm = dep2 - 1440;
@@ -13142,8 +13166,13 @@ function ntCreate(DATA) {
   return {
     // \uccab \uad6c\uac04 '\ub2e4\uc74c \uc5f4\ucc28' \uc548\ub0b4(\ub178\uc120\ub3c4 \uacbd\ub85c \ube0c\ub9ac\ud551): { line, from, to, baseMs, mins } \u2192 \uc571\uc758 \uc61b _metroNextTrainInfo \uc640 \uac19\uc740 \ubaa8\uc591
     metroInfo: function (q) {
-      var di = ntDayInfo(q.baseMs); setCtx(di);
-      return _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      var di = ntSvcDayInfo(q.baseMs); setCtx(di);
+      var r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      if (di.nowMin >= 1440 && r && r.found === false) {      // s469: no train left from last night -> the first train comes from today's (calendar day) table
+        var d0 = ntDayInfo(q.baseMs); setCtx(d0);
+        r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: d0.nowMin, isHol: d0.isHol });
+      }
+      return r;
     },
     // \uc9c0\ud558\ucca0 \uad6c\uac04\uc758 \uc2b9\ucc28\uc5ed \ub2e4\uc74c \uc5f4\ucc28 \ucd9c\ubc1c(\ubd84; \uc790\uc815 \ub118\uc73c\uba74 1440 \uc774\uc0c1): sg = { name(\ub178\uc120), type:1, stops:[{stationName}\u2026] }
     segNextDep: function (sg, baseMs) {
@@ -13395,7 +13424,7 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
       if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { shiftMs = v * 60000; break; }
     }
   }
-  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1;
+  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1, tail0 = ntDayInfo(baseMs).nowMin < NT_SVC_TAIL_MIN;
   for (var f0 = 0; f0 < sub.length; f0++) { var tt0 = sub[f0] && sub[f0].trafficType; if (tt0 === 1 || tt0 === 2 || tt0 === 4) { firstT = f0; break; } }      // \uccab \ub300\uc911\uad50\ud1b5 \uad6c\uac04 \uc790\ub9ac
   for (var k = 0; k < sub.length; k++) {
     var leg = sub[k];
@@ -13411,8 +13440,11 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
     var t = base0 + leg.startSec * 1000 + acc;
     var sod = (((Math.floor(t / 1000) + 32400) % 86400) + 86400) % 86400;          // KST \ud558\ub8e8 \uc548\uc758 \ucd08
     var bm = Math.floor(sod / 3600) * 60 + Math.floor((sod % 3600) / 60) + (sod % 60) / 60;
+    // s469: boarding between 00:00 and 02:59 -> look in the 1440+ part of the service day (previous day's table when the search itself started after midnight)
+    var tailLeg = bm < NT_SVC_TAIL_MIN, dayMs = (tailLeg && tail0) ? baseMs - 86400000 : baseMs;
+    if (tailLeg) bm += 1440;
     var dep = null;
-    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, baseMs, bm); } catch (e) {}
+    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, dayMs, bm); } catch (e) {}
     // s197: \uccab \ub300\uc911\uad50\ud1b5\uc774 \uc11c\uc6b8 \uc9c0\ud558\ucca0\uc774\uace0 \uc2e4\uc2dc\uac04 \uc5f4\ucc28\uac00 \uac00\ub824\uc84c\uc73c\uba74 \uc2dc\uac01\ud45c \ub300\uae30 \ub300\uc2e0 \uadf8 \uc5f4\ucc28\uae4c\uc9c0\uc758 \ub300\uae30(\uc870\uc6a9\ud55c \uad50\uccb4)
     if (live && k === firstT && shiftMs === 0 && st.length > 1) {
       var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];

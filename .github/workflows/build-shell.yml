@@ -35,6 +35,7 @@ jobs:
           - ride_start_engine.test.js
           - prefetch_access_live.test.js
           - neighbor_live.test.js
+          - s469_latenight_direct.test.js
           - rules_engine.test.js
           - legal_engine.test.js
           - scene_native.test.js
