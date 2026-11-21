@@ -374,6 +374,30 @@ function rsMtqTick(st, now, notes) {
   for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx > q.i) { delete st.mtq; return; }       // 다음 역을 이미 지났다 — 평소 보정 몫
   if (rsRtArm(st, q.i, now, notes)) { (st.rtc = st.rtc || { n: 0 }).why = 'mtq'; delete st.mtq; notes.push('내 열차 번호를 붙이려 실시간 확인(' + q.i + '번 승차)'); }
 }
+// s471: 앞 정류장을 건너뛰어 j 번을 통과로 적는 것이 말이 안 되는가 — 건너뛸 정류장(마지막 통과 번호 다음 ~ j 앞, 아직 안 지남) 중 j 에서 150m 넘게 떨어진 것이 있고,
+//   (가) 마지막 통과 뒤 위치 기록이 25초 넘게 끊긴 적 없이 촘촘한데 그 정류장 150m 안을 한 번도 안 지났거나 (나) 증거 시각(evMs)이 마지막 통과에서 계획 소요(표시 시각 기준)의 40% 도 안 지났으면 true(= 그 정류장은 아직이다).
+function rsSkipUnseen(st, tr, now, j, progMax, passes, evMs) {
+  var stops = st.stops || [], sj = null, i, k, lastPass = null, done = {};
+  for (i = 0; i < stops.length; i++) if (stops[i].i === j) sj = stops[i];
+  if (!sj || !isFinite(sj.lat) || !isFinite(sj.lng) || !tr || tr.length < 2) return false;
+  for (k = 0; k < passes.length; k++) { done[passes[k].idx] = 1; if (passes[k].idx === progMax) lastPass = passes[k]; }
+  if (!lastPass || lastPass.ms == null || !isFinite(lastPass.ms)) return false;
+  for (i = 0; i < stops.length; i++) {
+    var m = stops[i]; if (m.i <= progMax || m.i >= j || done[m.i] || !isFinite(m.lat) || !isFinite(m.lng)) continue;
+    if (rsDistM(m.lat, m.lng, sj.lat, sj.lng) <= 150) continue;
+    var em = st.etaMs || {}, tj = em[j] != null && isFinite(em[j]) ? em[j] : sj.arrMs, tl = em[progMax] != null && isFinite(em[progMax]) ? em[progMax] : lastPass.ms, pl = (tj != null && tl != null && isFinite(tj) && isFinite(tl)) ? tj - tl : 0;
+    if (evMs != null && isFinite(evMs) && pl > 0 && evMs - lastPass.ms < 0.4 * pl) return true;
+    var near = false, gap = false, prev = lastPass.ms, n = 0, q, acc;
+    for (k = 0; k < tr.length; k++) {
+      q = tr[k]; if (q[0] < lastPass.ms) continue;
+      n++; if (q[0] - prev > 25000) gap = true; prev = q[0];
+      acc = q[3] != null && isFinite(q[3]) ? Math.min(+q[3], 100) * 0.5 : 0;
+      if (rsHav(q[1], q[2], m.lat, m.lng) - acc <= 150) { near = true; break; }
+    }
+    if (!near && !gap && n >= 2 && now - prev <= 25000) return true;
+  }
+  return false;
+}
 // 환승 대기: 아직 안 탄 첫 환승 구간이 있고 앞 구간을 내렸으면 st.xw = {i,k,mode,line,name,arrMs,seen,shr}. 예약(xPend)은 그 시각이 되면 확정한다.
 // ★ s266 (YJ: 역에 도착한 게 확인되면 먼저 시각표대로 전진시키고 GPS 영점을 맞춰라 · 환승 칸과 버스 하차 칸을 마커가 오갔다):
 //   · 다음 승차역에 닿았나 — 승차 노드 150m 안(정확도의 절반 뺀 값)에서 걷는 속도(2.5m/s 이하)로 머문 위치 기록이 있으면 된다. 예전 rsAlightGps 는 마지막 기록 하나만 보고 20~120초 창이 필요해 지하 진입 뒤 기록이 드물면 놓쳤다.
@@ -1430,14 +1454,18 @@ function rsResync(st, now, notes) {
   for (i = tr.length - 2; i >= 0; i--) { if (a[0] - tr[i][0] >= 5000 && a[0] - tr[i][0] <= 60000 && (tr[i][3] == null || tr[i][3] <= 60)) { b = tr[i]; break; } }
   if (!b) return false;
   var lastStop = null; for (i = 0; i < stops.length; i++) if (stops[i].i === maxIdx) lastStop = stops[i];
-  var best = null, bestD = 1e9;
+  var best = null, bestD = 1e9, bestT = 1e13;
   for (k = 0; k < stops.length; k++) {
     var s = stops[k]; if (s.i <= maxIdx) continue;
     var da = rsDistM(a[1], a[2], s.lat, s.lng), db = rsDistM(b[1], b[2], s.lat, s.lng);
     if (da > 150 || db > 150) continue;
     var gap = lastStop ? (s.arrMs - lastStop.arrMs) : 0;
     if (gap > 0 && lastPass.ms != null && a[0] - lastPass.ms < 0.4 * gap) continue;   // 계획 소요의 40% 도 안 지났으면 건너뛸 수 없다
-    if (da < bestD) { bestD = da; best = s; }
+    if (s.i > maxIdx + 1 && rsSkipUnseen(st, tr, now, s.i, maxIdx, passes, a[0])) continue;      // s471: 위치로 보아 아직 안 지난 앞 정류장(150m 넘게 떨어진)을 건너뛰지 않는다
+    // ★ s471 (가상 이동 시험: 841번 사우역 — 승차(5번)와 하차(7번) 정류장이 43m, 사이 6번이 204m 밖인 U자 구간. 5번 110m 앞에서 '가장 가까운' 7번이 통과로 적혀 5·6번을 건너뛰고 하차 노드로 곧장 가 환승 2·1정거장 전 알림이 둘 다 사라졌다):
+    //   가까운 정류장이 여럿이면(150m 안) 거리가 아니라 '표시 도착 시각이 지금과 가장 가까운' 정류장을 고른다(같으면 앞 번호) — 앞에서 아직 안 지난 정류장을 건너뛰지 않는다.
+    var tm = (st.etaMs && st.etaMs[s.i] != null && isFinite(st.etaMs[s.i])) ? st.etaMs[s.i] : s.arrMs, dtm = (tm != null && isFinite(tm)) ? Math.abs(a[0] - tm) : 1e12;
+    if (!best || dtm < bestT || (dtm === bestT && s.i < best.i)) { bestD = da; bestT = dtm; best = s; }
   }
   if (!best) return false;
   passes.push({ idx: best.i, ms: a[0], src: 'gps' });
@@ -1913,6 +1941,10 @@ function rideStandby(req) {
   if (st.dt) { dtInfo = rsDtTick(st, tr, now, req, notes); if (!st.dt && st.dtDone && st.dtDone.at === now) rsXwait(st, tr, now, notes); }
   var dtHold = !!st.dt || !!(st.dtDone && st.xw && st.xw.i === st.dtDone.i) || !!(st.xw && st.xw.mode === 'sub' && st.xAl === st.xw.i && st.xFree !== st.xw.i);      // s266: 환승역 승강장에서 열차를 기다리는 동안(xw)은 승차역 근처 위치가 '통과'(= 탑승)로 잡히지 않게 — 시각표 출발·버튼·자동 승차로만 탄 것으로 한다(YJ: 14분에 대기를 눌렀는데 탑승처럼 나옴)
   //     // 역까지 이동 중이거나, 이어 붙인 열차를 아직 안 탄 동안은 위치로 통과를 인정하지 않는다(역 안에서 기다리는 중이다)
+  // ★ s471 (가상 이동 시험: 환승 대기 중 시각표 다음 차를 못 구하면(xFree) 승차 노드가 영점으로 '통과' 처리돼, 승차역에 서 있기만 한데 마커가 한 칸 앞서가고 '목적지 2정거장 전'이 1~3분 일찍 울렸다 —
+  //   환승 정거장 하나만 남은 짧은 구간이면 '목적지 도착'까지 3분 일찍): 시각표가 없으면 위치 증거에 맡기되, 승차 노드 자체는 '역에 서 있음'과 '열차가 지나감'을 영점만으로 가를 수 없으므로 통과로 적지 않는다.
+  //   탔다는 증거는 rsXGo(역에서 400m 넘게 빠르게 벗어남 · 계획 출발 4분 뒤까지 증거 없으면 시각표대로)가 맡고, 그 뒤 정류장의 영점 통과(그러면 승차는 지난 것)도 그대로 받는다.
+  var xfNode = (!dtHold && st.xw && st.xw.mode === 'sub' && !st.xPend && st.xAl === st.xw.i && st.xFree === st.xw.i && !(st.rsDone && st.rsDone[st.xw.i])) ? st.xw.i : -1;
   // 2) 영점: 정류장 도착 시각을 최신 etaMs 로 맞춰 ride-track 에 묻는다 → 통과 시각(passMs)은 gps 증거로, 아직 안 닿음은 notYet 으로
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
   var zero = null, newPass = false, tk = null;
@@ -1927,10 +1959,16 @@ function rideStandby(req) {
     if (zero && zero.stops) {
       zero.stops.forEach(function (z) {
         if (z.passMs != null && isFinite(z.passMs) && z.apply) {
+          // ★ s471 (가상 이동 시험: 841번 사우역 — 5번(승차)과 7번(하차)이 43m 이고 6번이 204m 밖인 U자 구간에서, 5번을 지나는 것만으로 7번이 '넓은 창 통과'로 적혀 6번을 건너뛰고 환승 '1정거장 전' 알림이 사라졌다):
+          //   마지막 통과 뒤 위치 기록이 촘촘한데 이 정류장 앞에서 아직 안 지난 '150m 넘게 떨어진' 정류장 근처를 한 번도 안 지났다면, 그 정류장을 건너뛰어 이 정류장을 통과로 적지 않는다(기록이 끊겼으면 건너뛸 수 있다).
+          if (z.i > progMax + 1 && rsSkipUnseen(st, tr, now, z.i, progMax, passes, z.passMs)) return;
+          if (z.i === xfNode) { if (st.xfNote !== z.i) { st.xfNote = z.i; notes.push('환승 승차역 ' + z.i + '번 — 시각표 없이 역에 서 있는 것만으로 탔다고 보지 않음(이동 증거 · 계획 출발 4분 뒤까지 기다림)'); } return; }
           var hit = -1; for (var k = 0; k < passes.length; k++) if (passes[k].idx === z.i) { hit = k; break; }
           if (hit >= 0 && st.rsDone && st.rsDone[z.i]) return;      // s266: 시각표·버튼으로 탔다고 확정한 환승 승차역은 위치(역에 닿은 시각)로 다시 쓰지 않는다 — 탑승 시각이 역에 닿은 시각으로 당겨지던 것
           if (hit >= 0 && passes[hit].src === 'gps' && z.i < progMax) return;      // s456 (YJ: "이미 지나간 것이 확정된 역은 시간을 바꾸지 마"): 뒤에 통과 증거가 있는(= 이미 지난) 정류장·역의 GPS 통과 시각은 다시 쓰지 않는다 — 근처에 머무는 위치(지하 · 같은 좌표 반복)가 지난 역 시각을 계속 늦추던 것. 가장 최근 역(영점 기준)은 그대로 다듬는다.
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
+          // s471: 앞 정류장 통과 시각보다 이른 증거(바로 앞 정류장과 가까워 그 근처에서 이미 잡힌 위치)는 그 통과 시각으로 맞춘다 — 통과 시각이 번호 순서를 거스르면 마커가 되돌아간다
+          for (var lq = 0; lq < passes.length; lq++) if (passes[lq] && passes[lq].idx === progMax && passes[lq].ms != null && isFinite(passes[lq].ms) && z.i > progMax && np.ms < passes[lq].ms) np.ms = passes[lq].ms;
           if (hit >= 0) passes[hit] = np; else passes.push(np);
           newPass = true;
           delete notYet[z.i];
