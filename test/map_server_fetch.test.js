@@ -804,6 +804,107 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
         ok(Date.now() - t5 < 2600 && r5.status === 200 && (r5.j.info.bus.need || []).some(n => /^r/.test(n.k)) && pend5.length >= 1, '14-d: 목록이 멈춰도 1.8초 안에 돌려주고(' + (Date.now() - t5) + 'ms) r 은 need 로 남겨 기기가 이어 받는다 · 못 끝낸 것은 응답 뒤에서 계속');
       }
     }
+    // ⑮ s468 (YJ: "카카오만큼") — 방향 이름 저장소(D1 bus_nx1): 한 번 알아낸 이름은 저장하고, 다음 사람(새 기기)은 받을 목록 없이 첫 응답에 바로 · 저장소가 막혀도 예전처럼 · 300m 안에 없으면 450m 까지
+    {
+      const sleep4 = ms => new Promise(r => setTimeout(r, ms));
+      const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+      const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)] } } } });
+      const arrB = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+      const stnList = (rid, names, ids) => JSON.stringify({ response: { body: { items: { item: names.map((n, k) => ({ routeid: rid, nodeord: k + 1, nodeid: ids[k], nodenm: n, gpslati: 37.5, gpslong: 126.7, updowncd: 0 })) } } } });
+      const RT = rid => stnList(rid, ['가', '검단대성베르힐', '다음역' + rid, '종점'], ['X1', 'ICB368001467', 'X3', 'X4']);
+      const res0 = { tp: '', gg: '', tn: only, a0: arrB(['9701', 200], ['77', 300]), t0: '{}' };
+      function mkDb(opts) {
+        const st = { rows: new Map(), created: !!(opts && opts.created), log: [] };
+        const mk = sql => { const q = { args: [], bind(...a) { q.args = a; return q; },
+          async all() { if (!/bus_nx1/.test(sql)) return { results: [] }; st.log.push('select'); if (opts && opts.failRead) throw new Error('D1 down'); if (!st.created) throw new Error('D1_ERROR: no such table: bus_nx1: SQLITE_ERROR'); const ids = q.args.slice(0, -1), min = q.args[q.args.length - 1]; return { results: [...st.rows.values()].filter(r => ids.includes(r.sid) && r.ts > min).map(r => ({ k: r.k, v: r.v })) }; },
+          async run() { if (/CREATE TABLE/.test(sql)) { st.created = true; st.log.push('create'); } return {}; },
+          exec() { const [sid, k, v, ts] = q.args, key = sid + '\n' + k, old = st.rows.get(key), rw = Number((/excluded\.ts - (\d+)/.exec(sql) || [])[1]) || 0; if (!old || old.ts < ts - rw) st.rows.set(key, { sid, k, v, ts }); } };
+          return q; };
+        return { st, db: { prepare: mk, batch: async arr => { st.log.push('batch:' + arr.length); arr.forEach(q => q.exec()); } } };
+      }
+      const mk = (log, extra) => { const tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner, sig) => { log.push(inner); const m = /routeId=(\w+)/.exec(inner); return sleep4(20).then(() => new Response(/getRouteAcctoThrghSttnList/.test(inner) ? RT(m[1]) : /getSttnAcctoArvlPrearngeInfoList/.test(inner) ? arrB(['9701', 200], ['77', 300]) : '{}', { status: 200 })); } }));
+        const c = load(Object.assign({ tagoAttempts }, extra || {})), pend = []; c.MAPSV_CTX = { waitUntil: p => pend.push(p) }; c.pend = pend; return c; };
+      const body = (res, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5824, lng: 126.7085, res: Object.assign({}, res), sv: 1, svb: 300, svo: 1 }, extra || {}) } });
+      const ENVK = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      // 15-a 저장소가 비어 있으면(표도 없다) 예전처럼 서버가 목록을 받아 이름을 채우고, 응답 뒤에서 표를 만들어 이름을 저장한다
+      const D = mkDb(), log = [], c = mk(log);
+      const r = await post(c.H, Object.assign({ DB: D.db }, ENVK), body(res0));
+      await Promise.all(c.pend);
+      const cd = r.j.body.filter(n => n.t === 'bcard')[0];
+      ok(r.status === 200 && r.j.info.bus.st === 'ok' && cd.rows.every(x => /방향/.test(x.dir || '')) && D.st.created, '15-a: 저장소가 비어도(표가 없어도) 예전처럼 이름이 채워지고 표는 스스로 만들어진다(' + D.st.log.join(',') + ')');
+      ok(D.st.rows.size >= 2 && D.st.rows.get('ICB368001467\nICB368001467|R9701').v === '다음역R9701' && D.st.rows.get('ICB368001467\nICB368001467|R77').v === '다음역R77', '15-a: 이 요청에서 새로 뽑은 이름이 저장소에 올라간다(' + D.st.rows.size + '행)');
+      // 15-b 다른 기기(이름을 모른다)가 같은 정류장을 열면 — 저장소에서 읽어 목록(r)을 하나도 안 받고 바로 이름까지 채운다
+      {
+        const log2 = [], c2 = mk(log2), t0 = Date.now();
+        const r2 = await post(c2.H, Object.assign({ DB: D.db }, ENVK), body(res0));
+        const cd2 = r2.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r2.j.info.bus.st === 'ok' && cd2.rows.every(x => /방향/.test(x.dir || '')) && log2.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0, '15-b: 새 기기도 저장된 이름을 바로 쓴다 — 노선 목록 받기 0건(' + (Date.now() - t0) + 'ms)');
+        // 15-c 첫 도착정보 응답(svb 2200 · 도착정보를 막 받는 요청)에도 도착정보를 받는 동안 읽어 둔 이름이 바로 들어간다
+        const log3 = [], c3 = mk(log3), r3 = await post(c3.H, Object.assign({ DB: D.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        const cd3 = r3.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r3.j.info.bres && r3.j.info.bres.a0 && r3.j.info.bus.st === 'ok' && cd3.rows.length === 2 && cd3.rows.every(x => /방향/.test(x.dir || '')), '15-c: 도착정보를 막 받는 첫 응답에도 저장된 방향 이름이 바로 들어간다(재요청 없이 한 번에 완성)');
+        // 15-d tune.nonxdb=1(dbg) 은 저장소를 읽지 않는다 — 예전 동작(r 은 need 로 남는다)
+        const D2 = mkDb({ created: true }); D.st.rows.forEach((v, k) => D2.st.rows.set(k, v));
+        const log4 = [], c4 = mk(log4), r4 = await post(c4.H, Object.assign({ DB: D2.db }, ENVK), body(res0, { svb: 2200, dbg: 1, tune: { nonxdb: 1, nonx: 1 } }));
+        ok(!D2.st.log.includes('select') && (r4.j.info.bus.need || []).some(n => /^r/.test(n.k)), '15-d: tune.nonxdb=1 은 저장소를 읽지 않는다(예전 동작)');
+      }
+      // 15-e 저장소가 막혀도(읽기 오류) 화면은 예전처럼 — 오류로 끊기지 않는다
+      {
+        const D3 = mkDb({ failRead: true }), log5 = [], c5 = mk(log5), r5 = await post(c5.H, Object.assign({ DB: D3.db }, ENVK), body(res0));
+        await Promise.all(c5.pend);
+        const cd5 = r5.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r5.status === 200 && r5.j.info.bus.st === 'ok' && cd5.rows.every(x => /방향/.test(x.dir || '')) && log5.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 2, '15-e: 저장소 읽기가 실패해도 예전처럼 서버가 목록을 받아 이름을 채운다');
+        const r6 = await post(mk([]).H, ENVK, body(res0));                                                                 // DB 바인딩이 아예 없는 환경
+        ok(r6.status === 200 && r6.j.info.bus.st === 'ok', '15-e: DB 바인딩이 없어도 그대로 동작');
+      }
+      // 15-f 저장 규칙: 지금 화면 정류장의 · 비어 있지 않은 · 새로 뽑은 것만 / 20일 안 같은 열쇠는 덮어쓰지 않는다 / 읽을 때 60일 넘은 것은 버린다
+      {
+        const D4 = mkDb({ created: true }), c7 = load(), pend7 = []; c7.MAPSV_CTX = { waitUntil: p => pend7.push(p) };
+        const out = { info: { stops: [{ id: 'S1' }, { id: 'S3' }], nx: { 'S1|R1': '다음', 'S2|R1': '남의 정류장', 'S1|R2': '', 'lm|S1': '○○역', 'lm|S3': '', 'od|S1|R1': '-', 'od|S1|R3': '3,4', 'fx|S1': 'N1|23', 'S1|R4': '<b>x</b>', 'S1|R5': '이미 안다' } } };
+        c7.mapSvNxSave({ DB: D4.db }, out, { base0: { 'S1|R5': '이미 안다' }, loaded: {} }, { n: 0 });
+        await Promise.all(pend7);
+        const keys = [...D4.st.rows.values()].map(r => r.k).sort().join(',');
+        ok(keys === 'S1|R1,fx|S1,lm|S1,lm|S3,od|S1|R1,od|S1|R3', '15-f: 지금 화면 정류장의 새 항목만 저장한다 — 방향 이름이 빈 것 · 남의 정류장 · 이미 아는 것 · 태그는 제외, 이름 옆 방향(lm)의 빈 값(찾았지만 없음)은 저장(' + keys + ')');
+        D4.st.rows.get('S1\nS1|R1').ts = Date.now() - 5 * 86400000;
+        const out2 = { info: { stops: [{ id: 'S1' }], nx: { 'S1|R1': '엉뚱한 이름' } } }, pend8 = []; c7.MAPSV_CTX = { waitUntil: p => pend8.push(p) };
+        c7.mapSvNxSave({ DB: D4.db }, out2, { base0: {}, loaded: {} }, { n: 0 }); await Promise.all(pend8);
+        ok(D4.st.rows.get('S1\nS1|R1').v === '다음', '15-f: 20일 안에 저장된 같은 열쇠는 다른 값으로 덮어쓰지 않는다');
+        D4.st.rows.get('S1\nS1|R1').ts = Date.now() - 25 * 86400000;
+        const pend9 = []; c7.MAPSV_CTX = { waitUntil: p => pend9.push(p) };
+        c7.mapSvNxSave({ DB: D4.db }, out2, { base0: {}, loaded: {} }, { n: 0 }); await Promise.all(pend9);
+        ok(D4.st.rows.get('S1\nS1|R1').v === '엉뚱한 이름', '15-f: 20일이 지나면 새 값으로 고친다(노선이 바뀐 경우)');
+        D4.st.rows.get('S1\nlm|S1').ts = Date.now() - 70 * 86400000;
+        const ld = await c7.mapSvNxLoad({ DB: D4.db }, ['S1', 'S3'], { n: 0 });
+        ok(ld && ld['lm|S1'] === undefined && ld['fx|S1'] === 'N1|23' && ld['lm|S3'] === '' && ld['od|S1|R1'] === '-', '15-f: 읽을 때 60일 넘은 항목은 버린다 · lm 의 빈 값은 빈 값으로 되돌려 읽는다');
+        const m = { nx: { 'S1|R1': '기기것' } }; c7.mapSvNxMerge(m, { 'S1|R1': '저장소것', 'S1|R2': '새것' });
+        ok(m.nx['S1|R1'] === '기기것' && m.nx['S1|R2'] === '새것', '15-f: 합칠 때 기기가 가진 같은 열쇠가 우선');
+      }
+      // 15-h 기기가 이 정류장들의 이름(lm)을 이미 알면(8초 갱신 등) 저장소를 읽지 않는다 · 모르면 읽는다 · r 이 필요해지면(이름이 모자라면) 그때 읽는다
+      {
+        const D5 = mkDb({ created: true }), nxFull = { 'lm|ICB368001467': '', 'ICB368001467|R9701': '가', 'ICB368001467|R77': '나' };
+        const r7 = await post(mk([]).H, Object.assign({ DB: D5.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200, nx: nxFull }));
+        ok(!D5.st.log.includes('select') && r7.j.info.bus.st === 'ok', '15-h: 기기가 이름을 이미 다 알면 저장소를 읽지 않는다(갱신마다 읽지 않는다 · 읽기 한도 아낌)');
+        const D6 = mkDb({ created: true }), r8 = await post(mk([]).H, Object.assign({ DB: D6.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        ok(D6.st.log.includes('select'), '15-h: 이름을 모르면 읽는다');
+        const D7 = mkDb({ created: true }), r9 = await post(mk([]).H, Object.assign({ DB: D7.db }, ENVK), body(res0, { nx: { 'lm|ICB368001467': '' } }));
+        ok(D7.st.log.includes('select'), '15-h: 도착정보는 있는데 노선 방향 이름이 모자라 r 이 필요해지면 그때 읽는다');
+      }
+      // 15-g 300m 안에 정류장이 하나도 없으면 450m 안 가까운 정류장을 보여 준다(+안내 한 줄) · 450m 밖이면 예전처럼 · 꾹 눌러 고른 곳(100m)은 그대로
+      {
+        const at = d => JSON.stringify({ response: { body: { items: { item: [it('ICB3FAR', '먼정류장', 37.5 + d / 111320, 127.0)] } } } });
+        const bd = (d, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: at(d), d1: '{"stops":[]}' } }, extra || {}) } });
+        const cF = load(), rf = await post(cF.H, {}, bd(348));
+        const txt = rf.j.body.filter(n => n.t === 'text').map(n => n.s).join('|');
+        ok(rf.j.body.filter(n => n.t === 'bcard').length === 1 && /300m 안에 정류장이 없어 가까운 정류장 1곳/.test(txt) && rf.j.info.bus.far === 1 && !/찾지 못했어요/.test(txt), '15-g: 348m 에만 정류장이 있으면 빈 화면 대신 그 정류장을 보여 주고 이유를 알린다');
+        const rf2 = await post(cF.H, {}, bd(600));
+        ok(rf2.j.info.bus.st === 'empty' && /찾지 못했어요/.test(rf2.j.body.filter(n => n.t === 'text').map(n => n.s).join('|')), '15-g: 450m 밖이면 예전처럼 \'찾지 못했어요\'');
+        const rf3 = await post(cF.H, {}, bd(348, { pin: [37.5, 127.0] }));
+        ok(rf3.j.info.bus.st === 'empty' && !rf3.j.info.bus.far, '15-g: 꾹 눌러 고른 곳(100m)은 넓히지 않는다');
+        const near = JSON.stringify({ response: { body: { items: { item: [it('ICB3NEAR', '가까운', 37.5 + 120 / 111320, 127.0), it('ICB3FAR', '먼정류장', 37.5 + 348 / 111320, 127.0)] } } } });
+        const rf4 = await post(cF.H, {}, { cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: near, d1: '{"stops":[]}' } } } });
+        ok(rf4.j.body.filter(n => n.t === 'bcard').length === 1 && !rf4.j.info.bus.far && !/300m 안에 정류장이 없어/.test(rf4.j.body.filter(n => n.t === 'text').map(n => n.s).join('|')), '15-g: 300m 안에 정류장이 있으면 예전과 같다(먼 정류장은 넣지 않고 안내도 없다)');
+      }
+    }
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);

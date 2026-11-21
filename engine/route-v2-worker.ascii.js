@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-21s467";
+var ENGINE_VERSION = "route-v2-2026-11-21s468";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -22920,7 +22920,8 @@ var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
 var MAP_STOP_DUP_M = 3;
 var MAP_PIN_R = 100, MAP_EXIT_CAP = 12, MAP_EXIT_SAME_M = 40, MAP_HOLD_MS = 2000;                        // s451 \uc9c0\ub3c4\uc5d0\uc11c \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3: \uadf8 \uc8fc\ubcc0 100m \u00b7 \uc5ed \ucd9c\uad6c\ub294 \uba87 \uacf3\uc774\ub4e0 \uba3c\uc800(\ucd5c\ub300 12) \u00b7 \uac19\uc740 \ucd9c\uad6c\uac00 \ub2e4\ub978 \ucd9c\ucc98\uc5d0 \uc870\uae08 \ub2e4\ub978 \uc88c\ud45c\ub85c \uc788\uc5b4\ub3c4(40m \uc548 \uac19\uc740 \uc774\ub984) \ud558\ub098 \u00b7 2\ucd08 \uafb9
 var MAP_NEAR_R = 300, MAP_NEAR_CAP = 8;                           // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c 300m \uc774\ub0b4\ub9cc(\uac00\uae4c\uc6b4 \uc21c \ucd5c\ub300 8\uacf3 \u2014 s284: \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294 \uacf3\uc774 \uc801\uc744\uc218\ub85d \ube68\ub9ac \u00b7 \ub35c \ube44\uac8c) \u2014 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4(\uc5c6\uc73c\uba74 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694')
-var MAP_Q = 1000, MAP_QR = 450;                                    // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
+var MAP_FAR_R = 450;                                              // s468: 300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c\ub9cc \uc774 \ubc18\uacbd\uae4c\uc9c0 \ub113\ud600 \uac00\uae4c\uc6b4 \uc21c\uc73c\ub85c \ubcf4\uc5ec \uc900\ub2e4(\uc870\ud68c \ubc18\uacbd MAP_QR \uacfc \uac19\ub2e4 \u2014 \uc774\ubbf8 \ubc1b\uc740 \uac12)
+var MAP_Q = 1000, MAP_QR = 450;                                  // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
 function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
 function mapXmlItems(text, tag) {
@@ -23104,7 +23105,9 @@ function mapBusStops(f) {
   }
   if (!s.length && d1.length) s = d1;
   s = mapExitMore(mapDedupStops(s), tp.concat(gg, tn, d1));                              // s451(YJ: \uc5ed \uadfc\ucc98\uc5d0\uc11c \uac00\uae4c\uc6b4 \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \uc548 \ub098\uc628\ub2e4): \uc5ed \ucd9c\uad6c\ub294 \ubc1b\uc740 \ubaa8\ub4e0 \ucd9c\ucc98\uc5d0\uc11c \ubaa8\uc544 \ud55c \uacf3\ub3c4 \ube60\uc9c0\uc9c0 \uc54a\uac8c
-  return mapStopOrder(s, c.r);
+  var near = mapStopOrder(s, c.r);
+  if (!near.length && !c.pin) near = mapStopOrder(s, MAP_FAR_R);                         // s468(YJ: \uce74\uce74\uc624\ub9cc\ud07c): 300m \uc548\uc5d0 \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \ube48 \ud654\uba74 \ub300\uc2e0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5(450m \uc548 \u00b7 \uc774\ubbf8 \ubc1b\uc740 \ubaa9\ub85d\uc774\ub77c \ud638\ucd9c \ucd94\uac00 \uc5c6\uc74c) \u2014 \uce74\uce74\uc624\ub294 \uba3c \uacf3\uc774\ub77c\ub3c4 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uc744 \ubcf4\uc5ec \uc900\ub2e4
+  return near;
 }
 function mapBusNeedStops(la, lo) {
   var need = [], ql = mapQ(la), qo = mapQ(lo);                     // \uc870\ud68c\ub294 0.001\u00b0 \uce78\uc758 \uac00\uc6b4\ub370 \uc88c\ud45c\ub85c(\uac19\uc740 \uce78\uc774\uba74 \uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \ubc14\ub85c \ub9de\ub294\ub2e4)
@@ -23703,6 +23706,10 @@ function mapBusBody(f, info) {
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   if (mapBusNoKeep(f)) info.bus.nc = 1;                                                            // s458: \uc774 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 \ubcf4\uad00\ud558\uc9c0 \ub9d0 \uac83(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c\ub97c \ubabb \ubc1b\uc558\ub2e4) \u2014 \uc571\uc740 \ub530\ub974\uae30\ub9cc \ud55c\ub2e4
   var body = [];
+  if (!pin && stops.some(function (s) { return s.dist > MAP_NEAR_R; })) {                      // s468: 300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5c6\uc5b4 \ub113\ud600 \ucc3e\uc740 \uacbd\uc6b0 \u2014 \uc65c \uba3c \uacf3\uc774 \ub098\uc624\ub294\uc9c0 \uc54c\ub9b0\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
+    body.push({ t: 'text', s: '300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5c6\uc5b4 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694.', size: 12, color: 'sub', align: 'center', pad: [10, 12, 0, 12] });
+    info.bus.far = 1;
+  }
   if (pin) {                                                                                   // s451: \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3 \u2014 \ubb34\uc5c7\uc744 \ubcf4\uace0 \uc788\ub294\uc9c0 \uc54c\ub9ac\uace0 \ub0b4 \uc704\uce58\ub85c \ub3cc\uc544\uc624\ub294 \ub2e8\ucd94
     body.push({ t: 'text', s: '\ud83d\udccd \uc9c0\ub3c4\uc5d0\uc11c \uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, bold: true, color: 'gold', align: 'center', pad: [10, 12, 0, 12] });
     body.push(back);
@@ -24257,10 +24264,83 @@ async function mapSvArrWait(ps, need, done, budget, svo, wi) {            // s46
   if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
   return early;
 }
+// \u2605 s468 (YJ: "\ub108\uac00 \uc9c4\uc9dc \uc0ac\uc6a9\uc790\ub77c\uace0 \uc0dd\uac01\ud558\uace0 \uce74\uce74\uc624\ub791 \ube44\uad50\ud588\uc744\ub54c, \uce74\uce74\uc624\ub9cc\ud07c\uc740 \ud560 \uc218 \uc788\uac8c") \u2014 \ubc29\ud5a5 \uc774\ub984 \uc800\uc7a5\uc18c.
+//   \uce74\uce74\uc624\ub294 \ub178\uc120\u00b7\uc815\ub958\uc7a5 \uc790\ub8cc\ub97c \uc790\uae30 \uc11c\ubc84\uc5d0 \ub450\uace0 \uc788\uc5b4 '\u2192 \u25cb\u25cb\ubc29\uba74'\uc774 \ucc98\uc74c\ubd80\ud130 \ubd99\ub294\ub2e4. \uc6b0\ub9ac\ub294 \uacf5\uacf5 API \uc758 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(15KB \u00b7 \ucf5c\ub4dc\uc77c \ub54c 1~6\ucd08)\uc5d0\uc11c \ub9e4\ubc88 \ubf51\uc544 \uc0c8 \uae30\uae30\u00b7\uc0c8 \ub3d9\ub124\ub294 \ubc29\ud5a5 \uc774\ub984\uc774 2~29\ucd08 \ub2a6\uac8c \ucc44\uc6cc\uc84c\ub2e4.
+//   \uc774\ub984\uc740 '\uc815\ub958\uc7a5+\ub178\uc120 \u2192 \ub2e4\uc74c \uc815\ub958\uc7a5'\uc774\ub77c \uac70\uc758 \uc548 \ubc14\ub00c\ub294 \uc0ac\uc2e4\uc774\ub2e4 \u2192 \ud55c \ubc88 \uc54c\uc544\ub0b8 \uac83\uc740 D1 \ud45c(bus_nx1)\uc5d0 \ubaa8\uc544 \ub450\uace0(\uc815\ub958\uc7a5 ID \ub85c \ud55c \ubc88\uc5d0 \uc77d\ub294\ub2e4), \uc815\ub958\uc7a5\uc744 \uc54c\uac8c \ub41c \uc989\uc2dc \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \uc77d\uc5b4 \uccab \uc751\ub2f5\uc5d0 \ubc14\ub85c \ub123\ub294\ub2e4.
+//   \u00b7 \uc77d\uae30: \uc815\ub958\uc7a5 \ub2e8\uacc4\uac00 \ub05d\ub098\uba74(\ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub3d9\uc2dc\uc5d0) \uadf8 \uc815\ub958\uc7a5\ub4e4\uc758 \ud56d\ubaa9\uc744 \ud55c \ubc88\uc5d0 \uc77d\uc5b4 f.bus.nx \uc5d0 \ud569\uce5c\ub2e4(\uae30\uae30\uac00 \uac00\uc9c4 \uac19\uc740 \uc5f4\uc1e0\uac00 \uc6b0\uc120). \ud569\uccd0\uc9c4 \uc5f4\uc1e0\ub294 \uc5d4\uc9c4\uc774 r(\ub178\uc120 \ubaa9\ub85d)\uc744 \ubd80\ud0c1\ud558\uc9c0 \uc54a\ub294\ub2e4.
+//   \u00b7 \uc4f0\uae30: \uc774 \uc694\uccad\uc5d0\uc11c \uc5d4\uc9c4\uc774 \uc0c8\ub85c \ubf51\uc740 \ud56d\ubaa9(info.nx \uc911 \uae30\uae30\u00b7\uc800\uc7a5\uc18c\uc5d0 \uc5c6\ub358 \uac83 \u00b7 \uc9c0\uae08 \ud654\uba74\uc758 \uc815\ub958\uc7a5 \uac83\ub9cc \u00b7 \ube48 \uac12 \uc81c\uc678)\ub9cc \uc751\ub2f5 \ub4a4\uc5d0\uc11c(waitUntil) \uc62c\ub9b0\ub2e4. \uac19\uc740 \uc5f4\uc1e0\uac00 20\uc77c \uc548\uc774\uba74 \ub36e\uc5b4\uc4f0\uc9c0 \uc54a\ub294\ub2e4(\uc5c9\ub6b1\ud55c \ubcf8\ubb38\uc774 \uad73\ub294 \uac83 \ubc29\uc9c0). \uc77d\uc744 \ub54c\ub294 60\uc77c \ub118\uc740 \ud56d\ubaa9\uc744 \ubc84\ub9b0\ub2e4.
+//   \u00b7 \ud45c\uac00 \uc5c6\uc73c\uba74 \uc2a4\uc2a4\ub85c \ub9cc\ub4e0\ub2e4(CREATE TABLE IF NOT EXISTS \u2014 \uc774 \uc6cc\ucee4\uc758 \ub2e4\ub978 \ud45c\ub4e4\uacfc \uac19\uc740 \ubc29\uc2dd). D1 \uc774 \ub290\ub9ac\uac70\ub098 \ub9c9\ud788\uba74 \uc5c6\ub358 \uac83\ucc98\ub7fc(\uc608\uc804 \ub3d9\uc791) \uac04\ub2e4. \uc694\uccad f.bus.dbg=1 + tune.nonxdb=1 \uc774\uba74 \ub048\ub2e4.
+var MAPSV_NXDB_TBL = 'bus_nx1', MAPSV_NXDB_TTL_MS = 60 * 86400000, MAPSV_NXDB_REWRITE_MS = 20 * 86400000, MAPSV_NXDB_WAIT_MS = 500, MAPSV_NXDB_READ_MS = 1500, MAPSV_NXDB_IDS = 24, MAPSV_NXDB_WRITE = 120, MAPSV_NXDB_OPS = 40;
+var MAPSV_NXDB = { mk: false };
+function mapSvNxSid(k) {                                    // nx \uc5f4\uc1e0 \u2192 \uc815\ub958\uc7a5 ID (\ubaa8\ub974\ub294 \ubaa8\uc591\uc774\uba74 '') \u2014 'ID|\ub178\uc120' \u00b7 'lm|ID' \u00b7 'fx|ID' \u00b7 'od|ID|\ub178\uc120'
+  var p = String(k || '').split('|');
+  if (p[0] === 'lm' || p[0] === 'fx') return p.length === 2 ? p[1] : '';
+  if (p[0] === 'od') return p.length === 3 ? p[1] : '';
+  return p.length === 2 ? p[0] : '';
+}
+var MAPSV_NXDB_EMPTY = '~';                                  // \uc774\ub984 \uc606 \ubc29\ud5a5(lm)\uc758 '\ucc3e\uc558\uc9c0\ub9cc \ud574\ub2f9 \uc5ed \u00b7 \uc2dc\uccad\uc774 \uc5c6\uc74c'(\ube48 \uac12)\uc744 \uc800\uc7a5\uc18c\uc5d0\uc11c \uad6c\ubd84\ud558\ub294 \ud45c\uc2dc \u2014 \uc5d4\uc9c4\uc740 \ube48 \uac12\ub3c4 '\uc774\ubbf8 \ubb3c\uc5c8\ub2e4'\ub85c \uc4f4\ub2e4(\ub2e4\uc2dc \uc548 \ubb3b\ub294\ub2e4)
+function mapSvNxEnc(k, v) {                                  // \uc800\uc7a5\ud560 \uac12 \ub610\ub294 null \u2014 \ubc29\ud5a5 \uc774\ub984(\ube48 \uac12\uc740 \ubaa9\ub85d\uc744 \ubabb \uc77d\uc740 \uc77c\uc2dc \uc624\ub958\uc77c \uc218 \uc788\ub2e4) \uc740 \ube48 \uac12 \u00b7 \ub108\ubb34 \uae34 \uac12 \u00b7 \uc81c\uc5b4\ubb38\uc790/\ud0dc\uadf8\ub97c \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4
+  if (typeof v !== 'string' || v.length > 40 || /[\u0000-\u001f<>]/.test(v)) return null;
+  if (!v) return /^lm\|/.test(k) ? MAPSV_NXDB_EMPTY : null;
+  return v;
+}
+function mapSvNxDec(k, v) { return (/^lm\|/.test(k) && v === MAPSV_NXDB_EMPTY) ? '' : v; }
+async function mapSvNxEnsure(env) {
+  if (MAPSV_NXDB.mk) return true;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS ' + MAPSV_NXDB_TBL + ' (sid TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (sid, k))').run();
+    MAPSV_NXDB.mk = true; return true;
+  } catch (e) { return false; }
+}
+async function mapSvNxLoad(env, ids, ops) {                  // \u2192 { \uc5f4\uc1e0: \uc774\ub984 } \ub610\ub294 null(\ubabb \uc77d\uc74c)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || !ids || !ids.length) return null;
+    if (ops) ops.n++;
+    var qs = ids.map(function () { return '?'; }).join(','), stmt = env.DB.prepare('SELECT k, v FROM ' + MAPSV_NXDB_TBL + ' WHERE sid IN (' + qs + ') AND ts > ?');
+    stmt = stmt.bind.apply(stmt, ids.concat([Date.now() - MAPSV_NXDB_TTL_MS]));
+    var tm = null, rs = await Promise.race([stmt.all(), new Promise(function (_, rej) { tm = setTimeout(function () { rej(new Error('timeout')); }, MAPSV_NXDB_READ_MS); })]);
+    if (tm) clearTimeout(tm);
+    var out = {}, rows = (rs && rs.results) || [];
+    rows.forEach(function (r) { if (r && typeof r.k === 'string' && mapSvNxEnc(r.k, r.v === MAPSV_NXDB_EMPTY ? '' : r.v) !== null) out[r.k] = mapSvNxDec(r.k, r.v); });
+    return out;
+  } catch (e) {
+    if (/no such table/i.test(String(e && e.message || e))) { await mapSvNxEnsure(env); return {}; }          // \ucc98\uc74c \u2014 \ud45c\uac00 \uc5c6\ub2e4: \ub9cc\ub4e4\uc5b4 \ub450\uace0 \ube48 \uac12\uc73c\ub85c(\ub2e4\uc74c \uc694\uccad\ubd80\ud130 \uc77d\ub294\ub2e4)
+    return null;
+  }
+}
+function mapSvNxMerge(b, loaded) {                            // \uc800\uc7a5\uc18c \ud56d\ubaa9\uc744 f.bus.nx \uc5d0 \ud569\uce5c\ub2e4 \u2014 \uc800\uc7a5\uc18c \uac83\uc744 \uc55e\uc5d0(\uc5d4\uc9c4\uc774 800\uac1c\uae4c\uc9c0\ub9cc \uc77d\uc73c\ubbc0\ub85c) \u00b7 \uae30\uae30\uac00 \ubcf4\ub0b8 \uac19\uc740 \uc5f4\uc1e0\uac00 \uc6b0\uc120
+  var cur = (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) ? b.nx : {}, o = {};
+  Object.keys(loaded).forEach(function (k) { if (cur[k] === undefined) o[k] = loaded[k]; });
+  Object.keys(cur).forEach(function (k) { o[k] = cur[k]; });
+  b.nx = o;
+}
+function mapSvNxSave(env, out, nxs, ops) {                    // \uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\ub294\ub2e4(waitUntil)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || typeof env.DB.batch !== 'function' || !out || !out.info || !out.info.nx || !Array.isArray(out.info.stops)) return;
+    if (ops && ops.n >= 46) return;
+    var ids = {}, base = (nxs && nxs.base0) || {}, ld = (nxs && nxs.loaded) || {}, ents = [], now = Date.now();
+    out.info.stops.forEach(function (s) { if (s && s.id) ids[String(s.id)] = 1; });
+    Object.keys(out.info.nx).forEach(function (k) {
+      var v = out.info.nx[k], sid = mapSvNxSid(k), ev = mapSvNxEnc(k, v);
+      if (ents.length >= MAPSV_NXDB_WRITE || base[k] === v || ld[k] === v || !sid || !ids[sid] || ev === null) return;
+      ents.push([sid, k, ev]);
+    });
+    if (!ents.length) return;
+    if (ops) ops.n++;
+    var sql = 'INSERT INTO ' + MAPSV_NXDB_TBL + ' (sid, k, v, ts) VALUES (?, ?, ?, ?) ON CONFLICT(sid, k) DO UPDATE SET v = excluded.v, ts = excluded.ts WHERE ' + MAPSV_NXDB_TBL + '.ts < excluded.ts - ' + MAPSV_NXDB_REWRITE_MS;
+    var run = (async function () {
+      if (!(await mapSvNxEnsure(env))) return;
+      await env.DB.batch(ents.map(function (e) { return env.DB.prepare(sql).bind(e[0], e[1], e[2], now); }));
+      mapSvUse('map.nx.save');
+    })().catch(function (e) { mapSvNote('nxsave', e, '', ''); });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(run);
+    if (nxs) nxs.saved = (nxs.saved || 0) + ents.length;
+  } catch (e0) { /* \uc800\uc7a5 \uc2e4\ud328\ub294 \ud654\uba74\uc5d0 \uc601\ud5a5\uc774 \uc5c6\ub2e4 */ }
+}
 // s467: \ubc29\ud5a5 \uc774\ub984 \u2014 \ub0a8\uc740 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(r)\ub9cc \ud544\uc694\ud55c \uc7ac\uc694\uccad\uc744 \uc11c\ubc84\uac00 \ub05d\ub0b8\ub2e4. \ud55c \ubc14\ud034\uc5d0 \ubaa8\ub450 \ub3d9\uc2dc\uc5d0(\ucd5c\ub300 MAPSV_NX_MAX \u00b7 \uc815\uc801 \ubaa9\ub85d\uc740 \ub370\uc774\ud130\uc13c\ud130 12\uc2dc\uac04 \uce90\uc2dc) \u00b7 \ucd5c\ub300 MAPSV_NX_ROUNDS \ubc14\ud034 \u00b7 \uc804\uccb4 MAPSV_NX_MS \uc548\uc5d0\uc11c.
 //   \ubc1b\uc740 \ud070 \ubcf8\ubb38\uc740 res \uc5d0\ub9cc \ub123\uace0(\uc751\ub2f5\uc758 bres \uc5d0\ub294 \uc2e3\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\uc5d0 \ub450\uc9c0 \uc54a\ub294\ub2e4) \uc5d4\uc9c4\uc774 \ubf51\uc740 \uc774\ub984\uc740 info.nx \ub85c \ub3cc\uc544\uac04\ub2e4. \ud558\uc704 \uc694\uccad\uc740 ops \ub85c \uc13c\ub2e4(\ubb34\ub8cc \uc694\uae08\uc81c 50\uac1c \ud55c\ub3c4).
-async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace) {
-  var f = body.f, b = f.bus, res = b.res, dl = Date.now() + MAPSV_NX_MS, round, late = [];
+async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs) {
+  var f = body.f, b = f.bus, res = b.res, dl = Date.now() + MAPSV_NX_MS, round, late = [], lateK = [];
   for (round = 0; round < MAPSV_NX_ROUNDS; round++) {
     var ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
@@ -24274,14 +24354,20 @@ async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace) {
     if (tmr) clearTimeout(tmr);
     var any = false;
     need.forEach(function (n, i) { if (done[i] && slot[i]) { res[String(n.k || '')] = slot[i]; any = true; } });
-    ps.forEach(function (p, i) { if (!done[i]) late.push(p); });
+    ps.forEach(function (p, i) { if (!done[i]) { late.push(p); lateK.push(String(need[i].k || '')); } });
     if (trace) trace.push({ r: round, w: 'n', t0: tw0, t1: Date.now() - tReq0, wb: left, early: false, why: '', cap: false, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     if (!any) break;
     var o2 = mapScreen({ cap: cap }, f, body.d);
     if (!o2 || !o2.ok) break;
     out = o2;
   }
-  if (late.length && MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(Promise.all(late).catch(function () { /* \ubb34\uc2dc */ }));          // \ubabb \ub05d\ub0b8 \ubaa9\ub85d\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \u2014 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uac00 \ucc44\uc6cc\uc838 \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \ubc14\ub85c \ubc1b\ub294\ub2e4
+  if (late.length && MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(Promise.all(late).then(function (txs) {          // \ubabb \ub05d\ub0b8 \ubaa9\ub85d\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \u2014 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uac00 \ucc44\uc6cc\uc838 \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \ubc14\ub85c \ubc1b\ub294\ub2e4 \u00b7 s468: \ub05d\ub09c \ub4a4 \uc774\ub984\uc744 \ubf51\uc544 \uc800\uc7a5\uc18c\uc5d0\ub3c4 \uc62c\ub9b0\ub2e4(\ub2e4\uc74c \uc0ac\ub78c\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    var any2 = false;
+    txs.forEach(function (t, j) { if (t) { res[lateK[j]] = t; any2 = true; } });
+    if (!any2 || !nxs) return;
+    var o9 = mapScreen({ cap: cap }, f, body.d);
+    if (o9 && o9.ok) mapSvNxSave(env, o9, nxs, ops);
+  }).catch(function () { /* \ubb34\uc2dc */ }));
   return out;
 }
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                  // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
@@ -24294,14 +24380,45 @@ async function mapSvResolve(env, cap, body, out) {
   if (TUNE.gap) ops.gap = Math.max(100, Math.min(3000, Number(TUNE.gap) || 700));                      // \uc2dc\ud5d8\uc6a9: \ub290\ub9b0 \ub3c4\ucc29\uc815\ubcf4\uc5d0 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub744\uc6b0\ub294 \uac04\uaca9(ms)
   if (TUNE.near !== undefined) ops.near = Math.max(0, Math.min(3000, Number(TUNE.near) || 0));         // \uc2dc\ud5d8\uc6a9: \uac00\uae4c\uc6b4 \uc14b \ub450 \ubc88\uc9f8 \uae38 \uac04\uaca9(ms)          // s462: svo \u2014 \uc0c8 \uc571\uc774 "\uacbd\uc720\ub178\uc120 \uac19\uc740 \ub364\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0, \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uba74 \ubc14\ub85c \u00b7 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc774 \uc0dd\uae30\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ud55c \ubc88 \ub354" \ub97c \uc6d0\ud55c\ub2e4(\uc804\uccb4 \uc57d budget+0.6\ucd08)
   var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !(res.tp || res.gg || res.tn || res.d1);            // s464: \ucc98\uc74c \uadf8\ub9ac\uae30\uc758 '\uc815\ub958\uc7a5\ub9cc \uba3c\uc800'(svb 300 \u00b7 \uc544\uc9c1 \uc815\ub958\uc7a5 \ubcf8\ubb38\uc774 \uc5c6\ub2e4) \uc694\uccad \u2014 \ub3c4\ucc29\uc815\ubcf4\ub294 \ub3d9\uc2dc\uc5d0 \uac04 \uc804\uccb4 \uc694\uccad(svb 2200)\uc774 \ubc1b\ub294\ub2e4. \uc5ec\uae30\uc11c\ub3c4 \ubc1b\uc73c\uba74 \uac19\uc740 \uacf3\uc744 \ub450 \ubc88 \ubd80\ub974\uace0 \uc815\ub958\uc7a5\ub3c4 0.6\ucd08 \ub2a6\uac8c \ub72c\ub2e4. \uc815\ub958\uc7a5\uc744 \uc774\ubbf8 \ubc1b\uc740 \ub4a4 \ubc14\ud034(svb 300)\ub294 \uc608\uc804 \uadf8\ub300\ub85c
+  var nxs = { p: null, loaded: null, merged: false, base0: null, t0: 0, ms: -1, n: 0, saved: 0 };          // s468: \ubc29\ud5a5 \uc774\ub984 \uc800\uc7a5\uc18c(D1) \uc77d\uae30 \uc0c1\ud0dc
+  var nxKick = function (o, force) {                                                                       // \uc815\ub958\uc7a5\uc744 \uc54c\uac8c \ub418\uba74 \uace7\ubc14\ub85c \uadf8 \uc815\ub958\uc7a5\ub4e4\uc758 \uc800\uc7a5\ub41c \ubc29\ud5a5 \uc774\ub984\uc744 \uc77d\uae30 \uc2dc\uc791\ud55c\ub2e4(\ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \u2014 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    if (nxs.p || TUNE.nonxdb || stopsOnly || !o || !o.info || !Array.isArray(o.info.stops) || ops.n > MAPSV_NXDB_OPS) return;
+    var ids = [], seen = {};
+    o.info.stops.forEach(function (s) { if (s && s.id && (s.src === 'tago' || s.src === 'd1') && !seen[s.id] && ids.length < MAPSV_NXDB_IDS) { seen[s.id] = 1; ids.push(String(s.id)); } });
+    if (!ids.length) return;
+    if (!force && b.nx && typeof b.nx === 'object' && ids.every(function (id) { return b.nx['lm|' + id] !== undefined; })) return;          // \uae30\uae30\uac00 \uc774 \uc815\ub958\uc7a5\ub4e4\uc758 \uc774\ub984\uc744 \uc774\ubbf8 \ub2e4 \uc548\ub2e4(8\ucd08 \uac31\uc2e0 \ub4f1) \u2014 \uc800\uc7a5\uc18c\ub97c \uc77d\uc9c0 \uc54a\ub294\ub2e4(\uc77d\uae30 \ud55c\ub3c4 \uc544\ub08c). \ubaa8\uc790\ub77c\uba74 r \uc774 \ud544\uc694\ud574\uc9c8 \ub54c \uc77d\ub294\ub2e4
+    nxs.base0 = {}; if (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) Object.keys(b.nx).forEach(function (k) { nxs.base0[k] = b.nx[k]; });
+    nxs.t0 = Date.now();
+    nxs.p = mapSvNxLoad(env, ids, ops).then(function (r) { nxs.ms = Date.now() - nxs.t0; nxs.loaded = r; return r || {}; });
+  };
+  var nxApply = async function (wait) {                                                                    // \u2192 true \uba74 f.bus.nx \uc5d0 \ud569\ucce4\ub2e4(\ud638\ucd9c\ud55c \ucabd\uc774 \uc5d4\uc9c4\uc744 \ub2e4\uc2dc \ub3cc\ub9b0\ub2e4)
+    if (!nxs.p || nxs.merged) return false;
+    var tmr = null, r = await Promise.race([nxs.p, new Promise(function (res2) { tmr = setTimeout(function () { res2(null); }, Math.max(30, wait)); })]);
+    if (tmr) clearTimeout(tmr);
+    if (!r) return false;
+    nxs.merged = true;
+    var n = 0, k; for (k in r) if (Object.prototype.hasOwnProperty.call(r, k)) n++;
+    nxs.n = n;
+    if (!n) return false;
+    mapSvNxMerge(b, r); mapSvUse('map.nx.hit');
+    return true;
+  };
+  nxKick(out);                                                                                              // \uc7ac\uc694\uccad\ucc98\ub7fc \uc815\ub958\uc7a5\uc744 \uc774\ubbf8 \uc544\ub294 \uc694\uccad\uc740 \uc2dc\uc791\ud558\uc790\ub9c8\uc790
   for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
     if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {                             // s199: \ub178\uc120 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d(\ubc29\uba74 \uc774\ub984\uc6a9 \u00b7 \ud070 \ubcf8\ubb38)\uc740 \ub3c4\ucc29\uc815\ubcf4\ub97c \ub9c9 \ubc1b\uc740 \uc751\ub2f5\uc5d0\uc11c\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\uac00 \ucc9c\ucc9c\ud788 \ubc1b\ub294\ub2e4
       if (svo && arrWaves === 0 && !stopsOnly && !TUNE.nonx && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {          // s467: \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\ubbf8 \ud654\uba74\uc5d0 \uc788\ub294 \uc7ac\uc694\uccad \u2014 \ubc29\ud5a5 \uc774\ub984\uc740 \uc11c\ubc84\uac00 \ub0a8\uc740 \ubaa9\ub85d\uc744 \ud55c \ubc88\uc5d0 \ubc1b\uc544 \ucc44\uc6b4\ub2e4
-        var o4 = await mapSvNxFill(env, cap, body, out, ops, tReq0, trace);
-        if (o4 && o4.ok) out = o4;
+        nxKick(out, true);
+        if (await nxApply(MAPSV_NXDB_WAIT_MS)) {                                                            // s468: \uba3c\uc800 \uc800\uc7a5\uc18c\uc5d0 \uc788\ub294 \uc774\ub984\uc744 \ud569\uccd0 \ub2e4\uc2dc \uadf8\ub9b0\ub2e4 \u2014 \uadf8\ub9cc\ud07c \ubc1b\uc744 \ubaa9\ub85d\uc774 \uc904\uac70\ub098 \uc5c6\uc5b4\uc9c4\ub2e4
+          var o5 = mapScreen({ cap: cap }, f, body.d);
+          if (o5 && o5.ok) { out = o5; ib = out.info && out.info.bus; need = (ib && ib.st === 'need' && Array.isArray(ib.need)) ? ib.need.slice(0, 60) : []; }
+        }
+        if (need.length && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {
+          var o4 = await mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs);
+          if (o4 && o4.ok) out = o4;
+        }
       }
       break;
     }
@@ -24364,12 +24481,15 @@ async function mapSvResolve(env, cap, body, out) {
     });
     if (any) anyEver = true;
     if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4
+    if (arrWave && nxs.p) await nxApply(Math.max(50, Math.min(MAPSV_NXDB_WAIT_MS, svoEnd - Date.now())));          // s468: \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \uc77d\uc5b4 \ub454 \uc800\uc7a5\ub41c \ubc29\ud5a5 \uc774\ub984\uc744 \ud569\uce5c \ub4a4 \uadf8\ub9b0\ub2e4(\uccab \uc751\ub2f5\uc5d0 \ubc14\ub85c \ub4e4\uc5b4\uac04\ub2e4)
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
+    nxKick(out);                                                                                            // s468: \uc815\ub958\uc7a5 \ub2e8\uacc4\uac00 \ub05d\ub0ac\ub2e4 \u2014 \uc774\uc81c \uc815\ub958\uc7a5 ID \ub97c \uc548\ub2e4(\ub2e4\uc74c \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc640 \ub098\ub780\ud788 \uc77d\ub294\ub2e4)
     if (arrWave) { arrWaves++; if (!tUseful && mapSvHasUseful(got)) tUseful = Date.now(); if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet \u2014 \uc77c\ucc0d \ub3cc\ub824\uc8fc\uae30\ub85c \ud588\uc73c\uba74 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\ub294 \ucd94\uac00 \ubc14\ud034\ub294 \ub3cc\uc9c0 \uc54a\ub294\ub2e4          // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc608\uc804 \uc571\uc740 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4) \u00b7 \uc0c8 \uc571(svo)\uc740 \uc2dc\uac04\uc774 \ub0a8\uc73c\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ucd5c\ub300 3\ubc14\ud034(\ubc14\uafbc ID \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
-  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace }; }
+  if (out && out.info) mapSvNxSave(env, out, nxs, ops);                                                    // s468: \uc774 \uc694\uccad\uc5d0\uc11c \uc0c8\ub85c \ubf51\uc740 \ubc29\ud5a5 \uc774\ub984\uc744 \uc800\uc7a5\uc18c\uc5d0(\uc751\ub2f5 \ub4a4\uc5d0\uc11c)
+  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace, nxdb: { n: nxs.n, ms: nxs.ms, merged: nxs.merged, saved: nxs.saved } }; }
   return out;
 }
 async function handleScreenMap(request, env) {

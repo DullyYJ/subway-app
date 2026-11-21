@@ -341,10 +341,83 @@ async function mapSvArrWait(ps, need, done, budget, svo, wi) {            // s46
   if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
   return early;
 }
+// ★ s468 (YJ: "너가 진짜 사용자라고 생각하고 카카오랑 비교했을때, 카카오만큼은 할 수 있게") — 방향 이름 저장소.
+//   카카오는 노선·정류장 자료를 자기 서버에 두고 있어 '→ ○○방면'이 처음부터 붙는다. 우리는 공공 API 의 노선 정류장 목록(15KB · 콜드일 때 1~6초)에서 매번 뽑아 새 기기·새 동네는 방향 이름이 2~29초 늦게 채워졌다.
+//   이름은 '정류장+노선 → 다음 정류장'이라 거의 안 바뀌는 사실이다 → 한 번 알아낸 것은 D1 표(bus_nx1)에 모아 두고(정류장 ID 로 한 번에 읽는다), 정류장을 알게 된 즉시 도착정보 받기와 나란히 읽어 첫 응답에 바로 넣는다.
+//   · 읽기: 정류장 단계가 끝나면(도착정보 받기와 동시에) 그 정류장들의 항목을 한 번에 읽어 f.bus.nx 에 합친다(기기가 가진 같은 열쇠가 우선). 합쳐진 열쇠는 엔진이 r(노선 목록)을 부탁하지 않는다.
+//   · 쓰기: 이 요청에서 엔진이 새로 뽑은 항목(info.nx 중 기기·저장소에 없던 것 · 지금 화면의 정류장 것만 · 빈 값 제외)만 응답 뒤에서(waitUntil) 올린다. 같은 열쇠가 20일 안이면 덮어쓰지 않는다(엉뚱한 본문이 굳는 것 방지). 읽을 때는 60일 넘은 항목을 버린다.
+//   · 표가 없으면 스스로 만든다(CREATE TABLE IF NOT EXISTS — 이 워커의 다른 표들과 같은 방식). D1 이 느리거나 막히면 없던 것처럼(예전 동작) 간다. 요청 f.bus.dbg=1 + tune.nonxdb=1 이면 끈다.
+var MAPSV_NXDB_TBL = 'bus_nx1', MAPSV_NXDB_TTL_MS = 60 * 86400000, MAPSV_NXDB_REWRITE_MS = 20 * 86400000, MAPSV_NXDB_WAIT_MS = 500, MAPSV_NXDB_READ_MS = 1500, MAPSV_NXDB_IDS = 24, MAPSV_NXDB_WRITE = 120, MAPSV_NXDB_OPS = 40;
+var MAPSV_NXDB = { mk: false };
+function mapSvNxSid(k) {                                    // nx 열쇠 → 정류장 ID (모르는 모양이면 '') — 'ID|노선' · 'lm|ID' · 'fx|ID' · 'od|ID|노선'
+  var p = String(k || '').split('|');
+  if (p[0] === 'lm' || p[0] === 'fx') return p.length === 2 ? p[1] : '';
+  if (p[0] === 'od') return p.length === 3 ? p[1] : '';
+  return p.length === 2 ? p[0] : '';
+}
+var MAPSV_NXDB_EMPTY = '~';                                  // 이름 옆 방향(lm)의 '찾았지만 해당 역 · 시청이 없음'(빈 값)을 저장소에서 구분하는 표시 — 엔진은 빈 값도 '이미 물었다'로 쓴다(다시 안 묻는다)
+function mapSvNxEnc(k, v) {                                  // 저장할 값 또는 null — 방향 이름(빈 값은 목록을 못 읽은 일시 오류일 수 있다) 은 빈 값 · 너무 긴 값 · 제어문자/태그를 저장하지 않는다
+  if (typeof v !== 'string' || v.length > 40 || /[\u0000-\u001f<>]/.test(v)) return null;
+  if (!v) return /^lm\|/.test(k) ? MAPSV_NXDB_EMPTY : null;
+  return v;
+}
+function mapSvNxDec(k, v) { return (/^lm\|/.test(k) && v === MAPSV_NXDB_EMPTY) ? '' : v; }
+async function mapSvNxEnsure(env) {
+  if (MAPSV_NXDB.mk) return true;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS ' + MAPSV_NXDB_TBL + ' (sid TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (sid, k))').run();
+    MAPSV_NXDB.mk = true; return true;
+  } catch (e) { return false; }
+}
+async function mapSvNxLoad(env, ids, ops) {                  // → { 열쇠: 이름 } 또는 null(못 읽음)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || !ids || !ids.length) return null;
+    if (ops) ops.n++;
+    var qs = ids.map(function () { return '?'; }).join(','), stmt = env.DB.prepare('SELECT k, v FROM ' + MAPSV_NXDB_TBL + ' WHERE sid IN (' + qs + ') AND ts > ?');
+    stmt = stmt.bind.apply(stmt, ids.concat([Date.now() - MAPSV_NXDB_TTL_MS]));
+    var tm = null, rs = await Promise.race([stmt.all(), new Promise(function (_, rej) { tm = setTimeout(function () { rej(new Error('timeout')); }, MAPSV_NXDB_READ_MS); })]);
+    if (tm) clearTimeout(tm);
+    var out = {}, rows = (rs && rs.results) || [];
+    rows.forEach(function (r) { if (r && typeof r.k === 'string' && mapSvNxEnc(r.k, r.v === MAPSV_NXDB_EMPTY ? '' : r.v) !== null) out[r.k] = mapSvNxDec(r.k, r.v); });
+    return out;
+  } catch (e) {
+    if (/no such table/i.test(String(e && e.message || e))) { await mapSvNxEnsure(env); return {}; }          // 처음 — 표가 없다: 만들어 두고 빈 값으로(다음 요청부터 읽는다)
+    return null;
+  }
+}
+function mapSvNxMerge(b, loaded) {                            // 저장소 항목을 f.bus.nx 에 합친다 — 저장소 것을 앞에(엔진이 800개까지만 읽으므로) · 기기가 보낸 같은 열쇠가 우선
+  var cur = (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) ? b.nx : {}, o = {};
+  Object.keys(loaded).forEach(function (k) { if (cur[k] === undefined) o[k] = loaded[k]; });
+  Object.keys(cur).forEach(function (k) { o[k] = cur[k]; });
+  b.nx = o;
+}
+function mapSvNxSave(env, out, nxs, ops) {                    // 응답을 붙잡지 않는다(waitUntil)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || typeof env.DB.batch !== 'function' || !out || !out.info || !out.info.nx || !Array.isArray(out.info.stops)) return;
+    if (ops && ops.n >= 46) return;
+    var ids = {}, base = (nxs && nxs.base0) || {}, ld = (nxs && nxs.loaded) || {}, ents = [], now = Date.now();
+    out.info.stops.forEach(function (s) { if (s && s.id) ids[String(s.id)] = 1; });
+    Object.keys(out.info.nx).forEach(function (k) {
+      var v = out.info.nx[k], sid = mapSvNxSid(k), ev = mapSvNxEnc(k, v);
+      if (ents.length >= MAPSV_NXDB_WRITE || base[k] === v || ld[k] === v || !sid || !ids[sid] || ev === null) return;
+      ents.push([sid, k, ev]);
+    });
+    if (!ents.length) return;
+    if (ops) ops.n++;
+    var sql = 'INSERT INTO ' + MAPSV_NXDB_TBL + ' (sid, k, v, ts) VALUES (?, ?, ?, ?) ON CONFLICT(sid, k) DO UPDATE SET v = excluded.v, ts = excluded.ts WHERE ' + MAPSV_NXDB_TBL + '.ts < excluded.ts - ' + MAPSV_NXDB_REWRITE_MS;
+    var run = (async function () {
+      if (!(await mapSvNxEnsure(env))) return;
+      await env.DB.batch(ents.map(function (e) { return env.DB.prepare(sql).bind(e[0], e[1], e[2], now); }));
+      mapSvUse('map.nx.save');
+    })().catch(function (e) { mapSvNote('nxsave', e, '', ''); });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(run);
+    if (nxs) nxs.saved = (nxs.saved || 0) + ents.length;
+  } catch (e0) { /* 저장 실패는 화면에 영향이 없다 */ }
+}
 // s467: 방향 이름 — 남은 노선 정류장 목록(r)만 필요한 재요청을 서버가 끝낸다. 한 바퀴에 모두 동시에(최대 MAPSV_NX_MAX · 정적 목록은 데이터센터 12시간 캐시) · 최대 MAPSV_NX_ROUNDS 바퀴 · 전체 MAPSV_NX_MS 안에서.
 //   받은 큰 본문은 res 에만 넣고(응답의 bres 에는 싣지 않는다 — 기기에 두지 않는다) 엔진이 뽑은 이름은 info.nx 로 돌아간다. 하위 요청은 ops 로 센다(무료 요금제 50개 한도).
-async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace) {
-  var f = body.f, b = f.bus, res = b.res, dl = Date.now() + MAPSV_NX_MS, round, late = [];
+async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs) {
+  var f = body.f, b = f.bus, res = b.res, dl = Date.now() + MAPSV_NX_MS, round, late = [], lateK = [];
   for (round = 0; round < MAPSV_NX_ROUNDS; round++) {
     var ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
@@ -358,14 +431,20 @@ async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace) {
     if (tmr) clearTimeout(tmr);
     var any = false;
     need.forEach(function (n, i) { if (done[i] && slot[i]) { res[String(n.k || '')] = slot[i]; any = true; } });
-    ps.forEach(function (p, i) { if (!done[i]) late.push(p); });
+    ps.forEach(function (p, i) { if (!done[i]) { late.push(p); lateK.push(String(need[i].k || '')); } });
     if (trace) trace.push({ r: round, w: 'n', t0: tw0, t1: Date.now() - tReq0, wb: left, early: false, why: '', cap: false, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     if (!any) break;
     var o2 = mapScreen({ cap: cap }, f, body.d);
     if (!o2 || !o2.ok) break;
     out = o2;
   }
-  if (late.length && MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(Promise.all(late).catch(function () { /* 무시 */ }));          // 못 끝낸 목록은 응답 뒤에서 계속 — 데이터센터 캐시가 채워져 기기의 다음 요청이 바로 받는다
+  if (late.length && MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(Promise.all(late).then(function (txs) {          // 못 끝낸 목록은 응답 뒤에서 계속 — 데이터센터 캐시가 채워져 기기의 다음 요청이 바로 받는다 · s468: 끝난 뒤 이름을 뽑아 저장소에도 올린다(다음 사람은 기다리지 않는다)
+    var any2 = false;
+    txs.forEach(function (t, j) { if (t) { res[lateK[j]] = t; any2 = true; } });
+    if (!any2 || !nxs) return;
+    var o9 = mapScreen({ cap: cap }, f, body.d);
+    if (o9 && o9.ok) mapSvNxSave(env, o9, nxs, ops);
+  }).catch(function () { /* 무시 */ }));
   return out;
 }
 var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                  // 도착정보는 이 시간 안에 온 것만 싣는다 — 늦거나 못 받은 정류장은 비워 두어(= need 로 남겨) 기기가 직접 받게 한다
@@ -378,14 +457,45 @@ async function mapSvResolve(env, cap, body, out) {
   if (TUNE.gap) ops.gap = Math.max(100, Math.min(3000, Number(TUNE.gap) || 700));                      // 시험용: 느린 도착정보에 '동시에 한 번 더'를 띄우는 간격(ms)
   if (TUNE.near !== undefined) ops.near = Math.max(0, Math.min(3000, Number(TUNE.near) || 0));         // 시험용: 가까운 셋 두 번째 길 간격(ms)          // s462: svo — 새 앱이 "경유노선 같은 덤은 기다리지 않고, 도착정보가 오면 바로 · 못 받은 정류장이 생기면 같은 요청 안에서 한 번 더" 를 원한다(전체 약 budget+0.6초)
   var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !(res.tp || res.gg || res.tn || res.d1);            // s464: 처음 그리기의 '정류장만 먼저'(svb 300 · 아직 정류장 본문이 없다) 요청 — 도착정보는 동시에 간 전체 요청(svb 2200)이 받는다. 여기서도 받으면 같은 곳을 두 번 부르고 정류장도 0.6초 늦게 뜬다. 정류장을 이미 받은 뒤 바퀴(svb 300)는 예전 그대로
+  var nxs = { p: null, loaded: null, merged: false, base0: null, t0: 0, ms: -1, n: 0, saved: 0 };          // s468: 방향 이름 저장소(D1) 읽기 상태
+  var nxKick = function (o, force) {                                                                       // 정류장을 알게 되면 곧바로 그 정류장들의 저장된 방향 이름을 읽기 시작한다(도착정보 받기와 나란히 — 기다리지 않는다)
+    if (nxs.p || TUNE.nonxdb || stopsOnly || !o || !o.info || !Array.isArray(o.info.stops) || ops.n > MAPSV_NXDB_OPS) return;
+    var ids = [], seen = {};
+    o.info.stops.forEach(function (s) { if (s && s.id && (s.src === 'tago' || s.src === 'd1') && !seen[s.id] && ids.length < MAPSV_NXDB_IDS) { seen[s.id] = 1; ids.push(String(s.id)); } });
+    if (!ids.length) return;
+    if (!force && b.nx && typeof b.nx === 'object' && ids.every(function (id) { return b.nx['lm|' + id] !== undefined; })) return;          // 기기가 이 정류장들의 이름을 이미 다 안다(8초 갱신 등) — 저장소를 읽지 않는다(읽기 한도 아낌). 모자라면 r 이 필요해질 때 읽는다
+    nxs.base0 = {}; if (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) Object.keys(b.nx).forEach(function (k) { nxs.base0[k] = b.nx[k]; });
+    nxs.t0 = Date.now();
+    nxs.p = mapSvNxLoad(env, ids, ops).then(function (r) { nxs.ms = Date.now() - nxs.t0; nxs.loaded = r; return r || {}; });
+  };
+  var nxApply = async function (wait) {                                                                    // → true 면 f.bus.nx 에 합쳤다(호출한 쪽이 엔진을 다시 돌린다)
+    if (!nxs.p || nxs.merged) return false;
+    var tmr = null, r = await Promise.race([nxs.p, new Promise(function (res2) { tmr = setTimeout(function () { res2(null); }, Math.max(30, wait)); })]);
+    if (tmr) clearTimeout(tmr);
+    if (!r) return false;
+    nxs.merged = true;
+    var n = 0, k; for (k in r) if (Object.prototype.hasOwnProperty.call(r, k)) n++;
+    nxs.n = n;
+    if (!n) return false;
+    mapSvNxMerge(b, r); mapSvUse('map.nx.hit');
+    return true;
+  };
+  nxKick(out);                                                                                              // 재요청처럼 정류장을 이미 아는 요청은 시작하자마자
   for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
     if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {                             // s199: 노선 경유 정류장 목록(방면 이름용 · 큰 본문)은 도착정보를 막 받은 응답에서는 기다리지 않는다 — 기기가 천천히 받는다
       if (svo && arrWaves === 0 && !stopsOnly && !TUNE.nonx && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {          // s467: 도착정보는 이미 화면에 있는 재요청 — 방향 이름은 서버가 남은 목록을 한 번에 받아 채운다
-        var o4 = await mapSvNxFill(env, cap, body, out, ops, tReq0, trace);
-        if (o4 && o4.ok) out = o4;
+        nxKick(out, true);
+        if (await nxApply(MAPSV_NXDB_WAIT_MS)) {                                                            // s468: 먼저 저장소에 있는 이름을 합쳐 다시 그린다 — 그만큼 받을 목록이 줄거나 없어진다
+          var o5 = mapScreen({ cap: cap }, f, body.d);
+          if (o5 && o5.ok) { out = o5; ib = out.info && out.info.bus; need = (ib && ib.st === 'need' && Array.isArray(ib.need)) ? ib.need.slice(0, 60) : []; }
+        }
+        if (need.length && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {
+          var o4 = await mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs);
+          if (o4 && o4.ok) out = o4;
+        }
       }
       break;
     }
@@ -448,12 +558,15 @@ async function mapSvResolve(env, cap, body, out) {
     });
     if (any) anyEver = true;
     if (!any) break;                                        // 아무것도 못 받았다 — 그대로 돌려줘 기기가 예전 방식으로 이어 간다
+    if (arrWave && nxs.p) await nxApply(Math.max(50, Math.min(MAPSV_NXDB_WAIT_MS, svoEnd - Date.now())));          // s468: 도착정보 받기와 나란히 읽어 둔 저장된 방향 이름을 합친 뒤 그린다(첫 응답에 바로 들어간다)
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
+    nxKick(out);                                                                                            // s468: 정류장 단계가 끝났다 — 이제 정류장 ID 를 안다(다음 도착정보 바퀴와 나란히 읽는다)
     if (arrWave) { arrWaves++; if (!tUseful && mapSvHasUseful(got)) tUseful = Date.now(); if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet — 일찍 돌려주기로 했으면 남은 정류장을 다시 붙잡는 추가 바퀴는 돌지 않는다          // 도착정보는 예전 앱은 한 번만(못 받은 곳은 기기가 이어 받는다) · 새 앱(svo)은 시간이 남으면 같은 요청 안에서 최대 3바퀴(바꾼 ID · 좌표로 다시 찾은 정류장)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
-  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace }; }
+  if (out && out.info) mapSvNxSave(env, out, nxs, ops);                                                    // s468: 이 요청에서 새로 뽑은 방향 이름을 저장소에(응답 뒤에서)
+  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace, nxdb: { n: nxs.n, ms: nxs.ms, merged: nxs.merged, saved: nxs.saved } }; }
   return out;
 }
 async function handleScreenMap(request, env) {
