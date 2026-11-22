@@ -29,6 +29,16 @@ function ntDayInfo(baseMs) {
   };
 }
 
+// s469: clock times 00:00-02:59 belong to the previous night's service. Timetable columns continue past midnight as 1440+ (24:xx, 25:xx),
+//   so for those hours use the previous day's day-type and add 1440 to the minute (otherwise a 00:40 search saw no train until the 05:xx first train).
+var NT_SVC_TAIL_MIN = 180;
+function ntSvcDayInfo(baseMs) {
+  var di = ntDayInfo(baseMs);
+  if (di.nowMin >= NT_SVC_TAIL_MIN) return di;
+  var p = ntDayInfo(baseMs - 86400000);
+  return { nowMin: di.nowMin + 1440, isHol: p.isHol, dayCode: p.dayCode };
+}
+
 function ntCreate(DATA) {
   var window = {};   // 앱 코드가 캐시를 window 에 두던 것을 그대로 쓰기 위한 지역 객체
   var _REAL_TT = DATA._REAL_TT || {}, _GIMPO_TT = DATA._GIMPO_TT || {}, _INCHEON_TT = DATA._INCHEON_TT || {};
@@ -603,7 +613,7 @@ function ntCreate(DATA) {
       // ── 폴백: 기존 _realNextDep (서울 1~9호선) ──
       var dep2 = (typeof _realNextDep==='function') ? _realNextDep(line, stn, dirKey, nowMin, isWk) : null;
       if(dep2 != null){
-        if(dep2 < 1440){
+        if(nowMin >= 1440 ? (dep2 - nowMin) <= 90 : dep2 < 1440){
           return { found:true, depMin:dep2, arrMin:dep2 + (mins||0), firstMin:null, line:line, stn:stn, dir:dirKey };
         }
         var fm = dep2 - 1440;
@@ -773,8 +783,13 @@ function ntCreate(DATA) {
   return {
     // 첫 구간 '다음 열차' 안내(노선도 경로 브리핑): { line, from, to, baseMs, mins } → 앱의 옛 _metroNextTrainInfo 와 같은 모양
     metroInfo: function (q) {
-      var di = ntDayInfo(q.baseMs); setCtx(di);
-      return _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      var di = ntSvcDayInfo(q.baseMs); setCtx(di);
+      var r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      if (di.nowMin >= 1440 && r && r.found === false) {      // s469: no train left from last night -> the first train comes from today's (calendar day) table
+        var d0 = ntDayInfo(q.baseMs); setCtx(d0);
+        r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: d0.nowMin, isHol: d0.isHol });
+      }
+      return r;
     },
     // 지하철 구간의 승차역 다음 열차 출발(분; 자정 넘으면 1440 이상): sg = { name(노선), type:1, stops:[{stationName}…] }
     segNextDep: function (sg, baseMs) {

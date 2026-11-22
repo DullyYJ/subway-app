@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-18s461";
+var ENGINE_VERSION = "route-v2-2026-11-21s472";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -3411,7 +3411,16 @@ function legsToSubPath(legs, r, o) {
       const _w = L.mode === "bus" && L.waitSec != null && isFinite(L.waitSec) ? Math.max(0, L.waitSec) : 0;
       const _arr = cum;
       const _dep = cum + _w;
-      const _sl = Array.isArray(L.secList) && L.secList.length === (L.stopList || []).length ? L.secList : null;
+      let _sl = Array.isArray(L.secList) && L.secList.length === (L.stopList || []).length ? L.secList : null;
+      if (_sl && L.mode === "bus" && _sl.length > 1) {
+        const _lastSl = _sl[_sl.length - 1], _mv = (L.min || 0) * 60 - _w;
+        if (_lastSl > 0 && _mv > 0 && Math.abs(_lastSl - _mv) > Math.max(180, _mv * 0.25)) {
+          const _kk = _mv / _lastSl;
+          _sl = _sl.map(function(v) {
+            return v * _kk;
+          });
+        }
+      }
       const _end = _sl ? _dep + _sl[_sl.length - 1] : cum + (L.min || 0) * 60;
       cum = _end;
       sp.push({
@@ -3802,13 +3811,13 @@ function tagoAttempts(env) {
   const list = [];
   const envKey = env && (env.TAGO_KEY || env.DATA_GO_KR_KEY) || "";
   const envKey2 = env && env.TAGO_KEY2 || "";
-  if (envKey) list.push({ via: "env-key", run: /* @__PURE__ */ __name((inner) => fetch(inner + "&serviceKey=" + encodeURIComponent(envKey)), "run") });
+  if (envKey) list.push({ via: "env-key", run: /* @__PURE__ */ __name((inner, signal) => fetch(inner + "&serviceKey=" + encodeURIComponent(envKey), signal ? { signal } : void 0), "run") });
   if (envKey2 && envKey2 !== envKey)
-    list.push({ via: "env-key2", run: /* @__PURE__ */ __name((inner) => fetch(inner + "&serviceKey=" + encodeURIComponent(envKey2)), "run") });
+    list.push({ via: "env-key2", run: /* @__PURE__ */ __name((inner, signal) => fetch(inner + "&serviceKey=" + encodeURIComponent(envKey2), signal ? { signal } : void 0), "run") });
   if (TAGO_KEY_DEFAULT && envKey !== TAGO_KEY_DEFAULT && envKey2 !== TAGO_KEY_DEFAULT)
-    list.push({ via: "default-key", run: /* @__PURE__ */ __name((inner) => fetch(inner + "&serviceKey=" + encodeURIComponent(TAGO_KEY_DEFAULT)), "run") });
+    list.push({ via: "default-key", run: /* @__PURE__ */ __name((inner, signal) => fetch(inner + "&serviceKey=" + encodeURIComponent(TAGO_KEY_DEFAULT), signal ? { signal } : void 0), "run") });
   if (env && env.BUSAPI && typeof env.BUSAPI.fetch === "function") {
-    list.push({ via: "binding", run: /* @__PURE__ */ __name((inner) => env.BUSAPI.fetch(new Request("https://busapi.internal/tago?url=" + encodeURIComponent(inner + "&serviceKey="))), "run") });
+    list.push({ via: "binding", run: /* @__PURE__ */ __name((inner, signal) => env.BUSAPI.fetch(new Request("https://busapi.internal/tago?url=" + encodeURIComponent(inner + "&serviceKey="), signal ? { signal } : void 0)), "run") });
   }
   return list;
 }
@@ -6348,6 +6357,9 @@ var DIRECT_EGRESS_M = Math.min(1e3, walkCapSec() * WALK_MPS);
 var DIRECT_MAX_CAND = 3;
 var DIRECT_EST_SLACK_MIN = 20;
 var DIRECT_EST_MAX_WAIT = 1200;
+function dirNoStop(G, s) {
+  return !!(s && (G && G.noStop && G.noStop[s.node_id] || isPassStop(s.node_nm)));
+}
 function findDirectRed(G, SY, SX, EY, EX) {
   const RS = G && G.routeStops;
   if (!RS) return [];
@@ -6360,6 +6372,7 @@ function findDirectRed(G, SY, SX, EY, EX) {
     if (!a || a.length < 3) continue;
     let bi = -1, bd = Infinity;
     for (let i = 0; i < a.length; i++) {
+      if (dirNoStop(G, a[i])) continue;
       const d = hav(SY, SX, a[i].lat, a[i].lng);
       if (d < bd) {
         bd = d;
@@ -6369,6 +6382,7 @@ function findDirectRed(G, SY, SX, EY, EX) {
     if (bi < 0 || bd > DIRECT_ACCESS_M) continue;
     let ei = -1, ed = Infinity;
     for (let i = bi + 1; i < a.length; i++) {
+      if (dirNoStop(G, a[i])) continue;
       const d = hav(EY, EX, a[i].lat, a[i].lng);
       if (d < ed) {
         ed = d;
@@ -7932,8 +7946,12 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
   const _nk = _nowMinKST(_baseMs);
   const _dk = holDowKST(_baseMs);
   const _we = _dk === 0 || _dk === 6;
-  _G.subOff = subOffSet(_G.LN, _nk, _we);
-  _G.subFirst = subNextFirst(_G.LN, _nk, _we);
+  // s470: _G is shared by every request in this isolate and the D1 reads below await, so another request with a different time could overwrite _G.subOff in between
+  //   (a 00:40 search then saw the lines running at 10:20). Keep this request's values in locals and hand those to G.
+  const _subOffReq = subOffSet(_G.LN, _nk, _we);
+  const _subFirstReq = subNextFirst(_G.LN, _nk, _we);
+  _G.subOff = _subOffReq;
+  _G.subFirst = _subFirstReq;
   var _spanLat = Math.abs(SY - EY);
   var _spanLng = Math.abs(SX - EX) * Math.cos((SY + EY) / 2 * Math.PI / 180);
   var _need = Math.min(0.25, Math.max(MARGIN, 0.35 * Math.max(_spanLat, _spanLng)));
@@ -8148,8 +8166,8 @@ async function handleRouteV2(request, env, url, SUBWAY_BUNDLE2, ctx) {
     adj: /* @__PURE__ */ Object.create(null),
     ST: _G.ST,
     LN: _G.LN,
-    subOff: _G.subOff,
-    subFirst: _G.subFirst,
+    subOff: _subOffReq,
+    subFirst: _subFirstReq,
     _weekend: _we,
     // \u2605 2026-09-25: \uc704\uc5d0\uc11c \uc774\ubbf8 baseMs \uae30\uc900\uc73c\ub85c \uacc4\uc0b0\ud574 \ub454 \uac12\uc744 \uadf8\ub300\ub85c \uc7ac\uc0ac\uc6a9(\uc911\ubcf5 \uacc4\uc0b0 \uc81c\uac70)
     _baseMs,
@@ -10529,6 +10547,30 @@ function rsMtqTick(st, now, notes) {
   for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx > q.i) { delete st.mtq; return; }       // \ub2e4\uc74c \uc5ed\uc744 \uc774\ubbf8 \uc9c0\ub0ac\ub2e4 \u2014 \ud3c9\uc18c \ubcf4\uc815 \ubaab
   if (rsRtArm(st, q.i, now, notes)) { (st.rtc = st.rtc || { n: 0 }).why = 'mtq'; delete st.mtq; notes.push('\ub0b4 \uc5f4\ucc28 \ubc88\ud638\ub97c \ubd99\uc774\ub824 \uc2e4\uc2dc\uac04 \ud655\uc778(' + q.i + '\ubc88 \uc2b9\ucc28)'); }
 }
+// s471: \uc55e \uc815\ub958\uc7a5\uc744 \uac74\ub108\ub6f0\uc5b4 j \ubc88\uc744 \ud1b5\uacfc\ub85c \uc801\ub294 \uac83\uc774 \ub9d0\uc774 \uc548 \ub418\ub294\uac00 \u2014 \uac74\ub108\ub6f8 \uc815\ub958\uc7a5(\ub9c8\uc9c0\ub9c9 \ud1b5\uacfc \ubc88\ud638 \ub2e4\uc74c ~ j \uc55e, \uc544\uc9c1 \uc548 \uc9c0\ub0a8) \uc911 j \uc5d0\uc11c 150m \ub118\uac8c \ub5a8\uc5b4\uc9c4 \uac83\uc774 \uc788\uace0,
+//   (\uac00) \ub9c8\uc9c0\ub9c9 \ud1b5\uacfc \ub4a4 \uc704\uce58 \uae30\ub85d\uc774 25\ucd08 \ub118\uac8c \ub04a\uae34 \uc801 \uc5c6\uc774 \ucd18\ucd18\ud55c\ub370 \uadf8 \uc815\ub958\uc7a5 150m \uc548\uc744 \ud55c \ubc88\ub3c4 \uc548 \uc9c0\ub0ac\uac70\ub098 (\ub098) \uc99d\uac70 \uc2dc\uac01(evMs)\uc774 \ub9c8\uc9c0\ub9c9 \ud1b5\uacfc\uc5d0\uc11c \uacc4\ud68d \uc18c\uc694(\ud45c\uc2dc \uc2dc\uac01 \uae30\uc900)\uc758 40% \ub3c4 \uc548 \uc9c0\ub0ac\uc73c\uba74 true(= \uadf8 \uc815\ub958\uc7a5\uc740 \uc544\uc9c1\uc774\ub2e4).
+function rsSkipUnseen(st, tr, now, j, progMax, passes, evMs) {
+  var stops = st.stops || [], sj = null, i, k, lastPass = null, done = {};
+  for (i = 0; i < stops.length; i++) if (stops[i].i === j) sj = stops[i];
+  if (!sj || !isFinite(sj.lat) || !isFinite(sj.lng) || !tr || tr.length < 2) return false;
+  for (k = 0; k < passes.length; k++) { done[passes[k].idx] = 1; if (passes[k].idx === progMax) lastPass = passes[k]; }
+  if (!lastPass || lastPass.ms == null || !isFinite(lastPass.ms)) return false;
+  for (i = 0; i < stops.length; i++) {
+    var m = stops[i]; if (m.i <= progMax || m.i >= j || done[m.i] || !isFinite(m.lat) || !isFinite(m.lng)) continue;
+    if (rsDistM(m.lat, m.lng, sj.lat, sj.lng) <= 150) continue;
+    var em = st.etaMs || {}, tj = em[j] != null && isFinite(em[j]) ? em[j] : sj.arrMs, tl = em[progMax] != null && isFinite(em[progMax]) ? em[progMax] : lastPass.ms, pl = (tj != null && tl != null && isFinite(tj) && isFinite(tl)) ? tj - tl : 0;
+    if (evMs != null && isFinite(evMs) && pl > 0 && evMs - lastPass.ms < 0.4 * pl) return true;
+    var near = false, gap = false, prev = lastPass.ms, n = 0, q, acc;
+    for (k = 0; k < tr.length; k++) {
+      q = tr[k]; if (q[0] < lastPass.ms) continue;
+      n++; if (q[0] - prev > 25000) gap = true; prev = q[0];
+      acc = q[3] != null && isFinite(q[3]) ? Math.min(+q[3], 100) * 0.5 : 0;
+      if (rsHav(q[1], q[2], m.lat, m.lng) - acc <= 150) { near = true; break; }
+    }
+    if (!near && !gap && n >= 2 && now - prev <= 25000) return true;
+  }
+  return false;
+}
 // \ud658\uc2b9 \ub300\uae30: \uc544\uc9c1 \uc548 \ud0c4 \uccab \ud658\uc2b9 \uad6c\uac04\uc774 \uc788\uace0 \uc55e \uad6c\uac04\uc744 \ub0b4\ub838\uc73c\uba74 st.xw = {i,k,mode,line,name,arrMs,seen,shr}. \uc608\uc57d(xPend)\uc740 \uadf8 \uc2dc\uac01\uc774 \ub418\uba74 \ud655\uc815\ud55c\ub2e4.
 // \u2605 s266 (YJ: \uc5ed\uc5d0 \ub3c4\ucc29\ud55c \uac8c \ud655\uc778\ub418\uba74 \uba3c\uc800 \uc2dc\uac01\ud45c\ub300\ub85c \uc804\uc9c4\uc2dc\ud0a4\uace0 GPS \uc601\uc810\uc744 \ub9de\ucdb0\ub77c \u00b7 \ud658\uc2b9 \uce78\uacfc \ubc84\uc2a4 \ud558\ucc28 \uce78\uc744 \ub9c8\ucee4\uac00 \uc624\uac14\ub2e4):
 //   \u00b7 \ub2e4\uc74c \uc2b9\ucc28\uc5ed\uc5d0 \ub2ff\uc558\ub098 \u2014 \uc2b9\ucc28 \ub178\ub4dc 150m \uc548(\uc815\ud655\ub3c4\uc758 \uc808\ubc18 \ube80 \uac12)\uc5d0\uc11c \uac77\ub294 \uc18d\ub3c4(2.5m/s \uc774\ud558)\ub85c \uba38\ubb38 \uc704\uce58 \uae30\ub85d\uc774 \uc788\uc73c\uba74 \ub41c\ub2e4. \uc608\uc804 rsAlightGps \ub294 \ub9c8\uc9c0\ub9c9 \uae30\ub85d \ud558\ub098\ub9cc \ubcf4\uace0 20~120\ucd08 \ucc3d\uc774 \ud544\uc694\ud574 \uc9c0\ud558 \uc9c4\uc785 \ub4a4 \uae30\ub85d\uc774 \ub4dc\ubb3c\uba74 \ub193\ucce4\ub2e4.
@@ -11585,14 +11627,18 @@ function rsResync(st, now, notes) {
   for (i = tr.length - 2; i >= 0; i--) { if (a[0] - tr[i][0] >= 5000 && a[0] - tr[i][0] <= 60000 && (tr[i][3] == null || tr[i][3] <= 60)) { b = tr[i]; break; } }
   if (!b) return false;
   var lastStop = null; for (i = 0; i < stops.length; i++) if (stops[i].i === maxIdx) lastStop = stops[i];
-  var best = null, bestD = 1e9;
+  var best = null, bestD = 1e9, bestT = 1e13;
   for (k = 0; k < stops.length; k++) {
     var s = stops[k]; if (s.i <= maxIdx) continue;
     var da = rsDistM(a[1], a[2], s.lat, s.lng), db = rsDistM(b[1], b[2], s.lat, s.lng);
     if (da > 150 || db > 150) continue;
     var gap = lastStop ? (s.arrMs - lastStop.arrMs) : 0;
     if (gap > 0 && lastPass.ms != null && a[0] - lastPass.ms < 0.4 * gap) continue;   // \uacc4\ud68d \uc18c\uc694\uc758 40% \ub3c4 \uc548 \uc9c0\ub0ac\uc73c\uba74 \uac74\ub108\ub6f8 \uc218 \uc5c6\ub2e4
-    if (da < bestD) { bestD = da; best = s; }
+    if (s.i > maxIdx + 1 && rsSkipUnseen(st, tr, now, s.i, maxIdx, passes, a[0])) continue;      // s471: \uc704\uce58\ub85c \ubcf4\uc544 \uc544\uc9c1 \uc548 \uc9c0\ub09c \uc55e \uc815\ub958\uc7a5(150m \ub118\uac8c \ub5a8\uc5b4\uc9c4)\uc744 \uac74\ub108\ub6f0\uc9c0 \uc54a\ub294\ub2e4
+    // \u2605 s471 (\uac00\uc0c1 \uc774\ub3d9 \uc2dc\ud5d8: 841\ubc88 \uc0ac\uc6b0\uc5ed \u2014 \uc2b9\ucc28(5\ubc88)\uc640 \ud558\ucc28(7\ubc88) \uc815\ub958\uc7a5\uc774 43m, \uc0ac\uc774 6\ubc88\uc774 204m \ubc16\uc778 U\uc790 \uad6c\uac04. 5\ubc88 110m \uc55e\uc5d0\uc11c '\uac00\uc7a5 \uac00\uae4c\uc6b4' 7\ubc88\uc774 \ud1b5\uacfc\ub85c \uc801\ud600 5\u00b76\ubc88\uc744 \uac74\ub108\ub6f0\uace0 \ud558\ucc28 \ub178\ub4dc\ub85c \uace7\uc7a5 \uac00 \ud658\uc2b9 2\u00b71\uc815\uac70\uc7a5 \uc804 \uc54c\ub9bc\uc774 \ub458 \ub2e4 \uc0ac\ub77c\uc84c\ub2e4):
+    //   \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uc774 \uc5ec\ub7ff\uc774\uba74(150m \uc548) \uac70\ub9ac\uac00 \uc544\ub2c8\ub77c '\ud45c\uc2dc \ub3c4\ucc29 \uc2dc\uac01\uc774 \uc9c0\uae08\uacfc \uac00\uc7a5 \uac00\uae4c\uc6b4' \uc815\ub958\uc7a5\uc744 \uace0\ub978\ub2e4(\uac19\uc73c\uba74 \uc55e \ubc88\ud638) \u2014 \uc55e\uc5d0\uc11c \uc544\uc9c1 \uc548 \uc9c0\ub09c \uc815\ub958\uc7a5\uc744 \uac74\ub108\ub6f0\uc9c0 \uc54a\ub294\ub2e4.
+    var tm = (st.etaMs && st.etaMs[s.i] != null && isFinite(st.etaMs[s.i])) ? st.etaMs[s.i] : s.arrMs, dtm = (tm != null && isFinite(tm)) ? Math.abs(a[0] - tm) : 1e12;
+    if (!best || dtm < bestT || (dtm === bestT && s.i < best.i)) { bestD = da; bestT = dtm; best = s; }
   }
   if (!best) return false;
   passes.push({ idx: best.i, ms: a[0], src: 'gps' });
@@ -11789,7 +11835,7 @@ function rsBlAsk(st, tr, now) {
 }
 // \u2605 s266 \ud658\uc2b9 \ub300\uae30(st.xw, \uc9c0\ud558\ucca0)\uc758 \ub2e4\uc74c \ucc28: \ud658\uc2b9\uc5ed\uc5d0 \ub0b4\ub9b0 \ub4a4(= xw \uac00 \uc11c \uc788\ub294 \ub3d9\uc548) \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28\ub97c \ubb3b\ub294\ub2e4 \u2014 \uacc4\ud68d \uc2dc\uac01(\ubc84\uc2a4\uac00 \ub2ff\ub294 \uc2dc\uac01)\uc5d0 \uc5f4\ucc28\uac00 \uc5c6\uc744 \uc218 \uc788\ub2e4.
 //   \ub2f5\uc740 eta.live \ub85c \uc801\uc5b4 ride-eta \uac00 \uadf8 \uc5ed \uc2dc\uac01\uacfc \ub4a4\ub97c \uadf8\ub9cc\ud07c \uc62e\uae34\ub2e4. \uc2b9\uac15\uc7a5\uae4c\uc9c0 \uac77\ub294 1\ubd84\uc744 \ub354\ud55c \uc2dc\uac01 \uc774\ud6c4 \ucc28\ubd80\ud130. \ub2f5\uc774 \uc788\uc73c\uba74 \uadf8 \ucc28\uac00 \ub5a0\ub09c 30\ucd08 \ub4a4\uae4c\uc9c0 \ub354 \ubb3b\uc9c0 \uc54a\uace0, \ubabb \ubc1b\uc73c\uba74 15\ucd08 \uac04\uaca9 6\ubc88\uae4c\uc9c0.
-var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000;
+var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000, RS_BLX_EARLY_TT_MS = 90000;
 function rsBlAskX(st, now) {
   try {
     var x = st.xw, tg = rsBlTarget(st); if (!x || st.wait || !tg) return null;
@@ -11807,6 +11853,14 @@ function rsBlApplyX(st, req, now, notes) {
   var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000 || bx.lastAt === at) return;
   bx.lastAt = at;
   if (b.ms == null || !isFinite(+b.ms) || +b.ms < now - 5000 || +b.ms > now + RS_BLX_MAXAHEAD_MS) return;      // \ubabb \ubc1b\uc74c \u2192 \uacc4\ud68d \uc2dc\uac01 \uadf8\ub300\ub85c
+  // \u2605 s472 (\uac00\uc0c1 \uc774\ub3d9 \uc2dc\ud5d8: \uccad\ub77c\u2192\uac15\ub0a8 \ud658\uc2b9 4\ubc88 \u2014 \uc2e0\ub17c\ud604 9\ud638\uc120\u2192\uc2e0\ubd84\ub2f9\uc120 \ud658\uc2b9\uc740 \uac77\ub294 \uc2dc\uac04\uc774 4\ubd84\uc778\ub370 '\uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28'\ub294 \uc2b9\uac15\uc7a5\uae4c\uc9c0 1\ubd84\ub9cc \ub354\ud574 \ubb3c\uc5b4, \uac77\ub294 \uc2dc\uac04 \ub54c\ubb38\uc5d0 \ubabb \ud0c0\ub294 8\ubd84 \uc774\ub978 \uc5f4\ucc28\ub97c \ud0d4\ub2e4\uace0 \ubc1b\uc544\ub4e4\uc5ec
+  //   '\ubaa9\uc801\uc9c0 \ub3c4\ucc29'\uc774 7\ubd84 \ub118\uac8c \uc77c\ucc0d \uc6b8\ub838\ub2e4): \uacc4\ud68d\uc758 \uc2b9\ucc28 \uc2dc\uac01\uc740 \uac77\ub294 \uc2dc\uac04\uc744 \ub123\uc5b4 \uc774\ubbf8 \uc2dc\uac01\ud45c\uc5d0\uc11c \uc7a1\uc740 \uac83\uc774\ub2e4. \uc2dc\uac01\ud45c(table) \ub2f5\uc774 \uadf8\ubcf4\ub2e4 RS_BLX_EARLY_TT_MS \ub118\uac8c \uc774\ub974\uba74 \uac77\ub2e4\uac00 \ub193\uce58\ub294 \ucc28 \u2014 \uacc4\ud68d \uc2dc\uac01\uc744 \uadf8\ub300\ub85c \ub454\ub2e4(\uadf8 \ucc28\ub97c \uc815\ub9d0 \ud0d4\ub2e4\uba74 \uc704\uce58 \uc774\ub3d9(rsXGo)\uc774 \uc7a1\ub294\ub2e4).
+  //   \uc2e4\uc2dc\uac04(realtime) \ub2f5\uc740 \uc2b9\uac15\uc7a5\uc5d0\uc11c \ubcf4\uc774\ub294 \ucc28\ub77c \uadf8\ub300\ub85c \ubc1b\ub294\ub2e4.
+  if (b.src === 'table' && x.arrMs != null && isFinite(x.arrMs) && +b.ms < x.arrMs - RS_BLX_EARLY_TT_MS) {
+    bx.ms = Math.round(x.arrMs); bx.src = 'plan'; delete bx.tn;
+    notes.push('\ud658\uc2b9 \ub2e4\uc74c \ucc28(table)\uac00 \uacc4\ud68d \uc2b9\ucc28\ubcf4\ub2e4 ' + Math.round((x.arrMs - +b.ms) / 1000) + '\ucd08 \uc77c\ub7ec \uac77\ub294 \uc0ac\uc774 \ub193\uce58\ub294 \ucc28 \u2014 \uacc4\ud68d \uc2dc\uac01 \uadf8\ub300\ub85c');
+    return;
+  }
   var lv = (eta.live || []).filter(function (q) { return q && +q.idx !== x.i; });
   var lvE = { idx: x.i, ms: Math.round(+b.ms) }; if (b.src === 'table') lvE.tt = 1;      // s456: \uc2dc\uac01\ud45c \ub2f5(\ubd84:00)\uc740 ride-eta \uac00 \uadf8 \uc5ed\uc758 \uc608\uc815 \ucd08(:20~:30) \uc790\ub9ac\ub85c \uc62e\uaca8 \uc4f4\ub2e4 \u2014 \uac19\uc740 \uc5f4\ucc28\uba74 \uc2dc\uac01\uc774 \uc548 \ubc14\ub010\ub2e4
   lv.push(lvE); eta.live = lv; bx.ms = Math.round(+b.ms); bx.src = b.src || '';
@@ -12068,6 +12122,10 @@ function rideStandby(req) {
   if (st.dt) { dtInfo = rsDtTick(st, tr, now, req, notes); if (!st.dt && st.dtDone && st.dtDone.at === now) rsXwait(st, tr, now, notes); }
   var dtHold = !!st.dt || !!(st.dtDone && st.xw && st.xw.i === st.dtDone.i) || !!(st.xw && st.xw.mode === 'sub' && st.xAl === st.xw.i && st.xFree !== st.xw.i);      // s266: \ud658\uc2b9\uc5ed \uc2b9\uac15\uc7a5\uc5d0\uc11c \uc5f4\ucc28\ub97c \uae30\ub2e4\ub9ac\ub294 \ub3d9\uc548(xw)\uc740 \uc2b9\ucc28\uc5ed \uadfc\ucc98 \uc704\uce58\uac00 '\ud1b5\uacfc'(= \ud0d1\uc2b9)\ub85c \uc7a1\ud788\uc9c0 \uc54a\uac8c \u2014 \uc2dc\uac01\ud45c \ucd9c\ubc1c\u00b7\ubc84\ud2bc\u00b7\uc790\ub3d9 \uc2b9\ucc28\ub85c\ub9cc \ud0c4 \uac83\uc73c\ub85c \ud55c\ub2e4(YJ: 14\ubd84\uc5d0 \ub300\uae30\ub97c \ub20c\ub800\ub294\ub370 \ud0d1\uc2b9\ucc98\ub7fc \ub098\uc634)
   //     // \uc5ed\uae4c\uc9c0 \uc774\ub3d9 \uc911\uc774\uac70\ub098, \uc774\uc5b4 \ubd99\uc778 \uc5f4\ucc28\ub97c \uc544\uc9c1 \uc548 \ud0c4 \ub3d9\uc548\uc740 \uc704\uce58\ub85c \ud1b5\uacfc\ub97c \uc778\uc815\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc5ed \uc548\uc5d0\uc11c \uae30\ub2e4\ub9ac\ub294 \uc911\uc774\ub2e4)
+  // \u2605 s471 (\uac00\uc0c1 \uc774\ub3d9 \uc2dc\ud5d8: \ud658\uc2b9 \ub300\uae30 \uc911 \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28\ub97c \ubabb \uad6c\ud558\uba74(xFree) \uc2b9\ucc28 \ub178\ub4dc\uac00 \uc601\uc810\uc73c\ub85c '\ud1b5\uacfc' \ucc98\ub9ac\ub3fc, \uc2b9\ucc28\uc5ed\uc5d0 \uc11c \uc788\uae30\ub9cc \ud55c\ub370 \ub9c8\ucee4\uac00 \ud55c \uce78 \uc55e\uc11c\uac00\uace0 '\ubaa9\uc801\uc9c0 2\uc815\uac70\uc7a5 \uc804'\uc774 1~3\ubd84 \uc77c\ucc0d \uc6b8\ub838\ub2e4 \u2014
+  //   \ud658\uc2b9 \uc815\uac70\uc7a5 \ud558\ub098\ub9cc \ub0a8\uc740 \uc9e7\uc740 \uad6c\uac04\uc774\uba74 '\ubaa9\uc801\uc9c0 \ub3c4\ucc29'\uae4c\uc9c0 3\ubd84 \uc77c\ucc0d): \uc2dc\uac01\ud45c\uac00 \uc5c6\uc73c\uba74 \uc704\uce58 \uc99d\uac70\uc5d0 \ub9e1\uae30\ub418, \uc2b9\ucc28 \ub178\ub4dc \uc790\uccb4\ub294 '\uc5ed\uc5d0 \uc11c \uc788\uc74c'\uacfc '\uc5f4\ucc28\uac00 \uc9c0\ub098\uac10'\uc744 \uc601\uc810\ub9cc\uc73c\ub85c \uac00\ub97c \uc218 \uc5c6\uc73c\ubbc0\ub85c \ud1b5\uacfc\ub85c \uc801\uc9c0 \uc54a\ub294\ub2e4.
+  //   \ud0d4\ub2e4\ub294 \uc99d\uac70\ub294 rsXGo(\uc5ed\uc5d0\uc11c 400m \ub118\uac8c \ube60\ub974\uac8c \ubc97\uc5b4\ub0a8 \u00b7 \uacc4\ud68d \ucd9c\ubc1c 4\ubd84 \ub4a4\uae4c\uc9c0 \uc99d\uac70 \uc5c6\uc73c\uba74 \uc2dc\uac01\ud45c\ub300\ub85c)\uac00 \ub9e1\uace0, \uadf8 \ub4a4 \uc815\ub958\uc7a5\uc758 \uc601\uc810 \ud1b5\uacfc(\uadf8\ub7ec\uba74 \uc2b9\ucc28\ub294 \uc9c0\ub09c \uac83)\ub3c4 \uadf8\ub300\ub85c \ubc1b\ub294\ub2e4.
+  var xfNode = (!dtHold && st.xw && st.xw.mode === 'sub' && !st.xPend && st.xAl === st.xw.i && st.xFree === st.xw.i && !(st.rsDone && st.rsDone[st.xw.i])) ? st.xw.i : -1;
   // 2) \uc601\uc810: \uc815\ub958\uc7a5 \ub3c4\ucc29 \uc2dc\uac01\uc744 \ucd5c\uc2e0 etaMs \ub85c \ub9de\ucdb0 ride-track \uc5d0 \ubb3b\ub294\ub2e4 \u2192 \ud1b5\uacfc \uc2dc\uac01(passMs)\uc740 gps \uc99d\uac70\ub85c, \uc544\uc9c1 \uc548 \ub2ff\uc74c\uc740 notYet \uc73c\ub85c
   var eta = st.eta, passes = (eta.passes = eta.passes || []), notYet = (st.notYet = st.notYet || {});
   var zero = null, newPass = false, tk = null;
@@ -12082,10 +12140,16 @@ function rideStandby(req) {
     if (zero && zero.stops) {
       zero.stops.forEach(function (z) {
         if (z.passMs != null && isFinite(z.passMs) && z.apply) {
+          // \u2605 s471 (\uac00\uc0c1 \uc774\ub3d9 \uc2dc\ud5d8: 841\ubc88 \uc0ac\uc6b0\uc5ed \u2014 5\ubc88(\uc2b9\ucc28)\uacfc 7\ubc88(\ud558\ucc28)\uc774 43m \uc774\uace0 6\ubc88\uc774 204m \ubc16\uc778 U\uc790 \uad6c\uac04\uc5d0\uc11c, 5\ubc88\uc744 \uc9c0\ub098\ub294 \uac83\ub9cc\uc73c\ub85c 7\ubc88\uc774 '\ub113\uc740 \ucc3d \ud1b5\uacfc'\ub85c \uc801\ud600 6\ubc88\uc744 \uac74\ub108\ub6f0\uace0 \ud658\uc2b9 '1\uc815\uac70\uc7a5 \uc804' \uc54c\ub9bc\uc774 \uc0ac\ub77c\uc84c\ub2e4):
+          //   \ub9c8\uc9c0\ub9c9 \ud1b5\uacfc \ub4a4 \uc704\uce58 \uae30\ub85d\uc774 \ucd18\ucd18\ud55c\ub370 \uc774 \uc815\ub958\uc7a5 \uc55e\uc5d0\uc11c \uc544\uc9c1 \uc548 \uc9c0\ub09c '150m \ub118\uac8c \ub5a8\uc5b4\uc9c4' \uc815\ub958\uc7a5 \uadfc\ucc98\ub97c \ud55c \ubc88\ub3c4 \uc548 \uc9c0\ub0ac\ub2e4\uba74, \uadf8 \uc815\ub958\uc7a5\uc744 \uac74\ub108\ub6f0\uc5b4 \uc774 \uc815\ub958\uc7a5\uc744 \ud1b5\uacfc\ub85c \uc801\uc9c0 \uc54a\ub294\ub2e4(\uae30\ub85d\uc774 \ub04a\uacbc\uc73c\uba74 \uac74\ub108\ub6f8 \uc218 \uc788\ub2e4).
+          if (z.i > progMax + 1 && rsSkipUnseen(st, tr, now, z.i, progMax, passes, z.passMs)) return;
+          if (z.i === xfNode) { if (st.xfNote !== z.i) { st.xfNote = z.i; notes.push('\ud658\uc2b9 \uc2b9\ucc28\uc5ed ' + z.i + '\ubc88 \u2014 \uc2dc\uac01\ud45c \uc5c6\uc774 \uc5ed\uc5d0 \uc11c \uc788\ub294 \uac83\ub9cc\uc73c\ub85c \ud0d4\ub2e4\uace0 \ubcf4\uc9c0 \uc54a\uc74c(\uc774\ub3d9 \uc99d\uac70 \u00b7 \uacc4\ud68d \ucd9c\ubc1c 4\ubd84 \ub4a4\uae4c\uc9c0 \uae30\ub2e4\ub9bc)'); } return; }
           var hit = -1; for (var k = 0; k < passes.length; k++) if (passes[k].idx === z.i) { hit = k; break; }
           if (hit >= 0 && st.rsDone && st.rsDone[z.i]) return;      // s266: \uc2dc\uac01\ud45c\u00b7\ubc84\ud2bc\uc73c\ub85c \ud0d4\ub2e4\uace0 \ud655\uc815\ud55c \ud658\uc2b9 \uc2b9\ucc28\uc5ed\uc740 \uc704\uce58(\uc5ed\uc5d0 \ub2ff\uc740 \uc2dc\uac01)\ub85c \ub2e4\uc2dc \uc4f0\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ud0d1\uc2b9 \uc2dc\uac01\uc774 \uc5ed\uc5d0 \ub2ff\uc740 \uc2dc\uac01\uc73c\ub85c \ub2f9\uaca8\uc9c0\ub358 \uac83
           if (hit >= 0 && passes[hit].src === 'gps' && z.i < progMax) return;      // s456 (YJ: "\uc774\ubbf8 \uc9c0\ub098\uac04 \uac83\uc774 \ud655\uc815\ub41c \uc5ed\uc740 \uc2dc\uac04\uc744 \ubc14\uafb8\uc9c0 \ub9c8"): \ub4a4\uc5d0 \ud1b5\uacfc \uc99d\uac70\uac00 \uc788\ub294(= \uc774\ubbf8 \uc9c0\ub09c) \uc815\ub958\uc7a5\u00b7\uc5ed\uc758 GPS \ud1b5\uacfc \uc2dc\uac01\uc740 \ub2e4\uc2dc \uc4f0\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uadfc\ucc98\uc5d0 \uba38\ubb34\ub294 \uc704\uce58(\uc9c0\ud558 \u00b7 \uac19\uc740 \uc88c\ud45c \ubc18\ubcf5)\uac00 \uc9c0\ub09c \uc5ed \uc2dc\uac01\uc744 \uacc4\uc18d \ub2a6\ucd94\ub358 \uac83. \uac00\uc7a5 \ucd5c\uadfc \uc5ed(\uc601\uc810 \uae30\uc900)\uc740 \uadf8\ub300\ub85c \ub2e4\ub4ec\ub294\ub2e4.
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
+          // s471: \uc55e \uc815\ub958\uc7a5 \ud1b5\uacfc \uc2dc\uac01\ubcf4\ub2e4 \uc774\ub978 \uc99d\uac70(\ubc14\ub85c \uc55e \uc815\ub958\uc7a5\uacfc \uac00\uae4c\uc6cc \uadf8 \uadfc\ucc98\uc5d0\uc11c \uc774\ubbf8 \uc7a1\ud78c \uc704\uce58)\ub294 \uadf8 \ud1b5\uacfc \uc2dc\uac01\uc73c\ub85c \ub9de\ucd98\ub2e4 \u2014 \ud1b5\uacfc \uc2dc\uac01\uc774 \ubc88\ud638 \uc21c\uc11c\ub97c \uac70\uc2a4\ub974\uba74 \ub9c8\ucee4\uac00 \ub418\ub3cc\uc544\uac04\ub2e4
+          for (var lq = 0; lq < passes.length; lq++) if (passes[lq] && passes[lq].idx === progMax && passes[lq].ms != null && isFinite(passes[lq].ms) && z.i > progMax && np.ms < passes[lq].ms) np.ms = passes[lq].ms;
           if (hit >= 0) passes[hit] = np; else passes.push(np);
           newPass = true;
           delete notYet[z.i];
@@ -12396,6 +12460,16 @@ function ntDayInfo(baseMs) {
     isHol: dow === 0 || dow === 6 || hol,
     dayCode: hol ? 'SUN' : (dow === 0 ? 'SUN' : (dow === 6 ? 'SAT' : 'DAY'))
   };
+}
+
+// s469: clock times 00:00-02:59 belong to the previous night's service. Timetable columns continue past midnight as 1440+ (24:xx, 25:xx),
+//   so for those hours use the previous day's day-type and add 1440 to the minute (otherwise a 00:40 search saw no train until the 05:xx first train).
+var NT_SVC_TAIL_MIN = 180;
+function ntSvcDayInfo(baseMs) {
+  var di = ntDayInfo(baseMs);
+  if (di.nowMin >= NT_SVC_TAIL_MIN) return di;
+  var p = ntDayInfo(baseMs - 86400000);
+  return { nowMin: di.nowMin + 1440, isHol: p.isHol, dayCode: p.dayCode };
 }
 
 function ntCreate(DATA) {
@@ -12972,7 +13046,7 @@ function ntCreate(DATA) {
       // \u2500\u2500 \ud3f4\ubc31: \uae30\uc874 _realNextDep (\uc11c\uc6b8 1~9\ud638\uc120) \u2500\u2500
       var dep2 = (typeof _realNextDep==='function') ? _realNextDep(line, stn, dirKey, nowMin, isWk) : null;
       if(dep2 != null){
-        if(dep2 < 1440){
+        if(nowMin >= 1440 ? (dep2 - nowMin) <= 90 : dep2 < 1440){
           return { found:true, depMin:dep2, arrMin:dep2 + (mins||0), firstMin:null, line:line, stn:stn, dir:dirKey };
         }
         var fm = dep2 - 1440;
@@ -13142,8 +13216,13 @@ function ntCreate(DATA) {
   return {
     // \uccab \uad6c\uac04 '\ub2e4\uc74c \uc5f4\ucc28' \uc548\ub0b4(\ub178\uc120\ub3c4 \uacbd\ub85c \ube0c\ub9ac\ud551): { line, from, to, baseMs, mins } \u2192 \uc571\uc758 \uc61b _metroNextTrainInfo \uc640 \uac19\uc740 \ubaa8\uc591
     metroInfo: function (q) {
-      var di = ntDayInfo(q.baseMs); setCtx(di);
-      return _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      var di = ntSvcDayInfo(q.baseMs); setCtx(di);
+      var r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: di.nowMin, isHol: di.isHol });
+      if (di.nowMin >= 1440 && r && r.found === false) {      // s469: no train left from last night -> the first train comes from today's (calendar day) table
+        var d0 = ntDayInfo(q.baseMs); setCtx(d0);
+        r = _metroNextTrainInfo({ line: q.line, from: q.from, to: q.to, mins: q.mins, nowMin: d0.nowMin, isHol: d0.isHol });
+      }
+      return r;
     },
     // \uc9c0\ud558\ucca0 \uad6c\uac04\uc758 \uc2b9\ucc28\uc5ed \ub2e4\uc74c \uc5f4\ucc28 \ucd9c\ubc1c(\ubd84; \uc790\uc815 \ub118\uc73c\uba74 1440 \uc774\uc0c1): sg = { name(\ub178\uc120), type:1, stops:[{stationName}\u2026] }
     segNextDep: function (sg, baseMs) {
@@ -13395,7 +13474,7 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
       if (typeof v === 'number' && isFinite(v) && v > 0 && v < 1440) { shiftMs = v * 60000; break; }
     }
   }
-  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1;
+  var base0 = baseMs + shiftMs, acc = 0, n = 0, firstT = -1, tail0 = ntDayInfo(baseMs).nowMin < NT_SVC_TAIL_MIN;
   for (var f0 = 0; f0 < sub.length; f0++) { var tt0 = sub[f0] && sub[f0].trafficType; if (tt0 === 1 || tt0 === 2 || tt0 === 4) { firstT = f0; break; } }      // \uccab \ub300\uc911\uad50\ud1b5 \uad6c\uac04 \uc790\ub9ac
   for (var k = 0; k < sub.length; k++) {
     var leg = sub[k];
@@ -13411,8 +13490,11 @@ function ntAttachPath(nt, path, baseMs, bf, live) {
     var t = base0 + leg.startSec * 1000 + acc;
     var sod = (((Math.floor(t / 1000) + 32400) % 86400) + 86400) % 86400;          // KST \ud558\ub8e8 \uc548\uc758 \ucd08
     var bm = Math.floor(sod / 3600) * 60 + Math.floor((sod % 3600) / 60) + (sod % 60) / 60;
+    // s469: boarding between 00:00 and 02:59 -> look in the 1440+ part of the service day (previous day's table when the search itself started after midnight)
+    var tailLeg = bm < NT_SVC_TAIL_MIN, dayMs = (tailLeg && tail0) ? baseMs - 86400000 : baseMs;
+    if (tailLeg) bm += 1440;
     var dep = null;
-    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, baseMs, bm); } catch (e) {}
+    try { dep = nt.segNextDepAt({ type: 1, name: line, stops: st }, dayMs, bm); } catch (e) {}
     // s197: \uccab \ub300\uc911\uad50\ud1b5\uc774 \uc11c\uc6b8 \uc9c0\ud558\ucca0\uc774\uace0 \uc2e4\uc2dc\uac04 \uc5f4\ucc28\uac00 \uac00\ub824\uc84c\uc73c\uba74 \uc2dc\uac01\ud45c \ub300\uae30 \ub300\uc2e0 \uadf8 \uc5f4\ucc28\uae4c\uc9c0\uc758 \ub300\uae30(\uc870\uc6a9\ud55c \uad50\uccb4)
     if (live && k === firstT && shiftMs === 0 && st.length > 1) {
       var lv = live[ntLiveKey(line, st[0].stationName, st[1].stationName, leg.arriveSec)];
@@ -22920,7 +23002,8 @@ var MAP_EXIT_RE = /\uc5ed\s*\d*\s*\ubc88?\s*\ucd9c\uad6c|\uc5ed\s*\ucd9c\uad6c/;
 var MAP_STOP_DUP_M = 3;
 var MAP_PIN_R = 100, MAP_EXIT_CAP = 12, MAP_EXIT_SAME_M = 40, MAP_HOLD_MS = 2000;                        // s451 \uc9c0\ub3c4\uc5d0\uc11c \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3: \uadf8 \uc8fc\ubcc0 100m \u00b7 \uc5ed \ucd9c\uad6c\ub294 \uba87 \uacf3\uc774\ub4e0 \uba3c\uc800(\ucd5c\ub300 12) \u00b7 \uac19\uc740 \ucd9c\uad6c\uac00 \ub2e4\ub978 \ucd9c\ucc98\uc5d0 \uc870\uae08 \ub2e4\ub978 \uc88c\ud45c\ub85c \uc788\uc5b4\ub3c4(40m \uc548 \uac19\uc740 \uc774\ub984) \ud558\ub098 \u00b7 2\ucd08 \uafb9
 var MAP_NEAR_R = 300, MAP_NEAR_CAP = 8;                           // \ub0b4 \uc8fc\ubcc0 \uc815\ub958\uc7a5: \uc9c0\uae08 \uc704\uce58\uc5d0\uc11c 300m \uc774\ub0b4\ub9cc(\uac00\uae4c\uc6b4 \uc21c \ucd5c\ub300 8\uacf3 \u2014 s284: \ub3c4\ucc29\uc815\ubcf4\ub97c \ubc1b\ub294 \uacf3\uc774 \uc801\uc744\uc218\ub85d \ube68\ub9ac \u00b7 \ub35c \ube44\uac8c) \u2014 300m \ubc16\uc740 \ud558\ub098\ub3c4 \ub123\uc9c0 \uc54a\ub294\ub2e4(\uc5c6\uc73c\uba74 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694')
-var MAP_Q = 1000, MAP_QR = 450;                                    // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
+var MAP_FAR_R = 450;                                              // s468: 300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \ud558\ub098\ub3c4 \uc5c6\uc744 \ub54c\ub9cc \uc774 \ubc18\uacbd\uae4c\uc9c0 \ub113\ud600 \uac00\uae4c\uc6b4 \uc21c\uc73c\ub85c \ubcf4\uc5ec \uc900\ub2e4(\uc870\ud68c \ubc18\uacbd MAP_QR \uacfc \uac19\ub2e4 \u2014 \uc774\ubbf8 \ubc1b\uc740 \uac12)
+var MAP_Q = 1000, MAP_QR = 450;                                  // \uc870\ud68c \uc88c\ud45c\ub294 0.001\u00b0(\uc57d 100m) \uce78\uc758 \uac00\uc6b4\ub370\ub85c \ub9de\ucd98\ub2e4(\uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \uac19\uc740 \uce78\uc5d0\uc11c \ub9de\ub294\ub2e4) \u2014 \uadf8\ub9cc\ud07c \ubc18\uacbd\uc744 300 \u2192 450m \ub85c \ub109\ub109\ud788 \ubc1b\uace0, \uac70\ub9ac\ub294 \ub298 \ub0b4 \uc9c4\uc9dc \uc88c\ud45c\ub85c \ub2e4\uc2dc \uc7b0\ub2e4
 function mapQ(v) { return Math.round(Number(v) * MAP_Q) / MAP_Q; }
 function mapInSeoul(la, lo) { return la >= MAP_SEOUL_BOX[0] && la <= MAP_SEOUL_BOX[1] && lo >= MAP_SEOUL_BOX[2] && lo <= MAP_SEOUL_BOX[3]; }
 function mapXmlItems(text, tag) {
@@ -22933,15 +23016,34 @@ function mapXmlVal(chunk, tag) {
   var m = new RegExp('<' + tag + '[^>]*>([\\s\\S]*?)<\\/' + tag + '>').exec(chunk);
   return m ? String(m[1]).replace(/<!\[CDATA\[|\]\]>/g, '').trim() : '';
 }
+// s464b: \uc11c\uc6b8 TOPIS \ub294 \ubcf4\ud1b5 XML \ub85c \uc624\uc9c0\ub9cc JSON({"msgBody":{"itemList":[...]}})\ub85c \uc624\ub294 \ub54c\uac00 \uc788\ub2e4(\uc11c\uc6b8 \uc0ac\ub2f9 \uadfc\ucc98 \u2014 \uc815\ub958\uc7a5 33\uacf3\uc774 \uc788\ub294\ub370 XML \ub9cc \uc77d\uc5b4 \ud1b5\uc9f8\ub85c \ub193\uccd0 '\ucc3e\uc9c0 \ubabb\ud588\uc5b4\uc694'). \ub458 \ub2e4 \uc77d\ub294\ub2e4.
+function mapTopisItems(text) {
+  var t = String(text || '').replace(/^\s+/, '');
+  if (t.charAt(0) !== '{') return mapXmlItems(t, 'itemList');
+  try {
+    var o = JSON.parse(t), b = o && (o.msgBody || (o.ServiceResult && o.ServiceResult.msgBody)), it = b && b.itemList;
+    if (it === undefined || it === null) return [];
+    return (Array.isArray(it) ? it : [it]).slice(0, 400).filter(function (x) { return x && typeof x === 'object'; });
+  } catch (e) { return []; }
+}
+function mapTopisVal(item, tag) {                                 // XML \uc870\uac01(\uae00) \uc774\ub4e0 JSON \ud56d\ubaa9(\uac1d\uccb4) \uc774\ub4e0 \uac19\uc740 \uc774\ub984\uc73c\ub85c \uac12\uc744 \uc77d\ub294\ub2e4
+  if (item && typeof item === 'object') { var v = item[tag]; return (v === undefined || v === null) ? '' : String(v).trim(); }
+  return mapXmlVal(item, tag);
+}
+function mapTopisErr(text) {                                      // \uc5f4\uc1e0 \uc624\ub958 \u00b7 \uc624\ub958 \ubd09\ud22c(headerCd 1~9) \u2014 XML \u00b7 JSON \ubaa8\ub450
+  var t = String(text || '');
+  return /Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) || /<headerCd>\s*[1-9]/.test(t) || /"headerCd"\s*:\s*"?[1-9]/.test(t.slice(0, 600));
+}
 function mapJsonItems(text) {
   try { var o = JSON.parse(String(text || '')), it = o.response.body.items.item || []; return Array.isArray(it) ? it : [it]; } catch (e) { return []; }
 }
 function mapSeoulStops(text, la, lo) {
   var stops = [];
-  mapXmlItems(text, 'itemList').forEach(function (ch) {
-    var ars = mapXmlVal(ch, 'arsId'), nm = mapXmlVal(ch, 'stationNm');
+  if (mapTopisErr(text)) return stops;
+  mapTopisItems(text).forEach(function (ch) {
+    var ars = mapTopisVal(ch, 'arsId'), nm = mapTopisVal(ch, 'stationNm');
     if (!ars || !nm || String(ars).replace(/^0+/, '') === '') return;       // arsId 0 = \ubbf8\uc815\ucc28
-    var gx = parseFloat(mapXmlVal(ch, 'gpsX')), gy = parseFloat(mapXmlVal(ch, 'gpsY')), d = parseFloat(mapXmlVal(ch, 'dist'));
+    var gx = parseFloat(mapTopisVal(ch, 'gpsX')), gy = parseFloat(mapTopisVal(ch, 'gpsY')), d = parseFloat(mapTopisVal(ch, 'dist'));
     var hasXY = !(isNaN(gx) || isNaN(gy));
     if (!hasXY) { gx = lo; gy = la; }
     stops.push({ nm: nm, id: 'SEOUL:' + ars, ars: ars, la: gy, lo: gx, dist: (hasXY || !isFinite(d)) ? mapHav(la, lo, gy, gx) : d, src: 'topis' });
@@ -23085,7 +23187,9 @@ function mapBusStops(f) {
   }
   if (!s.length && d1.length) s = d1;
   s = mapExitMore(mapDedupStops(s), tp.concat(gg, tn, d1));                              // s451(YJ: \uc5ed \uadfc\ucc98\uc5d0\uc11c \uac00\uae4c\uc6b4 \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \uc548 \ub098\uc628\ub2e4): \uc5ed \ucd9c\uad6c\ub294 \ubc1b\uc740 \ubaa8\ub4e0 \ucd9c\ucc98\uc5d0\uc11c \ubaa8\uc544 \ud55c \uacf3\ub3c4 \ube60\uc9c0\uc9c0 \uc54a\uac8c
-  return mapStopOrder(s, c.r);
+  var near = mapStopOrder(s, c.r);
+  if (!near.length && !c.pin) near = mapStopOrder(s, MAP_FAR_R);                         // s468(YJ: \uce74\uce74\uc624\ub9cc\ud07c): 300m \uc548\uc5d0 \ud558\ub098\ub3c4 \uc5c6\uc73c\uba74 \ube48 \ud654\uba74 \ub300\uc2e0 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5(450m \uc548 \u00b7 \uc774\ubbf8 \ubc1b\uc740 \ubaa9\ub85d\uc774\ub77c \ud638\ucd9c \ucd94\uac00 \uc5c6\uc74c) \u2014 \uce74\uce74\uc624\ub294 \uba3c \uacf3\uc774\ub77c\ub3c4 \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5\uc744 \ubcf4\uc5ec \uc900\ub2e4
+  return near;
 }
 function mapBusNeedStops(la, lo) {
   var need = [], ql = mapQ(la), qo = mapQ(lo);                     // \uc870\ud68c\ub294 0.001\u00b0 \uce78\uc758 \uac00\uc6b4\ub370 \uc88c\ud45c\ub85c(\uac19\uc740 \uce78\uc774\uba74 \uc11c\ubc84\u00b7\uae30\uae30 \uce90\uc2dc\uac00 \ubc14\ub85c \ub9de\ub294\ub2e4)
@@ -23254,16 +23358,16 @@ function mapSecOfMsg(msg) {
 }
 function mapSeoulArr(text) {
   var rows = [];
-  if (/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(text) || /<headerCd>\s*[1-9]/.test(text)) return rows;
-  mapXmlItems(text, 'itemList').forEach(function (ch) {
-    var rt = mapXmlVal(ch, 'rtNm') || mapXmlVal(ch, 'busRouteAbrv');
+  if (mapTopisErr(text)) return rows;
+  mapTopisItems(text).forEach(function (ch) {
+    var rt = mapTopisVal(ch, 'rtNm') || mapTopisVal(ch, 'busRouteAbrv');
     if (!rt) return;
-    var dir = mapXmlVal(ch, 'adirection') || mapXmlVal(ch, 'nxtStn');
+    var dir = mapTopisVal(ch, 'adirection') || mapTopisVal(ch, 'nxtStn');
     [1, 2].forEach(function (n) {
-      var msg = mapXmlVal(ch, 'arrmsg' + n), t = parseInt(mapXmlVal(ch, 'traTime' + n), 10);
+      var msg = mapTopisVal(ch, 'arrmsg' + n), t = parseInt(mapTopisVal(ch, 'traTime' + n), 10);
       var sec = (isFinite(t) && t > 0) ? t : mapSecOfMsg(msg);
-      var pm = /(\d+)\s*\ubc88\uc9f8/.exec(msg), cg = parseInt(mapXmlVal(ch, 'congestion' + n), 10);
-      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapXmlVal(ch, 'busType' + n), 10) === 1, dir: dir, rid: mapXmlVal(ch, 'busRouteId'), tp: '' });
+      var pm = /(\d+)\s*\ubc88\uc9f8/.exec(msg), cg = parseInt(mapTopisVal(ch, 'congestion' + n), 10);
+      if (sec > 0) rows.push({ no: rt, sec: sec, prev: pm ? parseInt(pm[1], 10) : 0, cong: isFinite(cg) ? cg : 0, low: parseInt(mapTopisVal(ch, 'busType' + n), 10) === 1, dir: dir, rid: mapTopisVal(ch, 'busRouteId'), tp: '' });
     });
   });
   return rows;
@@ -23684,6 +23788,10 @@ function mapBusBody(f, info) {
   else info.bus = { st: 'ok', vw: 'near', n: stops.length };
   if (mapBusNoKeep(f)) info.bus.nc = 1;                                                            // s458: \uc774 \uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 \ubcf4\uad00\ud558\uc9c0 \ub9d0 \uac83(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c\ub97c \ubabb \ubc1b\uc558\ub2e4) \u2014 \uc571\uc740 \ub530\ub974\uae30\ub9cc \ud55c\ub2e4
   var body = [];
+  if (!pin && stops.some(function (s) { return s.dist > MAP_NEAR_R; })) {                      // s468: 300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5c6\uc5b4 \ub113\ud600 \ucc3e\uc740 \uacbd\uc6b0 \u2014 \uc65c \uba3c \uacf3\uc774 \ub098\uc624\ub294\uc9c0 \uc54c\ub9b0\ub2e4(\uc571\uc740 \uadf8\ub9ac\uae30\ub9cc)
+    body.push({ t: 'text', s: '300m \uc548\uc5d0 \uc815\ub958\uc7a5\uc774 \uc5c6\uc5b4 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 ' + stops.length + '\uacf3\uc744 \ubcf4\uc5ec\ub4dc\ub824\uc694.', size: 12, color: 'sub', align: 'center', pad: [10, 12, 0, 12] });
+    info.bus.far = 1;
+  }
   if (pin) {                                                                                   // s451: \uafb9 \ub20c\ub7ec \uace0\ub978 \uacf3 \u2014 \ubb34\uc5c7\uc744 \ubcf4\uace0 \uc788\ub294\uc9c0 \uc54c\ub9ac\uace0 \ub0b4 \uc704\uce58\ub85c \ub3cc\uc544\uc624\ub294 \ub2e8\ucd94
     body.push({ t: 'text', s: '\ud83d\udccd \uc9c0\ub3c4\uc5d0\uc11c \uace0\ub978 \uacf3 \uc8fc\ubcc0 100m \uc815\ub958\uc7a5 ' + stops.length + '\uacf3', size: 12, bold: true, color: 'gold', align: 'center', pad: [10, 12, 0, 12] });
     body.push(back);
@@ -23906,63 +24014,89 @@ function mapBusRouteSheet(f0) {
 //   \u00b7 \ubc14\uc778\ub529\uc774 \uc5c6\uac70\ub098 \ubabb \ubc1b\uc73c\uba74 \uadf8\ub0e5 need \uac00 \ub0a8\uc740 \ud654\uba74\uc744 \ub3cc\ub824\uc900\ub2e4 \u2014 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd(\uc9c1\uc811 \ubc1b\uc544 \ub2e4\uc2dc \ubb3b\uae30)\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4.
 var MAPSV_HOSTS = /^https?:\/\/(apis\.data\.go\.kr|ws\.bus\.go\.kr)\//;
 var MAPSV_D1 = /^https:\/\/gentle-lab-7e47subway-api\.phg0643\.workers\.dev(\/bus-stops\?[A-Za-z0-9=&._-]{1,80})$/;
-function mapSvOkBody(k, t) {                              // \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \uc815\uc0c1 \ubcf8\ubb38\uc778\uac00(\uc815\ub958\uc7a5 \ubaa9\ub85d\ub9cc)
+// \u2605 s462 (YJ: "\uce74\uce74\uc624\ub294 \ubc14\ub85c \ub728\ub294\ub370 \uc6b0\ub9ac\ub294 \ubc14\ub85c \uc548 \ub728\ub294 \uac8c \ub108\ubb34 \ub9ce\ub2e4 \u2014 \uc801\uc5b4\ub3c4 3\ucd08 \uc548\uc5d0 \ub2e4 \ub098\uc624\uac8c") \u2014 \uac70\uc758 \uc548 \ubc14\ub00c\ub294 \uc870\ud68c\ub294 \ud55c \ubc88 \ubc1b\uc73c\uba74 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uc5d0 12\uc2dc\uac04 \ub454\ub2e4.
+//   \uacbd\uc720\ub178\uc120 \ubaa9\ub85d(getSttnThrghRouteList \u00b7 \uc5f4\uc1e0 t/u) \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5 \ubaa9\ub85d(getCrdntPrxmtSttnList \u00b7 t100+) \u00b7 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(getRouteAcctoThrghSttnList \u00b7 r) \uc740 \uc608\uc804\uc5d4 \ub9e4\ubc88 \uacf5\uacf5 API \ub97c \ubd88\ub7ec
+//   2~21\ucd08\uc529 \uac78\ub838\ub2e4(\ub3c4\ucc29\uc815\ubcf4 8\uacf3 + \uacbd\uc720\ub178\uc120 8\uacf3\uc744 \ud55c\uaebc\ubc88\uc5d0 \ubd88\ub7ec \uc11c\ub85c \ub290\ub824\uc9c0\uae30\ub3c4 \ud588\ub2e4). \uc774\uc81c \ub450 \ubc88\uc9f8\ubd80\ud130\ub294 \uc989\uc2dc. \ub3c4\ucc29\uc815\ubcf4(\uc2e4\uc2dc\uac04)\ub294 \uadf8\ub300\ub85c \uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4.
+var MAPSV_STATIC_OP = /\/(getSttnThrghRouteList|getRouteAcctoThrghSttnList|getCrdntPrxmtSttnList)\?/;
+function mapSvStaticCls(url) {                            // \uce90\uc2dc \uc885\ub958: 'tl'(\uacbd\uc720\ub178\uc120 \u00b7 \uc88c\ud45c \uc815\ub958\uc7a5 \ubaa9\ub85d) \u00b7 'rl'(\ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d) \u00b7 ''(\uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4)
+  var m = MAPSV_STATIC_OP.exec(String(url || ''));
+  if (!m || !/^https?:\/\/apis\.data\.go\.kr\//.test(String(url)) || !/[?&]serviceKey=(&|$)/i.test(String(url))) return '';
+  return m[1] === 'getRouteAcctoThrghSttnList' ? 'rl' : 'tl';
+}
+function mapSvOkBody(k, t) {                              // \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \uc815\uc0c1 \ubcf8\ubb38\uc778\uac00(\uc815\ub958\uc7a5 \ubaa9\ub85d \u00b7 \uacbd\uc720\ub178\uc120 \u00b7 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d)
   if (typeof t !== 'string' || t.length < 40) return false;
-  if (k === 'tp') return t.indexOf('<itemList>') >= 0 && !/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t);
+  if (k === 'tl' || k === 'rl') { try { var o2 = JSON.parse(t), it2 = o2.response.body.items; if (!it2 || !it2.item) return false; return !Array.isArray(it2.item) || it2.item.length > 0; } catch (e2) { return false; } }          // \ube48 \ubaa9\ub85d \u00b7 \uc624\ub958 \ubd09\ud22c\ub294 \uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4(\uc7a0\uae50\uc758 \ube48 \uc751\ub2f5\uc774 12\uc2dc\uac04 \uad73\uc9c0 \uc54a\uac8c)
+  if (k === 'tp') return (t.indexOf('<itemList>') >= 0 || /"itemList"\s*:\s*[\[{]/.test(t)) && !/Key\uc778\uc99d\uc2e4\ud328|SERVICE\s*KEY\s*IS\s*NOT\s*REGISTERED/i.test(t) && !/<headerCd>\s*[1-9]/.test(t) && !/"headerCd"\s*:\s*"?[1-9]/.test(t.slice(0, 600));
   if (k === 'gg') return t.indexOf('busStationAroundList') >= 0;
   if (k === 'tn') { try { var o = JSON.parse(t); var it = o.response.body.items; return !!(it && it.item); } catch (e) { return false; } }
   if (k === 'd1') return t.indexOf('"stops":[{') >= 0 || t.indexOf('"stops": [{') >= 0;
   return false;
 }
-function mapSvViaBinding(env, url) {                       // \u2192 Promise<Response> \ub610\ub294 null(\ud5c8\uc6a9\ud558\uc9c0 \uc54a\ub294 \uc8fc\uc18c \u00b7 \ubc14\uc778\ub529 \uc5c6\uc74c)
+function mapSvViaBinding(env, url, sig) {                  // \u2192 Promise<Response> \ub610\ub294 null(\ud5c8\uc6a9\ud558\uc9c0 \uc54a\ub294 \uc8fc\uc18c \u00b7 \ubc14\uc778\ub529 \uc5c6\uc74c) \u00b7 s467: sig \u2014 \ucde8\uc18c \uc2e0\ud638(\uc9c0\uac70\ub098 \ub2a6\uc740 \ud638\ucd9c\uc744 \ub04a\uc5b4 Cloudflare \ub3d9\uc2dc \uc5f0\uacb0 6\uce78\uc744 \ube44\uc6b4\ub2e4)
   if (!env || !env.BUSAPI || typeof env.BUSAPI.fetch !== 'function') return null;
-  var u = String(url || ''), m;
+  var u = String(url || ''), m, init = sig ? { signal: sig } : undefined;
   if (u.length > 700) return null;
-  if (MAPSV_HOSTS.test(u)) return env.BUSAPI.fetch(new Request('https://busapi.internal/tago?url=' + encodeURIComponent(u)));
-  if ((m = MAPSV_D1.exec(u))) return env.BUSAPI.fetch(new Request('https://busapi.internal' + m[1]));
+  if (MAPSV_HOSTS.test(u)) return env.BUSAPI.fetch(new Request('https://busapi.internal/tago?url=' + encodeURIComponent(u), init));
+  if ((m = MAPSV_D1.exec(u))) return env.BUSAPI.fetch(new Request('https://busapi.internal' + m[1], init));
   return null;
 }
-function mapSvAttempts(env, url, seq) {                    // \u2192 [() => Promise<Response>|null] \uc2dc\ub3c4 \uc21c\uc11c
+function mapSvAttempts(env, url, seq) {                    // \u2192 [(sig?) => Promise<Response>|null] \uc2dc\ub3c4 \uc21c\uc11c \u00b7 s467: sig \uac00 \uc788\uc73c\uba74 \uadf8 \ud638\ucd9c\uc744 \ub04a\uc744 \uc218 \uc788\ub2e4(run \uc774 \ub450 \ubc88\uc9f8 \uc778\uc790\ub97c \ubc1b\uc9c0 \uc54a\ub294 \uc61b \ubc88\ub4e4\uc740 \uadf8\ub0e5 \ubb34\uc2dc)
   var out = [];
   if (typeof tagoAttempts === 'function' && env && /^https?:\/\/apis\.data\.go\.kr\//.test(url)) {
     var inner = url.replace(/([?&])serviceKey=[^&]*&?/, '$1').replace(/[?&]$/, '');
     var ks = tagoAttempts(env).filter(function (x) { return x.via === 'env-key' || x.via === 'env-key2' || x.via === 'default-key'; });
     if (ks.length > 1 && seq % 2 === 1) ks = ks.slice(1).concat(ks.slice(0, 1));
-    ks.slice(0, 2).forEach(function (x) { out.push(function () { return x.run(inner); }); });
+    ks.slice(0, 2).forEach(function (x) { out.push(function (sig) { return x.run(inner, sig); }); });
   }
-  if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function () { return mapSvViaBinding(env, url); });
+  if (env && env.BUSAPI && typeof env.BUSAPI.fetch === 'function') out.push(function (sig) { return mapSvViaBinding(env, url, sig); });
   return out;
 }
-async function mapSvOne0(env, k, url, fresh) {                    // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 '')
-  var cacheable = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', cache = null, ck = null;
+async function mapSvOne0(env, k, url, fresh, ops) {                    // \u2192 \ubcf8\ubb38 \uae00(\uc2e4\ud328\ub294 ''). s463: ops \u2014 \uc774 \uc694\uccad\uc774 \uc9c0\uae08\uae4c\uc9c0 \uc4f4 \ud558\uc704 \uc694\uccad(fetch \u00b7 Cache API \u00b7 KV) \uc218({n}) \u00b7 \ubb34\ub8cc \uc694\uae08\uc81c 50\uac1c \ud55c\ub3c4\ub97c \ub118\uae30\uc9c0 \uc54a\uc73c\ub824\uace0 \uc138\uc5b4 \ub454\ub2e4
+  var stopK = k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1', sc = stopK ? '' : mapSvStaticCls(url), kc = sc || k;          // s462: sc \u2014 \uacbd\uc720\ub178\uc120 \u00b7 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(\uac70\uc758 \uc548 \ubc14\ub01c)\ub3c4 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uc5d0(KV \ub294 \uc4f0\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uc4f0\uae30 \ud55c\ub3c4 \ubcf4\ud638)
+  var cacheable = stopK || !!sc, cache = null, ck = null;
   if (cacheable) {
     try {
       if (typeof caches !== 'undefined' && caches.default) {
-        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?v=2&k=' + k + '&u=' + encodeURIComponent(url));          // s451: v=2 \u2014 \uc5ed \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \ube60\uc9c4 \ucc44 \ubcf4\uad00\ub41c \uc61b \uc815\ub958\uc7a5 \ubaa9\ub85d(\ub370\uc774\ud130\uc13c\ud130 12\uc2dc\uac04 \u00b7 KV 14\uc77c)\uc744 \ubc84\ub9ac\uace0 \uc0c8\ub85c \ubc1b\ub294\ub2e4
+        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?v=2&k=' + kc + '&u=' + encodeURIComponent(url));          // s451: v=2 \u2014 \uc5ed \ucd9c\uad6c \uc815\ub958\uc7a5\uc774 \ube60\uc9c4 \ucc44 \ubcf4\uad00\ub41c \uc61b \uc815\ub958\uc7a5 \ubaa9\ub85d(\ub370\uc774\ud130\uc13c\ud130 12\uc2dc\uac04 \u00b7 KV 14\uc77c)\uc744 \ubc84\ub9ac\uace0 \uc0c8\ub85c \ubc1b\ub294\ub2e4
+        if (ops) ops.n++;
         var hit = fresh ? null : await cache.match(ck);                                          // s383: \uc0c8\ub85c\uace0\uce68(fresh)\uc740 \ubcf4\uad00\ubcf8\uc744 \uac74\ub108\ub6f0\uace0 \uacf5\uacf5 API \uc5d0\uc11c \uc0c8\ub85c \u2014 \ubc1b\uc740 \ub4a4 \ubcf4\uad00\ubcf8\uc740 \uc0c8\uac83\uc73c\ub85c \ub36e\ub294\ub2e4
-        if (hit) { var ht = await hit.text(); if (mapSvOkBody(k, ht)) return ht; }
+        if (hit) { var ht = await hit.text(); if (mapSvOkBody(kc, ht)) return ht; }
       }
     } catch (e0) { cache = null; }
-    var kvb = fresh ? '' : await mapSvKvGet(env, k, url);                                                   // s290: \uc774 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uc5d0 \uc5c6\uc73c\uba74 \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c(KV)\uc5d0\uc11c \u2014 \ub2e4\ub978 \uacf3\uc5d0\uc11c \ud55c \ubc88\uc774\ub77c\ub3c4 \ubc1b\uc558\uc73c\uba74 \ubc14\ub85c \ub098\uc628\ub2e4
+    if (ops && !(fresh || sc)) ops.n++;
+    var kvb = (fresh || sc) ? '' : await mapSvKvGet(env, k, url);                                                   // s290: \uc774 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uc5d0 \uc5c6\uc73c\uba74 \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c(KV)\uc5d0\uc11c \u2014 \ub2e4\ub978 \uacf3\uc5d0\uc11c \ud55c \ubc88\uc774\ub77c\ub3c4 \ubc1b\uc558\uc73c\uba74 \ubc14\ub85c \ub098\uc628\ub2e4
     if (kvb) {
       if (cache && ck) { try { await cache.put(ck, new Response(kvb, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eK) { /* \ubb34\uc2dc */ } }
       return kvb;
     }
   }
+  var af = cacheable ? '' : mapSvArrFam(url), tStart = Date.now();                                    // s463: \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \ub370\uc774\ud130\uc13c\ud130 \uacf5\uc720 \uce90\uc2dc(\ubc1b\uc740 \uc9c0 5\ucd08 \uc548 \u00b7 saver 9\ucd08 \u00b7 critical 15\ucd08)\uc5d0 \uc788\uc73c\uba74 \uacf5\uacf5 API \ub97c \ubd80\ub974\uc9c0 \uc54a\ub294\ub2e4
+  if (af) { var ab = await mapSvArrGet(url, ops); if (ab) { mapSvUse('map.arr.saved'); return ab; } }
   var atts = mapSvAttempts(env, url, parseInt(String(k).replace(/\D/g, ''), 10) || 0);          // \uacf5\uacf5\ub370\uc774\ud130 \ud0a4\uac00 \ub458\uc774\uba74 \uc815\ub958\uc7a5\uc744 \ubc18\ubc18\uc529(\uc9dd\uc218 \ubc88\uc9f8\ub294 \ud0a41 \uba3c\uc800 \u00b7 \ud640\uc218 \ubc88\uc9f8\ub294 \ud0a42 \uba3c\uc800) \ub098\ub220 \ubb3b\uace0, \ud55c\ucabd\uc774 \uc624\ub958\uba74 \ubc14\ub85c \ub2e4\ub978 \ucabd \u00b7 \ub9c8\uc9c0\ub9c9\uc740 BUSAPI \ubc14\uc778\ub529
   if (!atts.length) return '';
   if (atts.length === 1) atts.push(atts[0]);                                                  // \uae38\uc774 \ud558\ub098\ubfd0\uc774\uba74 \ud55c \ubc88 \ub354
   // s174: \ud5e4\uc9c0 \u2014 \uccab \uc2dc\ub3c4\uac00 0.7\ucd08 \uc548\uc5d0 \uc548 \uc624\uba74 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub2e4\uc74c \uae38(\ub2e4\ub978 \ud0a4)\uc744 \ub3d9\uc2dc\uc5d0 \ub744\uc6cc \uba3c\uc800 \uc628 \uc815\uc0c1 \ubcf8\ubb38\uc744 \uc4f4\ub2e4. \ube68\ub9ac \uc2e4\ud328(\uc624\ub958 \ubd09\ud22c)\ud558\uba74 \uc989\uc2dc \ub2e4\uc74c \uae38. \ucd5c\ub300 3\ubc88.
-  var max = Math.min(atts.length, 3), launched = 0, inflight = [];
+  var bm = af ? mapSvBudMode(af) : 'normal', max = Math.min(atts.length, bm === 'normal' ? 3 : 2), gap = (ops && ops.gap) || MAPSV_HEDGE_GAP[bm] || 700, launched = 0, inflight = [];          // s463: \uc544\ub08c \ubaa8\ub4dc\ub294 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub2a6\ucd94\uace0 \uc138 \ubc88\uc9f8 \uae38\uc740 \ub744\uc6b0\uc9c0 \uc54a\ub294\ub2e4
+  var g1 = (af && bm === 'normal' && /^[af][0-2]$/.test(String(k))) ? ((ops && ops.near !== undefined) ? ops.near : MAPSV_NEAR_GAP) : gap;      // s464: \uac00\uc7a5 \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 \uc14b(a0~a2 \u00b7 \uc990\uaca8\ucc3e\uae30 f0~f2)\uc758 \ub3c4\ucc29\uc815\ubcf4\ub294 \ucc98\uc74c\ubd80\ud130 \ub450 \uae38\uc744 \ub3d9\uc2dc\uc5d0 \u2014 \uacf5\uacf5 API \uc758 \ub290\ub9b0 \uaf2c\ub9ac(2~5\ucd08)\ub97c \ud53c\ud55c\ub2e4. \uc544\ub08c\u00b7\uc808\uc57d \ubaa8\ub4dc(70%+)\ub294 \uc608\uc804 \uac04\uaca9 \uadf8\ub300\ub85c
   function start() {
     var o = {};
+    mapSvUse(af ? 'map.arr.' + af : (cacheable ? 'map.st' : 'map.etc')); if (launched > 1) mapSvUse('map.hedge'); if (ops) ops.n++;          // s463: \uc2e4\uc81c\ub85c \ub098\uac00\ub294 \ud638\ucd9c\uc744 \uc13c\ub2e4
+    var ac = null, att = atts[launched - 1];
+    try { ac = (typeof AbortController === 'function') ? new AbortController() : null; } catch (eAc) { ac = null; }
+    o.ac = ac;                                                                                   // s467: \uc774 \uc2dc\ub3c4\uc758 \ucde8\uc18c \uc190\uc7a1\uc774 \u2014 \uc2dc\uac04 \uc81c\ud55c\uc744 \ub118\uae30\uac70\ub098 \ub2e4\ub978 \uae38\uc774 \uba3c\uc800 \uc815\uc0c1 \ubcf8\ubb38\uc744 \uc8fc\uba74 \ub04a\ub294\ub2e4(\uc608\uc804\uc5d4 \uc548 \ub04a\uc5b4 \uba48\ucd98 \ud638\ucd9c\uc774 \ub3d9\uc2dc \uc5f0\uacb0 6\uce78\uc744 \uc624\ub798 \uc7a1\uc558\ub2e4)
     o.p = (async function () {
+      var tmo = null;
       try {
-        var p = atts[launched - 1]();
-        if (!p) return '';
-        var res = await Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3000); })]);
-        if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83
-      } catch (e1) { /* \uc2e4\ud328 */ }
+        var work = (async function () {
+          var p = att(ac ? ac.signal : undefined);
+          if (!p) return '';
+          var res = await p;
+          if (res && res.status === 200) { var tx = await res.text(); return mapArrErr(tx) ? '' : tx; }          // \uacf5\uacf5 API \uc624\ub958 \ubd09\ud22c(200)\ub294 \ubc1b\uc9c0 \ubabb\ud55c \uac83
+          return '';
+        })();
+        work.catch(function () { /* \ub04a\uae34 \uc2dc\ub3c4\uc758 \uac70\uc808\uc740 \uc5ec\uae30\uc11c \uc0bc\ud0a8\ub2e4 */ });
+        return await Promise.race([work, new Promise(function (_, rej) { tmo = setTimeout(function () { try { if (ac) ac.abort(); } catch (eA) { /* \ubb34\uc2dc */ } rej(new Error('timeout')); }, (ops && ops.to) || 3000); })]);          // s467: \uc2dc\uac04 \uc81c\ud55c\uc740 \ubcf8\ubb38 \uc77d\uae30\uae4c\uc9c0(\uba38\ub9ac\ub9cc \uc624\uace0 \ubcf8\ubb38\uc774 \uba48\ucd94\ub294 \uacbd\uc6b0\ub3c4)
+      } catch (e1) { /* \uc2e4\ud328 */ } finally { if (tmo) clearTimeout(tmo); }
       return '';
     })().then(function (b) { o.b = b; return o; });
     inflight.push(o);
@@ -23970,13 +24104,15 @@ async function mapSvOne0(env, k, url, fresh) {                    // \u2192 \ubc
   launched++; start();
   while (inflight.length) {
     var waiters = inflight.map(function (o) { return o.p; });
-    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, 700); }));
+    if (launched < max) waiters.push(new Promise(function (r) { setTimeout(function () { r(null); }, launched === 1 ? g1 : gap); }));
     var w = await Promise.race(waiters);
     if (w === null) { launched++; start(); continue; }                                         // \ub290\ub9ac\ub2e4 \u2014 \ub2e4\ub978 \uae38\uc744 \ub3d9\uc2dc\uc5d0
     inflight.splice(inflight.indexOf(w), 1);
     if (w.b) {
-      if (cache && ck && mapSvOkBody(k, w.b)) { try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
-      if (cacheable && mapSvOkBody(k, w.b)) mapSvKvPut(env, k, url, w.b);                       // s290: \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c\uc5d0\ub3c4(\uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\uace0 \ub4a4\uc5d0\uc11c)
+      inflight.forEach(function (o2) { try { if (o2.ac) o2.ac.abort(); } catch (eB) { /* \ubb34\uc2dc */ } });          // s467: \uba3c\uc800 \uc628 \uc815\uc0c1 \ubcf8\ubb38\uc774 \uc788\uc73c\ub2c8 \uc544\uc9c1 \uac00\ub294 \ub2e4\ub978 \uae38\uc740 \ub04a\ub294\ub2e4(\uacf5\uacf5 API \uc5d0 \uc4f8\ub370\uc5c6\uc774 \ub9e4\ub2ec\ub9ac\uc9c0 \uc54a\uac8c)
+      if (af) mapSvArrPut(url, w.b, tStart, ops);                                              // s463: \ubc1b\uc740 \ub3c4\ucc29\uc815\ubcf4\ub294 \uac19\uc740 \ub370\uc774\ud130\uc13c\ud130\uc758 \ub2e4\ub978 \uc694\uccad\ub3c4 \uc4f0\uac8c(\ub4a4\uc5d0\uc11c)
+      if (cache && ck && mapSvOkBody(kc, w.b)) { if (ops) ops.n++; try { await cache.put(ck, new Response(w.b, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (e2) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+      if (stopK && mapSvOkBody(k, w.b)) { if (ops) ops.n += 3; mapSvKvPut(env, k, url, w.b); }                           // s290: \uc804\uad6d \uacf5\uc6a9 \uc800\uc7a5\uc18c\uc5d0\ub3c4(\uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\uace0 \ub4a4\uc5d0\uc11c)
       return w.b;
     }
     if (!inflight.length && launched < max) { launched++; start(); }                           // \ube68\ub9ac \uc2e4\ud328\ud588\ub2e4 \u2014 \uace7\ubc14\ub85c \ub2e4\uc74c \uae38
@@ -23990,6 +24126,87 @@ async function mapSvOne0(env, k, url, fresh) {                    // \u2192 \ubc
 //      \ub3c4\ucc29\uc815\ubcf4\uc758 \uc6d0\ucc9c \uac31\uc2e0\uc774 \uc218\uc2ed \ucd08 \ub2e8\uc704\ub77c 5\ucd08\ub294 \ud654\uba74\uc5d0 \ubcf4\uc774\ub294 \ucc28\uc774\uac00 \uc5c6\uace0, \ube48 \uac12\u00b7\uc624\ub958\ub294 \uae30\uc5b5\ud558\uc9c0 \uc54a\ub294\ub2e4.
 var MAPSV_CTX = null;
 var MAPSV_MEMO = {}, MAPSV_MEMO_N = 0, MAPSV_MEMO_MS = 5000;
+// \u2605 s463 (YJ: "API \ud638\ucd9c\ub7c9 \uc870\uc808 \u00b7 \uae30\uc220\uc801\uc73c\ub85c \ucd5c\ub300\ud55c \uce74\uce74\uc624\ucc98\ub7fc \u2014 \ud074\ub77c\uc6b0\ub4dc\ud50c\ub808\uc5b4\ub9cc\uc73c\ub85c") \u2014 \ud638\ucd9c \uc138\uae30 \u00b7 \ud558\ub8e8 \uc608\uc0b0 \uc870\uc808\uae30 \u00b7 \uac19\uc740 \ub370\uc774\ud130\uc13c\ud130 \uc548 \ub3c4\ucc29\uc815\ubcf4 \uacf5\uc720
+//   \u2460 \uc138\uae30: \uc774 \uc11c\ubc84\uac00 \uacf5\uacf5 API \ub85c \ub0b4\ubcf4\ub0b4\ub294 \ud638\ucd9c\uc744 live_usage \uc5d0 \uc13c\ub2e4(map.arr.tago|seoul|gbis = \uc2e4\uc81c \ub098\uac04 \ud638\ucd9c \u00b7 map.hedge = \uadf8\uc911 '\ub290\ub824\uc11c \ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354 \ub744\uc6b4' \ud638\ucd9c \u00b7 map.arr.saved = \uae30\uc5b5\u00b7\uacf5\uc720 \uce90\uc2dc\ub85c \uc544\ub080 \ud638\ucd9c \u00b7 map.st = \uc815\ub958\uc7a5\u00b7\ub178\uc120 \ubaa9\ub85d \ud638\ucd9c).
+//      \uc608\uc804\uc5d4 \uc774 \uae38(\uc9c0\ub3c4 \uc11c\ubc84 \u00b7 /bus-tago)\uc758 \ud638\ucd9c\uc774 \uc544\uc608 \uc138\uc5b4\uc9c0\uc9c0 \uc54a\uc544 \ud558\ub8e8 \uc0ac\uc6a9\ub7c9\uc774 \uc2e4\uc81c\ubcf4\ub2e4 \uc801\uac8c \ubcf4\uc600\ub2e4.
+//   \u2461 \uc870\uc808\uae30: \uc624\ub298(\ud55c\uad6d \ub0a0\uc9dc) TAGO \ub3c4\ucc29\uc815\ubcf4(500,000/\uc77c) \u00b7 \uc11c\uc6b8 \ub3c4\ucc29\uc815\ubcf4(10,000/\uc77c) \uc0ac\uc6a9\ub7c9\uc744 D1 live_usage \uc5d0\uc11c 1\ubd84\uc5d0 \ud55c \ubc88\ub9cc(\uc694\uccad\uc744 \ub9c9\uc9c0 \uc54a\uace0 \ub4a4\uc5d0\uc11c) \uc77d\uc5b4 \ubaa8\ub4dc\ub97c \uc815\ud55c\ub2e4 \u2014 70% \uc774\uc0c1 'saver' \u00b7 90% \uc774\uc0c1 'critical'.
+//      saver/critical \uc5d0\uc11c\ub294 \uac19\uc740 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4\ub97c 5\ucd08 \u2192 9\ucd08/15\ucd08 \ub3d9\uc548 \ub2e4\uc2dc \ubd80\ub974\uc9c0 \uc54a\uace0 \uc4f0\uba70, \ub290\ub9b0 \ud638\ucd9c\uc5d0 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'(\ud5e4\uc9c0)\ub97c \ub2a6\ucd94\uace0(0.7\ucd08 \u2192 1.2/1.8\ucd08) \uc138 \ubc88\uc9f8 \uae38\uc740 \ub744\uc6b0\uc9c0 \uc54a\ub294\ub2e4. \ud654\uba74\uc758 \ub3c4\ucc29\uc815\ubcf4\ub294 \uadf8\ub798\ub3c4 15\ucd08\ub97c \ub118\uc9c0 \uc54a\ub294\ub2e4.
+//   \u2462 \uacf5\uc720: \ub3c4\ucc29\uc815\ubcf4\ub97c \uc774 \ub370\uc774\ud130\uc13c\ud130\uc758 Cache API \uc5d0 \uc9e7\uac8c \ub454\ub2e4(\ubc1b\uc740 \uc2dc\uac01\uc744 \ud568\uaed8 \uc801\uc5b4 TTL \uc548\uc5d0\uc11c\ub9cc \uc4f4\ub2e4 \u00b7 \ube48 \ubaa9\ub85d \u00b7 \uc624\ub958 \ubd09\ud22c\ub294 \ub450\uc9c0 \uc54a\ub294\ub2e4) \u2192 \uac19\uc740 \uacf3\uc744 \uc5ec\ub7ec \uae30\uae30\uac00 \ubd80\ub974\uba74 \uacf5\uacf5 API \ub294 \ud55c \ubc88\ub9cc \ub098\uac04\ub2e4.
+//      \ubb34\ub8cc \uc694\uae08\uc81c\ub294 \uc694\uccad \ud558\ub098\ub2f9 \ud558\uc704 \uc694\uccad(fetch \u00b7 Cache API \u00b7 KV \u00b7 D1)\uc774 50\uac1c\uae4c\uc9c0\ub77c, \ud55c \uc694\uccad \uc548\uc5d0\uc11c \uc774\ubbf8 \ub9ce\uc774 \uc37c\uc73c\uba74(MAPSV_OPS_SOFT) \uc774 \uacf5\uc720 \uce90\uc2dc\ub294 \uac74\ub108\ub6f4\ub2e4(\uc5c6\uc5b4\ub3c4 \ud654\uba74\uc740 \uac19\ub2e4).
+var MAPSV_LIMIT_DEF = { tago: 500000, seoul: 10000 };
+var MAPSV_BUD = { t: 0, busy: false, modes: { tago: 'normal', seoul: 'normal' }, used: { tago: 0, seoul: 0 }, limit: { tago: 500000, seoul: 10000 }, day: '', err: '', at: 0 };
+var MAPSV_BUD_MS = 60000, MAPSV_BUD_SAVER = 0.7, MAPSV_BUD_CRIT = 0.9;
+var MAPSV_BUD_KEYS = { tago: ['bus.tago.arr', 'map.arr.tago', 'tago.env-key', 'tago.env-key2'], seoul: ['bus.seoul.arr', 'map.arr.seoul'] };
+var MAPSV_ARR_TTL = { normal: 5000, saver: 9000, critical: 15000 };
+var MAPSV_HEDGE_GAP = { normal: 700, saver: 1200, critical: 1800 };
+var MAPSV_OPS_SOFT = 32;
+var MAPSV_NEAR_GAP = 0;                                     // s464: \uac00\uae4c\uc6b4 \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4\uc758 '\ub450 \ubc88\uc9f8 \uae38' \ub3d9\uc2dc \uc2dc\uc791 \uac04\uaca9(ms) \u2014 normal \ubaa8\ub4dc\uc5d0\uc11c\ub9cc
+function mapSvUse(k) { try { if (typeof usageAdd === 'function') usageAdd(k); } catch (e) { /* \uc138\uae30 \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+function mapSvArrFam(url) {                                // \ub3c4\ucc29\uc815\ubcf4 \uc8fc\uc18c\uc758 \uc885\ub958: 'tago' \u00b7 'gbis' \u00b7 'seoul' \u00b7 ''(\ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\uac70\ub098 \uc5f4\uc1e0\uac00 \ub4e4\uc5b4 \uc788\ub2e4 \u2014 \uce90\uc2dc\ud558\uc9c0 \uc54a\ub294\ub2e4)
+  var u = String(url || '');
+  if (/[?&]serviceKey=[^&]/i.test(u)) return '';
+  if (/^https?:\/\/apis\.data\.go\.kr\/1613000\/ArvlInfoInqireService\/getSttnAcctoArvlPrearngeInfoList\?/.test(u)) return 'tago';
+  if (/^https?:\/\/apis\.data\.go\.kr\/6410000\/busarrivalservice\/v2\/getBusArrivalListv2\?/.test(u)) return 'gbis';
+  if (/^https?:\/\/ws\.bus\.go\.kr\/api\/rest\/stationinfo\/getStationByUid\?/.test(u)) return 'seoul';
+  return '';
+}
+function mapSvArrOk(t) {                                   // \uacf5\uc720 \uce90\uc2dc\uc5d0 \ub458 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\uc778\uac00: \uc624\ub958 \ubd09\ud22c\uac00 \uc544\ub2c8\uace0 \uc815\ub958\uc7a5\uc5d0 \ubc84\uc2a4\uac00 \ud55c \ub300\ub77c\ub3c4 \uc788\ub2e4(\ube48 \ubaa9\ub85d\uc740 \uc7a0\uae50\uc758 \ube48 \uc751\ub2f5\uc77c \uc218 \uc788\uc5b4 \ub450\uc9c0 \uc54a\ub294\ub2e4)
+  return typeof t === 'string' && t.length > 60 && !mapArrErr(t) && /"item"\s*:\s*[\[{]|<itemList>|"itemList"\s*:\s*[\[{]|"busArrivalList"\s*:\s*[\[{]|<busArrivalList>/.test(t);
+}
+function mapSvBudMode(fam) { return (fam && MAPSV_BUD.modes[fam]) || 'normal'; }
+function mapSvArrTtl(url) { return MAPSV_ARR_TTL[mapSvBudMode(mapSvArrFam(url))] || MAPSV_ARR_TTL.normal; }
+function mapSvBudEval(rows, pend, limit) {                 // \uc21c\uc218 \uacc4\uc0b0: live_usage \ud589 + \uc774 isolate \uc5d0 \uc544\uc9c1 \ubabb \uc62c\ub9b0 \uc138\uae30 \u2192 \uc885\ub958\ubcc4 \uc0ac\uc6a9\ub7c9 \u00b7 \ubaa8\ub4dc
+  var by = {}, used = { tago: 0, seoul: 0 }, modes = {}, lim = {}, worst = 0;
+  (rows || []).forEach(function (r) { if (r && r.k != null) by[String(r.k)] = (by[String(r.k)] || 0) + (Number(r.n) || 0); });
+  Object.keys(MAPSV_BUD_KEYS).forEach(function (f) {
+    MAPSV_BUD_KEYS[f].forEach(function (k) { used[f] += (by[k] || 0) + ((pend && Number(pend[k])) || 0); });
+    lim[f] = (limit && Number(limit[f]) > 0) ? Number(limit[f]) : MAPSV_LIMIT_DEF[f];
+    var ratio = used[f] / lim[f];
+    modes[f] = ratio >= MAPSV_BUD_CRIT ? 'critical' : ratio >= MAPSV_BUD_SAVER ? 'saver' : 'normal';
+    if (ratio > worst) worst = ratio;
+  });
+  return { modes: modes, used: used, limit: lim, ratio: worst };
+}
+function mapSvBudRefresh(env, force) {                     // 1\ubd84\uc5d0 \ud55c \ubc88 \ub4a4\uc5d0\uc11c \uc77d\ub294\ub2e4(\uc751\ub2f5\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4 \u2014 \ucc98\uc74c \uc694\uccad\uc740 'normal'\ub85c \uac00\uace0 \uc77d\uc740 \ub4a4\ubd80\ud130 \ubc18\uc601). \ubabb \uc77d\uc73c\uba74 \uc9c0\ub09c \ubaa8\ub4dc \uadf8\ub300\ub85c
+  var now = Date.now();
+  if (MAPSV_BUD.busy || (!force && now - MAPSV_BUD.t < MAPSV_BUD_MS)) return null;
+  if (!env || !env.DB || typeof env.DB.prepare !== 'function') return null;
+  MAPSV_BUD.busy = true; MAPSV_BUD.t = now;
+  var run = (async function () {
+    try {
+      var day = new Date(now + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      var rs = await Promise.race([env.DB.prepare('SELECT k, n FROM live_usage WHERE day = ?').bind(day).all(), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 1500); })]);
+      var ev = mapSvBudEval(rs && rs.results, (typeof USAGE !== 'undefined' && USAGE) ? USAGE.n : null, { tago: Number(env.TAGO_ARR_LIMIT), seoul: Number(env.SEOUL_ARR_LIMIT) });
+      MAPSV_BUD.modes = ev.modes; MAPSV_BUD.used = ev.used; MAPSV_BUD.limit = ev.limit; MAPSV_BUD.day = day; MAPSV_BUD.err = ''; MAPSV_BUD.at = Date.now();
+    } catch (e) { MAPSV_BUD.err = String(e && e.message || e).slice(0, 80); }
+    MAPSV_BUD.busy = false;
+  })();
+  if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') { try { MAPSV_CTX.waitUntil(run); } catch (e0) { /* \ubb34\uc2dc */ } }
+  return run;
+}
+function mapSvArrReq(url) { return new Request('https://map-sv-cache.internal/a?v=1&u=' + encodeURIComponent(url)); }
+async function mapSvArrGet(url, ops) {                     // \u2192 \uacf5\uc720 \uce90\uc2dc\uc758 \ub3c4\ucc29\uc815\ubcf4 \ubcf8\ubb38(\ubc1b\uc740 \uc9c0 TTL \uc548\uc778 \uac83\ub9cc) \ub610\ub294 ''
+  try {
+    if (!mapSvArrFam(url) || typeof caches === 'undefined' || !caches.default) return '';
+    if (ops && ops.n >= MAPSV_OPS_SOFT) return '';
+    if (ops) ops.n++;
+    var h = await caches.default.match(mapSvArrReq(url));
+    if (!h) return '';
+    var at = Number(h.headers.get('x-at')) || 0, now = Date.now();
+    if (!at || at > now + 1000 || now - at >= mapSvArrTtl(url)) return '';
+    var t = await h.text();
+    return mapSvArrOk(t) ? t : '';
+  } catch (e) { return ''; }
+}
+function mapSvArrPut(url, body, at, ops) {                 // \ubc1b\uc740 \ub4a4 \ub4a4\uc5d0\uc11c(waitUntil) \u2014 \ubc1b\uae30 \uc2dc\uc791\ud55c \uc2dc\uac01(at)\uc744 \uc801\uc5b4 \ub454\ub2e4(\ub290\ub9ac\uac8c \ubc1b\uc558\uc5b4\ub3c4 \uadf8\ub9cc\ud07c \uc624\ub798\ub41c \uac83\uc73c\ub85c \uce5c\ub2e4)
+  try {
+    if (!mapSvArrFam(url) || !mapSvArrOk(body) || typeof caches === 'undefined' || !caches.default) return;
+    if (ops && ops.n >= MAPSV_OPS_SOFT) return;
+    if (ops) ops.n++;
+    var p = caches.default.put(mapSvArrReq(url), new Response(body, { headers: { 'Cache-Control': 'public, max-age=30', 'Content-Type': 'text/plain; charset=utf-8', 'x-at': String(at || Date.now()) } })).catch(function () { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(p);
+  } catch (e) { /* \ubb34\uc2dc */ }
+}
 var MAPSV_KV_TTL = 14 * 86400, MAPSV_REG = 'bsreg', MAPSV_REG_MAX = 240, MAPSV_WARM_AGE = 6 * 86400000, MAPSV_WARM_N = 8;
 function mapSvHash(s) {                                     // 32\ube44\ud2b8 \ub450 \uac1c(\uc11c\ub85c \ub2e4\ub978 \uc2dc\uc791\uac12) \u2192 16\uae00\uc790. \uc800\uc7a5 \uac12\uc5d0 \uc6d0\ubcf8 \uc8fc\uc18c\ub97c \uac19\uc774 \ub123\uc5b4 \ud655\uc778\ud558\ubbc0\ub85c \uacb9\uccd0\ub3c4 \ud2c0\ub9b0 \ubcf8\ubb38\uc740 \uc4f0\uc9c0 \uc54a\ub294\ub2e4
   var h1 = 0x811c9dc5, h2 = 0x01000193 ^ 0x5bd1e995, i, c;
@@ -24052,43 +24269,271 @@ async function mapBusWarmCron(env, nowMs) {
   if (n > 0) { try { await env.ROWS_KV.put(MAPSV_REG, JSON.stringify(reg), { expirationTtl: MAPSV_KV_TTL }); } catch (e3) { /* \ub2e4\uc74c\uc5d0 */ } }
   return n;
 }
-function mapSvOne(env, k, url, fresh) {                            // \u2192 Promise<\ubcf8\ubb38 \uae00> (\uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 mapSvOne0 \uc758 \uce90\uc2dc \u00b7 \ub3c4\ucc29\uc815\ubcf4\ub294 \ud569\uce58\uae30 + 5\ucd08 \uae30\uc5b5)
-  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url, fresh);
-  var now = Date.now(), e = MAPSV_MEMO[url];
-  if (e && now - e.t < MAPSV_MEMO_MS) return e.p;
+function mapSvOne(env, k, url, fresh, ops) {                       // \u2192 Promise<\ubcf8\ubb38 \uae00> (\uc815\ub958\uc7a5 \ubaa9\ub85d\uc740 mapSvOne0 \uc758 \uce90\uc2dc \u00b7 \ub3c4\ucc29\uc815\ubcf4\ub294 \ud569\uce58\uae30 + 5\ucd08 \uae30\uc5b5 \u2014 s463: \uc544\ub08c \ubaa8\ub4dc\uba74 9\ucd08 \u00b7 15\ucd08)
+  if (k === 'tp' || k === 'gg' || k === 'tn' || k === 'd1') return mapSvOne0(env, k, url, fresh, ops);
+  var now = Date.now(), e = MAPSV_MEMO[url], ttl = mapSvArrTtl(url);
+  if (e && now - e.t < ttl) { mapSvUse('map.arr.saved'); return e.p; }
   var ent = { t: now, p: null };
-  ent.p = mapSvOne0(env, k, url).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
+  ent.p = mapSvOne0(env, k, url, undefined, ops).then(function (b) { if (!b && MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return b; }, function () { if (MAPSV_MEMO[url] === ent) delete MAPSV_MEMO[url]; return ''; });
   if (++MAPSV_MEMO_N > 300) { MAPSV_MEMO = {}; MAPSV_MEMO_N = 0; }
   MAPSV_MEMO[url] = ent;
   return ent.p;
 }
 var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: \uc815\ub958\uc7a5 \ubaa9\ub85d \ub2e8\uacc4\uc5d0\uc11c \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4
 var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: \uc815\ub958\uc7a5 \ub2e8\uacc4\uc5d0\uc11c \ubabb \uae30\ub2e4\ub9b0 D1(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c)\uc744 \ub3c4\ucc29\uc815\ubcf4 \ub2e8\uacc4\uc5d0\uc11c \ub418\ubc1b\uc744 \ub54c \ub354 \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \ub2e4 \uc628 \ub4a4\ubd80\ud130 \u00b7 \uc608\uc0b0 \uc548\uc5d0\uc11c
-async function mapSvArrWait(ps, need, done, budget) {
-  var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
-  var tW = Date.now();
-  await Promise.race([Promise.all(ps.filter(function (p, i) { return i !== dIx; })), new Promise(function (r) { setTimeout(r, budget); })]);
-  if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
+// \u2605 s462 \u2014 \uc5f4\uc1e0\uc758 \ubb34\uac8c: 'core'(\ub3c4\ucc29\uc815\ubcf4 a\u00b7f\u00b7g\u00b7h \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5 \ubaa9\ub85d t\u00b7u 100+ \u2014 \uace7 \ub3c4\ucc29\uc815\ubcf4\ub85c \uc774\uc5b4\uc9c4\ub2e4) \ub294 \uae30\ub2e4\ub9ac\uace0, 'opt'(\uacbd\uc720\ub178\uc120 t\u00b7u 0~99 \u00b7 \ubc29\uba74 r)\ub294 \ud654\uba74\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4.
+function mapSvTier(k) {
+  k = String(k || '');
+  if (/^[tu][0-9]{1,2}$/.test(k) || /^r[0-9]{1,3}$/.test(k)) return 'opt';
+  return 'core';
 }
-var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                   // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
+var MAPSV_OPT_GATE_MS = 500, MAPSV_OPT_GRACE_MS = 250, MAPSV_SVO_ROUNDS = 5, MAPSV_SVO_WAVES = 3;
+// \u2605 s464 (YJ: "\uc21c\uc11c\ub300\ub85c \ud574\uc918" \u2014 \uccab \ub3c4\ucc29\uc815\ubcf4 3\ucd08 \uc548) \u2014 \u2460 \uc0c8 \uc571(svo)\uc740 \uac00\uc7a5 \ub290\ub9b0 \uc815\ub958\uc7a5\uc744 \uc608\uc0b0 \ub05d(\u22483.1\ucd08)\uae4c\uc9c0 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4: \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\uac00 \ud558\ub098\ub77c\ub3c4 \uc624\uba74 0.4\ucd08(\ubc1b\uae30\ub97c \uc2dc\uc791\ud55c \uc9c0 0.6\ucd08\ub294 \uc9c0\ub09c \ub4a4)\ub9cc \ub354 \uae30\ub2e4\ub9ac\uace0 \ub3cc\ub824\uc900\ub2e4.
+//   \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \ubc1b\uc544(waitUntil) \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \uce90\uc2dc\uc5d0\uc11c \ubc14\ub85c \uac00\uc838\uac04\ub2e4. \uac19\uc740 \uc694\uccad \uc548\uc758 \ucd94\uac00 \ubc14\ud034\ub3c4 \uac74\ub108\ub6f4\ub2e4(\uc608\uc804\uc5d4 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\uc544 \uacb0\uad6d \uc608\uc0b0 \ub05d\uae4c\uc9c0 \uac14\ub2e4).
+var MAPSV_EARLY_GRACE_MS = 400, MAPSV_EARLY_MIN_MS = 600;
+// \u2605 s467 (YJ: "2\ubc88 \uba3c\uc800") \u2014 \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\uac00 \ud55c \uac74\ub3c4 \uc5c6\ub294\ub370(\ubc24 \u00b7 \uc624\ub958 \u00b7 \ube48 \ubcf8\ubb38) \ub3c4\ucc29\uc815\ubcf4(core) \ub300\ubd80\ubd84\uc774 \uc774\ubbf8 \ub05d\ub0ac\uace0 \uba87 \uacf3\ub9cc \uba48\ucdb0 \uc788\uc73c\uba74, \uadf8 \uba87 \uacf3 \ub54c\ubb38\uc5d0 \ub9c8\uac10(\u22483.1\ucd08)\uae4c\uc9c0 \ubd99\uc7a1\uc9c0 \uc54a\ub294\ub2e4.
+//   \ubc1b\uae30\ub97c \uc2dc\uc791\ud55c \uc9c0 1\ucd08\uac00 \uc9c0\ub0ac\uace0 core \uc758 75% \uc774\uc0c1\uc774 \ub05d\ub0ac\uc73c\uba74 \uc77c\ucc0d \ub3cc\ub824\uc900\ub2e4(\ub0a8\uc740 \uacf3\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \ubc1b\uace0 \u00b7 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4). \uc694\uccad f.bus.dbg=1 + f.bus.tune.nosettle=1 \uc774\uba74 \uc608\uc804 \ub3d9\uc791(\uc2dc\ud5d8 \ube44\uad50\uc6a9).
+var MAPSV_SETTLE_MS = 1000, MAPSV_SETTLE_FRAC = 0.75;
+// \u2605 s467 (YJ: "3\ubc88 \uba3c\uc800") \u2014 \ubc29\ud5a5 \uc774\ub984('\u2192 \u25cb\u25cb\ubc29\ud5a5') \uc7ac\uc694\uccad: \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\ubbf8 \ud654\uba74\uc5d0 \uc788\uace0 \ub0a8\uc740 \uac83\uc774 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(r \u00b7 \ud070 \ubcf8\ubb38)\ubfd0\uc778 \uc694\uccad\uc774\uba74, \uc11c\ubc84\uac00 \uadf8 \ubaa9\ub85d\uc744 \uc9c1\uc811(12\uc2dc\uac04 \uce90\uc2dc \u00b7 \ub3d9\uc2dc \u00b7 \ud55c\ub3c4 \uc548\uc5d0\uc11c) \ubc1b\uc544 \ubc29\ud5a5 \uc774\ub984\uc744 \ucc44\uc6cc \ub3cc\ub824\uc900\ub2e4.
+//   \uae30\uae30\uac00 4\ub178\uc120\uc529 \uc5ec\ub7ec \ubc14\ud034 \ub3c4\ub294 \ub300\uc2e0 \ud55c \ubc88\uc5d0 \ub05d\ub09c\ub2e4. \ub3c4\ucc29\uc815\ubcf4\ub97c \ub9c9 \ubc1b\uc740 \uccab \uc751\ub2f5(arrWaves > 0)\uc740 \uc774 \uc77c\ub85c \ub2a6\ucd94\uc9c0 \uc54a\ub294\ub2e4. \ubabb \ub05d\ub0b8 \uac83\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d(\uce90\uc2dc\ub97c \ucc44\uc6c0) \u00b7 \uae30\uae30\uac00 \uc608\uc804\ucc98\ub7fc \uc774\uc5b4 \ubc1b\ub294\ub2e4. f.bus.dbg=1 + tune.nonx=1 \uc774\uba74 \ub048\ub2e4.
+var MAPSV_NX_MS = 1800, MAPSV_NX_ROUNDS = 3, MAPSV_NX_MAX = 12;
+// \u2605 s466 (YJ: "\ubcd1\ubaa9\ubd80\ubd84 \ucc3e\uace0" \u2014 \ub0ae \uc2e4\uce21: \uac19\uc740 \uc694\uccad \uc548 \ub450 \ubc88\uc9f8 \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034(\uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5 t100+ \u00b7 \ubc14\uafbc ID \ub3c4\ucc29\uc815\ubcf4)\uac00 \ub05d\ub0a0 \ub54c\uae4c\uc9c0 \ubd99\uc7a1\ud600, \uccab \ubc14\ud034\uc5d0\uc11c \ub3c4\ucc29\uc815\ubcf4\ub97c \uc774\ubbf8 \ubc1b\uace0\ub3c4 \uc751\ub2f5\uc774 \uc608\uc0b0 \ub05d(\u22483.1\ucd08)\uae4c\uc9c0 \ub2a6\ub358 \uacf3\uc774 12%(\ubd80\uc0b0 \ub3d9\ub798 \u00b7 \uc11c\uba74 \u00b7 \uc21c\ucc9c \u2026)).
+//   \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\ub97c \ucc98\uc74c \ubc1b\uc740 \ub54c\ubd80\ud130 \ucd94\uac00 \ubc14\ud034\ub4e4\uc740 \ud569\uccd0\uc11c W2 \ud55c\ub3c4(0.7\ucd08)\uae4c\uc9c0\ub9cc \uae30\ub2e4\ub9ac\uace0 \ub3cc\ub824\uc900\ub2e4(\ube60\ub974\uba74 \uc608\uc804\ucc98\ub7fc \ud55c \uc694\uccad\uc5d0\uc11c \ub05d\uae4c\uc9c0). \ubabb \ub05d\ub0b8 \uac83\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \ubc1b\uace0(waitUntil) \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4. \uc694\uccad f.bus.dbg=1 + f.bus.tune.old=1 \uc774\uba74 \uc608\uc804 \ub3d9\uc791(\uc2dc\ud5d8 \ube44\uad50\uc6a9).
+var MAPSV_W2_CAP_MS = 700;
+function mapSvHasUseful(got) {                              // \uc774 \uc694\uccad\uc5d0\uc11c \uc4f8 \ub9cc\ud55c(\ubc84\uc2a4\uac00 \uc788\ub294) \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4(a\u00b7f)\ub97c \uc774\ubbf8 \ubc1b\uc558\ub098
+  for (var k in got) if (Object.prototype.hasOwnProperty.call(got, k) && /^[af][0-9]{1,3}$/.test(k) && mapSvArrOk(got[k])) return true;
+  return false;
+}
+// \u2192 true \uba74 '\uc77c\ucc0d \ub3cc\ub824\uc900\ub2e4'(core \uac00 \uc544\uc9c1 \ub35c \uc654\ub2e4) \u2014 \ud638\ucd9c\ud55c \ucabd\uc740 \ucd94\uac00 \ubc14\ud034\ub97c \ub3cc\uc9c0 \uc54a\ub294\ub2e4
+async function mapSvArrWait(ps, need, done, budget, svo, wi) {            // s467: wi \u2014 \ud638\ucd9c\ud55c \ucabd\uc774 '\uc65c \ub3cc\ub824\uc92c\ub098'(wi.why)\ub97c \uc9c4\ub2e8\uc5d0 \uc4f0\ub824\uace0 \ub118\uae30\ub294 \ube48 \uac1d\uccb4(\uc120\ud0dd) \u00b7 wi.nosettle \uc774\uba74 '\ub300\ubd80\ubd84 \ub05d\ub0ac\ub294\ub370 \uc77c\ubd80\ub9cc \uba48\ucd98' \uc870\uae30 \ubc18\ud658\uc744 \ub048\ub2e4
+  var dIx = -1; need.forEach(function (n, i) { if (String(n.k || '') === 'd1') dIx = i; });
+  var tW = Date.now(), early = false;
+  if (svo) {                                                // s462: f.bus.svo=1(\uc0c8 \uc571) \u2014 \ub3c4\ucc29\uc815\ubcf4(core)\uac00 \ub2e4 \uc624\uba74 \uacbd\uc720\ub178\uc120(\ub364)\uc740 0.25\ucd08\ub9cc \ub354 \uae30\ub2e4\ub9ac\uace0 \ub3cc\ub824\uc900\ub2e4(\uc608\uc804\uc5d4 \uac00\uc7a5 \ub290\ub9b0 \ub364\uae4c\uc9c0 \uc608\uc0b0 \ub05d\uae4c\uc9c0 \ubd99\uc7a1\ud614\ub2e4)
+    var coreP = ps.filter(function (p, i) { return i !== dIx && mapSvTier(need[i].k) === 'core'; });
+    var allCore = Promise.all(coreP), tmo = null, stl = null, over = false;
+    var firstP = new Promise(function (r) {                 // s464: \uc4f8 \ub9cc\ud55c(\ubc84\uc2a4\uac00 \uc788\ub294) \uc815\ub958\uc7a5 \ub3c4\ucc29\uc815\ubcf4(a\u00b7f)\uac00 \ucc98\uc74c \uc624\ub294 \uc21c\uac04
+      need.forEach(function (n, i) {
+        var k = String(n.k || '');
+        if (i === dIx || !/^[af][0-9]{1,3}$/.test(k) || mapSvTier(k) !== 'core') return;
+        ps[i].then(function (t) { if (t && mapSvArrOk(t)) r(true); }, function () { /* \ubb34\uc2dc */ });
+      });
+    });
+    var settleP = new Promise(function (r) {                // s467: \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\ub294 \uc5c6\ub294\ub370 core \uc758 75%+ \uac00 \ub05d\ub0ac\uace0 \uba87 \uacf3\ub9cc \uba48\ucd98 \ucc44 1\ucd08\uac00 \uc9c0\ub0a8 \u2192 \uadf8 \uba87 \uacf3 \ub54c\ubb38\uc5d0 \ub9c8\uac10\uae4c\uc9c0 \ubd99\uc7a1\uc9c0 \uc54a\ub294\ub2e4
+      if (wi && wi.nosettle) return;
+      var coreIx = []; need.forEach(function (n, i) { if (i !== dIx && mapSvTier(n.k) === 'core') coreIx.push(i); });
+      var chk = function () {
+        if (over) return;
+        var nd = 0; coreIx.forEach(function (i) { if (done[i]) nd++; });
+        if (nd > 0 && nd < coreIx.length && nd >= Math.ceil(coreIx.length * MAPSV_SETTLE_FRAC)) { r(true); return; }
+        stl = setTimeout(chk, 100);
+      };
+      stl = setTimeout(chk, Math.max(0, Math.min(MAPSV_SETTLE_MS, budget - 100)));
+    });
+    var why = await Promise.race([allCore.then(function () { return 'all'; }), new Promise(function (r) { tmo = setTimeout(function () { r('to'); }, budget); }), firstP.then(function () { return 'first'; }), settleP.then(function () { return 'settled'; })]);
+    over = true; if (stl) clearTimeout(stl);
+    if (tmo) clearTimeout(tmo);
+    if (wi) wi.why = why;
+    if (why === 'settled') early = true;
+    if (why === 'first') {
+      var more = Math.min(Math.max(MAPSV_EARLY_GRACE_MS, MAPSV_EARLY_MIN_MS - (Date.now() - tW)), budget - (Date.now() - tW));
+      if (more > 0) await Promise.race([allCore, new Promise(function (r) { setTimeout(r, more); })]);
+      early = need.some(function (n, i) { return i !== dIx && mapSvTier(n.k) === 'core' && !done[i]; });
+    }
+    var gl = Math.min(MAPSV_OPT_GRACE_MS, budget - (Date.now() - tW));
+    if (!early && gl > 0) await Promise.race([Promise.all(ps.filter(function (p, i) { return i !== dIx; })), new Promise(function (r) { setTimeout(r, gl); })]);
+  }
+  else await Promise.race([Promise.all(ps.filter(function (p, i) { return i !== dIx; })), new Promise(function (r) { setTimeout(r, budget); })]);
+  if (dIx >= 0 && !done[dIx]) { var left = Math.min(MAPSV_D1_AGAIN_MS, budget) - (Date.now() - tW); if (left > 0) await Promise.race([ps[dIx], new Promise(function (r) { setTimeout(r, left); })]); }
+  return early;
+}
+// \u2605 s468 (YJ: "\ub108\uac00 \uc9c4\uc9dc \uc0ac\uc6a9\uc790\ub77c\uace0 \uc0dd\uac01\ud558\uace0 \uce74\uce74\uc624\ub791 \ube44\uad50\ud588\uc744\ub54c, \uce74\uce74\uc624\ub9cc\ud07c\uc740 \ud560 \uc218 \uc788\uac8c") \u2014 \ubc29\ud5a5 \uc774\ub984 \uc800\uc7a5\uc18c.
+//   \uce74\uce74\uc624\ub294 \ub178\uc120\u00b7\uc815\ub958\uc7a5 \uc790\ub8cc\ub97c \uc790\uae30 \uc11c\ubc84\uc5d0 \ub450\uace0 \uc788\uc5b4 '\u2192 \u25cb\u25cb\ubc29\uba74'\uc774 \ucc98\uc74c\ubd80\ud130 \ubd99\ub294\ub2e4. \uc6b0\ub9ac\ub294 \uacf5\uacf5 API \uc758 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(15KB \u00b7 \ucf5c\ub4dc\uc77c \ub54c 1~6\ucd08)\uc5d0\uc11c \ub9e4\ubc88 \ubf51\uc544 \uc0c8 \uae30\uae30\u00b7\uc0c8 \ub3d9\ub124\ub294 \ubc29\ud5a5 \uc774\ub984\uc774 2~29\ucd08 \ub2a6\uac8c \ucc44\uc6cc\uc84c\ub2e4.
+//   \uc774\ub984\uc740 '\uc815\ub958\uc7a5+\ub178\uc120 \u2192 \ub2e4\uc74c \uc815\ub958\uc7a5'\uc774\ub77c \uac70\uc758 \uc548 \ubc14\ub00c\ub294 \uc0ac\uc2e4\uc774\ub2e4 \u2192 \ud55c \ubc88 \uc54c\uc544\ub0b8 \uac83\uc740 D1 \ud45c(bus_nx1)\uc5d0 \ubaa8\uc544 \ub450\uace0(\uc815\ub958\uc7a5 ID \ub85c \ud55c \ubc88\uc5d0 \uc77d\ub294\ub2e4), \uc815\ub958\uc7a5\uc744 \uc54c\uac8c \ub41c \uc989\uc2dc \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \uc77d\uc5b4 \uccab \uc751\ub2f5\uc5d0 \ubc14\ub85c \ub123\ub294\ub2e4.
+//   \u00b7 \uc77d\uae30: \uc815\ub958\uc7a5 \ub2e8\uacc4\uac00 \ub05d\ub098\uba74(\ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub3d9\uc2dc\uc5d0) \uadf8 \uc815\ub958\uc7a5\ub4e4\uc758 \ud56d\ubaa9\uc744 \ud55c \ubc88\uc5d0 \uc77d\uc5b4 f.bus.nx \uc5d0 \ud569\uce5c\ub2e4(\uae30\uae30\uac00 \uac00\uc9c4 \uac19\uc740 \uc5f4\uc1e0\uac00 \uc6b0\uc120). \ud569\uccd0\uc9c4 \uc5f4\uc1e0\ub294 \uc5d4\uc9c4\uc774 r(\ub178\uc120 \ubaa9\ub85d)\uc744 \ubd80\ud0c1\ud558\uc9c0 \uc54a\ub294\ub2e4.
+//   \u00b7 \uc4f0\uae30: \uc774 \uc694\uccad\uc5d0\uc11c \uc5d4\uc9c4\uc774 \uc0c8\ub85c \ubf51\uc740 \ud56d\ubaa9(info.nx \uc911 \uae30\uae30\u00b7\uc800\uc7a5\uc18c\uc5d0 \uc5c6\ub358 \uac83 \u00b7 \uc9c0\uae08 \ud654\uba74\uc758 \uc815\ub958\uc7a5 \uac83\ub9cc \u00b7 \ube48 \uac12 \uc81c\uc678)\ub9cc \uc751\ub2f5 \ub4a4\uc5d0\uc11c(waitUntil) \uc62c\ub9b0\ub2e4. \uac19\uc740 \uc5f4\uc1e0\uac00 20\uc77c \uc548\uc774\uba74 \ub36e\uc5b4\uc4f0\uc9c0 \uc54a\ub294\ub2e4(\uc5c9\ub6b1\ud55c \ubcf8\ubb38\uc774 \uad73\ub294 \uac83 \ubc29\uc9c0). \uc77d\uc744 \ub54c\ub294 60\uc77c \ub118\uc740 \ud56d\ubaa9\uc744 \ubc84\ub9b0\ub2e4.
+//   \u00b7 \ud45c\uac00 \uc5c6\uc73c\uba74 \uc2a4\uc2a4\ub85c \ub9cc\ub4e0\ub2e4(CREATE TABLE IF NOT EXISTS \u2014 \uc774 \uc6cc\ucee4\uc758 \ub2e4\ub978 \ud45c\ub4e4\uacfc \uac19\uc740 \ubc29\uc2dd). D1 \uc774 \ub290\ub9ac\uac70\ub098 \ub9c9\ud788\uba74 \uc5c6\ub358 \uac83\ucc98\ub7fc(\uc608\uc804 \ub3d9\uc791) \uac04\ub2e4. \uc694\uccad f.bus.dbg=1 + tune.nonxdb=1 \uc774\uba74 \ub048\ub2e4.
+var MAPSV_NXDB_TBL = 'bus_nx1', MAPSV_NXDB_TTL_MS = 60 * 86400000, MAPSV_NXDB_REWRITE_MS = 20 * 86400000, MAPSV_NXDB_WAIT_MS = 500, MAPSV_NXDB_READ_MS = 1500, MAPSV_NXDB_IDS = 24, MAPSV_NXDB_WRITE = 120, MAPSV_NXDB_OPS = 40;
+var MAPSV_NXDB = { mk: false };
+function mapSvNxSid(k) {                                    // nx \uc5f4\uc1e0 \u2192 \uc815\ub958\uc7a5 ID (\ubaa8\ub974\ub294 \ubaa8\uc591\uc774\uba74 '') \u2014 'ID|\ub178\uc120' \u00b7 'lm|ID' \u00b7 'fx|ID' \u00b7 'od|ID|\ub178\uc120'
+  var p = String(k || '').split('|');
+  if (p[0] === 'lm' || p[0] === 'fx') return p.length === 2 ? p[1] : '';
+  if (p[0] === 'od') return p.length === 3 ? p[1] : '';
+  return p.length === 2 ? p[0] : '';
+}
+var MAPSV_NXDB_EMPTY = '~';                                  // \uc774\ub984 \uc606 \ubc29\ud5a5(lm)\uc758 '\ucc3e\uc558\uc9c0\ub9cc \ud574\ub2f9 \uc5ed \u00b7 \uc2dc\uccad\uc774 \uc5c6\uc74c'(\ube48 \uac12)\uc744 \uc800\uc7a5\uc18c\uc5d0\uc11c \uad6c\ubd84\ud558\ub294 \ud45c\uc2dc \u2014 \uc5d4\uc9c4\uc740 \ube48 \uac12\ub3c4 '\uc774\ubbf8 \ubb3c\uc5c8\ub2e4'\ub85c \uc4f4\ub2e4(\ub2e4\uc2dc \uc548 \ubb3b\ub294\ub2e4)
+function mapSvNxEnc(k, v) {                                  // \uc800\uc7a5\ud560 \uac12 \ub610\ub294 null \u2014 \ubc29\ud5a5 \uc774\ub984(\ube48 \uac12\uc740 \ubaa9\ub85d\uc744 \ubabb \uc77d\uc740 \uc77c\uc2dc \uc624\ub958\uc77c \uc218 \uc788\ub2e4) \uc740 \ube48 \uac12 \u00b7 \ub108\ubb34 \uae34 \uac12 \u00b7 \uc81c\uc5b4\ubb38\uc790/\ud0dc\uadf8\ub97c \uc800\uc7a5\ud558\uc9c0 \uc54a\ub294\ub2e4
+  if (typeof v !== 'string' || v.length > 40 || /[\u0000-\u001f<>]/.test(v)) return null;
+  if (!v) return /^lm\|/.test(k) ? MAPSV_NXDB_EMPTY : null;
+  return v;
+}
+function mapSvNxDec(k, v) { return (/^lm\|/.test(k) && v === MAPSV_NXDB_EMPTY) ? '' : v; }
+async function mapSvNxEnsure(env) {
+  if (MAPSV_NXDB.mk) return true;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS ' + MAPSV_NXDB_TBL + ' (sid TEXT NOT NULL, k TEXT NOT NULL, v TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (sid, k))').run();
+    MAPSV_NXDB.mk = true; return true;
+  } catch (e) { return false; }
+}
+async function mapSvNxLoad(env, ids, ops) {                  // \u2192 { \uc5f4\uc1e0: \uc774\ub984 } \ub610\ub294 null(\ubabb \uc77d\uc74c)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || !ids || !ids.length) return null;
+    if (ops) ops.n++;
+    var qs = ids.map(function () { return '?'; }).join(','), stmt = env.DB.prepare('SELECT k, v FROM ' + MAPSV_NXDB_TBL + ' WHERE sid IN (' + qs + ') AND ts > ?');
+    stmt = stmt.bind.apply(stmt, ids.concat([Date.now() - MAPSV_NXDB_TTL_MS]));
+    var tm = null, rs = await Promise.race([stmt.all(), new Promise(function (_, rej) { tm = setTimeout(function () { rej(new Error('timeout')); }, MAPSV_NXDB_READ_MS); })]);
+    if (tm) clearTimeout(tm);
+    var out = {}, rows = (rs && rs.results) || [];
+    rows.forEach(function (r) { if (r && typeof r.k === 'string' && mapSvNxEnc(r.k, r.v === MAPSV_NXDB_EMPTY ? '' : r.v) !== null) out[r.k] = mapSvNxDec(r.k, r.v); });
+    return out;
+  } catch (e) {
+    if (/no such table/i.test(String(e && e.message || e))) { await mapSvNxEnsure(env); return {}; }          // \ucc98\uc74c \u2014 \ud45c\uac00 \uc5c6\ub2e4: \ub9cc\ub4e4\uc5b4 \ub450\uace0 \ube48 \uac12\uc73c\ub85c(\ub2e4\uc74c \uc694\uccad\ubd80\ud130 \uc77d\ub294\ub2e4)
+    return null;
+  }
+}
+function mapSvNxMerge(b, loaded) {                            // \uc800\uc7a5\uc18c \ud56d\ubaa9\uc744 f.bus.nx \uc5d0 \ud569\uce5c\ub2e4 \u2014 \uc800\uc7a5\uc18c \uac83\uc744 \uc55e\uc5d0(\uc5d4\uc9c4\uc774 800\uac1c\uae4c\uc9c0\ub9cc \uc77d\uc73c\ubbc0\ub85c) \u00b7 \uae30\uae30\uac00 \ubcf4\ub0b8 \uac19\uc740 \uc5f4\uc1e0\uac00 \uc6b0\uc120
+  var cur = (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) ? b.nx : {}, o = {};
+  Object.keys(loaded).forEach(function (k) { if (cur[k] === undefined) o[k] = loaded[k]; });
+  Object.keys(cur).forEach(function (k) { o[k] = cur[k]; });
+  b.nx = o;
+}
+function mapSvNxSave(env, out, nxs, ops) {                    // \uc751\ub2f5\uc744 \ubd99\uc7a1\uc9c0 \uc54a\ub294\ub2e4(waitUntil)
+  try {
+    if (!env || !env.DB || typeof env.DB.prepare !== 'function' || typeof env.DB.batch !== 'function' || !out || !out.info || !out.info.nx || !Array.isArray(out.info.stops)) return;
+    if (ops && ops.n >= 46) return;
+    var ids = {}, base = (nxs && nxs.base0) || {}, ld = (nxs && nxs.loaded) || {}, ents = [], now = Date.now();
+    out.info.stops.forEach(function (s) { if (s && s.id) ids[String(s.id)] = 1; });
+    Object.keys(out.info.nx).forEach(function (k) {
+      var v = out.info.nx[k], sid = mapSvNxSid(k), ev = mapSvNxEnc(k, v);
+      if (ents.length >= MAPSV_NXDB_WRITE || base[k] === v || ld[k] === v || !sid || !ids[sid] || ev === null) return;
+      ents.push([sid, k, ev]);
+    });
+    if (!ents.length) return;
+    if (ops) ops.n++;
+    var sql = 'INSERT INTO ' + MAPSV_NXDB_TBL + ' (sid, k, v, ts) VALUES (?, ?, ?, ?) ON CONFLICT(sid, k) DO UPDATE SET v = excluded.v, ts = excluded.ts WHERE ' + MAPSV_NXDB_TBL + '.ts < excluded.ts - ' + MAPSV_NXDB_REWRITE_MS;
+    var run = (async function () {
+      if (!(await mapSvNxEnsure(env))) return;
+      await env.DB.batch(ents.map(function (e) { return env.DB.prepare(sql).bind(e[0], e[1], e[2], now); }));
+      mapSvUse('map.nx.save');
+    })().catch(function (e) { mapSvNote('nxsave', e, '', ''); });
+    if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(run);
+    if (nxs) nxs.saved = (nxs.saved || 0) + ents.length;
+  } catch (e0) { /* \uc800\uc7a5 \uc2e4\ud328\ub294 \ud654\uba74\uc5d0 \uc601\ud5a5\uc774 \uc5c6\ub2e4 */ }
+}
+// s467: \ubc29\ud5a5 \uc774\ub984 \u2014 \ub0a8\uc740 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(r)\ub9cc \ud544\uc694\ud55c \uc7ac\uc694\uccad\uc744 \uc11c\ubc84\uac00 \ub05d\ub0b8\ub2e4. \ud55c \ubc14\ud034\uc5d0 \ubaa8\ub450 \ub3d9\uc2dc\uc5d0(\ucd5c\ub300 MAPSV_NX_MAX \u00b7 \uc815\uc801 \ubaa9\ub85d\uc740 \ub370\uc774\ud130\uc13c\ud130 12\uc2dc\uac04 \uce90\uc2dc) \u00b7 \ucd5c\ub300 MAPSV_NX_ROUNDS \ubc14\ud034 \u00b7 \uc804\uccb4 MAPSV_NX_MS \uc548\uc5d0\uc11c.
+//   \ubc1b\uc740 \ud070 \ubcf8\ubb38\uc740 res \uc5d0\ub9cc \ub123\uace0(\uc751\ub2f5\uc758 bres \uc5d0\ub294 \uc2e3\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\uc5d0 \ub450\uc9c0 \uc54a\ub294\ub2e4) \uc5d4\uc9c4\uc774 \ubf51\uc740 \uc774\ub984\uc740 info.nx \ub85c \ub3cc\uc544\uac04\ub2e4. \ud558\uc704 \uc694\uccad\uc740 ops \ub85c \uc13c\ub2e4(\ubb34\ub8cc \uc694\uae08\uc81c 50\uac1c \ud55c\ub3c4).
+async function mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs) {
+  var f = body.f, b = f.bus, res = b.res, dl = Date.now() + MAPSV_NX_MS, round, late = [], lateK = [];
+  for (round = 0; round < MAPSV_NX_ROUNDS; round++) {
+    var ib = out && out.info && out.info.bus;
+    if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
+    var need = ib.need.slice(0, MAPSV_NX_MAX);
+    if (!need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;
+    var left = dl - Date.now();
+    if (left < 250) break;
+    var slot = new Array(need.length), done = new Array(need.length), tm = new Array(need.length), tw0 = Date.now() - tReq0, tmr = null;
+    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), false, ops).then(function (t) { slot[i] = t; done[i] = true; if (trace) tm[i] = Date.now() - tReq0; return t; }, function () { done[i] = true; return ''; }); });
+    await Promise.race([Promise.all(ps), new Promise(function (r) { tmr = setTimeout(r, left); })]);
+    if (tmr) clearTimeout(tmr);
+    var any = false;
+    need.forEach(function (n, i) { if (done[i] && slot[i]) { res[String(n.k || '')] = slot[i]; any = true; } });
+    ps.forEach(function (p, i) { if (!done[i]) { late.push(p); lateK.push(String(need[i].k || '')); } });
+    if (trace) trace.push({ r: round, w: 'n', t0: tw0, t1: Date.now() - tReq0, wb: left, early: false, why: '', cap: false, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
+    if (!any) break;
+    var o2 = mapScreen({ cap: cap }, f, body.d);
+    if (!o2 || !o2.ok) break;
+    out = o2;
+  }
+  if (late.length && MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') MAPSV_CTX.waitUntil(Promise.all(late).then(function (txs) {          // \ubabb \ub05d\ub0b8 \ubaa9\ub85d\uc740 \uc751\ub2f5 \ub4a4\uc5d0\uc11c \uacc4\uc18d \u2014 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\uac00 \ucc44\uc6cc\uc838 \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \ubc14\ub85c \ubc1b\ub294\ub2e4 \u00b7 s468: \ub05d\ub09c \ub4a4 \uc774\ub984\uc744 \ubf51\uc544 \uc800\uc7a5\uc18c\uc5d0\ub3c4 \uc62c\ub9b0\ub2e4(\ub2e4\uc74c \uc0ac\ub78c\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    var any2 = false;
+    txs.forEach(function (t, j) { if (t) { res[lateK[j]] = t; any2 = true; } });
+    if (!any2 || !nxs) return;
+    var o9 = mapScreen({ cap: cap }, f, body.d);
+    if (o9 && o9.ok) mapSvNxSave(env, o9, nxs, ops);
+  }).catch(function () { /* \ubb34\uc2dc */ }));
+  return out;
+}
+var MAPSV_ARR_MS = 2200, MAPSV_ARR_MIN = 300, MAPSV_ARR_MAX = 3500;                                  // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774 \uc2dc\uac04 \uc548\uc5d0 \uc628 \uac83\ub9cc \uc2e3\ub294\ub2e4 \u2014 \ub2a6\uac70\ub098 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc740 \ube44\uc6cc \ub450\uc5b4(= need \ub85c \ub0a8\uaca8) \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\uac8c \ud55c\ub2e4
 async function mapSvResolve(env, cap, body, out) {
   var svb = Number(body.f && body.f.bus && body.f.bus.svb), budget = isFinite(svb) && svb > 0 ? Math.max(MAPSV_ARR_MIN, Math.min(MAPSV_ARR_MAX, Math.floor(svb))) : MAPSV_ARR_MS;       // \uae30\uae30\uac00 \uc815\ud55c \uae30\ub2e4\ub9bc(\ucc98\uc74c \uadf8\ub9ac\uae30\ub294 \uc9e7\uac8c \u2014 \uc815\ub958\uc7a5\ubd80\ud130 \uba3c\uc800 \ubcf4\uc774\uace0 \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\uc5b4\uc11c \ucc44\uc6b4\ub2e4)          // need \ub97c \uc11c\ubc84\uac00 \ubc1b\uc544 \ucc44\uc6b4\ub2e4(\ucd5c\ub300 3\ubc14\ud034: \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4 \u2026)
   var f = body.f, b = f.bus, fresh = !!(b && b.nf), res = (b.res && typeof b.res === 'object') ? b.res : (b.res = {}), got = {}, failA = 0, anyEver = false, round, ib;
-  for (round = 0; round < 3; round++) {
+  var svo = !!(b && Number(b.svo) === 1), tReq0 = Date.now(), svoEnd = tReq0 + budget + 600, arrWaves = 0, ops = { n: 0 }, earlyRet = false;
+  var tUseful = 0, dbg = !!(b && Number(b.dbg) === 1), TUNE = (dbg && b.tune && typeof b.tune === 'object') ? b.tune : {}, trace = dbg ? [] : null;          // s466: \uc9c4\ub2e8(dbg=1) \u2014 \ub2e8\uacc4\ubcc4 \uc2dc\uac04(info.svt) \u00b7 \uc2dc\ud5d8\uc6a9 \uc870\uc808(tune: old \u00b7 w2 \u00b7 to)\uc740 \uc774 \uc694\uccad\uc5d0\ub9cc \u00b7 \uac12\uc740 \ubc94\uc704 \uc548\uc73c\ub85c
+  if (TUNE.to) ops.to = Math.max(500, Math.min(6000, Number(TUNE.to) || 3000));
+  if (TUNE.gap) ops.gap = Math.max(100, Math.min(3000, Number(TUNE.gap) || 700));                      // \uc2dc\ud5d8\uc6a9: \ub290\ub9b0 \ub3c4\ucc29\uc815\ubcf4\uc5d0 '\ub3d9\uc2dc\uc5d0 \ud55c \ubc88 \ub354'\ub97c \ub744\uc6b0\ub294 \uac04\uaca9(ms)
+  if (TUNE.near !== undefined) ops.near = Math.max(0, Math.min(3000, Number(TUNE.near) || 0));         // \uc2dc\ud5d8\uc6a9: \uac00\uae4c\uc6b4 \uc14b \ub450 \ubc88\uc9f8 \uae38 \uac04\uaca9(ms)          // s462: svo \u2014 \uc0c8 \uc571\uc774 "\uacbd\uc720\ub178\uc120 \uac19\uc740 \ub364\uc740 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0, \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uba74 \ubc14\ub85c \u00b7 \ubabb \ubc1b\uc740 \uc815\ub958\uc7a5\uc774 \uc0dd\uae30\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ud55c \ubc88 \ub354" \ub97c \uc6d0\ud55c\ub2e4(\uc804\uccb4 \uc57d budget+0.6\ucd08)
+  var stopsOnly = svo && budget <= MAPSV_ARR_MIN && !(res.tp || res.gg || res.tn || res.d1);            // s464: \ucc98\uc74c \uadf8\ub9ac\uae30\uc758 '\uc815\ub958\uc7a5\ub9cc \uba3c\uc800'(svb 300 \u00b7 \uc544\uc9c1 \uc815\ub958\uc7a5 \ubcf8\ubb38\uc774 \uc5c6\ub2e4) \uc694\uccad \u2014 \ub3c4\ucc29\uc815\ubcf4\ub294 \ub3d9\uc2dc\uc5d0 \uac04 \uc804\uccb4 \uc694\uccad(svb 2200)\uc774 \ubc1b\ub294\ub2e4. \uc5ec\uae30\uc11c\ub3c4 \ubc1b\uc73c\uba74 \uac19\uc740 \uacf3\uc744 \ub450 \ubc88 \ubd80\ub974\uace0 \uc815\ub958\uc7a5\ub3c4 0.6\ucd08 \ub2a6\uac8c \ub72c\ub2e4. \uc815\ub958\uc7a5\uc744 \uc774\ubbf8 \ubc1b\uc740 \ub4a4 \ubc14\ud034(svb 300)\ub294 \uc608\uc804 \uadf8\ub300\ub85c
+  var nxs = { p: null, loaded: null, merged: false, base0: null, t0: 0, ms: -1, n: 0, saved: 0 };          // s468: \ubc29\ud5a5 \uc774\ub984 \uc800\uc7a5\uc18c(D1) \uc77d\uae30 \uc0c1\ud0dc
+  var nxKick = function (o, force) {                                                                       // \uc815\ub958\uc7a5\uc744 \uc54c\uac8c \ub418\uba74 \uace7\ubc14\ub85c \uadf8 \uc815\ub958\uc7a5\ub4e4\uc758 \uc800\uc7a5\ub41c \ubc29\ud5a5 \uc774\ub984\uc744 \uc77d\uae30 \uc2dc\uc791\ud55c\ub2e4(\ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \u2014 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4)
+    if (nxs.p || TUNE.nonxdb || stopsOnly || !o || !o.info || !Array.isArray(o.info.stops) || ops.n > MAPSV_NXDB_OPS) return;
+    var ids = [], seen = {};
+    o.info.stops.forEach(function (s) { if (s && s.id && (s.src === 'tago' || s.src === 'd1') && !seen[s.id] && ids.length < MAPSV_NXDB_IDS) { seen[s.id] = 1; ids.push(String(s.id)); } });
+    if (!ids.length) return;
+    if (!force && b.nx && typeof b.nx === 'object' && ids.every(function (id) { return b.nx['lm|' + id] !== undefined; })) return;          // \uae30\uae30\uac00 \uc774 \uc815\ub958\uc7a5\ub4e4\uc758 \uc774\ub984\uc744 \uc774\ubbf8 \ub2e4 \uc548\ub2e4(8\ucd08 \uac31\uc2e0 \ub4f1) \u2014 \uc800\uc7a5\uc18c\ub97c \uc77d\uc9c0 \uc54a\ub294\ub2e4(\uc77d\uae30 \ud55c\ub3c4 \uc544\ub08c). \ubaa8\uc790\ub77c\uba74 r \uc774 \ud544\uc694\ud574\uc9c8 \ub54c \uc77d\ub294\ub2e4
+    nxs.base0 = {}; if (b.nx && typeof b.nx === 'object' && !Array.isArray(b.nx)) Object.keys(b.nx).forEach(function (k) { nxs.base0[k] = b.nx[k]; });
+    nxs.t0 = Date.now();
+    nxs.p = mapSvNxLoad(env, ids, ops).then(function (r) { nxs.ms = Date.now() - nxs.t0; nxs.loaded = r; return r || {}; });
+  };
+  var nxApply = async function (wait) {                                                                    // \u2192 true \uba74 f.bus.nx \uc5d0 \ud569\ucce4\ub2e4(\ud638\ucd9c\ud55c \ucabd\uc774 \uc5d4\uc9c4\uc744 \ub2e4\uc2dc \ub3cc\ub9b0\ub2e4)
+    if (!nxs.p || nxs.merged) return false;
+    var tmr = null, r = await Promise.race([nxs.p, new Promise(function (res2) { tmr = setTimeout(function () { res2(null); }, Math.max(30, wait)); })]);
+    if (tmr) clearTimeout(tmr);
+    if (!r) return false;
+    nxs.merged = true;
+    var n = 0, k; for (k in r) if (Object.prototype.hasOwnProperty.call(r, k)) n++;
+    nxs.n = n;
+    if (!n) return false;
+    mapSvNxMerge(b, r); mapSvUse('map.nx.hit');
+    return true;
+  };
+  nxKick(out);                                                                                              // \uc7ac\uc694\uccad\ucc98\ub7fc \uc815\ub958\uc7a5\uc744 \uc774\ubbf8 \uc544\ub294 \uc694\uccad\uc740 \uc2dc\uc791\ud558\uc790\ub9c8\uc790
+  for (round = 0; round < (svo ? MAPSV_SVO_ROUNDS : 3); round++) {
     ib = out && out.info && out.info.bus;
     if (!ib || ib.st !== 'need' || !Array.isArray(ib.need) || !ib.need.length) break;
     var need = ib.need.slice(0, 60);
-    if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) break;                       // s199: \ub178\uc120 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d(\ubc29\uba74 \uc774\ub984\uc6a9 \u00b7 \ud070 \ubcf8\ubb38)\uc740 \uae30\uae30\uac00 \ucc9c\ucc9c\ud788 \ubc1b\ub294\ub2e4 \u2014 \uc11c\ubc84\uac00 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4
+    if (need.some(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {                             // s199: \ub178\uc120 \uacbd\uc720 \uc815\ub958\uc7a5 \ubaa9\ub85d(\ubc29\uba74 \uc774\ub984\uc6a9 \u00b7 \ud070 \ubcf8\ubb38)\uc740 \ub3c4\ucc29\uc815\ubcf4\ub97c \ub9c9 \ubc1b\uc740 \uc751\ub2f5\uc5d0\uc11c\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\uac00 \ucc9c\ucc9c\ud788 \ubc1b\ub294\ub2e4
+      if (svo && arrWaves === 0 && !stopsOnly && !TUNE.nonx && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {          // s467: \ub3c4\ucc29\uc815\ubcf4\ub294 \uc774\ubbf8 \ud654\uba74\uc5d0 \uc788\ub294 \uc7ac\uc694\uccad \u2014 \ubc29\ud5a5 \uc774\ub984\uc740 \uc11c\ubc84\uac00 \ub0a8\uc740 \ubaa9\ub85d\uc744 \ud55c \ubc88\uc5d0 \ubc1b\uc544 \ucc44\uc6b4\ub2e4
+        nxKick(out, true);
+        if (await nxApply(MAPSV_NXDB_WAIT_MS)) {                                                            // s468: \uba3c\uc800 \uc800\uc7a5\uc18c\uc5d0 \uc788\ub294 \uc774\ub984\uc744 \ud569\uccd0 \ub2e4\uc2dc \uadf8\ub9b0\ub2e4 \u2014 \uadf8\ub9cc\ud07c \ubc1b\uc744 \ubaa9\ub85d\uc774 \uc904\uac70\ub098 \uc5c6\uc5b4\uc9c4\ub2e4
+          var o5 = mapScreen({ cap: cap }, f, body.d);
+          if (o5 && o5.ok) { out = o5; ib = out.info && out.info.bus; need = (ib && ib.st === 'need' && Array.isArray(ib.need)) ? ib.need.slice(0, 60) : []; }
+        }
+        if (need.length && need.every(function (n) { return /^r[0-9]/.test(String(n.k || '')); })) {
+          var o4 = await mapSvNxFill(env, cap, body, out, ops, tReq0, trace, nxs);
+          if (o4 && o4.ok) out = o4;
+        }
+      }
+      break;
+    }
     if (typeof mapBusWantD1 === 'function' && mapBusWantD1(f)) {                                            // s459: \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uc544\uc9c1 \ubabb \ubc1b\uc740 \ucc44 TAGO \ub9cc\uc73c\ub85c \uadf8\ub838\ub2e4 \u2014 \uc774\ubc88 \ubc14\ud034\uc5d0 D1 \ub3c4 \uac19\uc774 \ubc1b\uc544 \ub454\ub2e4(\ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc5d0 \ub07c\uc6cc\uc11c \u00b7 \ub2e4\uc74c \uadf8\ub9ac\uae30\uc5d0 \uc5ed \ucd9c\uad6c\uac00 \ucc44\uc6cc\uc9c4\ub2e4). \uc608\uc804\uc5d4 \ud55c \ubc88 \ub193\uce58\uba74 \uadf8 \uc694\uccad\uc5d0\uc11c\ub294 \ub05d\uae4c\uc9c0 \uc548 \ubc1b\uc558\ub2e4
       var cD = mapBusCenter(b);
       if (isFinite(cD.la) && isFinite(cD.lo) && !need.some(function (n) { return String(n.k || '') === 'd1'; })) need = need.concat(mapBusNeedStops(cD.la, cD.lo).filter(function (n) { return n.k === 'd1'; }));
     }
     var arrWave = need.every(function (n) { return /^([afghtu][0-9]{1,3}|d1)$/.test(String(n.k || '')); }) && need.some(function (n) { return /^[afghtu][0-9]{1,3}$/.test(String(n.k || '')); });   // s459: \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc5d0 D1 \ub418\ubc1b\uae30\uac00 \ub07c\uc5b4 \uc788\uc5b4\ub3c4 \ud568\uaed8 \ubc1b\ub294\ub2e4(D1 \ub9cc \ub0a8\uc740 \uac83\uc740 \uc815\ub958\uc7a5 \ubc14\ud034)
+    if (stopsOnly && arrWave) break;                                                                      // s464: \uc815\ub958\uc7a5\ub9cc \uba3c\uc800 \u2014 \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\ub294 \uac74\ub108\ub6f0\uace0 need \ub85c \ub0a8\uaca8 \ub454\ub2e4(\uc804\uccb4 \uc694\uccad \u00b7 \uae30\uae30\uac00 \ubc1b\ub294\ub2e4)
+    if (svo && arrWaves > 0 && (svoEnd - Date.now() < 400 || !need.some(function (n) { return /^[afghtu]/.test(String(n.k || '')) && mapSvTier(n.k) === 'core'; }))) break;          // s462: \uac19\uc740 \uc694\uccad \uc548\uc758 \ub450 \ubc88\uc9f8 \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\ub294 \uc2dc\uac04\uc774 \ub0a8\uace0 \ubc1b\uc744 core(\ubc14\uafbc ID \u00b7 \uc88c\ud45c \uc815\ub958\uc7a5 \u2192 \ub3c4\ucc29\uc815\ubcf4)\uac00 \uc788\uc744 \ub54c\ub9cc
+    var wb = svo ? Math.max(Math.min(budget, 1200), svoEnd - Date.now()) : budget;
+    var useful2 = svo && arrWaves > 0 && !TUNE.old && tUseful > 0;                                          // s466: \uc4f8 \ub9cc\ud55c \ub3c4\ucc29\uc815\ubcf4\ub97c \uc774\ubbf8 \ubc1b\uc740 \ub4a4\uc758 \ucd94\uac00 \ubc14\ud034 \u2014 \ubc1b\uc740 \ub54c\ubd80\ud130 \ud569\uccd0\uc11c W2 \ud55c\ub3c4\uae4c\uc9c0\ub9cc
+    if (useful2) { wb = Math.min(wb, tUseful + (TUNE.w2 !== undefined ? Math.max(0, Math.min(4000, Number(TUNE.w2) || 0)) : MAPSV_W2_CAP_MS) - Date.now()); if (wb < 80) break; }
+    var tm = new Array(need.length), tw0 = Date.now() - tReq0;         // \uc774\ubc88 \ubc14\ud034\uac00 \uae30\ub2e4\ub9b4 \uc2dc\uac04: \uc0c8 \uc571\uc740 \uc804\uccb4 \uc57d budget+0.6\ucd08 \uc548\uc5d0\uc11c(\uc815\ub958\uc7a5\uc774 \ub2a6\uc5b4\ub3c4 \ub3c4\ucc29\uc815\ubcf4\uc5d0 \ucd5c\uc18c 1.2\ucd08)
     var slot = new Array(need.length);
     var done = new Array(need.length);
-    var ps = need.map(function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh).then(function (t) { slot[i] = t; done[i] = true; return t; }); });
+    var mkP = function (n, i) { return mapSvOne(env, String(n.k || ''), String(n.url || ''), fresh, ops).then(function (t) { slot[i] = t; done[i] = true; if (trace) tm[i] = Date.now() - tReq0; return t; }); };
+    var ps = new Array(need.length);
+    if (arrWave && svo) {                                   // s462: \uc0c8 \uc571 \u2014 \ub3c4\ucc29\uc815\ubcf4(core)\ub97c \uba3c\uc800 \ub744\uc6b0\uace0 \uacbd\uc720\ub178\uc120(\ub364)\uc740 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc624\uac70\ub098 0.5\ucd08\uac00 \uc9c0\ub09c \ub4a4\uc5d0 \u2014 \uacf5\uacf5 API \uc5d0 \ud55c\uaebc\ubc88\uc5d0 \ubab0\ub824 \ub3c4\ucc29\uc815\ubcf4\uae4c\uc9c0 \ub290\ub824\uc9c0\ub358 \uac83\uc744 \ub9c9\ub294\ub2e4(\ub458 \ub2e4 \uce90\uc2dc\ub418\uba74 \uc774 \uc9c0\uc5f0\ub3c4 \uc5c6\ub2e4). \uc608\uc804 \uc571\uc740 \uc608\uc804 \uadf8\ub300\ub85c(\ub3d9\uc2dc\uc5d0)
+      var coreAll = [], gtm = null;
+      need.forEach(function (n, i) { if (mapSvTier(n.k) === 'core') { ps[i] = mkP(n, i); if (String(n.k || '') !== 'd1') coreAll.push(ps[i]); } });
+      var gate = Promise.race([Promise.all(coreAll), new Promise(function (r) { gtm = setTimeout(r, MAPSV_OPT_GATE_MS); })]).then(function () { if (gtm) clearTimeout(gtm); });
+      need.forEach(function (n, i) { if (!ps[i]) ps[i] = gate.then(function () { return mkP(n, i); }); });
+    } else ps = need.map(mkP);
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
-    if (arrWave) await mapSvArrWait(ps, need, done, budget);
+    earlyRet = false; var wi = { nosettle: !!TUNE.nosettle };
+    if (arrWave) {
+      earlyRet = await mapSvArrWait(ps, need, done, wb, svo, wi);
+      if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') {                                         // s462: \uc751\ub2f5\uc744 \ub3cc\ub824\uc900 \ub4a4\uc5d0\ub3c4 \ubabb \ub05d\ub0b8 \ubc1b\uae30(\uacbd\uc720\ub178\uc120 \u00b7 \ub290\ub9b0 \ub3c4\ucc29\uc815\ubcf4)\ub294 \ub05d\uae4c\uc9c0 \u2014 \uce90\uc2dc \u00b7 5\ucd08 \uae30\uc5b5\uc5d0 \ucc44\uc6cc\uc838 \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \uc989\uc2dc \ubc1b\ub294\ub2e4(\uc608\uc804\uc5d4 \uc751\ub2f5\uacfc \ud568\uaed8 \ub04a\uae38 \uc218 \uc788\uc5c8\ub2e4)
+        var lf = ps.filter(function (p, i) { return !done[i]; });
+        if (lf.length) MAPSV_CTX.waitUntil(Promise.all(lf).catch(function () { /* \ubb34\uc2dc */ }));
+      }
+    }
     else if (stopWave) {                                    // s177: \uc815\ub958\uc7a5 \ubaa9\ub85d \u2014 \uc6b0\uc120\uc21c\uc704 \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc8fc\uba74 \ub098\uba38\uc9c0(\ub290\ub9b0 TAGO)\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub118\uc5b4\uac04\ub2e4. \ubabb \uae30\ub2e4\ub9b0 \ucd9c\ucc98\ub294 \ube48 \uac12\uc73c\ub85c \ub454\ub2e4.
       var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO \uac00 \uba3c\uc800 \uc640\ub3c4 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub294 \uc774 \uc2dc\uac04\uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\uc5ed \ucd9c\uad6c\uac00 \ube60\uc9c0\uc9c0 \uc54a\uac8c) \u2014 \ub118\uc73c\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \uce58\uace0 \uadf8\ub9b0\ub2e4
       for (;;) {
@@ -24104,6 +24549,7 @@ async function mapSvResolve(env, cap, body, out) {
       }
     }
     else await Promise.all(ps);
+    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, why: wi.why || '', cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
@@ -24117,17 +24563,22 @@ async function mapSvResolve(env, cap, body, out) {
     });
     if (any) anyEver = true;
     if (!any) break;                                        // \uc544\ubb34\uac83\ub3c4 \ubabb \ubc1b\uc558\ub2e4 \u2014 \uadf8\ub300\ub85c \ub3cc\ub824\uc918 \uae30\uae30\uac00 \uc608\uc804 \ubc29\uc2dd\uc73c\ub85c \uc774\uc5b4 \uac04\ub2e4
+    if (arrWave && nxs.p) await nxApply(Math.max(50, Math.min(MAPSV_NXDB_WAIT_MS, svoEnd - Date.now())));          // s468: \ub3c4\ucc29\uc815\ubcf4 \ubc1b\uae30\uc640 \ub098\ub780\ud788 \uc77d\uc5b4 \ub454 \uc800\uc7a5\ub41c \ubc29\ud5a5 \uc774\ub984\uc744 \ud569\uce5c \ub4a4 \uadf8\ub9b0\ub2e4(\uccab \uc751\ub2f5\uc5d0 \ubc14\ub85c \ub4e4\uc5b4\uac04\ub2e4)
     out = mapScreen({ cap: cap }, f, body.d);
     if (!out || !out.ok) return out;
-    if (arrWave) break;                                     // \ub3c4\ucc29\uc815\ubcf4\ub294 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4)
+    nxKick(out);                                                                                            // s468: \uc815\ub958\uc7a5 \ub2e8\uacc4\uac00 \ub05d\ub0ac\ub2e4 \u2014 \uc774\uc81c \uc815\ub958\uc7a5 ID \ub97c \uc548\ub2e4(\ub2e4\uc74c \ub3c4\ucc29\uc815\ubcf4 \ubc14\ud034\uc640 \ub098\ub780\ud788 \uc77d\ub294\ub2e4)
+    if (arrWave) { arrWaves++; if (!tUseful && mapSvHasUseful(got)) tUseful = Date.now(); if (!svo || earlyRet || arrWaves >= MAPSV_SVO_WAVES || svoEnd - Date.now() < 400) break; }          // s464: earlyRet \u2014 \uc77c\ucc0d \ub3cc\ub824\uc8fc\uae30\ub85c \ud588\uc73c\uba74 \ub0a8\uc740 \uc815\ub958\uc7a5\uc744 \ub2e4\uc2dc \ubd99\uc7a1\ub294 \ucd94\uac00 \ubc14\ud034\ub294 \ub3cc\uc9c0 \uc54a\ub294\ub2e4          // \ub3c4\ucc29\uc815\ubcf4\ub294 \uc608\uc804 \uc571\uc740 \ud55c \ubc88\ub9cc(\ubabb \ubc1b\uc740 \uacf3\uc740 \uae30\uae30\uac00 \uc774\uc5b4 \ubc1b\ub294\ub2e4) \u00b7 \uc0c8 \uc571(svo)\uc740 \uc2dc\uac04\uc774 \ub0a8\uc73c\uba74 \uac19\uc740 \uc694\uccad \uc548\uc5d0\uc11c \ucd5c\ub300 3\ubc14\ud034(\ubc14\uafbc ID \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5)
   }
   if (anyEver && out && out.info) { out.info.bres = got; out.info.svf = failA; }
+  if (out && out.info) mapSvNxSave(env, out, nxs, ops);                                                    // s468: \uc774 \uc694\uccad\uc5d0\uc11c \uc0c8\ub85c \ubf51\uc740 \ubc29\ud5a5 \uc774\ub984\uc744 \uc800\uc7a5\uc18c\uc5d0(\uc751\ub2f5 \ub4a4\uc5d0\uc11c)
+  if (trace && out && out.info) { out.info.svt = { v: 1, ms: Date.now() - tReq0, budget: budget, waves: arrWaves, tune: TUNE, r: trace, nxdb: { n: nxs.n, ms: nxs.ms, merged: nxs.merged, saved: nxs.saved } }; }
   return out;
 }
 async function handleScreenMap(request, env) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   if (request.method !== "POST") return new Response(JSON.stringify({ ok: false, error: "post-only" }), { status: 405, headers: H });
+  mapSvLive(env); H["X-Bus-Mode"] = mapSvBudMode('tago') + '/' + mapSvBudMode('seoul'); H["Access-Control-Expose-Headers"] = "X-Bus-Mode";          // s463: \uc138\uae30\ub97c \uc62c\ub9b4 \uc218 \uc788\uac8c \u00b7 \ud558\ub8e8 \uc608\uc0b0 \ubaa8\ub4dc\ub97c \ub4a4\uc5d0\uc11c \uac31\uc2e0 \u00b7 \ud604\uc7ac \ubaa8\ub4dc\ub97c \uc751\ub2f5 \uba38\ub9ac\uc5d0(\uc9c4\ub2e8\uc6a9)
   var raw = await request.text();
   if (raw.length > 3000000) return new Response(JSON.stringify({ ok: false, error: "body-too-long" }), { status: 413, headers: H });
   var body;
@@ -24135,18 +24586,81 @@ async function handleScreenMap(request, env) {
   if (!body || typeof body !== "object") return new Response(JSON.stringify({ ok: false, error: "bad-body" }), { status: 400, headers: H });
   var out, cap = Number(body.cap) || 0, ttFill = null;
   try { if (body.f && body.f.part === 'tt') ttFill = await mapTtFill(env, body.f); } catch (eT) { ttFill = null; }          // s248: \uc2dc\uac04\ud45c\ub294 \uc11c\ubc84\uac00 \uc9c1\uc811 \ucc44\uc6b4\ub2e4(\uae30\uae30\ub294 \ud55c \ubc88\ub9cc \ubb3b\ub294\ub2e4) \u2014 \ubabb \ucc44\uc6b0\uba74 \uc608\uc804\ucc98\ub7fc need \uac00 \ub0a8\uc544 \uae30\uae30\uac00 /next-train \uc73c\ub85c \ubc1b\ub294\ub2e4
-  try { out = mapScreen({ cap: cap }, body.f, body.d); } catch (e2) { return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H }); }
+  try { out = mapScreen({ cap: cap }, body.f, body.d); } catch (e2) {
+    out = mapSvSalvage(cap, body, e2);                                                                    // s464: \uae30\uae30\uac00 \ubcf4\ub0b8 \ubc1b\uc740 \ubcf8\ubb38 \ud558\ub098\uac00 \uc5d4\uc9c4\uc744 \ud130\ub728\ub838\ub2e4 \u2014 \uadf8 \ubcf8\ubb38\ub9cc \ube7c\uace0 \ub2e4\uc2dc \uadf8\ub9b0\ub2e4(\ube60\uc9c4 \uacf3\uc740 '\ubd88\ub7ec\uc624\ub294 \uc911'\uc73c\ub85c \ub0a8\uc544 \uae30\uae30\uac00 \ub2e4\uc2dc \ubc1b\ub294\ub2e4). \uadf8\ub798\ub3c4 \uc548 \ub418\uba74 \uc608\uc804\ucc98\ub7fc 500
+    if (!out) return new Response(JSON.stringify({ ok: false, error: String(e2 && e2.message || e2).slice(0, 120) }), { status: 500, headers: H });
+  }
   if (!out || !out.ok) return new Response(JSON.stringify(out || { ok: false, error: "fail" }), { status: 400, headers: H });
   try {
     var bf = body.f && body.f.bus;
     if (cap >= 23 && bf && bf.sv === 1 && out.info && out.info.bus && out.info.bus.st === 'need') {
+      var tSv = Date.now();
       var o2 = await mapSvResolve(env, cap, body, out);
       if (o2 && o2.ok) out = o2;
+      if (out.info && out.info.bus && out.info.bus.st === 'empty' && !bf.pin && Date.now() - tSv < 1500) {          // s464: \uc815\ub958\uc7a5 '0\uac74' \u2014 \uacf5\uacf5 API \u00b7 \uc11c\ubc84 \uc815\ub958\uc7a5 \ud45c\uac00 \uc7a0\uae50 \ube48 \uac12\uc744 \uc900 \uac83\uc77c \uc218 \uc788\ub2e4(\uccad\ub77c: \uac19\uc740 \uc790\ub9ac\uac00 \uc5b4\ub5a4 \ub54c\ub294 0\uac74 \u00b7 \uace7\ubc14\ub85c\ub294 20\uacf3). \uc694\uccad\uc774 \uc544\uc9c1 \uc9e7\uc73c\uba74 \uce90\uc2dc\ub97c \uac74\ub108\ub6f0\uace0 \ud55c \ubc88\ub9cc \uc0c8\ub85c \ubc1b\uc544 \ubcf8\ub2e4
+        try {
+          var body2 = JSON.parse(raw), bf2 = body2.f.bus; bf2.nf = 1; if (!bf2.res || typeof bf2.res !== 'object') bf2.res = {};
+          ['tp', 'gg', 'tn', 'd1'].forEach(function (rk) { delete bf2.res[rk]; });
+          mapSvUse('map.empty.retry');
+          var out2 = mapScreen({ cap: cap }, body2.f, body2.d);
+          if (out2 && out2.ok && out2.info && out2.info.bus && out2.info.bus.st === 'need') {
+            var o3 = await mapSvResolve(env, cap, body2, out2);
+            if (o3 && o3.ok && o3.info && o3.info.bus && o3.info.bus.st !== 'empty') { out = o3; mapSvUse('map.empty.fix'); }
+          }
+        } catch (eR) { /* \ub2e4\uc2dc \ubc1b\uae30 \uc2e4\ud328\ub294 \ucc98\uc74c \uacb0\uacfc \uadf8\ub300\ub85c */ }
+      }
     }
   } catch (e3) { /* \uc11c\ubc84\uac00 \ubabb \ubc1b\uc73c\uba74 need \uac00 \ub0a8\uc740 \uccab \ud654\uba74 \uadf8\ub300\ub85c \u2014 \uae30\uae30\uac00 \uc774\uc5b4 \uac04\ub2e4 */ }
   if (ttFill && out.info) { for (var kf in ttFill) { out.info.fill = ttFill; break; } }
   out.ver = ENGINE_VERSION;
+  if (typeof usageFlush === 'function') { try { usageFlush(env); } catch (eU) { /* \ubb34\uc2dc */ } }          // s463: \uc13c \ud638\ucd9c\uc744 1\ubd84\uc5d0 \ud55c \ubc88 D1 \uc5d0 \uc62c\ub9b0\ub2e4(\uc751\ub2f5 \ub4a4\uc5d0\uc11c)
   return new Response(JSON.stringify(out), { headers: H });
+}
+// \u2605 s464 \u2014 \uc5d4\uc9c4\uc774 \uae30\uae30\uac00 \ubcf4\ub0b8 \ubc1b\uc740 \ubcf8\ubb38(f.bus.res) \ub54c\ubb38\uc5d0 \ud130\uc84c\uc744 \ub54c: \ud130\ub728\ub9b0 \ubcf8\ubb38 \ud558\ub098\ub97c \ucc3e\uc544 \ube7c\uace0 \ub2e4\uc2dc \uadf8\ub9b0\ub2e4. \ub9c8\uc9c0\ub9c9\uc5d0 \uc77c\uc5b4\ub09c \uc77c\uc740 /bus-budget \uc758 lastErr \uc5d0 \ub0a8\uae34\ub2e4(Cloudflare \ub85c\uadf8\ub97c \uc548 \ubd10\ub3c4 \uc6d0\uc778\uc744 \uc54c \uc218 \uc788\uac8c).
+var MAPSV_ERR = null;
+function mapSvNote(stage, e, key, txt) {
+  MAPSV_ERR = { at: new Date().toISOString(), stage: stage, msg: String(e && e.message || e || '').slice(0, 160), key: key || '', head: typeof txt === 'string' ? txt.slice(0, 160) : '' };
+  mapSvUse('map.err.' + stage);
+}
+function mapSvSalvage(cap, body, err) {                                                                  // \u2192 \ub2e4\uc2dc \uadf8\ub9b0 \ud654\uba74 \ub610\ub294 null
+  try {
+    var f = body && body.f, b = f && f.bus, res = b && b.res;
+    if (!res || typeof res !== 'object') { mapSvNote('500', err, '', ''); return null; }
+    var keys = Object.keys(res), i, saved, out;
+    var order = keys.filter(function (k) { return !/^(tp|gg|tn|d1)$/.test(k); }).concat(keys.filter(function (k) { return /^(tp|gg|tn|d1)$/.test(k); }));      // \ub3c4\ucc29\uc815\ubcf4 \u00b7 \uacbd\uc720\ub178\uc120 \ubcf8\ubb38\ubd80\ud130 \uc758\uc2ec\ud55c\ub2e4
+    for (i = 0; i < order.length; i++) {
+      saved = res[order[i]]; delete res[order[i]];
+      try { out = mapScreen({ cap: cap }, f, body.d); if (out && out.ok) { mapSvNote('salvage', err, order[i], saved); return out; } } catch (e1) { /* \uc774 \ubcf8\ubb38\uc774 \ubc94\uc778\uc774 \uc544\ub2c8\ub2e4 */ }
+      res[order[i]] = saved;
+    }
+    for (i = 0; i < order.length; i++) delete res[order[i]];                                              // \ud558\ub098\ub9cc \ube7c\uc11c\ub294 \uc548 \ub41c\ub2e4 \u2014 \ubc1b\uc740 \uac83\uc744 \ubaa8\ub450 \ube44\uc6b0\uace0 \ucc98\uc74c \ud654\uba74\uc73c\ub85c
+    try { out = mapScreen({ cap: cap }, f, body.d); if (out && out.ok) { mapSvNote('salvage-all', err, '', ''); return out; } } catch (e2) { /* \uc544\ub798 */ }
+  } catch (e0) { /* \uc544\ub798 */ }
+  mapSvNote('500', err, '', '');
+  return null;
+}
+// s463: \uc774 \uc694\uccad\uc774 \uc13c \ud638\ucd9c\uc744 \uc62c\ub9b4 \uc218 \uc788\uac8c \uc2e4\ud589 \ub9e5\ub77d\uc744 \uc54c\ub824 \uc8fc\uace0, \ud558\ub8e8 \uc608\uc0b0 \ubaa8\ub4dc\ub97c \ub4a4\uc5d0\uc11c \uac31\uc2e0\ud55c\ub2e4
+function mapSvLive(env) {
+  try { if (typeof _liveCtx !== 'undefined' && MAPSV_CTX) _liveCtx = MAPSV_CTX; } catch (e) { /* \ubb34\uc2dc */ }
+  mapSvBudRefresh(env);
+}
+// GET /bus-budget \u2014 \ud558\ub8e8 \uc608\uc0b0 \ubaa8\ub4dc \u00b7 \uc624\ub298 \uc0ac\uc6a9\ub7c9(\uc9c4\ub2e8). ?refresh=1 \uc740 \ubc14\ub85c \ub2e4\uc2dc \uc77d\ub294\ub2e4 \u00b7 ?probe=1 \uc740 \ud558\uc704 \uc694\uccad \ud55c\ub3c4(\ubb34\ub8cc 50 \u00b7 \uc720\ub8cc 1000)\ub97c Cache API \ud638\ucd9c\ub85c \uc7ac \ubcf8\ub2e4(\uc694\uae08\uc81c \ud655\uc778\uc6a9 \u00b7 60\ubc88\ub9cc \ubd80\ub978\ub2e4)
+async function handleBusBudget(request, env) {
+  var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
+  var u = new URL(request.url), out = {};
+  if (u.searchParams.get('refresh') === '1') { var rp = mapSvBudRefresh(env, true); if (rp) await rp; }
+  else mapSvLive(env);
+  var ratio = {}; Object.keys(MAPSV_BUD.used).forEach(function (f) { ratio[f] = Math.round(MAPSV_BUD.used[f] / MAPSV_BUD.limit[f] * 10000) / 10000; });
+  out = { ok: true, ver: ENGINE_VERSION, day: MAPSV_BUD.day, modes: MAPSV_BUD.modes, used: MAPSV_BUD.used, limit: MAPSV_BUD.limit, ratio: ratio, saver: MAPSV_BUD_SAVER, critical: MAPSV_BUD_CRIT, ttlMs: { tago: mapSvArrTtl('https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?'), seoul: mapSvArrTtl('http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?') }, readAt: MAPSV_BUD.at, ageMs: MAPSV_BUD.at ? Date.now() - MAPSV_BUD.at : null, err: MAPSV_BUD.err, hasDb: !!(env && env.DB), lastErr: MAPSV_ERR };
+  if (u.searchParams.get('probe') === '1') {
+    var okN = 0, errMsg = '';
+    try {
+      var pk = new Request('https://map-sv-cache.internal/probe?v=1');
+      for (var i = 0; i < 60; i++) { await caches.default.match(pk); okN++; }
+    } catch (e) { errMsg = String(e && e.message || e).slice(0, 100); }
+    out.probe = { cacheCallsOk: okN, error: errMsg, plan: okN >= 60 ? 'paid(\ud558\uc704 \uc694\uccad 50 \ucd08\uacfc \uac00\ub2a5)' : 'free(50\uac1c \ud55c\ub3c4)' };
+  }
+  return new Response(JSON.stringify(out), { status: 200, headers: H });
 }
 // \u2550\u2550\u2550 s248 \uc5ed \uc2dc\uac04\ud45c \uc11c\ubc84 \ucc44\uc6b0\uae30 \u2014 (YJ: "\uc2dc\uac04\ud45c\uac00 \uc548 \ub098\uc640. \ubbf8\ub9ac \ub2e4 \ubc1b\uc544\ub194\uc57c \ud574") \u2550\u2550\u2550
 //   f.tt.sv === 1 \uc774\uba74 \uc774 \uc5ed\uc758 \ubaa8\ub4e0 \ub178\uc120(\uc694\uc77c \ubbf8\uc815)\uacfc \uace0\ub978 \ub178\uc120\u00b7\uc694\uc77c\uc758 \uc2dc\uac04\ud45c\ub97c \uc11c\ubc84(\ub2e4\uc74c \uc5f4\ucc28 \uc5d4\uc9c4)\uac00 \ubc14\ub85c \ucc44\uc6cc \ud55c \ubc88\uc5d0 \uc644\uc131\ub41c \ud654\uba74\uc744 \uc900\ub2e4.
@@ -24215,6 +24729,19 @@ async function handleBusTago(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var raw = new URL(request.url).searchParams.get('url') || '';
   if (raw.length === 0 || raw.length > 1500 || !/^https?:\/\/(apis\.data\.go\.kr|ws\.bus\.go\.kr)\//.test(raw)) return new Response('bad-url', { status: 400, headers: H });
+  var sc = mapSvStaticCls(raw), cache = null, ck = null;                                       // s462: \uacbd\uc720\ub178\uc120 \u00b7 \ub178\uc120 \uc815\ub958\uc7a5 \ubaa9\ub85d(\uac70\uc758 \uc548 \ubc14\ub01c)\uc740 \uc11c\ubc84\uac00 \ubc1b\uc744 \ub54c\uc640 \uac19\uc740 \ub370\uc774\ud130\uc13c\ud130 \uce90\uc2dc\ub97c \uc4f4\ub2e4 \u2014 \uae30\uae30\uac00 \uc9c1\uc811 \ubc1b\ub294 \uae38\ub3c4 \ub450 \ubc88\uc9f8\ubd80\ud130 \uc989\uc2dc
+  if (sc) {
+    try {
+      if (typeof caches !== 'undefined' && caches.default) {
+        cache = caches.default; ck = new Request('https://map-sv-cache.internal/s?v=2&k=' + sc + '&u=' + encodeURIComponent(raw));
+        var hit = await cache.match(ck);
+        if (hit) { var ht = await hit.text(); if (mapSvOkBody(sc, ht)) return new Response(ht, { status: 200, headers: Object.assign({ "Content-Type": 'text/plain; charset=utf-8' }, H) }); }
+      }
+    } catch (eC) { cache = null; }
+  }
+  mapSvLive(env);
+  var af = mapSvArrFam(raw), tStart = Date.now();                                              // s463: \ub3c4\ucc29\uc815\ubcf4\ub294 \uac19\uc740 \ub370\uc774\ud130\uc13c\ud130 \uacf5\uc720 \uce90\uc2dc(\ubc1b\uc740 \uc9c0 5\ucd08 \uc548 \u00b7 \uc544\ub08c \ubaa8\ub4dc 9\ucd08 \u00b7 15\ucd08)\ub97c \uba3c\uc800 \u2014 \uc5ec\ub7ec \uae30\uae30\uac00 \uac19\uc740 \uc815\ub958\uc7a5\uc744 \ubd80\ub974\uba74 \uacf5\uacf5 API \ub294 \ud55c \ubc88\ub9cc
+  if (af) { var ab = await mapSvArrGet(raw, null); if (ab) { mapSvUse('map.arr.saved'); return new Response(ab, { status: 200, headers: Object.assign({ "Content-Type": 'text/plain; charset=utf-8', "X-Cache": "HIT-A" }, H) }); } }
   var keys = mapKeyList(env);
   if (!keys.length) return new Response('no-key', { status: 500, headers: H });
   var first = (MAPBT_RR++) % keys.length;
@@ -24223,9 +24750,15 @@ async function handleBusTago(request, env) {
     for (var pr = 0; pr < 2; pr++) {                                                           // ws.bus.go.kr \ub294 http \ub9cc \ubc1b\ub294 \ub54c\uac00 \uc788\uc5b4 \ud504\ub85c\ud1a0\ucf5c\uc744 \ubc14\uafd4 \ud55c \ubc88 \ub354
       try {
         var u2 = pr === 0 ? tgt : tgt.replace(/^https?:/, /^https:/.test(tgt) ? 'http:' : 'https:');
+        mapSvUse(af ? 'map.arr.' + af : (sc ? 'map.st' : 'map.etc'));                               // s463: \uc2e4\uc81c\ub85c \ub098\uac00\ub294 \ud638\ucd9c\uc744 \uc13c\ub2e4
         var res = await Promise.race([fetch(u2, { headers: { 'Accept': '*/*', 'User-Agent': 'gildongmu/1.0' } }), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, 3500); })]);
         var txt = await res.text();
-        if (res.status === 200 && !mapBtBad(txt)) return new Response(txt, { status: 200, headers: Object.assign({ "Content-Type": res.headers.get('Content-Type') || 'text/plain; charset=utf-8' }, H) });
+        if (res.status === 200 && !mapBtBad(txt)) {
+          if (af) mapSvArrPut(raw, txt, tStart, null);
+          if (typeof usageFlush === 'function') { try { usageFlush(env); } catch (eU) { /* \ubb34\uc2dc */ } }
+          if (cache && ck && mapSvOkBody(sc, txt)) { try { await cache.put(ck, new Response(txt, { headers: { 'Cache-Control': 'public, max-age=43200', 'Content-Type': 'text/plain; charset=utf-8' } })); } catch (eP) { /* \uce90\uc2dc \uc2e4\ud328\ub294 \ubb34\uc2dc */ } }
+          return new Response(txt, { status: 200, headers: Object.assign({ "Content-Type": res.headers.get('Content-Type') || 'text/plain; charset=utf-8' }, H) });
+        }
         if (res.status === 200 || pr === 1) break;
       } catch (e) { /* \ub2e4\uc74c \uc2dc\ub3c4 */ }
     }
@@ -26098,6 +26631,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/screen/map") return handleScreenMap(request, env);
   if (url.pathname === "/bus-split-test") return handleBusSplitTest(request, env);
   if (url.pathname === "/bus-tago") return handleBusTago(request, env);
+  if (url.pathname === "/bus-budget") return handleBusBudget(request, env);
   if (url.pathname === "/screen/fav") return handleScreenFav(request);
   if (url.pathname === "/screen/hcards") return handleScreenHcards(request);
   if (url.pathname === "/ride/start") return handleRideStart(request, env);

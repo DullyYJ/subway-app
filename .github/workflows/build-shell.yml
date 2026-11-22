@@ -35,6 +35,11 @@ jobs:
           - ride_start_engine.test.js
           - prefetch_access_live.test.js
           - neighbor_live.test.js
+          - s469_latenight_direct.test.js
+          - s471_alert_fuzz.test.js
+          - s471_xfer_nofree.test.js
+          - s471_bus_loop_skip.test.js
+          - s472_xfer_early_table.test.js
           - rules_engine.test.js
           - legal_engine.test.js
           - scene_native.test.js

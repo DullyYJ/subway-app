@@ -6,9 +6,9 @@ const R = p => path.join(__dirname, '..', p);
 let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('  FAIL', m); } }
 const cut = t => t.slice(0, t.indexOf('if (typeof module'));
-const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
+const code = cut(fs.readFileSync(R('engine/map.js'), 'utf8')) + '\n' + fs.readFileSync(R('engine/map-worker.js'), 'utf8') + '\n;this.H = handleScreenMap; this.T = handleBusTago; this.B = handleBusBudget; this.mapSvOne = mapSvOne; this.mapBusStops = mapBusStops;';
 function load(extra) {
-  const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console }, extra || {});
+  const ctx = Object.assign({ ENGINE_VERSION: 'test', Request, Response, URL, Promise, setTimeout, clearTimeout, JSON, Date, console, AbortController }, extra || {});
   vm.runInNewContext(code, ctx);
   return ctx;
 }
@@ -334,6 +334,577 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
     const old = load(); old.mapBusWantD1 = () => false;      // 예전 동작(기다리지 않음) 재현 — 화면과 같은 6곳이 나오는지 확인
     const r0 = await post(old.H, { BUSAPI: mk(50, 300) }, { cap: 23, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: ME[0], lng: ME[1], res: {}, sv: 1, svb: 300 } } }), n0 = r0.j.body.filter(n => n.t === 'bcard').map(n => n.nm);
     ok(JSON.stringify(n0) === JSON.stringify(['아라역1번출구', '아라역3번출구', '아라역6번출구', '아라역7번출구', '아라동행정복지센터', '아라동행정복지센터']), 's458: (재현) 기다리지 않으면 YJ 화면 그대로 — 출구 4곳 + 아라동행정복지센터 2곳: ' + n0.join(' / '));
+  }
+  // ⑩ s462 (YJ: "카카오는 바로 뜨는데 우리는 바로 안 뜨는 게 너무 많다 — 적어도 3초 안에 다 나오게"): 경유노선 캐시 · 새 앱(svo)의 덤 안 기다림 · 같은 요청 안 두 번째 바퀴 · 응답 뒤 받기 이어 가기
+  {
+    const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+    const TH = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', routeid: 'R1', routetp: '일반버스' }, { routeno: '9', routeid: 'R2', routetp: '일반버스' }] } } } });
+    const CR = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'BSB1X', nodenm: '시청역', gpslati: 35.1796, gpslong: 129.0757, citycode: 21, nodeno: '1' }] } } } });
+    const mkB = (log, o) => { o = o || {}; return { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+      if (/getCrdntPrxmtSttnList/.test(inner) && /numOfRows=50/.test(inner)) return new Response('', { status: 200 });
+      if (/getCrdntPrxmtSttnList/.test(inner)) { await new Promise(r => setTimeout(r, o.crMs || 0)); return new Response(CR, { status: 200 }); }
+      if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+      if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { await new Promise(r => setTimeout(r, o.arrMs || 0)); return new Response(o.emptyB1 && /nodeId=BSB1&/.test(inner) ? EMPTY : AR, { status: 200 }); }
+      if (/getSttnThrghRouteList/.test(inner)) { await new Promise(r => setTimeout(r, o.thruMs || 0)); return new Response(o.thruEmpty ? '{"response":{"body":{"items":""}}}' : TH, { status: 200 }); }
+      return new Response('', { status: 200 }); } }; };
+    const body = (extra, res) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0756, res: res || {}, sv: 1, svb: 2000 }, extra || {}) } });
+    const mkCaches = () => { const store = new Map(); return { store, default: { match: async (rq) => store.has(rq.url) ? new Response(store.get(rq.url)) : undefined, put: async (rq, rs) => { store.set(rq.url, await rs.text()); } } }; };
+    const thruN = log => log.filter(u => /getSttnThrghRouteList/.test(u)).length;
+    // 10-a 경유노선은 한 번 받으면 데이터센터 캐시에 — 다른 isolate(기억 없음)에서도 두 번째는 공공 API 를 부르지 않는다
+    {
+      const cs = mkCaches(), l1 = [], l2 = [];
+      let c = load({ caches: cs }); const r1 = await post(c.H, { BUSAPI: mkB(l1) }, body());
+      ok(thruN(l1) === 2 && r1.j.info.bres.t0 && r1.j.info.bres.t1, '10-a: 처음에는 경유노선 2곳을 받는다');
+      ok([...cs.store.keys()].some(k => /k=tl&/.test(k)) && ![...cs.store.keys()].some(k => /k=t0&/.test(k)), '10-a: 캐시 종류는 열쇠 번호가 아니라 조회 종류(tl)로 — 열쇠 번호가 바뀌어도 맞는다');
+      c = load({ caches: cs }); const r2 = await post(c.H, { BUSAPI: mkB(l2) }, body());
+      ok(thruN(l2) === 0 && r2.j.info.bres.t0 === r1.j.info.bres.t0 && r2.j.info.bres.t1 === r1.j.info.bres.t1, '10-a: 두 번째(다른 isolate)는 경유노선 공공 호출 0번 · 같은 본문 ' + thruN(l2));
+      ok(l2.filter(u => /getSttnAcctoArvlPrearngeInfoList/.test(u)).length === 2, '10-a: 도착정보(실시간)는 캐시하지 않고 새로 받는다');
+      // 빈 목록은 12시간 굳히지 않는다
+      const cs2 = mkCaches(), l3 = [], l4 = [];
+      c = load({ caches: cs2 }); await post(c.H, { BUSAPI: mkB(l3, { thruEmpty: true }) }, body());
+      c = load({ caches: cs2 }); await post(c.H, { BUSAPI: mkB(l4, { thruEmpty: true }) }, body());
+      ok(thruN(l3) === 2 && thruN(l4) === 2 && ![...cs2.store.keys()].some(k => /k=tl&/.test(k)), '10-a: 빈 경유노선 응답은 캐시하지 않는다(다시 받는다)');
+    }
+    // 10-b 새 앱(svo): 도착정보가 다 오면 느린 경유노선(덤)은 0.25초만 더 기다리고 돌려준다 · 예전 앱은 예전 그대로(예산 끝까지)
+    {
+      const pend = [], ctxw = { waitUntil: (p) => pend.push(p) };
+      const run = async (svo) => { const l = []; const c = load(); c.MAPSV_CTX = ctxw; const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l, { thruMs: 3000, arrMs: 40 }) }, body(svo ? { svo: 1 } : {})); return { r, dt: Date.now() - t0, l }; };
+      const o = await run(true), n = await run(false);
+      const cards = o.r.j.body.filter(x => x.t === 'bcard');
+      ok(o.dt < 1300 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1), '10-b: svo — 도착정보가 오면 바로(경유노선 3초를 기다리지 않는다) ' + o.dt + 'ms');
+      ok(o.r.j.info.bres.a0 && o.r.j.info.bres.a1 && !o.r.j.info.bres.t0 && o.r.j.info.bus.st === 'need' && o.r.j.info.bus.need.every(x => /^[tu][0-9]{1,2}$/.test(x.k) || /^r/.test(x.k)), '10-b: 못 받은 덤(경유노선)은 need 로 남는다 · 도착정보 정류장은 모두 채워졌다 ' + JSON.stringify((o.r.j.info.bus.need || []).map(x => x.k)));
+      ok(n.dt >= 1800 && n.r.j.info.bus.st === 'need', '10-b: svo 가 없는 예전 앱은 예전처럼 예산(2초)까지 기다린다 ' + n.dt + 'ms');
+      ok(pend.length >= 1, '10-b: 응답 뒤에도 못 끝낸 받기는 waitUntil 로 이어 간다(' + pend.length + ')');
+      const tw = Date.now(); await Promise.all(pend); // 이어 받은 경유노선이 끝나면 5초 기억 · 캐시에 남는다
+    }
+    // 10-c 응답 뒤에 이어 받은 경유노선은 데이터센터 캐시에 채워진다 → 기기의 다음 요청은 즉시
+    {
+      const cs = mkCaches(), pend = [], ctxw = { waitUntil: (p) => pend.push(p) }, l1 = [], l2 = [];
+      let c = load({ caches: cs }); c.MAPSV_CTX = ctxw;
+      const t0 = Date.now(); await post(c.H, { BUSAPI: mkB(l1, { thruMs: 1500, arrMs: 30 }) }, body({ svo: 1 }));
+      const dt1 = Date.now() - t0;
+      await Promise.all(pend);
+      ok(dt1 < 1200 && [...cs.store.keys()].some(k => /k=tl&/.test(k)), '10-c: 응답은 빨리(' + dt1 + 'ms) · 그 뒤 이어 받은 경유노선은 캐시에 채워졌다');
+      c = load({ caches: cs }); const t1 = Date.now(); const r2 = await post(c.H, { BUSAPI: mkB(l2, { thruMs: 1500, arrMs: 30 }) }, body({ svo: 1 }));
+      ok(thruN(l2) === 0 && r2.j.info.bres.t0 && Date.now() - t1 < 1000, '10-c: 다음 요청은 경유노선을 기다리지 않고 캐시에서 ' + (Date.now() - t1) + 'ms');
+    }
+    // 10-d 같은 요청 안 두 번째 바퀴: 좌표로 다시 찾은 정류장(t100+) → 바꾼 ID 도착정보(g)까지 서버가 한 번에. 예전 앱은 기기가 바퀴를 더 돈다
+    {
+      const flow = async (svo) => { const log = [], c = load(); let res = {}, rounds = 0, last = null;
+        for (; rounds < 8; rounds++) {
+          const r = await post(c.H, { BUSAPI: mkB(log, { emptyB1: true }) }, body({ svb: svo ? 2200 : 300, svo: svo ? 1 : 0 }, res)); last = r.j;       // s464: svb 300 + svo 는 '정류장만 먼저' 요청(도착정보를 받지 않는다) — 전체 요청은 svb 2200
+          const need = r.j.info.bus.need || [];
+          for (const k in (r.j.info.bres || {})) res[k] = r.j.info.bres[k];
+          if (!need.length) break;
+          const left = need.filter(x => res[x.k] === undefined);
+          if (!left.length) break;
+          for (const x of left) { const rr = await mkB(log, { emptyB1: true }).fetch(new Request('https://busapi.internal/tago?url=' + encodeURIComponent(x.url))); res[x.k] = await rr.text(); }
+        }
+        return { rounds, last, keys: Object.keys(res) };
+      };
+      const a = await flow(false), b = await flow(true);
+      ok(b.last.info.bus.st === 'ok' && a.last.info.bus.st === 'ok' && b.keys.includes('t100') && b.keys.includes('g500'), '10-d: 두 방식 모두 끝에는 완성된 화면(좌표 정류장 · 바꾼 ID 도착정보 포함) ' + a.keys.join() + ' | ' + b.keys.join());
+      ok(b.rounds < a.rounds, '10-d: 새 앱(svo)은 서버가 같은 요청 안에서 바퀴를 더 돌아 요청 횟수가 줄어든다(예전 ' + (a.rounds + 1) + '번 → ' + (b.rounds + 1) + '번)');
+    }
+    // 10-e /bus-tago — 경유노선 · 노선 정류장 목록은 캐시 · 도착정보는 캐시 안 함 · 빈 본문은 캐시 안 함
+    {
+      const cs = mkCaches(); let nf = 0, empty = false;
+      const fx = async (u) => { nf++; return new Response(/getSttnAcctoArvlPrearngeInfoList/.test(u) ? AR : empty ? '{"response":{"body":{"items":""}}}' : TH, { status: 200 }); };
+      const call = (c, url) => c.T(new Request('https://x/bus-tago?url=' + encodeURIComponent(url)), { TAGO_KEY: 'K1' });
+      const THU = 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnThrghRouteList?serviceKey=&cityCode=21&nodeid=BSB1&numOfRows=100&pageNo=1&_type=json';
+      const ARU = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=21&nodeId=BSB1&_type=json';
+      let c = load({ fetch: fx, caches: cs });
+      const a1 = await call(c, THU), a2 = await call(c, THU);
+      ok(a1.status === 200 && a2.status === 200 && nf === 1 && (await a2.text()) === TH, '10-e: 경유노선은 두 번째부터 공공 API 를 부르지 않는다 ' + nf);
+      await call(c, ARU); await call(c, ARU);
+      ok(nf === 3, '10-e: 도착정보는 매번 받는다 ' + nf);
+      nf = 0; empty = true; const cs2 = mkCaches(); c = load({ fetch: fx, caches: cs2 });
+      await call(c, THU); await call(c, THU);
+      ok(nf === 2 && cs2.store.size === 0, '10-e: 빈 목록은 캐시하지 않는다');
+      nf = 0; empty = false; c = load({ fetch: fx, caches: mkCaches() });
+      await call(c, THU.replace('serviceKey=&', 'serviceKey=REALKEY&')); await call(c, THU.replace('serviceKey=&', 'serviceKey=REALKEY&'));
+      ok(nf === 2, '10-e: 키가 박힌 주소는 캐시 열쇠에 키가 섞이지 않게 캐시하지 않는다');
+      ok(c.mapSvStaticCls(THU) === 'tl' && c.mapSvStaticCls(THU.replace('getSttnThrghRouteList', 'getRouteAcctoThrghSttnList')) === 'rl' && c.mapSvStaticCls(ARU) === '' && c.mapSvStaticCls('https://evil.example/getSttnThrghRouteList?serviceKey=&a=1') === '', '10-e: 캐시 종류 판별(경유노선 tl · 노선 정류장 rl · 도착정보/남의 호스트는 안 함)');
+    }
+  }
+  // ⑪ s463 (YJ: "API 호출량 조절 · 카카오처럼 — 클라우드플레어만으로"): 호출 세기 · 하루 예산 조절기 · 데이터센터 도착정보 공유 캐시 · /bus-budget
+  {
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+    const ERRB = '{"OpenAPI_ServiceResponse":{"cmmMsgHeader":{"errMsg":"HTTP_ERROR","returnReasonCode":"04"}}}';
+    const ARU = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=21&nodeId=BSB1&_type=json';
+    const SEU = 'http://ws.bus.go.kr/api/rest/stationinfo/getStationByUid?arsId=11111';
+    // 받은 시각(x-at)을 담는 모의 데이터센터 캐시(머리글까지 보관) + 시계를 옮길 수 있는 Date
+    const mkCs = () => { const store = new Map(), calls = { match: 0, put: 0 };
+      return { store, calls, default: { match: async (rq) => { calls.match++; const e = store.get(rq.url); return e ? new Response(e.t, { headers: e.h }) : undefined; }, put: async (rq, rs) => { calls.put++; const h = {}; rs.headers.forEach((v, k) => { h[k] = v; }); store.set(rq.url, { t: await rs.text(), h }); } } }; };
+    const tick = () => new Promise(r => setTimeout(r, 15));                                  // 공유 캐시 쓰기는 응답 뒤에(waitUntil) 끝난다 — 시험은 잠깐 기다린다
+    const clock = () => { const T = { off: 0 }; class MD extends Date { static now() { return Date.now.call(Date) + T.off; } } return { T, MD }; };
+    const usageOf = () => { const n = {}; return { n, usageAdd: (k) => { n[k] = (n[k] || 0) + 1; } }; };
+    const dbOf = (rows, o) => { o = o || {}; const st = { q: 0 }; return { st, DB: { prepare: (sql) => ({ bind: (day) => ({ all: async () => { st.q++; st.sql = sql; st.day = day; if (o.err) throw new Error(o.err); if (o.slow) await new Promise(r => setTimeout(r, o.slow)); return { results: rows }; } }) }) } }; };
+    const tagoK = (log, ms, bad) => (env) => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner) => { log.push(n + ':' + inner); return new Promise(r => setTimeout(() => r(new Response(bad ? ERRB : AR, { status: 200 })), ms || 0)); } }));
+
+    // 11-a 순수 계산: 종류별 사용량 → 모드(70% saver · 90% critical) · 이 isolate 의 아직 못 올린 세기도 더한다 · 환경값으로 한도를 바꾼다
+    {
+      const c = load();
+      const ev = (rows, pend, lim) => c.mapSvBudEval(rows, pend, lim);
+      let e = ev([{ k: 'bus.tago.arr', n: 100000 }]);
+      ok(e.modes.tago === 'normal' && e.modes.seoul === 'normal' && e.used.tago === 100000, '11-a: 10만 건(20%)은 normal');
+      e = ev([{ k: 'bus.tago.arr', n: 200000 }, { k: 'map.arr.tago', n: 150000 }]);
+      ok(e.modes.tago === 'saver' && e.used.tago === 350000, '11-a: 버스 서버 + 지도 서버 호출을 합쳐 70% → saver');
+      e = ev([{ k: 'tago.env-key', n: 440000 }, { k: 'tago.env-key2', n: 10000 }]);
+      ok(e.modes.tago === 'critical', '11-a: 90% → critical (route-v2 의 tago.env-key · env-key2 도 센다)');
+      e = ev([{ k: 'bus.seoul.arr', n: 7000 }, { k: 'bus.tago.arr', n: 10 }]);
+      ok(e.modes.seoul === 'saver' && e.modes.tago === 'normal', '11-a: 서울(1만/일)은 따로 — 7천 건 → seoul 만 saver');
+      e = ev([{ k: 'bus.seoul.arr', n: 8500 }], { 'map.arr.seoul': 500 });
+      ok(e.modes.seoul === 'critical', '11-a: 아직 올리지 못한 이 isolate 의 세기(pending)도 더한다');
+      e = ev([{ k: 'bus.tago.arr', n: 60000 }], null, { tago: 80000 });
+      ok(e.modes.tago === 'saver' && e.limit.tago === 80000, '11-a: 한도를 환경값(TAGO_ARR_LIMIT)으로 바꿀 수 있다');
+      e = ev([{ k: 'bus.gbis', n: 9e9 }, { k: 'x', n: 9e9 }, null, { k: 'bus.tago.arr', n: 'zz' }]);
+      ok(e.modes.tago === 'normal' && e.modes.seoul === 'normal', '11-a: 다른 종류의 세기 · 깨진 행은 무시');
+    }
+    // 11-b 조절기 갱신: D1 에서 오늘 행을 읽어 모드 반영 · 1분에 한 번 · 못 읽으면 지난 모드 · DB 없으면 normal
+    {
+      const { T, MD } = clock(), u = usageOf();
+      const c = load({ Date: MD, USAGE: { n: {}, last: 0, ready: true } });
+      const d = dbOf([{ k: 'bus.tago.arr', n: 360000 }]);
+      ok(c.mapSvBudRefresh({}) === null && c.mapSvBudMode('tago') === 'normal', '11-b: DB 가 없으면 읽지 않고 normal');
+      const p = c.mapSvBudRefresh({ DB: d.DB }); ok(p && typeof p.then === 'function', '11-b: 뒤에서 읽는다(약속을 돌려준다)');
+      ok(c.mapSvBudMode('tago') === 'normal', '11-b: 읽는 동안 이 요청은 막히지 않는다(아직 normal)');
+      await p;
+      ok(c.mapSvBudMode('tago') === 'saver' && c.mapSvBudMode('seoul') === 'normal' && d.st.q === 1 && /live_usage/.test(d.st.sql) && /^\d{4}-\d\d-\d\d$/.test(d.st.day), '11-b: 읽은 뒤 saver · 한국 날짜 키로 live_usage 조회 1번');
+      ok(c.mapSvBudRefresh({ DB: d.DB }) === null && d.st.q === 1, '11-b: 1분 안에는 다시 읽지 않는다(D1 읽기 보호)');
+      T.off = 61000; const d2 = dbOf([{ k: 'bus.tago.arr', n: 470000 }]);
+      await c.mapSvBudRefresh({ DB: d2.DB });
+      ok(c.mapSvBudMode('tago') === 'critical', '11-b: 1분 뒤에는 다시 읽어 critical 로');
+      T.off = 130000; const d3 = dbOf([], { err: 'D1 down' });
+      await c.mapSvBudRefresh({ DB: d3.DB });
+      ok(c.mapSvBudMode('tago') === 'critical' && /D1 down/.test(c.MAPSV_BUD.err) && c.MAPSV_BUD.busy === false, '11-b: 못 읽으면 지난 모드를 그대로(갑자기 풀리지 않는다) · 다음에 다시');
+      T.off = 200000; const d4 = dbOf([], { slow: 2500 }); const t0 = Date.now();
+      await c.mapSvBudRefresh({ DB: d4.DB });
+      ok(Date.now() - t0 < 2200 && /timeout/.test(c.MAPSV_BUD.err), '11-b: D1 이 느려도 1.5초에서 포기 ' + (Date.now() - t0) + 'ms');
+      T.off = 300000; const d5 = dbOf([{ k: 'bus.tago.arr', n: 1 }]);
+      await c.mapSvBudRefresh({ DB: d5.DB });
+      ok(c.mapSvBudMode('tago') === 'normal', '11-b: 사용량이 줄면(다음 날) normal 로 돌아온다');
+    }
+    // 11-c 도착정보 공유 캐시: 같은 데이터센터의 다른 isolate 는 TTL 안이면 공공 API 를 부르지 않는다 · TTL 은 모드에 따라 5/9/15초
+    {
+      const cs = mkCs(), { T, MD } = clock(), l1 = [], l2 = [], u = usageOf();
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      let c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l1, 0), usageAdd: u.usageAdd }); const b1 = await c.mapSvOne(env, 'a0', ARU);
+      await tick(); ok(b1 === AR && l1.length === 1 && cs.calls.put === 1, '11-c: 처음엔 공공 API 1번 · 공유 캐시에 둔다');
+      c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l2, 0), usageAdd: u.usageAdd }); // 다른 isolate(기억 없음)
+      T.off = 4000; const b2 = await c.mapSvOne(env, 'a0', ARU);
+      ok(b2 === AR && l2.length === 0 && u.n['map.arr.saved'] === 1, '11-c: 4초 뒤 다른 isolate — 공공 호출 0번(map.arr.saved 1)');
+      c = load({ caches: cs, Date: MD, tagoAttempts: tagoK(l2, 0), usageAdd: u.usageAdd }); T.off = 6000; await c.mapSvOne(env, 'a0', ARU); await tick();
+      ok(l2.length === 1, '11-c: 6초 뒤에는 새로 받는다(normal TTL 5초 — 오래된 도착정보를 내지 않는다)');
+      // saver: 9초 · critical: 15초(그 이상은 절대 안 쓴다)
+      for (const [mode, hit, miss] of [['saver', 8000, 10000], ['critical', 14000, 16000]]) {
+        const cs2 = mkCs(), ck = clock(), la = [];
+        const rows = [{ k: 'bus.tago.arr', n: mode === 'saver' ? 400000 : 480000 }];
+        const mk = () => { const cc = load({ caches: cs2, Date: ck.MD, tagoAttempts: tagoK(la, 0), usageAdd: usageOf().usageAdd }); return cc; };
+        let cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); await new Promise(r => setTimeout(r, 5));
+        ok(cc.mapSvBudMode('tago') === mode, '11-c: ' + mode + ' 모드');
+        await cc.mapSvOne(env, 'a0', ARU); await tick(); const n0 = la.length;
+        cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); ck.T.off = hit; await cc.mapSvOne(env, 'a0', ARU);
+        ok(la.length === n0, '11-c: ' + mode + ' — ' + hit / 1000 + '초 뒤에도 공유본을 쓴다');
+        cc = mk(); await cc.mapSvBudRefresh({ DB: dbOf(rows).DB }); ck.T.off = miss; await cc.mapSvOne(env, 'a0', ARU);
+        ok(la.length === n0 + 1, '11-c: ' + mode + ' — ' + miss / 1000 + '초 뒤에는 새로 받는다');
+      }
+    }
+    // 11-d 공유 캐시에 두지 않는 것: 빈 목록 · 오류 봉투 · 열쇠가 박힌 주소 · 도착정보가 아닌 주소 · 머리글(x-at)이 없거나 미래인 것
+    {
+      const { T, MD } = clock(), env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      const run = async (body, url) => { const cs = mkCs(), l = []; const c = load({ caches: cs, Date: MD, tagoAttempts: (e) => [{ via: 'env-key', run: (inner) => { l.push(inner); return Promise.resolve(new Response(body, { status: 200 })); } }, { via: 'env-key2', run: (inner) => { l.push(inner); return Promise.resolve(new Response(body, { status: 200 })); } }] });
+        await c.mapSvOne(env, 'a0', url || ARU); await tick(); const ent = [...cs.store.keys()].filter(k => /map-sv-cache\.internal\/a\?/.test(k)).length; return { cs, c, ent }; };
+      ok((await run(EMPTY)).ent === 0, '11-d: 빈 도착정보 응답은 공유하지 않는다(잠깐의 빈 응답이 모두에게 퍼지지 않게)');
+      ok((await run(ERRB)).ent === 0, '11-d: 오류 봉투는 공유하지 않는다');
+      ok((await run(AR, ARU.replace('serviceKey=&', 'serviceKey=REAL&'))).ent === 0, '11-d: 열쇠가 박힌 주소는 공유하지 않는다');
+      const r0 = await run(AR); ok(r0.ent === 1 && [...r0.cs.store.entries()].every(([k, v]) => !/k1|k2|REAL/.test(k) && /^\d+$/.test(v.h['x-at'] || '') && /max-age=30/.test(v.h['cache-control'] || '')), '11-d: 정상 도착정보는 열쇠 없는 주소로 · 받은 시각 · max-age 30초와 함께');
+      const c = r0.c; const url = ARU;
+      const key = [...r0.cs.store.keys()][0];
+      const get = async (h) => { r0.cs.store.set(key, { t: AR, h }); return c.mapSvArrGet(url, null); };
+      ok((await get({})) === '' && (await get({ 'x-at': String(Date.now() + 60000) })) === '' && (await get({ 'x-at': String(Date.now()) })) === AR, '11-d: 받은 시각이 없거나 미래(시계 이상)인 것은 쓰지 않는다');
+      ok((await c.mapSvArrGet(url, { n: 40 })) === '' && (await c.mapSvArrGet(url, { n: 3 })) === AR, '11-d: 한 요청이 하위 요청을 이미 많이 썼으면(무료 50개 한도 보호) 공유 캐시는 건너뛴다');
+      ok(c.mapSvArrFam(ARU) === 'tago' && c.mapSvArrFam(SEU) === 'seoul' && c.mapSvArrFam('https://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?stationId=1&format=json') === 'gbis' && c.mapSvArrFam('https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getSttnThrghRouteList?serviceKey=&cityCode=21') === '' && c.mapSvArrFam(ARU.replace('serviceKey=&', 'serviceKey=X&')) === '', '11-d: 도착정보 종류 판별(tago · seoul · gbis · 그 밖은 아님)');
+    }
+    // 11-e 호출 세기: 실제로 나간 호출만 map.arr.<종류> · 동시에 띄운 호출은 map.hedge · 아낀 호출은 map.arr.saved
+    {
+      const u = usageOf(), l = [], env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, { MD } = clock();
+      const c = load({ caches: mkCs(), Date: MD, tagoAttempts: tagoK(l, 900), usageAdd: u.usageAdd });
+      await c.mapSvOne(env, 'a0', ARU); await c.mapSvOne(env, 'a0', ARU);       // 두 번째는 5초 기억
+      ok(u.n['map.arr.tago'] === 2 && u.n['map.hedge'] === 1 && u.n['map.arr.saved'] === 1 && l.length === 2, '11-e: 느린 첫 호출(0.9초) → 0.7초에 한 번 더(hedge) = 나간 호출 2 · 아낀 호출 1 ' + JSON.stringify(u.n));
+      const u2 = usageOf(); const c2 = load({ caches: mkCs(), Date: MD, tagoAttempts: tagoK([], 0), usageAdd: u2.usageAdd });
+      await c2.mapSvOne(env, 'a0', ARU);
+      ok(u2.n['map.arr.tago'] === 1 && !u2.n['map.hedge'], '11-e: 빨리 오면 호출 1 · hedge 0');
+      const u3 = usageOf(), c3 = load({ caches: mkCs(), usageAdd: u3.usageAdd, tagoAttempts: tagoK([], 0) });
+      await c3.mapSvOne(env, 'tp', 'https://apis.data.go.kr/1613000/BusSttnInfoInqireService/getCrdntPrxmtSttnList?serviceKey=&gpsLati=37.5&gpsLong=127&numOfRows=10&_type=json');
+      ok(u3.n['map.st'] >= 1 && !u3.n['map.arr.tago'], '11-e: 정류장 · 노선 목록 호출은 map.st 로 따로');
+      // usageAdd 가 없는 환경(시험 · 예전 번들)에서도 그대로 동작
+      const c4 = load({ caches: mkCs(), tagoAttempts: tagoK([], 0) }); ok((await c4.mapSvOne(env, 'a0', ARU)) === AR, '11-e: 세기 함수가 없어도 동작');
+    }
+    // 11-f 헤지(느린 호출에 동시에 한 번 더): normal 0.7초 · 3번까지 / saver 1.2초 · 2번까지 / critical 1.8초 · 2번까지
+    {
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2', BUSAPI: { fetch: async () => { calls.push('b'); await new Promise(r => setTimeout(r, 1500)); return new Response(AR, { status: 200 }); } } };
+      let calls = [];
+      const trial = async (rows) => { calls = []; const c = load({ caches: mkCs(), tagoAttempts: (e) => [{ via: 'env-key', run: () => { calls.push('1'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }, { via: 'env-key2', run: () => { calls.push('2'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }, { via: 'binding', run: () => { calls.push('b'); return new Promise(r => setTimeout(() => r(new Response(AR, { status: 200 })), 1500)); } }], usageAdd: usageOf().usageAdd });
+        if (rows) { await c.mapSvBudRefresh({ DB: dbOf(rows).DB }); await new Promise(r => setTimeout(r, 5)); }
+        const t0 = Date.now(); await c.mapSvOne(env, 'a0', ARU); return { n: calls.length, dt: Date.now() - t0, mode: c.mapSvBudMode('tago') }; };
+      const a = await trial(null), b = await trial([{ k: 'bus.tago.arr', n: 400000 }]), d = await trial([{ k: 'bus.tago.arr', n: 480000 }]);
+      ok(a.mode === 'normal' && a.n === 3, '11-f: normal — 1.5초 걸리는 호출에 0.7초 · 1.4초에 동시 호출이 늘어 3번 ' + a.n);
+      ok(b.mode === 'saver' && b.n === 2, '11-f: saver — 1.2초에 한 번만 더 = 2번 ' + b.n);
+      ok(d.mode === 'critical' && d.n === 1, '11-f: critical — 1.8초까지 기다리므로 1.5초에 온 첫 호출로 끝 = 1번 ' + d.n);
+      ok(a.dt < 1800 && b.dt < 1800 && d.dt < 1800, '11-f: 어느 모드든 결과는 첫 호출이 오는 즉시(약 1.5초) ' + [a.dt, b.dt, d.dt].join());
+    }
+    // 11-g /screen/map: 센 호출을 올릴 수 있게 실행 맥락을 알리고 · 응답 머리에 모드 · 끝에 usageFlush
+    {
+      const u = usageOf(), flushed = []; const ctxw = { waitUntil: () => {} };
+      const c = load({ _liveCtx: null, usageFlush: (e) => flushed.push(e), usageAdd: u.usageAdd });
+      c.MAPSV_CTX = ctxw; const log = [];
+      const env = { BUSAPI: binding(log), DB: dbOf([{ k: 'bus.seoul.arr', n: 9500 }]).DB };
+      const rs = await c.H(new Request('https://x/screen/map', { method: 'POST', body: JSON.stringify(base(true)) }), env);
+      ok(rs.status === 200 && /^normal\/normal$/.test(rs.headers.get('X-Bus-Mode') || ''), '11-g: 첫 요청은 읽는 중이라 normal/normal 머리 ' + rs.headers.get('X-Bus-Mode'));
+      await new Promise(r => setTimeout(r, 20));
+      const rs2 = await c.H(new Request('https://x/screen/map', { method: 'POST', body: JSON.stringify(base(true)) }), env);
+      ok(/^normal\/critical$/.test(rs2.headers.get('X-Bus-Mode') || ''), '11-g: 읽은 뒤 요청은 서울 critical 반영 ' + rs2.headers.get('X-Bus-Mode'));
+      ok(flushed.length >= 2 && c._liveCtx === ctxw, '11-g: 요청마다 usageFlush · 실행 맥락(_liveCtx)을 알려 센 호출이 D1 에 올라간다');
+      ok(u.n['map.arr.seoul'] === 3 && u.n['map.arr.saved'] >= 3, '11-g: 서울 도착정보 3곳 = 나간 호출 3(바인딩 길도 이 서버가 낸 호출로 센다) · 둘째 요청은 5초 기억으로 아낌 ' + JSON.stringify(u.n));
+    }
+    // 11-h /bus-tago: 도착정보 공유 캐시(HIT-A) · 센다 · 오류/빈 목록 비공유
+    {
+      let nf = 0, body = AR; const cs = mkCs(), u = usageOf(), { T, MD } = clock();
+      const fx = async () => { nf++; return new Response(body, { status: 200 }); };
+      const call = (c, url) => c.T(new Request('https://x/bus-tago?url=' + encodeURIComponent(url)), { TAGO_KEY: 'K1' });
+      let c = load({ fetch: fx, caches: cs, Date: MD, usageAdd: u.usageAdd });
+      const r1 = await call(c, ARU); await tick(); const r2 = await call(c, ARU);
+      ok(r1.status === 200 && r2.status === 200 && nf === 1 && r2.headers.get('X-Cache') === 'HIT-A' && (await r2.text()) === AR, '11-h: 두 번째는 공공 API 를 부르지 않고 공유본(HIT-A) ' + nf);
+      ok(u.n['map.arr.tago'] === 1 && u.n['map.arr.saved'] === 1, '11-h: 센다 — 나간 호출 1 · 아낀 호출 1 ' + JSON.stringify(u.n));
+      T.off = 6000; await call(c, ARU); await tick();
+      ok(nf === 2, '11-h: 5초가 지나면 새로 받는다');
+      body = EMPTY; const cs2 = mkCs(); c = load({ fetch: fx, caches: cs2, Date: MD }); nf = 0; await call(c, ARU); await tick(); await call(c, ARU); await tick();
+      ok(nf === 2 && ![...cs2.store.keys()].some(k => /\/a\?/.test(k)), '11-h: 빈 도착정보는 공유하지 않는다');
+      body = AR; nf = 0; c = load({ fetch: fx, caches: mkCs(), Date: MD }); await call(c, ARU.replace('serviceKey=&', 'serviceKey=REAL&')); await tick(); await call(c, ARU.replace('serviceKey=&', 'serviceKey=REAL&'));
+      ok(nf === 2, '11-h: 열쇠가 박힌 주소는 공유하지 않는다');
+    }
+    // 11-i /bus-budget: 진단 JSON · ?refresh=1 바로 읽기 · ?probe=1 요금제(하위 요청 한도) 재 보기
+    {
+      const c = load({ caches: mkCs() }); c.MAPSV_CTX = { waitUntil: () => {} };
+      const env = { DB: dbOf([{ k: 'bus.tago.arr', n: 450000 }, { k: 'bus.seoul.arr', n: 1000 }]).DB };
+      const r = await c.B(new Request('https://x/bus-budget?refresh=1'), env), j = await r.json();
+      ok(r.status === 200 && j.ok && j.modes.tago === 'critical' && j.modes.seoul === 'normal' && j.used.tago === 450000 && j.limit.tago === 500000 && j.ratio.tago === 0.9 && j.ttlMs.tago === 15000 && j.ttlMs.seoul === 5000 && j.hasDb && !j.err && j.ver === 'test', '11-i: /bus-budget?refresh=1 — 모드 · 사용량 · 한도 · 비율 · TTL ' + JSON.stringify(j).slice(0, 200));
+      const free = { n: 0, default: { match: async () => { if (++free.n > 50) throw new Error('Too many subrequests'); return undefined; } } };
+      const cf = load({ caches: free }), jf = await (await cf.B(new Request('https://x/bus-budget?probe=1'), {})).json();
+      ok(jf.probe.cacheCallsOk === 50 && /free/.test(jf.probe.plan) && /Too many/.test(jf.probe.error), '11-i: 50번째에서 막히면 무료 요금제로 본다 ' + JSON.stringify(jf.probe));
+      const paid = { default: { match: async () => undefined } }, cp = load({ caches: paid }), jp = await (await cp.B(new Request('https://x/bus-budget?probe=1'), {})).json();
+      ok(jp.probe.cacheCallsOk === 60 && /paid/.test(jp.probe.plan), '11-i: 60번 모두 되면 유료로 본다');
+      const jn = await (await load({}).B(new Request('https://x/bus-budget'), {})).json();
+      ok(jn.ok && jn.modes.tago === 'normal' && jn.hasDb === false && jn.probe === undefined, '11-i: DB 가 없어도 동작(normal)');
+    }
+  }
+  // ⑫ s464 (YJ: "순서대로 해줘" — 첫 도착정보를 3초 안에): 조기 반환 · '정류장만 먼저' 요청은 도착정보를 받지 않는다 · 가까운 정류장 도착정보는 두 길을 동시에 · 정류장 0건 재시도 · 엔진을 터뜨린 본문 하나만 빼고 다시 그리기
+  {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+    const D1E = '{"ok":true,"count":0,"stops":[]}';
+    const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+    const mkB = (log, o) => { o = o || {}; return { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+      if (/getCrdntPrxmtSttnList/.test(inner)) return new Response('', { status: 200 });
+      if (/bus-stops/.test(inner)) { const n = log.filter(x => /bus-stops/.test(x)).length; return new Response(o.d1 ? o.d1(n) : D1, { status: 200 }); }
+      if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { const node = (inner.match(/nodeId=(\w+)/) || [])[1]; await sleep((o.arrMs && o.arrMs[node]) || 0); return new Response(AR, { status: 200 }); }
+      return new Response('', { status: 200 }); } }; };
+    const body = (extra, res) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0756, res: res || {}, sv: 1, svb: 2200, svo: 1 }, extra || {}) } });
+    const arrN = log => log.filter(u => /getSttnAcctoArvlPrearngeInfoList/.test(u)).length;
+    const mkU = () => { const n = {}; return { n, usageAdd: k => { n[k] = (n[k] || 0) + 1; } }; };
+    // 12-a 조기 반환: 한 곳은 바로 오고 한 곳은 3초 걸린다 → 새 앱(svo)은 예산 끝(2.8초)까지 붙잡히지 않고 곧 돌려준다 · 못 받은 곳은 응답 뒤에서 계속 받는다 · 예전 앱은 예전 그대로
+    {
+      const l1 = [], pend = [], c = load(); c.MAPSV_CTX = { waitUntil: p => pend.push(p) };
+      const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB2: 3000 } }) }, body());
+      const dt = Date.now() - t0, cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(dt < 1500 && cards.length === 2 && cards[0].rows && cards[0].rows.length === 1 && cards[1].ld && r.j.info.bus.st === 'need', '12-a: 첫 도착정보가 오면 곧 돌려준다(' + dt + 'ms) · 느린 정류장은 "불러오는 중"으로 남겨 기기가 이어 받는다');
+      ok(r.j.info.bres && r.j.info.bres.a0 && !r.j.info.bres.a1 && r.j.info.svf === 1 && pend.length >= 1, '12-a: 받은 본문만 bres 에 · 못 받은 1곳은 svf · 응답 뒤 받기는 waitUntil 에 맡긴다(' + pend.length + ')');
+      await Promise.all(pend);
+      const l2 = [], c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+      const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB(l2, { arrMs: { BSB2: 3000 } }) }, body({ svo: 0, svb: 1200 }));
+      const dt2 = Date.now() - t1;
+      ok(dt2 >= 1100 && r2.j.body.filter(n => n.t === 'bcard')[1].ld, '12-a: 예전 앱(svo 없음)은 예전 그대로 예산 끝까지 기다린다(' + dt2 + 'ms)');
+    }
+    // 12-b 모두 빨리 오면 기다리지 않는다(조기 반환은 core 가 덜 왔을 때만) · 느리지 않은 요청은 완성 화면
+    {
+      const l1 = [], c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+      const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB1: 40, BSB2: 120 } }) }, body());
+      const cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(Date.now() - t0 < 900 && cards.length === 2 && cards.every(x => x.rows && x.rows.length === 1) && !(r.j.info.bus.need || []).some(n => /^a/.test(n.k)) && r.j.info.svf === 0, '12-b: 모두 곧 오면 도착정보 전부 채운 화면 ' + (Date.now() - t0) + 'ms');
+    }
+    // 12-c '정류장만 먼저'(svb 300 + svo) 요청은 도착정보를 받지 않는다(전체 요청과 같은 곳을 두 번 부르지 않는다) · 정류장은 그대로 · need 로 남긴다
+    {
+      const l1 = [], c = load(), t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB(l1, { arrMs: { BSB1: 800, BSB2: 800 } }) }, body({ svb: 300 }));
+      const cards = r.j.body.filter(n => n.t === 'bcard'), need = r.j.info.bus.need || [];
+      ok(arrN(l1) === 0 && cards.length === 2 && cards.every(x => x.ld) && need.some(n => n.k === 'a0') && need.some(n => n.k === 'a1') && Date.now() - t0 < 700, '12-c: 정류장만 먼저 — 도착정보는 안 받고(공공 API ' + arrN(l1) + '번) need 로 남긴다 ' + (Date.now() - t0) + 'ms');
+      const l2 = [], c2 = load(); await post(c2.H, { BUSAPI: mkB(l2) }, body({ svb: 300, svo: 0 }));
+      ok(arrN(l2) === 2, '12-c: 예전 앱(svo 없음)의 svb 300 은 예전 그대로 도착정보를 짧게 기다려 받는다(' + arrN(l2) + ')');
+      const l3 = [], c3 = load(); c3.MAPSV_CTX = { waitUntil: () => {} }; await post(c3.H, { BUSAPI: mkB(l3) }, body({ svb: 300 }, { d1: D1 }));
+      ok(arrN(l3) === 2, '12-c: 정류장 본문을 이미 받은 뒤 바퀴(svb 300 + svo)는 예전 그대로 모자란 도착정보를 받는다(' + arrN(l3) + ')');
+    }
+    // 12-d 가장 가까운 정류장 셋(a0~a2)은 두 길을 동시에(normal 모드) · 넷째부터는 예전 간격(0.7초) · 아낌 모드는 예전 간격
+    {
+      const TN = JSON.stringify({ response: { body: { items: { item: [0, 1, 2, 3].map(i => ({ nodeid: 'ICB36800043' + i, nodenm: '정류장' + i, gpslati: 37.489 + i * 0.0003, gpslong: 126.724, citycode: '23', nodeno: '1' + i })) } } } });
+      const AR2 = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3 }] } } } });
+      const run = async (mode) => {
+        const calls = [], tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner) => { calls.push([n, inner]); return sleep(120).then(() => new Response(/getCrdntPrxmtSttnList/.test(inner) ? TN : AR2, { status: 200 })); } }));
+        const u = mkU(), c = load({ tagoAttempts, usageAdd: u.usageAdd }); c.MAPSV_CTX = { waitUntil: () => {} };
+        if (mode) c.MAPSV_BUD.modes.tago = mode;
+        await post(c.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, { cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.489, lng: 126.724, res: {}, sv: 1, svb: 2200, svo: 1 } } });
+        const per = {}; calls.filter(x => /getSttnAcctoArvlPrearngeInfoList/.test(x[1])).forEach(x => { const id = x[1].match(/nodeId=(\w+)/)[1]; (per[id] = per[id] || []).push(x[0]); });
+        return { per, u };
+      };
+      const a = await run(null), ids = Object.keys(a.per).sort();
+      ok(ids.length === 4 && ids.slice(0, 3).every(id => a.per[id].length === 2 && new Set(a.per[id]).size === 2) && a.per[ids[3]].length === 1, '12-d: 가까운 셋은 두 키를 동시에(각 2번 · 서로 다른 키) · 넷째는 1번 — ' + JSON.stringify(a.per));
+      ok((a.u.n['map.hedge'] || 0) === 3, '12-d: 동시에 띄운 두 번째 호출 3개를 map.hedge 로 센다(' + (a.u.n['map.hedge'] || 0) + ')');
+      const b = await run('saver');
+      ok(Object.keys(b.per).every(id => b.per[id].length === 1), '12-d: 아낌(saver) 모드는 동시에 띄우지 않는다 — 빨리 오면 1번씩 ' + JSON.stringify(b.per));
+    }
+    // 12-e 정류장 0건: 서버 정류장 표(D1)가 잠깐 빈 값을 주면(청라) 캐시를 건너뛰고 한 번 더 · 진짜 비어 있으면 한 번만 더 · 고른 곳(pin)은 다시 안 받는다
+    {
+      const l1 = [], u = mkU(), c = load({ usageAdd: u.usageAdd }); c.MAPSV_CTX = { waitUntil: () => {} };
+      const r = await post(c.H, { BUSAPI: mkB(l1, { d1: n => n === 1 ? D1E : D1 }) }, body());
+      const cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(cards.length === 2 && l1.filter(x => /bus-stops/.test(x)).length === 2 && u.n['map.empty.retry'] === 1 && u.n['map.empty.fix'] === 1, '12-e: 첫 응답이 빈 값이어도 한 번 더 받아 정류장 ' + cards.length + '곳 · 정류장 조회 ' + l1.filter(x => /bus-stops/.test(x)).length + '번');
+      const l2 = [], u2 = mkU(), c2 = load({ usageAdd: u2.usageAdd }); c2.MAPSV_CTX = { waitUntil: () => {} };
+      const r2 = await post(c2.H, { BUSAPI: mkB(l2, { d1: () => D1E }) }, body());
+      ok(r2.j.info.bus.st === 'empty' && l2.filter(x => /bus-stops/.test(x)).length === 2 && u2.n['map.empty.fix'] === undefined, '12-e: 진짜 비어 있으면 한 번만 더 받고 빈 화면 — 조회 ' + l2.filter(x => /bus-stops/.test(x)).length + '번');
+      const l3 = [], c3 = load(); c3.MAPSV_CTX = { waitUntil: () => {} };
+      const r3 = await post(c3.H, { BUSAPI: mkB(l3, { d1: () => D1E }) }, body({ pin: [35.1796, 129.0756] }));
+      ok(r3.j.info.bus.st === 'empty' && l3.filter(x => /bus-stops/.test(x)).length === 1, '12-e: 지도에서 고른 곳(pin)의 빈 결과는 다시 받지 않는다(' + l3.filter(x => /bus-stops/.test(x)).length + '번)');
+    }
+    // 12-f 엔진을 터뜨린 받은 본문 하나만 빼고 다시 그린다(500 대신) · 원인은 /bus-budget lastErr 에 · 그래도 안 되면 500
+    {
+      const u = mkU(), c = load({ usageAdd: u.usageAdd }), real = c.mapScreen; c.MAPSV_CTX = { waitUntil: () => {} };
+      c.mapScreen = function (cap, f, d) { const r = f && f.bus && f.bus.res; if (r && r.a1 === 'POISON') throw new Error('Cannot read properties of undefined (reading x)'); return real(cap, f, d); };
+      const D1R = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }] });
+      const r = await post(c.H, { BUSAPI: mkB([]) }, body({ sv: 0 }, { d1: D1R, a0: AR, a1: 'POISON', t0: '{}' }));
+      ok(r.status === 200 && r.j.ok && r.j.body.some(n => n.t === 'bcard'), '12-f: 본문 하나(a1)가 엔진을 터뜨려도 500 이 아니라 그 본문만 빼고 다시 그린다(status ' + r.status + ')');
+      ok(c.MAPSV_ERR && c.MAPSV_ERR.stage === 'salvage' && c.MAPSV_ERR.key === 'a1' && /Cannot read/.test(c.MAPSV_ERR.msg) && u.n['map.err.salvage'] === 1, '12-f: 범인(a1)과 오류를 lastErr 에 남기고 센다 ' + JSON.stringify(c.MAPSV_ERR));
+      const jb = await (await c.B(new Request('https://x/bus-budget'), {})).json();
+      ok(jb.lastErr && jb.lastErr.key === 'a1', '12-f: /bus-budget 으로 마지막 오류를 볼 수 있다');
+      const c2 = load({ usageAdd: u.usageAdd }); c2.mapScreen = function () { throw new Error('always'); };
+      const r2 = await post(c2.H, { BUSAPI: mkB([]) }, body({ sv: 0 }, { a0: AR }));
+      ok(r2.status === 500 && /always/.test(r2.j.error) && c2.MAPSV_ERR.stage === '500', '12-f: 본문 탓이 아니면 예전처럼 500(원인 기록)');
+    }
+    // ⑬ s466 (YJ: "병목부분 찾고") — 쓸 만한 도착정보를 이미 받았으면 추가 바퀴(좌표로 다시 찾은 정류장 t100+ → 바꾼 ID 도착정보)는 짧게만 기다린다 · 진단(dbg=1)은 info.svt 에 단계별 시간
+    {
+      const sleep2 = ms => new Promise(r => setTimeout(r, ms));
+      const D1 = JSON.stringify({ ok: true, count: 2, stops: [{ node_id: 'BSB1', node_nm: '시청역', city_code: '21', lat: 35.1796, lng: 129.0757 }, { node_id: 'BSB2', node_nm: '부산시청', city_code: '21', lat: 35.1798, lng: 129.0758 }] });
+      const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+      const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+      const CR = JSON.stringify({ response: { body: { items: { item: [{ nodeid: 'BSB1X', nodenm: '시청역', gpslati: 35.1796, gpslong: 129.0757, citycode: 21, nodeno: '1' }] } } } });
+      const mkB = (log, o) => { o = o || {}; return { fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search); log.push(inner);
+        if (/getCrdntPrxmtSttnList/.test(inner) && /numOfRows=50/.test(inner)) return new Response('', { status: 200 });
+        if (/getCrdntPrxmtSttnList/.test(inner)) { await sleep2(o.crMs || 0); return new Response(CR, { status: 200 }); }
+        if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+        if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { await sleep2(o.arrMs || 0); return new Response(/nodeId=BSB1&/.test(inner) ? EMPTY : AR, { status: 200 }); }
+        return new Response('', { status: 200 }); } }; };
+      const body = (extra, res) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0756, res: res || {}, sv: 1, svb: 2200, svo: 1 }, extra || {}) } });
+      // 13-a 느린 좌표 정류장 목록(2.5초): 새 방식은 첫 바퀴의 도착정보로 곧 돌려준다 · 예전 방식(dbg + tune.old)은 기다린다
+      {
+        const pend = [], c = load(); c.MAPSV_CTX = { waitUntil: p => pend.push(p) };
+        const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body());
+        const dt = Date.now() - t0, cards = r.j.body.filter(n => n.t === 'bcard');
+        ok(dt < 1500 && cards.some(x => x.rows && x.rows.length >= 1) && r.j.info.bus.st === 'need' && !r.j.info.svt, '13-a: 도착정보를 받았으면 느린 좌표 목록(2.5초)을 끝까지 붙잡히지 않는다(' + dt + 'ms) · 진단 없이는 svt 없음');
+        await Promise.all(pend);
+        const c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+        const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body({ dbg: 1, tune: { old: 1 } }));
+        ok(Date.now() - t1 >= 2300, '13-a: 예전 방식(tune.old)은 느린 좌표 목록까지 기다린다(' + (Date.now() - t1) + 'ms)');
+      }
+      // 13-b 좌표 목록이 빠르면(30ms) 한 요청에서 끝까지(예전과 같다) — 한도(0.7초) 안이라
+      {
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const t0 = Date.now(); const r = await post(c.H, { BUSAPI: mkB([], { crMs: 30 }) }, body());
+        ok(r.j.info.bres.t100 && r.j.info.bres.g500 && !(r.j.info.bus.need || []).some(n => /^[afgh][0-9]|^[tu][0-9]{3}/.test(n.k)) && Date.now() - t0 < 900, '13-b: 빠른 좌표 목록은 한도 안이라 한 요청에서 도착정보까지 끝낸다(경유노선 덤만 남음 · ' + (Date.now() - t0) + 'ms)');
+      }
+      // 13-c 진단(dbg=1): 단계별 시간 · 바퀴 구분 · 키별 완료 시각 · 한도 적용 여부 · tune 값 범위 안으로
+      {
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const r = await post(c.H, { BUSAPI: mkB([], { crMs: 2500 }) }, body({ dbg: 1, tune: { w2: 400, to: 99999 } }));
+        const sv = r.j.info.svt;
+        ok(sv && sv.v === 1 && Array.isArray(sv.r) && sv.r.some(x => x.w === 's') && sv.r.some(x => x.w === 'a') && sv.r.every(x => Array.isArray(x.ks) && x.t1 >= x.t0) && sv.ms < 1500, '13-c: dbg=1 → info.svt 에 바퀴별(정류장 s · 도착정보 a) 시간이 있다(' + (sv && sv.ms) + 'ms)');
+        const aw = sv.r.filter(x => x.w === 'a');
+        ok(aw.length >= 2 && aw[1].cap === true && aw[1].wb <= 400 && aw[0].ks.some(k => k[0] === 'a1' && k[1] >= 0), '13-c: 두 번째 도착정보 바퀴는 한도 적용(cap) · tune.w2=400 반영 · 첫 바퀴 a1 완료 시각 기록');
+        const r2 = await post(load().H, { BUSAPI: mkB([]) }, body({ tune: { w2: 5 } }));            // dbg 없이 tune 만 보내면 무시
+        ok(!r2.j.info.svt, '13-c: dbg 없이 보낸 tune 은 무시된다(진단 · 조절은 dbg=1 일 때만)');
+      }
+    }
+
+    // ⑭ s467 (YJ: "2, 3번 먼저") — ② 멈춘 호출 끊기 · 대부분 끝났는데 몇 곳만 멈추면 일찍 응답 · ③ 방향 이름(노선 정류장 목록 r)을 서버가 한 번에 받아 채우기
+    {
+      const sleep3 = ms => new Promise(r => setTimeout(r, ms));
+      const ARU = 'https://apis.data.go.kr/1613000/ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList?serviceKey=&cityCode=21&nodeId=BSB1&_type=json';
+      const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+      const env = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      // 14-a 가까운 정류장(a0)은 두 길을 동시에 — 한쪽이 멈춰 있고 다른 쪽이 먼저 정상 본문을 주면 멈춘 쪽은 끊는다
+      {
+        const ev = [], tagoAttempts = () => [{ via: 'env-key', run: (inner, sig) => new Promise((res, rej) => { ev.push('k1 start sig=' + !!sig); if (sig) sig.addEventListener('abort', () => { ev.push('k1 abort'); rej(new Error('aborted')); }); }) },
+          { via: 'env-key2', run: (inner, sig) => { ev.push('k2 start'); return sleep3(60).then(() => new Response(AR, { status: 200 })); } }];
+        const c = load({ tagoAttempts }), t0 = Date.now(), b = await c.mapSvOne(env, 'a0', ARU, false, { n: 0 });
+        await sleep3(20);
+        ok(b === AR && Date.now() - t0 < 600 && ev.includes('k1 start sig=true') && ev.includes('k1 abort'), '14-a: 먼저 온 정상 본문이 있으면 멈춘 다른 길은 끊는다(취소 신호가 호출에 전달됨) ' + ev.join('|') + ' ' + (Date.now() - t0) + 'ms');
+      }
+      // 14-b 시간 제한(tune.to=500)을 넘긴 시도는 끊는다 — 멈춘 호출이 동시 연결을 계속 잡지 않게 · 본문 읽기가 멈춰도 같다
+      {
+        const ev = [], mk = () => (inner, sig) => new Promise((res, rej) => { if (sig) sig.addEventListener('abort', () => { ev.push('abort'); rej(new Error('aborted')); }); });
+        const c = load({ tagoAttempts: () => [{ via: 'env-key', run: mk() }, { via: 'env-key2', run: mk() }] }), t0 = Date.now(), b = await c.mapSvOne(env, 'a0', ARU, false, { n: 0, to: 500 });
+        const dt = Date.now() - t0;
+        ok(b === '' && dt >= 450 && dt < 1500 && ev.length >= 2, '14-b: 시간 제한을 넘긴 호출은 끊고(' + ev.length + '건) 빈 값으로 돌려준다 ' + dt + 'ms');
+        const c2 = load({ tagoAttempts: () => [{ via: 'env-key', run: (inner, sig) => Promise.resolve({ status: 200, text: () => new Promise((_, rej) => { if (sig) sig.addEventListener('abort', () => { ev.push('body-abort'); rej(new Error('aborted')); }); }) }) }] });
+        const t1 = Date.now(), b2 = await c2.mapSvOne(env, 'a0', ARU, false, { n: 0, to: 500 });
+        ok(b2 === '' && Date.now() - t1 < 1500 && ev.includes('body-abort'), '14-b: 머리만 오고 본문이 멈춰도 시간 제한 안에 끊는다 ' + (Date.now() - t1) + 'ms');
+        const c3 = load({ tagoAttempts: () => [{ via: 'env-key', run: async () => new Response(AR, { status: 200 }) }] });                       // 취소 신호를 안 받는 옛 run · 신호가 없는 환경에서도 그대로 동작
+        ok(await c3.mapSvOne(env, 'a0', ARU, false, { n: 0 }) === AR, '14-b: 취소 신호를 쓰지 않는 호출도 그대로 정상');
+      }
+      // 14-c 쓸 만한 도착정보가 한 건도 없는데 core 의 75% 이상이 끝났고 한 곳만 멈춘 채 1초가 지나면 마감(≈1.8초)까지 안 붙잡고 돌려준다 · tune.nosettle 은 예전 동작
+      {
+        const D1 = JSON.stringify({ ok: true, count: 4, stops: [1, 2, 3, 4].map(i => ({ node_id: 'BSB' + i, node_nm: '정류장' + i, city_code: '21', lat: 35.1796 + i * 0.0002, lng: 129.0757 })) });
+        const EMPTY = '{"response":{"header":{"resultCode":"00"},"body":{"items":"","numOfRows":10,"pageNo":1,"totalCount":0}}}';
+        const mkB = () => ({ fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search);
+          if (/getCrdntPrxmtSttnList/.test(inner) && /numOfRows=50/.test(inner)) return new Response('', { status: 200 });
+          if (/bus-stops/.test(inner)) return new Response(D1, { status: 200 });
+          if (/getSttnAcctoArvlPrearngeInfoList/.test(inner)) { if (/nodeId=BSB4&/.test(inner)) { await sleep3(4000); return new Response(AR, { status: 200 }); } await sleep3(30); return new Response(EMPTY, { status: 200 }); }
+          return new Response('', { status: 200 }); } });
+        const body = (extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 35.1796, lng: 129.0757, res: {}, sv: 1, svb: 1200, svo: 1, dbg: 1 }, extra || {}) } });
+        const c = load(); c.MAPSV_CTX = { waitUntil: () => {} };
+        const t0 = Date.now(), r = await post(c.H, { BUSAPI: mkB() }, body()), dt = Date.now() - t0, aw = (r.j.info.svt.r || []).filter(x => x.w === 'a');
+        ok(dt >= 900 && dt < 1500 && aw.length >= 1 && aw[0].early === true && aw[0].why === 'settled' && r.j.info.bus.st === 'need' && (r.j.info.bus.need || []).some(n => n.k === 'a3'), '14-c: 쓸 만한 도착정보 없이 3/4 가 끝나고 1곳이 멈추면 1초 무렵 일찍 돌려준다(' + dt + 'ms · why=' + (aw[0] && aw[0].why) + ') · 멈춘 정류장은 need 로 남는다');
+        const c2 = load(); c2.MAPSV_CTX = { waitUntil: () => {} };
+        const t1 = Date.now(); const r2 = await post(c2.H, { BUSAPI: mkB() }, body({ tune: { nosettle: 1 } }));
+        ok(Date.now() - t1 >= 1500, '14-c: tune.nosettle=1 은 예전처럼 마감까지 기다린다(' + (Date.now() - t1) + 'ms)');
+      }
+      // 14-d 방향 이름: 도착정보는 이미 있고 남은 것이 노선 정류장 목록(r)뿐인 재요청 — 서버가 받아 info.nx 로 채운다(기기 바퀴 없이)
+      {
+        const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+        const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)] } } } });
+        const arrB = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+        const stnList = (rid, names, ids) => JSON.stringify({ response: { body: { items: { item: names.map((n, k) => ({ routeid: rid, nodeord: k + 1, nodeid: ids[k], nodenm: n, gpslati: 37.5, gpslong: 126.7, updowncd: 0 })) } } } });
+        const RT = rid => stnList(rid, ['가', '검단대성베르힐', '다음역' + rid, '종점'], ['X1', 'ICB368001467', 'X3', 'X4']);
+        const res0 = { tp: '', gg: '', tn: only, a0: arrB(['9701', 200], ['77', 300]), t0: '{}' };
+        const mk = (log, extra) => { const tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner, sig) => { log.push(inner); const m = /routeId=(\w+)/.exec(inner); return sleep3(20).then(() => new Response(/getRouteAcctoThrghSttnList/.test(inner) ? RT(m[1]) : /getSttnAcctoArvlPrearngeInfoList/.test(inner) ? arrB(['9701', 200], ['77', 300]) : '{}', { status: 200 })); } }));
+          const c = load({ tagoAttempts }); c.MAPSV_CTX = { waitUntil: () => {} }; return c; };
+        const body = (res, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5824, lng: 126.7085, res: Object.assign({}, res), sv: 1, svb: 300, svo: 1 }, extra || {}) } });
+        const log = [], c = mk(log), t0 = Date.now(), r = await post(c.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0));
+        const cd = r.j.body.filter(n => n.t === 'bcard')[0], rl = log.filter(x => /getRouteAcctoThrghSttnList/.test(x));
+        ok(rl.length === 2 && r.j.info.bus.st === 'ok' && r.j.info.nx['ICB368001467|R9701'] === '다음역R9701' && r.j.info.nx['ICB368001467|R77'] === '다음역R77' && cd.rows.every(x => /방향/.test(x.dir || '')) && !(r.j.info.bres && Object.keys(r.j.info.bres).some(k => /^r/.test(k))), '14-d: 도착정보는 있고 r 만 남은 재요청 — 서버가 두 노선 목록을 한 번에 받아 방향 이름을 채운다(' + rl.length + '건 · ' + (Date.now() - t0) + 'ms) · 큰 본문은 bres 에 싣지 않는다');
+        const log2 = [], c2 = mk(log2), r2 = await post(c2.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        ok(r2.j.info.bres && r2.j.info.bres.a0 && r2.j.info.bus.st === 'need' && (r2.j.info.bus.need || []).every(n => /^r[0-9]/.test(n.k)) && log2.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0, '14-d: 도착정보를 막 받은 첫 응답은 방향 이름 때문에 늦추지 않는다(r 은 need 로 남고 서버가 받지 않음)');
+        const log3 = [], c3 = mk(log3), r3 = await post(c3.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0, { dbg: 1, tune: { nonx: 1 } }));
+        ok(log3.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0 && (r3.j.info.bus.need || []).some(n => /^r/.test(n.k)), '14-d: tune.nonx=1 은 예전처럼 서버가 r 을 받지 않는다');
+        const log4 = [], c4 = mk(log4), r4 = await post(c4.H, { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' }, body(res0, { svo: 0 }));
+        ok(log4.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0 && (r4.j.info.bus.need || []).some(n => /^r/.test(n.k)), '14-d: 예전 앱(svo 없음)은 그대로 — 서버가 r 을 받지 않는다');
+        const slow = { run: null }; const log5 = [], tagoAttempts5 = () => [{ via: 'env-key', run: (inner, sig) => { log5.push(inner); if (/getRouteAcctoThrghSttnList/.test(inner)) return new Promise(() => {}); return Promise.resolve(new Response('{}', { status: 200 })); } }];
+        const c5 = load({ tagoAttempts: tagoAttempts5 }); const pend5 = []; c5.MAPSV_CTX = { waitUntil: p => pend5.push(p) };
+        const t5 = Date.now(), r5 = await post(c5.H, { TAGO_KEY: 'k1' }, body(res0));
+        ok(Date.now() - t5 < 2600 && r5.status === 200 && (r5.j.info.bus.need || []).some(n => /^r/.test(n.k)) && pend5.length >= 1, '14-d: 목록이 멈춰도 1.8초 안에 돌려주고(' + (Date.now() - t5) + 'ms) r 은 need 로 남겨 기기가 이어 받는다 · 못 끝낸 것은 응답 뒤에서 계속');
+      }
+    }
+    // ⑮ s468 (YJ: "카카오만큼") — 방향 이름 저장소(D1 bus_nx1): 한 번 알아낸 이름은 저장하고, 다음 사람(새 기기)은 받을 목록 없이 첫 응답에 바로 · 저장소가 막혀도 예전처럼 · 300m 안에 없으면 450m 까지
+    {
+      const sleep4 = ms => new Promise(r => setTimeout(r, ms));
+      const it = (id, nm, la, lo) => ({ nodeid: id, nodenm: nm, gpslati: la, gpslong: lo, citycode: '23' });
+      const only = JSON.stringify({ response: { body: { items: { item: [it('ICB368001467', '검단대성베르힐', 37.582405, 126.708497)] } } } });
+      const arrB = (...a) => JSON.stringify({ response: { body: { items: { item: a.map(x => ({ routeno: x[0], arrtime: x[1], arrprevstationcnt: 2, routeid: 'R' + x[0], routetp: '일반버스' })) } } } });
+      const stnList = (rid, names, ids) => JSON.stringify({ response: { body: { items: { item: names.map((n, k) => ({ routeid: rid, nodeord: k + 1, nodeid: ids[k], nodenm: n, gpslati: 37.5, gpslong: 126.7, updowncd: 0 })) } } } });
+      const RT = rid => stnList(rid, ['가', '검단대성베르힐', '다음역' + rid, '종점'], ['X1', 'ICB368001467', 'X3', 'X4']);
+      const res0 = { tp: '', gg: '', tn: only, a0: arrB(['9701', 200], ['77', 300]), t0: '{}' };
+      function mkDb(opts) {
+        const st = { rows: new Map(), created: !!(opts && opts.created), log: [] };
+        const mk = sql => { const q = { args: [], bind(...a) { q.args = a; return q; },
+          async all() { if (!/bus_nx1/.test(sql)) return { results: [] }; st.log.push('select'); if (opts && opts.failRead) throw new Error('D1 down'); if (!st.created) throw new Error('D1_ERROR: no such table: bus_nx1: SQLITE_ERROR'); const ids = q.args.slice(0, -1), min = q.args[q.args.length - 1]; return { results: [...st.rows.values()].filter(r => ids.includes(r.sid) && r.ts > min).map(r => ({ k: r.k, v: r.v })) }; },
+          async run() { if (/CREATE TABLE/.test(sql)) { st.created = true; st.log.push('create'); } return {}; },
+          exec() { const [sid, k, v, ts] = q.args, key = sid + '\n' + k, old = st.rows.get(key), rw = Number((/excluded\.ts - (\d+)/.exec(sql) || [])[1]) || 0; if (!old || old.ts < ts - rw) st.rows.set(key, { sid, k, v, ts }); } };
+          return q; };
+        return { st, db: { prepare: mk, batch: async arr => { st.log.push('batch:' + arr.length); arr.forEach(q => q.exec()); } } };
+      }
+      const mk = (log, extra) => { const tagoAttempts = () => ['k1', 'k2'].map((n, i) => ({ via: i ? 'env-key2' : 'env-key', run: (inner, sig) => { log.push(inner); const m = /routeId=(\w+)/.exec(inner); return sleep4(20).then(() => new Response(/getRouteAcctoThrghSttnList/.test(inner) ? RT(m[1]) : /getSttnAcctoArvlPrearngeInfoList/.test(inner) ? arrB(['9701', 200], ['77', 300]) : '{}', { status: 200 })); } }));
+        const c = load(Object.assign({ tagoAttempts }, extra || {})), pend = []; c.MAPSV_CTX = { waitUntil: p => pend.push(p) }; c.pend = pend; return c; };
+      const body = (res, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5824, lng: 126.7085, res: Object.assign({}, res), sv: 1, svb: 300, svo: 1 }, extra || {}) } });
+      const ENVK = { TAGO_KEY: 'k1', TAGO_KEY2: 'k2' };
+      // 15-a 저장소가 비어 있으면(표도 없다) 예전처럼 서버가 목록을 받아 이름을 채우고, 응답 뒤에서 표를 만들어 이름을 저장한다
+      const D = mkDb(), log = [], c = mk(log);
+      const r = await post(c.H, Object.assign({ DB: D.db }, ENVK), body(res0));
+      await Promise.all(c.pend);
+      const cd = r.j.body.filter(n => n.t === 'bcard')[0];
+      ok(r.status === 200 && r.j.info.bus.st === 'ok' && cd.rows.every(x => /방향/.test(x.dir || '')) && D.st.created, '15-a: 저장소가 비어도(표가 없어도) 예전처럼 이름이 채워지고 표는 스스로 만들어진다(' + D.st.log.join(',') + ')');
+      ok(D.st.rows.size >= 2 && D.st.rows.get('ICB368001467\nICB368001467|R9701').v === '다음역R9701' && D.st.rows.get('ICB368001467\nICB368001467|R77').v === '다음역R77', '15-a: 이 요청에서 새로 뽑은 이름이 저장소에 올라간다(' + D.st.rows.size + '행)');
+      // 15-b 다른 기기(이름을 모른다)가 같은 정류장을 열면 — 저장소에서 읽어 목록(r)을 하나도 안 받고 바로 이름까지 채운다
+      {
+        const log2 = [], c2 = mk(log2), t0 = Date.now();
+        const r2 = await post(c2.H, Object.assign({ DB: D.db }, ENVK), body(res0));
+        const cd2 = r2.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r2.j.info.bus.st === 'ok' && cd2.rows.every(x => /방향/.test(x.dir || '')) && log2.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 0, '15-b: 새 기기도 저장된 이름을 바로 쓴다 — 노선 목록 받기 0건(' + (Date.now() - t0) + 'ms)');
+        // 15-c 첫 도착정보 응답(svb 2200 · 도착정보를 막 받는 요청)에도 도착정보를 받는 동안 읽어 둔 이름이 바로 들어간다
+        const log3 = [], c3 = mk(log3), r3 = await post(c3.H, Object.assign({ DB: D.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        const cd3 = r3.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r3.j.info.bres && r3.j.info.bres.a0 && r3.j.info.bus.st === 'ok' && cd3.rows.length === 2 && cd3.rows.every(x => /방향/.test(x.dir || '')), '15-c: 도착정보를 막 받는 첫 응답에도 저장된 방향 이름이 바로 들어간다(재요청 없이 한 번에 완성)');
+        // 15-d tune.nonxdb=1(dbg) 은 저장소를 읽지 않는다 — 예전 동작(r 은 need 로 남는다)
+        const D2 = mkDb({ created: true }); D.st.rows.forEach((v, k) => D2.st.rows.set(k, v));
+        const log4 = [], c4 = mk(log4), r4 = await post(c4.H, Object.assign({ DB: D2.db }, ENVK), body(res0, { svb: 2200, dbg: 1, tune: { nonxdb: 1, nonx: 1 } }));
+        ok(!D2.st.log.includes('select') && (r4.j.info.bus.need || []).some(n => /^r/.test(n.k)), '15-d: tune.nonxdb=1 은 저장소를 읽지 않는다(예전 동작)');
+      }
+      // 15-e 저장소가 막혀도(읽기 오류) 화면은 예전처럼 — 오류로 끊기지 않는다
+      {
+        const D3 = mkDb({ failRead: true }), log5 = [], c5 = mk(log5), r5 = await post(c5.H, Object.assign({ DB: D3.db }, ENVK), body(res0));
+        await Promise.all(c5.pend);
+        const cd5 = r5.j.body.filter(n => n.t === 'bcard')[0];
+        ok(r5.status === 200 && r5.j.info.bus.st === 'ok' && cd5.rows.every(x => /방향/.test(x.dir || '')) && log5.filter(x => /getRouteAcctoThrghSttnList/.test(x)).length === 2, '15-e: 저장소 읽기가 실패해도 예전처럼 서버가 목록을 받아 이름을 채운다');
+        const r6 = await post(mk([]).H, ENVK, body(res0));                                                                 // DB 바인딩이 아예 없는 환경
+        ok(r6.status === 200 && r6.j.info.bus.st === 'ok', '15-e: DB 바인딩이 없어도 그대로 동작');
+      }
+      // 15-f 저장 규칙: 지금 화면 정류장의 · 비어 있지 않은 · 새로 뽑은 것만 / 20일 안 같은 열쇠는 덮어쓰지 않는다 / 읽을 때 60일 넘은 것은 버린다
+      {
+        const D4 = mkDb({ created: true }), c7 = load(), pend7 = []; c7.MAPSV_CTX = { waitUntil: p => pend7.push(p) };
+        const out = { info: { stops: [{ id: 'S1' }, { id: 'S3' }], nx: { 'S1|R1': '다음', 'S2|R1': '남의 정류장', 'S1|R2': '', 'lm|S1': '○○역', 'lm|S3': '', 'od|S1|R1': '-', 'od|S1|R3': '3,4', 'fx|S1': 'N1|23', 'S1|R4': '<b>x</b>', 'S1|R5': '이미 안다' } } };
+        c7.mapSvNxSave({ DB: D4.db }, out, { base0: { 'S1|R5': '이미 안다' }, loaded: {} }, { n: 0 });
+        await Promise.all(pend7);
+        const keys = [...D4.st.rows.values()].map(r => r.k).sort().join(',');
+        ok(keys === 'S1|R1,fx|S1,lm|S1,lm|S3,od|S1|R1,od|S1|R3', '15-f: 지금 화면 정류장의 새 항목만 저장한다 — 방향 이름이 빈 것 · 남의 정류장 · 이미 아는 것 · 태그는 제외, 이름 옆 방향(lm)의 빈 값(찾았지만 없음)은 저장(' + keys + ')');
+        D4.st.rows.get('S1\nS1|R1').ts = Date.now() - 5 * 86400000;
+        const out2 = { info: { stops: [{ id: 'S1' }], nx: { 'S1|R1': '엉뚱한 이름' } } }, pend8 = []; c7.MAPSV_CTX = { waitUntil: p => pend8.push(p) };
+        c7.mapSvNxSave({ DB: D4.db }, out2, { base0: {}, loaded: {} }, { n: 0 }); await Promise.all(pend8);
+        ok(D4.st.rows.get('S1\nS1|R1').v === '다음', '15-f: 20일 안에 저장된 같은 열쇠는 다른 값으로 덮어쓰지 않는다');
+        D4.st.rows.get('S1\nS1|R1').ts = Date.now() - 25 * 86400000;
+        const pend9 = []; c7.MAPSV_CTX = { waitUntil: p => pend9.push(p) };
+        c7.mapSvNxSave({ DB: D4.db }, out2, { base0: {}, loaded: {} }, { n: 0 }); await Promise.all(pend9);
+        ok(D4.st.rows.get('S1\nS1|R1').v === '엉뚱한 이름', '15-f: 20일이 지나면 새 값으로 고친다(노선이 바뀐 경우)');
+        D4.st.rows.get('S1\nlm|S1').ts = Date.now() - 70 * 86400000;
+        const ld = await c7.mapSvNxLoad({ DB: D4.db }, ['S1', 'S3'], { n: 0 });
+        ok(ld && ld['lm|S1'] === undefined && ld['fx|S1'] === 'N1|23' && ld['lm|S3'] === '' && ld['od|S1|R1'] === '-', '15-f: 읽을 때 60일 넘은 항목은 버린다 · lm 의 빈 값은 빈 값으로 되돌려 읽는다');
+        const m = { nx: { 'S1|R1': '기기것' } }; c7.mapSvNxMerge(m, { 'S1|R1': '저장소것', 'S1|R2': '새것' });
+        ok(m.nx['S1|R1'] === '기기것' && m.nx['S1|R2'] === '새것', '15-f: 합칠 때 기기가 가진 같은 열쇠가 우선');
+      }
+      // 15-h 기기가 이 정류장들의 이름(lm)을 이미 알면(8초 갱신 등) 저장소를 읽지 않는다 · 모르면 읽는다 · r 이 필요해지면(이름이 모자라면) 그때 읽는다
+      {
+        const D5 = mkDb({ created: true }), nxFull = { 'lm|ICB368001467': '', 'ICB368001467|R9701': '가', 'ICB368001467|R77': '나' };
+        const r7 = await post(mk([]).H, Object.assign({ DB: D5.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200, nx: nxFull }));
+        ok(!D5.st.log.includes('select') && r7.j.info.bus.st === 'ok', '15-h: 기기가 이름을 이미 다 알면 저장소를 읽지 않는다(갱신마다 읽지 않는다 · 읽기 한도 아낌)');
+        const D6 = mkDb({ created: true }), r8 = await post(mk([]).H, Object.assign({ DB: D6.db }, ENVK), body({ tp: '', gg: '', tn: only }, { svb: 2200 }));
+        ok(D6.st.log.includes('select'), '15-h: 이름을 모르면 읽는다');
+        const D7 = mkDb({ created: true }), r9 = await post(mk([]).H, Object.assign({ DB: D7.db }, ENVK), body(res0, { nx: { 'lm|ICB368001467': '' } }));
+        ok(D7.st.log.includes('select'), '15-h: 도착정보는 있는데 노선 방향 이름이 모자라 r 이 필요해지면 그때 읽는다');
+      }
+      // 15-g 300m 안에 정류장이 하나도 없으면 450m 안 가까운 정류장을 보여 준다(+안내 한 줄) · 450m 밖이면 예전처럼 · 꾹 눌러 고른 곳(100m)은 그대로
+      {
+        const at = d => JSON.stringify({ response: { body: { items: { item: [it('ICB3FAR', '먼정류장', 37.5 + d / 111320, 127.0)] } } } });
+        const bd = (d, extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: at(d), d1: '{"stops":[]}' } }, extra || {}) } });
+        const cF = load(), rf = await post(cF.H, {}, bd(348));
+        const txt = rf.j.body.filter(n => n.t === 'text').map(n => n.s).join('|');
+        ok(rf.j.body.filter(n => n.t === 'bcard').length === 1 && /300m 안에 정류장이 없어 가까운 정류장 1곳/.test(txt) && rf.j.info.bus.far === 1 && !/찾지 못했어요/.test(txt), '15-g: 348m 에만 정류장이 있으면 빈 화면 대신 그 정류장을 보여 주고 이유를 알린다');
+        const rf2 = await post(cF.H, {}, bd(600));
+        ok(rf2.j.info.bus.st === 'empty' && /찾지 못했어요/.test(rf2.j.body.filter(n => n.t === 'text').map(n => n.s).join('|')), '15-g: 450m 밖이면 예전처럼 \'찾지 못했어요\'');
+        const rf3 = await post(cF.H, {}, bd(348, { pin: [37.5, 127.0] }));
+        ok(rf3.j.info.bus.st === 'empty' && !rf3.j.info.bus.far, '15-g: 꾹 눌러 고른 곳(100m)은 넓히지 않는다');
+        const near = JSON.stringify({ response: { body: { items: { item: [it('ICB3NEAR', '가까운', 37.5 + 120 / 111320, 127.0), it('ICB3FAR', '먼정류장', 37.5 + 348 / 111320, 127.0)] } } } });
+        const rf4 = await post(cF.H, {}, { cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: { lat: 37.5, lng: 127.0, res: { tp: '', gg: '', tn: near, d1: '{"stops":[]}' } } } });
+        ok(rf4.j.body.filter(n => n.t === 'bcard').length === 1 && !rf4.j.info.bus.far && !/300m 안에 정류장이 없어/.test(rf4.j.body.filter(n => n.t === 'text').map(n => n.s).join('|')), '15-g: 300m 안에 정류장이 있으면 예전과 같다(먼 정류장은 넣지 않고 안내도 없다)');
+      }
+    }
   }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);

@@ -34,12 +34,15 @@ public final class MapCore {
     /** 꼭 받아야 하는 본문(a · f) — 이웃 · 바꾼 ID · 경유노선은 덤이라 못 받아도 이번 갱신을 버리지 않는다. */
     /** 버스 화면을 완성하려고 엔진과 주고받는 최대 바퀴: 정류장(0) → 도착정보·이웃·경유노선(1) → 바꾼 ID(2) → 좌표로 정류장 다시 찾기(3) → 그 번호 도착정보(4) → 방면 목록(5) → 마무리(6) (+ 공공 API 가 비어 서버 표로 돌아가는 한 바퀴). 3 으로 막아 두면 마지막 그림이 화면에 오르지 못했다. */
     public static final int BUS_ROUNDS = 8;
-    /** 남은 주소가 방면 이름용 노선 정류장 목록(r)뿐이면 화면은 이미 완성이다 — 방면 글자만 나중에 덧붙는다(기다리며 화면을 막지 않는다). */
+    /** 남은 주소가 덤(방면 이름용 노선 정류장 목록 r · 경유노선 t·u 0~99)뿐이면 화면은 이미 완성이다 — 그 글자만 나중에 덧붙는다(기다리며 화면을 막지 않는다).
+     *  s462 (YJ: 카카오는 바로 뜨는데 우리는 안 뜬다): 경유노선(t·u)도 덤이다 — 예전엔 r 만 덤으로 쳐서, 느린 경유노선 하나(최대 20초)가 캐시 화면 위의 새 도착정보를 붙잡았다.
+     *  좌표로 다시 찾은 정류장 목록(t·u 100번 이상)은 곧 도착정보로 이어지므로 덤이 아니다. */
     public boolean needOptionalOnly() {
         if (busNeed.isEmpty()) return false;
-        for (String[] n : busNeed) if (n == null || !n[0].matches("r[0-9]{1,3}")) return false;
+        for (String[] n : busNeed) if (n == null || !optionalKey(n[0])) return false;
         return true;
     }
+    public static boolean optionalKey(String k) { return k != null && (k.matches("r[0-9]{1,3}") || k.matches("[tu][0-9]{1,2}")); }
     public static boolean coreKey(String k) { return k != null && k.matches("[af][0-9]{1,3}"); }
     // ── TAGO 줄의 "→ ○○방향"(웹 _fetchBusNextStop): 엔진이 노선 경유 정류장 목록(큰 본문 · 열쇠 r+번호)에서 이름만 뽑아 info.nx 로 돌려준다 → 이름만 저장해 두었다가 다음 요청에 실어 보낸다(큰 본문은 기기에 두지 않는다).
     static final String K_BNX = "bnx"; static final int NX_CAP = 400;
@@ -412,7 +415,7 @@ public final class MapCore {
     public String bodyRequest(int cap, String theme, boolean skel) {
         String f = facts("b", theme, "");
         if ("bus".equals(mode())) {
-            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb).append(stopsFresh && !skel ? ",\"nf\":1" : "").append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
+            StringBuilder b = new StringBuilder(f.substring(0, f.length() - 1)).append(",\"bus\":{\"vw\":").append(ShellCore.q(busView())).append(",\"sel\":").append(busSel).append(skel ? "" : ",\"sv\":1,\"svb\":" + svb + ",\"svo\":1").append(stopsFresh && !skel ? ",\"nf\":1" : "").append(busFailShow ? ",\"fl\":1" : "").append(",\"fav\":").append(favRaw()).append(",\"nx\":").append(nxJson()).append(",\"al\":").append(alRaw()).append(",\"ord\":").append(ordRaw());
             if (busLL != null) b.append(",\"lat\":").append(busLL[0]).append(",\"lng\":").append(busLL[1]);
             if (busPin != null) b.append(",\"pin\":[").append(busPin[0]).append(',').append(busPin[1]).append(']');          // s451: 꾹 눌러 고른 곳 — 엔진이 그 주변 100m 로 찾는다
             b.append(",\"res\":{");
