@@ -87,7 +87,7 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     console.log('        s460: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
     try { fs.unlinkSync(f); } catch (e) { }
   });
-  await t('s471~s473 건너뜀 방지(U자 · 환승 대기 xFree) · 이른 시각표 버림 · 버스→버스 환승(판교 · 동탄): 폰 안 엔진(자바)이 서버 JS 와 걸음마다 같은 답 · 같은 상태를 낸다', async () => {
+  await t('s471~s474 건너뜀 방지(U자 · 환승 대기 xFree) · 이른 시각표 버림 · 버스→버스 환승(판교 · 동탄) · 지하철→버스 환승(의정부→홍대입구): 폰 안 엔진(자바)이 서버 JS 와 걸음마다 같은 답 · 같은 상태를 낸다', async () => {
     const BX = require(path.join(__dirname, 'helpers', 'bus_xfer_scenario.js')), SB = require(path.join(ROOT, 'engine', 'ride-standby.js'));
     const f = path.join(out, 'ride_corpus_s473.jsonl'), fd = fs.openSync(f, 'w'), J = (x) => JSON.parse(JSON.stringify(x));
     let n = 0; const saw = {};
@@ -101,6 +101,9 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     for (const gps of [undefined, flaky]) BX.run(SB, UL, { gps, rec, answer: (b) => ({ ms: b.fromMs + 30000, src: 'table' }) });
     const PG = BX.run(SB, BX.fixture('pangyo'), { realMove: true, rec }), DT = BX.run(SB, BX.fixture('dongtan'), { realMove: true, rec });
     BX.run(SB, BX.fixture('dongtan'), { realMove: true, noise: 8, rec }); BX.run(SB, BX.fixture('pangyo'), { realMove: true, gps: flaky, rec });
+    BX.run(SB, BX.fixture474(), { realMove: true, rec }); BX.run(SB, BX.fixture474(), { realMove: true, noise: 8, rec }); BX.run(SB, BX.fixture474(), { realMove: true, gps: tunnel, rec }); BX.run(SB, BX.fixture474(), { rec });
+    for (const [D, W, o2] of [[30, 180, { realMove: true }], [95, 420, { realMove: true, noise: 8 }], [500, 700, { realMove: true, walkFirst: true, noise: 25 }], [900, 180, { realMove: true, walkFirst: true, noise: 8 }]]) { BX.run(SB, BX.subBus(D, W, false), Object.assign({ rec }, o2)); }
+    BX.run(SB, BX.subBus(95, 420, true), { realMove: true, rec });      // s474: 지하철 → 버스 환승(역과 정류장 95m)에서 기다리는 사람
     fs.closeSync(fd);
     assert.ok(saw['재동기'] && saw['환승 승차역'] && saw['계획 승차보다'] && saw['영점'] && saw.zp && saw.xfNote, '새 규칙의 상태·기록이 녹화에 모두 들어 있어야 한다 ' + JSON.stringify(saw));
     // 서버 JS 가 먼저 제대로 가야 한다(판교: 환승 정류장에서 기다렸다 출발해도 도착 1정거장 전이 울림(시각은 첫 정류장 통과 기준 초) · 동탄: 붙은 정류장(52m)에서 기다려도 목적지 2정거장 전이 일찍 울리지 않음)

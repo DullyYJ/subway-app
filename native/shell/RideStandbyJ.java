@@ -1353,9 +1353,14 @@ final class RideStandbyJ {
     // s473 — engine rsBusXferNode: 버스→버스 환승 정류장(내리는 곳 = 다음 버스를 타는 곳이 한 노드로 합쳐진 정류장) — 다음 노드가 버스이고 노선이 다르다
     static boolean busXferNode(List<Object> enodes, int i) {
         Object a = enodes != null && i >= 0 && i < enodes.size() ? enodes.get(i) : null, b = enodes != null && i + 1 >= 0 && i + 1 < enodes.size() ? enodes.get(i + 1) : null;
-        return truthy(a) && truthy(b) && truthy(g(a, "isBus")) && !truthy(g(a, "isWalk")) && truthy(g(b, "isBus")) && !truthy(g(b, "isWalk")) && !or(g(a, "lineName"), "").equals(or(g(b, "lineName"), ""));
+        if (!(truthy(a) && truthy(b) && truthy(g(b, "isBus")) && !truthy(g(b, "isWalk")) && !truthy(g(a, "isWalk")))) return false;
+        // s474: 지하철 → 버스 환승(역에서 내려 근처 정류장에서 버스를 기다림)도 같은 성질이라 함께 본다
+        if (truthy(g(a, "isBus"))) return !or(g(a, "lineName"), "").equals(or(g(b, "lineName"), ""));
+        return truthy(g(a, "isSub"));
     }
-    static final double BX_LEAD_MS = 30000, BX_AWAY_M = 300;
+    static final double BX_LEAD_MS = 30000, BX_AWAY_M = 300, BX_PAST_M = 150;
+    // s474 — engine rsBxAway: '다음 차를 타고 떠났다'로 볼 거리(환승 노드 T 에서 300m, 다음 승차 정류장 j 가 더 멀면 j 를 150m 더 지난 거리)
+    static double bxAway(Map<String, Object> spT, Map<String, Object> spJ) { return Math.max(BX_AWAY_M, rsHav(num(spT.get("lat")), num(spT.get("lng")), num(spJ.get("lat")), num(spJ.get("lng"))) + BX_PAST_M); }
     // s473 — engine rsBusXferHold: 버스→버스 환승 정류장 T 의 바로 다음 정류장 j 를 아직 통과로 적으면 안 되는가(다음 버스를 기다리는 중)
     static boolean busXferHold(Map<String, Object> st, List<Object> tr, double now, double T, double j) {
         Map<String, Object> eta = mm(st.get("eta"));
@@ -1367,8 +1372,24 @@ final class RideStandbyJ {
         if (lp == null || lp.get("ms") == null || !fin(lp.get("ms")) || !(gap > 0)) return false;
         if (now - num(lp.get("ms")) >= gap - BX_LEAD_MS) return false;
         Object q = tr != null && !tr.isEmpty() ? tr.get(tr.size() - 1) : null;
-        if (q != null && fin(at(q, 1)) && fin(at(q, 2)) && rsHav(num(at(q, 1)), num(at(q, 2)), num(spT.get("lat")), num(spT.get("lng"))) >= BX_AWAY_M) return false;
+        if (q != null && fin(at(q, 1)) && fin(at(q, 2)) && rsHav(num(at(q, 1)), num(at(q, 2)), num(spT.get("lat")), num(spT.get("lng"))) >= bxAway(spT, spJ)) return false;
         return true;
+    }
+    // s474 — engine rsBusXferFloor: 지하철 → 버스 환승에서 다음 버스 시각이 됐지만 아직 환승 역 근처(300m 안)에 서 있는 사람의 '버스 승차 정류장 통과 시각' 하한(홀드가 풀리는 시각)
+    static Double busXferFloor(Map<String, Object> st, List<Object> tr, double T, double j) {
+        if (j != T + 1) return null;
+        Map<String, Object> eta = mm(st.get("eta")); List<Object> nodes = eta == null ? null : l(eta.get("nodes"));
+        if (nodes == null || T < 0 || !busXferNode(nodes, (int) T)) return null;
+        Object a = nodes.get((int) T);
+        if (!truthy(a) || truthy(g(a, "isBus")) || !truthy(g(a, "isSub"))) return null;
+        Map<String, Object> spT = stopOf(st, T), spJ = stopOf(st, j); List<Object> passes = l(eta.get("passes")); Map<String, Object> lp = null;
+        if (spT == null || spJ == null || !fin(spT.get("arrMs")) || !fin(spJ.get("arrMs"))) return null;
+        if (passes != null) for (int k = 0; k < passes.size(); k++) if (truthy(passes.get(k)) && gn(passes.get(k), "idx") == T) lp = mm(passes.get(k));
+        double gap = num(spJ.get("arrMs")) - num(spT.get("arrMs"));
+        if (lp == null || lp.get("ms") == null || !fin(lp.get("ms")) || !(gap > 0)) return null;
+        Object q = tr != null && !tr.isEmpty() ? tr.get(tr.size() - 1) : null;
+        if (q == null || !fin(at(q, 1)) || !fin(at(q, 2)) || rsHav(num(at(q, 1)), num(at(q, 2)), num(spT.get("lat")), num(spT.get("lng"))) >= bxAway(spT, spJ)) return null;
+        return Double.valueOf(num(lp.get("ms")) + gap - BX_LEAD_MS);
     }
     static boolean resync(Map<String, Object> st, double now, List<Object> notes) {
         Map<String, Object> eta = mm(st.get("eta")); List<Object> tr = trailOf(st), stops = l(st.get("stops")); if (stops == null) stops = new ArrayList<Object>();
@@ -1973,6 +1994,7 @@ final class RideStandbyJ {
                         { Map<String, Object> zpM = mm(st.get("zp"));
                           if (hit >= 0 && zpX && "gps".equals(g(passes.get(hit), "src")) && g(passes.get(hit), "ms") != null && fin(g(passes.get(hit), "ms")) && num(z.get("passMs")) > num(g(passes.get(hit), "ms")) && zpM != null && zpM.get(ik(num(z.get("i")))) != null && num(zpM.get(ik(num(z.get("i"))))) == num(g(passes.get(hit), "ms"))) continue; }
                         Map<String, Object> np = obj("idx", z.get("i"), "ms", z.get("passMs"), "src", "gps");
+                        { Double bxF = busXferFloor(st, tr, num(z.get("i")) - 1, num(z.get("i"))); if (bxF != null && num(np.get("ms")) < bxF) np.put("ms", bxF); }      // s474: 지하철 → 버스 환승 정류장 — 서 있던 자리에서 앞당겨 잡힌 통과 시각을 버스 시각 근처로
                         // s471: 앞 정류장 통과 시각보다 이른 증거는 그 통과 시각으로 맞춘다 — 통과 시각이 번호 순서를 거스르면 마커가 되돌아간다
                         for (int lq = 0; lq < passes.size(); lq++) { Object pq = passes.get(lq); if (truthy(pq) && gn(pq, "idx") == progMax && g(pq, "ms") != null && fin(g(pq, "ms")) && num(z.get("i")) > progMax && num(np.get("ms")) < num(g(pq, "ms"))) np.put("ms", g(pq, "ms")); }
                         if (zpX) { Map<String, Object> zpM2 = mm(st.get("zp")); if (zpM2 == null) { zpM2 = obj(); st.put("zp", zpM2); } zpM2.put(ik(num(z.get("i"))), np.get("ms")); }

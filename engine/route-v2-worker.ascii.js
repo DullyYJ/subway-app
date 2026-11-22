@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-22s473";
+var ENGINE_VERSION = "route-v2-2026-11-22s474";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -10580,9 +10580,14 @@ function rsSkipUnseen(st, tr, now, j, progMax, passes, evMs) {
 // s473: \ubc84\uc2a4\u2192\ubc84\uc2a4 \ud658\uc2b9 \uc815\ub958\uc7a5(\ub0b4\ub9ac\ub294 \uacf3 = \ub2e4\uc74c \ubc84\uc2a4\ub97c \ud0c0\ub294 \uacf3\uc774 \ud55c \ub178\ub4dc\ub85c \ud569\uccd0\uc9c4 \uc815\ub958\uc7a5) \u2014 \ub2e4\uc74c \ub178\ub4dc\uac00 \ubc84\uc2a4\uc774\uace0 \ub178\uc120\uc774 \ub2e4\ub974\ub2e4
 function rsBusXferNode(enodes, i) {
   var a = enodes && enodes[i], b = enodes && enodes[i + 1];
-  return !!(a && b && a.isBus && !a.isWalk && b.isBus && !b.isWalk && String(a.lineName || '') !== String(b.lineName || ''));
+  if (!(a && b && b.isBus && !b.isWalk && !a.isWalk)) return false;
+  // s474: \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4 \ud658\uc2b9(\uc5ed\uc5d0\uc11c \ub0b4\ub824 \uadfc\ucc98 \uc815\ub958\uc7a5\uc5d0\uc11c \ubc84\uc2a4\ub97c \uae30\ub2e4\ub9bc \u2014 \ub3c4\ubd09\uc0b0 \u2192 1102 \ucc98\ub7fc \uc5ed\uacfc \uc815\ub958\uc7a5\uc774 100m \uc548\ud30e)\ub3c4 \uac19\uc740 \uc131\uc9c8\uc774\ub77c \ud568\uaed8 \ubcf8\ub2e4
+  if (a.isBus) return String(a.lineName || '') !== String(b.lineName || '');
+  return !!(a.isSub && !a.isBus);
 }
-var RS_BX_LEAD_MS = 30000, RS_BX_AWAY_M = 300;
+var RS_BX_LEAD_MS = 30000, RS_BX_AWAY_M = 300, RS_BX_PAST_M = 150;
+// s474: '\ub2e4\uc74c \ucc28\ub97c \ud0c0\uace0 \ub5a0\ub0ac\ub2e4'\ub85c \ubcfc \uac70\ub9ac \u2014 \ud658\uc2b9 \ub178\ub4dc T \uc5d0\uc11c 300m, \ub2e4\uc74c \uc2b9\ucc28 \uc815\ub958\uc7a5 j \uac00 \uadf8\ubcf4\ub2e4 \uba40\uba74(\uac78\uc5b4\uc11c \uc62e\uaca8 \uac00 \uae30\ub2e4\ub9ac\ub294 \uc0ac\ub78c) j \ub97c 150m \ub354 \uc9c0\ub09c \uac70\ub9ac(\uc815\ub958\uc7a5\uc5d0 \uc11c \uc788\ub294 \uac83\uc744 \ub5a0\ub09c \uac83\uc73c\ub85c \ubcf4\uc9c0 \uc54a\ub294\ub2e4)
+function rsBxAway(spT, spJ) { return Math.max(RS_BX_AWAY_M, rsHav(spT.lat, spT.lng, spJ.lat, spJ.lng) + RS_BX_PAST_M); }
 // s473: \ubc84\uc2a4\u2192\ubc84\uc2a4 \ud658\uc2b9 \uc815\ub958\uc7a5 T \uc758 \ubc14\ub85c \ub2e4\uc74c \uc815\ub958\uc7a5 j \ub97c \uc544\uc9c1 \ud1b5\uacfc\ub85c \uc801\uc73c\uba74 \uc548 \ub418\ub294\uac00 \u2014 T \uc5d0 \ub2ff\uc740 \uc9c0 (\uacc4\ud68d \uc18c\uc694 \u2212 30\ucd08) \uac00 \uc548 \ub410\uace0 \ud658\uc2b9 \uc815\ub958\uc7a5\uc5d0\uc11c 300m \ub118\uac8c \ubc97\uc5b4\ub098\uc9c0\ub3c4 \uc54a\uc558\uc73c\uba74 true(= \ub2e4\uc74c \ubc84\uc2a4\ub97c \uae30\ub2e4\ub9ac\ub294 \uc911)
 function rsBusXferHold(st, tr, now, T, j) {
   if (j !== T + 1 || !rsBusXferNode((st.eta || {}).nodes || [], T)) return false;
@@ -10593,8 +10598,23 @@ function rsBusXferHold(st, tr, now, T, j) {
   if (!lp || lp.ms == null || !isFinite(lp.ms) || !(gap > 0)) return false;
   if (now - lp.ms >= gap - RS_BX_LEAD_MS) return false;
   var q = tr && tr.length ? tr[tr.length - 1] : null;
-  if (q && isFinite(q[1]) && isFinite(q[2]) && rsHav(q[1], q[2], spT.lat, spT.lng) >= RS_BX_AWAY_M) return false;
+  if (q && isFinite(q[1]) && isFinite(q[2]) && rsHav(q[1], q[2], spT.lat, spT.lng) >= rsBxAway(spT, spJ)) return false;
   return true;
+}
+// s474: \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4 \ud658\uc2b9\uc5d0\uc11c \ub2e4\uc74c \ubc84\uc2a4 \uc2dc\uac01\uc774 \ub410\uc9c0\ub9cc \uc544\uc9c1 \ud658\uc2b9 \uc5ed \uadfc\ucc98(300m \uc548)\uc5d0 \uc11c \uc788\ub294 \uc0ac\ub78c\uc758 '\ubc84\uc2a4 \uc2b9\ucc28 \uc815\ub958\uc7a5 \ud1b5\uacfc \uc2dc\uac01' \ud558\ud55c \u2014 \uc601\uc810\uc774 \ub3cc\ub824\uc8fc\ub294 \uac00\uc7a5 \uac00\uae4c\uc6e0\ub358 \uc21c\uac04(passMs)\uc740
+//   \uadf8\ub3d9\uc548 \uc11c \uc788\ub358 \uc790\ub9ac \uc5b4\ub514\ucbe4\uc73c\ub85c \uc7a1\ud600 \uc218\ubc31 \ucd08 \uc55e\ub2f9\uaca8 \uc801\ud788\ubbc0\ub85c(\ub3c4\ubd09\uc0b0 \u2192 1102: 933\ucd08 \u00b7 \uc2e4\uc81c \ubc84\uc2a4\ub294 1080\ucd08) \ub4a4 \uc815\ub958\uc7a5 \ub3c4\ucc29 \uc608\uc0c1\uc774 \uadf8\ub9cc\ud07c \uc55e\uc11c \uac04\ub2e4 \u2014 \ud640\ub4dc\uac00 \ud480\ub9ac\ub294 \uc2dc\uac01(\ud658\uc2b9 \uc5ed \ud1b5\uacfc + \uacc4\ud68d \uc18c\uc694 \u2212 30\ucd08)\ubcf4\ub2e4 \uc774\ub974\uac8c \uc801\uc9c0 \uc54a\ub294\ub2e4.
+function rsBusXferFloor(st, tr, T, j) {
+  if (j !== T + 1) return null;
+  var nodes = (st.eta || {}).nodes || [], a = nodes[T];
+  if (!rsBusXferNode(nodes, T) || !a || a.isBus || !a.isSub) return null;
+  var spT = rsStopOf(st, T), spJ = rsStopOf(st, j), passes = (st.eta || {}).passes || [], lp = null, k;
+  if (!spT || !spJ || !isFinite(spT.arrMs) || !isFinite(spJ.arrMs)) return null;
+  for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx === T) lp = passes[k];
+  var gap = spJ.arrMs - spT.arrMs;
+  if (!lp || lp.ms == null || !isFinite(lp.ms) || !(gap > 0)) return null;
+  var q = tr && tr.length ? tr[tr.length - 1] : null;
+  if (!q || !isFinite(q[1]) || !isFinite(q[2]) || rsHav(q[1], q[2], spT.lat, spT.lng) >= rsBxAway(spT, spJ)) return null;
+  return lp.ms + gap - RS_BX_LEAD_MS;
 }
 var RS_XNEAR_M = 150, RS_XAUTO_MS = 20000;
 function rsAtBoard(st, tr, bi) {
@@ -12188,6 +12208,7 @@ function rideStandby(req) {
           var zpX = rsBusXferNode(enodes, z.i);      // st.zp = \uc601\uc810\uc774 \uc801\uc740 \ubc84\uc2a4 \ud658\uc2b9 \uc815\ub958\uc7a5 \ud1b5\uacfc \uc2dc\uac01(idx \u2192 ms) \u2014 \ubc84\uc2a4\u2192\ubc84\uc2a4 \ud658\uc2b9 \uc815\ub958\uc7a5\uc5d0\uc11c\ub9cc \uc4f4\ub2e4
           if (hit >= 0 && zpX && passes[hit].src === 'gps' && passes[hit].ms != null && isFinite(passes[hit].ms) && z.passMs > passes[hit].ms && st.zp && st.zp[z.i] === passes[hit].ms) return;
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
+          var bxF = rsBusXferFloor(st, tr, z.i - 1, z.i); if (bxF != null && np.ms < bxF) np.ms = bxF;      // s474: \uc9c0\ud558\ucca0 \u2192 \ubc84\uc2a4 \ud658\uc2b9 \uc815\ub958\uc7a5 \u2014 \uc11c \uc788\ub358 \uc790\ub9ac\uc5d0\uc11c \uc55e\ub2f9\uaca8 \uc7a1\ud78c \ud1b5\uacfc \uc2dc\uac01\uc744 \ubc84\uc2a4 \uc2dc\uac01 \uadfc\ucc98\ub85c
           // s471: \uc55e \uc815\ub958\uc7a5 \ud1b5\uacfc \uc2dc\uac01\ubcf4\ub2e4 \uc774\ub978 \uc99d\uac70(\ubc14\ub85c \uc55e \uc815\ub958\uc7a5\uacfc \uac00\uae4c\uc6cc \uadf8 \uadfc\ucc98\uc5d0\uc11c \uc774\ubbf8 \uc7a1\ud78c \uc704\uce58)\ub294 \uadf8 \ud1b5\uacfc \uc2dc\uac01\uc73c\ub85c \ub9de\ucd98\ub2e4 \u2014 \ud1b5\uacfc \uc2dc\uac01\uc774 \ubc88\ud638 \uc21c\uc11c\ub97c \uac70\uc2a4\ub974\uba74 \ub9c8\ucee4\uac00 \ub418\ub3cc\uc544\uac04\ub2e4
           for (var lq = 0; lq < passes.length; lq++) if (passes[lq] && passes[lq].idx === progMax && passes[lq].ms != null && isFinite(passes[lq].ms) && z.i > progMax && np.ms < passes[lq].ms) np.ms = passes[lq].ms;
           if (zpX) (st.zp = st.zp || {})[z.i] = np.ms;

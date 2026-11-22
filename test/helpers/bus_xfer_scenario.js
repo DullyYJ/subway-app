@@ -29,10 +29,12 @@ function uloop() {
   return RS.rideStart({ cap: 18 }, mk(P)).state;
 }
 function fixture(name) { return JSON.parse(JSON.stringify(require(path.join(__dirname, '..', 'fixtures', 's473_' + name + '_bus_state.json')))); }
+// s474: 실제 서비스가 만든 지하철 → 버스 → 버스 경로(공휴일 12/25 10:00 의정부→홍대입구: 1호선 → 1102 → 7101). 도봉산역(4번)과 도봉산역(중)(5번)은 95m.
+function fixture474() { return JSON.parse(JSON.stringify(require(path.join(__dirname, '..', 'fixtures', 's474_hol_subbus_state.json')))); }
 
 const hav = (a, b, c, d) => { const R = 6371000, k = Math.PI / 180, x = (c - a) * k, y = (d - b) * k * Math.cos((a + c) / 2 * k); return Math.sqrt(x * x + y * y) * R; };
 
-// st0 를 처음부터 끝까지. opts: { realMove, answer(b, now) → {ms, src} | null, gps(ft, p, STOPS) → true 면 위치 기록을 준다, noise(m), seed, rec(req, out), stepMs }
+// st0 를 처음부터 끝까지. opts: { realMove, walkFirst, answer(b, now) → {ms, src} | null, gps(ft, p, STOPS) → true 면 위치 기록을 준다, noise(m), seed, rec(req, out), stepMs }
 function run(SB, st0, opts) {
   opts = opts || {};
   const STOPS = st0.stops.slice().sort((a, b) => a.i - b.i), T = STOPS.map(s => s.arrMs), last = STOPS.length - 1;
@@ -43,7 +45,10 @@ function run(SB, st0, opts) {
       let f = T[k + 1] > T[k] ? (ts - T[k]) / (T[k + 1] - T[k]) : 1;
       if (opts.realMove) {      // 계획 구간이 느리면(기다림이 들어 있음) 정류장에서 기다리다 마지막에 움직인다
         const dd = hav(STOPS[k].lat, STOPS[k].lng, STOPS[k + 1].lat, STOPS[k + 1].lng), dts = (T[k + 1] - T[k]) / 1000;
-        if (dts > 120 && dd / dts < 3) { const mv = Math.max(20, dd / 6), tl = (T[k + 1] - ts) / 1000; f = tl >= mv ? 0 : 1 - tl / mv; }
+        if (dts > 120 && dd / dts < 3) {
+          if (opts.walkFirst) { const el = (ts - T[k]) / 1000, wk = Math.max(15, dd / 1.3); f = Math.min(1, Math.max(0, el / wk)); }      // s474: 내리자마자 걸어 다음 정류장에서 기다린다(realMove 는 서 있다 마지막에 움직임)
+          else { const mv = Math.max(20, dd / 6), tl = (T[k + 1] - ts) / 1000; f = tl >= mv ? 0 : 1 - tl / mv; }
+        }
       }
       return [STOPS[k].lat + (STOPS[k + 1].lat - STOPS[k].lat) * f, STOPS[k].lng + (STOPS[k + 1].lng - STOPS[k].lng) * f];
     }
@@ -75,4 +80,31 @@ function run(SB, st0, opts) {
   return { alerts, notes, rows, doneAt, state: st, plan: STOPS.map(s => rel(s.arrMs)), at: (key) => { const a = alerts.filter(x => x.key === key); return a.length ? a[0].t : null; } };
 }
 
-module.exports = { T0, transfer, uloop, fixture, run, hav };
+
+// s474: 합성 지하철 → 버스(→ 버스) 경로 — 1호선 4역(S0~S3) 내린 뒤 정류장 B0 까지 D m 를 걷고 W 초 기다렸다 버스(B0~B5, 500m/90초)를 탄다. third 면 B5 에서 400m 걸어 다음 버스(C0~C4)로 환승.
+// build: sub S0..S3 (3.6km, 120s/stn) → [walk D m, wait W s] → bus B0..B5 (500m each, 90s) [→ optional 2nd bus C0..C4]
+function subBus(D, W, third) {
+  const LAT=37.5, LNG0=127.0, DL=0.0137;
+  const subStart=120, subEnd=subStart+360;
+  const st=[0,1,2,3].map(i=>({stationName:'S'+i,y:LAT,x:LNG0+DL*i}));
+  const sub={trafficType:1,lane:[{name:'수도권 1호선'}],sectionTime:6,distance:3600,startName:'S0',endName:'S3',startSec:subStart,endSec:subEnd,stopSec:[120,240,360,480],passStopList:{stations:st}};
+  const sx=LNG0+DL*3, dLng=D/(111000*Math.cos(LAT*Math.PI/180));
+  const busStart=subEnd+W, nB=6;
+  const bs=[...Array(nB)].map((_,i)=>({stationName:'B'+i,y:LAT+ (i*0.0045)*0.3,x:sx+dLng+i*0.0052}));
+  const busEnd=busStart+(nB-1)*90;
+  const bus={trafficType:2,lane:[{busNo:'1102'}],sectionTime:Math.round((busEnd-busStart)/60),distance:2500,startName:'B0',endName:'B'+(nB-1),startSec:busStart,endSec:busEnd,passStopList:{stations:bs}};
+  const sp=[walk(2,0,120),sub,bus];
+  let end=busEnd;
+  if(third){ // bus→bus: next bus boards at a stop 400 m away
+    const last=bs[nB-1], nC=5, cStart=busEnd+240;
+    const cs=[...Array(nC)].map((_,i)=>({stationName:'C'+i,y:last.y+0.0036+i*0.0004,x:last.x+0.0030+i*0.0052}));
+    const cEnd=cStart+(nC-1)*90;
+    sp.push({trafficType:2,lane:[{busNo:'7101'}],sectionTime:Math.round((cEnd-cStart)/60),distance:2000,startName:'C0',endName:'C'+(nC-1),startSec:cStart,endSec:cEnd,passStopList:{stations:cs}}); end=cEnd;
+  }
+  sp.push(walk(2,end,end+120));
+  const P={info:{totalTime:Math.round(end/60)+4,transferCount:third?2:1,pathType:3,tab:'fast'},subPath:sp};
+  const r=RS.rideStart({ cap: 18 }, mk(P)); if(!r.state) throw new Error(JSON.stringify(r).slice(0,200));
+  return r.state;
+}
+
+module.exports = { T0, transfer, uloop, fixture, fixture474, subBus, run, hav };

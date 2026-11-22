@@ -407,9 +407,14 @@ function rsSkipUnseen(st, tr, now, j, progMax, passes, evMs) {
 // s473: 버스→버스 환승 정류장(내리는 곳 = 다음 버스를 타는 곳이 한 노드로 합쳐진 정류장) — 다음 노드가 버스이고 노선이 다르다
 function rsBusXferNode(enodes, i) {
   var a = enodes && enodes[i], b = enodes && enodes[i + 1];
-  return !!(a && b && a.isBus && !a.isWalk && b.isBus && !b.isWalk && String(a.lineName || '') !== String(b.lineName || ''));
+  if (!(a && b && b.isBus && !b.isWalk && !a.isWalk)) return false;
+  // s474: 지하철 → 버스 환승(역에서 내려 근처 정류장에서 버스를 기다림 — 도봉산 → 1102 처럼 역과 정류장이 100m 안팎)도 같은 성질이라 함께 본다
+  if (a.isBus) return String(a.lineName || '') !== String(b.lineName || '');
+  return !!(a.isSub && !a.isBus);
 }
-var RS_BX_LEAD_MS = 30000, RS_BX_AWAY_M = 300;
+var RS_BX_LEAD_MS = 30000, RS_BX_AWAY_M = 300, RS_BX_PAST_M = 150;
+// s474: '다음 차를 타고 떠났다'로 볼 거리 — 환승 노드 T 에서 300m, 다음 승차 정류장 j 가 그보다 멀면(걸어서 옮겨 가 기다리는 사람) j 를 150m 더 지난 거리(정류장에 서 있는 것을 떠난 것으로 보지 않는다)
+function rsBxAway(spT, spJ) { return Math.max(RS_BX_AWAY_M, rsHav(spT.lat, spT.lng, spJ.lat, spJ.lng) + RS_BX_PAST_M); }
 // s473: 버스→버스 환승 정류장 T 의 바로 다음 정류장 j 를 아직 통과로 적으면 안 되는가 — T 에 닿은 지 (계획 소요 − 30초) 가 안 됐고 환승 정류장에서 300m 넘게 벗어나지도 않았으면 true(= 다음 버스를 기다리는 중)
 function rsBusXferHold(st, tr, now, T, j) {
   if (j !== T + 1 || !rsBusXferNode((st.eta || {}).nodes || [], T)) return false;
@@ -420,8 +425,23 @@ function rsBusXferHold(st, tr, now, T, j) {
   if (!lp || lp.ms == null || !isFinite(lp.ms) || !(gap > 0)) return false;
   if (now - lp.ms >= gap - RS_BX_LEAD_MS) return false;
   var q = tr && tr.length ? tr[tr.length - 1] : null;
-  if (q && isFinite(q[1]) && isFinite(q[2]) && rsHav(q[1], q[2], spT.lat, spT.lng) >= RS_BX_AWAY_M) return false;
+  if (q && isFinite(q[1]) && isFinite(q[2]) && rsHav(q[1], q[2], spT.lat, spT.lng) >= rsBxAway(spT, spJ)) return false;
   return true;
+}
+// s474: 지하철 → 버스 환승에서 다음 버스 시각이 됐지만 아직 환승 역 근처(300m 안)에 서 있는 사람의 '버스 승차 정류장 통과 시각' 하한 — 영점이 돌려주는 가장 가까웠던 순간(passMs)은
+//   그동안 서 있던 자리 어디쯤으로 잡혀 수백 초 앞당겨 적히므로(도봉산 → 1102: 933초 · 실제 버스는 1080초) 뒤 정류장 도착 예상이 그만큼 앞서 간다 — 홀드가 풀리는 시각(환승 역 통과 + 계획 소요 − 30초)보다 이르게 적지 않는다.
+function rsBusXferFloor(st, tr, T, j) {
+  if (j !== T + 1) return null;
+  var nodes = (st.eta || {}).nodes || [], a = nodes[T];
+  if (!rsBusXferNode(nodes, T) || !a || a.isBus || !a.isSub) return null;
+  var spT = rsStopOf(st, T), spJ = rsStopOf(st, j), passes = (st.eta || {}).passes || [], lp = null, k;
+  if (!spT || !spJ || !isFinite(spT.arrMs) || !isFinite(spJ.arrMs)) return null;
+  for (k = 0; k < passes.length; k++) if (passes[k] && passes[k].idx === T) lp = passes[k];
+  var gap = spJ.arrMs - spT.arrMs;
+  if (!lp || lp.ms == null || !isFinite(lp.ms) || !(gap > 0)) return null;
+  var q = tr && tr.length ? tr[tr.length - 1] : null;
+  if (!q || !isFinite(q[1]) || !isFinite(q[2]) || rsHav(q[1], q[2], spT.lat, spT.lng) >= rsBxAway(spT, spJ)) return null;
+  return lp.ms + gap - RS_BX_LEAD_MS;
 }
 var RS_XNEAR_M = 150, RS_XAUTO_MS = 20000;
 function rsAtBoard(st, tr, bi) {
@@ -2015,6 +2035,7 @@ function rideStandby(req) {
           var zpX = rsBusXferNode(enodes, z.i);      // st.zp = 영점이 적은 버스 환승 정류장 통과 시각(idx → ms) — 버스→버스 환승 정류장에서만 쓴다
           if (hit >= 0 && zpX && passes[hit].src === 'gps' && passes[hit].ms != null && isFinite(passes[hit].ms) && z.passMs > passes[hit].ms && st.zp && st.zp[z.i] === passes[hit].ms) return;
           var np = { idx: z.i, ms: z.passMs, src: 'gps' };
+          var bxF = rsBusXferFloor(st, tr, z.i - 1, z.i); if (bxF != null && np.ms < bxF) np.ms = bxF;      // s474: 지하철 → 버스 환승 정류장 — 서 있던 자리에서 앞당겨 잡힌 통과 시각을 버스 시각 근처로
           // s471: 앞 정류장 통과 시각보다 이른 증거(바로 앞 정류장과 가까워 그 근처에서 이미 잡힌 위치)는 그 통과 시각으로 맞춘다 — 통과 시각이 번호 순서를 거스르면 마커가 되돌아간다
           for (var lq = 0; lq < passes.length; lq++) if (passes[lq] && passes[lq].idx === progMax && passes[lq].ms != null && isFinite(passes[lq].ms) && z.i > progMax && np.ms < passes[lq].ms) np.ms = passes[lq].ms;
           if (zpX) (st.zp = st.zp || {})[z.i] = np.ms;
