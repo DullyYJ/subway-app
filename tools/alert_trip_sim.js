@@ -3,7 +3,7 @@
 // 쓰는 법: route-v2 워커와 같은 출처의 브라우저 탭(예: https://route-v2.phg0643.workers.dev/health)에서 이 파일 내용을 JS 로 실행한다.
 //   · 경로: GET /route-v2-app?SX=&SY=&EX=&EY=&SN=&EN=&baseMs=   → 응답 그대로 A.state(j, tab, nowMs) 로 /ride/start 에 넣어 '안내 상태'를 만든다.
 //   · 가상 이동: 상태의 정류장 좌표·도착 시각(state.stops)을 따라 사람이(또는 열차가) 움직인다고 보고, 4~12초마다 /ride-standby 를 불러 알림·현재역을 받는다.
-//   · 변형: delaySec(열차가 계획보다 늦음/빠름) · gps('gps' 계속 | 'tunnel' 역 350m 안에서만 | 'none' 없음) · noise(위치 흔들림 m) · allowed(끈 알림) · startMs/now(중간에 시작)
+//   · 변형: realMove(대기가 긴 구간은 정류장에서 서 있다 마지막에만 움직임) · delaySec(열차가 계획보다 늦음/빠름) · gps('gps' 계속 | 'tunnel' 역 350m 안에서만 | 'none' 없음) · noise(위치 흔들림 m) · allowed(끈 알림) · startMs/now(중간에 시작)
 //   · 판정(엔진이 한 말을 '실제로 지난 시각'과 맞춰 본다): 알림 빠짐·중복·엉뚱한 키 · 알림 시각(실제 통과 대비) · 현재역(curIdx)이 앞서거나 뒤처진 정도 ·
 //          상주 알림 글(다음 역·남은 정거장) · 오버레이 줄(현재역·도착 시각·남은 시간) · 안내 끝(done) 시각 · 응답 시간 · 상태 크기
 //   · 먼저 A.installGuard() — 기기당 요청 한도(초당 2건)에 걸리지 않게 여정마다 따로 줄 세워 보낸다(안 부르면 40건째에 error:rate).
@@ -64,7 +64,10 @@
     var trueK = function (t) { var k = -1; for (var i = 0; i <= last; i++) if (T[i] <= t) k = i; return k; };
     var posAt = function (t) {
       if (t <= T[0]) return [stops[0].lat, stops[0].lng];
-      for (var k = 0; k < last; k++) if (t <= T[k + 1]) { var f = T[k + 1] > T[k] ? (t - T[k]) / (T[k + 1] - T[k]) : 1; return [stops[k].lat + (stops[k + 1].lat - stops[k].lat) * f, stops[k].lng + (stops[k + 1].lng - stops[k].lng) * f]; }
+      for (var k = 0; k < last; k++) if (t <= T[k + 1]) { var f = T[k + 1] > T[k] ? (t - T[k]) / (T[k + 1] - T[k]) : 1;
+        // o.realMove: 계획 시각 사이가 길고 느린 구간(환승 대기 · 긴 도보 — 평균 3m/s 미만, 120초 초과)은 정류장에서 서 있다가 마지막 dist/6 초만 움직인다(안 쓰면 직선으로 천천히 기어간다 — 버스 환승 대기 구간에서 엔진이 '다음 정류장 근처' 라고 일찍 인정하는 것처럼 보임)
+        if (o.realMove) { var dd = hav(stops[k].lat, stops[k].lng, stops[k + 1].lat, stops[k + 1].lng), dts = (T[k + 1] - T[k]) / 1000; if (dts > 120 && dd / dts < 3) { var mv = Math.max(20, dd / 6), tl = (T[k + 1] - t) / 1000; f = tl >= mv ? 0 : 1 - tl / mv; } }
+        return [stops[k].lat + (stops[k + 1].lat - stops[k].lat) * f, stops[k].lng + (stops[k + 1].lng - stops[k].lng) * f]; }
       return [stops[last].lat, stops[last].lng];
     };
     var nearStop = function (p) { var m = 1e9; for (var i = 0; i < stops.length; i++) { var d = hav(p[0], p[1], stops[i].lat, stops[i].lng); if (d < m) m = d; } return m; };

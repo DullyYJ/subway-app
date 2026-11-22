@@ -87,6 +87,32 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     console.log('        s460: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
     try { fs.unlinkSync(f); } catch (e) { }
   });
+  await t('s471~s473 건너뜀 방지(U자 · 환승 대기 xFree) · 이른 시각표 버림 · 버스→버스 환승(판교 · 동탄): 폰 안 엔진(자바)이 서버 JS 와 걸음마다 같은 답 · 같은 상태를 낸다', async () => {
+    const BX = require(path.join(__dirname, 'helpers', 'bus_xfer_scenario.js')), SB = require(path.join(ROOT, 'engine', 'ride-standby.js'));
+    const f = path.join(out, 'ride_corpus_s473.jsonl'), fd = fs.openSync(f, 'w'), J = (x) => JSON.parse(JSON.stringify(x));
+    let n = 0; const saw = {};
+    const rec = (req, o) => { fs.writeSync(fd, JSON.stringify({ fn: 'standby', in: req, out: J(o) }) + '\n'); n++; (o.notes || []).forEach(m => { for (const k of ['재동기', '환승 승차역', '계획 승차보다', '영점']) if (m.indexOf(k) >= 0) saw[k] = true; }); if (o.state.zp) saw.zp = true; if (o.state.xfNote != null) saw.xfNote = true; };
+    const tunnel = (ft, p, STOPS) => Math.min.apply(null, STOPS.map(s => BX.hav(p[0], p[1], s.lat, s.lng))) <= 350;
+    const flaky = (ft) => (Math.floor(ft / 3000) % 5) < 2;
+    const TR = BX.transfer(), PL = TR.stops.slice().sort((a, b) => a.i - b.i).map(x => x.arrMs);
+    for (const ans of [null, (b) => ({ ms: b.fromMs + 30000, src: 'table' }), () => ({ ms: PL[4] - 60000, src: 'table' }), () => ({ ms: PL[4] + 180000, src: 'table' }), () => ({ ms: PL[4] - 20000, src: 'realtime' })])
+      for (const gps of [undefined, tunnel]) BX.run(SB, TR, { answer: ans || undefined, gps, rec });
+    const UL = BX.uloop();
+    for (const gps of [undefined, flaky]) BX.run(SB, UL, { gps, rec, answer: (b) => ({ ms: b.fromMs + 30000, src: 'table' }) });
+    const PG = BX.run(SB, BX.fixture('pangyo'), { realMove: true, rec }), DT = BX.run(SB, BX.fixture('dongtan'), { realMove: true, rec });
+    BX.run(SB, BX.fixture('dongtan'), { realMove: true, noise: 8, rec }); BX.run(SB, BX.fixture('pangyo'), { realMove: true, gps: flaky, rec });
+    fs.closeSync(fd);
+    assert.ok(saw['재동기'] && saw['환승 승차역'] && saw['계획 승차보다'] && saw['영점'] && saw.zp && saw.xfNote, '새 규칙의 상태·기록이 녹화에 모두 들어 있어야 한다 ' + JSON.stringify(saw));
+    // 서버 JS 가 먼저 제대로 가야 한다(판교: 환승 정류장에서 기다렸다 출발해도 도착 1정거장 전이 울림(시각은 첫 정류장 통과 기준 초) · 동탄: 붙은 정류장(52m)에서 기다려도 목적지 2정거장 전이 일찍 울리지 않음)
+    assert.ok(PG.at('5_1') != null && PG.at('5_1') >= 1790 && PG.at('5_1') <= 1900, '판교 5_1 ' + PG.at('5_1'));
+    assert.ok(DT.at('7_1') != null && DT.at('10_2') != null && DT.at('10_2') >= 3560 && DT.at('10_2') <= 3640, '동탄 7_1 ' + DT.at('7_1') + ' · 10_2 ' + DT.at('10_2'));
+    const r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', f], { env: ENV, encoding: 'utf8', maxBuffer: 1 << 28 });
+    assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1800) + (r.stderr || '').slice(-300));
+    assert.strictEqual(+/ALL OK \((\d+)\)/.exec(r.stdout)[1], n, '모든 줄을 견줬다');
+    assert.ok(n >= 3000, '걸음 ' + n);
+    console.log('        s473: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
+    try { fs.unlinkSync(f); } catch (e) { }
+  });
   await t('계산 코어는 안드로이드·네트워크·시계를 쓰지 않는다(순수 자바)', async () => {
     for (const c of RIDE) {
       const src = fs.readFileSync(N(c + '.java'), 'utf8').replace(/System\.currentTimeMillis\(\)/g, '0');   // 서버 JS 의 'nowMs 없으면 Date.now()' 대비 줄만 허용(승차 엔진은 늘 nowMs 를 준다)

@@ -40,6 +40,7 @@ jobs:
           - s471_xfer_nofree.test.js
           - s471_bus_loop_skip.test.js
           - s472_xfer_early_table.test.js
+          - s473_bus_xfer_wait.test.js
           - rules_engine.test.js
           - legal_engine.test.js
           - scene_native.test.js
