@@ -1662,7 +1662,7 @@ function rsBlAsk(st, tr, now) {
 }
 // ★ s266 환승 대기(st.xw, 지하철)의 다음 차: 환승역에 내린 뒤(= xw 가 서 있는 동안) 시각표 다음 차를 묻는다 — 계획 시각(버스가 닿는 시각)에 열차가 없을 수 있다.
 //   답은 eta.live 로 적어 ride-eta 가 그 역 시각과 뒤를 그만큼 옮긴다. 승강장까지 걷는 1분을 더한 시각 이후 차부터. 답이 있으면 그 차가 떠난 30초 뒤까지 더 묻지 않고, 못 받으면 15초 간격 6번까지.
-var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000;
+var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000, RS_BLX_EARLY_TT_MS = 90000;
 function rsBlAskX(st, now) {
   try {
     var x = st.xw, tg = rsBlTarget(st); if (!x || st.wait || !tg) return null;
@@ -1680,6 +1680,14 @@ function rsBlApplyX(st, req, now, notes) {
   var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000 || bx.lastAt === at) return;
   bx.lastAt = at;
   if (b.ms == null || !isFinite(+b.ms) || +b.ms < now - 5000 || +b.ms > now + RS_BLX_MAXAHEAD_MS) return;      // 못 받음 → 계획 시각 그대로
+  // ★ s472 (가상 이동 시험: 청라→강남 환승 4번 — 신논현 9호선→신분당선 환승은 걷는 시간이 4분인데 '시각표 다음 차'는 승강장까지 1분만 더해 물어, 걷는 시간 때문에 못 타는 8분 이른 열차를 탔다고 받아들여
+  //   '목적지 도착'이 7분 넘게 일찍 울렸다): 계획의 승차 시각은 걷는 시간을 넣어 이미 시각표에서 잡은 것이다. 시각표(table) 답이 그보다 RS_BLX_EARLY_TT_MS 넘게 이르면 걷다가 놓치는 차 — 계획 시각을 그대로 둔다(그 차를 정말 탔다면 위치 이동(rsXGo)이 잡는다).
+  //   실시간(realtime) 답은 승강장에서 보이는 차라 그대로 받는다.
+  if (b.src === 'table' && x.arrMs != null && isFinite(x.arrMs) && +b.ms < x.arrMs - RS_BLX_EARLY_TT_MS) {
+    bx.ms = Math.round(x.arrMs); bx.src = 'plan'; delete bx.tn;
+    notes.push('환승 다음 차(table)가 계획 승차보다 ' + Math.round((x.arrMs - +b.ms) / 1000) + '초 일러 걷는 사이 놓치는 차 — 계획 시각 그대로');
+    return;
+  }
   var lv = (eta.live || []).filter(function (q) { return q && +q.idx !== x.i; });
   var lvE = { idx: x.i, ms: Math.round(+b.ms) }; if (b.src === 'table') lvE.tt = 1;      // s456: 시각표 답(분:00)은 ride-eta 가 그 역의 예정 초(:20~:30) 자리로 옮겨 쓴다 — 같은 열차면 시각이 안 바뀐다
   lv.push(lvE); eta.live = lv; bx.ms = Math.round(+b.ms); bx.src = b.src || '';

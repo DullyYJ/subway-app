@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-21s471";
+var ENGINE_VERSION = "route-v2-2026-11-21s472";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -11835,7 +11835,7 @@ function rsBlAsk(st, tr, now) {
 }
 // \u2605 s266 \ud658\uc2b9 \ub300\uae30(st.xw, \uc9c0\ud558\ucca0)\uc758 \ub2e4\uc74c \ucc28: \ud658\uc2b9\uc5ed\uc5d0 \ub0b4\ub9b0 \ub4a4(= xw \uac00 \uc11c \uc788\ub294 \ub3d9\uc548) \uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28\ub97c \ubb3b\ub294\ub2e4 \u2014 \uacc4\ud68d \uc2dc\uac01(\ubc84\uc2a4\uac00 \ub2ff\ub294 \uc2dc\uac01)\uc5d0 \uc5f4\ucc28\uac00 \uc5c6\uc744 \uc218 \uc788\ub2e4.
 //   \ub2f5\uc740 eta.live \ub85c \uc801\uc5b4 ride-eta \uac00 \uadf8 \uc5ed \uc2dc\uac01\uacfc \ub4a4\ub97c \uadf8\ub9cc\ud07c \uc62e\uae34\ub2e4. \uc2b9\uac15\uc7a5\uae4c\uc9c0 \uac77\ub294 1\ubd84\uc744 \ub354\ud55c \uc2dc\uac01 \uc774\ud6c4 \ucc28\ubd80\ud130. \ub2f5\uc774 \uc788\uc73c\uba74 \uadf8 \ucc28\uac00 \ub5a0\ub09c 30\ucd08 \ub4a4\uae4c\uc9c0 \ub354 \ubb3b\uc9c0 \uc54a\uace0, \ubabb \ubc1b\uc73c\uba74 15\ucd08 \uac04\uaca9 6\ubc88\uae4c\uc9c0.
-var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000;
+var RS_BLX_PLAT_MS = 60000, RS_BLX_PASS_MS = 75000, RS_BLX_MAXTRY = 6, RS_BLX_MAXAHEAD_MS = 40 * 60000, RS_BLX_EARLY_TT_MS = 90000;
 function rsBlAskX(st, now) {
   try {
     var x = st.xw, tg = rsBlTarget(st); if (!x || st.wait || !tg) return null;
@@ -11853,6 +11853,14 @@ function rsBlApplyX(st, req, now, notes) {
   var at = +b.at; if (!isFinite(at) || now - at > RS_BL_ANS_MS || at > now + 5000 || bx.lastAt === at) return;
   bx.lastAt = at;
   if (b.ms == null || !isFinite(+b.ms) || +b.ms < now - 5000 || +b.ms > now + RS_BLX_MAXAHEAD_MS) return;      // \ubabb \ubc1b\uc74c \u2192 \uacc4\ud68d \uc2dc\uac01 \uadf8\ub300\ub85c
+  // \u2605 s472 (\uac00\uc0c1 \uc774\ub3d9 \uc2dc\ud5d8: \uccad\ub77c\u2192\uac15\ub0a8 \ud658\uc2b9 4\ubc88 \u2014 \uc2e0\ub17c\ud604 9\ud638\uc120\u2192\uc2e0\ubd84\ub2f9\uc120 \ud658\uc2b9\uc740 \uac77\ub294 \uc2dc\uac04\uc774 4\ubd84\uc778\ub370 '\uc2dc\uac01\ud45c \ub2e4\uc74c \ucc28'\ub294 \uc2b9\uac15\uc7a5\uae4c\uc9c0 1\ubd84\ub9cc \ub354\ud574 \ubb3c\uc5b4, \uac77\ub294 \uc2dc\uac04 \ub54c\ubb38\uc5d0 \ubabb \ud0c0\ub294 8\ubd84 \uc774\ub978 \uc5f4\ucc28\ub97c \ud0d4\ub2e4\uace0 \ubc1b\uc544\ub4e4\uc5ec
+  //   '\ubaa9\uc801\uc9c0 \ub3c4\ucc29'\uc774 7\ubd84 \ub118\uac8c \uc77c\ucc0d \uc6b8\ub838\ub2e4): \uacc4\ud68d\uc758 \uc2b9\ucc28 \uc2dc\uac01\uc740 \uac77\ub294 \uc2dc\uac04\uc744 \ub123\uc5b4 \uc774\ubbf8 \uc2dc\uac01\ud45c\uc5d0\uc11c \uc7a1\uc740 \uac83\uc774\ub2e4. \uc2dc\uac01\ud45c(table) \ub2f5\uc774 \uadf8\ubcf4\ub2e4 RS_BLX_EARLY_TT_MS \ub118\uac8c \uc774\ub974\uba74 \uac77\ub2e4\uac00 \ub193\uce58\ub294 \ucc28 \u2014 \uacc4\ud68d \uc2dc\uac01\uc744 \uadf8\ub300\ub85c \ub454\ub2e4(\uadf8 \ucc28\ub97c \uc815\ub9d0 \ud0d4\ub2e4\uba74 \uc704\uce58 \uc774\ub3d9(rsXGo)\uc774 \uc7a1\ub294\ub2e4).
+  //   \uc2e4\uc2dc\uac04(realtime) \ub2f5\uc740 \uc2b9\uac15\uc7a5\uc5d0\uc11c \ubcf4\uc774\ub294 \ucc28\ub77c \uadf8\ub300\ub85c \ubc1b\ub294\ub2e4.
+  if (b.src === 'table' && x.arrMs != null && isFinite(x.arrMs) && +b.ms < x.arrMs - RS_BLX_EARLY_TT_MS) {
+    bx.ms = Math.round(x.arrMs); bx.src = 'plan'; delete bx.tn;
+    notes.push('\ud658\uc2b9 \ub2e4\uc74c \ucc28(table)\uac00 \uacc4\ud68d \uc2b9\ucc28\ubcf4\ub2e4 ' + Math.round((x.arrMs - +b.ms) / 1000) + '\ucd08 \uc77c\ub7ec \uac77\ub294 \uc0ac\uc774 \ub193\uce58\ub294 \ucc28 \u2014 \uacc4\ud68d \uc2dc\uac01 \uadf8\ub300\ub85c');
+    return;
+  }
   var lv = (eta.live || []).filter(function (q) { return q && +q.idx !== x.i; });
   var lvE = { idx: x.i, ms: Math.round(+b.ms) }; if (b.src === 'table') lvE.tt = 1;      // s456: \uc2dc\uac01\ud45c \ub2f5(\ubd84:00)\uc740 ride-eta \uac00 \uadf8 \uc5ed\uc758 \uc608\uc815 \ucd08(:20~:30) \uc790\ub9ac\ub85c \uc62e\uaca8 \uc4f4\ub2e4 \u2014 \uac19\uc740 \uc5f4\ucc28\uba74 \uc2dc\uac01\uc774 \uc548 \ubc14\ub010\ub2e4
   lv.push(lvE); eta.live = lv; bx.ms = Math.round(+b.ms); bx.src = b.src || '';
