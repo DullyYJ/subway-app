@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-24s477";
+var ENGINE_VERSION = "route-v2-2026-11-24s478";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -2774,6 +2774,7 @@ async function kricLoad(env, G) {
     (G.adj["S|" + r.a] = G.adj["S|" + r.a] || []).push({ to: "S|" + r.b, w: r.hop, kind: "xpress", line: r.line, dep: xpBits(r.wk), depW: xpBits(r.we), hp: xpHops(r.hk), hpW: xpHops(r.he), bw: (G.LN[r.line] && G.LN[r.line].hw || 420) / 2 });
     nx++;
   }
+  G.__xpFix = xpChainFix(G);
   var gm = null;
   for (var id in G.ST) if (G.ST[id].l === "S01" && G.ST[id].n === "\uAD11\uBA85") gm = id;
   if (gm) {
@@ -2785,6 +2786,48 @@ async function kricLoad(env, G) {
   G.__kricStat = { seg: ns, xp: nx };
 }
 __name(kricLoad, "kricLoad");
+// \u2605 s477 (9\ud638\uc120 \uae09\ud589 \uac00\uc591\u2192\uc5ec\uc758\ub3c4 390\ucd08 \u2014 \uac00\uc591\u2192\uc5fc\ucc3d 210 + \uc5fc\ucc3d\u2192\uc5ec\uc758\ub3c4 405 = 615\ucd08\uc778\ub370 \ud55c \ubc88\uc5d0 \uac00\ub294 \uac04\uc120\ub9cc \uc9e7\uc558\ub2e4 \u00b7 \uadf8\ub798\uc11c \uc911\uac04\uc5ed(\uc5fc\ucc3d)\ub3c4 \ub07c\uc6b0\uc9c0 \ubabb\ud588\ub2e4):
+//   KRIC \uae30\ub85d\uc5d0\uc11c \uc5f4\ucc28 \ubc88\ud638\uac00 \uaf2c\uc778 \uba87 \uc904\uc774 \uc911\uac04\uac12\uae4c\uc9c0 \ub04c\uc5b4\ub0b4\ub9b0 \uae09\ud589 \uac04\uc120\uc774 \uc788\ub2e4. \uac19\uc740 \ub178\uc120\uc5d0\uc11c a\u2192c \u00b7 c\u2192b \uae09\ud589 \uac04\uc120\uc774 \ub2e4 \uc788\uc73c\uba74 a\u2192b \ub294 \uadf8 \ud569\ubcf4\ub2e4 \ud06c\uac8c \uc9e7\uc744 \uc218 \uc5c6\ub2e4
+//   (\uc911\uac04\uc5ed\uc5d0 \uc11c\ub294 \uae09\ud589\uc740 \ud569\uacfc \uac70\uc758 \uac19\uace0, \uadf8 \uc5ed\uc744 \uac74\ub108\ub6f0\ub294 \ud2b9\uae09\uc774\ub77c\ub3c4 25% \ub118\uac8c \ube60\ub974\uc9c0 \uc54a\ub2e4). \ud569\uc758 XP_CHAIN_MIN_RATIO \ubcf4\ub2e4 \uc9e7\uc73c\uba74 '\ud569 \u2212 30\ucd08'\ub85c \uc62c\ub9b0\ub2e4(\uc6d0\ub798 \uac12\uc740 w0).
+//   \uc2dc\uac04\ub300\ubcc4 \uc18c\uc694(hp)\ub294 xpWait \uac00 \uc774 \uac12\uc758 XP_HOP_MIN_RATIO \ubbf8\ub9cc\uc744 \ubc84\ub9ac\ubbc0\ub85c \ud568\uaed8 \ub9de\ucdb0\uc9c4\ub2e4. \uace0\uce5c \uac04\uc120 \uc218\ub97c \ub3cc\ub824\uc900\ub2e4.
+var XP_CHAIN_MIN_RATIO = 0.75;
+//   c \ub294 \uc77c\ubc18 \uc5f4\ucc28 \uae38(ride \uac04\uc120)\ub85c a \uc640 b '\uc0ac\uc774'\uc5d0 \uc788\ub294 \uc5ed\ub9cc \ubcf8\ub2e4(\ub4a4\ub85c \uac14\ub2e4 \uc624\ub294 c \ub97c \uc138\uba74 \ubc14\ub978 \uc9e7\uc740 \uac04\uc120\uae4c\uc9c0 \uc62c\ub77c\uac04\ub2e4).
+function xpLocalFrom(G, a, line, memo) {
+  var mk = a + "|" + line; if (memo[mk]) return memo[mk];
+  var dist = {}, done = {}, q = [a]; dist[a] = 0;
+  while (q.length) {
+    var bi = 0; for (var qi = 1; qi < q.length; qi++) if (dist[q[qi]] < dist[q[bi]]) bi = qi;
+    var u = q.splice(bi, 1)[0]; if (done[u]) continue; done[u] = 1;
+    var L = G.adj["S|" + u] || [];
+    for (var j = 0; j < L.length; j++) {
+      var e = L[j]; if (e.kind !== "ride" || e.line !== line) continue;
+      var v = e.to.slice(2), nv = dist[u] + e.w;
+      if (dist[v] === void 0 || nv < dist[v]) { dist[v] = nv; q.push(v); }
+    }
+  }
+  return memo[mk] = dist;
+}
+function xpChainFix(G) {
+  var xw = {}, ka, j, fixes = [], memo = {};
+  for (ka in G.adj) { var La = G.adj[ka]; for (j = 0; j < La.length; j++) if (La[j].kind === "xpress") xw[ka.slice(2) + ">" + La[j].to.slice(2)] = La[j]; }
+  for (var kx in xw) {
+    var eX = xw[kx], ab = kx.split(">"), best = Infinity, La2 = G.adj["S|" + ab[0]] || [];
+    var la = xpLocalFrom(G, ab[0], eX.line, memo), dab = la[ab[1]];
+    if (!(dab > 0)) continue;
+    for (j = 0; j < La2.length; j++) {
+      var e1 = La2[j]; if (e1.kind !== "xpress" || e1.line !== eX.line) continue;
+      var cc = e1.to.slice(2); if (cc === ab[1]) continue;
+      var e2 = xw[cc + ">" + ab[1]]; if (!e2 || e2.line !== eX.line) continue;
+      var dac = la[cc], dcb = xpLocalFrom(G, cc, eX.line, memo)[ab[1]];
+      if (!(dac > 0) || !(dcb > 0) || dac + dcb > dab * 1.05 + 60) continue;
+      if (e1.w + e2.w < best) best = e1.w + e2.w;
+    }
+    if (best < Infinity && eX.w < best * XP_CHAIN_MIN_RATIO) fixes.push([eX, Math.round(best - 30)]);
+  }
+  for (j = 0; j < fixes.length; j++) { fixes[j][0].w0 = fixes[j][0].w; fixes[j][0].w = fixes[j][1]; }
+  return fixes.length;
+}
+__name(xpChainFix, "xpChainFix");
 async function kricDerive(env, B, L) {
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS kric_seg (line TEXT, a TEXT, b TEXT, sec INTEGER, n INTEGER, PRIMARY KEY (line, a, b))").run();
   await env.DB.prepare("CREATE TABLE IF NOT EXISTS kric_xp (line TEXT, a TEXT, b TEXT, hop INTEGER, n INTEGER, wk TEXT, we TEXT, hk TEXT, he TEXT, PRIMARY KEY (line, a, b))").run();
