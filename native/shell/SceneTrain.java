@@ -32,15 +32,18 @@ final class SceneTrain {
         double shift;            // 승강장 가로 이동(화면 px; 도착 때는 음수에서 0으로, 출발 때는 0에서 양수로)
         boolean platform;
         // 자리
-        double[] spotX = new double[6], spotY = new double[6]; boolean[] spotSit = new boolean[6]; int[] spotOf = new int[6];
+        double[] spotX = new double[NS], spotY = new double[NS]; boolean[] spotSit = new boolean[NS]; int[] spotOf = new int[NC];
         // 그림 틀(장면 좌표)
         double ceilB, winT, winB, floorLine, benchBack, seatY, laneY, platFeet, doorW, sillY;
         double[] doorX = new double[2];
         int nTrip;
         // 안무: 달리는 동안 열두 초(EP)마다 친구 몇 명이 자리를 바꾼다(일어서서 걸어가 다른 자리에 앉는다). cur=지금 자리 · prv=바로 전 자리. 서 있는 동안엔 새 자리 바꿈을 시작하지 않는다.
-        double chor, tA; int epoch; int[] cur = new int[6], prv = new int[6], emo = new int[6];
+        double chor, tA; int epoch; int[] cur = new int[NC], prv = new int[NC], emo = new int[NC];
     }
     static final double EP = 12, SL = 9;
+    // s475 (YJ: 혼잡도 카드를 옆으로 밀어도 길동무 친구들이 안 나온다): 친구는 8마리(SceneModel.ORDER — 죽순·뽀송이 뒤에 붙었다)인데 객실은 6마리 기준이라
+    //   대표가 죽순·뽀송이면 자리 배열(6칸) 밖을 써서 장면이 죽고(SceneTrain.setup AIOOBE) → 3번 다시 해도 같은 대표라 두 쪽 카드가 영영 꺼졌다. 친구 수는 ORDER 를 따르고 자리는 8칸(앉기 4 · 서기 4).
+    static final int NC = SceneModel.ORDER.length, NS = 8;
 
     // ═══ 준비 ═══
     static void setup(SceneCore s) {
@@ -54,17 +57,17 @@ final class SceneTrain {
         StringBuilder sb = new StringBuilder(); for (String n : z.T.names) sb.append(n).append('|');
         z.seed = (sb.toString() + s.res.hero + z.T.first).hashCode();
         // 자리: 앉는 자리 4 · 서는 자리 2 (한 번 정하면 이 여정 내내 같은 친구가 같은 자리)
-        double[] sx = { .12, .43, .57, .88, .50, .24 }; boolean[] sit = { true, true, true, true, false, false };
-        double[] sy = { z.seatY + 12, z.seatY + 12, z.seatY + 12, z.seatY + 12, H * .93, H * .86 };
-        for (int i = 0; i < 6; i++) { z.spotX[i] = Math.round(W * sx[i]); z.spotSit[i] = sit[i]; z.spotY[i] = Math.round(sy[i]); }
+        double[] sx = { .12, .43, .57, .88, .50, .24, .78, .38 }; boolean[] sit = { true, true, true, true, false, false, false, false };
+        double[] sy = { z.seatY + 12, z.seatY + 12, z.seatY + 12, z.seatY + 12, H * .93, H * .86, H * .87, H * .95 };
+        for (int i = 0; i < NS; i++) { z.spotX[i] = Math.round(W * sx[i]); z.spotSit[i] = sit[i]; z.spotY[i] = Math.round(sy[i]); }
         // 대표 캐릭터는 가운데 앉는 자리. 나머지는 시드로 섞는다
-        List<Integer> order = new ArrayList<>(); for (int i = 0; i < 6; i++) order.add(i);
+        List<Integer> order = new ArrayList<>(); for (int i = 0; i < NS; i++) order.add(i);
         java.util.Random rr = new java.util.Random(z.seed * 31L + 7); java.util.Collections.shuffle(order, rr);
-        int hi = indexOfId(s.res.hero); int[] spotOf = new int[6]; java.util.Arrays.fill(spotOf, -1);
+        int hi = indexOfId(s.res.hero); int[] spotOf = new int[NC]; java.util.Arrays.fill(spotOf, -1);
         if (hi >= 0) { spotOf[hi] = 1; order.remove(Integer.valueOf(1)); }
-        for (int c = 0; c < 6; c++) if (spotOf[c] < 0) spotOf[c] = order.remove(0);
+        for (int c = 0; c < NC; c++) if (spotOf[c] < 0) spotOf[c] = order.remove(0);
         z.spotOf = spotOf;
-        if (old != null) { z.chor = old.chor; z.tA = old.tA; z.epoch = old.epoch; z.cur = old.cur.clone(); z.prv = old.prv.clone(); z.emo = old.emo.clone(); }
+        if (old != null && old.cur.length == NC) { z.chor = old.chor; z.tA = old.tA; z.epoch = old.epoch; z.cur = old.cur.clone(); z.prv = old.prv.clone(); z.emo = old.emo.clone(); }
         else { z.cur = spotOf.clone(); z.prv = spotOf.clone(); java.util.Arrays.fill(z.emo, -1); z.chor = EP - 2; }
         if (old == null) z.nowMs = System.currentTimeMillis();
     }
@@ -159,7 +162,7 @@ final class SceneTrain {
         double tOpen = Math.min(1.1, dwell * .1), tClose = dwell >= 1e8 ? 1e9 : dwell - Math.min(3.2, dwell * .2);
         double win = tClose >= 1e8 ? 30 : Math.max(2.5, tClose - tOpen - 1.0);
         int idx = 0, cnt = 0;                         // 나와 같은 일을 하는 친구들 중 내 순번
-        for (int c = 0; c < 6; c++) { int bb = 1 << c; boolean same = isOut ? (out & bb) != 0 : (in & bb) != 0; if (same) { if (c < ci) idx++; cnt++; } }
+        for (int c = 0; c < NC; c++) { int bb = 1 << c; boolean same = isOut ? (out & bb) != 0 : (in & bb) != 0; if (same) { if (c < ci) idx++; cnt++; } }
         int hs = h(z.seed + k, ci);
         double f = 1.0;                               // 정차가 짧으면 모두 서두른다
         double need = 6.5 + 1.4 * Math.max(0, cnt - 1) + (isOut ? 0 : 0); if (need > win) f = clamp(win / need, .35, 1);
@@ -208,15 +211,15 @@ final class SceneTrain {
     // ═══ 객실 안에서 하는 일들 (앉았다 일어서서 다른 자리로 · 졸기 · 기지개 · 두리번 · 서성이기 · 콧노래/하트) ═══
     /** 열두 초가 지날 때마다: 타고 있는 친구 한두 명이 다른 자리로 옮긴다(그 자리에 앉은 친구와 맞바꾸거나 빈 자리로). */
     static void nextEpoch(St z) {
-        System.arraycopy(z.cur, 0, z.prv, 0, 6);
+        System.arraycopy(z.cur, 0, z.prv, 0, NC);
         int k = z.toK; int[] sp = (k >= 0 && k < z.T.stops.size()) ? z.T.stops.get(k) : new int[] { z.T.init, 0, 0 };
-        int mask = sp[0], nm = 1 + h(z.seed + z.epoch, 99) % 2; boolean[] moved = new boolean[6];
+        int mask = sp[0], nm = 1 + h(z.seed + z.epoch, 99) % 2; boolean[] moved = new boolean[NC];
         for (int m = 0; m < nm; m++) {
-            int hs = h(z.seed + z.epoch * 31 + m, 17), n = 0; int[] cand = new int[6];
-            for (int c = 0; c < 6; c++) if ((mask & (1 << c)) != 0 && !moved[c]) cand[n++] = c;
+            int hs = h(z.seed + z.epoch * 31 + m, 17), n = 0; int[] cand = new int[NC];
+            for (int c = 0; c < NC; c++) if ((mask & (1 << c)) != 0 && !moved[c]) cand[n++] = c;
             if (n == 0) break;
-            int a = cand[hs % n], old = z.cur[a], to = (old + 1 + (hs >> 6) % 5) % 6, b = -1;
-            for (int c = 0; c < 6; c++) if (z.cur[c] == to) b = c;
+            int a = cand[hs % n], old = z.cur[a], to = (old + 1 + (hs >> 6) % (NS - 1)) % NS, b = -1;
+            for (int c = 0; c < NC; c++) if (z.cur[c] == to) b = c;
             z.cur[a] = to; moved[a] = true;
             if (b >= 0) { z.cur[b] = old; moved[b] = true; }
         }
@@ -379,7 +382,7 @@ final class SceneTrain {
         if (!z.stop && z.k >= 0 && z.k < z.T.stops.size()) {          // 달리는 중: 직전 정차(k)가 끝난 뒤의 명단 = 다음 역(toK)의 '직전 명단'
             k = z.toK;
         }
-        for (int ci = 0; ci < 6; ci++) {
+        for (int ci = 0; ci < NC; ci++) {
             Pax p;
             if (z.stop) p = paxAt(s, z, ci, k, e, dwell);
             else {      // 달림: 다음 역에 닿기 직전의 명단 그대로 앉아 있다
