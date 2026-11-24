@@ -43,17 +43,30 @@ final class RideEtaJ {
     static boolean rtLine(String ln) { return RT_LINES.contains(ln) || RT_LINES.contains(ln.replaceAll("호선$", "") + "호선"); }
     static boolean nrtNode(Object nd) { return truthy(nd) && truthy(g(nd, "isSub")) && !truthy(g(nd, "isBus")) && !truthy(g(nd, "isWalk")) && truthy(g(nd, "lineName")) && !rtLine(str(g(nd, "lineName"))); }
     /** s379 (engine _reNrtFreeze): ① 실시간 없는 노선의 뒤 역 도착 당김 ② 지난(확정) 역 시각 잠금(frozen = {역번호: ms}) — s456: GPS 통과가 있는 역도 잠근 값 그대로(지난 역 시각은 바뀌지 않는다) */
-    static void nrtFreeze(double[] out, List<Object> nodes, List<Object> passes, Map<String, Object> frozen, double nowMs, List<Object> notes) {
-        int n = out.length, k, i, maxP = -1, nz = 0, ne = 0;
+    static void nrtFreeze(double[] out, List<Object> nodes, List<Object> passes, Map<String, Object> frozen, double nowMs, List<Object> notes, double[] planMs, boolean[] valid, boolean[] isLegStart) {
+        int n = out.length, k, i, maxP = -1, nz = 0, ne = 0, lastF = -1, nr = 0;
         for (i = 0; i < passes.size(); i++) { Object pp = passes.get(i); double ix = gn(pp, "idx"); if (!fin(ix)) continue; if ((int) ix > maxP) maxP = (int) ix; }
         double early = Math.max(0, nrtEarlySec) * 1000;
         if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (!Double.isNaN(out[k]) && k < nodes.size() && nrtNode(nodes.get(k))) { out[k] -= early; ne++; }
         if (frozen != null) for (k = 0; k < n; k++) {
             Object fm = frozen.get(String.valueOf(k)); if (fm == null || !fin(fm) || Double.isNaN(out[k])) continue;
+            lastF = k;
             if (Math.abs(out[k] - num(fm)) > 0) { out[k] = num(fm); nz++; }
+        }
+        // s475 (engine _reNrtFreeze): 마지막 잠근 역 뒤(가장 뒤 통과 증거보다도 뒤) 같은 구간의 역은 '앞 역 시각 + 예정 간격'보다 이르지 않게 — 귤현 · 계양이 같은 분으로 나오고 마커가 먼저 넘어가던 것
+        if (lastF >= 0 && lastF >= maxP && planMs != null && isLegStart != null) {
+            int pk = lastF;
+            for (k = lastF + 1; k < n; k++) {
+                if (Double.isNaN(out[k]) || !valid[k] || !valid[pk]) continue;
+                if (isLegStart[k]) break;
+                double loF = out[pk] + Math.max(0, planMs[k] - planMs[pk]);
+                if (out[k] < loF) { out[k] = loF; nr++; }
+                pk = k;
+            }
         }
         if (ne != 0) notes.add("실시간 없는 노선 도착 " + ns(nrtEarlySec) + "초 당김 " + ne + "곳");
         if (nz != 0) notes.add("지난 역 시각 잠금 " + nz + "곳");
+        if (nr != 0) notes.add("잠근 역 뒤 " + nr + "곳: 앞 역 + 예정 간격보다 이르지 않게");
     }
     static final String rounding = "floor", overdueMode = "clamp";
 
@@ -588,7 +601,7 @@ final class RideEtaJ {
         Map<String, Object> xfMain = xferTT(out, planMs, valid, isLegStart, nodes, boardIdx, anchor.idx + 1, liveHit, input, notes);      // s456: 버스 → 지하철 환승 승차역은 시각표대로
 
         Map<String, Object> frozenIn = m(input.get("frozen"));
-        nrtFreeze(out, nodes, passesIn, frozenIn, nowMs, notes);
+        nrtFreeze(out, nodes, passesIn, frozenIn, nowMs, notes, planMs, valid, isLegStart);
         Map<String, Object> rMain = finish(out, tz, anchor.idx, level, notes, n, nowMs, frozenIn);
         if (xfMain != null) rMain.put("xfer", xfMain);
         return rMain;
