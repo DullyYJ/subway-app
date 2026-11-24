@@ -698,7 +698,7 @@ function _rideEtaCore(input) {
 
   var xfMain = _reXferTT(out, planMs, valid, isLegStart, nodes, boardIdx, anchor.idx + 1, liveHit, input, O, notes);      // s456: 버스 → 지하철 환승 승차역은 시각표대로
 
-  _reNrtFreeze(out, nodes, passesIn, input.frozen, O, nowMs, notes);
+  _reNrtFreeze(out, nodes, passesIn, input.frozen, O, nowMs, notes, planMs, isLegStart);
   var rMain = _reFinish(out, tz, O, anchor.idx, level, notes, n, nowMs, input.frozen);
   if (xfMain) rMain.xfer = xfMain;
   return rMain;
@@ -735,14 +735,28 @@ function _reNrtNode(nd) { return !!(nd && nd.isSub && !nd.isBus && !nd.isWalk &&
 // ① 지난(확정) 역 시각 잠금: 앱이 이미 지난 역의 시각(input.frozen = {idx: ms})을 보내 오면 그 값으로 고정한다 — 뒤 역을 다시 맞추다 지난 역 시각이 바뀌는 일이 없다.
 //    ★ s456 (YJ: "이미 지나간 것이 확정된 역은 시간을 바꾸지 말고, 영점으로 밀리거나 당겨지면 아직 지나지 않은 역만"): GPS 통과가 있는 역도 잠근 값 그대로다(예전엔 GPS 통과가 있으면 잠금을 건너뛰어, 지난 정류장의 통과 시각이 다시 쓰이면 화면 시각이 따라 바뀌었다). 어느 역을 잠글지는 ride-standby rsFreeze 가 정한다(마커가 이미 떠난 역).
 // ② 실시간 없는 노선의 뒤 역 도착을 nrtEarlySec 당겨 보인다(가장 뒤 통과 증거보다 뒤 역만).
-function _reNrtFreeze(out, nodes, passes, frozen, O, nowMs, notes) {
-  var n = out.length, k, i, maxP = -1, nz = 0, ne = 0;
+function _reNrtFreeze(out, nodes, passes, frozen, O, nowMs, notes, planMs, isLegStart) {
+  var n = out.length, k, i, maxP = -1, nz = 0, ne = 0, lastF = -1, nr = 0;
   for (i = 0; i < (passes || []).length; i++) { var pp = passes[i], ix = +(pp && pp.idx); if (!isFinite(ix)) continue; if (ix > maxP) maxP = ix; }
   var early = Math.max(0, +O.nrtEarlySec || 0) * 1000;
   if (early > 0 && maxP >= 0) for (k = maxP + 1; k < n; k++) if (out[k] != null && _reNrtNode(nodes[k])) { out[k] -= early; ne++; }
-  if (frozen) for (k = 0; k < n; k++) { var fm = frozen[k]; if (fm != null && isFinite(+fm) && out[k] != null && Math.abs(out[k] - fm) > 0) { out[k] = +fm; nz++; } }
+  if (frozen) for (k = 0; k < n; k++) { var fm = frozen[k]; if (fm != null && isFinite(+fm) && out[k] != null) { lastF = k; if (Math.abs(out[k] - fm) > 0) { out[k] = +fm; nz++; } } }
+  // ★ s475 (YJ 11-24: "귤현과 계양 도착시간이 똑같이 22분"): 지난 역(잠금)은 늦은 시각인데 그 뒤 역은 시각표(통과 증거 없음 → 지연 0) 그대로라
+  //   다음 역(계양)이 방금 떠난 역(귤현)보다 이르거나 같게 나와 표시 순서 보정으로 같은 분이 되고, 마커가 다음 역으로 먼저 넘어갔다.
+  //   마지막 잠근 역 뒤(가장 뒤 통과 증거보다도 뒤) 같은 구간의 역은 '앞 역 시각 + 예정 간격'보다 이르지 않게 민다(올리기만 — 당기지 않는다).
+  if (lastF >= 0 && lastF >= maxP && planMs && isLegStart) {
+    var pk = lastF;
+    for (k = lastF + 1; k < n; k++) {
+      if (out[k] == null || planMs[k] == null || planMs[pk] == null) continue;
+      if (isLegStart[k]) break;
+      var loF = out[pk] + Math.max(0, planMs[k] - planMs[pk]);
+      if (out[k] < loF) { out[k] = loF; nr++; }
+      pk = k;
+    }
+  }
   if (ne) notes.push('실시간 없는 노선 도착 ' + O.nrtEarlySec + '초 당김 ' + ne + '곳');
   if (nz) notes.push('지난 역 시각 잠금 ' + nz + '곳');
+  if (nr) notes.push('잠근 역 뒤 ' + nr + '곳: 앞 역 + 예정 간격보다 이르지 않게');
 }
 
 // 표시 마지막 안전망: 시각이 거꾸로 가지 않게(앞 시각보다 이른 값은 앞 시각에 맞춘다) + 도착 예정이 이미 지난 시각이 되지 않게 + 서식
