@@ -594,13 +594,31 @@ public class SceneJvmTest {
                     ok(fineX, "범위 밖(환승 뒤·지난) 구간이 섞인 시각표에도 객실 장면이 오류 없이 돈다 " + whyX);
                     cx.trainClock(1200000); cx.update(1.0 / 30); ok(cx.tr.stop && cx.tr.k == n3 - 1, "범위 안 마지막 구간이 끝나면 마지막 역에 선다 k=" + cx.tr.k);
                 }
+                // s475 (YJ: 옆으로 밀어도 길동무 친구들이 안 나온다): 친구는 8마리인데 객실이 6마리 기준이라 대표가 죽순·뽀송이면 자리 배열 밖을 써서 장면이 죽었다 — 누가 대표든 · 8마리가 다 타도 오류 없이 돈다
+                {
+                    String raw = read(tf); boolean fineH = true; String whyH = "";
+                    String all = raw.replaceAll("\"init\":\\d+", "\"init\":" + ((1 << CHARS.length) - 1));
+                    for (String hero : CHARS) for (String src : new String[] { raw, all }) {
+                        SceneModel.Res th = SceneModel.parse(src.replaceFirst("\"hero\":\"[a-z]+\"", "\"hero\":\"" + hero + "\""));
+                        TestHost hh = fakeHost(); SceneCore ch = core(hh, 5); ch.layout(340, 190, 2.75, true);
+                        try {
+                            if (!ch.apply(th) || !"train".equals(ch.mode())) { fineH = false; whyH = hero + " 켜지지 않음"; break; }
+                            ch.trainPos(trainPos(th.train.first, th.train.names.size() - 1));
+                            for (int i = 0; i < 30 * 40; i++) { ch.trainClock(i * 1000L / 10); ch.update(1.0 / 30); if (i % 60 == 0) draw(ch, canvasImg(680, 380)); if (ch.error != null) { fineH = false; whyH = hero + " " + ch.error; break; } }
+                        } catch (RuntimeException e) { fineH = false; whyH = hero + " " + e; }
+                        if (!fineH) break;
+                        java.util.Set<Integer> spots = new java.util.HashSet<>(); for (int v : ch.tr.cur) spots.add(v);
+                        if (spots.size() != CHARS.length) { fineH = false; whyH = hero + " 자리 겹침"; break; }
+                    }
+                    ok(fineH, "s475: 대표가 8마리 누구든(죽순 · 뽀송 포함) · 8마리가 다 타도 객실 장면이 오류 없이 돈다(자리 8칸, 겹침 없음) " + whyH);
+                }
                 // s233 안무: 달리는 동안 친구들이 자리를 바꾸고(일어서서 걸어가 다른 자리에 앉는다) · 졸고 · 기지개를 켠다 — 자리는 늘 겹치지 않는다
                 {
                     TestHost hc = fakeHost(); SceneCore cc = core(hc, 5); cc.layout(340, 190, 2.75, true); cc.apply(tr); cc.trainPos("");
                     int[] first = cc.tr.cur.clone(); boolean perm = true, walk = false, stand = false, nap = false, sat = false; int moves = 0; int[] last = first.clone();
                     for (int i = 0; i < 30 * 150; i++) {
                         cc.trainClock(i * 1000L / 30); cc.update(1.0 / 30);
-                        boolean[] seen = new boolean[6]; for (int v : cc.tr.cur) { if (v < 0 || v > 5 || seen[v]) perm = false; else seen[v] = true; }
+                        boolean[] seen = new boolean[SceneTrain.NS]; for (int v : cc.tr.cur) { if (v < 0 || v >= SceneTrain.NS || seen[v]) perm = false; else seen[v] = true; }          // s475: 자리 8칸(친구 8마리)
                         if (!java.util.Arrays.equals(last, cc.tr.cur)) { moves++; last = cc.tr.cur.clone(); }
                         if (i % 6 == 0) for (SceneTrain.Pax px : SceneTrain.allPax(cc, cc.tr)) { if (px.walking) walk = true; if (px.nap) nap = true; if (px.sit) sat = true; else if (!px.walking) stand = true; }
                     }
