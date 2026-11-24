@@ -87,6 +87,29 @@ const RIDE = ['RideJs', 'RideTrackJ', 'RideEtaJ', 'RideStandbyJ', 'RidePosFusion
     console.log('        s460: ' + r.stdout.split('\n').filter(l => /같음|ALL OK/.test(l)).join(' / '));
     try { fs.unlinkSync(f); } catch (e) { }
   });
+  await t('s475 귤현 · 계양 같은 분(지난 역 잠금이 늦은데 뒤 역은 시각표 그대로): 잠근 역 뒤를 앞 역 + 예정 간격보다 이르지 않게 — 폰 안 엔진(자바)이 서버 JS 와 같은 답을 낸다', async () => {
+    const { rideEta } = require(path.join(ROOT, 'engine', 'ride-eta.js')), J = (x) => JSON.parse(JSON.stringify(x));
+    const f = path.join(out, 'ride_corpus_s475.jsonl'), fd = fs.openSync(f, 'w');
+    const DAY = Date.parse('2026-11-24T00:00:00+09:00'), at = (h, m, sx) => DAY + ((h * 60 + m) * 60 + (sx || 0)) * 1000;
+    const nodes = [{ name: '집', isOrigin: true }, { name: '선학', isSub: true, lineName: '인천1호선', planMin: 1087 }, { name: '임학', isSub: true, lineName: '인천1호선', planMin: 1095 }, { name: '박촌', isSub: true, lineName: '인천1호선', planMin: 1097 },
+      { name: '귤현', isSub: true, lineName: '인천1호선', planMin: 1100 }, { name: '계양', isSub: true, lineName: '인천1호선', planMin: 1102 }, { name: '아라', isSub: true, lineName: '인천1호선', planMin: 1107 }];
+    let n = 0, pushed = 0;
+    for (const fz of [{ 2: at(18, 18, 40), 3: at(18, 20, 45), 4: at(18, 22, 10) }, { 2: at(18, 18, 40), 3: at(18, 20, 45) }, { 4: at(18, 20, 40) }, {}, { 2: at(18, 15, 30), 3: at(18, 17, 30), 4: at(18, 20, 30) }])
+      for (const ps of [[{ idx: 1, ms: at(18, 7, 20), src: 'board' }], [{ idx: 1, ms: at(18, 7, 20), src: 'board' }, { idx: 5, ms: at(18, 24, 30), src: 'gps' }]])
+        for (const now of [at(18, 22, 40), at(18, 23, 0), at(18, 25, 0)]) {
+          const inp = { nodes, nowMs: now, tzOffsetMin: 540, boarded: true, timetableFirst: true, passes: ps, frozen: fz }, o = J(rideEta(J(inp)));
+          if ((o.notes || []).some((m) => m.indexOf('잠근 역 뒤') >= 0)) pushed++;
+          fs.writeSync(fd, JSON.stringify({ fn: 'eta', in: inp, out: o }) + '\n'); n++;
+        }
+    fs.closeSync(fd);
+    const g = rideEta({ nodes, nowMs: at(18, 23, 0), tzOffsetMin: 540, boarded: true, timetableFirst: true, passes: [{ idx: 1, ms: at(18, 7, 20), src: 'board' }], frozen: { 2: at(18, 18, 40), 3: at(18, 20, 45), 4: at(18, 22, 10) } });
+    assert.ok(g.arr[4] === '18:22' && g.arr[5] !== g.arr[4] && g.etaMs[5] - g.etaMs[4] >= 110000, '귤현 ' + g.arr[4] + ' 계양 ' + g.arr[5] + ' ' + g.notes.join(' | '));
+    assert.ok(pushed > 0, '새 규칙이 녹화에 들어 있어야 한다');
+    const r = spawnSync('java', ['-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstrict=1', '-cp', out, 'com.dullyyj.subway.RideLocalJvmTest', f], { env: ENV, encoding: 'utf8', maxBuffer: 1 << 26 });
+    assert.ok(/ALL OK \((\d+)\)/.test(r.stdout), (r.stdout || '').slice(-1500) + (r.stderr || '').slice(-300));
+    assert.strictEqual(+/ALL OK \((\d+)\)/.exec(r.stdout)[1], n, '모든 줄을 견줬다');
+    try { fs.unlinkSync(f); } catch (e) { }
+  });
   await t('s471~s474 건너뜀 방지(U자 · 환승 대기 xFree) · 이른 시각표 버림 · 버스→버스 환승(판교 · 동탄) · 지하철→버스 환승(의정부→홍대입구): 폰 안 엔진(자바)이 서버 JS 와 걸음마다 같은 답 · 같은 상태를 낸다', async () => {
     const BX = require(path.join(__dirname, 'helpers', 'bus_xfer_scenario.js')), SB = require(path.join(ROOT, 'engine', 'ride-standby.js'));
     const f = path.join(out, 'ride_corpus_s473.jsonl'), fd = fs.openSync(f, 'w'), J = (x) => JSON.parse(JSON.stringify(x));
