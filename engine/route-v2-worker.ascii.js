@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-24s476";
+var ENGINE_VERSION = "route-v2-2026-11-24s477";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -2461,6 +2461,7 @@ function xpHopsRaw(h) {
   return any ? a : null;
 }
 __name(xpHops, "xpHops");
+var XP_HOP_MIN_RATIO = 0.7;
 function xpWait(G, e, dSec) {
   var wkd = !!(G && G._weekend);
   var hx = wkd ? e.depW : e.dep;
@@ -2486,11 +2487,14 @@ function xpWait(G, e, dSec) {
     if (w2 * 60 >= bestC) break;
     var hv = hs[(s0 + k2) % 480];
     if (!hv) continue;
-    var c = w2 * 60 + hv * 10;
+    // \u2605 s477 (9\ud638\uc120 \uae09\ud589 \ub9c8\uace1\ub098\ub8e8\u2192\uc5ec\uc758\ub3c4\uac00 3~9\ubd84\uc73c\ub85c \ub098\uc624\uace0 \uc911\uac04\uc5ed\uc774 \ube60\uc9d0): \uc2dc\uac04\ub300\ubcc4 \uc18c\uc694(hk)\ub294 \uadf8 \uc2dc\uac04\ub300\uc758 \ucd5c\uc19f\uac12\uc774\ub77c \uc5f4\ucc28 \ubc88\ud638\uac00 \uaf2c\uc778 \uae30\ub85d \ud558\ub098\uac00 \ub04c\uc5b4\ub0b4\ub9b0\ub2e4(\uc5fc\ucc3d\u2192\uc5ec\uc758\ub3c4 30\ucd08 \u00b7 \uc911\uac04\uac12 405\ucd08).
+    //   \uc911\uac04\uac12(e.w)\uc758 XP_HOP_MIN_RATIO \ubcf4\ub2e4 \uc9e7\uc73c\uba74 \ubbff\uc9c0 \uc54a\uace0 \uc911\uac04\uac12\uc744 \uc4f4\ub2e4.
+    var hvS = hv * 10 < e.w * XP_HOP_MIN_RATIO ? e.w : hv * 10;
+    var c = w2 * 60 + hvS;
     if (c < bestC) {
       bestC = c;
       bestW = w2 * 60;
-      bestH = hv * 10;
+      bestH = hvS;
     }
   }
   if (bestW == null) return null;
