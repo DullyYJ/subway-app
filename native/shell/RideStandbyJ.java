@@ -2127,13 +2127,17 @@ final class RideStandbyJ {
         Map<String, Object> dest = null; int nextIdx = -1;
         List<Object> targets = l(cfg.get("targets")); if (targets != null) for (Object t : targets) if ("dest".equals(g(t, "kind"))) dest = mm(t);
         for (i = 0; i < seq.size(); i++) if (num(seq.get(i)) > showIdx) { nextIdx = (int) num(seq.get(i)); break; }
+        // s475 (engine): 'N정거장' 도 '다음 X' 와 같은 기준(showIdx)으로 센다
+        int shPos = -1;
+        for (i = 0; i < seq.size(); i++) { if (num(seq.get(i)) <= showIdx) shPos = i; else break; }
+        double cntPos = shPos >= 0 ? shPos : al.curPos;
         String destNameC = or(cfg.get("destName"), dest != null && truthy(dest.get("name")) ? str(dest.get("name")) : "목적지");
         String text;
         if (dest != null && al.curPos >= num(dest.get("seqPos"))) text = destNameC + " 도착";
         else if (nextIdx >= 0) {
             Object nxn = nextIdx < nodes.size() ? nodes.get(nextIdx) : null; String nm = truthy(nxn) ? or(g(nxn, "name"), "") : "";
             Object aro = at(l(r.get("arr")), nextIdx); String ar = truthy(aro) ? str(aro) : "";
-            text = "다음 " + nm + (ar.length() > 0 ? " " + ar : "") + (dest != null && al.curPos >= 0 ? " · " + destNameC + "까지 " + ns(Math.max(0, num(dest.get("seqPos")) - al.curPos)) + "정거장" : "");
+            text = "다음 " + nm + (ar.length() > 0 ? " " + ar : "") + (dest != null && al.curPos >= 0 ? " · " + destNameC + "까지 " + ns(Math.max(0, num(dest.get("seqPos")) - cntPos)) + "정거장" : "");
         } else text = "";
         if (st.get("wait") != null) {
             int wi = (int) num(mm(st.get("wait")).get("i")); Object wn = wi >= 0 && wi < nodes.size() ? nodes.get(wi) : null; Object wa = at(l(r.get("arr")), wi);
