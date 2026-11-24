@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-24s475";
+var ENGINE_VERSION = "route-v2-2026-11-24s476";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -12352,11 +12352,15 @@ function rideStandby(req) {
   var seq = cfg.seq || [], dest = null, nextIdx = -1;
   (cfg.targets || []).forEach(function (t) { if (t.kind === 'dest') dest = t; });
   for (i = 0; i < seq.length; i++) if (seq[i] > showIdx) { nextIdx = seq[i]; break; }
+  // s475: 'N\uc815\uac70\uc7a5' \ub3c4 '\ub2e4\uc74c X' \uc640 \uac19\uc740 \uae30\uc900(\ub9c8\ucee4\uac00 \ubcf4\uc774\ub294 \uc5ed showIdx)\uc73c\ub85c \uc13c\ub2e4 \u2014 \uc608\uc804\uc5d4 \ub2e4\uc74c \uc5ed\uc740 \ub9c8\ucee4, \uc815\uac70\uc7a5 \uc218\ub294 \uacc4\uc0b0\uc0c1 \ud604\uc704\uce58(curPos)\ub77c \ub458\uc774 \uac08\ub9ac\ub294 \uba87 \ucd08 \ub3d9\uc548 \ud55c \uc815\uac70\uc7a5 \uc5b4\uae0b\ub0ac\ub2e4.
+  var shPos = -1;
+  for (i = 0; i < seq.length; i++) { if (seq[i] <= showIdx) shPos = i; else break; }
+  var cntPos = shPos >= 0 ? shPos : al.curPos;
   var text;
   if (dest && al.curPos >= dest.seqPos) text = (cfg.destName || dest.name || '\ubaa9\uc801\uc9c0') + ' \ub3c4\ucc29';
   else if (nextIdx >= 0) {
     var nm = (nodes[nextIdx] && nodes[nextIdx].name) || '', ar = r.arr && r.arr[nextIdx] ? r.arr[nextIdx] : '';
-    text = '\ub2e4\uc74c ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' \u00b7 ' + (cfg.destName || dest.name || '\ubaa9\uc801\uc9c0') + '\uae4c\uc9c0 ' + Math.max(0, dest.seqPos - al.curPos) + '\uc815\uac70\uc7a5' : '');
+    text = '\ub2e4\uc74c ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' \u00b7 ' + (cfg.destName || dest.name || '\ubaa9\uc801\uc9c0') + '\uae4c\uc9c0 ' + Math.max(0, dest.seqPos - cntPos) + '\uc815\uac70\uc7a5' : '');
   } else text = '';
   if (st.wait) text = '\uc2b9\ucc28 \ub300\uae30 \u00b7 ' + ((nodes[st.wait.i] && nodes[st.wait.i].name) || '') + (r.arr && r.arr[st.wait.i] ? ' ' + r.arr[st.wait.i] : '') + ' \u00b7 ' + (cfg.destName || (dest && dest.name) || '\ubaa9\uc801\uc9c0') + '\uae4c\uc9c0';
   if (offActive) text = '\uacbd\ub85c\ub97c \ubc97\uc5b4\ub0ac\uc5b4\uc694 \u00b7 \uc571\uc744 \uc5f4\uba74 \ub2e4\uc2dc \ucc3e\uc544 \ub4dc\ub824\uc694';

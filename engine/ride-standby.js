@@ -2165,11 +2165,15 @@ function rideStandby(req) {
   var seq = cfg.seq || [], dest = null, nextIdx = -1;
   (cfg.targets || []).forEach(function (t) { if (t.kind === 'dest') dest = t; });
   for (i = 0; i < seq.length; i++) if (seq[i] > showIdx) { nextIdx = seq[i]; break; }
+  // s475: 'N정거장' 도 '다음 X' 와 같은 기준(마커가 보이는 역 showIdx)으로 센다 — 예전엔 다음 역은 마커, 정거장 수는 계산상 현위치(curPos)라 둘이 갈리는 몇 초 동안 한 정거장 어긋났다.
+  var shPos = -1;
+  for (i = 0; i < seq.length; i++) { if (seq[i] <= showIdx) shPos = i; else break; }
+  var cntPos = shPos >= 0 ? shPos : al.curPos;
   var text;
   if (dest && al.curPos >= dest.seqPos) text = (cfg.destName || dest.name || '목적지') + ' 도착';
   else if (nextIdx >= 0) {
     var nm = (nodes[nextIdx] && nodes[nextIdx].name) || '', ar = r.arr && r.arr[nextIdx] ? r.arr[nextIdx] : '';
-    text = '다음 ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' · ' + (cfg.destName || dest.name || '목적지') + '까지 ' + Math.max(0, dest.seqPos - al.curPos) + '정거장' : '');
+    text = '다음 ' + nm + (ar ? ' ' + ar : '') + (dest && al.curPos >= 0 ? ' · ' + (cfg.destName || dest.name || '목적지') + '까지 ' + Math.max(0, dest.seqPos - cntPos) + '정거장' : '');
   } else text = '';
   if (st.wait) text = '승차 대기 · ' + ((nodes[st.wait.i] && nodes[st.wait.i].name) || '') + (r.arr && r.arr[st.wait.i] ? ' ' + r.arr[st.wait.i] : '') + ' · ' + (cfg.destName || (dest && dest.name) || '목적지') + '까지';
   if (offActive) text = '경로를 벗어났어요 · 앱을 열면 다시 찾아 드려요';
