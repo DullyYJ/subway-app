@@ -29,6 +29,21 @@ var MEM_MAX = 1500;
 // upstream cacheEverything, which would freeze a 200-status error envelope for the whole ttl.
 function isStaticPath(p) { return /getSttnThrghRouteList|getCrdntPrxmtSttnList|getRouteAcctoThrghSttnList/i.test(String(p || "")); }
 var STATIC_TTL_SEC = 6 * 3600;
+// s481: bus position lists (TAGO getRouteAcctoBusLcList / Gyeonggi getBusLocationList) were never cached: every open of a route screen paid a full upstream call, 0.15 s when data.go.kr is warm but 1-6 s when it is cold.
+// Now shared for 6 s (the app refreshes every 8 s) and identical concurrent calls are merged. Empty lists are never kept (the app retries an empty answer after 0.8 s and must reach upstream again).
+var POS_TTL_SEC = 6;
+function isPosPath(p) { return /getRouteAcctoBusLcList|getBusLocationList/i.test(String(p || "")); }
+// s481: hedged request - if the first upstream call has not answered in HEDGE_MS, start a second identical one and use whichever answers first (cuts the 1-6 s cold tail of data.go.kr to ~HEDGE_MS + a warm call).
+var HEDGE_MS = 1500;
+function hedged(fn, ms) {
+  return new Promise((resolve, reject) => {
+    let done = false, pending = 1, timer = null;
+    const ok = (r) => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(r); };
+    const bad = (e) => { pending--; if (!done && pending <= 0) { done = true; if (timer) clearTimeout(timer); reject(e); } };
+    fn().then(ok, bad);
+    timer = setTimeout(() => { timer = null; if (done) return; pending++; fn().then(ok, bad); }, ms);
+  });
+}
 
 // s463: daily-budget governor. Reads today's call counters (D1 live_usage, written by this worker and by route-v2) at most once a minute IN THE BACKGROUND (never blocks a request;
 // the first request in a fresh isolate runs as 'normal') and stretches the arrival cache TTL when the day's quota is running out: TAGO arrivals 500,000/day, Seoul TOPIS 10,000/day.
@@ -75,6 +90,7 @@ function ttlSecFor(u) {
   const h = String(u.hostname || "").toLowerCase().replace(/\.$/, "");
   const p = u.pathname || "";
   if (h === "apis.data.go.kr" && isStaticPath(p)) return STATIC_TTL_SEC;
+  if (h === "apis.data.go.kr" && isPosPath(p)) return POS_TTL_SEC;
   if (h === "ws.bus.go.kr") {
     if (/getStationByUid/i.test(p)) return budTtl("seoul");   // Seoul stop arrivals: 15 s (s454: 20 -> 15; Seoul API quota is 10k/day); s463: 20 / 25 s when the day's quota runs low
     if (/getStationByPos/i.test(p)) return 60;   // Seoul nearby stops
@@ -91,6 +107,7 @@ function okBody(u, text) {
     return /<headerCd>\s*[04]\s*<\/headerCd>/.test(t);
   }
   const good = /"resultCode"\s*:\s*"?(0|00|4)"?\s*[,}]/.test(t) || /<resultCode>\s*(0|00|4)\s*<\/resultCode>/.test(t);
+  if (good && isPosPath(u.pathname)) return /"item"\s*:\s*[\[{]/.test(t) || /<item>/.test(t) || /"busLocationList"\s*:\s*[\[{]/.test(t) || /<busLocationList>/.test(t);   // s481: never keep an empty position list
   if (good && isStaticPath(u.pathname)) return /"item"\s*:\s*[\[{]/.test(t) || /<item>/.test(t);   // s462: an empty list may be a passing glitch - never keep it for 6 hours
   return good;
 }
@@ -567,7 +584,7 @@ var index_default = {
     let tag = "JOIN";
     if (!p) {
       tag = "MISS";
-      p = fetchUpstream()
+      p = (isStatic || BUD.modes.tago === "critical" ? fetchUpstream() : hedged(fetchUpstream, HEDGE_MS))
         .then((r) => {
           if (r.status === 200 && !isKeyError(r.text) && okBody(cleaned, r.text)) {
             if (!isStatic || r.text.length <= STATIC_MEM_BYTES) {
