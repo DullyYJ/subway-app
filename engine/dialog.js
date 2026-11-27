@@ -16,7 +16,7 @@
 //        행동 이름: dl.ok · dl.no(perm · exit · report) · dl.copy · dl.clear · dl.close(diag). 흐린 곳을 누르면 dlg.tap(perm 만 dl.no).
 var DLG_CAP = 16;
 var RLOAD_CAP = 19;           // rload(경로 탐색 로딩)는 runner 노드를 아는 앱(CAP 19)부터 — 옛 앱은 kind 를 몰라 그냥 쓰지 않는다
-var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1, offroute: 1 };
+var DLG_KINDS = { perm: 1, diag: 1, pop: 1, exit: 1, report: 1, walk: 1, rload: 1, bpick: 1, reco: 1, offroute: 1, shopgo: 1 };
 var DLG_MAXLINES = 600, DLG_CHUNK = 1700;
 var DLG_EMOJI = /[☀-➿⬀-⯿️‍]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 
@@ -250,6 +250,27 @@ function dlgWalk(f) {
     info: { nav: nav, msg: dst ? '' : '목적지 좌표를 찾을 수 없습니다', refresh: WALK_REFRESH_MS, dist: dist === null ? -1 : Math.round(dist), min: min === null ? -1 : min } };
 }
 
+// s481 shopgo: product confirm card (name + picture, buttons No / Yes). f = { n, i }
+//   (YJ: 쇼핑 상품을 누르면 그 상품 그림과 함께 쿠팡앱으로 연결하시겠습니까? 팝업 · 아니오 / 예) dl.no = 아니오 · dl.ok = 예(열 곳은 앱이 누른 카드에서 들고 있다) · dl.keep = 그림을 눌러도 안 닫힘
+function dlgShopgo(f) {
+  var name = dlgClean(f.n, 80) || '상품', img = dlgStr(f.i, 1500);
+  var no = { a: 'call', v: 'dl.no' };
+  var card = { t: 'card', name: name, tag: '', fb: '\uD83D\uDECD\uFE0F', act: { a: 'call', v: 'dl.keep' } };
+  if (/^https?:\/\//i.test(img)) card.img = img;
+  return {
+    dlg: { w: 320, maxh: 0.9, dim: 0.5, top: 0.5, r: 18, mx: 28, tap: no }, bg: 'card',
+    head: [
+      { t: 'text', pad: [22, 22, 22, 10], s: '\uCFE0\uD321\uC571\uC73C\uB85C \uC5F0\uACB0\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?', size: 17, bold: true, lh: 1.4, color: 'text' },
+      { t: 'grid', pad: [14, 0, 14, 12], gap: 8, cols: 1, items: [card] },
+      { t: 'btnrow', pad: [22, 0, 22, 22], gap: 10, h: 46, eq: true, bsize: 15, r: 11, items: [
+        { label: '\uC544\uB2C8\uC624', fill: 'card2', line: 'border', tc: 'sub', act: no },
+        { label: '\uC608', fill: '#2f7cf6', line: '#2f7cf6', tc: '#ffffff', act: { a: 'call', v: 'dl.ok' } }
+      ] }
+    ],
+    body: [{ t: 'spacer', h: 0 }], foot: null, info: {}
+  };
+}
+
 function dialogScreen(inp, f) {
   inp = inp || {};
   if (!(Number(inp.cap) >= DLG_CAP)) return { ok: false, error: 'cap' };
@@ -257,7 +278,7 @@ function dialogScreen(inp, f) {
   var kind = dlgStr(f.kind, 10);
   if (!DLG_KINDS[kind]) return { ok: false, error: 'kind' };
   if (kind === 'rload' && !(Number(inp.cap) >= RLOAD_CAP)) return { ok: false, error: 'cap' };
-  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : (kind === 'offroute' ? dlgOff(f) : dlgPop(f))))))));
+  var d = kind === 'perm' ? dlgPerm() : (kind === 'report' ? dlgReport() : kind === 'exit' ? dlgExit() : (kind === 'diag' ? dlgDiag(f) : (kind === 'walk' ? dlgWalk(f) : (kind === 'rload' ? dlgRload() : (kind === 'bpick' ? dlgBpick(f) : (kind === 'reco' ? dlgReco(f) : (kind === 'shopgo' ? dlgShopgo(f) : kind === 'offroute' ? dlgOff(f) : dlgPop(f))))))));
   var out = { ok: true, v: 1, screen: kind === 'walk' ? 'walk' : 'dlg', bg: d.bg, head: d.head, body: d.body, info: d.info };
   if (d.dlg) out.dlg = d.dlg;
   if (d.foot) out.foot = d.foot;

@@ -178,8 +178,26 @@ function rloadChecks() {
   { const rc = screenCheck([o]); ok(!rc.err && rc.out.length === 1 && /^OK/.test(rc.out[0]), 'rload: 앱 검증기 통과 ' + (rc.err || rc.out.join(' '))); }
 }
 
+function shopgoChecks() {
+  // ⑥-2 쇼핑 상품 확인 카드(shopgo) — 상품 그림 + "쿠팡앱으로 연결하시겠습니까?" + 아니오 / 예
+  const o = G({ kind: 'shopgo', n: '테스트 상품 500g', i: 'https://img.example.com/a.jpg' }), b = btns(o), card = o.head.filter(n => n.t === 'grid')[0].items[0];
+  ok(o.ok === true && o.screen === 'dlg' && o.dlg.dim === 0.5 && o.dlg.tap.v === 'dl.no' && o.dlg.r === 18 && o.bg === 'card', 'shopgo: 앱 안내 카드와 같은 모양(뒤 어둡게 · 모서리 18 · 흐린 곳은 아니오)');
+  ok(o.head[0].s === '쿠팡앱으로 연결하시겠습니까?' && o.head[0].bold === true, 'shopgo: 질문 문구');
+  ok(card.t === 'card' && card.name === '테스트 상품 500g' && card.img === 'https://img.example.com/a.jpg' && card.act.v === 'dl.keep', 'shopgo: 누른 상품의 이름 · 그림 · (그림을 눌러도 닫히지 않음)');
+  ok(b.length === 2 && b[0].label === '아니오' && b[0].act.v === 'dl.no' && b[1].label === '예' && b[1].act.v === 'dl.ok' && b[1].fill === '#2f7cf6', 'shopgo: 단추는 아니오 / 예');
+  const x = G({ kind: 'shopgo', n: '', i: 'javascript:alert(1)' }), xc = x.head.filter(n => n.t === 'grid')[0].items[0];
+  ok(x.ok === true && xc.name === '상품' && xc.img === undefined, 'shopgo: 이름이 비면 "상품" · http(s) 아닌 그림 주소는 버린다');
+  ok(G({ kind: 'shopgo', n: '가'.repeat(300) }).head[1].items[0].name.length === 80, 'shopgo: 이름 80자까지');
+  ok(G({ kind: 'shopgo', n: 'a', i: 'https://x/a.jpg' }).rev === G({ kind: 'shopgo', n: 'a', i: 'https://x/a.jpg' }).rev && G({ kind: 'shopgo', n: 'b' }).rev !== G({ kind: 'shopgo', n: 'a' }).rev, 'shopgo: 같은 입력은 같은 rev');
+  { const rc = screenCheck([o, x]); ok(!rc.err && rc.out.length === 2 && /^OK/.test(rc.out[0]) && /^OK/.test(rc.out[1]), 'shopgo: 앱 검증기 통과 ' + (rc.err || rc.out.join(' '))); }
+  const ascii = fs.readFileSync(R('engine/route-v2-worker.ascii.js'), 'utf8');
+  ok(/function dlgShopgo\(f\)/.test(ascii) && /shopgo: 1 \}/.test(ascii) && /kind === 'shopgo' \? dlgShopgo\(f\)/.test(ascii) && !/[^\x00-\x7f]/.test(ascii), 'shopgo: 워커 내장 사본에도 들어 있다(ASCII 전용)');
+  ok(/dl\.keep/.test(fs.readFileSync(R('native/shell/ShellActivity.java'), 'utf8')) && /shopGo\(a\.url, a\.t, a\.img\)/.test(fs.readFileSync(R('native/shell/ShellActivity.java'), 'utf8')), 'shopgo: 앱이 쇼핑 카드 탭에서 이 카드를 띄운다');
+}
+
 function done() {
   rloadChecks();
+  shopgoChecks();
   // ⑦ 웹 연결 글
   ok(/id: 'dlg', kp: 'gdm_scrd', ep: '\/screen\/dlg'/.test(html) && /id="scrdSetCard"/.test(html) && /key === 'f\.scrd'/.test(html) && /window\._scrdSetUse = /.test(html), '웹: 틀 · 설정 카드 · 스위치 연결');
   ok(/window\._ndlg\.pop\(msg, sub, cls\)/.test(html) && /window\._ndlg\.perm\(onOk, onCancel\)/.test(html) && /window\._ndlg\.diag\(\)/.test(html) && /function _pickPopWeb/.test(html) && /function _showOvlPermDialogWeb/.test(html) && /function _ovlDiagShowWeb/.test(html) && /window\._ndlg\.exit\(\)/.test(html) && /window\._ndlg\.report\(function/.test(html) && /function _lrReportGo/.test(html), '웹: 팝업 4종이 먼저 네이티브를 시도하고 웹으로 돌아간다');

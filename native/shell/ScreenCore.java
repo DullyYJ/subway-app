@@ -174,7 +174,7 @@ public final class ScreenCore {
     public static final class Act {
         public String a = "", v = "", url = "", tpl = "", empty = "", key = "";
         public int ix = -1;                         // 엔진이 알려 준 원래 목록에서의 위치(같은 id 가 여럿이어도 누른 그 줄을 가리키는 보조 표지; 없으면 -1)
-        public String id = "", t = "";            // call 행동의 고유 식별(글 · 기사의 id)과 제목 — 순서가 아니라 이것으로 대상을 가리키면 목록이 바뀐 뒤에 눌러도 같은 글이다. key = 댓글 입력칸 열쇠
+        public String id = "", t = "", img = "";            // call 행동의 고유 식별(글 · 기사의 id)과 제목 — 순서가 아니라 이것으로 대상을 가리키면 목록이 바뀐 뒤에 눌러도 같은 글이다. key = 댓글 입력칸 열쇠
     }
     /** 색: 역할 이름(role)이거나 CSS 색을 읽은 ARGB. */
     public static final class Col {
@@ -495,6 +495,7 @@ public final class ScreenCore {
                 c.img = optStr(im, "img", "", 1500);
                 if (c.img.length() > 0 && !httpUrl(c.img)) c.img = "";                // 이미지 주소가 이상하면 그림만 뺀다(카드는 그대로)
                 c.act = act(im.get("act"), true);
+                if ("open".equals(c.act.a)) { c.act.t = clip(c.name, 160); c.act.img = c.img; }          // s481: 누른 카드의 이름 · 그림을 행동에 실어 둔다(쇼핑 확인 팝업이 쓴다)
                 n.items.add(c); sc.nodes++;
                 if (sc.nodes > MAX_NODES) throw new ParseError("노드가 너무 많다");
             }

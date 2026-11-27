@@ -1773,6 +1773,9 @@ public class ShellActivity extends Activity {
             } else if (ShellCore.S_NEWS.equals(screenName()) && "call".equals(a.a) && a.v.startsWith("nw.") && (a.id.length() > 0)) {
                 openNewsById(a.id, a.t, a.ix);                       // 목록이 바뀐 뒤에 눌러도 같은 기사 — 순번이 아니라 기사의 고유 id 로
                 return;
+            } else if (ShellCore.S_SHOP.equals(screenName()) && "open".equals(a.a) && a.t.length() > 0) {
+                shopGo(a.url, a.t, a.img);                          // s481: 상품을 누르면 그림과 함께 쿠팡앱으로 연결하시겠습니까? 카드를 먼저 띄운다
+                return;
             } else if (ShellCore.S_FOOD.equals(screenName())) {
                 foodAct(a);
                 return;
@@ -4711,6 +4714,7 @@ public class ShellActivity extends Activity {
     /** 카드의 단추: dl.ok → 확인 쪽 · 그 밖(dl.no · dl.close · 바깥 · 뒤로)은 취소 쪽. 한 번만 처리한다. */
     private void dlgAct(String v, android.app.Dialog d) {
         if (d != dlgD) return;
+        if ("dl.keep".equals(v)) return;                                          // s481: 카드 안의 그림을 눌러도 닫지 않는다
         if ("dl.go".equals(v)) v = "dl.ok";                                       // 하차 추천 팝업의 [맛집·쿠팡 보기] → 확인 쪽(열 곳은 그 팝업이 들고 있다)
         if (v != null && v.startsWith("dl.bp.")) {                                 // 탈 버스 고르기: N 번째 버스 → 확인 쪽으로 처리하고 번호는 따로 남긴다
             try { dlgPick = Integer.parseInt(v.substring(6)); } catch (NumberFormatException e) { dlgPick = -1; }
@@ -4721,6 +4725,18 @@ public class ShellActivity extends Activity {
         dlgD = null; dlgV = null; dlgOk = null; dlgNo = null;
         try { d.dismiss(); } catch (Throwable ignored) { }
         if (ok != null) ok.run(); else if (no != null) no.run();
+    }
+    /** s481 (YJ: 쇼핑 상품을 누르면 그 상품 그림과 함께 쿠팡앱으로 연결하시겠습니까? 팝업 · 아니오 / 예): 엔진(/screen/dlg kind:shopgo)이 만든 카드를 띄운다. 예 → 쿠팡 주소를 연다 · 아니오 → 닫기. 카드를 못 받으면 예전처럼 바로 연다. */
+    private void shopGo(final String url, final String name, final String img) {
+        final String key = "shopgo|" + url;
+        new Thread(new Runnable() { @Override public void run() {
+            try { dlgFetchF(key, "{\"kind\":\"shopgo\",\"n\":" + ShellCore.q(name) + ",\"i\":" + ShellCore.q(img == null ? "" : img) + "}"); } catch (Throwable ignored) { }
+            main.post(new Runnable() { @Override public void run() {
+                String js = dlgJson.remove(key);
+                final Runnable go = new Runnable() { @Override public void run() { apply(ShellCore.linkEffect(url)); } };
+                if (js == null || !dlgOpen(js, go, null, 0L)) { if (!(dlgD != null && dlgD.isShowing())) go.run(); }          // 카드를 못 받았으면 바로 연다(이미 다른 카드가 떠 있으면 아무것도 하지 않는다)
+            } });
+        } }, "shell-shopgo").start();
     }
     /** s252 (YJ: 하차 추천도 앱을 켜 두면 팝업): 엔진(/screen/dlg kind:reco)이 만든 카드를 띄운다. 알림 대신 이것 하나만 보인다 — 못 띄우면 false(부르는 쪽이 알림으로 대신). */
     private volatile boolean recoPopOpen;
