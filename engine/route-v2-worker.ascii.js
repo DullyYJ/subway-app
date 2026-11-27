@@ -14498,9 +14498,9 @@ var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
 var SHOP_WHY = "";                                          // \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc0c1\ud488 \uc11c\ubc84\ub97c \ubabb \ubc1b\uc740 \uc774\uc720(\uc548\ub0b4 \ud654\uba74\uc5d0 \uc791\uac8c \ubcf4\uc778\ub2e4 \u2014 \ud654\uba74\ub9cc \ubd10\ub3c4 \uc6d0\uc778\uc744 \uc54c \uc218 \uc788\uac8c)
-// \uac19\uc740 \uacc4\uc815 \uc6cc\ucee4\ub07c\ub9ac workers.dev \uc8fc\uc18c\ub85c \ubd80\ub974\uba74 Cloudflare \uac00 \ub9c9\ub294\ub2e4(404 / error 1042). \uc11c\ube44\uc2a4 \ubc14\uc778\ub529(env.SHOP_SVC \u2192 gildongmu-shop, env.FOOD_SVC \u2192 gildongmu-food)\uc774 \uc788\uc73c\uba74
-//   \uadf8 \uae38\ub85c \ubc1b\uace0(\uc8fc\uc18c\uc758 \ud638\uc2a4\ud2b8\ub294 \ubb34\uc2dc\ub41c\ub2e4), \uc5c6\uc73c\uba74 \uc608\uc804\ucc98\ub7fc \uc8fc\uc18c\ub85c \ubc1b\ub294\ub2e4. \ubc14\uc778\ub529\uc740 Cloudflare \ub300\uc2dc\ubcf4\ub4dc \u2192 route-v2 \u2192 \uc124\uc815 \u2192 \ubc14\uc778\ub529 \u2192 \uc11c\ube44\uc2a4 \ubc14\uc778\ub529\uc5d0\uc11c \ub2e8\ub2e4.
-var SHOP_ENV = null;                                         // \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubcf8 env(\ub2e4\ub978 \ubaa8\ub4c8 \u2014 \ucd94\ucc9c \ubb38\uad6c \u2014 \uc774 shopLoad() \ub97c env \uc5c6\uc774 \ubd88\ub7ec\ub3c4 \uac19\uc740 \uae38\uc744 \uc4f0\uac8c)
+// Same-account workers cannot call each other by workers.dev address (404 / error 1042). If service bindings exist (env.SHOP_SVC -> gildongmu-shop, env.FOOD_SVC -> gildongmu-food), use them (the URL host is ignored); otherwise fetch by URL as before.
+//   Add the bindings in the Cloudflare dashboard: route-v2 > Settings > Bindings > Service binding.
+var SHOP_ENV = null;                                         // last seen env, so other modules (reco text) that call shopLoad() without env use the same path
 function shopSvc(env, name) { var e = env || SHOP_ENV; return e && e[name] && typeof e[name].fetch === "function" ? e[name] : null; }
 async function shopFetchJson(u, ms, svc) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);

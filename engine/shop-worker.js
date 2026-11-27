@@ -7,9 +7,9 @@ var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
 var SHOP_WHY = "";                                          // 마지막으로 상품 서버를 못 받은 이유(안내 화면에 작게 보인다 — 화면만 봐도 원인을 알 수 있게)
-// 같은 계정 워커끼리 workers.dev 주소로 부르면 Cloudflare 가 막는다(404 / error 1042). 서비스 바인딩(env.SHOP_SVC → gildongmu-shop, env.FOOD_SVC → gildongmu-food)이 있으면
-//   그 길로 받고(주소의 호스트는 무시된다), 없으면 예전처럼 주소로 받는다. 바인딩은 Cloudflare 대시보드 → route-v2 → 설정 → 바인딩 → 서비스 바인딩에서 단다.
-var SHOP_ENV = null;                                         // 마지막으로 본 env(다른 모듈 — 추천 문구 — 이 shopLoad() 를 env 없이 불러도 같은 길을 쓰게)
+// Same-account workers cannot call each other by workers.dev address (404 / error 1042). If service bindings exist (env.SHOP_SVC -> gildongmu-shop, env.FOOD_SVC -> gildongmu-food), use them (the URL host is ignored); otherwise fetch by URL as before.
+//   Add the bindings in the Cloudflare dashboard: route-v2 > Settings > Bindings > Service binding.
+var SHOP_ENV = null;                                         // last seen env, so other modules (reco text) that call shopLoad() without env use the same path
 function shopSvc(env, name) { var e = env || SHOP_ENV; return e && e[name] && typeof e[name].fetch === "function" ? e[name] : null; }
 async function shopFetchJson(u, ms, svc) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
