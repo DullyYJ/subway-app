@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-24s478";
+var ENGINE_VERSION = "route-v2-2026-11-27s480";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -14489,7 +14489,7 @@ function shopRich(parts) {
   parts.forEach(function (p) { if (p[1]) hl.push([s.length, s.length + p[0].length]); s += p[0]; });
   return { s: s, hl: hl };
 }
-// \uc1fc\ud551 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/shop (engine/shop.js \uc758 shopScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/shop") return handleScreenShop(request);` \ub97c \ub123\ub294\ub2e4.
+// \uc1fc\ud551 \ud654\uba74 \uc5d4\uc9c4 Worker \uc5f0\uacb0\ubd80 \u2014 GET /screen/shop (engine/shop.js \uc758 shopScreen \uc744 \ubd80\ub978\ub2e4). route-v2 \uc758 handleFetch \uc5d0 `if (url.pathname === "/screen/shop") return handleScreenShop(request, env);` \ub97c \ub123\ub294\ub2e4.
 //   \u00b7 \uc0c1\ud488: \uc1fc\ud551 \uc11c\ubc84(gildongmu-shop) /shop \uc758 data \ub97c 60\ucd08 \uba54\ubaa8\ub9ac\uc5d0 \ub454\ub2e4. \uc11c\ubc84\uac00 \uc7a0\uae50 \uc548 \ub418\uba74 \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubc1b\uc740 \uac83\uc744 \uc4f4\ub2e4(\uc5c6\uc73c\uba74 503 \u2014 \uc571\uc740 \uc800\uc7a5\ud574 \ub454 \ud654\uba74 \ub610\ub294 \uc608\uc804 \uc6f9 \uc1fc\ud551\uc73c\ub85c \uac04\ub2e4).
 //   \u00b7 \uc6b4\uc601 \uc124\uc815: gildongmu-food /app-config?k=shop (\uacc4\uc808 \uaddc\uce59) 10\ubd84. \ubabb \ubc1b\uc73c\uba74 null \u2192 \ub0b4\uc7a5 \uaddc\uce59.
 //   \u00b7 \ub0a0\uc528: \uc7a5\uba74 \uc5d4\uc9c4\uacfc \uac19\uc740 sceneWeather(lat,lng) (subway-api /weather, 10\ubd84 \uce90\uc2dc). \uc704\uce58\ub97c \uc548 \uc8fc\uba74 \ub0a0\uc528 \uc5c6\uc774 \uacc4\uc0b0\ud55c\ub2e4.
@@ -14498,30 +14498,36 @@ var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
 var SHOP_WHY = "";                                          // \ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc0c1\ud488 \uc11c\ubc84\ub97c \ubabb \ubc1b\uc740 \uc774\uc720(\uc548\ub0b4 \ud654\uba74\uc5d0 \uc791\uac8c \ubcf4\uc778\ub2e4 \u2014 \ud654\uba74\ub9cc \ubd10\ub3c4 \uc6d0\uc778\uc744 \uc54c \uc218 \uc788\uac8c)
-async function shopFetchJson(u, ms) {
+// \uac19\uc740 \uacc4\uc815 \uc6cc\ucee4\ub07c\ub9ac workers.dev \uc8fc\uc18c\ub85c \ubd80\ub974\uba74 Cloudflare \uac00 \ub9c9\ub294\ub2e4(404 / error 1042). \uc11c\ube44\uc2a4 \ubc14\uc778\ub529(env.SHOP_SVC \u2192 gildongmu-shop, env.FOOD_SVC \u2192 gildongmu-food)\uc774 \uc788\uc73c\uba74
+//   \uadf8 \uae38\ub85c \ubc1b\uace0(\uc8fc\uc18c\uc758 \ud638\uc2a4\ud2b8\ub294 \ubb34\uc2dc\ub41c\ub2e4), \uc5c6\uc73c\uba74 \uc608\uc804\ucc98\ub7fc \uc8fc\uc18c\ub85c \ubc1b\ub294\ub2e4. \ubc14\uc778\ub529\uc740 Cloudflare \ub300\uc2dc\ubcf4\ub4dc \u2192 route-v2 \u2192 \uc124\uc815 \u2192 \ubc14\uc778\ub529 \u2192 \uc11c\ube44\uc2a4 \ubc14\uc778\ub529\uc5d0\uc11c \ub2e8\ub2e4.
+var SHOP_ENV = null;                                         // \ub9c8\uc9c0\ub9c9\uc73c\ub85c \ubcf8 env(\ub2e4\ub978 \ubaa8\ub4c8 \u2014 \ucd94\ucc9c \ubb38\uad6c \u2014 \uc774 shopLoad() \ub97c env \uc5c6\uc774 \ubd88\ub7ec\ub3c4 \uac19\uc740 \uae38\uc744 \uc4f0\uac8c)
+function shopSvc(env, name) { var e = env || SHOP_ENV; return e && e[name] && typeof e[name].fetch === "function" ? e[name] : null; }
+async function shopFetchJson(u, ms, svc) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
-  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = "HTTP " + r.status; return null; } return await r.json(); }
+  try { var r = svc ? await svc.fetch(u, { signal: ac.signal }) : await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = (svc ? "svc " : "") + "HTTP " + r.status; return null; } return await r.json(); }
   catch (e) { clearTimeout(t); SHOP_WHY = String(e && e.message || e).slice(0, 60); return null; }
 }
 function shopPostedOk(j) { return !!(j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length); }
-async function shopLoad() {
+async function shopLoad(env) {
+  if (env) SHOP_ENV = env;
+  var shopSv = shopSvc(env, "SHOP_SVC"), foodSv = shopSvc(env, "FOOD_SVC");
   var now = Date.now();
   var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
   if (needCfg) SHOP_MEM.cfgTs = now;                        // \uc2e4\ud328\ud574\ub3c4 10\ubd84\uc740 \ub2e4\uc2dc \ubb3b\uc9c0 \uc54a\ub294\ub2e4
   // \uc0c1\ud488\uacfc \uc6b4\uc601 \uc124\uc815\uc744 \ud568\uaed8 \ubc1b\ub294\ub2e4(\ucc28\ub840\ub85c \ubc1b\ub358 \uc2dc\uac04 \uc808\uc57d). \uc0c1\ud488\uc740 \ucc98\uc74c \ud55c \ubc88 \uc2e4\ud328\ud558\uba74 \ud55c \ubc88 \ub354 \uc2dc\ub3c4\ud55c\ub2e4(\uc1fc\ud551 \uc11c\ubc84\uac00 \uae68\uc5b4\ub098\ub294 \ub370 \uac78\ub9ac\ub294 \uc2dc\uac04).
   var pj = needShop ? (async function () {
     var ok = function (j) { return j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length; };
-    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000);
-    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000);
+    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000, shopSv);
+    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000, shopSv);
     return ok(j) ? j : null;
   })() : Promise.resolve(null);
-  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500) : Promise.resolve(null);
+  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500, foodSv) : Promise.resolve(null);
   var got = await Promise.all([pj, pc]), j2 = got[0], c = got[1];
   if (j2) { SHOP_MEM.data = j2.data; SHOP_MEM.ver = String(j2.version || ""); SHOP_MEM.ts = now; }
   if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
   return SHOP_MEM;
 }
-async function handleScreenShop(request) {
+async function handleScreenShop(request, env) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
@@ -14536,7 +14542,7 @@ async function handleScreenShop(request) {
       if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
     }
   } else if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "method" }), { status: 405, headers: H });
-  var mem = await shopLoad();
+  var mem = await shopLoad(env);
   if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // \uc548\ub0b4 \ud654\uba74(\uc11c\ubc84 \uc5f0\uacb0 \uc9c0\uc5f0) + \uc7ac\uc2dc\ub3c4 \uac04\uaca9 \u2014 \uc571\uc740 \uc774\uac83\uc744 \uadf8\ub9ac\uace0 \ub4a4\uc5d0\uc11c \ub2e4\uc2dc \ubc1b\ub294\ub2e4
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await Promise.race([sceneWeather(lat, lng), new Promise(function (res) { setTimeout(function () { res(null); }, 2500); })]); } catch (e) { wx = null; } }          // \ub0a0\uc528\uac00 \ub2a6\uc5b4\ub3c4 \uc1fc\ud551 \ud654\uba74\uc740 2.5\ucd08 \uc548\uc5d0(\ubabb \ubc1b\uc73c\uba74 \ub0a0\uc528 \uc5c6\uc774)
@@ -26717,6 +26723,7 @@ function handleLegal(request) {
 
 async function handleFetch(request, env, ctx) {
   if (typeof MAPSV_CTX !== "undefined") MAPSV_CTX = ctx || null;
+  if (typeof SHOP_ENV !== "undefined") SHOP_ENV = env || null;          // shop service binding (SHOP_SVC/FOOD_SVC) for every module that calls shopLoad()
   try { await holEnsure(env); } catch (e) {}
   const url = new URL(request.url);
   if (url.pathname === "/ride-eta") return handleRideEtaNT(request, env);
@@ -26735,7 +26742,7 @@ async function handleFetch(request, env, ctx) {
   if (url.pathname === "/holidays") return handleHolidays(request, env);
   if (url.pathname === "/widget-say") return handleWidgetSay(request, env, ctx);
   if (url.pathname === "/scene") return handleScene(request);
-  if (url.pathname === "/screen/shop") return handleScreenShop(request);
+  if (url.pathname === "/screen/shop") return handleScreenShop(request, env);
   if (url.pathname === "/screen/settings") return handleScreenSettings(request);
   if (url.pathname === "/screen/food") return handleScreenFood(request);
   if (url.pathname === "/food-pub") return handleFoodPub(request, env, ctx);

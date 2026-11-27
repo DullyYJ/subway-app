@@ -261,6 +261,37 @@ console.log('동등성 대조 ' + cases.length + '건');
     ok(rp.status === 200 && jp.ok && jp.screen === 'shop' && jp.cover === 'tab' && jp.shopVer === 'p1', '앱이 실어 보낸 상품 자료로 화면을 만든다(POST)');
     const rb = await mod4.default.fetch(new Request('https://x/screen/shop', { method: 'POST', body: 'not json' }), {}, { waitUntil() {} });
     ok(rb.status === 400, 'POST 본문이 깨졌으면 400');
+    // 서비스 바인딩(env.SHOP_SVC · env.FOOD_SVC)이 있으면 엔진이 그 길로 받는다 — 같은 계정 워커끼리 주소 호출(1042)이 막혀도 앱이 큰 POST 를 안 해도 화면이 뜬다
+    const mod5 = await import(tmp + '?fresh=4');
+    let urlCalls = 0, svcShop = 0, svcFood = 0, svcUrl = '';
+    globalThis.fetch = async (u) => { u = String(u); if (u.includes('gildongmu-')) { urlCalls++; throw new Error('error code: 1042'); } return new Response('{}', { status: 404 }); };
+    // 1.3MB 짜리 상품 자료(앱 → 엔진 POST 한도 800,000자를 넘는 크기)도 바인딩 길로는 그대로 받는다
+    const big = { WEEKDAY: data.WEEKDAY, WEEKEND: data.WEEKEND, CATS: data.CATS.map(c => ({ c: c.c, items: c.items.concat(c.items, c.items, c.items).map((it, k) => Object.assign({}, it, { i: it.i + '?pad=' + 'x'.repeat(220) + k })) })) };
+    const bigLen = JSON.stringify({ ok: true, version: 'b1', data: big }).length;
+    const svcEnv = {
+      SHOP_SVC: { fetch: async (u) => { svcShop++; svcUrl = String(u); return new Response(JSON.stringify({ ok: true, version: 'b1', data: big })); } },
+      FOOD_SVC: { fetch: async () => { svcFood++; return new Response(JSON.stringify({ ok: false })); } }
+    };
+    const rs = await mod5.default.fetch(new Request('https://x/screen/shop?cap=2&now=' + t), svcEnv, { waitUntil() {} });
+    const js = await rs.json();
+    ok(bigLen > 1000000, '시험용 상품 자료가 1MB 를 넘는다(' + bigLen + '자)');
+    ok(rs.status === 200 && js.ok && js.screen === 'shop' && js.shopVer === 'b1', '서비스 바인딩이 있으면 상품 서버를 바인딩으로 받아 화면을 만든다');
+    ok(svcShop === 1 && svcFood === 1 && urlCalls === 0 && /\/shop$/.test(svcUrl), '주소 호출(workers.dev)은 하지 않는다(상품 ' + svcShop + ' · 설정 ' + svcFood + ' · 주소 ' + urlCalls + ')');
+    // 한 번 받은 뒤 60초 안에는 다시 받지 않는다(메모리)
+    await mod5.default.fetch(new Request('https://x/screen/shop?now=' + t), svcEnv, { waitUntil() {} });
+    ok(svcShop === 1, '60초 안에는 다시 받지 않는다');
+    // 바인딩이 있어도 상품 서버가 계속 안 되면 503 + 안내 화면, 이유에 svc 가 붙는다(주소 호출로 되돌아가지 않는다)
+    const mod6 = await import(tmp + '?fresh=5');
+    const badEnv = { SHOP_SVC: { fetch: async () => new Response('x', { status: 503 }) } };
+    const rf = await mod6.default.fetch(new Request('https://x/screen/shop?now=' + t), badEnv, { waitUntil() {} });
+    const jf = await rf.json();
+    ok(rf.status === 503 && jf.delayed === true && jf.body.some(n => n.t === 'text' && /svc HTTP 503/.test(n.s)), '바인딩 길이 실패하면 503 안내 화면(이유 svc HTTP 503)');
+    // 바인딩이 없는 환경(예전 배포)은 지금까지처럼 주소로 받는다
+    const mod7 = await import(tmp + '?fresh=6');
+    let plainCalls = 0;
+    globalThis.fetch = async (u) => { u = String(u); if (u.includes('gildongmu-shop')) { plainCalls++; return new Response(JSON.stringify({ ok: true, version: 'u1', data })); } return new Response(JSON.stringify({ ok: false })); };
+    const rn = await mod7.default.fetch(new Request('https://x/screen/shop?now=' + t), {}, { waitUntil() {} });
+    ok(rn.status === 200 && plainCalls === 1, '바인딩이 없으면 예전처럼 주소로 받는다');
   } catch (e) { fail++; console.log('  FAIL 워커 시험 예외', e && e.stack || e); }
   try { fs.unlinkSync(tmp); } catch (e) { }
   console.log(`shop_engine: ${pass} pass, ${fail} fail`);

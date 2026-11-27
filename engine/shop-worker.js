@@ -1,4 +1,4 @@
-// 쇼핑 화면 엔진 Worker 연결부 — GET /screen/shop (engine/shop.js 의 shopScreen 을 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/screen/shop") return handleScreenShop(request);` 를 넣는다.
+// 쇼핑 화면 엔진 Worker 연결부 — GET /screen/shop (engine/shop.js 의 shopScreen 을 부른다). route-v2 의 handleFetch 에 `if (url.pathname === "/screen/shop") return handleScreenShop(request, env);` 를 넣는다.
 //   · 상품: 쇼핑 서버(gildongmu-shop) /shop 의 data 를 60초 메모리에 둔다. 서버가 잠깐 안 되면 마지막으로 받은 것을 쓴다(없으면 503 — 앱은 저장해 둔 화면 또는 예전 웹 쇼핑으로 간다).
 //   · 운영 설정: gildongmu-food /app-config?k=shop (계절 규칙) 10분. 못 받으면 null → 내장 규칙.
 //   · 날씨: 장면 엔진과 같은 sceneWeather(lat,lng) (subway-api /weather, 10분 캐시). 위치를 안 주면 날씨 없이 계산한다.
@@ -7,30 +7,36 @@ var SHOP_API_URL = "https://gildongmu-shop.phg0643.workers.dev";
 var SHOP_CFG_URL = "https://gildongmu-food.phg0643.workers.dev/app-config?k=shop";
 var SHOP_MEM = { data: null, ts: 0, ver: "", cfg: null, cfgTs: 0 };
 var SHOP_WHY = "";                                          // 마지막으로 상품 서버를 못 받은 이유(안내 화면에 작게 보인다 — 화면만 봐도 원인을 알 수 있게)
-async function shopFetchJson(u, ms) {
+// 같은 계정 워커끼리 workers.dev 주소로 부르면 Cloudflare 가 막는다(404 / error 1042). 서비스 바인딩(env.SHOP_SVC → gildongmu-shop, env.FOOD_SVC → gildongmu-food)이 있으면
+//   그 길로 받고(주소의 호스트는 무시된다), 없으면 예전처럼 주소로 받는다. 바인딩은 Cloudflare 대시보드 → route-v2 → 설정 → 바인딩 → 서비스 바인딩에서 단다.
+var SHOP_ENV = null;                                         // 마지막으로 본 env(다른 모듈 — 추천 문구 — 이 shopLoad() 를 env 없이 불러도 같은 길을 쓰게)
+function shopSvc(env, name) { var e = env || SHOP_ENV; return e && e[name] && typeof e[name].fetch === "function" ? e[name] : null; }
+async function shopFetchJson(u, ms, svc) {
   var ac = new AbortController(), t = setTimeout(function () { ac.abort(); }, ms);
-  try { var r = await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = "HTTP " + r.status; return null; } return await r.json(); }
+  try { var r = svc ? await svc.fetch(u, { signal: ac.signal }) : await fetch(u, { signal: ac.signal }); clearTimeout(t); if (!r.ok) { SHOP_WHY = (svc ? "svc " : "") + "HTTP " + r.status; return null; } return await r.json(); }
   catch (e) { clearTimeout(t); SHOP_WHY = String(e && e.message || e).slice(0, 60); return null; }
 }
 function shopPostedOk(j) { return !!(j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length); }
-async function shopLoad() {
+async function shopLoad(env) {
+  if (env) SHOP_ENV = env;
+  var shopSv = shopSvc(env, "SHOP_SVC"), foodSv = shopSvc(env, "FOOD_SVC");
   var now = Date.now();
   var needShop = !SHOP_MEM.data || now - SHOP_MEM.ts > 60000, needCfg = now - SHOP_MEM.cfgTs > 600000;
   if (needCfg) SHOP_MEM.cfgTs = now;                        // 실패해도 10분은 다시 묻지 않는다
   // 상품과 운영 설정을 함께 받는다(차례로 받던 시간 절약). 상품은 처음 한 번 실패하면 한 번 더 시도한다(쇼핑 서버가 깨어나는 데 걸리는 시간).
   var pj = needShop ? (async function () {
     var ok = function (j) { return j && j.ok && j.data && j.data.CATS && j.data.CATS.length && j.data.WEEKDAY && j.data.WEEKDAY.length; };
-    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000);
-    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000);
+    var j = await shopFetchJson(SHOP_API_URL + "/shop", SHOP_MEM.data ? 4000 : 7000, shopSv);
+    if (!ok(j) && !SHOP_MEM.data) j = await shopFetchJson(SHOP_API_URL + "/shop", 6000, shopSv);
     return ok(j) ? j : null;
   })() : Promise.resolve(null);
-  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500) : Promise.resolve(null);
+  var pc = needCfg ? shopFetchJson(SHOP_CFG_URL, 2500, foodSv) : Promise.resolve(null);
   var got = await Promise.all([pj, pc]), j2 = got[0], c = got[1];
   if (j2) { SHOP_MEM.data = j2.data; SHOP_MEM.ver = String(j2.version || ""); SHOP_MEM.ts = now; }
   if (c && c.ok && c.v && typeof c.v === "object") SHOP_MEM.cfg = c.v;
   return SHOP_MEM;
 }
-async function handleScreenShop(request) {
+async function handleScreenShop(request, env) {
   var H = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", "Cache-Control": "no-store" };
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: H });
   var u = new URL(request.url), q = u.searchParams;
@@ -45,7 +51,7 @@ async function handleScreenShop(request) {
       if (pb.cfg && pb.cfg.ok && pb.cfg.v && typeof pb.cfg.v === "object") { SHOP_MEM.cfg = pb.cfg.v; SHOP_MEM.cfgTs = Date.now(); }
     }
   } else if (request.method !== "GET") return new Response(JSON.stringify({ ok: false, error: "method" }), { status: 405, headers: H });
-  var mem = await shopLoad();
+  var mem = await shopLoad(env);
   if (!mem.data) return new Response(JSON.stringify(shopDelayScreen(SHOP_WHY)), { status: 503, headers: H });          // 안내 화면(서버 연결 지연) + 재시도 간격 — 앱은 이것을 그리고 뒤에서 다시 받는다
   var lat = Number(q.get("lat")), lng = Number(q.get("lng")), wx = null;
   if (q.get("lat") != null && q.get("lng") != null) { try { wx = await Promise.race([sceneWeather(lat, lng), new Promise(function (res) { setTimeout(function () { res(null); }, 2500); })]); } catch (e) { wx = null; } }          // 날씨가 늦어도 쇼핑 화면은 2.5초 안에(못 받으면 날씨 없이)
