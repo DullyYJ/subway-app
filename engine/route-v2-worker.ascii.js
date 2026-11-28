@@ -40,7 +40,7 @@ var WARM_BUSY = null;
 function isoId() {
   return ISO_ID || (ISO_ID = Math.random().toString(36).slice(2, 8));
 }
-var ENGINE_VERSION = "route-v2-2026-11-27s481";
+var ENGINE_VERSION = "route-v2-2026-11-28s482";
 var MARGIN = 0.014;
 var MAX_STOPS = 3e4;
 var CS_DEFAULT = false;
@@ -23392,7 +23392,7 @@ function mapBusTagoLed(f) {                            // \uc774 \ud654\uba74\uc
   return mapStopsOf('tn', res.tn, la, lo, c.r) > 0;
 }
 function mapBusWantD1(f) { var r = f && f.bus && f.bus.res; return !!r && r.d1 === undefined && mapBusTagoLed(f); }      // \uc11c\ubc84\uac00 D1 \uc744 \ub354 \uae30\ub2e4\ub9b4 \uac83\uc778\uac00
-function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && !r.d1 && mapBusTagoLed(f); }                 // D1 \uc5c6\uc774(\ubabb \ubc1b\uc74c \u00b7 \uc2e4\ud328) TAGO \ub9cc\uc73c\ub85c \uadf8\ub9b0 \ubaa9\ub85d \u2014 \ucd9c\uad6c\uac00 \ube60\uc84c\uc744 \uc218 \uc788\uc73c\ub2c8 \uae30\uae30\uac00 \ubcf4\uad00\ud558\uc9c0 \uc54a\uac8c \uc54c\ub9b0\ub2e4(info.bus.nc)
+function mapBusCapOk(f) { var b = f && f.bus; if (!b) return false; var src = (b.res && typeof b.res === 'object') ? b.res : {}, r = {}, c = mapBusCenter(b), la = c.la, lo = c.lo; if (c.pin || !isFinite(la) || !isFinite(lo)) return false; Object.keys(src).forEach(function (k) { r[k] = src[k]; }); if (r.tn === undefined) r.tn = ''; try { var tp = r.tp ? mapSeoulStops(r.tp, la, lo) : [], gg = r.gg ? mapGbisStops(r.gg, la, lo) : []; if (!tp.length && !(mapGGPreferred(la, lo) && gg.length)) return false; return mapBusStops({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: r } }).length > 0; } catch (e) { return false; } } /* s482: TAGO (tn) slow - can the list be drawn without it? Only when Seoul TOPIS (tp) or Gyeonggi GBIS (gg, outside the Incheon box) already returned stops: mapBusStops then takes that source list whatever TAGO says (TAGO could only add station exits). Incheon / other cities (TAGO is the main source) -> false, keep waiting. cut=1: the server stopped waiting for TAGO, so the device must not keep the list */ function mapBusNoKeep(f) { var r = f && f.bus && f.bus.res; return !!r && ((!r.d1 && mapBusTagoLed(f)) || (f.bus.cut === 1)); }                 // D1 \uc5c6\uc774(\ubabb \ubc1b\uc74c \u00b7 \uc2e4\ud328) TAGO \ub9cc\uc73c\ub85c \uadf8\ub9b0 \ubaa9\ub85d \u2014 \ucd9c\uad6c\uac00 \ube60\uc84c\uc744 \uc218 \uc788\uc73c\ub2c8 \uae30\uae30\uac00 \ubcf4\uad00\ud558\uc9c0 \uc54a\uac8c \uc54c\ub9b0\ub2e4(info.bus.nc)
 function mapArrErr(t) {                                    // \uacf5\uacf5 API \uac00 HTTP 200 \uc73c\ub85c \uac74\ub128 \uc624\ub958 \ubd09\ud22c({"OpenAPI_ServiceResponse":\u2026"HTTP_ERROR"})\uc778\uac00 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4(\uc6f9 _safeParseResponse \uc640 \uac19\uc740 \uae00\uc790). \ubc1b\uc9c0 \ubabb\ud55c \uac83\uc73c\ub85c \uce5c\ub2e4
   var x = typeof t === 'string' ? t : '';
   return x.length > 0 && x.length < 4000 && (/OpenAPI_ServiceResponse|cmmMsgHeader|SERVICE_KEY_IS_NOT_REGISTERED_ERROR|LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR/.test(x) || /"resultCode"\s*:\s*"?99"?\s*[,}]/.test(x));   // s461: \uc778\ucc9c BIS \uac00 '\uac00\uc6a9\ud55c \uc138\uc158\uc774 \uc874\uc7ac\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4 (30/30)'\ub97c HTTP 200 \u00b7 resultCode 99 \ub85c \ubcf4\ub0b8\ub2e4(\ube48 \ub3c4\ucc29\uc815\ubcf4\uac00 \uc544\ub2c8\ub2e4 \u2014 \ubabb \ubc1b\uc740 \uac83)
@@ -24433,7 +24433,7 @@ function mapSvOne(env, k, url, fresh, ops) {                       // \u2192 Pro
   return ent.p;
 }
 var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: \uc815\ub958\uc7a5 \ubaa9\ub85d \ub2e8\uacc4\uc5d0\uc11c \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub97c \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4
-var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: \uc815\ub958\uc7a5 \ub2e8\uacc4\uc5d0\uc11c \ubabb \uae30\ub2e4\ub9b0 D1(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c)\uc744 \ub3c4\ucc29\uc815\ubcf4 \ub2e8\uacc4\uc5d0\uc11c \ub418\ubc1b\uc744 \ub54c \ub354 \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \ub2e4 \uc628 \ub4a4\ubd80\ud130 \u00b7 \uc608\uc0b0 \uc548\uc5d0\uc11c
+var MAPSV_TN_CAP_MS = 1200; /* s482: stop-list stage - after this long, if only a slow TAGO (tn) is still pending and the stops already received give a nearest-stop list, draw without it (the late TAGO still fills the cache) */ var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: \uc815\ub958\uc7a5 \ub2e8\uacc4\uc5d0\uc11c \ubabb \uae30\ub2e4\ub9b0 D1(\uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c)\uc744 \ub3c4\ucc29\uc815\ubcf4 \ub2e8\uacc4\uc5d0\uc11c \ub418\ubc1b\uc744 \ub54c \ub354 \uae30\ub2e4\ub9ac\ub294 \ud55c\ub3c4 \u2014 \ub3c4\ucc29\uc815\ubcf4\uac00 \ub2e4 \uc628 \ub4a4\ubd80\ud130 \u00b7 \uc608\uc0b0 \uc548\uc5d0\uc11c
 // \u2605 s462 \u2014 \uc5f4\uc1e0\uc758 \ubb34\uac8c: 'core'(\ub3c4\ucc29\uc815\ubcf4 a\u00b7f\u00b7g\u00b7h \u00b7 \uc88c\ud45c\ub85c \ub2e4\uc2dc \ucc3e\uc740 \uc815\ub958\uc7a5 \ubaa9\ub85d t\u00b7u 100+ \u2014 \uace7 \ub3c4\ucc29\uc815\ubcf4\ub85c \uc774\uc5b4\uc9c4\ub2e4) \ub294 \uae30\ub2e4\ub9ac\uace0, 'opt'(\uacbd\uc720\ub178\uc120 t\u00b7u 0~99 \u00b7 \ubc29\uba74 r)\ub294 \ud654\uba74\uc744 \ub9c9\uc9c0 \uc54a\ub294\ub2e4.
 function mapSvTier(k) {
   k = String(k || '');
@@ -24679,7 +24679,7 @@ async function mapSvResolve(env, cap, body, out) {
       need.forEach(function (n, i) { if (!ps[i]) ps[i] = gate.then(function () { return mkP(n, i); }); });
     } else ps = need.map(mkP);
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
-    earlyRet = false; var wi = { nosettle: !!TUNE.nosettle };
+    var capCut = false; earlyRet = false; var wi = { nosettle: !!TUNE.nosettle };
     if (arrWave) {
       earlyRet = await mapSvArrWait(ps, need, done, wb, svo, wi);
       if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') {                                         // s462: \uc751\ub2f5\uc744 \ub3cc\ub824\uc900 \ub4a4\uc5d0\ub3c4 \ubabb \ub05d\ub0b8 \ubc1b\uae30(\uacbd\uc720\ub178\uc120 \u00b7 \ub290\ub9b0 \ub3c4\ucc29\uc815\ubcf4)\ub294 \ub05d\uae4c\uc9c0 \u2014 \uce90\uc2dc \u00b7 5\ucd08 \uae30\uc5b5\uc5d0 \ucc44\uc6cc\uc838 \uae30\uae30\uc758 \ub2e4\uc74c \uc694\uccad\uc774 \uc989\uc2dc \ubc1b\ub294\ub2e4(\uc608\uc804\uc5d4 \uc751\ub2f5\uacfc \ud568\uaed8 \ub04a\uae38 \uc218 \uc788\uc5c8\ub2e4)
@@ -24688,7 +24688,7 @@ async function mapSvResolve(env, cap, body, out) {
       }
     }
     else if (stopWave) {                                    // s177: \uc815\ub958\uc7a5 \ubaa9\ub85d \u2014 \uc6b0\uc120\uc21c\uc704 \uc55e \ucd9c\ucc98\uac00 \uc815\ub958\uc7a5\uc744 \uc8fc\uba74 \ub098\uba38\uc9c0(\ub290\ub9b0 TAGO)\ub294 \uae30\ub2e4\ub9ac\uc9c0 \uc54a\uace0 \ub3c4\ucc29\uc815\ubcf4\ub85c \ub118\uc5b4\uac04\ub2e4. \ubabb \uae30\ub2e4\ub9b0 \ucd9c\ucc98\ub294 \ube48 \uac12\uc73c\ub85c \ub454\ub2e4.
-      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO \uac00 \uba3c\uc800 \uc640\ub3c4 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub294 \uc774 \uc2dc\uac04\uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\uc5ed \ucd9c\uad6c\uac00 \ube60\uc9c0\uc9c0 \uc54a\uac8c) \u2014 \ub118\uc73c\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \uce58\uace0 \uadf8\ub9b0\ub2e4
+      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null, capAt = Date.now() + MAPSV_TN_CAP_MS; capCut = false;      // s458: TAGO \uac00 \uba3c\uc800 \uc640\ub3c4 \uc6b0\ub9ac \uc815\ub958\uc7a5 \ud45c(D1)\ub294 \uc774 \uc2dc\uac04\uae4c\uc9c0 \uae30\ub2e4\ub9b0\ub2e4(\uc5ed \ucd9c\uad6c\uac00 \ube60\uc9c0\uc9c0 \uc54a\uac8c) \u2014 \ub118\uc73c\uba74 \uc5c6\ub294 \uac83\uc73c\ub85c \uce58\uace0 \uadf8\ub9b0\ub2e4
       for (;;) {
         var tmp = {}, pend = [];
         Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
@@ -24696,13 +24696,13 @@ async function mapSvResolve(env, cap, body, out) {
         if (tmp.d1 === undefined && Date.now() >= d1Dead) tmp.d1 = '';
         var rdy = false;
         try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }) && !(typeof mapBusWantD1 === 'function' && mapBusWantD1({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } })); } catch (eR) { rdy = false; }
-        if (rdy || !pend.length) break;
-        await Promise.race(pend.concat([new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, d1Dead - Date.now() + 5)); })]));
+        if (rdy || !pend.length) break; if (Date.now() >= capAt && !TUNE.nocap && tmp.tn === undefined && typeof mapBusCapOk === 'function' && need.every(function (n, i) { return done[i] || String(n.k) === 'tn'; })) { var okC = false; try { okC = !!mapBusCapOk({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }); } catch (eC) { okC = false; } if (okC) { capCut = true; break; } }
+        var nowT = Date.now(), wt = -1; if (d1Dead > nowT) wt = d1Dead - nowT + 5; if (capAt > nowT && (wt < 0 || capAt - nowT + 5 < wt)) wt = capAt - nowT + 5; await Promise.race(pend.concat(wt < 0 ? [] : [new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, wt)); })]));
         if (d1Tick) { clearTimeout(d1Tick); d1Tick = null; }
       }
     }
-    else await Promise.all(ps);
-    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, why: wi.why || '', cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
+    else await Promise.all(ps); if (capCut) { b.cut = 1; mapSvUse('map.tn.cut'); if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') { var lt = ps.filter(function (p, i) { return !done[i]; }); if (lt.length) MAPSV_CTX.waitUntil(Promise.all(lt).catch(function () { /* ignore */ })); } }          // s482: cut - the late TAGO keeps going after the response (cache + KV get filled) so the next request finds it at once
+    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, cut: capCut, why: wi.why || '', cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
@@ -24711,7 +24711,7 @@ async function mapSvResolve(env, cap, body, out) {
         if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else if (/^[af]/.test(k)) failA++;       // \uc774\uc6c3\u00b7\ubc14\uafbc ID\u00b7\uacbd\uc720\ub178\uc120(g\u00b7h\u00b7t\u00b7u)\uc740 \ub364 \u2014 \ubabb \ubc1b\uc544\ub3c4 \uc2e4\ud328\ub85c \uc138\uc9c0 \uc54a\ub294\ub2e4
         return;
       }
-      if (t) any = true; if (k === 'd1' && !t) return;                           // s459: D1 \uc744 \ubabb \ubc1b\uc558\uc73c\uba74(\ud55c\ub3c4 \ub118\uae40\u00b7\uc2e4\ud328) \ube48 \uac12\uc73c\ub85c \uad73\ud788\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\ub3c4 \ube48 \uac12\uc744 \uc548 \ubc1b\uc73c\ub2c8 \ub2e4\uc74c \uc694\uccad\uc5d0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4(\uc608\uc804\uc5d4 res.d1='' \uac00 \uadf8 \uc790\ub9ac\uc5d0 \ub0a8\uc544 \uadf8 \ub4a4\ub85c\ub294 \uc601\uc601 \uc548 \ubc1b\uc558\ub2e4)
+      if (t) any = true; if (k === 'd1' && !t) return; if (k === 'tn' && capCut && !t) { res[k] = ''; return; }                           // s459: D1 \uc744 \ubabb \ubc1b\uc558\uc73c\uba74(\ud55c\ub3c4 \ub118\uae40\u00b7\uc2e4\ud328) \ube48 \uac12\uc73c\ub85c \uad73\ud788\uc9c0 \uc54a\ub294\ub2e4 \u2014 \uae30\uae30\ub3c4 \ube48 \uac12\uc744 \uc548 \ubc1b\uc73c\ub2c8 \ub2e4\uc74c \uc694\uccad\uc5d0 \ub2e4\uc2dc \ubc1b\ub294\ub2e4(\uc608\uc804\uc5d4 res.d1='' \uac00 \uadf8 \uc790\ub9ac\uc5d0 \ub0a8\uc544 \uadf8 \ub4a4\ub85c\ub294 \uc601\uc601 \uc548 \ubc1b\uc558\ub2e4)
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;

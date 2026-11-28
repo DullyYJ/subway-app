@@ -906,6 +906,76 @@ const base = (sv, cap) => ({ cap: cap == null ? 23 : cap, f: { part: 'b', mode: 
       }
     }
   }
+  // ⑬ s482 (YJ: "내 위치 주변 버스정류장 2~3초 안에"): 서울 TOPIS · 경기 GBIS(인천 상자 밖)가 이미 정류장을 줬는데 300m 안에는 없고 TAGO 만 느릴 때 — 목록은 그 출처에서 나오므로(TAGO 는 역 출구만 더할 수 있다) 1.2초 뒤에는 TAGO 를 기다리지 않고 그린다(보관 금지 nc · TAGO 는 bres 에 싣지 않는다 · 응답 뒤에서 계속 받는다). 인천 · 다른 시(TAGO 가 주 출처) · 아무것도 없는 곳 · 꾹 눌러 고른 곳은 예전 그대로 기다린다
+  {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const m2d = m => m / 111320;
+    const mkX = (LA, LO, cs) => {
+      const d1of = list => JSON.stringify({ ok: true, count: list.length, stops: list.map(x => ({ node_id: x.id, node_nm: x.nm, city_code: cs, lat: LA + m2d(x.m), lng: LO })) });
+      const tnof = list => JSON.stringify({ response: { body: { items: { item: list.map(x => ({ nodeid: x.id, nodenm: x.nm, gpslati: LA + m2d(x.m), gpslong: LO, citycode: cs, nodeno: x.id.slice(-3) })) } } } });
+      const ggof = list => JSON.stringify({ response: { msgHeader: { resultCode: list.length ? 0 : 4 }, msgBody: list.length ? { busStationAroundList: list.map(x => ({ stationId: x.id, stationName: x.nm, y: LA + m2d(x.m), x: LO, mobileNo: '1' + x.id.slice(-4) })) } : {} } });
+      const AR = JSON.stringify({ response: { body: { items: { item: [{ routeno: '8', arrtime: 240, arrprevstationcnt: 3, routeid: 'R1' }] } } } });
+      const mk = (o) => ({ fetch: async (req) => { const u = new URL(req.url), inner = u.searchParams.get('url') || (u.pathname + u.search);
+        if (/getCrdntPrxmtSttnList/.test(inner)) { await sleep(o.tnMs || 0); return new Response(o.tn || '', { status: 200 }); }
+        if (/getBusStationAroundListv2/.test(inner)) { await sleep(o.ggMs || 0); return new Response(o.gg || '', { status: 200 }); }
+        if (/bus-stops/.test(inner)) { await sleep(o.d1Ms || 0); return new Response(o.d1 || '', { status: 200 }); }
+        if (/getSttnAcctoArvlPrearngeInfoList|getBusArrivalListv2|getStationByUid/.test(inner)) return new Response(AR, { status: 200 });
+        return new Response('', { status: 200 }); } });
+      const body = (extra) => ({ cap: 29, f: { part: 'b', mode: 'bus', th: 'dark', bus: Object.assign({ lat: LA, lng: LO, res: {}, sv: 1, svb: 2200, svo: 1 }, extra || {}) } });
+      return { d1of, tnof, ggof, mk, body };
+    };
+    const SU = mkX(37.2636, 127.0286, '31'), IC = mkX(37.4901, 126.6572, '23'), BS = mkX(35.1796, 129.0756, '21');         // 수원(경기 · GBIS 먼저) · 인천(TAGO 먼저) · 부산(TAGO 만)
+    const FAR = [{ id: '202000099', nm: '먼정류장', m: 350 }], NEAR = [{ id: '202000011', nm: '가까운정류장', m: 120 }];
+    const run = async (X, o, extra, cap) => { const c = load(); c.MAPSV_CTX = { waitUntil: p => (c.__p = c.__p || []).push(p) }; c.MAPSV_TN_CAP_MS = cap || 300; const t0 = Date.now(), r = await post(c.H, { BUSAPI: X.mk(o) }, X.body(extra)); r.dt = Date.now() - t0; r.c = c; return r; };
+    // 13-a 수원: GBIS 가 먼 정류장(350m)만 준다 + TAGO 가 2.5초 걸린다 → 상한 뒤 곧 그린다 · 먼 정류장 · nc · far · bres 에 tn 없음 · 응답 뒤 받기
+    {
+      const r = await run(SU, { gg: SU.ggof(FAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 2500 });
+      const cards = r.j.body.filter(n => n.t === 'bcard');
+      ok(r.status === 200 && r.dt < 1500 && cards.length === 1 && r.j.info.stops && r.j.info.stops[0].id === 'GG:202000099', '13-a: GBIS 가 줬으면 TAGO 가 늦어도 상한 뒤 그린다(' + r.dt + 'ms · ' + cards.length + '곳)');
+      ok(r.j.info.bus.nc === 1 && r.j.info.bus.far === 1, '13-a: 기기가 보관하지 않게 nc=1 · 먼 정류장 안내(far)');
+      ok(r.j.info.bres && !('tn' in r.j.info.bres) && r.j.info.bres.gg, '13-a: 못 받은 TAGO 를 빈 값으로 기기에 넘기지 않는다(bres 에 tn 없음)');
+      ok((r.c.__p || []).length >= 1, '13-a: 늦은 TAGO 는 응답 뒤에서 계속(waitUntil ' + (r.c.__p || []).length + ')');
+      await Promise.all(r.c.__p || []);
+    }
+    // 13-b GBIS 가 가까운 정류장(120m)을 주면 예전처럼 곧바로(TAGO 를 보지 않는다) · nc 없음
+    {
+      const r = await run(SU, { gg: SU.ggof(NEAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(FAR), tnMs: 2500 });
+      ok(r.dt < 1200 && r.j.info.stops[0].id === 'GG:202000011' && !r.j.info.bus.nc && !r.j.info.bus.far, '13-b: 가까운 정류장이 있으면 예전 그대로(' + r.dt + 'ms · 보관 허용)');
+    }
+    // 13-c 상한 전에 TAGO 가 오면 자르지 않는다 — nc 없음 · bres 에 tn 이 실린다
+    {
+      const r = await run(SU, { gg: SU.ggof(FAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 120 }, null, 600);
+      ok(r.j.info.stops[0].id === 'GG:202000099' && !r.j.info.bus.nc && r.j.info.bres && r.j.info.bres.tn, '13-c: 상한 안에 온 TAGO 는 그대로 받는다(nc 없음 · bres 에 tn)');
+    }
+    // 13-d 아무 출처에도 정류장이 없으면(진짜 빈 곳일 수도 · 잠깐 빈 값일 수도) 자르지 않고 TAGO 를 기다린다 · TAGO 목록으로 그린다
+    {
+      const r = await run(SU, { gg: SU.ggof([]), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 900 });
+      ok(r.dt >= 850 && r.j.info.stops && /202000011/.test(r.j.info.stops[0].id) && !r.j.info.bus.nc, '13-d: 아무것도 없을 때는 TAGO 를 끝까지 기다린다(' + r.dt + 'ms)');
+    }
+    // 13-e 시험용 nocap(진단 dbg + tune) 이면 예전 그대로 기다린다 · 진단 svt 에 상한으로 자른 단계가 cut 으로 남는다
+    {
+      const r = await run(SU, { gg: SU.ggof(FAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 900 }, { dbg: 1, tune: { nocap: 1 } });
+      ok(r.dt >= 850 && r.j.info.svt && r.j.info.svt.r.every(x => !x.cut) && !r.j.info.bus.nc, '13-e: nocap 이면 TAGO 를 기다린다(' + r.dt + 'ms)');
+      const r2 = await run(SU, { gg: SU.ggof(FAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 2500 }, { dbg: 1 });
+      ok(r2.j.info.svt && r2.j.info.svt.r.some(x => x.w === 's' && x.cut === true), '13-e: 진단(svt)에 상한으로 자른 단계가 cut 으로 남는다');
+      await Promise.all(r2.c.__p || []);
+    }
+    // 13-f 꾹 눌러 고른 곳(pin · 100m)은 자르지 않는다
+    {
+      const r = await run(SU, { gg: SU.ggof(FAR), ggMs: 30, d1: SU.d1of([]), d1Ms: 30, tn: SU.tnof(NEAR), tnMs: 700 }, { pin: [37.2636, 127.0286] });
+      ok(r.dt >= 650 && !r.j.info.bus.nc, '13-f: 고른 곳(pin)은 상한으로 자르지 않는다(' + r.dt + 'ms)');
+    }
+    // 13-g 인천(TAGO 가 주 출처): GBIS 가 먼 정류장을 줘도 자르지 않는다 — TAGO 가 가까운 정류장을 줄 수 있다(실측: GBIS 2곳 vs TAGO 4곳)
+    {
+      const r = await run(IC, { gg: IC.ggof(FAR), ggMs: 30, d1: IC.d1of([]), d1Ms: 30, tn: IC.tnof([{ id: 'ICB366000011', nm: '가까운1', m: 100 }, { id: 'ICB366000012', nm: '가까운2', m: 150 }]), tnMs: 900 });
+      ok(r.dt >= 850 && r.j.info.stops.length === 2 && /ICB366000011/.test(r.j.info.stops[0].id) && !r.j.info.bus.nc, '13-g: 인천은 TAGO 를 끝까지 기다린다(' + r.dt + 'ms · ' + r.j.info.stops.length + '곳)');
+    }
+    // 13-h 부산(공공 API 가 TAGO 뿐): 우리 표(D1)가 먼 정류장만 줘도 자르지 않는다
+    {
+      const r = await run(BS, { d1: BS.d1of(FAR), d1Ms: 30, tn: BS.tnof(NEAR), tnMs: 900 });
+      ok(r.dt >= 850 && /202000011/.test(r.j.info.stops[0].id) && !r.j.info.bus.nc, '13-h: TAGO 만 있는 도시는 끝까지 기다린다(' + r.dt + 'ms)');
+    }
+  }
   console.log('map_server_fetch: ' + pass + ' pass, ' + fail + ' fail');
   process.exit(fail ? 1 : 0);
 })();

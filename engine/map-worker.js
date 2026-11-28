@@ -275,7 +275,7 @@ function mapSvOne(env, k, url, fresh, ops) {                       // → Promis
   return ent.p;
 }
 var MAPSV_D1_WAIT_MS = 1500;                                                                              // s458: 정류장 목록 단계에서 우리 정류장 표(D1)를 기다리는 한도
-var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: 정류장 단계에서 못 기다린 D1(우리 정류장 표)을 도착정보 단계에서 되받을 때 더 기다리는 한도 — 도착정보가 다 온 뒤부터 · 예산 안에서
+var MAPSV_TN_CAP_MS = 1200; /* s482: stop-list stage - after this long, if only a slow TAGO (tn) is still pending and the stops already received give a nearest-stop list, draw without it (the late TAGO still fills the cache) */ var MAPSV_D1_AGAIN_MS = 600;                                                                              // s459: 정류장 단계에서 못 기다린 D1(우리 정류장 표)을 도착정보 단계에서 되받을 때 더 기다리는 한도 — 도착정보가 다 온 뒤부터 · 예산 안에서
 // ★ s462 — 열쇠의 무게: 'core'(도착정보 a·f·g·h · 좌표로 다시 찾은 정류장 목록 t·u 100+ — 곧 도착정보로 이어진다) 는 기다리고, 'opt'(경유노선 t·u 0~99 · 방면 r)는 화면을 막지 않는다.
 function mapSvTier(k) {
   k = String(k || '');
@@ -521,7 +521,7 @@ async function mapSvResolve(env, cap, body, out) {
       need.forEach(function (n, i) { if (!ps[i]) ps[i] = gate.then(function () { return mkP(n, i); }); });
     } else ps = need.map(mkP);
     var stopWave = !arrWave && typeof mapBusReady === 'function' && b.vw !== 'fav' && ((isFinite(Number(b.lat)) && isFinite(Number(b.lng))) || mapBusCenter(b).pin) && need.every(function (n) { return /^(tp|gg|tn|d1)$/.test(String(n.k || '')); });
-    earlyRet = false; var wi = { nosettle: !!TUNE.nosettle };
+    var capCut = false; earlyRet = false; var wi = { nosettle: !!TUNE.nosettle };
     if (arrWave) {
       earlyRet = await mapSvArrWait(ps, need, done, wb, svo, wi);
       if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') {                                         // s462: 응답을 돌려준 뒤에도 못 끝낸 받기(경유노선 · 느린 도착정보)는 끝까지 — 캐시 · 5초 기억에 채워져 기기의 다음 요청이 즉시 받는다(예전엔 응답과 함께 끊길 수 있었다)
@@ -530,7 +530,7 @@ async function mapSvResolve(env, cap, body, out) {
       }
     }
     else if (stopWave) {                                    // s177: 정류장 목록 — 우선순위 앞 출처가 정류장을 주면 나머지(느린 TAGO)는 기다리지 않고 도착정보로 넘어간다. 못 기다린 출처는 빈 값으로 둔다.
-      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null;      // s458: TAGO 가 먼저 와도 우리 정류장 표(D1)는 이 시간까지 기다린다(역 출구가 빠지지 않게) — 넘으면 없는 것으로 치고 그린다
+      var d1Dead = Date.now() + MAPSV_D1_WAIT_MS, d1Tick = null, capAt = Date.now() + MAPSV_TN_CAP_MS; capCut = false;      // s458: TAGO 가 먼저 와도 우리 정류장 표(D1)는 이 시간까지 기다린다(역 출구가 빠지지 않게) — 넘으면 없는 것으로 치고 그린다
       for (;;) {
         var tmp = {}, pend = [];
         Object.keys(res).forEach(function (rk) { tmp[rk] = res[rk]; });
@@ -538,13 +538,13 @@ async function mapSvResolve(env, cap, body, out) {
         if (tmp.d1 === undefined && Date.now() >= d1Dead) tmp.d1 = '';
         var rdy = false;
         try { rdy = !!mapBusReady({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }) && !(typeof mapBusWantD1 === 'function' && mapBusWantD1({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } })); } catch (eR) { rdy = false; }
-        if (rdy || !pend.length) break;
-        await Promise.race(pend.concat([new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, d1Dead - Date.now() + 5)); })]));
+        if (rdy || !pend.length) break; if (Date.now() >= capAt && !TUNE.nocap && tmp.tn === undefined && typeof mapBusCapOk === 'function' && need.every(function (n, i) { return done[i] || String(n.k) === 'tn'; })) { var okC = false; try { okC = !!mapBusCapOk({ bus: { lat: b.lat, lng: b.lng, pin: b.pin, res: tmp } }); } catch (eC) { okC = false; } if (okC) { capCut = true; break; } }
+        var nowT = Date.now(), wt = -1; if (d1Dead > nowT) wt = d1Dead - nowT + 5; if (capAt > nowT && (wt < 0 || capAt - nowT + 5 < wt)) wt = capAt - nowT + 5; await Promise.race(pend.concat(wt < 0 ? [] : [new Promise(function (r) { d1Tick = setTimeout(r, Math.max(20, wt)); })]));
         if (d1Tick) { clearTimeout(d1Tick); d1Tick = null; }
       }
     }
-    else await Promise.all(ps);
-    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, why: wi.why || '', cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
+    else await Promise.all(ps); if (capCut) { b.cut = 1; mapSvUse('map.tn.cut'); if (MAPSV_CTX && typeof MAPSV_CTX.waitUntil === 'function') { var lt = ps.filter(function (p, i) { return !done[i]; }); if (lt.length) MAPSV_CTX.waitUntil(Promise.all(lt).catch(function () { /* ignore */ })); } }          // s482: cut - the late TAGO keeps going after the response (cache + KV get filled) so the next request finds it at once
+    if (trace) trace.push({ r: round, w: arrWave ? 'a' : (stopWave ? 's' : 'x'), t0: tw0, t1: Date.now() - tReq0, wb: wb, early: earlyRet, cut: capCut, why: wi.why || '', cap: useful2, ks: need.map(function (n, i) { return [String(n.k || ''), done[i] ? tm[i] : -1]; }) });
     var any = false;
     failA = 0;
     need.forEach(function (n, i) {
@@ -553,7 +553,7 @@ async function mapSvResolve(env, cap, body, out) {
         if (t) { any = true; res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t; } else if (/^[af]/.test(k)) failA++;       // 이웃·바꾼 ID·경유노선(g·h·t·u)은 덤 — 못 받아도 실패로 세지 않는다
         return;
       }
-      if (t) any = true; if (k === 'd1' && !t) return;                           // s459: D1 을 못 받았으면(한도 넘김·실패) 빈 값으로 굳히지 않는다 — 기기도 빈 값을 안 받으니 다음 요청에 다시 받는다(예전엔 res.d1='' 가 그 자리에 남아 그 뒤로는 영영 안 받았다)
+      if (t) any = true; if (k === 'd1' && !t) return; if (k === 'tn' && capCut && !t) { res[k] = ''; return; }                           // s459: D1 을 못 받았으면(한도 넘김·실패) 빈 값으로 굳히지 않는다 — 기기도 빈 값을 안 받으니 다음 요청에 다시 받는다(예전엔 res.d1='' 가 그 자리에 남아 그 뒤로는 영영 안 받았다)
       res[k] = t; got[k] = t.length > 120000 ? t.slice(0, 120000) : t;
     });
     if (any) anyEver = true;
